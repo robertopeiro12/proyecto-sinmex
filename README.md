@@ -52,6 +52,22 @@ vendedores/repartidores en ruta + **Portal Web** para administración.
    npx supabase link --project-ref psrxgmyhajbdsriusqvl
    ```
 
+## Flujo de trabajo (ramas + Pull Request)
+
+`main` está protegida: **no dejes pushear directo ahí**. El flujo es:
+
+1. Crea una rama por ticket, ej. `git checkout -b feature/t-05-esquema`.
+2. Trabaja y haz commits normales en tu rama.
+3. `git push -u origin feature/t-05-esquema` y abre un Pull Request hacia `main` en GitHub
+   (o con `gh pr create`).
+4. El PR dispara CI automáticamente (lint + build + test). El botón de **Merge** queda
+   deshabilitado hasta que el check `lint-and-test` termine en verde ✅. Si sale en rojo ❌,
+   arregla y vuelve a pushear a la misma rama — el check corre de nuevo solo.
+5. Una vez en verde, mergea el PR.
+
+No hace falta aprobación de otro dev para mergear (somos 2 y no queremos bloquearnos
+mutuamente) — solo que CI pase.
+
 ## Estado del proyecto
 
 Stack técnico y decisiones de arquitectura: ver `ADR-0002 Stack tecnológico inicial` en el
