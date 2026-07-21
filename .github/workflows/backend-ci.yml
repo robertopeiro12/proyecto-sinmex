@@ -2,17 +2,8 @@ name: Backend CI
 
 on:
   push:
-    paths:
-      - "apps/backend/**"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/backend-ci.yml"
+    branches: [main]
   pull_request:
-    paths:
-      - "apps/backend/**"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/backend-ci.yml"
 
 jobs:
   lint-and-test:
