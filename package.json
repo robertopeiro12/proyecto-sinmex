@@ -1,0 +1,12 @@
+{
+  "name": "proyecto-sinmex",
+  "private": true,
+  "version": "0.0.0",
+  "description": "JAWA — distribucion de bebidas: App Tablet + Portal Web",
+  "scripts": {
+    "supabase": "supabase"
+  },
+  "devDependencies": {
+    "supabase": "^2.109.1"
+  }
+}
