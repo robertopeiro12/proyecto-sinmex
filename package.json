@@ -3,8 +3,12 @@
   "private": true,
   "version": "0.0.0",
   "description": "JAWA — distribucion de bebidas: App Tablet + Portal Web",
+  "workspaces": [
+    "apps/*"
+  ],
   "scripts": {
-    "supabase": "supabase"
+    "supabase": "supabase",
+    "backend": "npm run start:dev --workspace=apps/backend"
   },
   "devDependencies": {
     "supabase": "^2.109.1"

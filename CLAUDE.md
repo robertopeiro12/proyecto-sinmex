@@ -29,3 +29,34 @@ Resumen de las reglas de oro del vault (el detalle está en su `AGENTS.md`):
 
 Si `../jawa-obsidian-memory` no existe en esta máquina, avisa al usuario en vez de
 asumir o inventar contexto de negocio.
+
+## Estructura del repo (monorepo, npm workspaces)
+
+```
+proyecto-sinmex/
+├── apps/
+│   ├── backend/   — NestJS (T-02). Módulos en src/modules/, uno por módulo de dominio
+│   │                (mismos slugs que el vault: ventas-cobranza, tesoreria, etc.).
+│   ├── portal/    — Next.js (T-03, pendiente)
+│   └── tablet/    — React Native/Expo (T-04, pendiente)
+├── supabase/      — migraciones (T-01)
+├── .env.example   — plantilla de variables; .env.development es local, nunca se sube
+└── package.json   — raíz del workspace
+```
+
+## Comandos
+
+Desde la raíz del repo (no entres a `apps/backend` a mano, usa los scripts del workspace):
+
+```
+npm install                  # instala todo el monorepo (un solo node_modules)
+npm run backend               # levanta el backend en modo dev (watch)
+npm run lint --workspace=apps/backend
+npm run build --workspace=apps/backend
+npm test --workspace=apps/backend
+```
+
+Health check una vez levantado: `GET http://localhost:3000/health`.
+
+CI (`.github/workflows/backend-ci.yml`) corre lint + build + test en cada push/PR que toque
+`apps/backend/**`.
