@@ -8,6 +8,25 @@ on:
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: jawa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/jawa_test
+      JWT_SECRET: secreto-de-ci
+
     steps:
       - uses: actions/checkout@v4
 
@@ -17,6 +36,13 @@ jobs:
           cache: npm
 
       - run: npm ci
+
+      - name: Aplicar migraciones
+        run: |
+          for f in supabase/migrations/*.sql; do
+            echo "→ $f"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
 
       - name: Lint
         run: npm run lint --workspace=apps/backend

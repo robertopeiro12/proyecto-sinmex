@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { DatabaseModule } from './database/database.module';
 import { VentasCobranzaModule } from './modules/ventas-cobranza/ventas-cobranza.module';
 import { TesoreriaModule } from './modules/tesoreria/tesoreria.module';
 import { FlujoEfectivoModule } from './modules/flujo-efectivo/flujo-efectivo.module';
@@ -25,6 +26,7 @@ import { HealthModule } from './modules/health/health.module';
         '../../.env',
       ],
     }),
+    DatabaseModule,
     VentasCobranzaModule,
     TesoreriaModule,
     FlujoEfectivoModule,
