@@ -3,12 +3,11 @@
  * Please do not edit it manually.
  */
 
-import type { ColumnType } from 'kysely';
+import type { ColumnType } from "kysely";
 
-export type Generated<T> =
-  T extends ColumnType<infer S, infer I, infer U>
-    ? ColumnType<S, I | undefined, U>
-    : ColumnType<T, T | undefined, T>;
+export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
+  ? ColumnType<S, I | undefined, U>
+  : ColumnType<T, T | undefined, T>;
 
 export type Numeric = ColumnType<string, number | string, number | string>;
 
@@ -147,6 +146,17 @@ export interface Ruta {
   vendedor_id: string;
 }
 
+export interface SesionRefresh {
+  created_at: Generated<Timestamp>;
+  expira_en: Timestamp;
+  id: Generated<string>;
+  reemplazada_por: string | null;
+  revocada_en: Timestamp | null;
+  token_hash: string;
+  updated_at: Generated<Timestamp>;
+  usuario_id: string;
+}
+
 export interface Sucursal {
   activa: Generated<boolean>;
   codigo: string;
@@ -254,6 +264,7 @@ export interface DB {
   presentacion: Presentacion;
   producto: Producto;
   ruta: Ruta;
+  sesion_refresh: SesionRefresh;
   sucursal: Sucursal;
   tipo_negocio: TipoNegocio;
   usuario: Usuario;
