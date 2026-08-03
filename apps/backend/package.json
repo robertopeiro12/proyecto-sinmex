@@ -13,7 +13,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "db:types": "kysely-codegen --dialect postgres --out-file src/database/schema.d.ts --env-file ../../.env.test",
+    "db:types": "kysely-codegen --dialect postgres --include-pattern='public.*' --out-file src/database/schema.d.ts --env-file ../../.env.test",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
