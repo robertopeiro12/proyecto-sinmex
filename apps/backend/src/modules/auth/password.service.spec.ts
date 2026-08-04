@@ -11,7 +11,9 @@ describe('PasswordService', () => {
 
   it('verifica la contrasena correcta', async () => {
     const hash = await servicio.hashear('contrasena-secreta');
-    await expect(servicio.verificar(hash, 'contrasena-secreta')).resolves.toBe(true);
+    await expect(servicio.verificar(hash, 'contrasena-secreta')).resolves.toBe(
+      true,
+    );
   });
 
   it('rechaza la contrasena incorrecta', async () => {
@@ -20,7 +22,9 @@ describe('PasswordService', () => {
   });
 
   it('devuelve false ante un hash corrupto en vez de reventar', async () => {
-    await expect(servicio.verificar('no-es-un-hash', 'lo-que-sea')).resolves.toBe(false);
+    await expect(
+      servicio.verificar('no-es-un-hash', 'lo-que-sea'),
+    ).resolves.toBe(false);
   });
 
   it('produce hashes distintos para la misma contrasena (sal aleatoria)', async () => {

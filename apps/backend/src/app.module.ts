@@ -1,9 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { APP_GUARD } from '@nestjs/core';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
 import { VentasCobranzaModule } from './modules/ventas-cobranza/ventas-cobranza.module';
 import { TesoreriaModule } from './modules/tesoreria/tesoreria.module';
 import { FlujoEfectivoModule } from './modules/flujo-efectivo/flujo-efectivo.module';
@@ -43,7 +43,6 @@ import { HealthModule } from './modules/health/health.module';
     NotificacionesModule,
     HealthModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],
 })
 export class AppModule {}
