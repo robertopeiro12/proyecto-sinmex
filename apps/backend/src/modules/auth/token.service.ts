@@ -9,7 +9,7 @@ export class TokenInvalidoError extends Error {}
 
 export interface PayloadAcceso {
   sub: string;
-  tipo: string;
+  tipo: 'usuario';
 }
 
 @Injectable()
@@ -31,11 +31,25 @@ export class TokenService {
   }
 
   verificarAcceso(token: string): PayloadAcceso {
+    let payload: PayloadAcceso;
     try {
-      return this.jwt.verify<PayloadAcceso>(token);
+      // Se restringe el algoritmo aceptado: defensa en profundidad ante un
+      // token firmado con un algoritmo distinto al que este servicio usa.
+      payload = this.jwt.verify<PayloadAcceso>(token, {
+        algorithms: ['HS256'],
+      });
     } catch {
       throw new TokenInvalidoError('Token de acceso invalido o vencido.');
     }
+
+    // El campo 'tipo' distingue actores (portal vs. futura app de tablet).
+    // Un JWT firmado con el mismo secreto pero tipo distinto (p.ej.
+    // 'vendedor') no debe ser aceptado en el portal.
+    if (payload.tipo !== 'usuario') {
+      throw new TokenInvalidoError('Tipo de token no valido para el portal.');
+    }
+
+    return payload;
   }
 
   async emitirRefresh(usuarioId: string): Promise<string> {
@@ -79,7 +93,27 @@ export class TokenService {
       this.hashear(nuevoPlano),
       this.calcularVencimiento(),
     );
-    await this.sesiones.revocar(sesion.id, nuevoId);
+
+    // Punto de serializacion: el UPDATE condicional (WHERE revocada_en IS
+    // NULL) es lo unico que decide quien gana entre dos rotaciones
+    // concurrentes del mismo token. Se crea la sesion nueva ANTES de
+    // intentar revocar la vieja (y no al reves) porque asi, si esta llamada
+    // pierde la carrera, ya existe una sesion nueva que revocarTodasDelUsuario
+    // puede alcanzar y matar junto con todo lo demas; si revocaramos primero
+    // no tendriamos con que encadenar la fila vieja al ganador.
+    const gano = await this.sesiones.revocarSiViva(sesion.id, nuevoId);
+    if (!gano) {
+      // Otra rotacion concurrente ya revoco esta misma sesion entre nuestro
+      // SELECT y este UPDATE: dos usos paralelos del mismo refresh token es
+      // exactamente el escenario de reuso que se detecta mas arriba, asi
+      // que se trata igual — se corta toda la cadena del usuario, incluida
+      // la sesion nueva que esta llamada perdedora acaba de crear (sigue
+      // viva, por lo que revocarTodasDelUsuario la alcanza).
+      await this.sesiones.revocarTodasDelUsuario(sesion.usuario_id);
+      throw new TokenInvalidoError(
+        'Token de refresh reusado; sesiones revocadas.',
+      );
+    }
 
     return {
       acceso: this.emitirAcceso(sesion.usuario_id),
