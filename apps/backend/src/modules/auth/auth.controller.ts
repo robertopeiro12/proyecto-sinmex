@@ -73,6 +73,14 @@ export class AuthController {
     }
   }
 
+  // Publico a proposito: el guard global exigiria un access token vivo (15 min)
+  // para llegar aqui, pero la sesion de refresh dura 12 horas. Sin esto, un
+  // usuario que vuelve pasados los 15 min no podria cerrar sesion y el
+  // refresh token seguiria vivo en la base con las cookies puestas. Es seguro
+  // sin autenticacion: solo actua sobre el refresh token que venga en la
+  // cookie, y revocarRefresh no hace nada si el token no existe o ya esta
+  // revocado. El CSRF de logout queda mitigado por sameSite=lax sobre un POST.
+  @Publico()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   async logout(
@@ -98,6 +106,12 @@ export class AuthController {
     return usuario;
   }
 
+  /**
+   * La cookie de acceso vive lo mismo que el refresh (12 h) a proposito:
+   * quien manda es el expiresIn del JWT (15 min). Si la cookie muriera a
+   * los 15 min, el navegador la borraria y el portal no tendria como
+   * distinguir "hay que refrescar" de "no hay sesion".
+   */
   private ponerCookies(res: Response, acceso: string, refresh: string): void {
     const horasRefresh = Number(
       this.config.get<string>('REFRESH_TOKEN_TTL_HORAS', '12'),

@@ -82,14 +82,18 @@ export class AuthService {
       login: fila.login,
       nombre: fila.nombre,
       perfil: fila.perfil,
+      // La unica senal de "General" es sucursal_id IS NULL. Comprobar por
+      // truthiness de codigo/nombre en vez de esto ensancharia el alcance en
+      // silencio si alguno llegara en cadena vacia, aunque el usuario si
+      // tenga una sucursal asignada.
       sucursal:
-        fila.sucursal_id && fila.sucursal_codigo && fila.sucursal_nombre
-          ? {
+        fila.sucursal_id === null
+          ? null
+          : {
               id: fila.sucursal_id,
-              codigo: fila.sucursal_codigo,
-              nombre: fila.sucursal_nombre,
-            }
-          : null,
+              codigo: fila.sucursal_codigo as string,
+              nombre: fila.sucursal_nombre as string,
+            },
     };
   }
 }
