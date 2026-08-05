@@ -1,17 +1,8 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
+import { HASH_SENUELO } from './auth.constantes';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
-
-/**
- * Hash argon2id valido de una cadena arbitraria. Se verifica contra el cuando
- * el login no existe, para que la respuesta tarde lo mismo en ambos casos.
- * Exportado unicamente para que el e2e (Tarea 8) pueda confirmar que sigue
- * siendo un hash argon2id que de verdad parsea; no se usa fuera de este
- * modulo en produccion.
- */
-export const HASH_SENUELO =
-  '$argon2id$v=19$m=19456,t=2,p=1$c2FsLXNlbnVlbG8tam9zZQ$rMSuJ2GH9m3GG4T5NqYUvJHDIZ2iBcCkzZBRQBRr6mY';
 
 export interface UsuarioSesion {
   id: string;

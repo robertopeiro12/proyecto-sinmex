@@ -12,7 +12,7 @@ import {
   type Database,
 } from './../src/database/database.tokens';
 import { AuthModule } from './../src/modules/auth/auth.module';
-import { HASH_SENUELO } from './../src/modules/auth/auth.service';
+import { HASH_SENUELO } from './../src/modules/auth/auth.constantes';
 import { PasswordService } from './../src/modules/auth/password.service';
 
 interface RespuestaError {
@@ -117,10 +117,18 @@ describe('Auth (e2e)', () => {
   });
 
   it('rechaza un body sin password con 400 de validacion', async () => {
-    await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .post('/auth/login')
       .send({ login: LOGIN })
       .expect(400);
+
+    // Sin el ValidationPipe, `password` llegaria como undefined al servicio
+    // (un 401 generico, no un 400) o el placeholder de argon2 lanzaria un
+    // 500. El mensaje del DTO (LoginDto) es lo que confirma que este 400 lo
+    // produjo class-validator sobre el campo `password`, y no otra cosa que
+    // tambien devolviera 400 por casualidad.
+    const mensajes = (res.body as { message: string[] }).message;
+    expect(mensajes).toContain('La contrasena es obligatoria.');
   });
 
   it('/auth/me sin sesion devuelve 401 con el mensaje del guard', async () => {
@@ -238,24 +246,34 @@ describe('Auth (e2e)', () => {
       .where('id', '=', usuarioId)
       .execute();
 
-    const res = await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({ login: LOGIN, password: PASSWORD })
-      .expect(401);
-    expect((res.body as RespuestaError).message).toBe(
-      'Credenciales invalidas.',
-    );
-
-    await db
-      .updateTable('usuario')
-      .set({ deleted_at: null })
-      .where('id', '=', usuarioId)
-      .execute();
+    // El revert va en un finally: el usuario es compartido por el resto del
+    // archivo (y por cualquier test futuro que se agregue). Si una
+    // aserticion de aqui adentro fallara y el revert no corriera en un
+    // finally, el usuario quedaria dado de baja el resto de la corrida y un
+    // fallo real en este bloque cascadearia en fallos falsos en tests
+    // posteriores que ni tocan deleted_at.
+    try {
+      const res = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ login: LOGIN, password: PASSWORD })
+        .expect(401);
+      expect((res.body as RespuestaError).message).toBe(
+        'Credenciales invalidas.',
+      );
+    } finally {
+      await db
+        .updateTable('usuario')
+        .set({ deleted_at: null })
+        .where('id', '=', usuarioId)
+        .execute();
+    }
 
     // No basta con confirmar que corrio el UPDATE: se confirma la reversion
     // real dejando que el usuario vuelva a poder loguearse. Si el UPDATE de
     // arriba fallara silenciosamente (o el filtro `deleted_at is null` de
-    // AuthService quedara mal escrito), este login seguiria dando 401.
+    // AuthService quedara mal escrito), este login seguiria dando 401. Va
+    // fuera del finally a proposito: si el revert fallo, queremos que el
+    // test siga fallando (no que este segundo login enmascare el problema).
     await request(app.getHttpServer())
       .post('/auth/login')
       .send({ login: LOGIN, password: PASSWORD })
@@ -311,8 +329,14 @@ describe('Arranque del backend con JWT_SECRET vacio (e2e)', () => {
       ).rejects.toThrow('Falta JWT_SECRET.');
     } finally {
       // Restaurar sin importar el resultado: otros archivos e2e del mismo
-      // proceso de Jest comparten process.env.
-      process.env.JWT_SECRET = original;
+      // proceso de Jest comparten process.env. Si originalmente no estaba
+      // definida, hay que borrar la clave (no asignarle la cadena literal
+      // "undefined", que es lo que haria `process.env.X = undefined`).
+      if (original === undefined) {
+        delete process.env.JWT_SECRET;
+      } else {
+        process.env.JWT_SECRET = original;
+      }
     }
   });
 });
