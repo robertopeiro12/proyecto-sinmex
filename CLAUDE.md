@@ -72,4 +72,5 @@ Health check una vez levantado: `GET http://localhost:3000/health`.
   como Postgres gestionado).
 
 CI (`.github/workflows/backend-ci.yml`) levanta su propio Postgres, aplica las migraciones de
-`supabase/migrations/` y corre lint + build + test + test:e2e en cada push/PR.
+`supabase/migrations/` y corre lint + build + test + test:e2e en cada push a `main` y en cada
+Pull Request (un push a tu propia rama de feature, sin abrir/actualizar un PR, no lo dispara).

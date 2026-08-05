@@ -48,6 +48,12 @@ vendedores/repartidores en ruta + **Portal Web** para administración.
 
    `.env.development` nunca se sube a git — ya está en `.gitignore`.
 
+4. **Conecta el CLI de Supabase a tu cuenta:**
+   ```
+   npx supabase login
+   npx supabase link --project-ref psrxgmyhajbdsriusqvl
+   ```
+
 5. **Para correr las pruebas del backend** hace falta además:
    - El stack local de Supabase arriba: `colima start` y luego `npm run supabase start`.
    - Un `.env.test` en la raíz (tampoco se versiona) con `DATABASE_URL` apuntando a ese Postgres
@@ -56,12 +62,6 @@ vendedores/repartidores en ruta + **Portal Web** para administración.
    Con eso arriba: `npm test --workspace=apps/backend` (unitarias), `npm run test:e2e
    --workspace=apps/backend` (end-to-end contra Postgres real) y `npm run supabase -- test db`
    (pgTAP, contra el esquema en `supabase/migrations/`).
-
-4. **Conecta el CLI de Supabase a tu cuenta:**
-   ```
-   npx supabase login
-   npx supabase link --project-ref psrxgmyhajbdsriusqvl
-   ```
 
 ## Flujo de trabajo (ramas + Pull Request)
 
