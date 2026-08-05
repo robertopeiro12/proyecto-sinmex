@@ -12,12 +12,8 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import { AuthService, type UsuarioSesion } from './auth.service';
-import {
-  COOKIE_ACCESO,
-  COOKIE_REFRESH,
-  msDeHoras,
-  opcionesCookie,
-} from './cookies';
+import { COOKIE_ACCESO, COOKIE_REFRESH, opcionesCookie } from './cookies';
+import { msDeSesionRefresh } from './ttl-sesion';
 import { LoginDto } from './dto/login.dto';
 import { Publico } from './publico.decorator';
 import { UsuarioActual } from './usuario-actual.decorator';
@@ -113,19 +109,11 @@ export class AuthController {
    * distinguir "hay que refrescar" de "no hay sesion".
    */
   private ponerCookies(res: Response, acceso: string, refresh: string): void {
-    const horasRefresh = Number(
-      this.config.get<string>('REFRESH_TOKEN_TTL_HORAS', '12'),
-    );
-    res.cookie(
-      COOKIE_ACCESO,
-      acceso,
-      opcionesCookie(this.config, msDeHoras(horasRefresh)),
-    );
-    res.cookie(
-      COOKIE_REFRESH,
-      refresh,
-      opcionesCookie(this.config, msDeHoras(horasRefresh)),
-    );
+    // El mismo maxAge que el expira_en de la fila en sesion_refresh: ambos
+    // salen de msDeSesionRefresh() para que no puedan separarse (ver ttl-sesion.ts).
+    const maxAge = msDeSesionRefresh(this.config);
+    res.cookie(COOKIE_ACCESO, acceso, opcionesCookie(this.config, maxAge));
+    res.cookie(COOKIE_REFRESH, refresh, opcionesCookie(this.config, maxAge));
   }
 
   private limpiarCookies(res: Response): void {

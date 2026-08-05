@@ -15,7 +15,10 @@ export function opcionesCookie(
   const dominio = config.get<string>('COOKIE_DOMAIN');
   return {
     httpOnly: true,
-    secure: config.get<string>('COOKIE_SECURE', 'false') === 'true',
+    secure: esVerdadero(config.get('COOKIE_SECURE')),
+    // El valor ya viene restringido a 'lax' | 'strict' por
+    // configuracion.schema.ts; 'none' no es aceptable porque apagaria la
+    // unica defensa contra CSRF del sistema. El cast solo estrecha el tipo.
     sameSite: config.get<string>(
       'COOKIE_SAMESITE',
       'lax',
@@ -26,6 +29,13 @@ export function opcionesCookie(
   };
 }
 
-export function msDeHoras(horas: number): number {
-  return horas * 60 * 60 * 1000;
+/**
+ * COOKIE_SECURE llega como booleano cuando el schema de AppModule esta activo
+ * (Joi convierte) y como cadena cuando no lo esta (pruebas unitarias, o
+ * AuthModule montado suelto). Comparar solo contra la cadena 'true' hacia que
+ * el booleano `true` diera `false`: las cookies se emitirian SIN Secure en
+ * produccion sin que nada avisara. De ahi que se contemplen las dos formas.
+ */
+function esVerdadero(valor: unknown): boolean {
+  return valor === true || valor === 'true';
 }

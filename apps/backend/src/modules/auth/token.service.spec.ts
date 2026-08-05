@@ -221,6 +221,44 @@ describe('TokenService', () => {
     );
   });
 
+  it('rechaza rotar el refresh de un usuario dado de baja, sin revocarle la cadena', async () => {
+    const refresh = await servicio.emitirRefresh(usuarioId);
+
+    await db
+      .updateTable('usuario')
+      .set({ deleted_at: new Date() })
+      .where('id', '=', usuarioId)
+      .execute();
+
+    try {
+      await expect(servicio.rotarRefresh(refresh)).rejects.toThrow(
+        TokenInvalidoError,
+      );
+
+      // La baja no es un robo de token: se rechaza, pero no se corta la
+      // cadena. La sesion sigue viva en la base (ver el comentario de
+      // rotarRefresh); lo que la vuelve inutil es el chequeo, no un UPDATE.
+      const vivas = await db
+        .selectFrom('sesion_refresh')
+        .select('id')
+        .where('usuario_id', '=', usuarioId)
+        .where('revocada_en', 'is', null)
+        .execute();
+      expect(vivas.length).toBeGreaterThan(0);
+    } finally {
+      await db
+        .updateTable('usuario')
+        .set({ deleted_at: null })
+        .where('id', '=', usuarioId)
+        .execute();
+    }
+
+    // Restaurado el usuario, el mismo refresh vuelve a rotar: confirma que el
+    // rechazo de arriba lo causo la baja y no un efecto colateral.
+    const rotado = await servicio.rotarRefresh(refresh);
+    expect(rotado.usuarioId).toBe(usuarioId);
+  });
+
   it('rechaza un refresh que nunca existio', async () => {
     await expect(servicio.rotarRefresh('token-inventado')).rejects.toThrow(
       TokenInvalidoError,

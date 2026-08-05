@@ -1,11 +1,11 @@
 import { Test, type TestingModule } from '@nestjs/testing';
-import { ValidationPipe, type INestApplication } from '@nestjs/common';
+import type { INestApplication } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { verify } from '@node-rs/argon2';
-import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { OPCIONES_NEST, configurarApp } from './../src/configurar-app';
 import { DatabaseModule } from './../src/database/database.module';
 import {
   DB_CONNECTION,
@@ -42,16 +42,14 @@ describe('Auth (e2e)', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
-    // main.ts registra esto en bootstrap(); createNestApplication() no pasa
-    // por ahi, asi que se repite a mano (igual que en app.e2e-spec.ts). Sin
-    // cookieParser(), req.cookies queda undefined y todo pasaria por la rama
-    // de "sin cookie"; sin el ValidationPipe, el DTO de login no filtraria
-    // el caso de body sin password.
-    app.use(cookieParser());
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, transform: true }),
-    );
+    // Se construye con LA MISMA configuracion que main.ts (OPCIONES_NEST +
+    // configurarApp), no con una copia a mano: si divergieran, esta suite
+    // estaria probando una app que no existe en produccion. En particular
+    // OPCIONES_NEST tiene que ir aqui, en la creacion, porque `bodyParser` no
+    // es middleware y no puede aplicarse despues — de eso depende el test de
+    // CSRF de login.
+    app = moduleFixture.createNestApplication(OPCIONES_NEST);
+    configurarApp(app);
     await app.init();
 
     db = app.get<Database>(DB_CONNECTION);
@@ -129,6 +127,34 @@ describe('Auth (e2e)', () => {
     // tambien devolviera 400 por casualidad.
     const mensajes = (res.body as { message: string[] }).message;
     expect(mensajes).toContain('La contrasena es obligatoria.');
+  });
+
+  it('no autentica un login enviado como formulario (CSRF de login): sin parser urlencoded no hay Set-Cookie', async () => {
+    // El ataque: una pagina cualquiera autoenvia un <form method="POST"> a
+    // /auth/login con las credenciales del ATACANTE. Es una peticion simple
+    // (sin preflight), asi que CORS no la para, y al atacante no le hace
+    // falta leer la respuesta: le basta con que el navegador de la victima se
+    // quede logueado en su cuenta. La defensa es no entender ese formato.
+    //
+    // Se mandan credenciales VALIDAS a proposito: si algun dia se reactivara
+    // express.urlencoded, esto seria un 200 con Set-Cookie y el test caeria.
+    // Con credenciales falsas el test pasaria por el motivo equivocado.
+    const res = await request(app.getHttpServer())
+      .post('/auth/login')
+      .type('form')
+      .send({ login: LOGIN, password: PASSWORD });
+
+    expect(res.status).not.toBe(200);
+    // Lo que de verdad importa no es el status, es que no salga sesion.
+    expect(res.headers['set-cookie']).toBeUndefined();
+
+    // Y el mismo login por JSON si funciona: confirma que el rechazo de
+    // arriba es por el formato del body y no porque el usuario o la
+    // contrasena esten mal.
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ login: LOGIN, password: PASSWORD })
+      .expect(200);
   });
 
   it('/auth/me sin sesion devuelve 401 con el mensaje del guard', async () => {
@@ -280,6 +306,61 @@ describe('Auth (e2e)', () => {
       .expect(200);
   });
 
+  it('dar de baja a un usuario corta una sesion YA ABIERTA: su refresh deja de rotar', async () => {
+    // Esto es una invariante distinta de "un usuario dado de baja no puede
+    // entrar" (el test de arriba). Aquella solo cubre /auth/login. Sin
+    // comprobar la baja en la rotacion, un usuario ya logueado seguiria
+    // renovando su refresh indefinidamente — cada rotacion emite una sesion
+    // nueva de 12 h — y conservaria acceso a la API para siempre.
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ login: LOGIN, password: PASSWORD })
+      .expect(200);
+
+    const cookies = login.headers['set-cookie'] as unknown as string[];
+    const acceso = leerCookie(cookies, 'jawa_access');
+    const refresh = leerCookie(cookies, 'jawa_refresh');
+
+    // Se confirma que la sesion estaba viva ANTES de la baja: si no, el 401
+    // de abajo podria venir de una sesion que nunca funciono.
+    await request(app.getHttpServer())
+      .get('/auth/me')
+      .set('Cookie', [`jawa_access=${acceso}`])
+      .expect(200);
+
+    await db
+      .updateTable('usuario')
+      .set({ deleted_at: new Date() })
+      .where('id', '=', usuarioId)
+      .execute();
+
+    // Revert en finally, igual que el test de baja de arriba: el usuario es
+    // compartido por todo el archivo y un fallo aqui dentro no debe dejar la
+    // base sucia ni cascadear en fallos falsos.
+    try {
+      const res = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Cookie', [`jawa_refresh=${refresh}`])
+        .expect(401);
+      expect((res.body as RespuestaError).message).toBe('Sesion invalida.');
+    } finally {
+      await db
+        .updateTable('usuario')
+        .set({ deleted_at: null })
+        .where('id', '=', usuarioId)
+        .execute();
+    }
+
+    // Restaurado el usuario, el MISMO refresh vuelve a rotar. Dos cosas a la
+    // vez: que el 401 de arriba fue por la baja (y no porque el token ya
+    // estuviera quemado por otra razon), y que la rama de baja NO revoca la
+    // cadena — decision deliberada documentada en TokenService.rotarRefresh.
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .set('Cookie', [`jawa_refresh=${refresh}`])
+      .expect(200);
+  });
+
   it('el hash senuelo sigue siendo un argon2id que de verdad parsea (no pierde la ecualizacion de tiempos en silencio)', async () => {
     // Un hash con formato invalido hace que argon2 LANCE internamente. Esto
     // confirma que el "resolves.toBe(false)" de abajo para HASH_SENUELO no
@@ -305,6 +386,12 @@ describe('Auth (e2e)', () => {
 });
 
 describe('Arranque del backend con JWT_SECRET vacio (e2e)', () => {
+  // Este caso cubre la defensa EN PROFUNDIDAD, no la principal: el schema de
+  // configuracion (configuracion.schema.ts) ya impide arrancar el AppModule
+  // sin JWT_SECRET, y eso se prueba en configuracion.e2e-spec.ts. Lo de aqui
+  // es el chequeo a mano de auth.module.ts, que es lo unico que protege a
+  // AuthModule cuando se monta SIN ese ConfigModule — como hace este mismo
+  // test, y como podria hacer cualquier app futura.
   it('rechaza compilar el modulo de auth en vez de arrancar sin secreto', async () => {
     const original = process.env.JWT_SECRET;
     process.env.JWT_SECRET = '';

@@ -16,6 +16,13 @@ import { TokenService } from './token.service';
         const secret = config.get<string>('JWT_SECRET');
         if (!secret) {
           // Preferimos no arrancar a arrancar inseguro.
+          //
+          // Se mantiene aunque configuracion.schema.ts ya exija JWT_SECRET:
+          // ese schema vive en el ConfigModule de AppModule, y AuthModule se
+          // puede montar sin el — las pruebas lo hacen, y cualquier futura
+          // app (la de tablet, un worker) tambien podria. Este chequeo es lo
+          // unico que protege ese camino. Es defensa en profundidad barata:
+          // tres lineas contra un backend firmando tokens con `undefined`.
           throw new Error('Falta JWT_SECRET.');
         }
         return { secret };

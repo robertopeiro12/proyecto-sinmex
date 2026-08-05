@@ -3,6 +3,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { SesionRepository } from './sesion.repository';
+import { msDeSesionRefresh } from './ttl-sesion';
 
 /** Error de dominio; el controller lo traduce a 401. */
 export class TokenInvalidoError extends Error {}
@@ -83,6 +84,29 @@ export class TokenService {
       );
     }
 
+    // Baja logica del usuario: sin esto, quien ya tuviera sesion abierta
+    // seguiria rotando para siempre (cada rotacion emite una sesion nueva de
+    // 12 h, asi que la sesion nunca vence sola) y conservaria acceso a la API
+    // aunque este dado de baja. /auth/me si filtra deleted_at, pero eso solo
+    // salva a ese endpoint; la puerta de verdad es esta.
+    //
+    // Va DESPUES de la deteccion de reuso, no antes, y no revoca la cadena:
+    //
+    // - Despues, porque un token reusado es un token reusado independientemente
+    //   del estado del usuario; anteponer este chequeo cambiaria el
+    //   comportamiento de la rama de seguridad mas valiosa del sistema (un
+    //   token robado de un usuario dado de baja dejaria de cortar la cadena).
+    // - Sin revocar, porque una baja no es un robo: revocarTodasDelUsuario
+    //   existe para castigar el reuso, y usarla aqui haria que una baja y un
+    //   robo dejaran exactamente el mismo rastro en la base, borrando la unica
+    //   evidencia forense que tenemos. Ademas no hace falta: el rechazo ya es
+    //   total (toda rotacion futura vuelve a pasar por aqui), asi que revocar
+    //   solo agregaria escrituras. Y es reversible: si la baja fue un error y
+    //   se restaura al usuario, su sesion sigue sirviendo.
+    if (sesion.usuario_deleted_at !== null) {
+      throw new TokenInvalidoError('Usuario dado de baja.');
+    }
+
     if (sesion.expira_en.getTime() <= Date.now()) {
       throw new TokenInvalidoError('Sesion vencida.');
     }
@@ -122,6 +146,18 @@ export class TokenService {
     };
   }
 
+  /**
+   * Cierre de sesion. Asimetria deliberada con rotarRefresh: aqui un token ya
+   * revocado NO se trata como reuso, simplemente no hace nada.
+   *
+   * El motivo es que rotarRefresh CONCEDE algo (un par de tokens nuevos) y
+   * logout no concede nada: ver un token revocado en una rotacion significa
+   * que alguien intenta usar credenciales muertas para entrar, mientras que en
+   * un logout significa, casi siempre, un doble clic en "Salir" o una pestana
+   * vieja cerrandose. Castigar eso cortando la cadena entera sacaria al
+   * usuario de sus otras sesiones legitimas a cambio de ninguna seguridad,
+   * porque el logout ya dejo esa sesion muerta. No es un olvido.
+   */
   async revocarRefresh(tokenPlano: string): Promise<void> {
     const sesion = await this.sesiones.buscarPorHash(this.hashear(tokenPlano));
     if (sesion && sesion.revocada_en === null) {
@@ -138,9 +174,6 @@ export class TokenService {
   }
 
   private calcularVencimiento(): Date {
-    const horas = Number(
-      this.config.get<string>('REFRESH_TOKEN_TTL_HORAS', '12'),
-    );
-    return new Date(Date.now() + horas * 60 * 60 * 1000);
+    return new Date(Date.now() + msDeSesionRefresh(this.config));
   }
 }

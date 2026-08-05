@@ -6,6 +6,14 @@ export interface Sesion {
   usuario_id: string;
   expira_en: Date;
   revocada_en: Date | null;
+  /**
+   * Baja logica del DUENO de la sesion, no de la sesion. Viaja con la fila
+   * porque quien rota un refresh necesita decidir con el estado del usuario y
+   * no hay forma de saberlo sin volver a la base; traerlo en el mismo SELECT
+   * evita esa segunda consulta y, sobre todo, evita que alguien olvide
+   * hacerla.
+   */
+  usuario_deleted_at: Date | null;
 }
 
 @Injectable()
@@ -29,11 +37,25 @@ export class SesionRepository {
     return fila.id;
   }
 
+  /**
+   * Trae la sesion junto con la baja logica de su dueno (innerJoin con
+   * usuario). El join es innerJoin y no leftJoin a proposito: usuario_id
+   * tiene FK a usuario, asi que una sesion sin usuario no puede existir; si
+   * alguna vez existiera, no queremos que la sesion se cuele con
+   * usuario_deleted_at = null, queremos que no aparezca.
+   */
   async buscarPorHash(tokenHash: string): Promise<Sesion | undefined> {
     return this.db
       .selectFrom('sesion_refresh')
-      .select(['id', 'usuario_id', 'expira_en', 'revocada_en'])
-      .where('token_hash', '=', tokenHash)
+      .innerJoin('usuario', 'usuario.id', 'sesion_refresh.usuario_id')
+      .select([
+        'sesion_refresh.id as id',
+        'sesion_refresh.usuario_id as usuario_id',
+        'sesion_refresh.expira_en as expira_en',
+        'sesion_refresh.revocada_en as revocada_en',
+        'usuario.deleted_at as usuario_deleted_at',
+      ])
+      .where('sesion_refresh.token_hash', '=', tokenHash)
       .executeTakeFirst();
   }
 

@@ -51,6 +51,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const cerrarSesion = useCallback(async () => {
     try {
       await apiFetch("/auth/logout", { method: "POST" });
+    } catch {
+      // Se ignora a proposito. Si la API no contesta (red caida, backend
+      // abajo) no hay nada util que decirle al usuario: el finally ya limpia
+      // la sesion local y lo manda al login, que es lo que pidio. La sesion
+      // del servidor seguiria viva, pero muere sola al vencer el refresh.
+      //
+      // El catch existe sobre todo porque quien invoca esto lo hace con
+      // `void cerrarSesion()`, que descarta la promesa: sin este catch, un
+      // logout fallido se convertia en un unhandledrejection en la consola
+      // del navegador aunque el comportamiento visible fuera correcto.
     } finally {
       setUsuario(null);
       router.replace("/login");

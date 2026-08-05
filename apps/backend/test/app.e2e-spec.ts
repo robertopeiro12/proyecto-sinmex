@@ -1,9 +1,9 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
-import cookieParser from 'cookie-parser';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
+import { OPCIONES_NEST, configurarApp } from './../src/configurar-app';
 import { COOKIE_ACCESO } from './../src/modules/auth/cookies';
 
 interface RespuestaError {
@@ -18,12 +18,11 @@ describe('Health y guard global de sesion (e2e)', () => {
       imports: [AppModule],
     }).compile();
 
-    app = moduleFixture.createNestApplication();
-    // main.ts registra cookie-parser en el bootstrap real; aqui se registra
-    // a mano porque createNestApplication() no pasa por main.ts. Sin esto
-    // req.cookies queda undefined y el caso de la cookie basura no puede
-    // ejercer la rama de verificarAcceso() del guard.
-    app.use(cookieParser());
+    // Misma configuracion que main.ts (ver configurar-app.ts): sin
+    // cookieParser() req.cookies queda undefined y el caso de la cookie
+    // basura no podria ejercer la rama de verificarAcceso() del guard.
+    app = moduleFixture.createNestApplication(OPCIONES_NEST);
+    configurarApp(app);
     await app.init();
   });
 
