@@ -1,10 +1,12 @@
 import { Controller, Get } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Publico } from '../auth/publico.decorator';
 
 @Controller('health')
 export class HealthController {
   constructor(private readonly config: ConfigService) {}
 
+  @Publico()
   @Get()
   check() {
     return {

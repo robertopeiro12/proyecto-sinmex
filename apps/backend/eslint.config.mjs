@@ -6,7 +6,9 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['eslint.config.mjs'],
+    // schema.d.ts es generado por kysely-codegen (db:types); reformatearlo
+    // solo produce churn que la siguiente corrida de codegen revierte.
+    ignores: ['eslint.config.mjs', 'src/database/schema.d.ts'],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

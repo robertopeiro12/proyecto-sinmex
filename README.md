@@ -43,6 +43,8 @@ vendedores/repartidores en ruta + **Portal Web** para administración.
    - `SUPABASE_SERVICE_ROLE_KEY` → misma sección, "secret keys"
    - `DATABASE_URL` → **Project Settings → Database** (o el botón **Connect**), con tu propio
      password (puedes generar uno nuevo si no tienes el original)
+   - `JWT_SECRET` → no está en el dashboard, genera el tuyo con `openssl rand -base64 32`.
+     El backend **se niega a arrancar** sin esta variable (aunque esté vacía) — es a propósito.
 
    `.env.development` nunca se sube a git — ya está en `.gitignore`.
 
@@ -51,6 +53,34 @@ vendedores/repartidores en ruta + **Portal Web** para administración.
    npx supabase login
    npx supabase link --project-ref psrxgmyhajbdsriusqvl
    ```
+
+5. **Para correr las pruebas del backend** hace falta además:
+   - El stack local de Supabase arriba: `colima start` y luego `npm run supabase start`.
+   - Un `.env.test` en la raíz (tampoco se versiona) con `DATABASE_URL` apuntando a ese Postgres
+     local y su propio `JWT_SECRET`.
+
+   Con eso arriba: `npm test --workspace=apps/backend` (unitarias), `npm run test:e2e
+   --workspace=apps/backend` (end-to-end contra Postgres real) y `npm run supabase -- test db`
+   (pgTAP, contra el esquema en `supabase/migrations/`).
+
+## Requisito de despliegue: portal y API bajo el mismo dominio padre
+
+**No es una preferencia, es un requisito.** La sesión viaja en cookies `httpOnly` con
+`SameSite=lax`, así que el portal y la API **tienen que compartir dominio padre** en
+producción — por ejemplo `app.jawa.mx` + `api.jawa.mx`, con `COOKIE_DOMAIN=.jawa.mx`.
+
+Alojarlos en dominios distintos (el caso típico: Vercel da `*.vercel.app` y Railway/Render
+dan `*.railway.app`) **no es un inconveniente, es un sistema que no funciona**: con
+`SameSite=lax` el navegador no manda las cookies, así que el login parece funcionar y
+después *todas* las peticiones dan 401, sin ningún error que explique por qué.
+
+La salida aparente es `SameSite=None; Secure`, y **está bloqueada a propósito**: hoy es la
+única defensa contra CSRF que tiene el sistema y no hay token CSRF que la reemplace. Por
+eso `COOKIE_SAMESITE` solo acepta `lax` o `strict`, y el backend **se niega a arrancar** con
+cualquier otro valor. Para poder usar `None` hay que implementar antes un token CSRF.
+
+En resumen, antes de contratar hosting: o dominio propio con subdominios para ambos, o un
+único origen (la API detrás de un path del portal, tipo `jawa.mx/api`).
 
 ## Flujo de trabajo (ramas + Pull Request)
 
