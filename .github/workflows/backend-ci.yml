@@ -25,7 +25,10 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/jawa_test
-      JWT_SECRET: secreto-de-ci
+      # Debe tener al menos 32 caracteres: configuracion.schema.ts lo exige
+      # (ver apps/backend/src/configuracion.schema.ts) y ConfigModule.forRoot
+      # rechaza el arranque si no se cumple.
+      JWT_SECRET: secreto-de-ci-con-al-menos-32-caracteres-de-largo
 
     steps:
       - uses: actions/checkout@v4
