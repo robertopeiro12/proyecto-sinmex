@@ -18,5 +18,13 @@ export function middleware(req: NextRequest) {
 
 export const config = {
   // Todo menos /login, los assets de Next y el favicon.
-  matcher: ["/((?!login|_next/static|_next/image|favicon.ico).*)"],
+  //
+  // La exencion de "login" va anclada al limite de segmento con "(?:/|$)":
+  // sin eso, la negacion es por PREFIJO y cualquier ruta que empiece con la
+  // cadena "login" (p. ej. /login-historial o /loginfalso) quedaria exenta
+  // de proteccion sin que nada avise. "_next/static" y "_next/image" no
+  // necesitan el mismo anclaje: "/_next" es un namespace reservado por
+  // Next.js, ninguna ruta de la app puede definirse bajo ese prefijo, asi
+  // que no hay colision posible con una pagina real del portal.
+  matcher: ["/((?!login(?:/|$)|_next/static|_next/image|favicon.ico).*)"],
 };
