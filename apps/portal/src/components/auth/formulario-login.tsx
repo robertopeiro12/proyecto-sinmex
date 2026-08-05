@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, ErrorApi } from "@/lib/api";
 
 export function FormularioLogin() {
   const router = useRouter();
@@ -24,9 +24,15 @@ export function FormularioLogin() {
       });
       router.replace("/operacion");
       router.refresh();
-    } catch {
-      // Mensaje generico a proposito: no confirmamos si el login existe.
-      setError("Usuario o contrasena incorrectos.");
+    } catch (err) {
+      if (err instanceof ErrorApi && err.status === 401) {
+        // Mensaje generico a proposito: no confirmamos si el login existe.
+        setError("Usuario o contraseña incorrectos.");
+      } else {
+        // Cualquier otro fallo (red caida, 5xx, etc.) no es culpa del usuario:
+        // no le digamos que se equivoco de contraseña.
+        setError("No se pudo conectar con el servidor. Intenta de nuevo.");
+      }
     } finally {
       setEnviando(false);
     }
@@ -43,6 +49,7 @@ export function FormularioLogin() {
           name="login"
           autoComplete="username"
           required
+          disabled={enviando}
           value={login}
           onChange={(e) => setLogin(e.target.value)}
           className="rounded-md border px-3 py-2 text-sm"
@@ -59,6 +66,7 @@ export function FormularioLogin() {
           type="password"
           autoComplete="current-password"
           required
+          disabled={enviando}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="rounded-md border px-3 py-2 text-sm"

@@ -17,6 +17,13 @@ export class ErrorApi extends Error {
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
+// Rutas publicas de autenticacion: un 401 aqui no significa "sesion vencida",
+// significa "credenciales invalidas" (login) o "no hay sesion que renovar"
+// (refresh). Reintentar via /auth/refresh en estos casos no tiene sentido y
+// solo genera una peticion de mas en el camino mas comun del formulario. Si
+// mas adelante hay mas rutas publicas (p. ej. la app tablet), se agregan aqui.
+const RUTAS_PUBLICAS_AUTH = ["/auth/login", "/auth/refresh"];
+
 /**
  * Llama a la API con las cookies de sesion. Ante un 401 intenta refrescar
  * UNA vez y reintenta; si tampoco funciona, propaga el 401 para que quien
@@ -32,7 +39,7 @@ export async function apiFetch<T>(ruta: string, init: RequestInit = {}): Promise
 
   let res = await enviar();
 
-  if (res.status === 401 && ruta !== "/auth/refresh") {
+  if (res.status === 401 && !RUTAS_PUBLICAS_AUTH.includes(ruta)) {
     const refrescado = await fetch(`${API}/auth/refresh`, {
       method: "POST",
       credentials: "include",
