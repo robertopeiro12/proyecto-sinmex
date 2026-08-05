@@ -43,8 +43,19 @@ vendedores/repartidores en ruta + **Portal Web** para administración.
    - `SUPABASE_SERVICE_ROLE_KEY` → misma sección, "secret keys"
    - `DATABASE_URL` → **Project Settings → Database** (o el botón **Connect**), con tu propio
      password (puedes generar uno nuevo si no tienes el original)
+   - `JWT_SECRET` → no está en el dashboard, genera el tuyo con `openssl rand -base64 32`.
+     El backend **se niega a arrancar** sin esta variable (aunque esté vacía) — es a propósito.
 
    `.env.development` nunca se sube a git — ya está en `.gitignore`.
+
+5. **Para correr las pruebas del backend** hace falta además:
+   - El stack local de Supabase arriba: `colima start` y luego `npm run supabase start`.
+   - Un `.env.test` en la raíz (tampoco se versiona) con `DATABASE_URL` apuntando a ese Postgres
+     local y su propio `JWT_SECRET`.
+
+   Con eso arriba: `npm test --workspace=apps/backend` (unitarias), `npm run test:e2e
+   --workspace=apps/backend` (end-to-end contra Postgres real) y `npm run supabase -- test db`
+   (pgTAP, contra el esquema en `supabase/migrations/`).
 
 4. **Conecta el CLI de Supabase a tu cuenta:**
    ```

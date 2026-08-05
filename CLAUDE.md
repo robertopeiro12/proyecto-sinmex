@@ -51,12 +51,25 @@ Desde la raíz del repo (no entres a `apps/backend` a mano, usa los scripts del 
 ```
 npm install                  # instala todo el monorepo (un solo node_modules)
 npm run backend               # levanta el backend en modo dev (watch)
+npm run portal                 # levanta el portal (Next.js) en modo dev
 npm run lint --workspace=apps/backend
 npm run build --workspace=apps/backend
 npm test --workspace=apps/backend
+npm run test:e2e --workspace=apps/backend      # pruebas end-to-end (requieren Postgres real)
+npm run db:types --workspace=apps/backend      # regenera apps/backend/src/database/schema.d.ts desde la BD local
+npm run crear-usuario --workspace=apps/backend # da de alta un usuario del portal (input interactivo)
 ```
 
 Health check una vez levantado: `GET http://localhost:3000/health`.
 
-CI (`.github/workflows/backend-ci.yml`) corre lint + build + test en cada push/PR que toque
-`apps/backend/**`.
+**Requisitos de entorno para lo anterior:**
+- `JWT_SECRET` en `.env.development` (raíz del repo) — el backend no arranca sin ella. Genera una
+  con `openssl rand -base64 32`.
+- Para `test`, `test:e2e` y `db:types`: el stack local de Supabase arriba (`colima start` +
+  `npm run supabase start`) y un `.env.test` en la raíz con `DATABASE_URL` (al Postgres local) y
+  `JWT_SECRET`. `db:types` filtra con `--include-pattern='public.*'` para no traerse las tablas
+  internas de Supabase (`auth.*`, `storage.*`, etc.), que contradicen el ADR-0002 (Supabase solo
+  como Postgres gestionado).
+
+CI (`.github/workflows/backend-ci.yml`) levanta su propio Postgres, aplica las migraciones de
+`supabase/migrations/` y corre lint + build + test + test:e2e en cada push/PR.
