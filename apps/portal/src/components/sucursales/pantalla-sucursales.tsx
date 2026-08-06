@@ -38,16 +38,25 @@ export function PantallaSucursales({ sucursal }: { sucursal: string | null }) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Sucursales</CardTitle>
-        {edicion === null && (
-          <Button size="sm" onClick={() => setEdicion("nueva")}>
-            Nueva sucursal
-          </Button>
-        )}
+        <Button
+          size="sm"
+          disabled={edicion !== null}
+          onClick={() => setEdicion("nueva")}
+        >
+          Nueva sucursal
+        </Button>
       </CardHeader>
 
       <CardContent>
         {edicion !== null && (
           <FormularioSucursal
+            // Sin `key` React reutiliza la misma instancia del formulario al
+            // pasar de "editar A" a "editar B": los useState de
+            // FormularioSucursal solo leen el prop `sucursal` en el primer
+            // montaje, asi que nombre/activa se quedarian con los valores
+            // viejos de A. El `key` fuerza el remontaje cuando cambia el
+            // objetivo de edicion.
+            key={edicion === "nueva" ? "nueva" : edicion.id}
             sucursal={edicion === "nueva" ? null : edicion}
             alGuardar={() => {
               setEdicion(null);
@@ -91,6 +100,7 @@ export function PantallaSucursales({ sucursal }: { sucursal: string | null }) {
                     <Button
                       variant="outline"
                       size="sm"
+                      disabled={edicion !== null}
                       onClick={() => setEdicion(s)}
                     >
                       Editar
