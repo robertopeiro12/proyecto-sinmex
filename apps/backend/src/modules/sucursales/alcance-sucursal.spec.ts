@@ -16,24 +16,36 @@ describe('resolverAlcance', () => {
     });
 
     it('pidiendo una sucursal concreta ve solo esa', () => {
-      expect(resolverAlcance(null, 'TJ')).toEqual({ tipo: 'una', codigo: 'TJ' });
+      expect(resolverAlcance(null, 'TJ')).toEqual({
+        tipo: 'una',
+        codigo: 'TJ',
+      });
     });
   });
 
   describe('usuario atado a una sucursal', () => {
     it('sin pedir nada ve la suya', () => {
-      expect(resolverAlcance('TJ', null)).toEqual({ tipo: 'una', codigo: 'TJ' });
+      expect(resolverAlcance('TJ', null)).toEqual({
+        tipo: 'una',
+        codigo: 'TJ',
+      });
     });
 
     it('pidiendo la suya ve la suya', () => {
-      expect(resolverAlcance('TJ', 'TJ')).toEqual({ tipo: 'una', codigo: 'TJ' });
+      expect(resolverAlcance('TJ', 'TJ')).toEqual({
+        tipo: 'una',
+        codigo: 'TJ',
+      });
     });
 
     // Pedir "todas" no nombra una sucursal ajena: es el selector que se quedo
     // en la URL al navegar, no un intento de escalar. Devolverle lo suyo es
     // correcto Y amable; un 403 aqui romperia la navegacion normal.
     it('pidiendo "todas" recibe la suya, no un 403', () => {
-      expect(resolverAlcance('TJ', TODAS)).toEqual({ tipo: 'una', codigo: 'TJ' });
+      expect(resolverAlcance('TJ', TODAS)).toEqual({
+        tipo: 'una',
+        codigo: 'TJ',
+      });
     });
 
     it('pidiendo otra sucursal recibe 403', () => {
