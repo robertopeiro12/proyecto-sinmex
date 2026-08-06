@@ -1,11 +1,15 @@
 import {
+  BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { resolverAlcance, type Alcance } from './alcance-sucursal';
 import { SucursalesRepository, type Sucursal } from './sucursales.repository';
 import type { CrearSucursalDto } from './dto/crear-sucursal.dto';
+import type { EditarSucursalDto } from './dto/editar-sucursal.dto';
 
 /**
  * `23505` es unique_violation en Postgres. Se mira el error DESPUES del insert
@@ -53,6 +57,41 @@ export class SucursalesService {
       }
       throw error;
     }
+  }
+
+  async editar(
+    usuarioId: string,
+    id: string,
+    dto: EditarSucursalDto,
+  ): Promise<Sucursal> {
+    // El 400 va ANTES de tocar la base: un PATCH sin cambios no es un fallo
+    // del servidor ni justifica una consulta, es un cuerpo mal armado.
+    if (dto.nombre === undefined && dto.activa === undefined) {
+      throw new BadRequestException('No hay nada que actualizar.');
+    }
+
+    const sucursal = await this.repo.buscarPorId(id);
+    if (!sucursal) {
+      throw new NotFoundException('No existe esa sucursal.');
+    }
+
+    // El alcance manda igual en escritura que en lectura (D3). Se compara
+    // contra la sucursal YA leida y no contra el query param: aqui el objeto
+    // que se va a modificar es el hecho, no lo que el cliente diga.
+    const alcance = await this.alcanceDe(usuarioId, null);
+    if (alcance.tipo === 'una' && alcance.codigo !== sucursal.codigo) {
+      throw new ForbiddenException('No tienes acceso a esa sucursal.');
+    }
+
+    const cambios: { nombre?: string; activa?: boolean } = {};
+    if (dto.nombre !== undefined) {
+      cambios.nombre = dto.nombre;
+    }
+    if (dto.activa !== undefined) {
+      cambios.activa = dto.activa;
+    }
+
+    return this.repo.actualizar(id, cambios);
   }
 
   /**

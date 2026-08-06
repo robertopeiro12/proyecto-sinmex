@@ -34,6 +34,7 @@ describe('Sucursales (e2e)', () => {
   let usuarioIds: string[] = [];
   let cookieGeneral: string;
   let cookieTijuana: string;
+  let idMexicali: string;
 
   /** Inicia sesion y devuelve la cookie de acceso lista para `.set('Cookie', …)`. */
   const iniciarSesion = async (login: string): Promise<string> => {
@@ -75,6 +76,13 @@ describe('Sucursales (e2e)', () => {
       .select('id')
       .where('codigo', '=', 'TJ')
       .executeTakeFirstOrThrow();
+
+    const mexicali = await db
+      .selectFrom('sucursal')
+      .select('id')
+      .where('codigo', '=', 'MX')
+      .executeTakeFirstOrThrow();
+    idMexicali = mexicali.id;
 
     const hash = await new PasswordService().hashear(PASSWORD);
 
@@ -255,6 +263,110 @@ describe('Sucursales (e2e)', () => {
         .set('Cookie', [cookieGeneral])
         .send({ codigo: 'ZC', nombre: '   ' })
         .expect(400);
+    });
+  });
+
+  describe('PATCH /sucursales/:id', () => {
+    let idZacatecas: string;
+
+    // La sucursal de trabajo se crea UNA vez aqui y no dentro del primer test.
+    // Si cada test la buscara por codigo, quedarian encadenados en un orden
+    // implicito: un fallo en el primero haria fallar a los demas por no
+    // encontrarla, y el reporte senalaria al test equivocado.
+    beforeAll(async () => {
+      const res = await request(app.getHttpServer())
+        .post('/sucursales')
+        .set('Cookie', [cookieGeneral])
+        .send({ codigo: 'ZC', nombre: 'Zacatecas' })
+        .expect(201);
+      idZacatecas = (res.body as SucursalRespuesta).id;
+    });
+
+    it('sin sesion responde 401', async () => {
+      await request(app.getHttpServer())
+        .patch(`/sucursales/${idZacatecas}`)
+        .send({ nombre: 'Otro' })
+        .expect(401);
+    });
+
+    it('cambia el nombre', async () => {
+      const res = await request(app.getHttpServer())
+        .patch(`/sucursales/${idZacatecas}`)
+        .set('Cookie', [cookieGeneral])
+        .send({ nombre: 'Zacatecas Centro' })
+        .expect(200);
+
+      expect((res.body as SucursalRespuesta).nombre).toBe('Zacatecas Centro');
+    });
+
+    it('desactiva la sucursal sin sacarla del listado', async () => {
+      await request(app.getHttpServer())
+        .patch(`/sucursales/${idZacatecas}`)
+        .set('Cookie', [cookieGeneral])
+        .send({ activa: false })
+        .expect(200);
+
+      // Desactivar NO es borrar (D6): la sucursal tiene que seguir visible en
+      // el catalogo para poder reactivarla, y sus ventas y folios historicos
+      // siguen apuntando a ella.
+      const listado = await request(app.getHttpServer())
+        .get('/sucursales')
+        .set('Cookie', [cookieGeneral])
+        .expect(200);
+
+      const zc = (listado.body as SucursalRespuesta[]).find(
+        (s) => s.codigo === 'ZC',
+      );
+      expect(zc).toBeDefined();
+      expect(zc?.activa).toBe(false);
+    });
+
+    it('ignora un intento de cambiar el codigo', async () => {
+      // El codigo abre los folios historicos (D5). No esta en EditarSucursalDto,
+      // asi que el ValidationPipe (whitelist: true) lo descarta antes de llegar
+      // al servicio. Si alguien lo agregara al DTO por descuido, este test cae.
+      const res = await request(app.getHttpServer())
+        .patch(`/sucursales/${idZacatecas}`)
+        .set('Cookie', [cookieGeneral])
+        .send({ codigo: 'ZZ', nombre: 'Zacatecas Centro' })
+        .expect(200);
+
+      expect((res.body as SucursalRespuesta).codigo).toBe('ZC');
+    });
+
+    it('un id inexistente responde 404', async () => {
+      await request(app.getHttpServer())
+        .patch('/sucursales/00000000-0000-4000-8000-000000000000')
+        .set('Cookie', [cookieGeneral])
+        .send({ nombre: 'Fantasma' })
+        .expect(404);
+    });
+
+    it('un id que no es uuid responde 400', async () => {
+      // Sin ParseUUIDPipe esto llegaria a Postgres y reventaria como 500
+      // (22P02, invalid input syntax for type uuid).
+      await request(app.getHttpServer())
+        .patch('/sucursales/no-soy-un-uuid')
+        .set('Cookie', [cookieGeneral])
+        .send({ nombre: 'Fantasma' })
+        .expect(400);
+    });
+
+    it('un cuerpo sin ningun cambio responde 400', async () => {
+      await request(app.getHttpServer())
+        .patch(`/sucursales/${idZacatecas}`)
+        .set('Cookie', [cookieGeneral])
+        .send({})
+        .expect(400);
+    });
+
+    it('un usuario de Tijuana no puede editar Mexicali', async () => {
+      // La otra mitad de D3: el alcance no es solo de lectura.
+      await request(app.getHttpServer())
+        .patch(`/sucursales/${idMexicali}`)
+        .set('Cookie', [cookieTijuana])
+        .send({ nombre: 'Mexicali Secuestrada' })
+        .expect(403);
     });
   });
 });

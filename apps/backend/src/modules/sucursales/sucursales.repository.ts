@@ -46,6 +46,31 @@ export class SucursalesRepository {
       .executeTakeFirstOrThrow();
   }
 
+  async buscarPorId(id: string): Promise<Sucursal | undefined> {
+    return this.db
+      .selectFrom('sucursal')
+      .select(CAMPOS)
+      .where('id', '=', id)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+  }
+
+  /**
+   * `cambios` nunca llega vacio: el servicio lo comprueba antes. Un `.set({})`
+   * genera SQL invalido, asi que el chequeo no es cortesia, es necesario.
+   */
+  async actualizar(
+    id: string,
+    cambios: { nombre?: string; activa?: boolean },
+  ): Promise<Sucursal> {
+    return this.db
+      .updateTable('sucursal')
+      .set(cambios)
+      .where('id', '=', id)
+      .returning(CAMPOS)
+      .executeTakeFirstOrThrow();
+  }
+
   /**
    * El codigo de la sucursal del usuario. Distingue tres casos que NO se
    * pueden colapsar:
