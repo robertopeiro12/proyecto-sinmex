@@ -64,6 +64,20 @@ npm run crear-usuario --workspace=apps/backend # da de alta un usuario del porta
 
 Health check una vez levantado: `GET http://localhost:3000/health`.
 
+**A qué base de datos apunta cada cosa (importante, no es obvio):**
+
+| Comando | Archivo de entorno | Base de datos |
+|---|---|---|
+| `npm run backend`, `npm run crear-usuario` | `.env.development` | **`sinmex dev` en la nube** |
+| `npm test`, `npm run test:e2e`, `npm run db:types` | `.env.test` | Postgres **local** (Colima) |
+
+Es decir: **levantar el backend en modo dev escribe en la base compartida con el otro dev**, no en
+la local. Los datos de prueba que crees haciendo clic en el portal se quedan ahí. Si quieres
+trastear sin ensuciar, apunta `DATABASE_URL` de `.env.development` al Postgres local mientras tanto.
+
+Descubierto en T-09, cuando una verificación "local" acabó creando una sucursal de prueba en
+`sinmex dev`.
+
 **Requisitos de entorno para lo anterior:**
 - `JWT_SECRET` en `.env.development` (raíz del repo) — el backend no arranca sin ella. Genera una
   con `openssl rand -base64 32`.
