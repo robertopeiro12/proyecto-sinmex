@@ -37,6 +37,8 @@ proyecto-sinmex/
 ├── apps/
 │   ├── backend/   — NestJS (T-02). Módulos en src/modules/, uno por módulo de dominio
 │   │                (mismos slugs que el vault: ventas-cobranza, tesoreria, etc.).
+│   │                Excepción: `modules/sucursales/` no corresponde a un slug del vault —
+│   │                Sucursal es transversal a los 12 módulos de dominio (T-09).
 │   ├── portal/    — Next.js (T-03, pendiente)
 │   └── tablet/    — React Native/Expo (T-04, pendiente)
 ├── supabase/      — migraciones (T-01)
