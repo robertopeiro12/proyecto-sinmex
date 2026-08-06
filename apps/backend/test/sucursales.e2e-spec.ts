@@ -178,4 +178,83 @@ describe('Sucursales (e2e)', () => {
         .expect(403);
     });
   });
+
+  describe('POST /sucursales', () => {
+    it('sin sesion responde 401', async () => {
+      await request(app.getHttpServer())
+        .post('/sucursales')
+        .send({ codigo: 'ZA', nombre: 'Zapopan' })
+        .expect(401);
+    });
+
+    it('crea una sucursal y aparece en el listado', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/sucursales')
+        .set('Cookie', [cookieGeneral])
+        .send({ codigo: 'ZA', nombre: 'Zapopan' })
+        .expect(201);
+
+      expect(res.body).toMatchObject({
+        codigo: 'ZA',
+        nombre: 'Zapopan',
+        activa: true, // default de la tabla
+      });
+
+      const listado = await request(app.getHttpServer())
+        .get('/sucursales')
+        .set('Cookie', [cookieGeneral])
+        .expect(200);
+
+      const codigos = (listado.body as SucursalRespuesta[]).map(
+        (s) => s.codigo,
+      );
+      expect(codigos).toContain('ZA');
+    });
+
+    it('rechaza un codigo repetido con 409 y un mensaje que nombra el codigo', async () => {
+      // Depende de que el test anterior ya creo ZA. Se afirma el mensaje y no
+      // solo el status porque el portal lo muestra tal cual junto al campo:
+      // si degradara a un texto generico, la pantalla empeoraria en silencio.
+      const res = await request(app.getHttpServer())
+        .post('/sucursales')
+        .set('Cookie', [cookieGeneral])
+        .send({ codigo: 'ZA', nombre: 'Otro Zapopan' })
+        .expect(409);
+
+      expect((res.body as { message: string }).message).toContain('ZA');
+    });
+
+    it.each([
+      ['Z', 'una letra'],
+      ['ZAB', 'tres letras'],
+      ['Z1', 'con digito'],
+    ])('rechaza el codigo "%s" (%s) con 400', async (codigo) => {
+      await request(app.getHttpServer())
+        .post('/sucursales')
+        .set('Cookie', [cookieGeneral])
+        .send({ codigo, nombre: 'Invalida' })
+        .expect(400);
+    });
+
+    it('acepta un codigo en minusculas y lo guarda en mayusculas', async () => {
+      // La API la van a llamar tambien scripts y, mas adelante, la app tablet.
+      // Rechazar 'zb' por la capitalizacion seria pedantico: el check de la
+      // base exige mayusculas, asi que se normaliza antes de validar.
+      const res = await request(app.getHttpServer())
+        .post('/sucursales')
+        .set('Cookie', [cookieGeneral])
+        .send({ codigo: 'zb', nombre: 'Zamora' })
+        .expect(201);
+
+      expect((res.body as SucursalRespuesta).codigo).toBe('ZB');
+    });
+
+    it('rechaza un nombre vacio con 400', async () => {
+      await request(app.getHttpServer())
+        .post('/sucursales')
+        .set('Cookie', [cookieGeneral])
+        .send({ codigo: 'ZC', nombre: '   ' })
+        .expect(400);
+    });
+  });
 });

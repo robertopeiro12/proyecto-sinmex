@@ -1,6 +1,7 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { UsuarioActual } from '../auth/usuario-actual.decorator';
 import { normalizarSucursalPedida } from './alcance-sucursal';
+import { CrearSucursalDto } from './dto/crear-sucursal.dto';
 import { SucursalesService } from './sucursales.service';
 import type { Sucursal } from './sucursales.repository';
 
@@ -19,5 +20,10 @@ export class SucursalesController {
       usuarioId,
       normalizarSucursalPedida(sucursal),
     );
+  }
+
+  @Post()
+  async crear(@Body() dto: CrearSucursalDto): Promise<Sucursal> {
+    return this.sucursales.crear(dto);
   }
 }

@@ -1,6 +1,26 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { resolverAlcance, type Alcance } from './alcance-sucursal';
 import { SucursalesRepository, type Sucursal } from './sucursales.repository';
+import type { CrearSucursalDto } from './dto/crear-sucursal.dto';
+
+/**
+ * `23505` es unique_violation en Postgres. Se mira el error DESPUES del insert
+ * en vez de consultar antes si el codigo existe: una consulta previa deja una
+ * ventana entre el SELECT y el INSERT en la que otra peticion puede meter el
+ * mismo codigo, y el unique de la base es quien de verdad decide.
+ */
+function esCodigoDuplicado(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === '23505'
+  );
+}
 
 @Injectable()
 export class SucursalesService {
@@ -14,6 +34,25 @@ export class SucursalesService {
     return alcance.tipo === 'todas'
       ? this.repo.listar()
       : this.repo.listarPorCodigo(alcance.codigo);
+  }
+
+  /**
+   * Crear una sucursal no ocurre "dentro de" ninguna sucursal, asi que no hay
+   * alcance que aplicar: hoy cualquier usuario con sesion puede hacerlo. Quien
+   * deberia poder es cosa del permiso `sucursal.gestionar` en T-08 (ver el
+   * spec, seccion Endpoints).
+   */
+  async crear(dto: CrearSucursalDto): Promise<Sucursal> {
+    try {
+      return await this.repo.crear(dto.codigo, dto.nombre);
+    } catch (error) {
+      if (esCodigoDuplicado(error)) {
+        throw new ConflictException(
+          `Ya existe una sucursal con el código ${dto.codigo}.`,
+        );
+      }
+      throw error;
+    }
   }
 
   /**

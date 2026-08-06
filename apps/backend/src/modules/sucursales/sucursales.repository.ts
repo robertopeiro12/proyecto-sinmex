@@ -38,6 +38,14 @@ export class SucursalesRepository {
       .execute();
   }
 
+  async crear(codigo: string, nombre: string): Promise<Sucursal> {
+    return this.db
+      .insertInto('sucursal')
+      .values({ codigo, nombre })
+      .returning(CAMPOS)
+      .executeTakeFirstOrThrow();
+  }
+
   /**
    * El codigo de la sucursal del usuario. Distingue tres casos que NO se
    * pueden colapsar:
