@@ -244,13 +244,20 @@ verificar end-to-end.
 
 - Entrada nueva en `nav-config.ts`, sección **Catálogo**.
 - Tabla: código, nombre, estado (activa/inactiva).
-- Botón "Nueva sucursal" → diálogo con `codigo` (2 letras, se normaliza a mayúsculas) y `nombre`.
-- Editar → mismo diálogo con el código en solo lectura (D5) y un control para `activa`.
+- Botón "Nueva sucursal" → formulario con `codigo` (2 letras, se normaliza a mayúsculas) y `nombre`.
+- Editar → mismo formulario con el código en solo lectura (D5) y un control para `activa`.
 - Errores de la API visibles en el formulario: el 409 aparece junto al campo de código, no como
   fallo genérico.
 
-Componentes de shadcn que faltan y hay que agregar: `table`, `input`, `label`, `dialog`.
-El portal hoy solo tiene `card` y `button`.
+**Sin dependencias nuevas.** El portal ya estableció su patrón en `formulario-login.tsx`:
+`<input>` y `<label>` de HTML con clases de Tailwind, y solo `Button`/`Card` desde shadcn. La
+pantalla de sucursales lo sigue — `<table>` con Tailwind y el mismo estilo de campos.
+
+El formulario aparece **en línea** (encima de la tabla) en vez de en un diálogo modal. Un modal
+accesible de verdad exige trampa de foco, cierre con Escape y `aria-modal`; traer esa dependencia
+para el primer catálogo, cuando un panel en línea resuelve el caso igual de bien, es complejidad
+sin retorno. Si más adelante los catálogos piden modal, se decide con varios casos a la vista
+(mismo criterio que la extracción de componentes).
 
 ### Selector "Por sucursal"
 
