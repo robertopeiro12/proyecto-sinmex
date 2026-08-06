@@ -89,7 +89,9 @@ En resumen, antes de contratar hosting: o dominio propio con subdominios para am
 1. Crea una rama por ticket, ej. `git checkout -b feature/t-05-esquema`.
 2. Trabaja y haz commits normales en tu rama.
 3. `git push -u origin feature/t-05-esquema` y abre un Pull Request hacia `main` en GitHub
-   (o con `gh pr create`).
+   (o con `gh pr create`). En el cuerpo del PR escribe **`Closes #9`**, en inglés: GitHub solo
+   reconoce `Closes`/`Fixes`/`Resolves` para cerrar el issue solo al mergear. Escribir
+   "Cierra #9" no hace nada y el issue se queda abierto (pasó en T-09).
 4. El PR dispara CI automáticamente (lint + build + test). El botón de **Merge** queda
    deshabilitado hasta que el check `lint-and-test` termine en verde ✅. Si sale en rojo ❌,
    arregla y vuelve a pushear a la misma rama — el check corre de nuevo solo.
