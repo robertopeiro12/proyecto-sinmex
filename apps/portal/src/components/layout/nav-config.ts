@@ -17,6 +17,7 @@ export const navSections: NavSection[] = [
   {
     label: "Catálogo",
     items: [
+      { label: "Sucursales", href: "/catalogo/sucursales" },
       { label: "Clientes", href: "/catalogo/clientes" },
       { label: "Vendedores", href: "/catalogo/vendedores" },
       { label: "Vehículos", href: "/catalogo/vehiculos" },

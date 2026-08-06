@@ -10,6 +10,13 @@ export class ErrorApi extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /**
+     * El mensaje que mando la API, cuando trae uno legible. Existe porque hay
+     * errores que SOLO el servidor sabe explicar — "ya existe una sucursal con
+     * el codigo TJ" — y degradarlos a un texto generico obligaria al usuario a
+     * adivinar que campo corregir.
+     */
+    readonly mensajeApi?: string,
   ) {
     super(message);
   }
@@ -79,6 +86,30 @@ function refrescarSesion(): Promise<boolean> {
 }
 
 /**
+ * Saca el mensaje de error del cuerpo. Nest manda `message` como cadena (las
+ * excepciones normales) o como arreglo de cadenas (el ValidationPipe, una por
+ * campo que fallo). Nunca lanza: si el cuerpo no es JSON, quien llama todavia
+ * tiene el status, y un fallo leyendo el error no debe tapar el error.
+ */
+async function leerMensajeDeError(res: Response): Promise<string | undefined> {
+  try {
+    const cuerpo: unknown = await res.json();
+    if (typeof cuerpo === "object" && cuerpo !== null && "message" in cuerpo) {
+      const mensaje = (cuerpo as { message: unknown }).message;
+      if (typeof mensaje === "string") {
+        return mensaje;
+      }
+      if (Array.isArray(mensaje)) {
+        return mensaje.filter((m): m is string => typeof m === "string").join(" ");
+      }
+    }
+  } catch {
+    // Cuerpo vacio o no-JSON: no hay nada que mostrar y no es un fallo.
+  }
+  return undefined;
+}
+
+/**
  * Llama a la API con las cookies de sesion. Ante un 401 intenta refrescar
  * UNA vez y reintenta; si tampoco funciona, propaga el 401 para que quien
  * llame mande al login.
@@ -110,7 +141,11 @@ export async function apiFetch<T>(ruta: string, init: RequestInit = {}): Promise
   }
 
   if (!res.ok) {
-    throw new ErrorApi(`La peticion a ${ruta} fallo`, res.status);
+    throw new ErrorApi(
+      `La peticion a ${ruta} fallo`,
+      res.status,
+      await leerMensajeDeError(res),
+    );
   }
 
   return (await res.json()) as T;
