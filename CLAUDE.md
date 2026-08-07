@@ -63,6 +63,7 @@ npm test --workspace=apps/backend
 npm run test:e2e --workspace=apps/backend      # pruebas end-to-end (requieren Postgres real)
 npm run db:types --workspace=apps/backend      # regenera apps/backend/src/database/schema.d.ts desde la BD local
 npm run crear-usuario --workspace=apps/backend # da de alta un usuario del portal (input interactivo)
+npm run crear-vendedor --workspace=apps/backend # da de alta (o restablece la contraseña de) un vendedor de la app
 
 npm run typecheck --workspace=apps/tablet      # tsc --noEmit de la app de tablet
 npm test --workspace=apps/tablet               # pruebas de la capa de datos local (SQLite)
@@ -90,9 +91,28 @@ trastear sin ensuciar, apunta `DATABASE_URL` de `.env.development` al Postgres l
 Descubierto en T-09, cuando una verificación "local" acabó creando una sucursal de prueba en
 `sinmex dev`.
 
+**Dos actores, dos autenticaciones (T-06) — no las mezcles:**
+
+| | Portal Web | App de tablet |
+|---|---|---|
+| Actor | `Usuario` | `Vendedor` (entidades separadas, ver el vault) |
+| Endpoints | `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/me` | `/auth/app/login`, `/auth/app/refresh`, `/auth/app/logout`, `/auth/app/me` |
+| Transporte | cookies httpOnly (exige dominio padre común) | **tokens** en el cuerpo + `Authorization: Bearer` |
+| Claim `tipo` del JWT | `usuario` | `vendedor` |
+| Sesión de refresh | tabla `sesion_refresh` | tabla `sesion_vendedor` |
+| Guard | por defecto | endpoints marcados con `@SoloApp()` |
+
+El guard global es estricto en los dos sentidos: un token de app **no** entra al portal ni al revés.
+El de la app además vale offline — ver `ADR-0005` en el vault y `apps/tablet/src/sesion/`.
+
 **Requisitos de entorno para lo anterior:**
 - `JWT_SECRET` en `.env.development` (raíz del repo) — el backend no arranca sin ella. Genera una
   con `openssl rand -base64 32`.
+- Variables de la app (todas en **horas**, todas con default): `ACCESS_TOKEN_TTL_APP_HORAS`,
+  `REFRESH_TOKEN_TTL_APP_HORAS`, `VENTANA_OFFLINE_MAX_HORAS`, `VERIFICADOR_LOCAL_ITERACIONES`.
+  Ver `.env.example` y `apps/backend/src/modules/auth/ttl-sesion.ts`.
+- Para que la tablet alcance el backend: `EXPO_PUBLIC_API_URL` (default `http://localhost:3000`,
+  que **solo sirve en emulador**; en una tablet real hay que apuntar a la IP del servidor).
 - Para `test`, `test:e2e` y `db:types`: el stack local de Supabase arriba (`colima start` +
   `npm run supabase start`) y un `.env.test` en la raíz con `DATABASE_URL` (al Postgres local) y
   `JWT_SECRET`. `db:types` filtra con `--include-pattern='public.*'` para no traerse las tablas

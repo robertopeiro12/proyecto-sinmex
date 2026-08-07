@@ -6,7 +6,6 @@ import { relojSistema } from './reloj';
 import { crearRepositorioCatalogos, type RepositorioCatalogos } from './repositorios/catalogos';
 import { crearRepositorioJornadas, type RepositorioJornadas } from './repositorios/jornadas';
 import type { DepsRepositorio } from './repositorios/deps';
-import { sembrarCatalogosDeDesarrollo } from './semilla-dev';
 
 /** Lo que la app usa para hablar con la base local. */
 export interface CapaDatos {
@@ -31,8 +30,9 @@ export function inicializarCapaDatos(): CapaDatos {
   const deps: DepsRepositorio = { bd, reloj: relojSistema, generarId: randomUUID };
   const catalogos = crearRepositorioCatalogos(deps);
 
-  // TODO: T-07 — quitar la semilla cuando el `pull` baje catalogos reales.
-  sembrarCatalogosDeDesarrollo(catalogos);
+  // La semilla de desarrollo ya NO se aplica aqui: necesita saber la sucursal
+  // del vendedor, y eso no se sabe hasta que inicia sesion. La aplica
+  // `estado/proveedor-sesion.tsx` tras un login correcto (y solo en __DEV__).
 
   return {
     deps,

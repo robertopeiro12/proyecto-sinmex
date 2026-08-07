@@ -4,26 +4,28 @@ import type { RepositorioCatalogos, SnapshotCatalogos } from './repositorios/cat
  * Catalogos de mentira para poder navegar el shell en un dispositivo antes de
  * que exista la sincronizacion.
  *
+ * > [!info] T-06 quito de aqui al vendedor
+ * > Esta semilla traia un vendedor `demo` y el arranque de la app lo tomaba
+ * > como si tuviera sesion iniciada. Ya no: el vendedor y su sucursal salen del
+ * > **login real** (ver `estado/proveedor-sesion.tsx`), y lo que queda aqui son
+ * > solo los catalogos que aun no baja nadie. Por eso ahora la semilla recibe
+ * > la sucursal del vendedor que entro: sus vehiculos y clientes tienen que
+ * > colgar de la sucursal de verdad, no de una inventada.
+ *
  * TODO: T-07 — al implementar el `pull` matutino, borrar este archivo y su
- *       llamada en `inicializar.ts`. Los catalogos reales bajan del portal.
+ *       llamada en `estado/proveedor-sesion.tsx`. Los catalogos reales bajan
+ *       del portal.
  */
-const SEMILLA: SnapshotCatalogos = {
-  sucursales: [
-    { id: 'dev-suc-tj', codigo: 'TJ', nombre: 'Tijuana', activa: 1 },
-    { id: 'dev-suc-mx', codigo: 'MX', nombre: 'Mexicali', activa: 1 },
-  ],
-  vendedores: [
-    {
-      id: 'dev-ven-1',
-      login: 'demo',
-      nombre: 'Vendedor de prueba',
-      sucursal_id: 'dev-suc-tj',
-      activo: 1,
-    },
-  ],
+function semilla(sucursalId: string): SnapshotCatalogos {
+  return {
+  // La sucursal ya la inserto el login (con su id y codigo reales); aqui no se
+  // vuelve a tocar para no pisar su nombre con uno inventado.
+  sucursales: [],
+  // Sin vendedores: el unico que existe es el que inicio sesion.
+  vendedores: [],
   vehiculos: [
-    { id: 'dev-veh-1', nombre: 'Camioneta 01', sucursal_id: 'dev-suc-tj', activo: 1 },
-    { id: 'dev-veh-2', nombre: 'Camioneta 02', sucursal_id: 'dev-suc-tj', activo: 1 },
+    { id: 'dev-veh-1', nombre: 'Camioneta 01', sucursal_id: sucursalId, activo: 1 },
+    { id: 'dev-veh-2', nombre: 'Camioneta 02', sucursal_id: sucursalId, activo: 1 },
   ],
   productos: [
     { id: 'dev-pro-1', nombre: 'Jamaica', activo: 1 },
@@ -48,7 +50,7 @@ const SEMILLA: SnapshotCatalogos = {
       plazo_credito_dias: 7,
       lat: 32.5149,
       lng: -117.0382,
-      sucursal_id: 'dev-suc-tj',
+      sucursal_id: sucursalId,
     },
     {
       id: 'dev-cli-2',
@@ -62,7 +64,7 @@ const SEMILLA: SnapshotCatalogos = {
       plazo_credito_dias: null,
       lat: 32.5325,
       lng: -117.0442,
-      sucursal_id: 'dev-suc-tj',
+      sucursal_id: sucursalId,
     },
     {
       id: 'dev-cli-3',
@@ -76,7 +78,7 @@ const SEMILLA: SnapshotCatalogos = {
       plazo_credito_dias: 15,
       lat: 32.5011,
       lng: -116.9998,
-      sucursal_id: 'dev-suc-tj',
+      sucursal_id: sucursalId,
     },
   ],
   precios: [
@@ -95,13 +97,22 @@ const SEMILLA: SnapshotCatalogos = {
       vigente_desde: '2026-01-01',
     },
   ],
-};
+  };
+}
 
-/** Sucursal del vendedor de prueba, mientras no haya login (T-06). */
-export const SUCURSAL_DEV = 'dev-suc-tj';
-
-/** Siembra los catalogos si la base aun no tiene ninguno. */
-export function sembrarCatalogosDeDesarrollo(catalogos: RepositorioCatalogos): void {
-  if (catalogos.frescuraCatalogos() !== null) return;
-  catalogos.guardarSnapshot(SEMILLA);
+/**
+ * Siembra los catalogos de desarrollo bajo la sucursal del vendedor que acaba
+ * de entrar, si la base aun no tiene vehiculos suyos.
+ *
+ * La condicion mira los **vehiculos de esa sucursal** y no la frescura global
+ * de los catalogos: desde T-06 el login ya escribe la sucursal y el vendedor,
+ * asi que la base nunca esta vacia cuando esto corre y la comprobacion anterior
+ * (`frescuraCatalogos() !== null`) impediria sembrar siempre.
+ */
+export function sembrarCatalogosDeDesarrollo(
+  catalogos: RepositorioCatalogos,
+  sucursalId: string,
+): void {
+  if (catalogos.listarVehiculos(sucursalId).length > 0) return;
+  catalogos.guardarSnapshot(semilla(sucursalId));
 }
