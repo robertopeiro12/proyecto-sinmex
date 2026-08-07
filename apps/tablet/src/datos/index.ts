@@ -17,4 +17,6 @@ export { crearRepositorioCatalogos } from './repositorios/catalogos';
 export type { RepositorioCatalogos, SnapshotCatalogos } from './repositorios/catalogos';
 export { crearRepositorioJornadas, ErrorJornada } from './repositorios/jornadas';
 export type { DatosAperturaJornada, RepositorioJornadas } from './repositorios/jornadas';
+export { crearRepositorioSync, CURSOR_PULL } from './repositorios/sync';
+export type { RepositorioSync } from './repositorios/sync';
 export * from './tipos';

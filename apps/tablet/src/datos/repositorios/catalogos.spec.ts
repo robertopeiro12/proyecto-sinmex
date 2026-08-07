@@ -60,8 +60,8 @@ describe('repositorio de catalogos', () => {
     const { deps, catalogos } = conCatalogos();
 
     const segundo = snapshotDePrueba();
-    segundo.clientes = [{ ...segundo.clientes[0]!, nombre: 'Abarrotes La Esquina S.A.' }];
-    segundo.precios[1] = { ...segundo.precios[1]!, precio_centavos: 2900 };
+    segundo.clientes = [{ ...segundo.clientes![0]!, nombre: 'Abarrotes La Esquina S.A.' }];
+    segundo.precios![1] = { ...segundo.precios![1]!, precio_centavos: 2900 };
     catalogos.guardarSnapshot(segundo);
 
     expect(catalogos.listarClientes('suc-tj')).toHaveLength(1);
@@ -110,5 +110,63 @@ describe('repositorio de catalogos', () => {
     // La transaccion se revirtio entera: no quedo el vehiculo huerfano.
     expect(catalogos.listarVehiculos('suc-tj').map((v) => v.id)).toEqual(['veh-1']);
     expect(catalogos.listarClientes('suc-tj')).toHaveLength(1);
+  });
+
+  // ---------------------------------------------------------------- T-07
+
+  describe('la baja llega como bandera, no como ausencia (T-07)', () => {
+    it('un cliente dado de baja deja de listarse pero NO se borra', () => {
+      // No se puede borrar: la operacion local (una jornada, una venta) puede
+      // estar apuntandolo, y el snapshot se aplica con upsert justamente por
+      // eso. Ver la migracion 002 y el contrato de sincronizacion.
+      const { deps, catalogos } = conCatalogos();
+
+      catalogos.guardarSnapshot({
+        clientes: [{ ...snapshotDePrueba().clientes![0]!, activo: 0 }],
+      });
+
+      expect(catalogos.listarClientes('suc-tj')).toHaveLength(0);
+      expect(catalogos.obtenerCliente('cli-1')).not.toBeNull();
+      expect(deps.bd.getAllSync('select id from cliente')).toHaveLength(2);
+    });
+
+    it('un precio dado de baja deja de aplicarse y descubre el anterior', () => {
+      const { catalogos } = conCatalogos();
+      expect(catalogos.precioVigente('cli-1', 'pre-1', '2026-08-07')).toBe(2800);
+
+      catalogos.guardarSnapshot({
+        precios: [{ ...snapshotDePrueba().precios![1]!, activo: 0 }],
+      });
+
+      // Vuelve a valer el de 2026-01-01, que sigue activo.
+      expect(catalogos.precioVigente('cli-1', 'pre-1', '2026-08-07')).toBe(2500);
+    });
+  });
+
+  describe('notas pendientes por cobrar (T-07)', () => {
+    it('bajan con el snapshot y se listan por cliente, mas viejas primero', () => {
+      const { catalogos } = conCatalogos();
+      const notas = catalogos.notasPendientesDe('cli-1');
+
+      expect(notas.map((n) => n.id)).toEqual(['nota-1', 'nota-2']);
+      expect(notas[0]!.saldo_centavos).toBe(15000);
+      expect(notas[0]!.monto_total_centavos).toBe(25000);
+      expect(notas[0]!.status).toBe('abonado');
+    });
+
+    it('una nota cancelada en el portal deja de poder cobrarse', () => {
+      const { catalogos } = conCatalogos();
+
+      catalogos.guardarSnapshot({
+        notas: [{ ...snapshotDePrueba().notas![0]!, activo: 0 }],
+      });
+
+      expect(catalogos.notasPendientesDe('cli-1').map((n) => n.id)).toEqual(['nota-2']);
+    });
+
+    it('un cliente sin notas devuelve lista vacia, no null', () => {
+      const { catalogos } = conCatalogos();
+      expect(catalogos.notasPendientesDe('cli-2')).toEqual([]);
+    });
   });
 });

@@ -5,6 +5,7 @@ import type {
   Cliente,
   ClientePrecio,
   FechaISO,
+  NotaPendiente,
   Presentacion,
   Producto,
   Sucursal,
@@ -13,17 +14,23 @@ import type {
 } from '../tipos';
 
 /**
- * Snapshot de catalogos tal como lo entregara el `pull` de T-07.
+ * Snapshot de catalogos tal como lo entrega el `pull` de T-07.
  * Cada fila llega **sin** `sincronizado_en`: lo pone el repositorio.
+ *
+ * Todas las colecciones son opcionales porque el pull es **incremental**: una
+ * sincronizacion de media manana suele traer solo lo que cambio, y a veces
+ * nada. Obligar a mandar listas vacias haria que quien llame se equivocara al
+ * primer descuido.
  */
 export interface SnapshotCatalogos {
-  sucursales: Omit<Sucursal, 'sincronizado_en'>[];
-  vendedores: Omit<Vendedor, 'sincronizado_en'>[];
-  vehiculos: Omit<Vehiculo, 'sincronizado_en'>[];
-  productos: Omit<Producto, 'sincronizado_en'>[];
-  presentaciones: Omit<Presentacion, 'sincronizado_en'>[];
-  clientes: Omit<Cliente, 'sincronizado_en'>[];
-  precios: Omit<ClientePrecio, 'sincronizado_en'>[];
+  sucursales?: Omit<Sucursal, 'sincronizado_en'>[];
+  vendedores?: Omit<Vendedor, 'sincronizado_en'>[];
+  vehiculos?: Omit<Vehiculo, 'sincronizado_en'>[];
+  productos?: Omit<Producto, 'sincronizado_en'>[];
+  presentaciones?: Omit<Presentacion, 'sincronizado_en'>[];
+  clientes?: Omit<Cliente, 'sincronizado_en'>[];
+  precios?: Omit<ClientePrecio, 'sincronizado_en'>[];
+  notas?: Omit<NotaPendiente, 'sincronizado_en'>[];
 }
 
 export type RepositorioCatalogos = ReturnType<typeof crearRepositorioCatalogos>;
@@ -34,7 +41,7 @@ const COLUMNAS = {
   vendedor: ['id', 'login', 'nombre', 'sucursal_id', 'activo'],
   vehiculo: ['id', 'nombre', 'sucursal_id', 'activo'],
   producto: ['id', 'nombre', 'activo'],
-  presentacion: ['id', 'producto_id', 'volumen'],
+  presentacion: ['id', 'producto_id', 'volumen', 'activo'],
   cliente: [
     'id',
     'nombre',
@@ -48,6 +55,7 @@ const COLUMNAS = {
     'lat',
     'lng',
     'sucursal_id',
+    'activo',
   ],
   cliente_precio: [
     'id',
@@ -55,6 +63,18 @@ const COLUMNAS = {
     'presentacion_id',
     'precio_centavos',
     'vigente_desde',
+    'activo',
+  ],
+  nota_pendiente: [
+    'id',
+    'cliente_id',
+    'folio',
+    'num_nota',
+    'fecha',
+    'status',
+    'monto_total_centavos',
+    'saldo_centavos',
+    'activo',
   ],
 } as const;
 
@@ -79,14 +99,15 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
      * ocurre justo cuando hay una jornada abierta, asi que ese caso es la norma
      * y no la excepcion.
      *
-     * Consecuencia conocida: una fila que **desaparece** del snapshot (un
-     * cliente dado de baja en el portal) se queda en la tablet hasta que se
-     * defina la purga.
+     * ### La purga: la baja llega como bandera (T-07)
      *
-     * TODO: T-07 — decidir la politica de purga. Lo natural, dado que el portal
-     *       nunca borra fisico (`deleted_at`), es que el snapshot traiga la
-     *       bandera de baja y aqui solo se refleje; no borrar filas que la
-     *       operacion local todavia referencia.
+     * Una fila que **desaparece** del snapshot se queda aqui — con upsert no
+     * puede ser de otra forma. Por eso el `pull` nunca omite lo dado de baja:
+     * lo manda con `activo: 0`. El portal no borra fisico (`deleted_at`), asi
+     * que una baja es un `update` y viaja por el mismo cursor incremental que
+     * cualquier otro cambio. Aqui solo se refleja; las consultas filtran por
+     * `activo = 1` y la operacion local que ya referenciaba esa fila sigue
+     * intacta.
      *
      * Todo va en una sola transaccion: la tablet nunca queda con medio catalogo
      * si la bajada se corta a la mitad.
@@ -96,7 +117,7 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
 
       enTransaccion(bd, () => {
         // Orden de llaves foraneas: sucursal -> vendedor/vehiculo/cliente,
-        // producto -> presentacion -> cliente_precio.
+        // producto -> presentacion -> cliente_precio -> nota_pendiente.
         upsert(bd, 'sucursal', COLUMNAS.sucursal, snapshot.sucursales, ahora);
         upsert(bd, 'vendedor', COLUMNAS.vendedor, snapshot.vendedores, ahora);
         upsert(bd, 'vehiculo', COLUMNAS.vehiculo, snapshot.vehiculos, ahora);
@@ -104,6 +125,7 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
         upsert(bd, 'presentacion', COLUMNAS.presentacion, snapshot.presentaciones, ahora);
         upsert(bd, 'cliente', COLUMNAS.cliente, snapshot.clientes, ahora);
         upsert(bd, 'cliente_precio', COLUMNAS.cliente_precio, snapshot.precios, ahora);
+        upsert(bd, 'nota_pendiente', COLUMNAS.nota_pendiente, snapshot.notas, ahora);
       });
     },
 
@@ -117,13 +139,28 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
       );
     },
 
-    /** Clientes (no prospectos) de una sucursal. */
+    /** Clientes (no prospectos) **activos** de una sucursal. */
     listarClientes(sucursalId: string): Cliente[] {
       return bd.getAllSync<Cliente>(
         `select * from cliente
-         where sucursal_id = $sucursal_id and tipo = 'cliente'
+         where sucursal_id = $sucursal_id and tipo = 'cliente' and activo = 1
          order by nombre`,
         { $sucursal_id: sucursalId },
+      );
+    },
+
+    /**
+     * Notas por cobrar de un cliente, para la pantalla de cobranza/abono.
+     *
+     * Solo las activas: una nota que el portal cancelo mientras el vendedor
+     * estaba en ruta no se le debe poder cobrar.
+     */
+    notasPendientesDe(clienteId: string): NotaPendiente[] {
+      return bd.getAllSync<NotaPendiente>(
+        `select * from nota_pendiente
+         where cliente_id = $cliente_id and activo = 1
+         order by fecha`,
+        { $cliente_id: clienteId },
       );
     },
 
@@ -148,6 +185,7 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
          where cliente_id = $cliente_id
            and presentacion_id = $presentacion_id
            and vigente_desde <= $fecha
+           and activo = 1
          order by vigente_desde desc
          limit 1`,
         { $cliente_id: clienteId, $presentacion_id: presentacionId, $fecha: fecha },
@@ -185,10 +223,10 @@ function upsert(
   bd: BaseDatos,
   tabla: string,
   columnas: readonly string[],
-  filas: readonly Record<string, unknown>[],
+  filas: readonly Record<string, unknown>[] | undefined,
   sincronizadoEn: string,
 ): void {
-  if (filas.length === 0) return;
+  if (!filas || filas.length === 0) return;
 
   const todas = [...columnas, 'sincronizado_en'];
   const marcadores = todas.map((c) => `$${c}`).join(', ');

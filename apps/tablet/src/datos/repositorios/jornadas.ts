@@ -133,7 +133,10 @@ export function crearRepositorioJornadas({ bd, reloj, generarId }: DepsRepositor
     /**
      * Jornadas que faltan por subir al portal.
      *
-     * TODO: T-07 — la usara el `push` del cierre de dia.
+     * Incluye las que quedaron en `error`: un rechazo puede deberse a un dato
+     * que el portal corrigio despues (un vehiculo que estaba de baja, por
+     * ejemplo), asi que se vuelve a intentar. Reintentar es seguro porque el
+     * `push` es idempotente: la clave es el `id` de la fila, que no cambia.
      */
     pendientesDeSincronizar(): Jornada[] {
       return bd.getAllSync<Jornada>(
@@ -143,12 +146,30 @@ export function crearRepositorioJornadas({ bd, reloj, generarId }: DepsRepositor
       );
     },
 
-    /** Marca una jornada como ya subida. TODO: T-07. */
+    /** Marca una jornada como ya subida y limpia el error de un intento previo. */
     marcarSincronizada(jornadaId: string): void {
       bd.runSync(
-        `update jornada set sync_estado = 'sincronizado', sincronizado_en = $sincronizado_en
+        `update jornada set
+           sync_estado = 'sincronizado',
+           sincronizado_en = $sincronizado_en,
+           sync_error = null
          where id = $id`,
         { $sincronizado_en: reloj.ahora(), $id: jornadaId },
+      );
+    },
+
+    /**
+     * El servidor rechazo esta jornada y dijo por que.
+     *
+     * Se guarda el motivo, no solo el estado: sin el, una fila en `error` es un
+     * callejon sin salida — nadie sabria que paso ni podria decirselo al
+     * vendedor. Sigue apareciendo en `pendientesDeSincronizar()` para que el
+     * proximo intento la vuelva a mandar.
+     */
+    marcarError(jornadaId: string, motivo: string): void {
+      bd.runSync(
+        `update jornada set sync_estado = 'error', sync_error = $motivo where id = $id`,
+        { $motivo: motivo, $id: jornadaId },
       );
     },
   };
