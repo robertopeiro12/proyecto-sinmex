@@ -39,8 +39,10 @@ proyecto-sinmex/
 │   │                (mismos slugs que el vault: ventas-cobranza, tesoreria, etc.).
 │   │                Excepción: `modules/sucursales/` no corresponde a un slug del vault —
 │   │                Sucursal es transversal a los 12 módulos de dominio (T-09).
-│   ├── portal/    — Next.js (T-03, pendiente)
-│   └── tablet/    — React Native/Expo (T-04, pendiente)
+│   ├── portal/    — Next.js (T-03)
+│   └── tablet/    — React Native/Expo + SQLite local (T-04). Rutas de expo-router
+│                    en `app/`, capa de datos offline en `src/datos/`.
+│                    Ver `apps/tablet/README.md`.
 ├── supabase/      — migraciones (T-01)
 ├── .env.example   — plantilla de variables; .env.development es local, nunca se sube
 └── package.json   — raíz del workspace
@@ -54,13 +56,23 @@ Desde la raíz del repo (no entres a `apps/backend` a mano, usa los scripts del 
 npm install                  # instala todo el monorepo (un solo node_modules)
 npm run backend               # levanta el backend en modo dev (watch)
 npm run portal                 # levanta el portal (Next.js) en modo dev
+npm run tablet                 # levanta el bundler de Expo (app de tablet)
 npm run lint --workspace=apps/backend
 npm run build --workspace=apps/backend
 npm test --workspace=apps/backend
 npm run test:e2e --workspace=apps/backend      # pruebas end-to-end (requieren Postgres real)
 npm run db:types --workspace=apps/backend      # regenera apps/backend/src/database/schema.d.ts desde la BD local
 npm run crear-usuario --workspace=apps/backend # da de alta un usuario del portal (input interactivo)
+
+npm run typecheck --workspace=apps/tablet      # tsc --noEmit de la app de tablet
+npm test --workspace=apps/tablet               # pruebas de la capa de datos local (SQLite)
+npm run export --workspace=apps/tablet         # bundle de Metro; valida la resolucion del monorepo
 ```
+
+**App de tablet dentro del monorepo:** `apps/tablet/metro.config.js` configura `watchFolders` a
+la raiz y `nodeModulesPaths` (workspace + raiz) porque `npm install` reparte las dependencias
+entre ambas carpetas. **No pongas `resolver.disableHierarchicalLookup = true`** (la receta que
+circula para pnpm/yarn): con el layout de npm rompe el bundle. Ver los comentarios del archivo.
 
 Health check una vez levantado: `GET http://localhost:3000/health`.
 
