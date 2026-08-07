@@ -83,7 +83,7 @@ Health check una vez levantado: `GET http://localhost:3000/health`.
 | Comando | Archivo de entorno | Base de datos |
 |---|---|---|
 | `npm run backend`, `npm run crear-usuario` | `.env.development` | **`sinmex dev` en la nube** |
-| `npm test`, `npm run test:e2e`, `npm run db:types` | `.env.test` | Postgres **local** (Colima) |
+| `npm test`, `npm run test:e2e`, `npm run db:types` | `.env.test` | Postgres **local** (Docker) |
 
 Es decir: **levantar el backend en modo dev escribe en la base compartida con el otro dev**, no en
 la local. Los datos de prueba que crees haciendo clic en el portal se quedan ahí. Si quieres
@@ -123,6 +123,29 @@ El de la app además vale offline — ver `ADR-0005` en el vault y `apps/tablet/
   no en el servicio. La clave es el `id` local de la fila en SQLite. Una operación **rechazada no
   deja fila**, para que se pueda corregir y reenviar.
 
+**Folios (T-14) — el folio lo emite la TABLET, offline:**
+
+`ADR-0001` en el vault manda el formato: **12 caracteres en 6 segmentos**
+(`TJ260322AP05` = sucursal + año + mes + día + vendedor + operación del día).
+
+- **No lo emite el servidor.** T-07 había escrito lo contrario ("se emitirá al proyectar");
+  ADR-0001 lo descarta explícitamente porque el folio se escribe en la nota física que el
+  cliente firma, en campo, sin red. Ver `ADR-0007` del vault y el §7 de `docs/`.
+- **El contador reinicia solo porque cuelga de la fecha.** `folio_contador` tiene llave
+  primaria `(vendedor, sucursal, fecha)` en el SQLite de la tablet. No hay ninguna
+  comprobación de "¿cambió el día?" que se pueda olvidar: un día nuevo es una fila nueva.
+- **Emite dentro de la transacción que guarda la operación.** `folios.emitir()` usa
+  `savepoint`, no `begin`, para poder anidarse. T-16/T-20 **deben** llamarlo dentro de su
+  propia transacción, o un fallo a media captura quema un número.
+- **Folio ≠ clave de idempotencia** y hay que mantenerlos separados: la clave identifica el
+  transporte, el folio el hecho de negocio.
+- **La colisión se detecta con un `unique` global** en `sync_operacion.folio` (rechazo por
+  operación, `folio-duplicado`). Al desempatar un `23505`, **mira primero la clave**: un
+  reenvío legítimo trae la misma clave y el mismo folio y es `duplicada`, no colisión.
+- **El segmento de vendedor (5º) lo asigna el SERVIDOR** y baja en el `pull`. La tablet no lo
+  deriva de `nombre`: solo baja su propia ficha, así que no puede saber si comparte iniciales
+  con un compañero. La estrategia de desambiguación es **provisional** (ADR-0007).
+
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
 `--`: sin él, npm se come los argumentos).
 
@@ -134,8 +157,8 @@ El de la app además vale offline — ver `ADR-0005` en el vault y `apps/tablet/
   Ver `.env.example` y `apps/backend/src/modules/auth/ttl-sesion.ts`.
 - Para que la tablet alcance el backend: `EXPO_PUBLIC_API_URL` (default `http://localhost:3000`,
   que **solo sirve en emulador**; en una tablet real hay que apuntar a la IP del servidor).
-- Para `test`, `test:e2e` y `db:types`: el stack local de Supabase arriba (`colima start` +
-  `npm run supabase start`) y un `.env.test` en la raíz con `DATABASE_URL` (al Postgres local) y
+- Para `test`, `test:e2e` y `db:types`: el stack local de Supabase arriba (Docker Desktop
+  corriendo + `npm run supabase start`; en esta maquina **no hay Colima**) y un `.env.test` en la raíz con `DATABASE_URL` (al Postgres local) y
   `JWT_SECRET`. `db:types` filtra con `--include-pattern='public.*'` para no traerse las tablas
   internas de Supabase (`auth.*`, `storage.*`, etc.), que contradicen el ADR-0002 (Supabase solo
   como Postgres gestionado).
