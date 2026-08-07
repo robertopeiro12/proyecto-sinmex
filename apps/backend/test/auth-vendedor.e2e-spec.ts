@@ -453,6 +453,43 @@ describe('Auth de la app del vendedor (e2e)', () => {
         .send({ tokenRefresh: 'esto-no-existe' })
         .expect(401);
     });
+
+    it('dos rotaciones concurrentes del mismo refresh: solo una gana y no queda ninguna sesion viva', async () => {
+      // Es la invariante mas sutil del sistema y la razon de que
+      // `revocarSiViva` sea un UPDATE condicional: sin ese punto de
+      // serializacion, dos usos paralelos del mismo token —que es
+      // exactamente la firma de un token robado— podrian salir los dos
+      // adelante y la deteccion de reuso quedaria ciega.
+      //
+      // Una tablet lo produce sola: la app reintenta al recuperar la WiFi
+      // justo cuando la sincronizacion de T-07 tambien renueva.
+      const sesion = await entrar();
+
+      // Se disparan a la vez, sin esperar una antes de la otra.
+      const resultados = await Promise.all([
+        request(app.getHttpServer())
+          .post('/auth/app/refresh')
+          .send({ tokenRefresh: sesion.tokenRefresh }),
+        request(app.getHttpServer())
+          .post('/auth/app/refresh')
+          .send({ tokenRefresh: sesion.tokenRefresh }),
+      ]);
+
+      const estados = resultados.map((r) => r.status).sort();
+      expect(estados).toEqual([200, 401]);
+
+      // Y la sesion de la llamada GANADORA tambien queda revocada: el reuso
+      // concurrente corta toda la cadena, incluida la rama "legitima". Sin
+      // esta asercion, la prueba pasaria igual con una implementacion que
+      // solo rechazara a la perdedora.
+      const vivas = await db
+        .selectFrom('sesion_vendedor')
+        .select('id')
+        .where('vendedor_id', '=', vendedorId)
+        .where('revocada_en', 'is', null)
+        .execute();
+      expect(vivas).toHaveLength(0);
+    });
   });
 
   describe('logout', () => {
@@ -507,6 +544,26 @@ describe('Auth de la app del vendedor (e2e)', () => {
         false,
       );
       expect(filas.length).toBeGreaterThan(0);
+    });
+
+    it('la sesion que guardara la tablet cabe holgadamente en expo-secure-store', async () => {
+      // Android limita el tamano de cada valor de SecureStore (~2 KB): pasarse
+      // no daria un error de compilacion, daria un fallo al guardar la sesion
+      // EN EL DISPOSITIVO, que es justo lo que aqui no se puede probar. Esta
+      // asercion es el guardarrail: si alguien engorda la respuesta del login
+      // (mas datos del vendedor, un catalogo, permisos de T-08), salta aqui.
+      const sesion = await entrar();
+      const guardado = JSON.stringify({
+        ...sesion,
+        // Lo unico que la tablet agrega y el servidor no manda.
+        verificador: `pbkdf2-sha256$60000$${'a'.repeat(32)}$${'b'.repeat(64)}`,
+        ultimoContactoServidor: new Date().toISOString(),
+        intentosFallidos: 0,
+      });
+
+      // Medido: 858 bytes. El limite de 1500 deja margen sin dejar de avisar
+      // mucho antes de los ~2 KB de Android.
+      expect(Buffer.byteLength(guardado, 'utf8')).toBeLessThan(1500);
     });
   });
 });

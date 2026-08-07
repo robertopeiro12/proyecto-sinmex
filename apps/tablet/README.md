@@ -114,6 +114,14 @@ Para que la app alcance el backend: `EXPO_PUBLIC_API_URL`. El default
 (`http://localhost:3000`) **solo sirve en emulador**; en una tablet real hay que
 apuntarlo a la IP del servidor en la red del negocio.
 
+> [!warning] Trafico en claro en una compilacion de produccion
+> Android 9+ **bloquea HTTP sin cifrar** en builds de release salvo que se
+> habilite `usesCleartextTraffic`. Hoy el default de `EXPO_PUBLIC_API_URL` es
+> `http://`, asi que un APK de produccion contra HTTP no conectaria. No se ha
+> tocado a proposito: la salida correcta es **HTTPS**, y eso se decide junto con
+> el hosting, que sigue pendiente en `ADR-0002`. Sin dispositivo tampoco se
+> puede comprobar. Hay que resolverlo antes de entregar tablets.
+
 Alta de credenciales: `npm run crear-vendedor --workspace=apps/backend` (el CRUD
 de vendedores es **T-62**).
 
