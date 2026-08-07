@@ -96,6 +96,10 @@ export class SincronizacionService {
         id: vendedor.id,
         login: vendedor.login,
         nombre: vendedor.nombre,
+        // T-14: la tablet emite el folio offline, pero **no decide** su segmento
+        // de vendedor — solo baja su propia ficha, asi que no puede saber si
+        // comparte iniciales con un companero. Se lo manda el servidor.
+        folio_segmento: vendedor.folio_segmento,
       },
       sucursal: {
         id: vendedor.sucursal_id,
@@ -143,7 +147,13 @@ export class SincronizacionService {
     dto.operaciones.forEach((cruda, posicion) => {
       const clave = claveReportable(cruda, posicion);
       const tipo = tipoReportable(cruda);
-      const r = normalizarOperacion(cruda, vendedor.id, hoy);
+      const r = normalizarOperacion(cruda, vendedor.id, hoy, {
+        // El folio que trae la operacion se coteja contra lo que el servidor
+        // sabe por su cuenta: la sucursal sale del token (T-09, el cliente
+        // propone y el servidor dispone) y el segmento lo asigno el servidor.
+        sucursal: vendedor.sucursal_codigo,
+        segmentoFolio: vendedor.folio_segmento,
+      });
 
       if (r.ok === 'ajena') {
         throw new ForbiddenException(
@@ -210,18 +220,41 @@ export class SincronizacionService {
         continue;
       }
 
-      const { id, duplicada } = await this.repo.guardarOperacion(
+      const guardado = await this.repo.guardarOperacion(
         vendedor.id,
         vendedor.sucursal_id,
         dto.contrato,
         op,
       );
 
+      // **Colision de folios** (T-14). Otra operacion ya subio este folio, casi
+      // siempre desde otra tablet. No se acepta en silencio: el folio es con lo
+      // que se cotejan las notas fisicas, y dos operaciones distintas con el
+      // mismo folio harian ese cotejo imposible para siempre.
+      //
+      // Se rechaza **por operacion** y no con un 4xx del lote, igual que
+      // cualquier otro rechazo de T-07: el resto de la jornada del vendedor
+      // entra igual.
+      if (guardado.colisionDeFolio) {
+        const dueno = op.folio ? await this.repo.duenoDelFolio(op.folio) : null;
+        resultados.set(posicion, {
+          clave: op.clave,
+          tipo: op.tipo,
+          estado: 'rechazada',
+          codigo: 'folio-duplicado',
+          motivo:
+            dueno && dueno.vendedorId !== vendedor.id
+              ? `El folio ${op.folio} ya lo uso otro vendedor. Hay que reasignarle un folio a esta operacion.`
+              : `El folio ${op.folio} ya esta usado por otra operacion.`,
+        });
+        continue;
+      }
+
       resultados.set(posicion, {
         clave: op.clave,
         tipo: op.tipo,
-        estado: duplicada ? 'duplicada' : 'aplicada',
-        id_servidor: id,
+        estado: guardado.duplicada ? 'duplicada' : 'aplicada',
+        id_servidor: guardado.id,
       });
     }
 

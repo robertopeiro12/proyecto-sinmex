@@ -20,6 +20,8 @@ export interface VendedorConSucursal {
   login: string;
   nombre: string;
   activo: boolean;
+  /** Su 5o segmento del [[Folios|folio]]. `null` si no tiene uno asignado. */
+  folio_segmento: string | null;
   sucursal_id: string;
   sucursal_codigo: string;
   sucursal_nombre: string;
@@ -57,6 +59,7 @@ export class SincronizacionRepository {
         'vendedor.login as login',
         'vendedor.nombre as nombre',
         'vendedor.activo as activo',
+        'vendedor.folio_segmento as folio_segmento',
         'sucursal.id as sucursal_id',
         'sucursal.codigo as sucursal_codigo',
         'sucursal.nombre as sucursal_nombre',
@@ -106,7 +109,15 @@ export class SincronizacionRepository {
   ): Promise<VendedorPull[]> {
     let q = this.db
       .selectFrom('vendedor')
-      .select(['id', 'login', 'nombre', 'sucursal_id', 'activo', 'deleted_at'])
+      .select([
+        'id',
+        'login',
+        'nombre',
+        'sucursal_id',
+        'activo',
+        'folio_segmento',
+        'deleted_at',
+      ])
       .where('id', '=', vendedorId);
     if (desde) q = q.where('updated_at', '>', desde);
 
@@ -115,6 +126,9 @@ export class SincronizacionRepository {
       login: f.login,
       nombre: f.nombre,
       sucursal_id: f.sucursal_id,
+      // Lo asigna el servidor porque la tablet no puede: solo baja su propia
+      // ficha, asi que no ve si otro vendedor comparte sus iniciales (T-14).
+      folio_segmento: f.folio_segmento,
       activo: bandera(f.activo, f.deleted_at),
     }));
   }
@@ -388,24 +402,58 @@ export class SincronizacionRepository {
     sucursalId: string,
     contrato: number,
     op: OperacionNormalizada,
-  ): Promise<{ id: string; duplicada: boolean }> {
-    const insertada = await this.db
-      .insertInto('sync_operacion')
-      .values({
-        vendedor_id: vendedorId,
-        sucursal_id: sucursalId,
-        clave_idempotencia: op.clave,
-        tipo: op.tipo,
-        contrato,
-        fecha_operacion: op.fechaOperacion,
-        ocurrido_en: op.ocurridoEn,
-        datos: JSON.stringify({ ...op.datos, cliente_id: op.clienteId }),
-      })
-      .onConflict((oc) =>
-        oc.columns(['vendedor_id', 'clave_idempotencia']).doNothing(),
-      )
-      .returning('id')
-      .executeTakeFirst();
+  ): Promise<ResultadoGuardado> {
+    let insertada: { id: string } | undefined;
+    try {
+      insertada = await this.db
+        .insertInto('sync_operacion')
+        .values({
+          vendedor_id: vendedorId,
+          sucursal_id: sucursalId,
+          clave_idempotencia: op.clave,
+          tipo: op.tipo,
+          contrato,
+          fecha_operacion: op.fechaOperacion,
+          ocurrido_en: op.ocurridoEn,
+          folio: op.folio,
+          datos: JSON.stringify({ ...op.datos, cliente_id: op.clienteId }),
+        })
+        .onConflict((oc) =>
+          oc.columns(['vendedor_id', 'clave_idempotencia']).doNothing(),
+        )
+        .returning('id')
+        .executeTakeFirst();
+    } catch (error) {
+      // Aqui solo puede caer la violacion del unique del FOLIO: la de la clave
+      // de idempotencia la absorbe el `on conflict do nothing` de arriba.
+      //
+      // > [!danger] No todo 23505 de folio es una colision
+      // > El caso normal (reenvio secuencial del mismo lote) ni siquiera llega
+      // > aqui: el `on conflict (vendedor_id, clave_idempotencia) do nothing`
+      // > comprueba su indice arbitro primero, no intenta el insert y el unique
+      // > del folio nunca se dispara. Eso esta cubierto por un e2e.
+      // >
+      // > Pero `do nothing` **solo** absorbe conflictos de su arbitro. Si dos
+      // > peticiones identicas se solapan, la segunda puede no ver todavia la
+      // > fila de la primera (sin commit), seguir adelante y chocar contra el
+      // > unique del FOLIO — un 23505 para lo que en realidad es un reenvio.
+      // >
+      // > Por eso se desempata mirando la clave: si esa fila ya existe, era un
+      // > reenvio (`duplicada`); solo si no existe es una colision de verdad.
+      // > Traducir todo 23505 a `folio-duplicado` dejaria esos reintentos en
+      // > error para siempre — lo contrario de lo que promete T-07.
+      // >
+      // > Es **defensivo**: no se ha conseguido forzar ese solape desde una
+      // > prueba, asi que esta rama no esta cubierta por un test que falle sin
+      // > ella. Se conserva porque el modo de fallo que evita es peor que su
+      // > coste (una consulta que solo corre cuando ya hubo un 23505).
+      if (!esViolacionDeUnico(error)) throw error;
+
+      const propia = await this.buscarPorClave(vendedorId, op.clave);
+      if (propia) return { id: propia.id, duplicada: true };
+
+      return { colisionDeFolio: true };
+    }
 
     if (insertada) return { id: insertada.id, duplicada: false };
 
@@ -418,6 +466,56 @@ export class SincronizacionRepository {
 
     return { id: existente.id, duplicada: true };
   }
+
+  /** La operacion de este vendedor con esa clave, si ya estaba guardada. */
+  private async buscarPorClave(
+    vendedorId: string,
+    clave: string,
+  ): Promise<{ id: string } | undefined> {
+    return this.db
+      .selectFrom('sync_operacion')
+      .select('id')
+      .where('vendedor_id', '=', vendedorId)
+      .where('clave_idempotencia', '=', clave)
+      .executeTakeFirst();
+  }
+
+  /**
+   * Quien ya se habia quedado con este folio.
+   *
+   * Solo se consulta para poder **explicar** la colision. El rechazo ya lo
+   * decidio la base; esto es el mensaje que leera quien tenga la tablet.
+   */
+  async duenoDelFolio(
+    folio: string,
+  ): Promise<{ vendedorId: string; clave: string } | null> {
+    const fila = await this.db
+      .selectFrom('sync_operacion')
+      .select(['vendedor_id', 'clave_idempotencia'])
+      .where('folio', '=', folio)
+      .executeTakeFirst();
+
+    return fila
+      ? { vendedorId: fila.vendedor_id, clave: fila.clave_idempotencia }
+      : null;
+  }
+}
+
+/**
+ * Resultado de guardar una operacion: entro, ya estaba, o **su folio choco con
+ * el de otra operacion** (T-14).
+ */
+export type ResultadoGuardado =
+  | { id: string; duplicada: boolean; colisionDeFolio?: false }
+  | { colisionDeFolio: true; id?: undefined; duplicada?: undefined };
+
+/** `23505 unique_violation` de Postgres. */
+function esViolacionDeUnico(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { code?: unknown }).code === '23505'
+  );
 }
 
 /** `date` de Postgres → `AAAA-MM-DD` sin pasar por UTC. */

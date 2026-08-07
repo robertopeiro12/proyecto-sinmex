@@ -198,6 +198,7 @@ export interface SyncOperacion {
   entidad_id: string | null;
   entidad_tabla: string | null;
   fecha_operacion: Timestamp;
+  folio: string | null;
   id: Generated<string>;
   ocurrido_en: Timestamp;
   recibido_en: Generated<Timestamp>;
@@ -252,6 +253,7 @@ export interface Vendedor {
   activo: Generated<boolean>;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
+  folio_segmento: string | null;
   id: Generated<string>;
   login: string;
   nombre: string;

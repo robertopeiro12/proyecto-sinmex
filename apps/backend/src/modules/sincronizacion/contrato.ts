@@ -94,6 +94,21 @@ export const CODIGOS_RECHAZO = [
   'datos-invalidos',
   /** El `cliente_id` no existe o no es de la sucursal del vendedor. */
   'cliente-fuera-de-alcance',
+  /**
+   * El `folio` no tiene el formato de [[Folios|ADR-0001]], o contradice a la
+   * propia operacion (dice otra sucursal, otra fecha u otro vendedor). T-14.
+   */
+  'folio-invalido',
+  /**
+   * **Colision de folios.** Otra operacion —normalmente de otra tablet— ya
+   * subio este mismo folio. Es el criterio de aceptacion de T-14: el servidor
+   * lo detecta y **no lo acepta en silencio**.
+   *
+   * Ojo con la diferencia: esto **no** es un reintento. Un reenvio del mismo
+   * lote trae la misma `clave` y se resuelve como `duplicada`; aqui son dos
+   * hechos de negocio distintos que dicen tener el mismo identificador.
+   */
+  'folio-duplicado',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -161,6 +176,26 @@ export interface VendedorPull extends FilaSincronizable {
   login: string;
   nombre: string;
   sucursal_id: string;
+  /**
+   * Las 2 letras del vendedor dentro del [[Folios|folio]] (5o segmento). T-14.
+   *
+   * **Lo asigna el servidor y la tablet lo usa tal cual.** No lo deriva ella de
+   * `nombre` aunque podria: dos vendedores con las mismas iniciales chocarian,
+   * y la tablet **no puede detectarlo** porque de `vendedores` solo baja su
+   * propia ficha — no ve a sus companeros. Solo el servidor tiene la
+   * visibilidad global para desambiguar.
+   *
+   * `null` mientras un vendedor no lo tenga asignado. Una tablet sin segmento
+   * **no puede emitir folios** y debe decirlo en voz alta, nunca inventarse las
+   * iniciales por su cuenta: eso reintroduciria en silencio la ambiguedad que
+   * sigue **pendiente de confirmar con el cliente** (ver ADR-0007).
+   *
+   * Es un campo **aditivo**: no sube la version del contrato. Un servidor que
+   * no lo mande deja a la tablet sin poder foliar, pero no rompe nada de lo que
+   * ya funcionaba. TODO: T-16 — cuando emitir folio sea obligatorio para
+   * registrar una venta, revisar si toca subir `CONTRATO_ACTUAL`.
+   */
+  folio_segmento: string | null;
 }
 
 export interface VehiculoPull extends FilaSincronizable {
@@ -250,7 +285,13 @@ export interface RespuestaPull {
    *       vez de marca de tiempo).
    */
   cursor: string;
-  vendedor: { id: string; login: string; nombre: string };
+  vendedor: {
+    id: string;
+    login: string;
+    nombre: string;
+    /** Su segmento del folio. Ver {@link VendedorPull.folio_segmento}. */
+    folio_segmento: string | null;
+  };
   sucursal: { id: string; codigo: string; nombre: string };
   catalogos: {
     sucursales: SucursalPull[];

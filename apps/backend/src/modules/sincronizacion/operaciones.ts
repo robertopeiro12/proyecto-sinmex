@@ -3,6 +3,7 @@ import {
   type CodigoRechazo,
   type TipoOperacion,
 } from './contrato';
+import { explicarFolioInvalido, revisarFolio } from './folio';
 
 /**
  * Validacion y normalizacion de **una** operacion del lote de `push`.
@@ -27,6 +28,15 @@ export interface OperacionNormalizada {
   ocurridoEn: string;
   /** Cliente al que se refiere, si aplica. Se comprueba el alcance contra la BD. */
   clienteId: string | null;
+  /**
+   * El [[Folios|folio]] que la tablet emitio **offline** para esta operacion,
+   * o `null` si su tipo no lleva folio.
+   *
+   * Hoy la `jornada` (vehiculo + kilometraje) no lo lleva: no es una nota que
+   * nadie firme. Venta y cobranza si lo llevaran (T-16/T-20). Por eso es
+   * opcional en el contrato y no obligatorio.
+   */
+  folio: string | null;
   datos: Record<string, unknown>;
 }
 
@@ -104,10 +114,27 @@ function texto(valor: unknown): string | null {
   return typeof valor === 'string' && valor.trim() !== '' ? valor.trim() : null;
 }
 
+/**
+ * Lo que el servidor sabe del vendedor por su cuenta, para poder comprobar que
+ * el [[Folios|folio]] que trae la operacion no se contradice consigo mismo.
+ *
+ * Es un parametro **obligatorio** y no opcional a proposito: un valor por
+ * defecto haria que un futuro llamador se saltara la comprobacion sin
+ * enterarse, y esta es justamente la que impide que entren folios que despues
+ * no se pueden cotejar contra la nota fisica.
+ */
+export interface ContextoVendedor {
+  /** Codigo de 2 letras de su sucursal. Lo decide el servidor, no el cuerpo. */
+  sucursal: string;
+  /** Su 5o segmento del folio, o `null` si no tiene uno asignado. */
+  segmentoFolio: string | null;
+}
+
 export function normalizarOperacion(
   cruda: unknown,
   vendedorIdDelToken: string,
   hoy: string,
+  vendedor: ContextoVendedor,
 ): ResultadoNormalizacion {
   if (typeof cruda !== 'object' || cruda === null || Array.isArray(cruda)) {
     return {
@@ -204,6 +231,25 @@ export function normalizarOperacion(
     };
   }
 
+  // El folio es OPCIONAL: hoy la `jornada` no lo lleva (no es una nota que
+  // nadie firme) y venta/cobranza lo llevaran con T-16/T-20. Cuando viene, se
+  // comprueba a fondo — un folio emitido no se corrige hacia atras.
+  const folio = texto(op.folio);
+  if (folio !== null) {
+    const motivo = revisarFolio(folio, {
+      sucursal: vendedor.sucursal,
+      fechaOperacion: fecha,
+      segmentoVendedor: vendedor.segmentoFolio,
+    });
+    if (motivo !== null) {
+      return {
+        ok: false,
+        codigo: 'folio-invalido',
+        motivo: explicarFolioInvalido(motivo),
+      };
+    }
+  }
+
   return {
     ok: true,
     operacion: {
@@ -212,6 +258,7 @@ export function normalizarOperacion(
       fechaOperacion: fecha,
       ocurridoEn: new Date(ocurrido).toISOString(),
       clienteId,
+      folio,
       datos: datos as Record<string, unknown>,
     },
   };
