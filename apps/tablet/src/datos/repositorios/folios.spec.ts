@@ -1,15 +1,15 @@
-import { depsDePrueba, snapshotDePrueba } from '../pruebas-apoyo';
-import { relojFijo } from '../reloj';
-import type { DepsRepositorio } from './deps';
-import { enTransaccion } from './deps';
-import { crearRepositorioCatalogos } from './catalogos';
+import { depsDePrueba, snapshotDePrueba } from "../pruebas-apoyo";
+import { relojFijo } from "../reloj";
+import type { DepsRepositorio } from "./deps";
+import { enTransaccion } from "./deps";
+import { crearRepositorioCatalogos } from "./catalogos";
 import {
   crearRepositorioFolios,
   ErrorFolio,
   formarFolio,
   MAX_OPERACIONES_POR_DIA,
   type RepositorioFolios,
-} from './folios';
+} from "./folios";
 
 /**
  * Emision offline de [[Folios|folios]] (T-14).
@@ -21,7 +21,7 @@ import {
  * se prueba.
  */
 
-const VENDEDOR = 'ven-1';
+const VENDEDOR = "ven-1";
 
 /**
  * Un reloj que se puede mover a mano, para poder cruzar la medianoche y
@@ -41,7 +41,7 @@ function relojMovible(inicial: string) {
 }
 
 /** Base migrada con el catalogo minimo cargado (1 sucursal TJ, vendedor AP). */
-function montar(momento = '2026-08-07T15:00:00.000Z'): {
+function montar(momento = "2026-08-07T15:00:00.000Z"): {
   deps: DepsRepositorio;
   folios: RepositorioFolios;
   mover: (m: string) => void;
@@ -63,56 +63,56 @@ function montar(momento = '2026-08-07T15:00:00.000Z'): {
 
 /* ================================================================== */
 
-describe('formato del folio (ADR-0001)', () => {
-  it('emite 12 caracteres en 6 segmentos, como el ejemplo del documento', () => {
-    const { folios } = montar('2026-03-22T15:00:00.000Z');
+describe("formato del folio (ADR-0001)", () => {
+  it("emite 12 caracteres en 6 segmentos, como el ejemplo del documento", () => {
+    const { folios } = montar("2026-03-22T15:00:00.000Z");
 
     const emitido = folios.emitir({
       vendedorId: VENDEDOR,
-      claveOperacion: 'op-1',
+      claveOperacion: "op-1",
     });
 
     // El ejemplo literal del callout de ADR-0001: `TJ260322AP05` es
     // "sucursal Tijuana, del 22 de marzo de 2026, vendedor AP, operacion #05".
     // Esta es la #01.
-    expect(emitido.folio).toBe('TJ260322AP01');
+    expect(emitido.folio).toBe("TJ260322AP01");
     expect(emitido.folio).toHaveLength(12);
     expect(emitido.folio).toMatch(/^[A-Z]{2}[0-9]{6}[A-Z]{2}[0-9]{2}$/);
   });
 
-  it('los 6 segmentos dicen lo que ADR-0001 dice que dicen', () => {
-    const { folios } = montar('2026-03-22T15:00:00.000Z');
+  it("los 6 segmentos dicen lo que ADR-0001 dice que dicen", () => {
+    const { folios } = montar("2026-03-22T15:00:00.000Z");
     const { folio } = folios.emitir({
       vendedorId: VENDEDOR,
-      claveOperacion: 'op-1',
+      claveOperacion: "op-1",
     });
 
-    expect(folio.slice(0, 2)).toBe('TJ'); // sucursal
-    expect(folio.slice(2, 4)).toBe('26'); // ano
-    expect(folio.slice(4, 6)).toBe('03'); // mes
-    expect(folio.slice(6, 8)).toBe('22'); // dia
-    expect(folio.slice(8, 10)).toBe('AP'); // vendedor
-    expect(folio.slice(10, 12)).toBe('01'); // operacion del dia
+    expect(folio.slice(0, 2)).toBe("TJ"); // sucursal
+    expect(folio.slice(2, 4)).toBe("26"); // ano
+    expect(folio.slice(4, 6)).toBe("03"); // mes
+    expect(folio.slice(6, 8)).toBe("22"); // dia
+    expect(folio.slice(8, 10)).toBe("AP"); // vendedor
+    expect(folio.slice(10, 12)).toBe("01"); // operacion del dia
   });
 
-  it('el consecutivo va con dos digitos: la #1 es `01`, no `1`', () => {
-    const { folios } = montar('2026-03-22T15:00:00.000Z');
+  it("el consecutivo va con dos digitos: la #1 es `01`, no `1`", () => {
+    const { folios } = montar("2026-03-22T15:00:00.000Z");
     for (let i = 1; i <= 12; i++) {
       const { folio, consecutivo } = folios.emitir({
         vendedorId: VENDEDOR,
         claveOperacion: `op-${i}`,
       });
       expect(consecutivo).toBe(i);
-      expect(folio.slice(10, 12)).toBe(`${i}`.padStart(2, '0'));
+      expect(folio.slice(10, 12)).toBe(`${i}`.padStart(2, "0"));
     }
   });
 
-  it('`formarFolio` reproduce el ejemplo del documento v2.0', () => {
+  it("`formarFolio` reproduce el ejemplo del documento v2.0", () => {
     // "TJ220313AP05": Tijuana, 13 de marzo de 2022, Abraham Perez, operacion 5.
-    expect(formarFolio('TJ', '2022-03-13', 'AP', 5)).toBe('TJ220313AP05');
+    expect(formarFolio("TJ", "2022-03-13", "AP", 5)).toBe("TJ220313AP05");
   });
 
-  it('el segmento de vendedor sale del pull, no del nombre', () => {
+  it("el segmento de vendedor sale del pull, no del nombre", () => {
     const { deps, folios } = montar();
 
     // El servidor le cambia el segmento (es lo unico que puede hacerlo). La
@@ -123,24 +123,88 @@ describe('formato del folio (ADR-0001)', () => {
     );
 
     expect(
-      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'op-1' }).folio,
-    ).toBe('TJ260807ZK01');
+      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "op-1" }).folio,
+    ).toBe("TJ260807ZK01");
   });
 
-  it('sin segmento asignado NO folia, y lo dice en voz alta', () => {
+  it("sin segmento asignado NO folia, y lo dice en voz alta", () => {
     // Inventarse las iniciales aqui reintroduciria en silencio la ambiguedad
     // que sigue pendiente de confirmar con el cliente.
     const { deps, folios } = montar();
-    deps.bd.runSync('update vendedor set folio_segmento = null where id = $id', {
-      $id: VENDEDOR,
-    });
+    deps.bd.runSync(
+      "update vendedor set folio_segmento = null where id = $id",
+      {
+        $id: VENDEDOR,
+      },
+    );
 
     expect(() =>
-      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'op-1' }),
+      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "op-1" }),
     ).toThrow(ErrorFolio);
     expect(() =>
-      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'op-1' }),
+      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "op-1" }),
     ).toThrow(/Sincroniza con el servidor/);
+  });
+
+  it("un login SIN RED no puede borrar el segmento que bajo el pull", () => {
+    // El caso real, y es el flujo NORMAL de campo, no un borde: el vendedor
+    // reabre la app a media ruta, se re-autentica **sin red**, y ese login hace
+    // un upsert de identidad con lo unico que la sesion conoce — que NO incluye
+    // el segmento del folio, porque ese lo asigna el servidor.
+    //
+    // Si ese upsert pisara el segmento con null, el vendedor se quedaria sin
+    // poder foliar hasta el siguiente pull... que un login offline nunca
+    // dispara. Se quedaria sin operar en ruta.
+    //
+    // Misma doctrina que "se pina, no se recalcula" (ADR-0007): el segmento no
+    // se pierde por el camino.
+    const { deps, folios } = montar();
+    const catalogos = crearRepositorioCatalogos(deps);
+
+    // 1. El pull trajo su segmento.
+    expect(
+      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "antes" }).folio,
+    ).toBe("TJ260807AP01");
+
+    // 2. Login sin red: upsert de identidad, sin segmento.
+    catalogos.guardarSnapshot({
+      vendedores: [
+        {
+          id: VENDEDOR,
+          login: "aperez",
+          nombre: "Abraham Perez",
+          sucursal_id: "suc-tj",
+          activo: 1,
+          folio_segmento: null,
+        },
+      ],
+    });
+
+    // 3. Sigue pudiendo foliar, y con el mismo segmento.
+    expect(
+      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "despues" }).folio,
+    ).toBe("TJ260807AP02");
+  });
+
+  it("el pull SI puede cambiar el segmento (es quien manda)", () => {
+    // Lo contrario del caso de arriba: cuando llega un valor de verdad, gana.
+    const { deps, folios } = montar();
+    crearRepositorioCatalogos(deps).guardarSnapshot({
+      vendedores: [
+        {
+          id: VENDEDOR,
+          login: "aperez",
+          nombre: "Abraham Perez",
+          sucursal_id: "suc-tj",
+          activo: 1,
+          folio_segmento: "ZK",
+        },
+      ],
+    });
+
+    expect(
+      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "op" }).folio,
+    ).toBe("TJ260807ZK01");
   });
 });
 
@@ -154,31 +218,31 @@ describe('formato del folio (ADR-0001)', () => {
  * colgar de la FECHA y pasara a leer "el ultimo folio emitido"— estas pruebas
  * se caen.
  */
-describe('reinicio diario del contador', () => {
-  it('al cambiar el dia, la primera operacion vuelve a 01', () => {
-    const { folios, mover } = montar('2026-08-07T15:00:00.000Z');
+describe("reinicio diario del contador", () => {
+  it("al cambiar el dia, la primera operacion vuelve a 01", () => {
+    const { folios, mover } = montar("2026-08-07T15:00:00.000Z");
 
     // Dia 1: tres operaciones.
-    for (const clave of ['a1', 'a2', 'a3']) {
+    for (const clave of ["a1", "a2", "a3"]) {
       folios.emitir({ vendedorId: VENDEDOR, claveOperacion: clave });
     }
-    expect(folios.consecutivoDe(VENDEDOR, '2026-08-07')).toBe(3);
+    expect(folios.consecutivoDe(VENDEDOR, "2026-08-07")).toBe(3);
 
     // Dia 2.
-    mover('2026-08-08T15:00:00.000Z');
+    mover("2026-08-08T15:00:00.000Z");
     const primera = folios.emitir({
       vendedorId: VENDEDOR,
-      claveOperacion: 'b1',
+      claveOperacion: "b1",
     });
 
     // NO hereda el 3 del dia anterior: arranca en 01.
     expect(primera.consecutivo).toBe(1);
-    expect(primera.folio).toBe('TJ260808AP01');
-    expect(primera.folio.slice(10, 12)).toBe('01');
+    expect(primera.folio).toBe("TJ260808AP01");
+    expect(primera.folio.slice(10, 12)).toBe("01");
   });
 
-  it('reinicia cada dia durante una semana seguida', () => {
-    const { folios, mover } = montar('2026-08-03T15:00:00.000Z');
+  it("reinicia cada dia durante una semana seguida", () => {
+    const { folios, mover } = montar("2026-08-03T15:00:00.000Z");
 
     for (let dia = 3; dia <= 9; dia++) {
       const fecha = `2026-08-0${dia}`;
@@ -198,45 +262,45 @@ describe('reinicio diario del contador', () => {
     }
   });
 
-  it('el contador del dia anterior queda intacto', () => {
+  it("el contador del dia anterior queda intacto", () => {
     // El reinicio no borra ni pisa nada: cada dia tiene su propia fila. Es lo
     // que hace que el corte del dia (T-38) siga cuadrando hacia atras.
-    const { folios, mover } = montar('2026-08-07T15:00:00.000Z');
-    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'a1' });
-    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'a2' });
+    const { folios, mover } = montar("2026-08-07T15:00:00.000Z");
+    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "a1" });
+    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "a2" });
 
-    mover('2026-08-08T15:00:00.000Z');
-    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'b1' });
+    mover("2026-08-08T15:00:00.000Z");
+    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "b1" });
 
-    expect(folios.consecutivoDe(VENDEDOR, '2026-08-07')).toBe(2);
-    expect(folios.consecutivoDe(VENDEDOR, '2026-08-08')).toBe(1);
+    expect(folios.consecutivoDe(VENDEDOR, "2026-08-07")).toBe(2);
+    expect(folios.consecutivoDe(VENDEDOR, "2026-08-08")).toBe(1);
   });
 
-  it('el dia es el LOCAL de la tablet, no el de UTC', () => {
+  it("el dia es el LOCAL de la tablet, no el de UTC", () => {
     // A las 18:00 de Tijuana (UTC-7) en UTC ya es el dia siguiente. El folio
     // tiene que decir el dia de trabajo del vendedor, igual que
     // `fecha_operacion` (T-07). `relojFijo` corta el ISO, asi que aqui se
     // comprueba explicitamente que se usa `hoy()` y no una derivacion de UTC.
-    const deps = depsDePrueba('2026-08-07T15:00:00.000Z');
+    const deps = depsDePrueba("2026-08-07T15:00:00.000Z");
     crearRepositorioCatalogos(deps).guardarSnapshot(snapshotDePrueba());
 
     const folios = crearRepositorioFolios({
       ...deps,
-      reloj: relojFijo('2026-08-07T18:00:00.000-07:00'),
+      reloj: relojFijo("2026-08-07T18:00:00.000-07:00"),
     });
 
     const { folio } = folios.emitir({
       vendedorId: VENDEDOR,
-      claveOperacion: 'tarde',
+      claveOperacion: "tarde",
     });
-    expect(folio.slice(2, 8)).toBe('260807');
+    expect(folio.slice(2, 8)).toBe("260807");
   });
 });
 
 /* ================================================================== */
 
-describe('no duplica ni salta numeros', () => {
-  it('100 emisiones seguidas dan 100 folios distintos y consecutivos', () => {
+describe("no duplica ni salta numeros", () => {
+  it("100 emisiones seguidas dan 100 folios distintos y consecutivos", () => {
     const { folios } = montar();
 
     const emitidos = Array.from({ length: MAX_OPERACIONES_POR_DIA }, (_, i) =>
@@ -252,7 +316,7 @@ describe('no duplica ni salta numeros', () => {
     );
   });
 
-  it('REENTRANTE: pedir folio dos veces para la misma operacion no quema un numero', () => {
+  it("REENTRANTE: pedir folio dos veces para la misma operacion no quema un numero", () => {
     // El caso real: la app se cierra a media captura y al volver el usuario
     // reintenta la MISMA operacion. Si cada intento quemara un numero, la
     // numeracion del dia quedaria con huecos y el folio dejaria de significar
@@ -261,15 +325,15 @@ describe('no duplica ni salta numeros', () => {
 
     const primera = folios.emitir({
       vendedorId: VENDEDOR,
-      claveOperacion: 'la-misma',
+      claveOperacion: "la-misma",
     });
     const segunda = folios.emitir({
       vendedorId: VENDEDOR,
-      claveOperacion: 'la-misma',
+      claveOperacion: "la-misma",
     });
     const tercera = folios.emitir({
       vendedorId: VENDEDOR,
-      claveOperacion: 'la-misma',
+      claveOperacion: "la-misma",
     });
 
     expect(segunda.folio).toBe(primera.folio);
@@ -279,19 +343,19 @@ describe('no duplica ni salta numeros', () => {
 
     // Y la siguiente operacion, que si es nueva, sigue en 02 y no en 04.
     expect(
-      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'otra' })
+      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "otra" })
         .consecutivo,
     ).toBe(2);
   });
 
-  it('intercalar operaciones nuevas y reintentos no descuadra la numeracion', () => {
+  it("intercalar operaciones nuevas y reintentos no descuadra la numeracion", () => {
     const { folios } = montar();
 
-    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'a' }); // 01
-    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'b' }); // 02
-    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'a' }); // reintento
-    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'c' }); // 03
-    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'b' }); // reintento
+    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "a" }); // 01
+    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "b" }); // 02
+    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "a" }); // reintento
+    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "c" }); // 03
+    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "b" }); // reintento
 
     expect(folios.delDia(VENDEDOR).map((f) => f.consecutivo)).toEqual([
       1, 2, 3,
@@ -299,46 +363,46 @@ describe('no duplica ni salta numeros', () => {
     expect(folios.consecutivoDe(VENDEDOR)).toBe(3);
   });
 
-  it('ATOMICO: si la transaccion de quien llama se revierte, el numero no se quema', () => {
+  it("ATOMICO: si la transaccion de quien llama se revierte, el numero no se quema", () => {
     // Este es el contrato para T-16/T-20: emitir DENTRO de la transaccion que
     // guarda la operacion. Si la captura falla a medias, el folio se va con
     // ella y el numero vuelve a estar disponible — nada de huecos.
     const { deps, folios } = montar();
 
-    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'primera' }); // 01
+    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "primera" }); // 01
 
     expect(() =>
       enTransaccion(deps.bd, () => {
-        folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'a-medias' });
-        throw new Error('la captura de la venta fallo');
+        folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "a-medias" });
+        throw new Error("la captura de la venta fallo");
       }),
-    ).toThrow('la captura de la venta fallo');
+    ).toThrow("la captura de la venta fallo");
 
     // El contador volvio a 1 y no quedo folio emitido para esa operacion.
     expect(folios.consecutivoDe(VENDEDOR)).toBe(1);
-    expect(folios.porOperacion('a-medias')).toBeNull();
+    expect(folios.porOperacion("a-medias")).toBeNull();
 
     // Y la siguiente operacion se lleva el 02, que no se perdio.
     expect(
-      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'siguiente' })
+      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "siguiente" })
         .consecutivo,
     ).toBe(2);
   });
 
-  it('emite dentro de la transaccion de quien llama (savepoint anidado)', () => {
+  it("emite dentro de la transaccion de quien llama (savepoint anidado)", () => {
     // Si `emitir()` usara `begin` en vez de `savepoint`, esto reventaria con
     // "cannot start a transaction within a transaction".
     const { deps, folios } = montar();
 
     const dentro = enTransaccion(deps.bd, () =>
-      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'anidada' }),
+      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "anidada" }),
     );
 
-    expect(dentro.folio).toBe('TJ260807AP01');
-    expect(folios.porOperacion('anidada')?.folio).toBe('TJ260807AP01');
+    expect(dentro.folio).toBe("TJ260807AP01");
+    expect(folios.porOperacion("anidada")?.folio).toBe("TJ260807AP01");
   });
 
-  it('se planta al llegar a 99: el consecutivo son 2 digitos', () => {
+  it("se planta al llegar a 99: el consecutivo son 2 digitos", () => {
     // ADR-0001 acepta el limite ("suficiente hoy; vigilar a futuro"). Fallar es
     // lo unico honesto: dar la vuelta a 00 o crecer a 3 digitos romperia el
     // formato que el cliente confirmo, y el folio ya estaria escrito en papel.
@@ -350,7 +414,7 @@ describe('no duplica ni salta numeros', () => {
     expect(folios.consecutivoDe(VENDEDOR)).toBe(99);
 
     expect(() =>
-      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'la-100' }),
+      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "la-100" }),
     ).toThrow(/99 operaciones/);
 
     // El intento fallido NO deja el contador en 100: el savepoint lo revirtio.
@@ -365,60 +429,60 @@ describe('no duplica ni salta numeros', () => {
  * aceptan esa superficie para la ventana offline y para `fecha_operacion`; aqui
  * se fija **que se garantiza y que no**.
  */
-describe('reloj manipulado', () => {
-  it('HACIA ATRAS: el contador de ese dia continua, no reinicia', () => {
-    const { folios, mover } = montar('2026-08-07T15:00:00.000Z');
+describe("reloj manipulado", () => {
+  it("HACIA ATRAS: el contador de ese dia continua, no reinicia", () => {
+    const { folios, mover } = montar("2026-08-07T15:00:00.000Z");
 
-    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'a1' }); // 07 -> 01
-    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'a2' }); // 07 -> 02
+    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "a1" }); // 07 -> 01
+    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "a2" }); // 07 -> 02
 
-    mover('2026-08-08T15:00:00.000Z');
-    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'b1' }); // 08 -> 01
+    mover("2026-08-08T15:00:00.000Z");
+    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "b1" }); // 08 -> 01
 
     // El vendedor mueve la fecha atras, al dia 7.
-    mover('2026-08-07T09:00:00.000Z');
+    mover("2026-08-07T09:00:00.000Z");
     const vuelta = folios.emitir({
       vendedorId: VENDEDOR,
-      claveOperacion: 'a3',
+      claveOperacion: "a3",
     });
 
     // NO reinicia en 01: esa fila ya existia y sigue donde iba. Es lo que
     // impide que se repita un folio ya emitido.
     expect(vuelta.consecutivo).toBe(3);
-    expect(vuelta.folio).toBe('TJ260807AP03');
+    expect(vuelta.folio).toBe("TJ260807AP03");
   });
 
-  it('HACIA ADELANTE: abre el dia nuevo en 01 y al volver retoma el real', () => {
-    const { folios, mover } = montar('2026-08-07T15:00:00.000Z');
+  it("HACIA ADELANTE: abre el dia nuevo en 01 y al volver retoma el real", () => {
+    const { folios, mover } = montar("2026-08-07T15:00:00.000Z");
 
-    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'a1' }); // 07 -> 01
+    folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "a1" }); // 07 -> 01
 
     // Salto al futuro.
-    mover('2027-01-01T15:00:00.000Z');
+    mover("2027-01-01T15:00:00.000Z");
     const futuro = folios.emitir({
       vendedorId: VENDEDOR,
-      claveOperacion: 'f1',
+      claveOperacion: "f1",
     });
-    expect(futuro.folio).toBe('TJ270101AP01');
+    expect(futuro.folio).toBe("TJ270101AP01");
 
     // Y de vuelta al dia real.
-    mover('2026-08-07T16:00:00.000Z');
+    mover("2026-08-07T16:00:00.000Z");
     expect(
-      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'a2' }).consecutivo,
+      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "a2" }).consecutivo,
     ).toBe(2);
   });
 
-  it('LO QUE SE GARANTIZA: pase lo que pase con el reloj, ningun folio se repite', () => {
-    const { folios, mover } = montar('2026-08-07T15:00:00.000Z');
+  it("LO QUE SE GARANTIZA: pase lo que pase con el reloj, ningun folio se repite", () => {
+    const { folios, mover } = montar("2026-08-07T15:00:00.000Z");
 
     const fechas = [
-      '2026-08-07',
-      '2026-08-08',
-      '2026-08-07',
-      '2025-01-01',
-      '2026-08-08',
-      '2027-12-31',
-      '2026-08-07',
+      "2026-08-07",
+      "2026-08-08",
+      "2026-08-07",
+      "2025-01-01",
+      "2026-08-08",
+      "2027-12-31",
+      "2026-08-07",
     ];
 
     const emitidos: string[] = [];
@@ -437,16 +501,16 @@ describe('reloj manipulado', () => {
     expect(new Set(emitidos).size).toBe(emitidos.length);
   });
 
-  it('LO QUE NO SE GARANTIZA: la fecha del folio es la del reloj, sea cual sea', () => {
+  it("LO QUE NO SE GARANTIZA: la fecha del folio es la del reloj, sea cual sea", () => {
     // Queda documentado a proposito. Sin NTP no hay forma de saber la fecha
     // real, y el servidor solo corta lo que venga a mas de un dia en el futuro
     // (T-07). Un folio con fecha movida es un dato malo, pero es un dato malo
     // *detectable* y unico, no una colision.
     const { folios, mover } = montar();
-    mover('2020-01-01T15:00:00.000Z');
+    mover("2020-01-01T15:00:00.000Z");
 
     expect(
-      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: 'vieja' }).folio,
-    ).toBe('TJ200101AP01');
+      folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "vieja" }).folio,
+    ).toBe("TJ200101AP01");
   });
 });
