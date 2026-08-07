@@ -4,6 +4,7 @@ import { abrirBaseDatos } from './driver-expo';
 import { ejecutarMigraciones, migraciones } from './migraciones';
 import { relojSistema } from './reloj';
 import { crearRepositorioCatalogos, type RepositorioCatalogos } from './repositorios/catalogos';
+import { crearRepositorioFolios, type RepositorioFolios } from './repositorios/folios';
 import { crearRepositorioJornadas, type RepositorioJornadas } from './repositorios/jornadas';
 import { crearRepositorioSync, type RepositorioSync } from './repositorios/sync';
 import type { DepsRepositorio } from './repositorios/deps';
@@ -15,6 +16,14 @@ export interface CapaDatos {
   jornadas: RepositorioJornadas;
   /** Cursor del pull incremental (T-07). */
   sync: RepositorioSync;
+  /**
+   * Emision offline de folios (T-14).
+   *
+   * Hoy **nadie lo llama todavia**: la jornada no lleva folio y las entidades
+   * que si lo llevaran son T-16 (venta) y T-20 (cobranza). Se arma aqui para
+   * que esos tickets solo tengan que emitir dentro de su transaccion.
+   */
+  folios: RepositorioFolios;
   /** Version de esquema con la que quedo la base tras migrar. */
   versionEsquema: number;
 }
@@ -42,6 +51,7 @@ export function inicializarCapaDatos(): CapaDatos {
     catalogos,
     jornadas: crearRepositorioJornadas(deps),
     sync: crearRepositorioSync(deps),
+    folios: crearRepositorioFolios(deps),
     versionEsquema: versionFinal,
   };
 }

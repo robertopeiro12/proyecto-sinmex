@@ -31,8 +31,24 @@ export function snapshotDePrueba(): SnapshotCatalogos {
   return {
     sucursales: [{ id: 'suc-tj', codigo: 'TJ', nombre: 'Tijuana', activa: 1 }],
     vendedores: [
-      { id: 'ven-1', login: 'aperez', nombre: 'Abraham Perez', sucursal_id: 'suc-tj', activo: 1 },
-      { id: 'ven-2', login: 'bruiz', nombre: 'Berta Ruiz', sucursal_id: 'suc-tj', activo: 0 },
+      {
+        id: 'ven-1',
+        login: 'aperez',
+        nombre: 'Abraham Perez',
+        sucursal_id: 'suc-tj',
+        activo: 1,
+        // El segmento del folio lo asigna el servidor (T-14). `AP` es el del
+        // ejemplo de ADR-0001: "TJ220313AP05".
+        folio_segmento: 'AP',
+      },
+      {
+        id: 'ven-2',
+        login: 'bruiz',
+        nombre: 'Berta Ruiz',
+        sucursal_id: 'suc-tj',
+        activo: 0,
+        folio_segmento: 'BR',
+      },
     ],
     vehiculos: [
       { id: 'veh-1', nombre: 'Camioneta 01', sucursal_id: 'suc-tj', activo: 1 },
@@ -144,7 +160,12 @@ export function respuestaPullDePrueba(
     desde: null,
     completo: true,
     cursor: '2026-08-07T14:59:55.000Z',
-    vendedor: { id: 'ven-1', login: 'aperez', nombre: 'Abraham Perez' },
+    vendedor: {
+      id: 'ven-1',
+      login: 'aperez',
+      nombre: 'Abraham Perez',
+      folio_segmento: 'AP',
+    },
     sucursal: { id: 'suc-tj', codigo: 'TJ', nombre: 'Tijuana' },
     catalogos: {
       sucursales: (s.sucursales ?? []).map(({ id, codigo, nombre, activa }) => ({

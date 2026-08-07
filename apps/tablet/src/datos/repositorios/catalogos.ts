@@ -38,7 +38,15 @@ export type RepositorioCatalogos = ReturnType<typeof crearRepositorioCatalogos>;
 /** Columnas de cada catalogo, en el orden en que se escriben. */
 const COLUMNAS = {
   sucursal: ['id', 'codigo', 'nombre', 'activa'],
-  vendedor: ['id', 'login', 'nombre', 'sucursal_id', 'activo'],
+  vendedor: [
+    'id',
+    'login',
+    'nombre',
+    'sucursal_id',
+    'activo',
+    // T-14: lo asigna el servidor; la tablet lo refleja y lo usa al foliar.
+    'folio_segmento',
+  ],
   vehiculo: ['id', 'nombre', 'sucursal_id', 'activo'],
   producto: ['id', 'nombre', 'activo'],
   presentacion: ['id', 'producto_id', 'volumen', 'activo'],

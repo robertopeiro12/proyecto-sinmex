@@ -19,4 +19,15 @@ export { crearRepositorioJornadas, ErrorJornada } from './repositorios/jornadas'
 export type { DatosAperturaJornada, RepositorioJornadas } from './repositorios/jornadas';
 export { crearRepositorioSync, CURSOR_PULL } from './repositorios/sync';
 export type { RepositorioSync } from './repositorios/sync';
+export {
+  crearRepositorioFolios,
+  ErrorFolio,
+  formarFolio,
+  MAX_OPERACIONES_POR_DIA,
+} from './repositorios/folios';
+export type {
+  FolioEmitido,
+  PeticionFolio,
+  RepositorioFolios,
+} from './repositorios/folios';
 export * from './tipos';
