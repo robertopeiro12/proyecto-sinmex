@@ -908,6 +908,33 @@ describe('Sincronizacion pull/push (e2e)', () => {
         await push({ operaciones: [] }).expect(400);
       });
 
+      it('un cliente_id que no es uuid se rechaza solo, sin reventar el lote', async () => {
+        // Sin la validacion de formato, ese valor llega a `where id in (...)` y
+        // Postgres tumba la peticion entera con "invalid input syntax for type
+        // uuid" -> 500 para las 3 operaciones. Y la tablet traduce un 5xx a
+        // "sin red", asi que reintentaria ese lote para siempre, en silencio.
+        const buena1 = operacion();
+        const corrupta = operacion({
+          tipo: 'venta',
+          cliente_id: 'no-soy-uuid',
+        });
+        const buena2 = operacion({ tipo: 'venta', cliente_id: clienteId });
+
+        const res = (
+          await push({ operaciones: [buena1, corrupta, buena2] }).expect(200)
+        ).body as RespuestaPush;
+
+        expect(res.resumen).toEqual({
+          recibidas: 3,
+          aplicadas: 2,
+          duplicadas: 0,
+          rechazadas: 1,
+        });
+        expect(res.resultados[1].codigo).toBe('cliente-fuera-de-alcance');
+        expect(res.resultados[0].estado).toBe('aplicada');
+        expect(res.resultados[2].estado).toBe('aplicada');
+      });
+
       it('una operacion ilegible se rechaza sola, sin tumbar el lote', async () => {
         const res = (
           await push({

@@ -275,7 +275,16 @@ cerrará**. Aquí se lee lo que hay, no se inventa un cálculo.
 }
 ```
 
-Máximo **500 operaciones** por lote. Un lote vacío es `400`.
+Máximo **500 operaciones** por lote; pasarse es `400`. Un lote vacío también es
+`400`. **La tablet trocea sola** en lotes de 500 (`motor.ts`): sin eso, un día
+con muchas operaciones recibiría un 400 que el cliente traduce a "sin red", y
+reintentaría ese lote para siempre en silencio.
+
+Un `cliente_id` que no sea un **uuid válido** se rechaza por operación, antes de
+llegar a la base. No es cosmético: `where id in ('abc')` no devuelve cero filas,
+hace que Postgres reviente con `invalid input syntax for type uuid`, y eso
+saldría como **500 para todo el lote** — el todo-o-nada que este contrato promete
+no hacer.
 
 `datos` es **libre en esta versión**. Ventas, cobranza, gastos, merma y ruta son
 T-16/T-20/T-27/T-33/T-39 y todavía no existen: T-07 define por dónde viajan y
@@ -320,7 +329,7 @@ texto en español** si reintenta o si avisa al vendedor.
 | `fecha-futura` | `fecha_operacion` más de 1 día por delante (§4) |
 | `momento-invalido` | `ocurrido_en` no es ISO-8601 |
 | `datos-invalidos` | `datos` no es un objeto (o la operación entera no lo es) |
-| `cliente-fuera-de-alcance` | El `cliente_id` no existe o no es de su sucursal |
+| `cliente-fuera-de-alcance` | El `cliente_id` no existe, no es de su sucursal, o no es un uuid válido |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo

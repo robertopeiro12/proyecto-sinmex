@@ -20,6 +20,9 @@
 /** Version que habla esta tablet. Debe coincidir con la del backend. */
 export const CONTRATO_ACTUAL = 1;
 
+/** Maximo de operaciones por lote. Pasarse es un 400 del servidor. */
+export const MAX_OPERACIONES_POR_LOTE = 500;
+
 export type TipoOperacion =
   | 'jornada'
   | 'venta'

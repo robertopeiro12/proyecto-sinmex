@@ -33,11 +33,12 @@ import {
   SesionRechazadaError,
   type ClienteSync,
 } from './api';
-import type {
-  OperacionSaliente,
-  RespuestaPull,
-  ResultadoOperacion,
-  TipoOperacion,
+import {
+  MAX_OPERACIONES_POR_LOTE,
+  type OperacionSaliente,
+  type RespuestaPull,
+  type ResultadoOperacion,
+  type TipoOperacion,
 } from './contrato';
 
 /**
@@ -196,16 +197,27 @@ export function crearMotorSincronizacion({
 
     for (const fuente of fuentes) {
       const operaciones = fuente.pendientes();
-      if (operaciones.length === 0) continue;
 
-      const respuesta = await api.push(token, operaciones);
-      total.enviadas += operaciones.length;
-      total.aplicadas += respuesta.resumen.aplicadas;
-      total.duplicadas += respuesta.resumen.duplicadas;
-      total.rechazadas += respuesta.resumen.rechazadas;
+      // Se trocea en lotes: el servidor rechaza con 400 un lote de mas de
+      // MAX_OPERACIONES_POR_LOTE, y la tablet traduce un 400 a "sin red", asi
+      // que un dia con muchas operaciones se reintentaria para siempre en
+      // silencio. Hoy solo hay jornadas (una al dia) y no se llega ni de lejos,
+      // pero el dia que T-16 registre ventas por cliente si.
+      //
+      // Cada lote es independiente: si el tercero falla por red, los dos
+      // primeros ya quedaron aplicados y no se vuelven a mandar.
+      for (let i = 0; i < operaciones.length; i += MAX_OPERACIONES_POR_LOTE) {
+        const lote = operaciones.slice(i, i + MAX_OPERACIONES_POR_LOTE);
+        const respuesta = await api.push(token, lote);
 
-      for (const r of respuesta.resultados) {
-        aplicarResultado(fuente, r);
+        total.enviadas += lote.length;
+        total.aplicadas += respuesta.resumen.aplicadas;
+        total.duplicadas += respuesta.resumen.duplicadas;
+        total.rechazadas += respuesta.resumen.rechazadas;
+
+        for (const r of respuesta.resultados) {
+          aplicarResultado(fuente, r);
+        }
       }
     }
 

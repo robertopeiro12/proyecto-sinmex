@@ -42,6 +42,21 @@ const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const LARGO_MAX_CLAVE = 100;
 
 /**
+ * Los ids del servidor son `uuid`, y esto se comprueba **antes** de consultar.
+ *
+ * No es cosmético. `where id in ('no-soy-uuid')` no devuelve cero filas: hace
+ * que Postgres reviente con `invalid input syntax for type uuid`, y eso saldría
+ * como **500 para todo el lote** — justo el todo-o-nada que este contrato
+ * promete no hacer. Peor aún: la tablet traduce un 5xx a "sin red" y
+ * reintentaría ese lote para siempre, en silencio.
+ *
+ * Una fila local con un `cliente_id` corrupto no es un caso teórico: la tablet
+ * lleva meses de datos capturados offline y sus ids salen de su propio SQLite.
+ */
+const RE_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
  * Fecha de hoy en la zona del negocio.
  *
  * > [!danger] La jornada del vendedor NO es un dia UTC
@@ -178,6 +193,17 @@ export function normalizarOperacion(
     };
   }
 
+  const clienteId = texto(op.cliente_id);
+  if (clienteId !== null && !RE_UUID.test(clienteId)) {
+    // Mismo codigo que "no existe": para el vendedor es lo mismo, y mantener el
+    // enum cerrado evita cambiar el contrato por un caso de dato corrupto.
+    return {
+      ok: false,
+      codigo: 'cliente-fuera-de-alcance',
+      motivo: `"${clienteId}" no es un identificador de cliente valido.`,
+    };
+  }
+
   return {
     ok: true,
     operacion: {
@@ -185,7 +211,7 @@ export function normalizarOperacion(
       tipo,
       fechaOperacion: fecha,
       ocurridoEn: new Date(ocurrido).toISOString(),
-      clienteId: texto(op.cliente_id),
+      clienteId,
       datos: datos as Record<string, unknown>,
     },
   };

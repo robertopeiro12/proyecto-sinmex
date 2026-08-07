@@ -148,6 +148,61 @@ describe('normalizarOperacion', () => {
       rechaza(null, 'datos-invalidos');
       rechaza([], 'datos-invalidos');
     });
+
+    it('con un cliente_id que no es un uuid', () => {
+      // NO es cosmetico. Sin esta comprobacion, `where id in ('abc')` no
+      // devuelve cero filas: hace que Postgres reviente con "invalid input
+      // syntax for type uuid", y eso sale como 500 para TODO el lote — el
+      // todo-o-nada que este contrato promete no hacer. Y la tablet traduce un
+      // 5xx a "sin red", asi que reintentaria ese lote para siempre, callada.
+      rechaza(
+        valida({ tipo: 'venta', cliente_id: 'no-soy-uuid' }),
+        'cliente-fuera-de-alcance',
+      );
+      rechaza(
+        valida({ tipo: 'venta', cliente_id: '123' }),
+        'cliente-fuera-de-alcance',
+      );
+      rechaza(
+        valida({ tipo: 'venta', cliente_id: "' or 1=1 --" }),
+        'cliente-fuera-de-alcance',
+      );
+    });
+  });
+
+  describe('cliente_id', () => {
+    it('un uuid bien formado pasa (el alcance se comprueba luego, contra la base)', () => {
+      const r = normalizarOperacion(
+        valida({
+          tipo: 'venta',
+          cliente_id: '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+        }),
+        VENDEDOR,
+        HOY,
+      );
+      expect(r.ok).toBe(true);
+      if (r.ok !== true) return;
+      expect(r.operacion.clienteId).toBe(
+        '3f2504e0-4f89-41d3-9a0c-0305e82c3301',
+      );
+    });
+
+    it('acepta mayusculas: un uuid no distingue caja', () => {
+      expect(
+        normalizarOperacion(
+          valida({ cliente_id: '3F2504E0-4F89-41D3-9A0C-0305E82C3301' }),
+          VENDEDOR,
+          HOY,
+        ).ok,
+      ).toBe(true);
+    });
+
+    it('sin cliente_id es correcto: una jornada o un gasto no tienen cliente', () => {
+      const r = normalizarOperacion(valida(), VENDEDOR, HOY);
+      expect(r.ok).toBe(true);
+      if (r.ok !== true) return;
+      expect(r.operacion.clienteId).toBeNull();
+    });
   });
 
   describe('tolerancia del reloj', () => {

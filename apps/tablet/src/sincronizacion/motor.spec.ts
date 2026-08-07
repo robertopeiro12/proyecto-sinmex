@@ -363,6 +363,35 @@ describe('motor de sincronizacion', () => {
       expect(r.push?.enviadas).toBe(0);
     });
 
+    it('trocea en lotes de 500: pasarse es un 400 que la tablet leeria como "sin red"', async () => {
+      // Con un solo lote de 600, el servidor responde 400 (ArrayMaxSize), la
+      // tablet lo traduce a SinRedError y reintentaria ese dia para siempre,
+      // en silencio. Hoy no se llega ni de lejos —solo hay jornadas— pero el
+      // dia que T-16 registre ventas por cliente, si.
+      const muchas: OperacionSaliente[] = Array.from({ length: 600 }, (_, i) => ({
+        clave: `op-${i}`,
+        tipo: 'venta',
+        fecha_operacion: '2026-08-07',
+        ocurrido_en: '2026-08-07T15:00:00.000Z',
+        datos: {},
+      }));
+      const sincronizadas: string[] = [];
+      const masiva: FuenteOperaciones = {
+        tipo: 'venta',
+        pendientes: () => muchas,
+        marcarSincronizada: (clave) => sincronizadas.push(clave),
+        marcarError: jest.fn(),
+      };
+
+      const { motor, escenario } = montar({ fuentes: () => [masiva] });
+      const r = await motor.sincronizar();
+
+      expect(escenario.pushes.map((p) => p.operaciones.length)).toEqual([500, 100]);
+      expect(r.push?.enviadas).toBe(600);
+      expect(r.push?.aplicadas).toBe(600);
+      expect(sincronizadas).toHaveLength(600);
+    });
+
     it('cada fuente manda su propio lote', async () => {
       // Es como se enchufaran T-16/T-20/T-27/T-33/T-39 sin tocar el motor.
       const fantasma: FuenteOperaciones = {
