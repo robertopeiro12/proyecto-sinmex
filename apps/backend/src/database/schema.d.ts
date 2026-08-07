@@ -157,6 +157,17 @@ export interface SesionRefresh {
   usuario_id: string;
 }
 
+export interface SesionVendedor {
+  created_at: Generated<Timestamp>;
+  expira_en: Timestamp;
+  id: Generated<string>;
+  reemplazada_por: string | null;
+  revocada_en: Timestamp | null;
+  token_hash: string;
+  updated_at: Generated<Timestamp>;
+  vendedor_id: string;
+}
+
 export interface Sucursal {
   activa: Generated<boolean>;
   codigo: string;
@@ -265,6 +276,7 @@ export interface DB {
   producto: Producto;
   ruta: Ruta;
   sesion_refresh: SesionRefresh;
+  sesion_vendedor: SesionVendedor;
   sucursal: Sucursal;
   tipo_negocio: TipoNegocio;
   usuario: Usuario;
