@@ -37,8 +37,9 @@ proyecto-sinmex/
 ├── apps/
 │   ├── backend/   — NestJS (T-02). Módulos en src/modules/, uno por módulo de dominio
 │   │                (mismos slugs que el vault: ventas-cobranza, tesoreria, etc.).
-│   │                Excepción: `modules/sucursales/` no corresponde a un slug del vault —
-│   │                Sucursal es transversal a los 12 módulos de dominio (T-09).
+│   │                Excepciones (no corresponden a un slug del vault porque atraviesan
+│   │                los 12 módulos de dominio): `modules/sucursales/` (T-09) y
+│   │                `modules/sincronizacion/` (T-07).
 │   ├── portal/    — Next.js (T-03)
 │   └── tablet/    — React Native/Expo + SQLite local (T-04). Rutas de expo-router
 │                    en `app/`, capa de datos offline en `src/datos/`.
@@ -104,6 +105,26 @@ Descubierto en T-09, cuando una verificación "local" acabó creando una sucursa
 
 El guard global es estricto en los dos sentidos: un token de app **no** entra al portal ni al revés.
 El de la app además vale offline — ver `ADR-0005` en el vault y `apps/tablet/src/sesion/`.
+
+**Sincronización de la tablet (T-07) — el contrato está documentado, léelo antes de tocarlo:**
+
+`docs/contrato-sincronizacion.md`. Endpoints `GET /sync/pull` y `POST /sync/push`, ambos con
+`@SoloApp()`. Tres cosas que se rompen en silencio si no se saben:
+
+- **El contrato lleva versión explícita** (`contrato: 1`) en cada petición y cada respuesta,
+  porque tablet y servidor se despliegan por separado. Los tipos están **duplicados** a propósito
+  en `apps/backend/src/modules/sincronizacion/contrato.ts` (normativo) y
+  `apps/tablet/src/sincronizacion/contrato.ts` (la tablet no puede importar del backend: Metro).
+  Si tocas uno, toca el otro y el `docs/` en el mismo commit.
+- **`fecha_operacion` la calcula la tablet con su reloj local (Tijuana) y el servidor NUNCA la
+  re-deriva de UTC.** A las 18:00 de Tijuana en UTC ya es el día siguiente, y eso partiría cada
+  jornada en dos.
+- **La idempotencia del push vive en un `unique (vendedor_id, clave_idempotencia)` de la base**,
+  no en el servicio. La clave es el `id` local de la fila en SQLite. Una operación **rechazada no
+  deja fila**, para que se pueda corregir y reenviar.
+
+`npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
+`--`: sin él, npm se come los argumentos).
 
 **Requisitos de entorno para lo anterior:**
 - `JWT_SECRET` en `.env.development` (raíz del repo) — el backend no arranca sin ella. Genera una
