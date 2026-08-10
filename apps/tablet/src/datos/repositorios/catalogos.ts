@@ -38,7 +38,15 @@ export type RepositorioCatalogos = ReturnType<typeof crearRepositorioCatalogos>;
 /** Columnas de cada catalogo, en el orden en que se escriben. */
 const COLUMNAS = {
   sucursal: ['id', 'codigo', 'nombre', 'activa'],
-  vendedor: ['id', 'login', 'nombre', 'sucursal_id', 'activo'],
+  vendedor: [
+    'id',
+    'login',
+    'nombre',
+    'sucursal_id',
+    'activo',
+    // T-14: lo asigna el servidor; la tablet lo refleja y lo usa al foliar.
+    'folio_segmento',
+  ],
   vehiculo: ['id', 'nombre', 'sucursal_id', 'activo'],
   producto: ['id', 'nombre', 'activo'],
   presentacion: ['id', 'producto_id', 'volumen', 'activo'],
@@ -77,6 +85,29 @@ const COLUMNAS = {
     'activo',
   ],
 } as const;
+
+/**
+ * Columnas que **no se pisan con `null`** al aplicar un snapshot.
+ *
+ * El upsert normal hace `columna = excluded.columna`, que es lo correcto para un
+ * catalogo: el portal manda y lo que llega gana. Pero no todos los snapshots
+ * vienen del `pull`.
+ *
+ * El caso concreto: un login **sin red** (re-autenticacion local, ADR-0005) hace
+ * un upsert de identidad con lo unico que la sesion guardada conoce — id, login,
+ * nombre y sucursal. **No conoce el `folio_segmento`**, porque ese lo asigna el
+ * servidor. Si ese upsert lo pisara con `null`, el vendedor se quedaria sin
+ * poder emitir [[Folios|folios]] hasta el siguiente `pull`... que un login
+ * offline **nunca dispara**. Se quedaria sin operar en plena ruta.
+ *
+ * Asi que para estas columnas el upsert usa `coalesce(excluded.x, tabla.x)`: un
+ * valor de verdad gana (el `pull` sigue mandando), pero un `null` no borra lo
+ * que ya habia. Es la misma doctrina de ADR-0007: el segmento **se pina**, no se
+ * recalcula ni se pierde por el camino.
+ */
+const NO_BORRAR_CON_NULO: Record<string, readonly string[]> = {
+  vendedor: ['folio_segmento'],
+};
 
 /**
  * Lectura de los catalogos precargados y escritura del snapshot que baja del
@@ -230,9 +261,15 @@ function upsert(
 
   const todas = [...columnas, 'sincronizado_en'];
   const marcadores = todas.map((c) => `$${c}`).join(', ');
+  const conservar = NO_BORRAR_CON_NULO[tabla] ?? [];
   const asignaciones = todas
     .filter((c) => c !== 'id')
-    .map((c) => `${c} = excluded.${c}`)
+    .map((c) =>
+      conservar.includes(c)
+        ? // Un valor de verdad gana; un null no borra lo que ya habia.
+          `${c} = coalesce(excluded.${c}, ${tabla}.${c})`
+        : `${c} = excluded.${c}`,
+    )
     .join(', ');
 
   const sql =

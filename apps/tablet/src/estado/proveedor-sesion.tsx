@@ -132,6 +132,12 @@ export function ProveedorSesion({
             nombre: quien.nombre,
             sucursal_id: quien.sucursalId,
             activo: 1,
+            // La sesion no conoce el segmento del folio: lo asigna el servidor
+            // y baja en el `pull` (T-14). Se deja nulo a proposito en vez de
+            // derivarlo del nombre — hacerlo aqui reintroduciria la ambiguedad
+            // de iniciales que la tablet no puede resolver sola. Hasta el
+            // primer pull, este vendedor no puede foliar.
+            folio_segmento: null,
           },
         ],
       });

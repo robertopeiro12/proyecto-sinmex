@@ -32,6 +32,16 @@ export interface Vendedor {
   nombre: string;
   sucursal_id: string;
   activo: Booleano;
+  /**
+   * Las 2 letras de este vendedor dentro del [[Folios|folio]] (5o segmento).
+   *
+   * **Lo asigna el servidor y baja en el pull.** La tablet no lo deriva de
+   * `nombre` aunque podria: dos vendedores con las mismas iniciales chocarian y
+   * la tablet no puede detectarlo, porque solo baja su propia ficha y no ve a
+   * sus companeros. `null` mientras no haya sincronizado nunca — y sin el no se
+   * puede emitir folio. Ver T-14 y ADR-0007.
+   */
+  folio_segmento: string | null;
   sincronizado_en: MomentoISO;
 }
 

@@ -10,6 +10,8 @@ import {
 } from './../src/database/database.tokens';
 import { PasswordService } from './../src/modules/auth/password.service';
 import { CONTRATO_ACTUAL } from './../src/modules/sincronizacion/contrato';
+import { formarFolio } from './../src/modules/sincronizacion/folio';
+import { asignarSegmento } from './../src/modules/sincronizacion/segmento-vendedor';
 import type {
   RespuestaPull,
   RespuestaPush,
@@ -52,6 +54,9 @@ describe('Sincronizacion pull/push (e2e)', () => {
 
   let vendedorId: string;
   let vendedorAjenoId: string;
+  /** El 5o segmento del folio de cada uno. Lo asigna el servidor (T-14). */
+  let segmento: string;
+  let segmentoAjeno: string;
   let usuarioPortalId: string;
 
   let clienteId: string;
@@ -152,6 +157,37 @@ describe('Sincronizacion pull/push (e2e)', () => {
         .returning('id')
         .executeTakeFirstOrThrow()
     ).id;
+
+    // --- Segmento del folio (T-14).
+    //
+    // Se asigna con la misma funcion que usa el alta real, contra lo que ya
+    // esta ocupado en la base: el segmento es unico entre vendedores vivos, y
+    // una corrida anterior que no limpiara podria tener el suyo tomado.
+    const ocupados = new Set(
+      (
+        await db
+          .selectFrom('vendedor')
+          .select('folio_segmento')
+          .where('folio_segmento', 'is not', null)
+          .where('deleted_at', 'is', null)
+          .execute()
+      ).map((f) => f.folio_segmento as string),
+    );
+
+    segmento = asignarSegmento('Vendedor Sync', ocupados) as string;
+    ocupados.add(segmento);
+    segmentoAjeno = asignarSegmento('Otro Ajeno', ocupados) as string;
+
+    await db
+      .updateTable('vendedor')
+      .set({ folio_segmento: segmento })
+      .where('id', '=', vendedorId)
+      .execute();
+    await db
+      .updateTable('vendedor')
+      .set({ folio_segmento: segmentoAjeno })
+      .where('id', '=', vendedorAjenoId)
+      .execute();
 
     const perfil = await db
       .selectFrom('perfil')
@@ -1026,6 +1062,318 @@ describe('Sincronizacion pull/push (e2e)', () => {
       expect(new Date(fila.ocurrido_en).toISOString()).toBe(
         '2026-08-08T01:00:00.000Z',
       );
+    });
+  });
+  /* ================================================================ */
+  /* Folios (T-14)                                                    */
+  /* ================================================================ */
+
+  /**
+   * El folio lo emite la **tablet, offline** (ADR-0001 descarta generarlo en el
+   * servidor: se escribe en la nota fisica que el cliente firma, en campo). Lo
+   * que el servidor hace es **no aceptarlo en silencio**: comprueba que sea
+   * coherente con la operacion y deja que un unique de la base detecte las
+   * colisiones.
+   */
+  describe('folios', () => {
+    /** Una venta con folio bien emitido para este vendedor y este dia. */
+    const conFolio = (
+      extra: Record<string, unknown> = {},
+      fecha = '2026-08-07',
+      consecutivo = 1,
+    ) => {
+      const base = operacion({
+        tipo: 'venta',
+        fecha_operacion: fecha,
+        ocurrido_en: `${fecha}T14:03:22.000-07:00`,
+        folio: formarFolio(sucursalCodigo, fecha, segmento, consecutivo),
+        ...extra,
+      });
+      return base;
+    };
+
+    const filasConFolio = async (folio: string) =>
+      db
+        .selectFrom('sync_operacion')
+        .select(['id', 'vendedor_id', 'clave_idempotencia'])
+        .where('folio', '=', folio)
+        .execute();
+
+    it('el pull manda el segmento de vendedor: la tablet no lo deriva sola', async () => {
+      // Es la pieza que hace posible emitir offline SIN ambiguedad. La tablet
+      // solo baja su propia ficha, asi que no puede saber si comparte
+      // iniciales con un companero; el servidor se lo dice.
+      const res = await pull().expect(200);
+      const cuerpo = res.body as RespuestaPull;
+
+      expect(cuerpo.vendedor.folio_segmento).toBe(segmento);
+      expect(cuerpo.catalogos.vendedores[0].folio_segmento).toBe(segmento);
+      expect(segmento).toMatch(/^[A-Z]{2}$/);
+    });
+
+    it('acepta una operacion con folio y lo guarda tal cual', async () => {
+      const op = conFolio({}, '2026-08-07', 11);
+      const res = await push({ operaciones: [op] }).expect(200);
+
+      expect((res.body as RespuestaPush).resultados[0]).toMatchObject({
+        estado: 'aplicada',
+      });
+
+      const fila = await db
+        .selectFrom('sync_operacion')
+        .select('folio')
+        .where('vendedor_id', '=', vendedorId)
+        .where('clave_idempotencia', '=', op.clave)
+        .executeTakeFirstOrThrow();
+      expect(fila.folio).toBe(op.folio);
+    });
+
+    it('la jornada sigue subiendo SIN folio', async () => {
+      // No es una nota que nadie firme: no lleva folio, y el indice unico es
+      // parcial justo para que varias operaciones sin folio convivan.
+      await push({ operaciones: [operacion(), operacion()] })
+        .expect(200)
+        .expect((r) => {
+          expect((r.body as RespuestaPush).resumen.aplicadas).toBe(2);
+        });
+    });
+
+    /* ---------------------------------------------------------------- */
+
+    describe('deteccion de colision', () => {
+      it('DOS TABLETS del mismo vendedor emiten el mismo folio: la segunda se rechaza', async () => {
+        // El caso real: al vendedor le dan una tablet de repuesto y entra con
+        // su mismo login. Cada tablet lleva su propio contador local en SQLite,
+        // las dos arrancan el dia en 01 y las dos emiten el mismo folio — con
+        // claves de idempotencia distintas, porque son filas locales distintas.
+        //
+        // Esto NO es un reintento: son dos hechos de negocio que dicen tener el
+        // mismo identificador. Aceptarlo haria imposible cotejar las notas
+        // fisicas para siempre.
+        const folio = formarFolio(sucursalCodigo, '2026-08-07', segmento, 21);
+
+        const primera = await push({
+          operaciones: [conFolio({ folio }, '2026-08-07')],
+        }).expect(200);
+        expect((primera.body as RespuestaPush).resultados[0].estado).toBe(
+          'aplicada',
+        );
+
+        const segunda = await push({
+          operaciones: [conFolio({ folio }, '2026-08-07')],
+        }).expect(200);
+        expect((segunda.body as RespuestaPush).resultados[0]).toMatchObject({
+          estado: 'rechazada',
+          codigo: 'folio-duplicado',
+        });
+
+        // Y en la base quedo UNA sola fila con ese folio.
+        expect(await filasConFolio(folio)).toHaveLength(1);
+      });
+
+      it('el rechazo por colision NO deja fila: la operacion se puede corregir y reenviar', async () => {
+        // Misma doctrina que el resto de rechazos de T-07. Si la fila quedara,
+        // consumiria su clave y esa operacion local quedaria rechazada para
+        // siempre — el vendedor no podria mandarla con un folio corregido.
+        const folio = formarFolio(sucursalCodigo, '2026-08-07', segmento, 22);
+        await push({ operaciones: [conFolio({ folio })] }).expect(200);
+
+        const rechazada = conFolio({ folio });
+        await push({ operaciones: [rechazada] }).expect(200);
+
+        const sinFila = await db
+          .selectFrom('sync_operacion')
+          .select('id')
+          .where('vendedor_id', '=', vendedorId)
+          .where('clave_idempotencia', '=', rechazada.clave)
+          .executeTakeFirst();
+        expect(sinFila).toBeUndefined();
+
+        // Corregido el folio, la MISMA fila local entra.
+        const corregida = {
+          ...rechazada,
+          folio: formarFolio(sucursalCodigo, '2026-08-07', segmento, 23),
+        };
+        const res = await push({ operaciones: [corregida] }).expect(200);
+        expect((res.body as RespuestaPush).resultados[0].estado).toBe(
+          'aplicada',
+        );
+      });
+
+      it('la colision se detecta tambien dentro del mismo lote', async () => {
+        const folio = formarFolio(sucursalCodigo, '2026-08-07', segmento, 24);
+        const res = await push({
+          operaciones: [conFolio({ folio }), conFolio({ folio })],
+        }).expect(200);
+
+        const cuerpo = res.body as RespuestaPush;
+        expect(cuerpo.resultados[0].estado).toBe('aplicada');
+        expect(cuerpo.resultados[1]).toMatchObject({
+          estado: 'rechazada',
+          codigo: 'folio-duplicado',
+        });
+        expect(await filasConFolio(folio)).toHaveLength(1);
+      });
+    });
+
+    /* ---------------------------------------------------------------- */
+
+    describe('la idempotencia sigue mandando por encima del folio', () => {
+      it('REENVIAR el mismo lote con folio devuelve `duplicada`, NO una colision', async () => {
+        // Un reenvio trae la MISMA clave y el MISMO folio, asi que choca
+        // contra los dos uniques a la vez. Tiene que resolverse como
+        // `duplicada` y no como colision: si se reportara como colision, los
+        // reintentos normales (la WiFi que se cae a media subida) dejarian la
+        // operacion en error y la tablet los repetiria para siempre.
+        //
+        // La clave identifica el TRANSPORTE, el folio el HECHO DE NEGOCIO
+        // (T-07/ADR-0006). Mismo transporte = duplicada.
+        //
+        // En secuencial esto lo resuelve el `on conflict (vendedor_id,
+        // clave_idempotencia) do nothing`: el indice arbitro se comprueba
+        // primero y el insert ni se intenta, asi que el unique del folio nunca
+        // llega a dispararse. El caso en el que si se dispara es concurrente,
+        // y va en la prueba de abajo.
+        const op = conFolio({}, '2026-08-07', 31);
+
+        const primera = await push({ operaciones: [op] }).expect(200);
+        const segunda = await push({ operaciones: [op] }).expect(200);
+        const tercera = await push({ operaciones: [op] }).expect(200);
+
+        const r1 = (primera.body as RespuestaPush).resultados[0];
+        const r2 = (segunda.body as RespuestaPush).resultados[0];
+        const r3 = (tercera.body as RespuestaPush).resultados[0];
+
+        expect(r1.estado).toBe('aplicada');
+        expect(r2.estado).toBe('duplicada');
+        expect(r3.estado).toBe('duplicada');
+
+        // Y el MISMO id de servidor las tres veces: la identidad de la
+        // operacion no cambia entre intentos, que es lo que hace que reenviar
+        // sea seguro de punta a punta.
+        expect(r2.id_servidor).toBe(r1.id_servidor);
+        expect(r3.id_servidor).toBe(r1.id_servidor);
+
+        expect(await filasConFolio(op.folio as string)).toHaveLength(1);
+      });
+
+      it('dos reintentos SIMULTANEOS del mismo lote: uno aplica, el otro duplica', async () => {
+        // La WiFi del negocio va y viene y la tablet reintenta; nada impide que
+        // dos peticiones identicas se solapen en el servidor.
+        //
+        // Lo que esta prueba garantiza: pase lo que pase con el solape, las
+        // dos peticiones convergen en UNA fila y **ninguna** se reporta como
+        // colision de folio.
+        //
+        // Que camino toman por dentro depende de si las transacciones llegan a
+        // solaparse, y eso no se puede forzar desde aqui. En la practica gana
+        // el `on conflict ... do nothing`. El desempate por clave del
+        // repositorio cubre el caso en que no: ver el comentario de
+        // `guardarOperacion`.
+        const op = conFolio({}, '2026-08-07', 32);
+
+        const respuestas = await Promise.all([
+          push({ operaciones: [op] }),
+          push({ operaciones: [op] }),
+        ]);
+
+        const estados = respuestas.map(
+          (r) => (r.body as RespuestaPush).resultados[0],
+        );
+
+        // Ninguna de las dos puede acabar como colision de folio.
+        for (const r of estados) {
+          expect(r.codigo).toBeUndefined();
+          expect(['aplicada', 'duplicada']).toContain(r.estado);
+        }
+
+        // Y las dos apuntan a la MISMA fila del servidor.
+        expect(estados[0].id_servidor).toBe(estados[1].id_servidor);
+        expect(await filasConFolio(op.folio as string)).toHaveLength(1);
+      });
+    });
+
+    /* ---------------------------------------------------------------- */
+
+    describe('coherencia: el folio no puede contradecir a su operacion', () => {
+      it('rechaza un folio de otra sucursal', async () => {
+        // La sucursal la decide el servidor desde el token (T-09).
+        const op = conFolio({
+          folio: formarFolio(sucursalAjenaCodigo, '2026-08-07', segmento, 41),
+        });
+        const res = await push({ operaciones: [op] }).expect(200);
+        expect((res.body as RespuestaPush).resultados[0]).toMatchObject({
+          estado: 'rechazada',
+          codigo: 'folio-invalido',
+        });
+      });
+
+      it('rechaza un folio cuya fecha contradice a `fecha_operacion`', async () => {
+        const op = operacion({
+          tipo: 'venta',
+          fecha_operacion: '2026-08-07',
+          ocurrido_en: '2026-08-07T14:03:22.000-07:00',
+          folio: formarFolio(sucursalCodigo, '2026-08-06', segmento, 42),
+        });
+        const res = await push({ operaciones: [op] }).expect(200);
+        expect((res.body as RespuestaPush).resultados[0]).toMatchObject({
+          estado: 'rechazada',
+          codigo: 'folio-invalido',
+        });
+      });
+
+      it('rechaza un folio con el segmento de OTRO vendedor', async () => {
+        // Esto es lo que impide que una tablet se invente las iniciales por su
+        // cuenta en vez de usar las que le mando el pull. Sin esta
+        // comprobacion, la ambiguedad de iniciales volveria en silencio.
+        const op = conFolio({
+          folio: formarFolio(sucursalCodigo, '2026-08-07', segmentoAjeno, 43),
+        });
+        const res = await push({ operaciones: [op] }).expect(200);
+        expect((res.body as RespuestaPush).resultados[0]).toMatchObject({
+          estado: 'rechazada',
+          codigo: 'folio-invalido',
+        });
+      });
+
+      it.each([
+        ['TJ260807AP', 'demasiado corto'],
+        ['tj260807ap01', 'minusculas'],
+        ['TJ261332AP01', 'una fecha que no existe'],
+        ['no-es-un-folio', 'cualquier cosa'],
+      ])('rechaza %p (%s)', async (folio) => {
+        const res = await push({
+          operaciones: [conFolio({ folio })],
+        }).expect(200);
+        expect((res.body as RespuestaPush).resultados[0]).toMatchObject({
+          estado: 'rechazada',
+          codigo: 'folio-invalido',
+        });
+      });
+
+      it('un folio malo rechaza SU operacion, no el lote', async () => {
+        // La promesa de T-07: 200 y detalle por operacion. Un dedazo en un
+        // folio no le puede costar el dia entero al vendedor.
+        const res = await push({
+          operaciones: [
+            operacion(),
+            conFolio({ folio: 'no-es-un-folio' }),
+            conFolio({}, '2026-08-07', 51),
+          ],
+        }).expect(200);
+
+        const cuerpo = res.body as RespuestaPush;
+        expect(cuerpo.resumen).toMatchObject({
+          recibidas: 3,
+          aplicadas: 2,
+          rechazadas: 1,
+        });
+        expect(cuerpo.resultados.map((r) => r.estado)).toEqual([
+          'aplicada',
+          'rechazada',
+          'aplicada',
+        ]);
+      });
     });
   });
 });

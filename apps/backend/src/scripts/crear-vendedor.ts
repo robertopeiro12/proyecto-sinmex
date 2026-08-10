@@ -20,6 +20,7 @@ import { config as cargarEnv } from 'dotenv';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
 import { PasswordService } from '../modules/auth/password.service';
+import { asignarSegmento } from '../modules/sincronizacion/segmento-vendedor';
 import type { DB } from '../database/schema';
 
 cargarEnv({
@@ -161,6 +162,35 @@ async function main(): Promise<void> {
       throw new Error(`No existe la sucursal "${codigoSucursal}".`);
     }
 
+    // El 5o segmento de su [[Folios|folio]] (T-14).
+    //
+    // Se asigna AQUI y no en la tablet porque la tablet no puede: del `pull`
+    // solo baja su propia ficha, asi que no ve a sus companeros y no puede
+    // saber si comparte iniciales con alguno. Y se **pina** en vez de
+    // recalcularse: un folio emitido esta escrito en una nota fisica firmada y
+    // no se corrige hacia atras, asi que dar de alta a alguien con las mismas
+    // iniciales no puede cambiarle el segmento a quien ya folio con el.
+    //
+    // ESTRATEGIA PROVISIONAL: como se desambigua sigue pendiente de confirmar
+    // con el cliente. Ver `segmento-vendedor.ts` y ADR-0007 en el vault.
+    const ocupados = new Set(
+      (
+        await db
+          .selectFrom('vendedor')
+          .select('folio_segmento')
+          .where('folio_segmento', 'is not', null)
+          .where('deleted_at', 'is', null)
+          .execute()
+      ).map((f) => f.folio_segmento as string),
+    );
+
+    const segmento = asignarSegmento(nombre, ocupados);
+    if (segmento === null) {
+      throw new Error(
+        'No queda ningun segmento de folio libre (las 676 combinaciones estan tomadas).',
+      );
+    }
+
     const creado = await db
       .insertInto('vendedor')
       .values({
@@ -168,11 +198,28 @@ async function main(): Promise<void> {
         nombre,
         password_hash: passwordHash,
         sucursal_id: sucursal.id,
+        folio_segmento: segmento,
       })
       .returning(['id', 'login'])
       .executeTakeFirstOrThrow();
 
     console.log(`\n✅ Vendedor "${creado.login}" creado (${creado.id}).`);
+
+    const iniciales = asignarSegmento(nombre, new Set());
+    console.log(
+      `   Segmento de folio: ${segmento} (p. ej. ${sucursal.codigo}260807${segmento}01).`,
+    );
+    if (segmento !== iniciales) {
+      console.log(
+        `   ⚠  Sus iniciales (${iniciales}) ya estaban tomadas por otro vendedor, asi que`,
+      );
+      console.log(
+        '      se le asigno el siguiente segmento libre. Como desambiguar iniciales',
+      );
+      console.log(
+        '      repetidas sigue PENDIENTE DE CONFIRMAR con el cliente (ADR-0007).',
+      );
+    }
   } finally {
     rl.close();
     await db.destroy();

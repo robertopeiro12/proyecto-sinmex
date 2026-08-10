@@ -1,6 +1,7 @@
 # Contrato de sincronización tablet ↔ servidor
 
-**Versión del contrato: `1`** · Implementado en T-07 · Última revisión: 2026-08-07
+**Versión del contrato: `1`** · Implementado en T-07 · Ampliado con folios en T-14
+· Última revisión: 2026-08-07
 
 Este documento es la referencia legible del contrato. Las definiciones
 normativas están en el código:
@@ -177,11 +178,13 @@ nadie relacionaría con nada.
   "desde": "2026-08-07T14:59:55.000Z",          // eco (null = completo)
   "completo": false,
   "cursor": "2026-08-07T20:59:55.000Z",         // el `desde` del próximo pull
-  "vendedor":  { "id": "…", "login": "aperez", "nombre": "Abraham Pérez" },
+  "vendedor":  { "id": "…", "login": "aperez", "nombre": "Abraham Pérez",
+                  "folio_segmento": "AP" },
   "sucursal":  { "id": "…", "codigo": "TJ", "nombre": "Tijuana" },
   "catalogos": {
     "sucursales":     [{ "id": "…", "codigo": "TJ", "nombre": "Tijuana", "activo": 1 }],
-    "vendedores":     [{ "id": "…", "login": "…", "nombre": "…", "sucursal_id": "…", "activo": 1 }],
+    "vendedores":     [{ "id": "…", "login": "…", "nombre": "…", "sucursal_id": "…",
+                         "folio_segmento": "AP", "activo": 1 }],
     "vehiculos":      [{ "id": "…", "nombre": "…", "sucursal_id": "…", "activo": 1 }],
     "productos":      [{ "id": "…", "nombre": "Jamaica", "activo": 1 }],
     "presentaciones": [{ "id": "…", "producto_id": "…", "volumen": "1 L", "activo": 1 }],
@@ -269,6 +272,7 @@ cerrará**. Aquí se lee lo que hay, no se inventa un cálculo.
       "ocurrido_en": "2026-08-07T14:03:22.000-07:00",
       "cliente_id": "…",                  // opcional; se valida el alcance
       "vendedor_id": "…",                 // opcional; si no es el del token → 403
+      "folio": "TJ260807AP01",           // opcional; T-14. La jornada no lleva
       "datos": { "km_inicial": 120345, "km_final": 120589 }
     }
   ]
@@ -330,6 +334,8 @@ texto en español** si reintenta o si avisa al vendedor.
 | `momento-invalido` | `ocurrido_en` no es ISO-8601 |
 | `datos-invalidos` | `datos` no es un objeto (o la operación entera no lo es) |
 | `cliente-fuera-de-alcance` | El `cliente_id` no existe, no es de su sucursal, o no es un uuid válido |
+| `folio-invalido` | El `folio` no tiene el formato de ADR-0001, o contradice a su propia operación (dice otra sucursal, otra fecha u otro vendedor) |
+| `folio-duplicado` | **Colisión de folios**: otra operación ya subió ese folio |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo
@@ -369,25 +375,63 @@ Y por tanto **no consume su clave**. Si la consumiera, esa fila local quedaría
 rechazada para siempre y el vendedor no podría reenviar una versión corregida.
 El rechazo se recalcula en cada intento: es determinista y no necesita memoria.
 
-### Cómo convive con el folio cuando llegue T-14
+### Cómo convive con el folio (T-14, implementado)
 
-Los folios (`10-Dominio/Reglas/Folios.md` y `ADR-0001` en el vault) los genera
-T-14 y **todavía no existen**. Además, un folio es un identificador de
-**negocio** que solo se puede emitir una vez, así que no sirve como clave de
-reintento: emitirlo dos veces sería el bug, no la solución.
+> [!warning] Esto corrige lo que T-07 había escrito aquí
+> T-07 anticipó que *"el folio se emitirá **al proyectar**… lo pone el
+> **servidor**"*. **Es incorrecto y ADR-0001 manda.** Ese ADR **descarta
+> explícitamente** generar el folio en el servidor (su opción 3): la tablet
+> opera sin red toda la jornada y el folio se escribe en la **nota física que el
+> cliente firma**, en campo — no puede esperar a la sincronización.
+>
+> T-07 acertó en la **capa** y erró en el **emisor**. Ver el ADR-0007 del vault.
 
-Cuando T-14 llegue:
+**El folio lo emite la tablet, offline.** Viaja en el push como campo
+**opcional** (`folio`), y el servidor no lo emite: lo **valida** y lo defiende.
 
-1. `sync_operacion` seguirá siendo el buzón de entrada, con su clave del cliente.
-2. El **folio se emitirá al proyectar** la operación a su tabla de negocio, una
-   sola vez, y el id de la fila creada quedará en `sync_operacion.entidad_id`.
-3. Un reenvío encuentra el unique, **no vuelve a proyectar** y devuelve el mismo
-   `entidad_id` — y con él, el mismo folio.
+1. `sync_operacion` sigue siendo el buzón de entrada, con su clave del cliente.
+2. La tablet emite el folio al **capturar** la operación, con su contador local
+   por vendedor + sucursal + día (`apps/tablet/src/datos/repositorios/folios.ts`).
+3. El servidor lo comprueba en dos capas, y las dos hacen falta:
+   - **Coherencia** — el folio repite la sucursal, el día y el vendedor, datos
+     que el servidor ya conoce por su cuenta. Si no coinciden → `folio-invalido`.
+   - **Colisión** — un `unique` **global** sobre `sync_operacion.folio`. Si otra
+     operación ya lo usó → `folio-duplicado`, rechazo **por operación**.
+4. Al proyectar (T-16/T-20), el folio se **copia** a `venta_nota.folio` (que ya
+   nació `unique` en T-05). **No se re-emite.** Un reenvío no vuelve a proyectar
+   y devuelve el mismo `entidad_id` — y con él, el mismo folio.
 
-Es decir: la clave del cliente y el folio conviven en **capas distintas**. La
-clave identifica el *transporte*; el folio identifica el *hecho de negocio*. La
-primera la pone la tablet y no cambia; el segundo lo pone el servidor y no se
-repite.
+Lo que T-07 dejó bien y sigue en pie: la clave y el folio viven en **capas
+distintas**. La clave identifica el *transporte* y no cambia entre reintentos;
+el folio identifica el *hecho de negocio* y solo se emite una vez.
+
+> [!danger] Ojo al desempatar el `23505`
+> Un reenvío legítimo trae la **misma clave Y el mismo folio**, así que choca
+> contra los dos uniques. Se mira **primero la clave**: si esa fila ya existe es
+> `duplicada`, no colisión. Traducir cualquier `23505` a `folio-duplicado`
+> dejaría los reintentos normales (la WiFi que se cae a media subida) marcados
+> en error y la tablet los repetiría para siempre.
+
+### El segmento de vendedor lo asigna el servidor
+
+El 5º segmento del folio son las **iniciales del vendedor**, y el `pull` las
+manda en `vendedor.folio_segmento`. **La tablet no las deriva de `nombre`**
+aunque podría: dos vendedores con las mismas iniciales producirían el mismo
+folio, y la tablet **no puede detectarlo** porque de `vendedores` solo baja **su
+propia ficha** — no ve a sus compañeros. Solo el servidor tiene la visibilidad
+global.
+
+> [!warning] Estrategia **provisional** — pendiente de confirmar con el cliente
+> Cómo desambiguar iniciales repetidas **no está en ninguna fuente**. Lo
+> implementado (ceder de forma determinista conservando la inicial del nombre,
+> con un `unique` en la base) es una elección nuestra marcada como provisional.
+> Ver `ADR-0007` y `10-Dominio/Reglas/Folios.md` en el vault.
+
+Es un campo **aditivo**: no sube la versión del contrato. Un servidor que no lo
+mande deja a la tablet sin poder foliar, pero no rompe nada de lo que ya
+funcionaba — y la tablet lo dice en voz alta en vez de inventarse las iniciales.
+Cuando **T-16** haga obligatorio emitir folio para registrar una venta, habrá
+que revisar si toca subir `CONTRATO_ACTUAL`.
 
 ### Limitación conocida: el buzón es de solo escritura
 
@@ -441,9 +485,8 @@ sincronizar.
 |---|---|
 | Resolución de conflictos (portal y tablet tocan lo mismo) | **T-43** |
 | Sincronización automática 11:00/14:00 | **T-44** |
-| Folios | **T-14** |
 | Forma de `datos` para venta / cobranza / gasto / merma / ruta | **T-16 / T-20 / T-27 / T-33 / T-39** |
-| Proyección de `sync_operacion` a las tablas de negocio | Los mismos |
+| Proyección de `sync_operacion` a las tablas de negocio (incluido **copiar el folio** a `venta_nota.folio`) | Los mismos |
 | Permisos granulares en estos endpoints | **T-8** |
 
 El envelope está diseñado para que todo eso **quepa encima sin romper la

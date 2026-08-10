@@ -8,6 +8,16 @@ import {
 const VENDEDOR = '11111111-1111-1111-1111-111111111111';
 const HOY = '2026-08-07';
 
+/**
+ * Lo que el servidor sabe del vendedor por su cuenta (T-14).
+ *
+ * Hace falta para poder comprobar el [[Folios|folio]] que trae la operacion:
+ * el folio repite la sucursal, el dia y el vendedor, y si esas copias no
+ * coinciden con lo que el servidor ya sabe, alguien miente o la tablet tiene
+ * un bug.
+ */
+const CTX = { sucursal: 'TJ', segmentoFolio: 'AP' } as const;
+
 const valida = (extra: Record<string, unknown> = {}) => ({
   clave: 'c0ffee00-0000-4000-8000-000000000001',
   tipo: 'jornada',
@@ -19,7 +29,7 @@ const valida = (extra: Record<string, unknown> = {}) => ({
 
 describe('normalizarOperacion', () => {
   it('acepta una operacion bien formada y normaliza el instante a UTC', () => {
-    const r = normalizarOperacion(valida(), VENDEDOR, HOY);
+    const r = normalizarOperacion(valida(), VENDEDOR, HOY, CTX);
     expect(r.ok).toBe(true);
     if (r.ok !== true) return;
 
@@ -39,6 +49,7 @@ describe('normalizarOperacion', () => {
       valida({ tipo: 'venta', datos: { lo_que_sea: [1, 2, 3] } }),
       VENDEDOR,
       HOY,
+      CTX,
     );
     expect(r.ok).toBe(true);
     if (r.ok !== true) return;
@@ -54,7 +65,7 @@ describe('normalizarOperacion', () => {
       'merma',
       'ruta',
     ]) {
-      expect(normalizarOperacion(valida({ tipo }), VENDEDOR, HOY).ok).toBe(
+      expect(normalizarOperacion(valida({ tipo }), VENDEDOR, HOY, CTX).ok).toBe(
         true,
       );
     }
@@ -68,6 +79,7 @@ describe('normalizarOperacion', () => {
         valida({ vendedor_id: '22222222-2222-2222-2222-222222222222' }),
         VENDEDOR,
         HOY,
+        CTX,
       );
       expect(r.ok).toBe('ajena');
     });
@@ -77,6 +89,7 @@ describe('normalizarOperacion', () => {
         valida({ vendedor_id: VENDEDOR }),
         VENDEDOR,
         HOY,
+        CTX,
       );
       expect(r.ok).toBe(true);
     });
@@ -89,6 +102,7 @@ describe('normalizarOperacion', () => {
         { vendedor_id: 'otro-vendedor', tipo: 'nada', fecha_operacion: 'ayer' },
         VENDEDOR,
         HOY,
+        CTX,
       );
       expect(r.ok).toBe('ajena');
     });
@@ -96,7 +110,7 @@ describe('normalizarOperacion', () => {
 
   describe('rechazos', () => {
     const rechaza = (op: unknown, codigo: string) => {
-      const r = normalizarOperacion(op, VENDEDOR, HOY);
+      const r = normalizarOperacion(op, VENDEDOR, HOY, CTX);
       expect(r.ok).toBe(false);
       if (r.ok !== false) return;
       expect(r.codigo).toBe(codigo);
@@ -179,6 +193,7 @@ describe('normalizarOperacion', () => {
         }),
         VENDEDOR,
         HOY,
+        CTX,
       );
       expect(r.ok).toBe(true);
       if (r.ok !== true) return;
@@ -193,12 +208,13 @@ describe('normalizarOperacion', () => {
           valida({ cliente_id: '3F2504E0-4F89-41D3-9A0C-0305E82C3301' }),
           VENDEDOR,
           HOY,
+          CTX,
         ).ok,
       ).toBe(true);
     });
 
     it('sin cliente_id es correcto: una jornada o un gasto no tienen cliente', () => {
-      const r = normalizarOperacion(valida(), VENDEDOR, HOY);
+      const r = normalizarOperacion(valida(), VENDEDOR, HOY, CTX);
       expect(r.ok).toBe(true);
       if (r.ok !== true) return;
       expect(r.operacion.clienteId).toBeNull();
@@ -212,6 +228,7 @@ describe('normalizarOperacion', () => {
           valida({ fecha_operacion: '2026-08-08' }),
           VENDEDOR,
           HOY,
+          CTX,
         ).ok,
       ).toBe(true);
     });
@@ -222,6 +239,7 @@ describe('normalizarOperacion', () => {
           valida({ fecha_operacion: '2026-07-20' }),
           VENDEDOR,
           HOY,
+          CTX,
         ).ok,
       ).toBe(true);
     });
@@ -231,6 +249,7 @@ describe('normalizarOperacion', () => {
         valida({ fecha_operacion: '2026-08-09' }),
         VENDEDOR,
         HOY,
+        CTX,
       );
       expect(r.ok).toBe(false);
     });

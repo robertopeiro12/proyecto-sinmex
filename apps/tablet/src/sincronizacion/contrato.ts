@@ -48,6 +48,22 @@ export interface VendedorPull extends FilaSincronizable {
   login: string;
   nombre: string;
   sucursal_id: string;
+  /**
+   * Las 2 letras del vendedor dentro del [[Folios|folio]] (5o segmento). T-14.
+   *
+   * **Lo asigna el servidor y la tablet lo usa tal cual.** No lo deriva ella de
+   * `nombre` aunque podria: dos vendedores con las mismas iniciales chocarian,
+   * y la tablet **no puede detectarlo** porque de `vendedores` solo baja su
+   * propia ficha — no ve a sus companeros.
+   *
+   * `null` = todavia sin asignar. Sin segmento **no se puede emitir folio**, y
+   * el repositorio lo dice en voz alta (`ErrorFolio`) en vez de inventarse las
+   * iniciales: eso reintroduciria en silencio la ambiguedad que sigue
+   * pendiente de confirmar con el cliente (ADR-0007).
+   *
+   * Campo **aditivo**: no sube la version del contrato.
+   */
+  folio_segmento: string | null;
 }
 
 export interface VehiculoPull extends FilaSincronizable {
@@ -102,7 +118,13 @@ export interface RespuestaPull {
   completo: boolean;
   /** Lo que hay que mandar como `desde` en el proximo pull. */
   cursor: string;
-  vendedor: { id: string; login: string; nombre: string };
+  vendedor: {
+    id: string;
+    login: string;
+    nombre: string;
+    /** Su segmento del folio. Ver {@link VendedorPull.folio_segmento}. */
+    folio_segmento: string | null;
+  };
   sucursal: { id: string; codigo: string; nombre: string };
   catalogos: {
     sucursales: SucursalPull[];
@@ -133,6 +155,21 @@ export interface OperacionSaliente {
   fecha_operacion: string;
   ocurrido_en: string;
   cliente_id?: string;
+  /**
+   * El [[Folios|folio]] que la tablet emitio **offline** para esta operacion
+   * (T-14), o ausente si su tipo no lleva folio.
+   *
+   * Hoy la `jornada` no lo lleva: no es una nota que nadie firme. Venta y
+   * cobranza si lo llevaran (T-16/T-20).
+   *
+   * > [!danger] El folio NO es la clave de idempotencia
+   * > Son capas distintas y hay que mantenerlas separadas (ADR-0006). `clave`
+   * > identifica el **transporte** y no cambia entre reintentos; el folio
+   * > identifica el **hecho de negocio** y solo se emite una vez. El servidor
+   * > lo defiende con un unique propio y rechaza las colisiones con
+   * > `folio-duplicado`.
+   */
+  folio?: string;
   datos: Record<string, unknown>;
 }
 
