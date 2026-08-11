@@ -1,6 +1,7 @@
 import { Redirect, Stack } from 'expo-router';
 
 import { useJawa } from '@/estado/proveedor-jawa';
+import { useSesion } from '@/estado/proveedor-sesion';
 import { colores } from '@/ui/tema';
 
 /**
@@ -17,10 +18,17 @@ import { colores } from '@/ui/tema';
  *
  * El guardia mira la **jornada de hoy en SQLite**, no una bandera en memoria:
  * si la app se reinicia a media manana, el vendedor vuelve donde estaba.
+ *
+ * Desde T-06 hay un guardia **antes** que este: sin sesion de vendedor no hay
+ * jornada que consultar. Se comprueba tambien aqui, y no solo en `app/index`,
+ * porque a este grupo se puede llegar por una ruta profunda (deep link,
+ * `router.replace` desde cualquier pantalla) sin pasar por el indice.
  */
 export default function LayoutJornada() {
+  const { vendedor } = useSesion();
   const { jornada } = useJawa();
 
+  if (!vendedor) return <Redirect href="/login" />;
   if (!jornada) return <Redirect href="/abrir-dia" />;
 
   return (

@@ -4,15 +4,26 @@ import { abrirBaseDatos } from './driver-expo';
 import { ejecutarMigraciones, migraciones } from './migraciones';
 import { relojSistema } from './reloj';
 import { crearRepositorioCatalogos, type RepositorioCatalogos } from './repositorios/catalogos';
+import { crearRepositorioFolios, type RepositorioFolios } from './repositorios/folios';
 import { crearRepositorioJornadas, type RepositorioJornadas } from './repositorios/jornadas';
+import { crearRepositorioSync, type RepositorioSync } from './repositorios/sync';
 import type { DepsRepositorio } from './repositorios/deps';
-import { sembrarCatalogosDeDesarrollo } from './semilla-dev';
 
 /** Lo que la app usa para hablar con la base local. */
 export interface CapaDatos {
   deps: DepsRepositorio;
   catalogos: RepositorioCatalogos;
   jornadas: RepositorioJornadas;
+  /** Cursor del pull incremental (T-07). */
+  sync: RepositorioSync;
+  /**
+   * Emision offline de folios (T-14).
+   *
+   * Hoy **nadie lo llama todavia**: la jornada no lleva folio y las entidades
+   * que si lo llevaran son T-16 (venta) y T-20 (cobranza). Se arma aqui para
+   * que esos tickets solo tengan que emitir dentro de su transaccion.
+   */
+  folios: RepositorioFolios;
   /** Version de esquema con la que quedo la base tras migrar. */
   versionEsquema: number;
 }
@@ -31,13 +42,16 @@ export function inicializarCapaDatos(): CapaDatos {
   const deps: DepsRepositorio = { bd, reloj: relojSistema, generarId: randomUUID };
   const catalogos = crearRepositorioCatalogos(deps);
 
-  // TODO: T-07 — quitar la semilla cuando el `pull` baje catalogos reales.
-  sembrarCatalogosDeDesarrollo(catalogos);
+  // Ya no hay semilla de desarrollo: los catalogos bajan del `pull` real
+  // (T-07), que corre tras el primer login en linea. Ver
+  // `sincronizacion/motor.ts` y `estado/proveedor-sesion.tsx`.
 
   return {
     deps,
     catalogos,
     jornadas: crearRepositorioJornadas(deps),
+    sync: crearRepositorioSync(deps),
+    folios: crearRepositorioFolios(deps),
     versionEsquema: versionFinal,
   };
 }

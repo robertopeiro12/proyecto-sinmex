@@ -3,9 +3,13 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { AuthVendedorController } from './auth-vendedor.controller';
+import { AuthVendedorService } from './auth-vendedor.service';
 import { PasswordService } from './password.service';
 import { SesionRepository } from './sesion.repository';
+import { SesionVendedorRepository } from './sesion-vendedor.repository';
 import { TokenService } from './token.service';
+import { TokenVendedorService } from './token-vendedor.service';
 
 @Module({
   imports: [
@@ -29,8 +33,24 @@ import { TokenService } from './token.service';
       },
     }),
   ],
-  controllers: [AuthController],
-  providers: [AuthService, PasswordService, TokenService, SesionRepository],
-  exports: [AuthService, TokenService],
+  controllers: [AuthController, AuthVendedorController],
+  providers: [
+    AuthService,
+    AuthVendedorService,
+    PasswordService,
+    TokenService,
+    TokenVendedorService,
+    SesionRepository,
+    SesionVendedorRepository,
+  ],
+  // TokenVendedorService se exporta porque lo inyecta JwtAuthGuard, que se
+  // registra como APP_GUARD en AppModule y por tanto se resuelve fuera de este
+  // modulo. Sin exportarlo, la app no arranca.
+  exports: [
+    AuthService,
+    TokenService,
+    AuthVendedorService,
+    TokenVendedorService,
+  ],
 })
 export class AuthModule {}

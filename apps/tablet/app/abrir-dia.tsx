@@ -22,7 +22,7 @@ import { colores, estilos } from '@/ui/tema';
 export default function AbrirDia() {
   const { datos, vendedor, sucursalId, jornada, refrescarJornada } = useJawa();
   const vehiculos = useMemo<Vehiculo[]>(
-    () => datos.catalogos.listarVehiculos(sucursalId),
+    () => (sucursalId ? datos.catalogos.listarVehiculos(sucursalId) : []),
     [datos, sucursalId],
   );
 
@@ -33,13 +33,15 @@ export default function AbrirDia() {
   const kmNumero = Number(km.replace(',', '.'));
   const puedeAbrir = vehiculoId !== null && km.trim() !== '' && Number.isFinite(kmNumero);
 
+  // Sin sesion no hay vendedor de quien abrir la jornada (T-06).
+  if (!vendedor) return <Redirect href="/login" />;
   // Ya abrio el dia: no tiene nada que hacer aqui.
   if (jornada) return <Redirect href="/(jornada)" />;
 
   function abrir() {
     setError(null);
     if (!vendedor) {
-      setError('No hay vendedor con sesion iniciada. Pendiente de T-06.');
+      setError('No hay vendedor con sesion iniciada.');
       return;
     }
     if (!vehiculoId) {

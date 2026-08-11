@@ -1,7 +1,8 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
+import { hashearToken } from './hash-token';
 import { SesionRepository } from './sesion.repository';
 import { msDeSesionRefresh } from './ttl-sesion';
 
@@ -165,12 +166,9 @@ export class TokenService {
     }
   }
 
-  /**
-   * SHA-256, no argon2: el token ya son 32 bytes aleatorios (no hay entropia
-   * baja que proteger) y la busqueda por igualdad debe ser barata.
-   */
+  /** Ver `hash-token.ts` para el porque de SHA-256 y de que sea compartido. */
   private hashear(plano: string): string {
-    return createHash('sha256').update(plano).digest('hex');
+    return hashearToken(plano);
   }
 
   private calcularVencimiento(): Date {

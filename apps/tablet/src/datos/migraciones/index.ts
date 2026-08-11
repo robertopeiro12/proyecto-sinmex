@@ -1,4 +1,6 @@
 import { esquemaInicial } from './001-esquema-inicial';
+import { sincronizacion } from './002-sincronizacion';
+import { folios } from './003-folios';
 import type { Migracion } from './motor';
 
 /**
@@ -10,7 +12,11 @@ import type { Migracion } from './motor';
  * 2. La version es el indice + 1 (`motor.ts` lo valida al arrancar).
  * 3. El archivo se nombra `NNN-descripcion.ts` para que ordene solo.
  */
-export const migraciones: readonly Migracion[] = [esquemaInicial];
+export const migraciones: readonly Migracion[] = [
+  esquemaInicial,
+  sincronizacion,
+  folios,
+];
 
 export { ejecutarMigraciones, versionEsquema } from './motor';
 export type { Migracion, ResultadoMigraciones } from './motor';

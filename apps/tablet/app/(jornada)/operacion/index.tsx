@@ -15,8 +15,11 @@ import { estilos } from '@/ui/tema';
  */
 export default function ListaClientes() {
   const { datos, sucursalId } = useJawa();
+  // `sucursalId` es null si no hay sesion. Aqui no puede pasar (el layout del
+  // grupo ya redirige al login), pero el tipo lo admite y devolver la lista
+  // vacia es mas honesto que forzar el tipo con un `!`.
   const clientes = useMemo<Cliente[]>(
-    () => datos.catalogos.listarClientes(sucursalId),
+    () => (sucursalId ? datos.catalogos.listarClientes(sucursalId) : []),
     [datos, sucursalId],
   );
 

@@ -8,8 +8,11 @@ import { colores } from '@/ui/tema';
 /**
  * Raiz de la app.
  *
- * Aqui se abre la base local y se corren las migraciones (dentro de
- * `ProveedorJawa`) antes de pintar cualquier pantalla.
+ * Aqui se abre la base local, se corren las migraciones y se lee la sesion
+ * guardada (dentro de `ProveedorJawa`) antes de pintar cualquier pantalla.
+ * Las tres cosas son **sincronas** a proposito: ver el comentario de
+ * `src/sesion/almacen.ts` sobre por que una lectura asincrona de la sesion
+ * mandaria al login a quien si la tiene.
  */
 export default function LayoutRaiz() {
   return (
@@ -24,6 +27,7 @@ export default function LayoutRaiz() {
           }}
         >
           <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="abrir-dia" options={{ title: 'Abrir el dia' }} />
           <Stack.Screen name="(jornada)" options={{ headerShown: false }} />
         </Stack>
