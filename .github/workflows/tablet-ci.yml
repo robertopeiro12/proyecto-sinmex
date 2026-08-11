@@ -1,0 +1,35 @@
+name: Tablet CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint-typecheck-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint --workspace=apps/tablet
+
+      - name: Typecheck
+        run: npm run typecheck --workspace=apps/tablet
+
+      - name: Test (capa de datos local)
+        run: npm test --workspace=apps/tablet
+
+      # Empaqueta el JS con Metro sin necesitar el SDK de Android. Es lo que
+      # verifica que la resolucion de modulos del monorepo (metro.config.js)
+      # sigue funcionando: es la parte fragil de tener Expo dentro de npm
+      # workspaces con node_modules repartidos entre la raiz y el workspace.
+      - name: Bundle con Metro
+        run: npm run export --workspace=apps/tablet

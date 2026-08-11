@@ -5,6 +5,7 @@ import { configuracionSchema } from './configuracion.schema';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
+import { SincronizacionModule } from './modules/sincronizacion/sincronizacion.module';
 import { SucursalesModule } from './modules/sucursales/sucursales.module';
 import { VentasCobranzaModule } from './modules/ventas-cobranza/ventas-cobranza.module';
 import { TesoreriaModule } from './modules/tesoreria/tesoreria.module';
@@ -35,6 +36,7 @@ import { HealthModule } from './modules/health/health.module';
     DatabaseModule,
     AuthModule,
     SucursalesModule,
+    SincronizacionModule,
     VentasCobranzaModule,
     TesoreriaModule,
     FlujoEfectivoModule,

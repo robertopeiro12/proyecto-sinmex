@@ -47,4 +47,43 @@ export const configuracionSchema = Joi.object({
   COOKIE_SAMESITE: Joi.string().valid('lax', 'strict').default('lax'),
 
   COOKIE_SECURE: Joi.boolean().default(false),
+
+  // --- App de tablet (T-06, segunda mitad) -------------------------------
+  //
+  // Todo en HORAS, igual que REFRESH_TOKEN_TTL_HORAS. Mezclar unidades (unas
+  // en horas, otras en dias) es como se producen los desfases silenciosos que
+  // ya documenta ttl-sesion.ts. El porque de cada default esta ahi.
+  //
+  // La app NO usa ACCESS_TOKEN_TTL (formato de la libreria 'ms'): su TTL se
+  // expresa en horas y se convierte a segundos al firmar, para poder calcular
+  // tambien la fecha exacta de vencimiento que la app necesita guardar.
+  ACCESS_TOKEN_TTL_APP_HORAS: Joi.number().integer().positive().default(12),
+  REFRESH_TOKEN_TTL_APP_HORAS: Joi.number()
+    .integer()
+    .positive()
+    .default(7 * 24),
+
+  // La ventana offline no puede superar la vida de la sesion: si lo hiciera, la
+  // tablet creeria poder operar sin red mas alla de lo que el servidor
+  // considera viva esa sesion, y el vendedor descubriria que no puede entrar
+  // justo al intentar sincronizar. Joi lo comprueba al arrancar en vez de
+  // dejarlo a la buena voluntad de quien edite el .env.
+  VENTANA_OFFLINE_MAX_HORAS: Joi.number()
+    .integer()
+    .positive()
+    .default(72)
+    .max(Joi.ref('REFRESH_TOKEN_TTL_APP_HORAS'))
+    .messages({
+      'number.max':
+        'VENTANA_OFFLINE_MAX_HORAS no puede superar REFRESH_TOKEN_TTL_APP_HORAS: la tablet no puede operar offline mas de lo que dura su sesion.',
+    }),
+
+  // Coste del KDF con el que la app deriva su verificador local. Se manda desde
+  // aqui para poder ajustarlo cuando se mida en una tablet real, sin publicar
+  // una version nueva de la app. El minimo evita que un cero o un valor de
+  // juguete deje el verificador sin coste.
+  VERIFICADOR_LOCAL_ITERACIONES: Joi.number()
+    .integer()
+    .min(10_000)
+    .default(60_000),
 });

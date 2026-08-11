@@ -1,0 +1,148 @@
+/**
+ * Tipos de la capa de datos local.
+ *
+ * Son el reflejo 1:1 de las filas de SQLite, sin adornos: los booleanos viajan
+ * como `0 | 1` y las fechas como texto ISO, tal cual estan guardados. La
+ * traduccion a tipos "bonitos" es responsabilidad de quien los presente.
+ */
+
+/** SQLite no tiene booleano. */
+export type Booleano = 0 | 1;
+
+/** Fecha `AAAA-MM-DD` en la zona horaria de la tablet (Tijuana). */
+export type FechaISO = string;
+
+/** Timestamp ISO-8601 completo. */
+export type MomentoISO = string;
+
+/** Estado de sincronizacion de una entidad capturada offline. Ver T-07. */
+export type SyncEstado = 'pendiente' | 'enviando' | 'sincronizado' | 'error';
+
+export interface Sucursal {
+  id: string;
+  codigo: string;
+  nombre: string;
+  activa: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
+export interface Vendedor {
+  id: string;
+  login: string;
+  nombre: string;
+  sucursal_id: string;
+  activo: Booleano;
+  /**
+   * Las 2 letras de este vendedor dentro del [[Folios|folio]] (5o segmento).
+   *
+   * **Lo asigna el servidor y baja en el pull.** La tablet no lo deriva de
+   * `nombre` aunque podria: dos vendedores con las mismas iniciales chocarian y
+   * la tablet no puede detectarlo, porque solo baja su propia ficha y no ve a
+   * sus companeros. `null` mientras no haya sincronizado nunca — y sin el no se
+   * puede emitir folio. Ver T-14 y ADR-0007.
+   */
+  folio_segmento: string | null;
+  sincronizado_en: MomentoISO;
+}
+
+export interface Vehiculo {
+  id: string;
+  nombre: string;
+  sucursal_id: string;
+  activo: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
+export interface Producto {
+  id: string;
+  nombre: string;
+  activo: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
+export interface Presentacion {
+  id: string;
+  producto_id: string;
+  volumen: string;
+  activo: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
+export type TipoCliente = 'cliente' | 'prospecto';
+export type Promocion = 'ninguna' | '10+1' | '20+1';
+
+export interface Cliente {
+  id: string;
+  nombre: string;
+  domicilio: string;
+  telefono: string;
+  encargado: string | null;
+  tipo: TipoCliente;
+  pct_comision: number | null;
+  promocion: Promocion;
+  plazo_credito_dias: number | null;
+  lat: number | null;
+  lng: number | null;
+  sucursal_id: string;
+  /**
+   * `0` = dado de baja en el portal.
+   *
+   * La baja llega como **bandera y no como ausencia**: el snapshot se aplica
+   * con upsert, asi que una fila que desapareciera se quedaria aqui para
+   * siempre. Ver la migracion `002-sincronizacion.ts`.
+   */
+  activo: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
+export interface ClientePrecio {
+  id: string;
+  cliente_id: string;
+  presentacion_id: string;
+  /** En centavos: ver la nota sobre dinero en `001-esquema-inicial.ts`. */
+  precio_centavos: number;
+  vigente_desde: FechaISO;
+  activo: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
+export type StatusNotaPendiente = 'pendiente' | 'abonado';
+
+/**
+ * Nota por cobrar de un cliente, precargada desde el portal.
+ *
+ * Es lo que el vendedor selecciona al cobrar o abonar en campo. Baja con los
+ * catalogos; la tablet no la crea (T-16 creara ventas, y esas se vuelven notas
+ * pendientes solo despues de sincronizar).
+ */
+export interface NotaPendiente {
+  id: string;
+  cliente_id: string;
+  folio: string;
+  num_nota: string;
+  fecha: FechaISO;
+  status: StatusNotaPendiente;
+  monto_total_centavos: number;
+  saldo_centavos: number;
+  activo: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
+export type EstadoJornada = 'abierta' | 'cerrada';
+
+export interface Jornada {
+  id: string;
+  fecha: FechaISO;
+  vendedor_id: string;
+  vehiculo_id: string;
+  km_inicial: number;
+  km_final: number | null;
+  abierta_en: MomentoISO;
+  cerrada_en: MomentoISO | null;
+  estado: EstadoJornada;
+  sync_estado: SyncEstado;
+  actualizado_local_en: MomentoISO;
+  sincronizado_en: MomentoISO | null;
+  /** Motivo por el que el servidor la rechazo, si `sync_estado = 'error'`. */
+  sync_error: string | null;
+}

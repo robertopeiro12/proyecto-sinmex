@@ -9,7 +9,8 @@
   "scripts": {
     "supabase": "supabase",
     "backend": "npm run start:dev --workspace=apps/backend",
-    "portal": "npm run dev --workspace=apps/portal"
+    "portal": "npm run dev --workspace=apps/portal",
+    "tablet": "npm run start --workspace=apps/tablet"
   },
   "devDependencies": {
     "supabase": "^2.109.1"
