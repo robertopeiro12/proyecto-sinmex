@@ -15,6 +15,7 @@ interface ContextoAuth {
   usuario: UsuarioSesion | null;
   cargando: boolean;
   cerrarSesion: () => Promise<void>;
+  puede: (clave: string) => boolean;
 }
 
 const Contexto = createContext<ContextoAuth | null>(null);
@@ -68,8 +69,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [router]);
 
+  /**
+   * El backend ya resolvio la lista (incluido el caso del Administrador
+   * General, que recibe el catalogo completo), asi que aqui no hay ninguna
+   * regla que replicar — solo consultarla.
+   *
+   * Devuelve false mientras la sesion carga: es preferible que un boton
+   * aparezca un instante despues a que parpadee y desaparezca.
+   */
+  const puede = useCallback(
+    (clave: string) => usuario?.permisos.includes(clave) ?? false,
+    [usuario],
+  );
+
   return (
-    <Contexto.Provider value={{ usuario, cargando, cerrarSesion }}>{children}</Contexto.Provider>
+    <Contexto.Provider value={{ usuario, cargando, cerrarSesion, puede }}>
+      {children}
+    </Contexto.Provider>
   );
 }
 

@@ -4,6 +4,8 @@ export interface UsuarioSesion {
   nombre: string;
   perfil: string;
   sucursal: { id: string; codigo: string; nombre: string } | null;
+  /** Claves de permiso efectivas, ya resueltas por el backend (perfil + excepciones). */
+  permisos: string[];
 }
 
 export class ErrorApi extends Error {
