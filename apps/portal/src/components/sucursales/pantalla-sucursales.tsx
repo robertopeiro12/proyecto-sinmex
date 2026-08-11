@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/components/auth/auth-provider";
 import { FormularioSucursal } from "./formulario-sucursal";
 import { listarSucursales, type Sucursal } from "@/lib/sucursales";
 
@@ -10,6 +11,8 @@ import { listarSucursales, type Sucursal } from "@/lib/sucursales";
 type Edicion = Sucursal | "nueva" | null;
 
 export function PantallaSucursales({ sucursal }: { sucursal: string | null }) {
+  const { puede } = useAuth();
+  const puedeGestionar = puede("sucursal.gestionar");
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,13 +41,15 @@ export function PantallaSucursales({ sucursal }: { sucursal: string | null }) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Sucursales</CardTitle>
-        <Button
-          size="sm"
-          disabled={edicion !== null}
-          onClick={() => setEdicion("nueva")}
-        >
-          Nueva sucursal
-        </Button>
+        {puedeGestionar && (
+          <Button
+            size="sm"
+            disabled={edicion !== null}
+            onClick={() => setEdicion("nueva")}
+          >
+            Nueva sucursal
+          </Button>
+        )}
       </CardHeader>
 
       <CardContent>
@@ -97,14 +102,16 @@ export function PantallaSucursales({ sucursal }: { sucursal: string | null }) {
                     )}
                   </td>
                   <td className="py-2 text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={edicion !== null}
-                      onClick={() => setEdicion(s)}
-                    >
-                      Editar
-                    </Button>
+                    {puedeGestionar && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={edicion !== null}
+                        onClick={() => setEdicion(s)}
+                      >
+                        Editar
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))}

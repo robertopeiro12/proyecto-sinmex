@@ -5,6 +5,7 @@ import { configuracionSchema } from './configuracion.schema';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/jwt-auth.guard';
+import { PermisosGuard } from './modules/auth/permisos.guard';
 import { SincronizacionModule } from './modules/sincronizacion/sincronizacion.module';
 import { SucursalesModule } from './modules/sucursales/sucursales.module';
 import { VentasCobranzaModule } from './modules/ventas-cobranza/ventas-cobranza.module';
@@ -51,6 +52,12 @@ import { HealthModule } from './modules/health/health.module';
     NotificacionesModule,
     HealthModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: JwtAuthGuard }],
+  // El ORDEN importa: Nest corre los APP_GUARD en el orden en que se declaran.
+  // PermisosGuard depende del req.usuarioId que deja JwtAuthGuard, asi que va
+  // segundo. Invertirlos hace que todo endpoint con @RequierePermiso truene.
+  providers: [
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PermisosGuard },
+  ],
 })
 export class AppModule {}

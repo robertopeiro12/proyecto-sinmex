@@ -106,6 +106,24 @@ Descubierto en T-09, cuando una verificación "local" acabó creando una sucursa
 El guard global es estricto en los dos sentidos: un token de app **no** entra al portal ni al revés.
 El de la app además vale offline — ver `ADR-0005` en el vault y `apps/tablet/src/sesion/`.
 
+**Permisos del portal (T-08a) — el candado no es automatico:**
+
+Un endpoint del portal nace exigiendo **solo sesion**. Para exigir un permiso concreto hay que
+marcarlo: `@RequierePermiso('producto.gestionar')` sobre el handler. Sin esa marca, cualquier
+usuario con sesion pasa.
+
+- **Los 6 perfiles sembrados estan VACIOS** y siguen asi hasta T-08b: el cliente nunca dijo que
+  permisos lleva cada uno, y la matriz la va a configurar el. Hoy el unico camino que pasa un
+  `@RequierePermiso` es el perfil **`Administrador General`**, que recibe el catalogo completo, o
+  una excepcion en `usuario_permiso`.
+- **`usuario_permiso.habilitado` va en los dos sentidos:** `true` concede un permiso que el perfil
+  no da, `false` quita uno que si da. La excepcion gana sobre el perfil.
+- **Todo se resuelve en `permisos.repository.ts`**, y lo consultan tanto el guard como
+  `GET /auth/me`. Si agregas una regla nueva de permisos, va ahi — no en el guard, o el portal y
+  la API acabaran discrepando.
+- **Los permisos aplican al portal, no a la tablet.** Un `@RequierePermiso` sobre un endpoint
+  `@SoloApp()` truena a proposito: el vendedor no tiene perfil.
+
 **Sincronización de la tablet (T-07) — el contrato está documentado, léelo antes de tocarlo:**
 
 `docs/contrato-sincronizacion.md`. Endpoints `GET /sync/pull` y `POST /sync/push`, ambos con
