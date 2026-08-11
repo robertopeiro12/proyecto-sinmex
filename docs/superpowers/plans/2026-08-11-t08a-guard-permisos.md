@@ -28,7 +28,7 @@
 | Archivo | Responsabilidad |
 |---|---|
 | `supabase/migrations/20260811120000_permiso_sucursal_gestionar.sql` | **Crear.** Siembra el permiso que falta. |
-| `supabase/tests/91_permiso_sucursal_test.sql` | **Crear.** pgTAP: el permiso existe y está en el grupo correcto. |
+| `supabase/tests/93_permiso_sucursal_test.sql` | **Crear.** pgTAP: el permiso existe y está en el grupo correcto. |
 | `apps/backend/src/modules/auth/permisos.ts` | **Crear.** Núcleo **puro**: mezcla perfil + excepciones, y define quién es el perfil maestro. Sin base de datos, sin Nest. |
 | `apps/backend/src/modules/auth/permisos.spec.ts` | **Crear.** Pruebas unitarias del núcleo puro. |
 | `apps/backend/src/modules/auth/permisos.repository.ts` | **Crear.** Acceso a datos: trae perfil, permisos del perfil y excepciones, y delega la mezcla al núcleo puro. |
@@ -54,7 +54,7 @@
 
 **Files:**
 - Create: `supabase/migrations/20260811120000_permiso_sucursal_gestionar.sql`
-- Test: `supabase/tests/91_permiso_sucursal_test.sql`
+- Test: `supabase/tests/93_permiso_sucursal_test.sql`
 
 **Interfaces:**
 - Consumes: nada.
@@ -62,7 +62,7 @@
 
 - [ ] **Step 1: Escribir la prueba pgTAP que falla**
 
-Crear `supabase/tests/91_permiso_sucursal_test.sql`:
+Crear `supabase/tests/93_permiso_sucursal_test.sql`:
 
 ```sql
 begin;
@@ -121,12 +121,12 @@ npm run supabase -- migration up --local
 npm run supabase -- test db
 ```
 
-Esperado: PASA, incluidas las 31 pruebas que ya existían.
+Esperado: PASA. Verificar contra el conteo real de la suite en el momento de ejecutar (correr `npm run supabase -- test db` sin cambios primero para ver el total base), no contra un número fijo en este plan.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/20260811120000_permiso_sucursal_gestionar.sql supabase/tests/91_permiso_sucursal_test.sql
+git add supabase/migrations/20260811120000_permiso_sucursal_gestionar.sql supabase/tests/93_permiso_sucursal_test.sql
 git commit -m "T-08a · Sembrar el permiso sucursal.gestionar que faltaba"
 ```
 
