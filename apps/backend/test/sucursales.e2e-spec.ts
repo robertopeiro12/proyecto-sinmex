@@ -20,13 +20,16 @@ interface SucursalRespuesta {
 const SUFIJO = Date.now();
 const LOGIN_GENERAL = `e2e-suc-gral-${SUFIJO}`;
 const LOGIN_TIJUANA = `e2e-suc-tj-${SUFIJO}`;
+const LOGIN_SIN_PERMISO = `e2e-suc-sin-${SUFIJO}`;
+const LOGIN_CON_EXCEPCION = `e2e-suc-exc-${SUFIJO}`;
+const LOGIN_EXCEPCION_BORRADA = `e2e-suc-exb-${SUFIJO}`;
 const PASSWORD = 'contrasena-de-prueba';
 
 // Codigos reservados para las pruebas. Se limpian en afterAll: el espacio de
 // codigos es minusculo (2 letras) y una corrida que deje basura envenenaria
 // las siguientes con 409 inesperados. Nunca uses TJ ni MX aqui: son semillas
 // reales y borrarlas romperia el resto de la suite.
-const CODIGOS_DE_PRUEBA = ['ZA', 'ZB', 'ZC'];
+const CODIGOS_DE_PRUEBA = ['ZA', 'ZB', 'ZC', 'ZD'];
 
 describe('Sucursales (e2e)', () => {
   let app: INestApplication<App>;
@@ -34,6 +37,9 @@ describe('Sucursales (e2e)', () => {
   let usuarioIds: string[] = [];
   let cookieGeneral: string;
   let cookieTijuana: string;
+  let cookieSinPermiso: string;
+  let cookieConExcepcion: string;
+  let cookieExcepcionBorrada: string;
   let idMexicali: string;
 
   /** Inicia sesion y devuelve la cookie de acceso lista para `.set('Cookie', …)`. */
@@ -65,10 +71,19 @@ describe('Sucursales (e2e)', () => {
 
     db = app.get<Database>(DB_CONNECTION);
 
+    // Explicito, no "el primero alfabeticamente": desde T-08a el perfil decide
+    // los permisos, y 'Administrador' (que es el primero por orden) esta VACIO
+    // como los otros cinco. Solo el maestro pasa el guard (D1).
     const perfil = await db
       .selectFrom('perfil')
       .select('id')
-      .orderBy('nombre')
+      .where('nombre', '=', 'Administrador General')
+      .executeTakeFirstOrThrow();
+
+    const perfilSinPermisos = await db
+      .selectFrom('perfil')
+      .select('id')
+      .where('nombre', '=', 'Auxiliar Administrativo')
       .executeTakeFirstOrThrow();
 
     const tijuana = await db
@@ -112,10 +127,86 @@ describe('Sucursales (e2e)', () => {
       .returning('id')
       .executeTakeFirstOrThrow();
 
-    usuarioIds = [general.id, deTijuana.id];
+    // Auxiliar Administrativo: perfil vacio, o sea sin sucursal.gestionar.
+    const sinPermiso = await db
+      .insertInto('usuario')
+      .values({
+        login: LOGIN_SIN_PERMISO,
+        nombre: 'Usuario sin permiso e2e',
+        password_hash: hash,
+        perfil_id: perfilSinPermisos.id,
+        sucursal_id: null,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+
+    // Mismo perfil vacio, pero con el permiso concedido POR EXCEPCION. Es el
+    // camino no-maestro de D3 probado de punta a punta: sin este usuario, la
+    // unica forma de pasar el guard en toda la suite seria el bypass del
+    // maestro, y la mezcla perfil+excepcion quedaria sin verificar contra la
+    // base de verdad.
+    const conExcepcion = await db
+      .insertInto('usuario')
+      .values({
+        login: LOGIN_CON_EXCEPCION,
+        nombre: 'Usuario con excepcion e2e',
+        password_hash: hash,
+        perfil_id: perfilSinPermisos.id,
+        sucursal_id: null,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+
+    const permisoSucursal = await db
+      .selectFrom('permiso')
+      .select('id')
+      .where('clave', '=', 'sucursal.gestionar')
+      .executeTakeFirstOrThrow();
+
+    // Mismo caso, pero con la excepcion dada de BAJA: debe comportarse como si
+    // no existiera.
+    const excepcionBorrada = await db
+      .insertInto('usuario')
+      .values({
+        login: LOGIN_EXCEPCION_BORRADA,
+        nombre: 'Usuario con excepcion borrada e2e',
+        password_hash: hash,
+        perfil_id: perfilSinPermisos.id,
+        sucursal_id: null,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+
+    await db
+      .insertInto('usuario_permiso')
+      .values([
+        {
+          usuario_id: conExcepcion.id,
+          permiso_id: permisoSucursal.id,
+          habilitado: true,
+        },
+        {
+          usuario_id: excepcionBorrada.id,
+          permiso_id: permisoSucursal.id,
+          habilitado: true,
+          deleted_at: new Date(),
+        },
+      ])
+      .execute();
+
+    usuarioIds = [
+      general.id,
+      deTijuana.id,
+      sinPermiso.id,
+      conExcepcion.id,
+      excepcionBorrada.id,
+    ];
 
     cookieGeneral = await iniciarSesion(LOGIN_GENERAL);
     cookieTijuana = await iniciarSesion(LOGIN_TIJUANA);
+    cookieSinPermiso = await iniciarSesion(LOGIN_SIN_PERMISO);
+    cookieConExcepcion = await iniciarSesion(LOGIN_CON_EXCEPCION);
+    cookieExcepcionBorrada = await iniciarSesion(LOGIN_EXCEPCION_BORRADA);
   });
 
   afterAll(async () => {
@@ -125,6 +216,10 @@ describe('Sucursales (e2e)', () => {
       .execute();
     await db
       .deleteFrom('sesion_refresh')
+      .where('usuario_id', 'in', usuarioIds)
+      .execute();
+    await db
+      .deleteFrom('usuario_permiso')
       .where('usuario_id', 'in', usuarioIds)
       .execute();
     await db.deleteFrom('usuario').where('id', 'in', usuarioIds).execute();
@@ -366,6 +461,59 @@ describe('Sucursales (e2e)', () => {
         .patch(`/sucursales/${idMexicali}`)
         .set('Cookie', [cookieTijuana])
         .send({ nombre: 'Mexicali Secuestrada' })
+        .expect(403);
+    });
+  });
+
+  describe('permiso sucursal.gestionar (T-08a)', () => {
+    it('sin el permiso, crear responde 403', async () => {
+      await request(app.getHttpServer())
+        .post('/sucursales')
+        .set('Cookie', cookieSinPermiso)
+        .send({ codigo: 'ZC', nombre: 'Sucursal sin permiso' })
+        .expect(403);
+    });
+
+    it('sin el permiso, editar responde 403', async () => {
+      await request(app.getHttpServer())
+        .patch(`/sucursales/${idMexicali}`)
+        .set('Cookie', cookieSinPermiso)
+        .send({ nombre: 'Mexicali editada sin permiso' })
+        .expect(403);
+    });
+
+    // La prueba que defiende D4. El selector "Por sucursal" de T-09 vive en la
+    // barra lateral de TODAS las paginas y se pinta con este GET: ponerle el
+    // permiso romperia el filtro global para casi todos los usuarios. Si
+    // alguien le cuelga un @RequierePermiso por descuido, esto se cae primero.
+    it('sin el permiso, listar sigue respondiendo 200', async () => {
+      await request(app.getHttpServer())
+        .get('/sucursales')
+        .set('Cookie', cookieSinPermiso)
+        .expect(200);
+    });
+
+    it('con el permiso concedido por excepcion, crear responde 201', async () => {
+      // 'ZD' y no 'ZC': 'ZC' ya quedo creado (y activo) por el beforeAll de
+      // PATCH /sucursales/:id mas arriba en este mismo archivo, asi que
+      // reusarlo aqui chocaria con el unique de la base (409) sin que tenga
+      // nada que ver con el permiso bajo prueba.
+      const res = await request(app.getHttpServer())
+        .post('/sucursales')
+        .set('Cookie', cookieConExcepcion)
+        .send({ codigo: 'ZD', nombre: 'Sucursal por excepcion' })
+        .expect(201);
+      expect((res.body as SucursalRespuesta).codigo).toBe('ZD');
+    });
+
+    // Baja logica: una excepcion con deleted_at ya no cuenta. Sin esta prueba,
+    // olvidar un `where deleted_at is null` en excepcionesDe() pasaria
+    // inadvertido — y el sintoma seria que revocar un permiso no revoca nada.
+    it('una excepcion dada de baja no concede el permiso', async () => {
+      await request(app.getHttpServer())
+        .post('/sucursales')
+        .set('Cookie', cookieExcepcionBorrada)
+        .send({ codigo: 'ZD', nombre: 'Sucursal con excepcion borrada' })
         .expect(403);
     });
   });
