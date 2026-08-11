@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { AuthVendedorController } from './auth-vendedor.controller';
 import { AuthVendedorService } from './auth-vendedor.service';
 import { PasswordService } from './password.service';
+import { PermisosRepository } from './permisos.repository';
 import { SesionRepository } from './sesion.repository';
 import { SesionVendedorRepository } from './sesion-vendedor.repository';
 import { TokenService } from './token.service';
@@ -42,15 +43,17 @@ import { TokenVendedorService } from './token-vendedor.service';
     TokenVendedorService,
     SesionRepository,
     SesionVendedorRepository,
+    PermisosRepository,
   ],
-  // TokenVendedorService se exporta porque lo inyecta JwtAuthGuard, que se
-  // registra como APP_GUARD en AppModule y por tanto se resuelve fuera de este
-  // modulo. Sin exportarlo, la app no arranca.
+  // TokenVendedorService y PermisosRepository se exportan porque los inyectan
+  // los guards que app.module.ts registra como APP_GUARD, y por tanto se
+  // resuelven fuera de este modulo. Sin exportarlos, la app no arranca.
   exports: [
     AuthService,
     TokenService,
     AuthVendedorService,
     TokenVendedorService,
+    PermisosRepository,
   ],
 })
 export class AuthModule {}
