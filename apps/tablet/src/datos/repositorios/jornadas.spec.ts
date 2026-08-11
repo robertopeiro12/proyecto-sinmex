@@ -159,5 +159,34 @@ describe('repositorio de jornadas', () => {
 
       expect(jornadas.pendientesDeSincronizar().map((j) => j.id)).toEqual([abierta.id]);
     });
+
+    it('marcarError guarda el motivo y la deja para reintentar (T-07)', () => {
+      // Sin el motivo, una fila en 'error' seria un callejon sin salida: nadie
+      // sabria por que ni podria decirselo al vendedor. Y sigue en la cola
+      // porque reintentar es seguro: el push es idempotente.
+      const { jornadas } = conJornadas();
+      const abierta = jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
+
+      jornadas.marcarError(abierta.id, 'fecha-futura: revisa el reloj de la tablet.');
+
+      expect(jornadas.porId(abierta.id)).toMatchObject({
+        sync_estado: 'error',
+        sync_error: 'fecha-futura: revisa el reloj de la tablet.',
+      });
+      expect(jornadas.pendientesDeSincronizar().map((j) => j.id)).toEqual([abierta.id]);
+    });
+
+    it('sincronizar despues de un error limpia el motivo', () => {
+      const { jornadas } = conJornadas();
+      const abierta = jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
+      jornadas.marcarError(abierta.id, 'algo salio mal');
+
+      jornadas.marcarSincronizada(abierta.id);
+
+      expect(jornadas.porId(abierta.id)).toMatchObject({
+        sync_estado: 'sincronizado',
+        sync_error: null,
+      });
+    });
   });
 });

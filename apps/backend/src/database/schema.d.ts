@@ -9,6 +9,18 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
 
+export type Json = JsonValue;
+
+export type JsonArray = JsonValue[];
+
+export type JsonObject = {
+  [x: string]: JsonValue | undefined;
+};
+
+export type JsonPrimitive = boolean | number | string | null;
+
+export type JsonValue = JsonArray | JsonObject | JsonPrimitive;
+
 export type Numeric = ColumnType<string, number | string, number | string>;
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
@@ -178,6 +190,24 @@ export interface Sucursal {
   updated_at: Generated<Timestamp>;
 }
 
+export interface SyncOperacion {
+  clave_idempotencia: string;
+  contrato: number;
+  created_at: Generated<Timestamp>;
+  datos: Json;
+  entidad_id: string | null;
+  entidad_tabla: string | null;
+  fecha_operacion: Timestamp;
+  folio: string | null;
+  id: Generated<string>;
+  ocurrido_en: Timestamp;
+  recibido_en: Generated<Timestamp>;
+  sucursal_id: string;
+  tipo: string;
+  updated_at: Generated<Timestamp>;
+  vendedor_id: string;
+}
+
 export interface TipoNegocio {
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -223,6 +253,7 @@ export interface Vendedor {
   activo: Generated<boolean>;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
+  folio_segmento: string | null;
   id: Generated<string>;
   login: string;
   nombre: string;
@@ -278,6 +309,7 @@ export interface DB {
   sesion_refresh: SesionRefresh;
   sesion_vendedor: SesionVendedor;
   sucursal: Sucursal;
+  sync_operacion: SyncOperacion;
   tipo_negocio: TipoNegocio;
   usuario: Usuario;
   usuario_permiso: UsuarioPermiso;

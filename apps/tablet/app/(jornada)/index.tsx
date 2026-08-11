@@ -1,9 +1,24 @@
+import { useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
+import type { MotivoAbandono } from '@/sincronizacion/motor';
 import { BotonMenu } from '@/ui/boton-menu';
 import { colores, espacio, estilos } from '@/ui/tema';
+
+/**
+ * Lo que se le dice al vendedor cuando la sincronizacion no sale.
+ *
+ * En su idioma y con la accion que le toca a el, no el motivo tecnico: en ruta
+ * no puede hacer nada con un "409 contrato incompatible".
+ */
+const MENSAJE: Record<MotivoAbandono, string> = {
+  'sin-sesion': 'Tu sesion ya no vale. Vuelve a entrar con el WiFi del negocio.',
+  'sin-red': 'No hay conexion con el negocio. Lo capturado sigue guardado aqui.',
+  contrato: 'Esta tablet y el servidor no coinciden de version. Avisa a la oficina.',
+  alcance: 'El servidor rechazo la peticion. Avisa a la oficina.',
+};
 
 /**
  * Menu de la jornada: las 4 secciones que [[App Tablet]] describe como flujo
@@ -11,7 +26,32 @@ import { colores, espacio, estilos } from '@/ui/tema';
  */
 export default function MenuJornada() {
   const { jornada, vendedor, datos } = useJawa();
-  const { salir } = useSesion();
+  const { salir, sincronizar, ultimaSincronizacion } = useSesion();
+  const [sincronizando, setSincronizando] = useState(false);
+
+  /**
+   * Sincronizacion manual.
+   *
+   * El modelo del negocio es sincronizar al volver al WiFi
+   * ([[Sincronizacion offline]]), y hasta que exista el disparo automatico de
+   * T-44 este boton es el unico camino a media jornada. Ademas **renueva la
+   * sesion**, que es lo que corre hacia adelante la ventana de 72 h.
+   */
+  async function sincronizarAhora() {
+    setSincronizando(true);
+    try {
+      const r = await sincronizar();
+      Alert.alert(
+        r.ok ? 'Sincronizacion completa' : 'No se pudo terminar',
+        r.ok
+          ? `Se bajaron ${r.pull?.filas ?? 0} registro(s) y se subieron ${r.push?.aplicadas ?? 0}.` +
+            (r.push?.rechazadas ? ` ${r.push.rechazadas} quedaron con error.` : '')
+          : MENSAJE[r.motivo ?? 'sin-red'],
+      );
+    } finally {
+      setSincronizando(false);
+    }
+  }
 
   /**
    * Cerrar sesion borra el material que permite entrar sin red (ver
@@ -67,8 +107,28 @@ export default function MenuJornada() {
           {datos.jornadas.pendientesDeSincronizar().length} registro(s) pendiente(s) de subir
         </Text>
         <Text style={estilos.textoSuave}>
-          La subida por WiFi al volver al negocio se implementa en T-07.
+          Catalogos bajados: {datos.catalogos.frescuraCatalogos() ?? 'nunca'}
         </Text>
+        {ultimaSincronizacion ? (
+          <Text style={estilos.textoSuave}>
+            {ultimaSincronizacion.ok
+              ? `Ultima sincronizacion correcta · ${ultimaSincronizacion.pull?.filas ?? 0} bajados · ${ultimaSincronizacion.push?.aplicadas ?? 0} subidos`
+              : MENSAJE[ultimaSincronizacion.motivo ?? 'sin-red']}
+          </Text>
+        ) : null}
+        <Pressable
+          onPress={() => void sincronizarAhora()}
+          disabled={sincronizando}
+          style={[
+            estilos.boton,
+            { marginTop: espacio.md },
+            sincronizando ? { opacity: 0.5 } : null,
+          ]}
+        >
+          <Text style={estilos.botonTexto}>
+            {sincronizando ? 'Sincronizando...' : 'Sincronizar ahora'}
+          </Text>
+        </Pressable>
       </View>
 
       <Pressable

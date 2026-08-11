@@ -32,6 +32,16 @@ export interface Vendedor {
   nombre: string;
   sucursal_id: string;
   activo: Booleano;
+  /**
+   * Las 2 letras de este vendedor dentro del [[Folios|folio]] (5o segmento).
+   *
+   * **Lo asigna el servidor y baja en el pull.** La tablet no lo deriva de
+   * `nombre` aunque podria: dos vendedores con las mismas iniciales chocarian y
+   * la tablet no puede detectarlo, porque solo baja su propia ficha y no ve a
+   * sus companeros. `null` mientras no haya sincronizado nunca — y sin el no se
+   * puede emitir folio. Ver T-14 y ADR-0007.
+   */
+  folio_segmento: string | null;
   sincronizado_en: MomentoISO;
 }
 
@@ -54,6 +64,7 @@ export interface Presentacion {
   id: string;
   producto_id: string;
   volumen: string;
+  activo: Booleano;
   sincronizado_en: MomentoISO;
 }
 
@@ -73,6 +84,14 @@ export interface Cliente {
   lat: number | null;
   lng: number | null;
   sucursal_id: string;
+  /**
+   * `0` = dado de baja en el portal.
+   *
+   * La baja llega como **bandera y no como ausencia**: el snapshot se aplica
+   * con upsert, asi que una fila que desapareciera se quedaria aqui para
+   * siempre. Ver la migracion `002-sincronizacion.ts`.
+   */
+  activo: Booleano;
   sincronizado_en: MomentoISO;
 }
 
@@ -83,6 +102,29 @@ export interface ClientePrecio {
   /** En centavos: ver la nota sobre dinero en `001-esquema-inicial.ts`. */
   precio_centavos: number;
   vigente_desde: FechaISO;
+  activo: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
+export type StatusNotaPendiente = 'pendiente' | 'abonado';
+
+/**
+ * Nota por cobrar de un cliente, precargada desde el portal.
+ *
+ * Es lo que el vendedor selecciona al cobrar o abonar en campo. Baja con los
+ * catalogos; la tablet no la crea (T-16 creara ventas, y esas se vuelven notas
+ * pendientes solo despues de sincronizar).
+ */
+export interface NotaPendiente {
+  id: string;
+  cliente_id: string;
+  folio: string;
+  num_nota: string;
+  fecha: FechaISO;
+  status: StatusNotaPendiente;
+  monto_total_centavos: number;
+  saldo_centavos: number;
+  activo: Booleano;
   sincronizado_en: MomentoISO;
 }
 
@@ -101,4 +143,6 @@ export interface Jornada {
   sync_estado: SyncEstado;
   actualizado_local_en: MomentoISO;
   sincronizado_en: MomentoISO | null;
+  /** Motivo por el que el servidor la rechazo, si `sync_estado = 'error'`. */
+  sync_error: string | null;
 }
