@@ -54,10 +54,12 @@ describe('Auth (e2e)', () => {
 
     db = app.get<Database>(DB_CONNECTION);
 
+    // Explicito, no "el primero alfabeticamente": desde T-08a el perfil decide
+    // los permisos, y solo el maestro recibe el catalogo completo (D1).
     const perfil = await db
       .selectFrom('perfil')
       .select('id')
-      .orderBy('nombre')
+      .where('nombre', '=', 'Administrador General')
       .executeTakeFirstOrThrow();
 
     const usuario = await db
@@ -359,6 +361,29 @@ describe('Auth (e2e)', () => {
       .post('/auth/refresh')
       .set('Cookie', [`jawa_refresh=${refresh}`])
       .expect(200);
+  });
+
+  it('GET /auth/me devuelve los permisos efectivos del usuario', async () => {
+    const login = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ login: LOGIN, password: PASSWORD })
+      .expect(200);
+    const cookies = login.headers['set-cookie'] as unknown as string[];
+    const acceso = leerCookie(cookies, 'jawa_access');
+
+    const res = await request(app.getHttpServer())
+      .get('/auth/me')
+      .set('Cookie', [`jawa_access=${acceso}`])
+      .expect(200);
+
+    const cuerpo = res.body as { permisos: string[] };
+    // Es Administrador General, asi que recibe el catalogo completo (D1),
+    // incluido el permiso que sembro T-08a.
+    expect(cuerpo.permisos).toContain('sucursal.gestionar');
+    expect(cuerpo.permisos).toContain('venta.registrar');
+
+    // Ordenado y estable entre peticiones.
+    expect(cuerpo.permisos).toEqual([...cuerpo.permisos].sort());
   });
 
   it('el hash senuelo sigue siendo un argon2id que de verdad parsea (no pierde la ecualizacion de tiempos en silencio)', async () => {

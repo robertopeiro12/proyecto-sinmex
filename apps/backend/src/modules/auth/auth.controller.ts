@@ -15,9 +15,13 @@ import { AuthService, type UsuarioSesion } from './auth.service';
 import { COOKIE_ACCESO, COOKIE_REFRESH, opcionesCookie } from './cookies';
 import { msDeSesionRefresh } from './ttl-sesion';
 import { LoginDto } from './dto/login.dto';
+import { PermisosRepository } from './permisos.repository';
 import { Publico } from './publico.decorator';
 import { UsuarioActual } from './usuario-actual.decorator';
 import { TokenInvalidoError, TokenService } from './token.service';
+
+/** Lo que ve el portal al arrancar: quien eres y que puedes hacer. */
+export type SesionConPermisos = UsuarioSesion & { permisos: string[] };
 
 @Controller('auth')
 export class AuthController {
@@ -25,6 +29,7 @@ export class AuthController {
     private readonly auth: AuthService,
     private readonly tokens: TokenService,
     private readonly config: ConfigService,
+    private readonly permisos: PermisosRepository,
   ) {}
 
   @Publico()
@@ -94,12 +99,21 @@ export class AuthController {
   }
 
   @Get('me')
-  async me(@UsuarioActual() usuarioId: string): Promise<UsuarioSesion> {
+  async me(@UsuarioActual() usuarioId: string): Promise<SesionConPermisos> {
     const usuario = await this.auth.buscarUsuarioPorId(usuarioId);
     if (!usuario) {
       throw new UnauthorizedException('Sesion invalida.');
     }
-    return usuario;
+
+    // Del MISMO resolutor que usa el guard (D1). Que ambos pregunten aqui es
+    // lo que impide que el portal esconda un boton que la API si permite, o
+    // peor, que muestre uno que va a rebotar con 403.
+    const permisos = await this.permisos.permisosDe(usuarioId);
+
+    // Ordenado para que la respuesta sea estable entre peticiones: un orden
+    // que baila hace que cualquier comparacion o cache del portal falle sin
+    // motivo aparente.
+    return { ...usuario, permisos: [...permisos].sort() };
   }
 
   /**
