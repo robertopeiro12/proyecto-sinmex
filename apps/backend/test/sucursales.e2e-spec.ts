@@ -23,13 +23,15 @@ const LOGIN_TIJUANA = `e2e-suc-tj-${SUFIJO}`;
 const LOGIN_SIN_PERMISO = `e2e-suc-sin-${SUFIJO}`;
 const LOGIN_CON_EXCEPCION = `e2e-suc-exc-${SUFIJO}`;
 const LOGIN_EXCEPCION_BORRADA = `e2e-suc-exb-${SUFIJO}`;
+const LOGIN_PERFIL_GRANT = `e2e-suc-pfg-${SUFIJO}`;
+const LOGIN_PERFIL_REVOCADO = `e2e-suc-pfr-${SUFIJO}`;
 const PASSWORD = 'contrasena-de-prueba';
 
 // Codigos reservados para las pruebas. Se limpian en afterAll: el espacio de
 // codigos es minusculo (2 letras) y una corrida que deje basura envenenaria
 // las siguientes con 409 inesperados. Nunca uses TJ ni MX aqui: son semillas
 // reales y borrarlas romperia el resto de la suite.
-const CODIGOS_DE_PRUEBA = ['ZA', 'ZB', 'ZC', 'ZD'];
+const CODIGOS_DE_PRUEBA = ['ZA', 'ZB', 'ZC', 'ZD', 'ZE', 'ZF', 'ZG', 'ZH'];
 
 describe('Sucursales (e2e)', () => {
   let app: INestApplication<App>;
@@ -40,7 +42,12 @@ describe('Sucursales (e2e)', () => {
   let cookieSinPermiso: string;
   let cookieConExcepcion: string;
   let cookieExcepcionBorrada: string;
+  let cookiePerfilGrant: string;
+  let cookiePerfilRevocado: string;
   let idMexicali: string;
+  let idConExcepcion: string;
+  let perfilAuxiliarId: string;
+  let permisoSucursalId: string;
 
   /** Inicia sesion y devuelve la cookie de acceso lista para `.set('Cookie', …)`. */
   const iniciarSesion = async (login: string): Promise<string> => {
@@ -85,6 +92,7 @@ describe('Sucursales (e2e)', () => {
       .select('id')
       .where('nombre', '=', 'Auxiliar Administrativo')
       .executeTakeFirstOrThrow();
+    perfilAuxiliarId = perfilSinPermisos.id;
 
     const tijuana = await db
       .selectFrom('sucursal')
@@ -156,12 +164,14 @@ describe('Sucursales (e2e)', () => {
       })
       .returning('id')
       .executeTakeFirstOrThrow();
+    idConExcepcion = conExcepcion.id;
 
     const permisoSucursal = await db
       .selectFrom('permiso')
       .select('id')
       .where('clave', '=', 'sucursal.gestionar')
       .executeTakeFirstOrThrow();
+    permisoSucursalId = permisoSucursal.id;
 
     // Mismo caso, pero con la excepcion dada de BAJA: debe comportarse como si
     // no existiera.
@@ -170,6 +180,39 @@ describe('Sucursales (e2e)', () => {
       .values({
         login: LOGIN_EXCEPCION_BORRADA,
         nombre: 'Usuario con excepcion borrada e2e',
+        password_hash: hash,
+        perfil_id: perfilSinPermisos.id,
+        sucursal_id: null,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+
+    // Concedido por el PERFIL (no por excepcion): ejercita clavesDelPerfil()
+    // contra Postgres de verdad. Hallazgo 1 del review final de T-08a. El
+    // perfil sigue vacio hasta que el describe de abajo le agrega la fila de
+    // perfil_permiso — insertarla aqui romperia 'sin el permiso, crear
+    // responde 403' de mas arriba, que corre con este mismo perfil vacio.
+    const conPermisoDePerfil = await db
+      .insertInto('usuario')
+      .values({
+        login: LOGIN_PERFIL_GRANT,
+        nombre: 'Usuario con permiso por perfil e2e',
+        password_hash: hash,
+        perfil_id: perfilSinPermisos.id,
+        sucursal_id: null,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+
+    // Mismo permiso concedido por el perfil, pero con una excepcion
+    // habilitado:false encima. Prueba el otro sentido de D3 contra la base de
+    // verdad: la excepcion gana aunque el perfil SI conceda el permiso, no
+    // solo cuando el perfil calla (ese caso ya lo cubre excepcionBorrada).
+    const perfilConExcepcionRevocada = await db
+      .insertInto('usuario')
+      .values({
+        login: LOGIN_PERFIL_REVOCADO,
+        nombre: 'Usuario con permiso por perfil revocado por excepcion e2e',
         password_hash: hash,
         perfil_id: perfilSinPermisos.id,
         sucursal_id: null,
@@ -191,6 +234,11 @@ describe('Sucursales (e2e)', () => {
           habilitado: true,
           deleted_at: new Date(),
         },
+        {
+          usuario_id: perfilConExcepcionRevocada.id,
+          permiso_id: permisoSucursal.id,
+          habilitado: false,
+        },
       ])
       .execute();
 
@@ -200,6 +248,8 @@ describe('Sucursales (e2e)', () => {
       sinPermiso.id,
       conExcepcion.id,
       excepcionBorrada.id,
+      conPermisoDePerfil.id,
+      perfilConExcepcionRevocada.id,
     ];
 
     cookieGeneral = await iniciarSesion(LOGIN_GENERAL);
@@ -207,12 +257,24 @@ describe('Sucursales (e2e)', () => {
     cookieSinPermiso = await iniciarSesion(LOGIN_SIN_PERMISO);
     cookieConExcepcion = await iniciarSesion(LOGIN_CON_EXCEPCION);
     cookieExcepcionBorrada = await iniciarSesion(LOGIN_EXCEPCION_BORRADA);
+    cookiePerfilGrant = await iniciarSesion(LOGIN_PERFIL_GRANT);
+    cookiePerfilRevocado = await iniciarSesion(LOGIN_PERFIL_REVOCADO);
   });
 
   afterAll(async () => {
     await db
       .deleteFrom('sucursal')
       .where('codigo', 'in', CODIGOS_DE_PRUEBA)
+      .execute();
+    // El perfil 'Auxiliar Administrativo' es semilla compartida, no algo que
+    // esta suite cree y borre por test: la fila de perfil_permiso agregada en
+    // el describe de mas abajo tiene que quitarse aqui o el perfil quedaria
+    // con sucursal.gestionar para siempre, envenenando cualquier corrida
+    // posterior de esta u otra suite que use el mismo perfil.
+    await db
+      .deleteFrom('perfil_permiso')
+      .where('perfil_id', '=', perfilAuxiliarId)
+      .where('permiso_id', '=', permisoSucursalId)
       .execute();
     await db
       .deleteFrom('sesion_refresh')
@@ -514,6 +576,88 @@ describe('Sucursales (e2e)', () => {
         .post('/sucursales')
         .set('Cookie', cookieExcepcionBorrada)
         .send({ codigo: 'ZD', nombre: 'Sucursal con excepcion borrada' })
+        .expect(403);
+    });
+
+    // D2: el guard consulta la base en CADA peticion, no solo al hacer login.
+    // Toda otra prueba de esta suite resuelve los permisos ANTES del login, asi
+    // que ninguna notaria una regresion que empezara a leer los permisos del
+    // JWT en vez de volver a consultar la base. Esta si: la MISMA cookie pasa
+    // de 201 a 403 sin volver a iniciar sesion, solo porque la excepcion que la
+    // sostenia se borro a mitad de sesion.
+    //
+    // Va AL FINAL de ESTE describe, y no del que sigue, por diseno: el
+    // describe de abajo le concede sucursal.gestionar al perfil 'Auxiliar
+    // Administrativo' completo (perfil_permiso), el mismo perfil de
+    // cookieConExcepcion. Si esta prueba corriera despues de esa concesion, la
+    // excepcion revocada dejaria de importar -- el perfil ya cubriria el
+    // permiso por su cuenta -- y la prueba dejaria de probar D2.
+    it('revocar la excepcion a mitad de sesion tumba el permiso en la siguiente peticion, con la MISMA cookie', async () => {
+      const antes = await request(app.getHttpServer())
+        .post('/sucursales')
+        .set('Cookie', cookieConExcepcion)
+        .send({ codigo: 'ZF', nombre: 'Antes de revocar' })
+        .expect(201);
+      expect((antes.body as SucursalRespuesta).codigo).toBe('ZF');
+
+      await db
+        .updateTable('usuario_permiso')
+        .set({ deleted_at: new Date() })
+        .where('usuario_id', '=', idConExcepcion)
+        .where('permiso_id', '=', permisoSucursalId)
+        .execute();
+
+      await request(app.getHttpServer())
+        .post('/sucursales')
+        .set('Cookie', cookieConExcepcion)
+        .send({ codigo: 'ZG', nombre: 'Despues de revocar' })
+        .expect(403);
+    });
+  });
+
+  // Hallazgo 1 del review final de T-08a. Va DESPUES del describe de arriba a
+  // proposito: su beforeAll le concede sucursal.gestionar al perfil 'Auxiliar
+  // Administrativo' completo (perfil_permiso, no usuario_permiso), y ese
+  // perfil es el mismo que usan cookieSinPermiso/cookieConExcepcion/
+  // cookieExcepcionBorrada de arriba. Si este describe corriera antes, esos
+  // usuarios dejarian de estar "sin permiso" y las pruebas de mas arriba (que
+  // esperan 403, incluida la de D2) fallarian por una razon que no tiene nada
+  // que ver con lo que prueban.
+  describe('permiso sucursal.gestionar via perfil (T-08a)', () => {
+    beforeAll(async () => {
+      // Ejercita clavesDelPerfil() (perfil_permiso -> permiso) contra Postgres
+      // de verdad: hasta este punto los 6 perfiles sembrados estan vacios y
+      // nadie no-maestro habia pasado el guard por esta via, solo por
+      // excepcion.
+      await db
+        .insertInto('perfil_permiso')
+        .values({
+          perfil_id: perfilAuxiliarId,
+          permiso_id: permisoSucursalId,
+        })
+        .execute();
+    });
+
+    it('con el permiso concedido por el perfil (sin excepcion), crear responde 201', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/sucursales')
+        .set('Cookie', cookiePerfilGrant)
+        .send({ codigo: 'ZE', nombre: 'Sucursal por perfil' })
+        .expect(201);
+
+      expect((res.body as SucursalRespuesta).codigo).toBe('ZE');
+    });
+
+    // La otra mitad de D3 contra la base de verdad: la excepcion gana aunque
+    // el perfil SI conceda el permiso, no solo cuando el perfil calla.
+    it('una excepcion habilitado:false revoca un permiso que SI concede el perfil', async () => {
+      await request(app.getHttpServer())
+        .post('/sucursales')
+        .set('Cookie', cookiePerfilRevocado)
+        .send({
+          codigo: 'ZH',
+          nombre: 'Sucursal perfil revocado por excepcion',
+        })
         .expect(403);
     });
   });
