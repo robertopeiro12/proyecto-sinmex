@@ -1300,21 +1300,30 @@ Añade a `apps/backend/src/modules/inventario/productos.repository.ts` (importa 
         .where('id', '=', id)
         .executeTakeFirstOrThrow();
 
+      if (plan.darDeBaja.length > 0) {
+        // Baja logica, nunca `delete` (D1): un borrado fisico desaparece del
+        // pull incremental y la tablet se queda la fila para siempre.
+        //
+        // Va ANTES que el renombrado y la insercion: tanto un rename como un
+        // insert pueden reusar el volumen que esta baja esta liberando en la
+        // misma peticion, y el indice unico de la Task 1 solo ignora filas ya
+        // marcadas con deleted_at. (Encontrado en revision de la Task 4: la
+        // version original de este ejemplo solo aplicaba la regla entre baja
+        // e insercion, no entre baja y renombrado, y eso producia un 409
+        // enganoso al renombrar una presentacion al volumen de otra que se
+        // quita en el mismo guardado.)
+        await trx
+          .updateTable('presentacion')
+          .set({ deleted_at: new Date() })
+          .where('id', 'in', plan.darDeBaja)
+          .execute();
+      }
+
       for (const fila of plan.actualizar) {
         await trx
           .updateTable('presentacion')
           .set({ volumen: fila.volumen })
           .where('id', '=', fila.id)
-          .execute();
-      }
-
-      if (plan.darDeBaja.length > 0) {
-        // Baja logica, nunca `delete` (D1): un borrado fisico desaparece del
-        // pull incremental y la tablet se queda la fila para siempre.
-        await trx
-          .updateTable('presentacion')
-          .set({ deleted_at: new Date() })
-          .where('id', 'in', plan.darDeBaja)
           .execute();
       }
 
@@ -1344,7 +1353,9 @@ Añade a `apps/backend/src/modules/inventario/productos.repository.ts` (importa 
   }
 ```
 
-> El orden importa: **primero las bajas, después las altas**. Al revés, reusar en el mismo guardado un volumen que se está quitando choca contra el índice único, que solo ignora las filas con `deleted_at`.
+> El orden importa: **primero las bajas, luego el renombrado, luego las altas**. Un rename puede
+> reusar un volumen que se está liberando en la misma petición tan fácilmente como un insert — el
+> índice único solo ignora las filas ya marcadas con `deleted_at`.
 
 - [ ] **Step 5: Agregar `editar()` al servicio**
 
