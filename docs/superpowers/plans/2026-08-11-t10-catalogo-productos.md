@@ -19,7 +19,7 @@
 - **Nunca apuntar a `sinmex dev` durante la implementación.** `.env.test` va al Postgres local.
 - **La baja siempre es lógica**, nunca `delete` físico (D1).
 - **`deleted_at` jamás se expone en una respuesta de la API** (convención de T-09).
-- **Conteo de pruebas de partida, verificado el 2026-08-11:** 83 pgTAP · 108 unitarias · 121 e2e · 0 en el portal. No confíes en las cifras del vault, están desfasadas.
+- **Conteo de pruebas de partida, verificado corriendo la suite en la línea base del worktree (2026-08-11):** **83 pgTAP · 116 unitarias · 128 e2e · 0 en el portal.** Este es el conteo real (`Tests: N passed, N total` de Jest) — un `grep` anterior de este mismo plan había estimado 108/121 y se quedó corto porque no captura `it.each` ni bloques `describe` anidados. **Los conteos "esperados" que aparecen en los pasos de las tareas siguientes heredan ese error de +8/+7 y no son fiables.** Verifica cada paso con el número real que reporte Jest/pgTAP en tu propia corrida, no con la cifra escrita en el paso.
 - **La migración solo agrega índices, no columnas** → **no** hace falta correr `npm run db:types`.
 
 ---
