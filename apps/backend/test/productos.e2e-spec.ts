@@ -376,6 +376,36 @@ describe('Productos (e2e)', () => {
       expect(fila?.deleted_at).not.toBeNull();
     });
 
+    // Regresion: la baja debe aplicarse ANTES que los renombres. Si se
+    // renombra "500 ml" -> "600 ml" mientras se quita (en el mismo payload) la
+    // presentacion que hoy tiene "600 ml", el renombre no debe chocar contra
+    // el unique con la fila que esta a punto de darse de baja.
+    it('renombra una presentacion al volumen de otra que se da de baja en el mismo guardado', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat4b`, [
+        '500 ml',
+        '600 ml',
+      ]);
+      const renombrada = producto.presentaciones.find(
+        (p) => p.volumen === '500 ml',
+      )!;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: producto.nombre,
+          presentaciones: [{ id: renombrada.id, volumen: '600 ml' }],
+        })
+        .expect(200);
+
+      const actualizado = res.body as ProductoRespuesta;
+      expect(actualizado.presentaciones).toHaveLength(1);
+      expect(actualizado.presentaciones[0]).toMatchObject({
+        id: renombrada.id,
+        volumen: '600 ml',
+      });
+    });
+
     it('desactiva un producto sin tocar sus presentaciones', async () => {
       const producto = await crearProducto(`${PREFIJO} Pat5`, ['500 ml']);
 

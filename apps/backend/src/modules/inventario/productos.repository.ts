@@ -127,21 +127,26 @@ export class ProductosRepository {
         .where('id', '=', id)
         .executeTakeFirstOrThrow();
 
+      if (plan.darDeBaja.length > 0) {
+        // Baja logica, nunca `delete` (D1): un borrado fisico desaparece del
+        // pull incremental y la tablet se queda la fila para siempre.
+        //
+        // Va ANTES que los renombres y las altas: un volumen que se libera
+        // aqui puede ser justo el que un renombre o una insercion de este
+        // mismo guardado quiere ocupar, y el indice unico solo ignora las
+        // filas con `deleted_at` ya puesto.
+        await trx
+          .updateTable('presentacion')
+          .set({ deleted_at: new Date() })
+          .where('id', 'in', plan.darDeBaja)
+          .execute();
+      }
+
       for (const fila of plan.actualizar) {
         await trx
           .updateTable('presentacion')
           .set({ volumen: fila.volumen })
           .where('id', '=', fila.id)
-          .execute();
-      }
-
-      if (plan.darDeBaja.length > 0) {
-        // Baja logica, nunca `delete` (D1): un borrado fisico desaparece del
-        // pull incremental y la tablet se queda la fila para siempre.
-        await trx
-          .updateTable('presentacion')
-          .set({ deleted_at: new Date() })
-          .where('id', 'in', plan.darDeBaja)
           .execute();
       }
 
