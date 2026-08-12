@@ -19,9 +19,17 @@ interface FilaPresentacion {
   clave: string;
 }
 
+// `crypto.randomUUID()` solo existe en contextos seguros (HTTPS, o
+// `localhost`), y este proyecto ya contempla el portal sirviendose por
+// `http://` plano a un host que no es localhost. La clave solo necesita ser
+// unica DENTRO de esta instancia montada del formulario (alcance de la
+// reconciliacion de React), asi que un contador incremental de modulo alcanza
+// sin depender de la Web Crypto API.
+let contadorFilasNuevas = 0;
+
 const filaVacia = (): FilaPresentacion => ({
   volumen: "",
-  clave: crypto.randomUUID(),
+  clave: `nueva-${++contadorFilasNuevas}`,
 });
 
 export function FormularioProducto({ producto, alGuardar, alCancelar }: Props) {

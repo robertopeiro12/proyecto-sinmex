@@ -1,5 +1,13 @@
 import { apiFetch } from "./api";
 
+// `Presentacion` y `Producto` son una copia normativa de las formas que
+// devuelve `apps/backend/src/modules/inventario/productos.repository.ts`
+// (interfaces `Presentacion` y `Producto` de ese archivo). No hay un tipo
+// compartido entre backend y portal -- mismo trato que
+// `apps/tablet/src/sincronizacion/contrato.ts` frente a
+// `apps/backend/src/modules/sincronizacion/contrato.ts` (ver CLAUDE.md, T-07).
+// Un cambio de forma en un lado exige el cambio equivalente en el otro; nada
+// aqui lo hace cumplir automaticamente.
 export interface Presentacion {
   id: string;
   volumen: string;

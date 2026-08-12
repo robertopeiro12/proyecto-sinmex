@@ -38,7 +38,11 @@ export function TablaCatalogo<T extends { id: string }>({
               {columna.encabezado}
             </th>
           ))}
-          {acciones && <th className="py-2" />}
+          {acciones && (
+            <th className="py-2">
+              <span className="sr-only">Acciones</span>
+            </th>
+          )}
         </tr>
       </thead>
       <tbody>
