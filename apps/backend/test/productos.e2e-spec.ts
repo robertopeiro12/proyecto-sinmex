@@ -1,5 +1,5 @@
 import { Test, type TestingModule } from '@nestjs/testing';
-import type { INestApplication } from '@nestjs/common';
+import { ConflictException, type INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
@@ -9,6 +9,8 @@ import {
   type Database,
 } from './../src/database/database.tokens';
 import { PasswordService } from './../src/modules/auth/password.service';
+import { ProductosRepository } from './../src/modules/inventario/productos.repository';
+import { ProductosService } from './../src/modules/inventario/productos.service';
 
 interface PresentacionRespuesta {
   id: string;
@@ -466,6 +468,140 @@ describe('Productos (e2e)', () => {
           ],
         })
         .expect(409);
+    });
+
+    // Regresion del hallazgo #1 de la revision final. La idea original del
+    // hallazgo era "renombrar una presentacion al volumen que ya tiene una
+    // hermana suya, sin tocar esa hermana" -- pero eso NUNCA llega a la base:
+    // `reconciliarPresentaciones` revisa el volumen FINAL de todo el payload
+    // (su set `vistos`) y lo ataja con 400 ("... esta repetida") antes de
+    // construir ningun plan, sin importar si se llega por HTTP o llamando al
+    // servicio directo. Se verifico corriendo exactamente ese caso: da 400,
+    // no 409. Con el reordenamiento baja-antes-que-renombre de la Task 4 y el
+    // renombrado en dos fases del hallazgo #2, tampoco hay forma de provocar
+    // el 23505 de `uq_presentacion_volumen` desde un solo PATCH secuencial --
+    // solo puede dispararse por una carrera real entre dos ediciones
+    // concurrentes del mismo producto (la lectura de `buscarPorId` en
+    // `editar()` ocurre FUERA de la transaccion, ver el comentario ahi).
+    //
+    // Se reproduce esa condicion sin depender de timing: se llama al
+    // repositorio DIRECTO con un plan que `reconciliarPresentaciones` jamas
+    // construiria (el equivalente exacto de lo que dejaria pasar una carrera),
+    // se confirma que Postgres devuelve el 23505 REAL con
+    // `constraint: 'uq_presentacion_volumen'`, y despues se confirma que
+    // `ProductosService.editar()` traduce ese mismo error real a un 409 que
+    // nombra el volumen, no el producto.
+    it('un choque de VOLUMEN durante el PATCH se reporta como tal, no como nombre repetido', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat10`, [
+        '500 ml',
+        '1 Litro',
+      ]);
+      const aRenombrar = producto.presentaciones.find(
+        (p) => p.volumen === '500 ml',
+      )!;
+
+      const repo = app.get(ProductosRepository);
+      const service = app.get(ProductosService);
+
+      // Paso 1: reproducir el 23505 real de la base, llamando al repositorio
+      // por debajo de `reconciliarPresentaciones` con un plan que renombra
+      // "500 ml" a "1 Litro" sin tocar la fila que ya tiene "1 Litro" -- el
+      // choque puro que el hallazgo describia, armado a mano porque el
+      // servicio nunca deja construir este plan desde afuera.
+      let errorReal: unknown;
+      try {
+        await repo.actualizar(
+          producto.id,
+          { nombre: producto.nombre },
+          {
+            insertar: [],
+            actualizar: [{ id: aRenombrar.id, volumen: '1 Litro' }],
+            darDeBaja: [],
+          },
+        );
+      } catch (error) {
+        errorReal = error;
+      }
+
+      expect((errorReal as { code?: string } | undefined)?.code).toBe('23505');
+      expect(
+        (errorReal as { constraint?: string } | undefined)?.constraint,
+      ).toBe('uq_presentacion_volumen');
+
+      // La transaccion fallida no debe haber dejado nada a medias.
+      const trasElChoque = await request(app.getHttpServer())
+        .get('/productos')
+        .set('Cookie', cookieAdmin)
+        .expect(200);
+      const productoTrasElChoque = (
+        trasElChoque.body as ProductoRespuesta[]
+      ).find((p) => p.id === producto.id)!;
+      expect(
+        productoTrasElChoque.presentaciones.map((p) => p.volumen).sort(),
+      ).toEqual(['1 Litro', '500 ml']);
+
+      // Paso 2: confirmar que el SERVICIO traduce ese mismo error real (no uno
+      // fabricado a mano) a un 409 que nombra el volumen. Se fuerza con un
+      // espia porque, otra vez, no hay forma de llegar aqui por HTTP.
+      const espia = jest
+        .spyOn(repo, 'actualizar')
+        .mockRejectedValueOnce(errorReal);
+
+      let errorDelServicio: unknown;
+      try {
+        await service.editar(producto.id, {
+          nombre: producto.nombre,
+          presentaciones: [{ id: aRenombrar.id, volumen: '600 ml' }],
+        });
+      } catch (error) {
+        errorDelServicio = error;
+      }
+
+      expect(errorDelServicio).toBeInstanceOf(ConflictException);
+      expect((errorDelServicio as ConflictException).message).toMatch(
+        /volumen/i,
+      );
+      expect((errorDelServicio as ConflictException).message).not.toMatch(
+        /nombre/i,
+      );
+
+      espia.mockRestore();
+    });
+
+    // Regresion del hallazgo #2: un swap real de volumenes en un solo PATCH
+    // (A pasa a ser lo que hoy es B, B pasa a ser lo que hoy es A) es valido
+    // -- ninguno choca con el volumen FINAL del otro -- pero aplicar los
+    // renombres uno a la vez en el orden del payload choca contra el valor
+    // que la otra fila todavia conserva. El repositorio ahora hace el
+    // renombrado en dos fases para que esto funcione.
+    it('permite intercambiar los volumenes de dos presentaciones en un solo PATCH', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat11`, [
+        '500 ml',
+        '1 Litro',
+      ]);
+      const a = producto.presentaciones.find((p) => p.volumen === '500 ml')!;
+      const b = producto.presentaciones.find((p) => p.volumen === '1 Litro')!;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: producto.nombre,
+          presentaciones: [
+            { id: a.id, volumen: '1 Litro' },
+            { id: b.id, volumen: '500 ml' },
+          ],
+        })
+        .expect(200);
+
+      const actualizado = res.body as ProductoRespuesta;
+      expect(actualizado.presentaciones).toHaveLength(2);
+      expect(
+        actualizado.presentaciones.find((p) => p.id === a.id)?.volumen,
+      ).toBe('1 Litro');
+      expect(
+        actualizado.presentaciones.find((p) => p.id === b.id)?.volumen,
+      ).toBe('500 ml');
     });
 
     it('rechaza editar sin el permiso producto.gestionar', async () => {

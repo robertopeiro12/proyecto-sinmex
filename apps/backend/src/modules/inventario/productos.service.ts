@@ -28,6 +28,23 @@ function esDuplicado(error: unknown): boolean {
   );
 }
 
+/**
+ * El driver `pg` expone en `error.constraint` el nombre del indice que violo
+ * el unique. En `crear()` solo puede dispararse `uq_producto_nombre` (no hay
+ * nada existente contra que chocar en volumen todavia), pero en `editar()`
+ * tambien puede dispararse `uq_presentacion_volumen` -- por ejemplo, renombrar
+ * una presentacion al volumen que ya tiene una hermana suya que no forma parte
+ * de este guardado. Sin distinguirlos, ese caso salia como "nombre repetido",
+ * un mensaje enganoso que apunta al campo equivocado.
+ */
+function nombreDelIndice(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('constraint' in error)) {
+    return undefined;
+  }
+  const valor = (error as { constraint?: unknown }).constraint;
+  return typeof valor === 'string' ? valor : undefined;
+}
+
 @Injectable()
 export class ProductosService {
   constructor(private readonly repo: ProductosRepository) {}
@@ -67,6 +84,14 @@ export class ProductosService {
   }
 
   async editar(id: string, dto: EditarProductoDto): Promise<Producto> {
+    // Lectura FUERA de la transaccion que mas abajo aplica el plan derivado de
+    // ella: entre este read y el write, una edicion concurrente podria cambiar
+    // las presentaciones y dejar el plan desactualizado (read-modify-write
+    // clasico). En esta pantalla de un solo admin el modo de fallo es
+    // "gana el ultimo que guarda", no corrupcion, asi que no se restructura
+    // aqui. Si un ticket futuro copia este patron de transaccion (T-16 venta,
+    // T-18 precios) para algo con escritores concurrentes, el read-y-plan
+    // deberia ir DENTRO de la transaccion, no antes.
     const producto = await this.repo.buscarPorId(id);
     if (!producto) {
       throw new NotFoundException('No existe ese producto.');
@@ -98,6 +123,14 @@ export class ProductosService {
       return await this.repo.actualizar(id, cambios, plan);
     } catch (error) {
       if (esDuplicado(error)) {
+        if (nombreDelIndice(error) === 'uq_presentacion_volumen') {
+          throw new ConflictException(
+            'Ya existe una presentación con ese volumen para este producto.',
+          );
+        }
+        // `uq_producto_nombre`, o cualquier 23505 sin `constraint` reconocido:
+        // se mantiene el mensaje de nombre como respaldo, que es la causa mas
+        // comun con diferencia.
         throw new ConflictException(
           `Ya existe un producto llamado "${dto.nombre}".`,
         );

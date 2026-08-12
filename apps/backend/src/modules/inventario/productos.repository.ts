@@ -121,6 +121,13 @@ export class ProductosRepository {
     plan: PlanPresentaciones,
   ): Promise<Producto> {
     return this.db.transaction().execute(async (trx) => {
+      // `executeTakeFirstOrThrow` aqui NO significa "existe una fila con este
+      // id": el `UpdateResult` de Kysely no lanza cuando el `where` no
+      // encuentra nada, solo si el `returning` (si lo hubiera) devuelve cero
+      // filas -- una condicion distinta que ni siquiera aplica, este update no
+      // lleva `returning`. Es inofensivo hoy porque el 404 ya se descarto
+      // antes, en `buscarPorId()` del servicio; esto solo afirma "esta
+      // escritura se ejecuto", no "encontro una fila".
       await trx
         .updateTable('producto')
         .set(cambios)
@@ -139,6 +146,23 @@ export class ProductosRepository {
           .updateTable('presentacion')
           .set({ deleted_at: new Date() })
           .where('id', 'in', plan.darDeBaja)
+          .execute();
+      }
+
+      // Renombrado en dos fases: un swap real dentro del mismo PATCH (A pasa a
+      // tener el volumen de B, B pasa a tener el de A) no se puede aplicar
+      // fila por fila en el orden en que llego el payload -- renombrar A
+      // primero choca contra el valor que B todavia conserva, sin importar
+      // cual de las dos se procese antes. Fase 1 vacia cada fila hacia un
+      // valor temporal unico-por-fila (su propio id, que ya es unico) para
+      // liberar su volumen objetivo sin chocar con nada. Fase 2 aplica el
+      // volumen final: para entonces todas las filas de este plan ya se
+      // vaciaron, asi que ninguna puede chocar con otra del mismo plan.
+      for (const fila of plan.actualizar) {
+        await trx
+          .updateTable('presentacion')
+          .set({ volumen: `#tmp#${fila.id}` })
+          .where('id', '=', fila.id)
           .execute();
       }
 
