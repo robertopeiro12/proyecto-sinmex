@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ReconciliacionInvalida,
@@ -10,6 +11,7 @@ import {
 } from './reconciliar-presentaciones';
 import { ProductosRepository, type Producto } from './productos.repository';
 import type { CrearProductoDto } from './dto/crear-producto.dto';
+import type { EditarProductoDto } from './dto/editar-producto.dto';
 
 /**
  * `23505` es unique_violation. Se mira DESPUES del insert en vez de consultar
@@ -54,6 +56,46 @@ export class ProductosService {
         dto.nombre,
         plan.insertar.map((p) => p.volumen),
       );
+    } catch (error) {
+      if (esDuplicado(error)) {
+        throw new ConflictException(
+          `Ya existe un producto llamado "${dto.nombre}".`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  async editar(id: string, dto: EditarProductoDto): Promise<Producto> {
+    const producto = await this.repo.buscarPorId(id);
+    if (!producto) {
+      throw new NotFoundException('No existe ese producto.');
+    }
+
+    let plan: PlanPresentaciones;
+    try {
+      plan = reconciliarPresentaciones(
+        producto.presentaciones,
+        dto.presentaciones,
+      );
+    } catch (error) {
+      // Lista vacia, id ajeno o volumen repetido: los tres son un cuerpo mal
+      // armado, no un choque con lo que ya existe. 400, no 409.
+      if (error instanceof ReconciliacionInvalida) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
+
+    const cambios: { nombre: string; activo?: boolean } = {
+      nombre: dto.nombre,
+    };
+    if (dto.activo !== undefined) {
+      cambios.activo = dto.activo;
+    }
+
+    try {
+      return await this.repo.actualizar(id, cambios, plan);
     } catch (error) {
       if (esDuplicado(error)) {
         throw new ConflictException(

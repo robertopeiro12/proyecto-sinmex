@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
+import type { PlanPresentaciones } from './reconciliar-presentaciones';
 
 export interface Presentacion {
   id: string;
@@ -103,6 +104,68 @@ export class ProductosRepository {
           volumenes.map((volumen) => ({ producto_id: producto.id, volumen })),
         )
         .returning(['id', 'volumen'])
+        .execute();
+
+      return { ...producto, presentaciones };
+    });
+  }
+
+  /**
+   * Aplica el plan que calculo `reconciliarPresentaciones` mas los cambios del
+   * producto, todo en una transaccion (D7): si una presentacion revienta por
+   * el unique, no puede quedar el nombre cambiado y las filas a medias.
+   */
+  async actualizar(
+    id: string,
+    cambios: { nombre: string; activo?: boolean },
+    plan: PlanPresentaciones,
+  ): Promise<Producto> {
+    return this.db.transaction().execute(async (trx) => {
+      await trx
+        .updateTable('producto')
+        .set(cambios)
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow();
+
+      for (const fila of plan.actualizar) {
+        await trx
+          .updateTable('presentacion')
+          .set({ volumen: fila.volumen })
+          .where('id', '=', fila.id)
+          .execute();
+      }
+
+      if (plan.darDeBaja.length > 0) {
+        // Baja logica, nunca `delete` (D1): un borrado fisico desaparece del
+        // pull incremental y la tablet se queda la fila para siempre.
+        await trx
+          .updateTable('presentacion')
+          .set({ deleted_at: new Date() })
+          .where('id', 'in', plan.darDeBaja)
+          .execute();
+      }
+
+      if (plan.insertar.length > 0) {
+        await trx
+          .insertInto('presentacion')
+          .values(
+            plan.insertar.map((p) => ({ producto_id: id, volumen: p.volumen })),
+          )
+          .execute();
+      }
+
+      const producto = await trx
+        .selectFrom('producto')
+        .select(['id', 'nombre', 'activo'])
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow();
+
+      const presentaciones = await trx
+        .selectFrom('presentacion')
+        .select(['id', 'volumen'])
+        .where('producto_id', '=', id)
+        .where('deleted_at', 'is', null)
+        .orderBy('volumen')
         .execute();
 
       return { ...producto, presentaciones };

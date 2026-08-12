@@ -1,6 +1,15 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { RequierePermiso } from '../auth/requiere-permiso.decorator';
 import { CrearProductoDto } from './dto/crear-producto.dto';
+import { EditarProductoDto } from './dto/editar-producto.dto';
 import { ProductosService } from './productos.service';
 import type { Producto } from './productos.repository';
 
@@ -24,5 +33,16 @@ export class ProductosController {
   @RequierePermiso('producto.gestionar')
   async crear(@Body() dto: CrearProductoDto): Promise<Producto> {
     return this.productos.crear(dto);
+  }
+
+  @Patch(':id')
+  @RequierePermiso('producto.gestionar')
+  async editar(
+    // ParseUUIDPipe convierte un id mal formado en 400. Sin el, la cadena
+    // llegaria a Postgres y saldria como 500 (mismo motivo que en T-09).
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: EditarProductoDto,
+  ): Promise<Producto> {
+    return this.productos.editar(id, dto);
   }
 }

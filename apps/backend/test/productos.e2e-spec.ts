@@ -256,4 +256,223 @@ describe('Productos (e2e)', () => {
       .set('Authorization', 'Bearer no-soy-un-token-del-portal')
       .expect(401);
   });
+
+  describe('PATCH', () => {
+    /** Crea un producto y devuelve su cuerpo, para no repetirlo en cada caso. */
+    const crearProducto = async (
+      nombre: string,
+      volumenes: string[],
+    ): Promise<ProductoRespuesta> => {
+      const res = await request(app.getHttpServer())
+        .post('/productos')
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre,
+          presentaciones: volumenes.map((volumen) => ({ volumen })),
+        })
+        .expect(201);
+      return res.body as ProductoRespuesta;
+    };
+
+    it('cambia el nombre y conserva las presentaciones', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat1`, ['500 ml']);
+
+      const res = await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: `${PREFIJO} Pat1 renombrada`,
+          presentaciones: producto.presentaciones.map((p) => ({
+            id: p.id,
+            volumen: p.volumen,
+          })),
+        })
+        .expect(200);
+
+      const actualizado = res.body as ProductoRespuesta;
+      expect(actualizado.nombre).toBe(`${PREFIJO} Pat1 renombrada`);
+      expect(actualizado.presentaciones).toHaveLength(1);
+    });
+
+    it('agrega una presentacion nueva sin tocar las existentes', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat2`, ['500 ml']);
+
+      const res = await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: producto.nombre,
+          presentaciones: [
+            { id: producto.presentaciones[0].id, volumen: '500 ml' },
+            { volumen: '1 Litro' },
+          ],
+        })
+        .expect(200);
+
+      const actualizado = res.body as ProductoRespuesta;
+      expect(actualizado.presentaciones.map((p) => p.volumen).sort()).toEqual([
+        '1 Litro',
+        '500 ml',
+      ]);
+      // La existente conserva su id: no se recreo.
+      expect(
+        actualizado.presentaciones.some(
+          (p) => p.id === producto.presentaciones[0].id,
+        ),
+      ).toBe(true);
+    });
+
+    it('da de baja la presentacion que el payload omite', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat3`, [
+        '500 ml',
+        '1 Litro',
+      ]);
+      const sobrevive = producto.presentaciones.find(
+        (p) => p.volumen === '500 ml',
+      )!;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: producto.nombre,
+          presentaciones: [{ id: sobrevive.id, volumen: '500 ml' }],
+        })
+        .expect(200);
+
+      expect((res.body as ProductoRespuesta).presentaciones).toHaveLength(1);
+    });
+
+    // D1: la baja es logica. Un borrado fisico haria que la fila desaparezca
+    // del pull incremental de T-07 y la tablet se la quedaria para siempre.
+    it('la baja de una presentacion es logica, no fisica', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat4`, [
+        '500 ml',
+        '1 Litro',
+      ]);
+      const sobrevive = producto.presentaciones.find(
+        (p) => p.volumen === '500 ml',
+      )!;
+      const quitada = producto.presentaciones.find(
+        (p) => p.volumen === '1 Litro',
+      )!;
+
+      await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: producto.nombre,
+          presentaciones: [{ id: sobrevive.id, volumen: '500 ml' }],
+        })
+        .expect(200);
+
+      const fila = await db
+        .selectFrom('presentacion')
+        .select(['id', 'deleted_at'])
+        .where('id', '=', quitada.id)
+        .executeTakeFirst();
+
+      expect(fila).toBeDefined();
+      expect(fila?.deleted_at).not.toBeNull();
+    });
+
+    it('desactiva un producto sin tocar sus presentaciones', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat5`, ['500 ml']);
+
+      const res = await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: producto.nombre,
+          activo: false,
+          presentaciones: [
+            { id: producto.presentaciones[0].id, volumen: '500 ml' },
+          ],
+        })
+        .expect(200);
+
+      const actualizado = res.body as ProductoRespuesta;
+      expect(actualizado.activo).toBe(false);
+      expect(actualizado.presentaciones).toHaveLength(1);
+    });
+
+    it('rechaza quedarse sin presentaciones con 400', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat6`, ['500 ml']);
+
+      await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({ nombre: producto.nombre, presentaciones: [] })
+        .expect(400);
+    });
+
+    it('rechaza una presentacion de otro producto con 400', async () => {
+      const uno = await crearProducto(`${PREFIJO} Pat7a`, ['500 ml']);
+      const otro = await crearProducto(`${PREFIJO} Pat7b`, ['1 Litro']);
+
+      await request(app.getHttpServer())
+        .patch(`/productos/${uno.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: uno.nombre,
+          presentaciones: [
+            { id: otro.presentaciones[0].id, volumen: '1 Litro' },
+          ],
+        })
+        .expect(400);
+    });
+
+    it('rechaza renombrar a un nombre que ya existe con 409', async () => {
+      await crearProducto(`${PREFIJO} Pat8a`, ['500 ml']);
+      const otro = await crearProducto(`${PREFIJO} Pat8b`, ['500 ml']);
+
+      await request(app.getHttpServer())
+        .patch(`/productos/${otro.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: `${PREFIJO} Pat8a`,
+          presentaciones: [
+            { id: otro.presentaciones[0].id, volumen: '500 ml' },
+          ],
+        })
+        .expect(409);
+    });
+
+    it('rechaza editar sin el permiso producto.gestionar', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat9`, ['500 ml']);
+
+      await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieSinPermiso)
+        .send({
+          nombre: `${PREFIJO} Pat9 hackeada`,
+          presentaciones: [
+            { id: producto.presentaciones[0].id, volumen: '500 ml' },
+          ],
+        })
+        .expect(403);
+    });
+
+    it('responde 404 con un id que no existe', async () => {
+      await request(app.getHttpServer())
+        .patch('/productos/99999999-9999-9999-9999-999999999999')
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: `${PREFIJO} Fantasma`,
+          presentaciones: [{ volumen: '500 ml' }],
+        })
+        .expect(404);
+    });
+
+    it('responde 400 con un id mal formado', async () => {
+      await request(app.getHttpServer())
+        .patch('/productos/no-soy-un-uuid')
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: `${PREFIJO} Malformada`,
+          presentaciones: [{ volumen: '500 ml' }],
+        })
+        .expect(400);
+    });
+  });
 });
