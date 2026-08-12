@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
-import { ErrorApi } from "@/lib/api";
+import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import { crearSucursal, editarSucursal, type Sucursal } from "@/lib/sucursales";
 
 interface Props {
@@ -16,34 +16,21 @@ export function FormularioSucursal({ sucursal, alGuardar, alCancelar }: Props) {
   const [codigo, setCodigo] = useState(sucursal?.codigo ?? "");
   const [nombre, setNombre] = useState(sucursal?.nombre ?? "");
   const [activa, setActiva] = useState(sucursal?.activa ?? true);
-  const [error, setError] = useState<string | null>(null);
-  const [enviando, setEnviando] = useState(false);
+  const { enviando, error, enviar } = useEnvioFormulario(
+    "No se pudo guardar la sucursal.",
+  );
 
   const esAlta = sucursal === null;
 
   async function alEnviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
-    setError(null);
-    setEnviando(true);
-
-    try {
-      if (sucursal) {
-        await editarSucursal(sucursal.id, { nombre, activa });
-      } else {
-        await crearSucursal({ codigo, nombre });
-      }
-      alGuardar();
-    } catch (err) {
-      // El mensaje del servidor se muestra tal cual cuando existe: el 409 dice
-      // exactamente que codigo esta repetido y el 400 dice que campo fallo.
-      setError(
-        err instanceof ErrorApi
-          ? (err.mensajeApi ?? "No se pudo guardar la sucursal.")
-          : "No se pudo conectar con el servidor. Intenta de nuevo.",
-      );
-    } finally {
-      setEnviando(false);
-    }
+    await enviar(
+      () =>
+        sucursal
+          ? editarSucursal(sucursal.id, { nombre, activa })
+          : crearSucursal({ codigo, nombre }),
+      alGuardar,
+    );
   }
 
   return (

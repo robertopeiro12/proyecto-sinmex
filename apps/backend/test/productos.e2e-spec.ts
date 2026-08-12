@@ -1,0 +1,644 @@
+import { Test, type TestingModule } from '@nestjs/testing';
+import { ConflictException, type INestApplication } from '@nestjs/common';
+import request from 'supertest';
+import type { App } from 'supertest/types';
+import { AppModule } from './../src/app.module';
+import { OPCIONES_NEST, configurarApp } from './../src/configurar-app';
+import {
+  DB_CONNECTION,
+  type Database,
+} from './../src/database/database.tokens';
+import { PasswordService } from './../src/modules/auth/password.service';
+import { ProductosRepository } from './../src/modules/inventario/productos.repository';
+import { ProductosService } from './../src/modules/inventario/productos.service';
+
+interface PresentacionRespuesta {
+  id: string;
+  volumen: string;
+}
+interface ProductoRespuesta {
+  id: string;
+  nombre: string;
+  activo: boolean;
+  presentaciones: PresentacionRespuesta[];
+}
+
+const SUFIJO = Date.now();
+const LOGIN_ADMIN = `e2e-prod-adm-${SUFIJO}`;
+const LOGIN_SIN_PERMISO = `e2e-prod-sin-${SUFIJO}`;
+const PASSWORD = 'contrasena-de-prueba';
+
+// Prefijo reservado: la limpieza de afterAll borra por `nombre like`. Sin el,
+// una corrida que deje basura envenena la siguiente con 409 inesperados.
+const PREFIJO = `ZZ-e2e-${SUFIJO}`;
+
+describe('Productos (e2e)', () => {
+  let app: INestApplication<App>;
+  let db: Database;
+  const usuarioIds: string[] = [];
+  let cookieAdmin: string;
+  let cookieSinPermiso: string;
+
+  const iniciarSesion = async (login: string): Promise<string> => {
+    const res = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ login, password: PASSWORD })
+      .expect(200);
+    const cookies = res.headers['set-cookie'] as unknown as string[];
+    const acceso = cookies.find((c) => c.startsWith('jawa_access='));
+    if (!acceso) throw new Error('El login no devolvio cookie de acceso.');
+    return acceso.split(';')[0];
+  };
+
+  /**
+   * Crea un usuario con el perfil indicado. `Administrador General` recibe el
+   * catalogo completo de permisos por diseño (D1 de T-08a); los otros 5
+   * perfiles estan VACIOS hasta T-08b, asi que sirven como "usuario sin
+   * permiso" sin tener que montar nada.
+   */
+  const crearUsuario = async (login: string, perfil: string): Promise<void> => {
+    const hash = await app.get(PasswordService).hashear(PASSWORD);
+    const { id: perfilId } = await db
+      .selectFrom('perfil')
+      .select('id')
+      .where('nombre', '=', perfil)
+      .executeTakeFirstOrThrow();
+    const { id } = await db
+      .insertInto('usuario')
+      .values({
+        login,
+        nombre: login,
+        password_hash: hash,
+        perfil_id: perfilId,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    usuarioIds.push(id);
+  };
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication(OPCIONES_NEST);
+    configurarApp(app);
+    await app.init();
+    db = app.get<Database>(DB_CONNECTION);
+
+    await crearUsuario(LOGIN_ADMIN, 'Administrador General');
+    await crearUsuario(LOGIN_SIN_PERMISO, 'Auxiliar Administrativo');
+    cookieAdmin = await iniciarSesion(LOGIN_ADMIN);
+    cookieSinPermiso = await iniciarSesion(LOGIN_SIN_PERMISO);
+  });
+
+  afterAll(async () => {
+    const ids = await db
+      .selectFrom('producto')
+      .select('id')
+      .where('nombre', 'like', `${PREFIJO}%`)
+      .execute();
+    const productoIds = ids.map((f) => f.id);
+    if (productoIds.length > 0) {
+      await db
+        .deleteFrom('presentacion')
+        .where('producto_id', 'in', productoIds)
+        .execute();
+      await db.deleteFrom('producto').where('id', 'in', productoIds).execute();
+    }
+    if (usuarioIds.length > 0) {
+      // `iniciarSesion` deja una fila en `sesion_refresh`: hay que borrarla
+      // antes que el usuario o el FK truena (mismo orden que
+      // sucursales.e2e-spec.ts).
+      await db
+        .deleteFrom('sesion_refresh')
+        .where('usuario_id', 'in', usuarioIds)
+        .execute();
+      await db.deleteFrom('usuario').where('id', 'in', usuarioIds).execute();
+    }
+    await app.close();
+  });
+
+  it('crea un producto con sus presentaciones', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/productos')
+      .set('Cookie', cookieAdmin)
+      .send({
+        nombre: `${PREFIJO} Jamaica`,
+        presentaciones: [{ volumen: '500 ml' }, { volumen: '1 Litro' }],
+      })
+      .expect(201);
+
+    const producto = res.body as ProductoRespuesta;
+    expect(producto.nombre).toBe(`${PREFIJO} Jamaica`);
+    expect(producto.activo).toBe(true);
+    expect(producto.presentaciones.map((p) => p.volumen).sort()).toEqual([
+      '1 Litro',
+      '500 ml',
+    ]);
+    expect(producto).not.toHaveProperty('deleted_at');
+  });
+
+  it('lista los productos con sus presentaciones', async () => {
+    await request(app.getHttpServer())
+      .post('/productos')
+      .set('Cookie', cookieAdmin)
+      .send({
+        nombre: `${PREFIJO} Horchata`,
+        presentaciones: [{ volumen: '355 ml' }],
+      })
+      .expect(201);
+
+    const res = await request(app.getHttpServer())
+      .get('/productos')
+      .set('Cookie', cookieAdmin)
+      .expect(200);
+
+    const productos = res.body as ProductoRespuesta[];
+    const horchata = productos.find((p) => p.nombre === `${PREFIJO} Horchata`);
+    expect(horchata?.presentaciones).toHaveLength(1);
+  });
+
+  // Defiende D5: si alguien le pone el candado al GET, Ventas e Inventario se
+  // quedan sin catalogo.
+  it('deja listar aunque el usuario no tenga producto.gestionar', async () => {
+    await request(app.getHttpServer())
+      .get('/productos')
+      .set('Cookie', cookieSinPermiso)
+      .expect(200);
+  });
+
+  it('rechaza crear sin el permiso producto.gestionar', async () => {
+    await request(app.getHttpServer())
+      .post('/productos')
+      .set('Cookie', cookieSinPermiso)
+      .send({
+        nombre: `${PREFIJO} Prohibida`,
+        presentaciones: [{ volumen: '500 ml' }],
+      })
+      .expect(403);
+  });
+
+  it('rechaza un nombre duplicado con 409', async () => {
+    const cuerpo = {
+      nombre: `${PREFIJO} Tamarindo`,
+      presentaciones: [{ volumen: '500 ml' }],
+    };
+    await request(app.getHttpServer())
+      .post('/productos')
+      .set('Cookie', cookieAdmin)
+      .send(cuerpo)
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/productos')
+      .set('Cookie', cookieAdmin)
+      .send(cuerpo)
+      .expect(409);
+  });
+
+  it('rechaza un nombre duplicado que solo cambia en mayusculas', async () => {
+    await request(app.getHttpServer())
+      .post('/productos')
+      .set('Cookie', cookieAdmin)
+      .send({
+        nombre: `${PREFIJO} Limonada`,
+        presentaciones: [{ volumen: '500 ml' }],
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/productos')
+      .set('Cookie', cookieAdmin)
+      .send({
+        nombre: `${PREFIJO} LIMONADA`,
+        presentaciones: [{ volumen: '500 ml' }],
+      })
+      .expect(409);
+  });
+
+  it('rechaza un producto sin presentaciones con 400', async () => {
+    await request(app.getHttpServer())
+      .post('/productos')
+      .set('Cookie', cookieAdmin)
+      .send({ nombre: `${PREFIJO} Vacia`, presentaciones: [] })
+      .expect(400);
+  });
+
+  // El volumen repetido se atrapa en el servicio, ANTES de tocar la base, asi
+  // que esta prueba no ejercita la transaccion: comprueba que un 400 no deja
+  // rastro. La transaccion (D7) sigue haciendo falta como ultima linea —el
+  // unique de la base es quien de verdad decide y dos peticiones concurrentes
+  // pueden colarse por la ventana entre la validacion y el insert— pero eso no
+  // se puede provocar desde una prueba e2e secuencial, y fingir que si seria
+  // peor que no probarlo.
+  it('un alta rechazada no deja el producto a medias', async () => {
+    await request(app.getHttpServer())
+      .post('/productos')
+      .set('Cookie', cookieAdmin)
+      .send({
+        nombre: `${PREFIJO} Atomica`,
+        presentaciones: [{ volumen: '500 ml' }, { volumen: '500 ml' }],
+      })
+      .expect(400);
+
+    const res = await request(app.getHttpServer())
+      .get('/productos')
+      .set('Cookie', cookieAdmin)
+      .expect(200);
+    const productos = res.body as ProductoRespuesta[];
+    expect(
+      productos.find((p) => p.nombre === `${PREFIJO} Atomica`),
+    ).toBeUndefined();
+  });
+
+  it('rechaza un token de la app de tablet', async () => {
+    await request(app.getHttpServer())
+      .get('/productos')
+      .set('Authorization', 'Bearer no-soy-un-token-del-portal')
+      .expect(401);
+  });
+
+  describe('PATCH', () => {
+    /** Crea un producto y devuelve su cuerpo, para no repetirlo en cada caso. */
+    const crearProducto = async (
+      nombre: string,
+      volumenes: string[],
+    ): Promise<ProductoRespuesta> => {
+      const res = await request(app.getHttpServer())
+        .post('/productos')
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre,
+          presentaciones: volumenes.map((volumen) => ({ volumen })),
+        })
+        .expect(201);
+      return res.body as ProductoRespuesta;
+    };
+
+    it('cambia el nombre y conserva las presentaciones', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat1`, ['500 ml']);
+
+      const res = await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: `${PREFIJO} Pat1 renombrada`,
+          presentaciones: producto.presentaciones.map((p) => ({
+            id: p.id,
+            volumen: p.volumen,
+          })),
+        })
+        .expect(200);
+
+      const actualizado = res.body as ProductoRespuesta;
+      expect(actualizado.nombre).toBe(`${PREFIJO} Pat1 renombrada`);
+      expect(actualizado.presentaciones).toHaveLength(1);
+    });
+
+    it('agrega una presentacion nueva sin tocar las existentes', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat2`, ['500 ml']);
+
+      const res = await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: producto.nombre,
+          presentaciones: [
+            { id: producto.presentaciones[0].id, volumen: '500 ml' },
+            { volumen: '1 Litro' },
+          ],
+        })
+        .expect(200);
+
+      const actualizado = res.body as ProductoRespuesta;
+      expect(actualizado.presentaciones.map((p) => p.volumen).sort()).toEqual([
+        '1 Litro',
+        '500 ml',
+      ]);
+      // La existente conserva su id: no se recreo.
+      expect(
+        actualizado.presentaciones.some(
+          (p) => p.id === producto.presentaciones[0].id,
+        ),
+      ).toBe(true);
+    });
+
+    it('da de baja la presentacion que el payload omite', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat3`, [
+        '500 ml',
+        '1 Litro',
+      ]);
+      const sobrevive = producto.presentaciones.find(
+        (p) => p.volumen === '500 ml',
+      )!;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: producto.nombre,
+          presentaciones: [{ id: sobrevive.id, volumen: '500 ml' }],
+        })
+        .expect(200);
+
+      expect((res.body as ProductoRespuesta).presentaciones).toHaveLength(1);
+    });
+
+    // D1: la baja es logica. Un borrado fisico haria que la fila desaparezca
+    // del pull incremental de T-07 y la tablet se la quedaria para siempre.
+    it('la baja de una presentacion es logica, no fisica', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat4`, [
+        '500 ml',
+        '1 Litro',
+      ]);
+      const sobrevive = producto.presentaciones.find(
+        (p) => p.volumen === '500 ml',
+      )!;
+      const quitada = producto.presentaciones.find(
+        (p) => p.volumen === '1 Litro',
+      )!;
+
+      await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: producto.nombre,
+          presentaciones: [{ id: sobrevive.id, volumen: '500 ml' }],
+        })
+        .expect(200);
+
+      const fila = await db
+        .selectFrom('presentacion')
+        .select(['id', 'deleted_at'])
+        .where('id', '=', quitada.id)
+        .executeTakeFirst();
+
+      expect(fila).toBeDefined();
+      expect(fila?.deleted_at).not.toBeNull();
+    });
+
+    // Regresion: la baja debe aplicarse ANTES que los renombres. Si se
+    // renombra "500 ml" -> "600 ml" mientras se quita (en el mismo payload) la
+    // presentacion que hoy tiene "600 ml", el renombre no debe chocar contra
+    // el unique con la fila que esta a punto de darse de baja.
+    it('renombra una presentacion al volumen de otra que se da de baja en el mismo guardado', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat4b`, [
+        '500 ml',
+        '600 ml',
+      ]);
+      const renombrada = producto.presentaciones.find(
+        (p) => p.volumen === '500 ml',
+      )!;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: producto.nombre,
+          presentaciones: [{ id: renombrada.id, volumen: '600 ml' }],
+        })
+        .expect(200);
+
+      const actualizado = res.body as ProductoRespuesta;
+      expect(actualizado.presentaciones).toHaveLength(1);
+      expect(actualizado.presentaciones[0]).toMatchObject({
+        id: renombrada.id,
+        volumen: '600 ml',
+      });
+    });
+
+    it('desactiva un producto sin tocar sus presentaciones', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat5`, ['500 ml']);
+
+      const res = await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: producto.nombre,
+          activo: false,
+          presentaciones: [
+            { id: producto.presentaciones[0].id, volumen: '500 ml' },
+          ],
+        })
+        .expect(200);
+
+      const actualizado = res.body as ProductoRespuesta;
+      expect(actualizado.activo).toBe(false);
+      expect(actualizado.presentaciones).toHaveLength(1);
+    });
+
+    it('rechaza quedarse sin presentaciones con 400', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat6`, ['500 ml']);
+
+      await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({ nombre: producto.nombre, presentaciones: [] })
+        .expect(400);
+    });
+
+    it('rechaza una presentacion de otro producto con 400', async () => {
+      const uno = await crearProducto(`${PREFIJO} Pat7a`, ['500 ml']);
+      const otro = await crearProducto(`${PREFIJO} Pat7b`, ['1 Litro']);
+
+      await request(app.getHttpServer())
+        .patch(`/productos/${uno.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: uno.nombre,
+          presentaciones: [
+            { id: otro.presentaciones[0].id, volumen: '1 Litro' },
+          ],
+        })
+        .expect(400);
+    });
+
+    it('rechaza renombrar a un nombre que ya existe con 409', async () => {
+      await crearProducto(`${PREFIJO} Pat8a`, ['500 ml']);
+      const otro = await crearProducto(`${PREFIJO} Pat8b`, ['500 ml']);
+
+      await request(app.getHttpServer())
+        .patch(`/productos/${otro.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: `${PREFIJO} Pat8a`,
+          presentaciones: [
+            { id: otro.presentaciones[0].id, volumen: '500 ml' },
+          ],
+        })
+        .expect(409);
+    });
+
+    // Regresion del hallazgo #1 de la revision final. La idea original del
+    // hallazgo era "renombrar una presentacion al volumen que ya tiene una
+    // hermana suya, sin tocar esa hermana" -- pero eso NUNCA llega a la base:
+    // `reconciliarPresentaciones` revisa el volumen FINAL de todo el payload
+    // (su set `vistos`) y lo ataja con 400 ("... esta repetida") antes de
+    // construir ningun plan, sin importar si se llega por HTTP o llamando al
+    // servicio directo. Se verifico corriendo exactamente ese caso: da 400,
+    // no 409. Con el reordenamiento baja-antes-que-renombre de la Task 4 y el
+    // renombrado en dos fases del hallazgo #2, tampoco hay forma de provocar
+    // el 23505 de `uq_presentacion_volumen` desde un solo PATCH secuencial --
+    // solo puede dispararse por una carrera real entre dos ediciones
+    // concurrentes del mismo producto (la lectura de `buscarPorId` en
+    // `editar()` ocurre FUERA de la transaccion, ver el comentario ahi).
+    //
+    // Se reproduce esa condicion sin depender de timing: se llama al
+    // repositorio DIRECTO con un plan que `reconciliarPresentaciones` jamas
+    // construiria (el equivalente exacto de lo que dejaria pasar una carrera),
+    // se confirma que Postgres devuelve el 23505 REAL con
+    // `constraint: 'uq_presentacion_volumen'`, y despues se confirma que
+    // `ProductosService.editar()` traduce ese mismo error real a un 409 que
+    // nombra el volumen, no el producto.
+    it('un choque de VOLUMEN durante el PATCH se reporta como tal, no como nombre repetido', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat10`, [
+        '500 ml',
+        '1 Litro',
+      ]);
+      const aRenombrar = producto.presentaciones.find(
+        (p) => p.volumen === '500 ml',
+      )!;
+
+      const repo = app.get(ProductosRepository);
+      const service = app.get(ProductosService);
+
+      // Paso 1: reproducir el 23505 real de la base, llamando al repositorio
+      // por debajo de `reconciliarPresentaciones` con un plan que renombra
+      // "500 ml" a "1 Litro" sin tocar la fila que ya tiene "1 Litro" -- el
+      // choque puro que el hallazgo describia, armado a mano porque el
+      // servicio nunca deja construir este plan desde afuera.
+      let errorReal: unknown;
+      try {
+        await repo.actualizar(
+          producto.id,
+          { nombre: producto.nombre },
+          {
+            insertar: [],
+            actualizar: [{ id: aRenombrar.id, volumen: '1 Litro' }],
+            darDeBaja: [],
+          },
+        );
+      } catch (error) {
+        errorReal = error;
+      }
+
+      expect((errorReal as { code?: string } | undefined)?.code).toBe('23505');
+      expect(
+        (errorReal as { constraint?: string } | undefined)?.constraint,
+      ).toBe('uq_presentacion_volumen');
+
+      // La transaccion fallida no debe haber dejado nada a medias.
+      const trasElChoque = await request(app.getHttpServer())
+        .get('/productos')
+        .set('Cookie', cookieAdmin)
+        .expect(200);
+      const productoTrasElChoque = (
+        trasElChoque.body as ProductoRespuesta[]
+      ).find((p) => p.id === producto.id)!;
+      expect(
+        productoTrasElChoque.presentaciones.map((p) => p.volumen).sort(),
+      ).toEqual(['1 Litro', '500 ml']);
+
+      // Paso 2: confirmar que el SERVICIO traduce ese mismo error real (no uno
+      // fabricado a mano) a un 409 que nombra el volumen. Se fuerza con un
+      // espia porque, otra vez, no hay forma de llegar aqui por HTTP.
+      const espia = jest
+        .spyOn(repo, 'actualizar')
+        .mockRejectedValueOnce(errorReal);
+
+      let errorDelServicio: unknown;
+      try {
+        await service.editar(producto.id, {
+          nombre: producto.nombre,
+          presentaciones: [{ id: aRenombrar.id, volumen: '600 ml' }],
+        });
+      } catch (error) {
+        errorDelServicio = error;
+      }
+
+      expect(errorDelServicio).toBeInstanceOf(ConflictException);
+      expect((errorDelServicio as ConflictException).message).toMatch(
+        /volumen/i,
+      );
+      expect((errorDelServicio as ConflictException).message).not.toMatch(
+        /nombre/i,
+      );
+
+      espia.mockRestore();
+    });
+
+    // Regresion del hallazgo #2: un swap real de volumenes en un solo PATCH
+    // (A pasa a ser lo que hoy es B, B pasa a ser lo que hoy es A) es valido
+    // -- ninguno choca con el volumen FINAL del otro -- pero aplicar los
+    // renombres uno a la vez en el orden del payload choca contra el valor
+    // que la otra fila todavia conserva. El repositorio ahora hace el
+    // renombrado en dos fases para que esto funcione.
+    it('permite intercambiar los volumenes de dos presentaciones en un solo PATCH', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat11`, [
+        '500 ml',
+        '1 Litro',
+      ]);
+      const a = producto.presentaciones.find((p) => p.volumen === '500 ml')!;
+      const b = producto.presentaciones.find((p) => p.volumen === '1 Litro')!;
+
+      const res = await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: producto.nombre,
+          presentaciones: [
+            { id: a.id, volumen: '1 Litro' },
+            { id: b.id, volumen: '500 ml' },
+          ],
+        })
+        .expect(200);
+
+      const actualizado = res.body as ProductoRespuesta;
+      expect(actualizado.presentaciones).toHaveLength(2);
+      expect(
+        actualizado.presentaciones.find((p) => p.id === a.id)?.volumen,
+      ).toBe('1 Litro');
+      expect(
+        actualizado.presentaciones.find((p) => p.id === b.id)?.volumen,
+      ).toBe('500 ml');
+    });
+
+    it('rechaza editar sin el permiso producto.gestionar', async () => {
+      const producto = await crearProducto(`${PREFIJO} Pat9`, ['500 ml']);
+
+      await request(app.getHttpServer())
+        .patch(`/productos/${producto.id}`)
+        .set('Cookie', cookieSinPermiso)
+        .send({
+          nombre: `${PREFIJO} Pat9 hackeada`,
+          presentaciones: [
+            { id: producto.presentaciones[0].id, volumen: '500 ml' },
+          ],
+        })
+        .expect(403);
+    });
+
+    it('responde 404 con un id que no existe', async () => {
+      await request(app.getHttpServer())
+        .patch('/productos/99999999-9999-9999-9999-999999999999')
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: `${PREFIJO} Fantasma`,
+          presentaciones: [{ volumen: '500 ml' }],
+        })
+        .expect(404);
+    });
+
+    it('responde 400 con un id mal formado', async () => {
+      await request(app.getHttpServer())
+        .patch('/productos/no-soy-un-uuid')
+        .set('Cookie', cookieAdmin)
+        .send({
+          nombre: `${PREFIJO} Malformada`,
+          presentaciones: [{ volumen: '500 ml' }],
+        })
+        .expect(400);
+    });
+  });
+});

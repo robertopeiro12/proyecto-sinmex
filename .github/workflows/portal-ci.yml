@@ -21,5 +21,8 @@ jobs:
       - name: Lint
         run: npm run lint --workspace=apps/portal
 
+      - name: Test
+        run: npm test --workspace=apps/portal
+
       - name: Build
         run: npm run build --workspace=apps/portal
