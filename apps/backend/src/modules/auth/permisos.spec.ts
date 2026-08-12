@@ -14,9 +14,9 @@ describe('esMaestro', () => {
 
 describe('combinarPermisos', () => {
   it('sin excepciones devuelve lo del perfil', () => {
-    expect(combinarPermisos(['venta.registrar', 'cliente.gestionar'], [])).toEqual(
-      new Set(['venta.registrar', 'cliente.gestionar']),
-    );
+    expect(
+      combinarPermisos(['venta.registrar', 'cliente.gestionar'], []),
+    ).toEqual(new Set(['venta.registrar', 'cliente.gestionar']));
   });
 
   it('una excepcion habilitada concede lo que el perfil no da', () => {
@@ -24,7 +24,9 @@ describe('combinarPermisos', () => {
       ['venta.registrar'],
       [{ clave: 'sucursal.gestionar', habilitado: true }],
     );
-    expect(efectivos).toEqual(new Set(['venta.registrar', 'sucursal.gestionar']));
+    expect(efectivos).toEqual(
+      new Set(['venta.registrar', 'sucursal.gestionar']),
+    );
   });
 
   it('una excepcion deshabilitada quita lo que el perfil si da', () => {
