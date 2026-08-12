@@ -175,8 +175,11 @@ usuario con sesion pasa.
   Ver `.env.example` y `apps/backend/src/modules/auth/ttl-sesion.ts`.
 - Para que la tablet alcance el backend: `EXPO_PUBLIC_API_URL` (default `http://localhost:3000`,
   que **solo sirve en emulador**; en una tablet real hay que apuntar a la IP del servidor).
-- Para `test`, `test:e2e` y `db:types`: el stack local de Supabase arriba (Docker Desktop
-  corriendo + `npm run supabase start`; en esta maquina **no hay Colima**) y un `.env.test` en la raíz con `DATABASE_URL` (al Postgres local) y
+- Para `test`, `test:e2e` y `db:types`: el stack local de Supabase arriba (un daemon de Docker
+  corriendo + `npm run supabase start`). En esta máquina el daemon lo da **Colima**
+  (`colima start` / `colima stop`), no Docker Desktop — no está instalado aquí. Antes de dar por
+  hecho cuál usa una máquina, confirma con `docker context ls` en vez de asumirlo. Además, un
+  `.env.test` en la raíz con `DATABASE_URL` (al Postgres local) y
   `JWT_SECRET`. `db:types` filtra con `--include-pattern='public.*'` para no traerse las tablas
   internas de Supabase (`auth.*`, `storage.*`, etc.), que contradicen el ADR-0002 (Supabase solo
   como Postgres gestionado).
