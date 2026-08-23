@@ -4,6 +4,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -32,6 +33,12 @@ export class CrearVehiculoDto {
     { message: 'El kilometraje debe ser un número con hasta 2 decimales.' },
   )
   @Min(0, { message: 'El kilometraje no puede ser negativo.' })
+  // numeric(10,2) tope en 99999999.99: sin esta cota, Postgres levanta un
+  // 22003 (numeric field overflow) que nadie mapea y el usuario recibe un 500
+  // por un digito de mas.
+  @Max(99999999.99, {
+    message: 'El kilometraje no puede pasar de 99,999,999.99.',
+  })
   kmInicial!: number;
 
   // Opcional a proposito (D3): solo lo manda —y solo se le hace caso a— un

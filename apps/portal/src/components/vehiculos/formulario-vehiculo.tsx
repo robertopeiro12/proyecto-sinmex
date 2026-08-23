@@ -121,6 +121,7 @@ export function FormularioVehiculo({
             type="number"
             required
             min={0}
+            max={99999999.99}
             step="0.01"
             disabled={enviando}
             value={km}

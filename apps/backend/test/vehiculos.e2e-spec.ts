@@ -356,6 +356,14 @@ describe('Vehiculos (e2e)', () => {
         .expect(400);
     });
 
+    it('rechaza un kilometraje que excede numeric(10,2) con 400', async () => {
+      await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieTijuana)
+        .send({ nombre: `${PREFIJO} Excedido`, kmInicial: 100000000 })
+        .expect(400);
+    });
+
     it('rechaza un nombre vacio con 400', async () => {
       await request(app.getHttpServer())
         .post('/vehiculos')
