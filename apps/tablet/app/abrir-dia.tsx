@@ -1,11 +1,15 @@
 import { Redirect, router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 
 import { ErrorJornada } from '@/datos';
 import type { Vehiculo } from '@/datos/tipos';
 import { useJawa } from '@/estado/proveedor-jawa';
-import { colores, estilos } from '@/ui/tema';
+import { Boton } from '@/ui/boton';
+import { Campo } from '@/ui/campo';
+import { Pantalla, Tarjeta } from '@/ui/pantalla';
+import { useTema } from '@/ui/tema';
+import { colores, espacio, grosor } from '@/ui/tokens';
 
 /**
  * Abrir el dia: vehiculo + kilometraje inicial.
@@ -21,6 +25,8 @@ import { colores, estilos } from '@/ui/tema';
  */
 export default function AbrirDia() {
   const { datos, vendedor, sucursalId, jornada, refrescarJornada } = useJawa();
+  const { estilos } = useTema();
+
   const vehiculos = useMemo<Vehiculo[]>(
     () => (sucursalId ? datos.catalogos.listarVehiculos(sucursalId) : []),
     [datos, sucursalId],
@@ -41,11 +47,11 @@ export default function AbrirDia() {
   function abrir() {
     setError(null);
     if (!vendedor) {
-      setError('No hay vendedor con sesion iniciada.');
+      setError('No hay vendedor con sesión iniciada.');
       return;
     }
     if (!vehiculoId) {
-      setError('Selecciona el vehiculo con el que sales a ruta.');
+      setError('Selecciona el vehículo con el que sales a ruta.');
       return;
     }
     try {
@@ -53,69 +59,84 @@ export default function AbrirDia() {
       refrescarJornada();
       router.replace('/(jornada)');
     } catch (e) {
-      setError(e instanceof ErrorJornada ? e.message : 'No se pudo abrir el dia.');
+      setError(e instanceof ErrorJornada ? e.message : 'No se pudo abrir el día.');
     }
   }
 
   return (
-    <ScrollView style={estilos.pantalla}>
-      <Text style={estilos.titulo}>Abrir el dia</Text>
-      <Text style={estilos.subtitulo}>
-        Selecciona tu vehiculo y captura el kilometraje inicial. Sin esto no puedes operar.
-      </Text>
+    <Pantalla
+      formulario
+      titulo="Abrir el día"
+      subtitulo="Selecciona tu vehículo y captura el kilometraje inicial. Sin esto no puedes operar."
+    >
+      <Text style={estilos.etiqueta}>Vehículo</Text>
 
-      <Text style={estilos.etiqueta}>Vehiculo</Text>
-      <View style={estilos.rejilla}>
-        {vehiculos.length === 0 ? (
-          <View style={[estilos.tarjeta, { flexGrow: 1 }]}>
-            <Text style={estilos.textoTarjeta}>Sin vehiculos en el catalogo local</Text>
-            <Text style={estilos.textoSuave}>
-              Los vehiculos bajan del portal al sincronizar (TODO: T-07).
-            </Text>
-          </View>
-        ) : (
-          vehiculos.map((vehiculo) => {
+      {vehiculos.length === 0 ? (
+        <Tarjeta estado="pendiente" etiqueta="Catálogo vacío">
+          <Text style={estilos.textoTarjeta}>Sin vehículos en el catálogo local</Text>
+          <Text style={estilos.textoSuave}>
+            Los vehículos bajan del portal con la sincronización, que corre sola tras un login con
+            WiFi. Si acabas de entrar, espera unos segundos; si sigue vacío, avisa a la oficina.
+          </Text>
+        </Tarjeta>
+      ) : (
+        <View style={estilos.rejilla}>
+          {vehiculos.map((vehiculo) => {
             const seleccionado = vehiculo.id === vehiculoId;
             return (
+              // No es un `<Boton>`: elegir vehiculo **no hace nada** todavia,
+              // solo marca. La accion de la pantalla es una sola, la de abajo.
+              //
+              // Lo seleccionado se distingue por tres canales a la vez (borde
+              // grueso, fondo y la palabra "Seleccionado"), no solo por color:
+              // misma regla que los botones opuestos, ver `boton.tsx`.
               <Pressable
                 key={vehiculo.id}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: seleccionado }}
+                accessibilityLabel={vehiculo.nombre}
                 onPress={() => setVehiculoId(vehiculo.id)}
-                style={[
+                style={({ pressed }) => [
                   estilos.tarjeta,
                   estilos.celdaRejilla,
-                  seleccionado && { borderColor: colores.primario, borderWidth: 2 },
+                  {
+                    borderWidth: grosor.fuerte,
+                    borderColor: seleccionado ? colores.primario : colores.borde,
+                  },
+                  seleccionado && { backgroundColor: colores.primarioTenue },
+                  pressed && { transform: [{ translateY: grosor.fuerte }], opacity: 0.9 },
                 ]}
               >
                 <Text style={estilos.textoTarjeta}>{vehiculo.nombre}</Text>
                 {seleccionado ? <Text style={estilos.textoSuave}>Seleccionado</Text> : null}
               </Pressable>
             );
-          })
-        )}
-      </View>
+          })}
+        </View>
+      )}
 
-      <View style={{ marginTop: 24 }}>
-        <Text style={estilos.etiqueta}>Kilometraje inicial</Text>
-        <TextInput
-          style={estilos.campo}
-          value={km}
-          onChangeText={setKm}
+      <View style={{ marginTop: espacio.lg }}>
+        <Campo
+          etiqueta="Kilometraje inicial"
+          cifra
+          // `number-pad` (el default de `cifra`) no trae separador decimal, y el
+          // odometro de la camioneta a veces lo tiene. `numeric` si.
           keyboardType="numeric"
           inputMode="decimal"
+          value={km}
+          onChangeText={setKm}
           placeholder="Ej. 128450"
-          placeholderTextColor={colores.textoSuave}
         />
       </View>
 
       {error ? <Text style={estilos.error}>{error}</Text> : null}
 
-      <Pressable
+      <Boton
+        etiqueta="Abrir el día"
         onPress={abrir}
-        disabled={!puedeAbrir}
-        style={[estilos.boton, { marginTop: 24 }, !puedeAbrir && estilos.botonDeshabilitado]}
-      >
-        <Text style={estilos.botonTexto}>Abrir el dia</Text>
-      </Pressable>
-    </ScrollView>
+        deshabilitado={!puedeAbrir}
+        estilo={{ marginTop: espacio.lg }}
+      />
+    </Pantalla>
   );
 }

@@ -2,7 +2,7 @@ import { Redirect, Stack } from 'expo-router';
 
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
-import { colores } from '@/ui/tema';
+import { useCabecera } from '@/ui/tema';
 
 /**
  * Guardia del kilometraje inicial.
@@ -27,20 +27,18 @@ import { colores } from '@/ui/tema';
 export default function LayoutJornada() {
   const { vendedor } = useSesion();
   const { jornada } = useJawa();
+  // Antes de los guardias: los hooks se llaman siempre, en el mismo orden.
+  const cabecera = useCabecera();
 
   if (!vendedor) return <Redirect href="/login" />;
   if (!jornada) return <Redirect href="/abrir-dia" />;
 
+  // Los `name` son rutas del sistema de archivos y no llevan acento; los
+  // `title` son lo que lee el vendedor y si lo llevan.
   return (
-    <Stack
-      screenOptions={{
-        headerStyle: { backgroundColor: colores.superficie },
-        headerTintColor: colores.texto,
-        contentStyle: { backgroundColor: colores.fondo },
-      }}
-    >
+    <Stack screenOptions={cabecera}>
       <Stack.Screen name="index" options={{ title: 'Jornada' }} />
-      <Stack.Screen name="operacion/index" options={{ title: 'Operacion por cliente' }} />
+      <Stack.Screen name="operacion/index" options={{ title: 'Operación por cliente' }} />
       <Stack.Screen name="operacion/[clienteId]/index" options={{ title: 'Cliente' }} />
       <Stack.Screen name="operacion/[clienteId]/venta" options={{ title: 'Venta' }} />
       <Stack.Screen name="operacion/[clienteId]/cobranza" options={{ title: 'Cobranza / abono' }} />
@@ -50,11 +48,11 @@ export default function LayoutJornada() {
       />
       <Stack.Screen
         name="operacion/[clienteId]/registros"
-        options={{ title: 'Merma, promocion, consumo y gastos' }}
+        options={{ title: 'Merma, promoción, consumo y gastos' }}
       />
       <Stack.Screen name="prospectos" options={{ title: 'Prospectos' }} />
       <Stack.Screen name="ruta" options={{ title: 'Ruta y GPS' }} />
-      <Stack.Screen name="cerrar-dia" options={{ title: 'Cerrar el dia' }} />
+      <Stack.Screen name="cerrar-dia" options={{ title: 'Cerrar el día' }} />
     </Stack>
   );
 }

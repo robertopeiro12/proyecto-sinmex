@@ -193,3 +193,31 @@ export function useTema(): Tema {
     t: (base: number) => escalarTipo(base, dispositivo.escalaTipo),
   };
 }
+
+/**
+ * `screenOptions` de un `Stack` de expo-router, en los colores y la tipografia
+ * del sistema.
+ *
+ * Vive aqui y no en cada layout por la misma razon que `<Pantalla>`: hay dos
+ * `Stack` en la app (la raiz y el grupo de la jornada) y antes cada uno repetia
+ * los colores a mano. Cuando eran dos literales sueltos ya se habian
+ * desincronizado del resto del tema — el `headerTintColor` seguia apuntando a
+ * un token que dejo de existir.
+ *
+ * La cabecera es lo unico de la app que no dibuja `<Pantalla>`, asi que es el
+ * unico sitio donde la fuente de titulo hay que pedirla explicitamente.
+ */
+export function useCabecera() {
+  const { t } = useTema();
+
+  return {
+    headerStyle: { backgroundColor: colores.superficie },
+    headerTintColor: colores.tinta,
+    headerTitleStyle: {
+      fontFamily: fuente.tituloMedio,
+      fontSize: t(tipo.subtitulo),
+      color: colores.tinta,
+    },
+    contentStyle: { backgroundColor: colores.papel },
+  };
+}
