@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react';
 
 import { inicializarCapaDatos, type CapaDatos } from '@/datos/inicializar';
 import type { Jornada } from '@/datos/tipos';
@@ -16,6 +24,22 @@ export interface EstadoJawa {
   jornada: Jornada | null;
   /** Vuelve a leer la jornada de hoy desde SQLite. */
   refrescarJornada: () => void;
+  /**
+   * Sube cada vez que el `pull` escribe en los catalogos locales.
+   *
+   * > [!danger] Si consultas un catalogo, ponlo en las dependencias
+   * > ```ts
+   * > const clientes = useMemo(
+   * >   () => datos.catalogos.listarClientes(sucursalId),
+   * >   [datos, sucursalId, versionCatalogos],   // <-- sin esto, no se refresca
+   * > );
+   * > ```
+   * > `datos` y `sucursalId` **no cambian** cuando el pull escribe en SQLite.
+   * > Olvidar esta dependencia es exactamente el bloqueo del primer arranque
+   * > que se encontro en dispositivo el 2026-08-23: la pantalla se queda con lo
+   * > que leyo al montarse y el vendedor no puede abrir el dia.
+   */
+  versionCatalogos: number;
 }
 
 const ContextoDatos = createContext<CapaDatos | null>(null);
@@ -102,6 +126,7 @@ function useDatos(): CapaDatos {
 export function useJawa(): EstadoJawa {
   const datos = useDatos();
   const { vendedor } = useSesion();
+  const versionCatalogos = useVersionCatalogos(datos);
   const jornadaCtx = useContext(ContextoJornada);
   if (!jornadaCtx) {
     throw new Error('useJawa() debe usarse dentro de <ProveedorJawa>.');
@@ -113,5 +138,27 @@ export function useJawa(): EstadoJawa {
     sucursalId: vendedor?.sucursalId ?? null,
     jornada: jornadaCtx.jornada,
     refrescarJornada: jornadaCtx.refrescarJornada,
+    versionCatalogos,
   };
+}
+
+/**
+ * Conecta React a la senal de cambio del repositorio de catalogos.
+ *
+ * `useSyncExternalStore` es la herramienta exacta para esto: la fuente de la
+ * verdad esta **fuera de React** (SQLite), y esta es la forma que React ofrece
+ * para leerla sin quedarse con una copia vieja.
+ *
+ * No hay contexto ni proveedor nuevo, y no hace falta: el repositorio ya es un
+ * unico objeto vivo durante todo el arranque (`inicializarCapaDatos()` corre una
+ * sola vez), asi que `suscribir` y `version` son referencias estables y cada
+ * componente puede conectarse por su cuenta.
+ *
+ * Va dentro de `useJawa()` y no como hook aparte para que **ninguna pantalla
+ * tenga que acordarse de pedirlo**. Es la misma doctrina que el guardia del
+ * kilometraje, que vive en la navegacion: lo que depende de que alguien se
+ * acuerde, tarde o temprano deja de existir en silencio.
+ */
+function useVersionCatalogos(datos: CapaDatos): number {
+  return useSyncExternalStore(datos.catalogos.suscribir, datos.catalogos.version);
 }
