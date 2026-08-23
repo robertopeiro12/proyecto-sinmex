@@ -364,4 +364,152 @@ describe('Vehiculos (e2e)', () => {
         .expect(400);
     });
   });
+
+  describe('PATCH /vehiculos/:id', () => {
+    it('edita el nombre y el kilometraje', async () => {
+      const id = await sembrarVehiculo(`${PREFIJO} Editable`, idTijuana);
+
+      const res = await request(app.getHttpServer())
+        .patch(`/vehiculos/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send({ nombre: `${PREFIJO} Editado`, kmInicial: 99999.99 })
+        .expect(200);
+
+      const vehiculo = res.body as VehiculoRespuesta;
+      expect(vehiculo.nombre).toBe(`${PREFIJO} Editado`);
+      // D6: el km al alta se puede corregir siempre. No es como el codigo de
+      // sucursal ni el folio, que quedan escritos en documentos que no se pueden
+      // corregir hacia atras.
+      expect(vehiculo.kmInicial).toBe(99999.99);
+    });
+
+    it('da de baja y vuelve a activar', async () => {
+      const id = await sembrarVehiculo(`${PREFIJO} Baja`, idTijuana);
+
+      const baja = await request(app.getHttpServer())
+        .patch(`/vehiculos/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send({ activo: false })
+        .expect(200);
+      expect((baja.body as VehiculoRespuesta).activo).toBe(false);
+
+      // Sigue apareciendo en la lista: la pantalla necesita verlo para poder
+      // reactivarlo.
+      const lista = await request(app.getHttpServer())
+        .get('/vehiculos')
+        .set('Cookie', cookieTijuana)
+        .expect(200);
+      expect((lista.body as VehiculoRespuesta[]).some((v) => v.id === id)).toBe(
+        true,
+      );
+
+      const alta = await request(app.getHttpServer())
+        .patch(`/vehiculos/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send({ activo: true })
+        .expect(200);
+      expect((alta.body as VehiculoRespuesta).activo).toBe(true);
+    });
+
+    // D3: el alcance manda igual en escritura que en lectura, y se compara
+    // contra la sucursal del vehiculo YA LEIDO, no contra lo que diga el cliente.
+    it('un usuario de TJ no puede editar un vehiculo de MX', async () => {
+      const id = await sembrarVehiculo(`${PREFIJO} Ajeno`, idMexicali);
+
+      await request(app.getHttpServer())
+        .patch(`/vehiculos/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send({ nombre: `${PREFIJO} Secuestrado` })
+        .expect(403);
+    });
+
+    it('el usuario General si puede editar en cualquier sucursal', async () => {
+      const id = await sembrarVehiculo(`${PREFIJO} General edita`, idMexicali);
+
+      await request(app.getHttpServer())
+        .patch(`/vehiculos/${id}`)
+        .set('Cookie', cookieGeneral)
+        .send({ nombre: `${PREFIJO} General edito` })
+        .expect(200);
+    });
+
+    it('un PATCH sin ningun campo responde 400', async () => {
+      const id = await sembrarVehiculo(`${PREFIJO} Vacio`, idTijuana);
+
+      await request(app.getHttpServer())
+        .patch(`/vehiculos/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send({})
+        .expect(400);
+    });
+
+    it('un id que no existe responde 404', async () => {
+      await request(app.getHttpServer())
+        .patch('/vehiculos/00000000-0000-0000-0000-000000000000')
+        .set('Cookie', cookieGeneral)
+        .send({ nombre: `${PREFIJO} Fantasma` })
+        .expect(404);
+    });
+
+    // ParseUUIDPipe: sin el, la cadena llegaria a Postgres y saldria como 500.
+    it('un id mal formado responde 400, no 500', async () => {
+      await request(app.getHttpServer())
+        .patch('/vehiculos/no-soy-un-uuid')
+        .set('Cookie', cookieGeneral)
+        .send({ nombre: `${PREFIJO} Basura` })
+        .expect(400);
+    });
+
+    it('renombrar a un nombre ya tomado en la sucursal responde 409', async () => {
+      await sembrarVehiculo(`${PREFIJO} Ocupado`, idTijuana);
+      const id = await sembrarVehiculo(`${PREFIJO} Aspirante`, idTijuana);
+
+      await request(app.getHttpServer())
+        .patch(`/vehiculos/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send({ nombre: `${PREFIJO} Ocupado` })
+        .expect(409);
+    });
+
+    it('rechaza editar sin el permiso vehiculo.gestionar', async () => {
+      const id = await sembrarVehiculo(`${PREFIJO} Blindado`, idTijuana);
+
+      await request(app.getHttpServer())
+        .patch(`/vehiculos/${id}`)
+        .set('Cookie', cookieSinPermiso)
+        .send({ nombre: `${PREFIJO} Hackeado` })
+        .expect(403);
+    });
+
+    // D3: la sucursal de un vehiculo no se puede cambiar, y el DTO ni siquiera
+    // lleva el campo.
+    //
+    // El 400 NO sale de rechazar el campo: `configurar-app.ts:42` configura el
+    // ValidationPipe con `whitelist: true` pero SIN `forbidNonWhitelisted`, asi
+    // que `sucursalId` se descarta en SILENCIO. Lo que queda es un cuerpo vacio,
+    // y el 400 lo produce el "No hay nada que actualizar" del servicio.
+    //
+    // El efecto visible es el correcto (la sucursal no cambia) y por eso la
+    // prueba vale, pero el mensaje de error hablara de campos faltantes en vez
+    // de decir "la sucursal no se puede cambiar". Agregar `forbidNonWhitelisted`
+    // arreglaria el mensaje a costa de endurecer TODOS los endpoints del
+    // proyecto de golpe: no es una decision de este ticket.
+    it('no deja cambiar la sucursal de un vehiculo', async () => {
+      const id = await sembrarVehiculo(`${PREFIJO} Arraigado`, idTijuana);
+
+      await request(app.getHttpServer())
+        .patch(`/vehiculos/${id}`)
+        .set('Cookie', cookieGeneral)
+        .send({ sucursalId: idMexicali })
+        .expect(400);
+
+      // Lo que de verdad importa: la sucursal siguio siendo la misma.
+      const fila = await db
+        .selectFrom('vehiculo')
+        .select('sucursal_id')
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow();
+      expect(fila.sucursal_id).toBe(idTijuana);
+    });
+  });
 });

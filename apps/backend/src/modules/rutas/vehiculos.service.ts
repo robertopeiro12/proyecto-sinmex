@@ -1,12 +1,15 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { resolverAlcance, type Alcance } from '../sucursales/alcance-sucursal';
 import { VehiculosRepository, type Vehiculo } from './vehiculos.repository';
 import type { CrearVehiculoDto } from './dto/crear-vehiculo.dto';
+import type { EditarVehiculoDto } from './dto/editar-vehiculo.dto';
 
 /**
  * `23505` es unique_violation. Se mira DESPUES del insert en vez de consultar
@@ -66,6 +69,58 @@ export class VehiculosService {
       if (esDuplicado(error)) {
         throw new ConflictException(
           `Ya existe un vehículo llamado "${dto.nombre}" en esa sucursal.`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  async editar(
+    usuarioId: string,
+    id: string,
+    dto: EditarVehiculoDto,
+  ): Promise<Vehiculo> {
+    // El 400 va ANTES de tocar la base: un PATCH sin cambios no es un fallo del
+    // servidor ni justifica una consulta, es un cuerpo mal armado.
+    if (
+      dto.nombre === undefined &&
+      dto.kmInicial === undefined &&
+      dto.activo === undefined
+    ) {
+      throw new BadRequestException('No hay nada que actualizar.');
+    }
+
+    const vehiculo = await this.repo.buscarPorId(id);
+    if (!vehiculo) {
+      throw new NotFoundException('No existe ese vehículo.');
+    }
+
+    // El alcance manda igual en escritura que en lectura (D3). Se compara contra
+    // la sucursal del vehiculo YA LEIDO y no contra el query param: aqui el
+    // objeto que se va a modificar es el hecho, no lo que el cliente diga.
+    const alcance = await this.alcanceDe(usuarioId, null);
+    if (alcance.tipo === 'una' && alcance.codigo !== vehiculo.sucursalCodigo) {
+      throw new ForbiddenException('No tienes acceso a esa sucursal.');
+    }
+
+    const cambios: { nombre?: string; km_inicial?: number; activo?: boolean } =
+      {};
+    if (dto.nombre !== undefined) {
+      cambios.nombre = dto.nombre;
+    }
+    if (dto.kmInicial !== undefined) {
+      cambios.km_inicial = dto.kmInicial;
+    }
+    if (dto.activo !== undefined) {
+      cambios.activo = dto.activo;
+    }
+
+    try {
+      return await this.repo.actualizar(id, cambios);
+    } catch (error) {
+      if (esDuplicado(error)) {
+        throw new ConflictException(
+          `Ya existe un vehículo llamado "${dto.nombre ?? vehiculo.nombre}" en esa sucursal.`,
         );
       }
       throw error;

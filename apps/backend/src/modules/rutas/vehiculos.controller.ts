@@ -1,9 +1,19 @@
-import { Body, Controller, Get, Post, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { UsuarioActual } from '../auth/usuario-actual.decorator';
 import { RequierePermiso } from '../auth/requiere-permiso.decorator';
 import { normalizarSucursalPedida } from '../sucursales/alcance-sucursal';
 import { VehiculosService } from './vehiculos.service';
 import { CrearVehiculoDto } from './dto/crear-vehiculo.dto';
+import { EditarVehiculoDto } from './dto/editar-vehiculo.dto';
 import type { Vehiculo } from './vehiculos.repository';
 
 // Sin @Publico(): el guard global de app.module.ts protege todo por defecto.
@@ -30,5 +40,17 @@ export class VehiculosController {
     @Body() dto: CrearVehiculoDto,
   ): Promise<Vehiculo> {
     return this.vehiculos.crear(usuarioId, dto);
+  }
+
+  @Patch(':id')
+  @RequierePermiso('vehiculo.gestionar')
+  async editar(
+    @UsuarioActual() usuarioId: string,
+    // ParseUUIDPipe convierte un id mal formado en 400. Sin el, la cadena
+    // llegaria a Postgres y saldria como 500 (mismo motivo que T-09 y T-10).
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: EditarVehiculoDto,
+  ): Promise<Vehiculo> {
+    return this.vehiculos.editar(usuarioId, id, dto);
   }
 }

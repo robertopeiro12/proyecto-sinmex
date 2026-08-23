@@ -115,6 +115,52 @@ export class VehiculosRepository {
     return aVehiculo({ ...fila, codigo: sucursal.codigo });
   }
 
+  async buscarPorId(id: string): Promise<Vehiculo | undefined> {
+    const fila = await this.db
+      .selectFrom('vehiculo')
+      .innerJoin('sucursal', 'sucursal.id', 'vehiculo.sucursal_id')
+      .select([
+        'vehiculo.id',
+        'vehiculo.nombre',
+        'vehiculo.km_inicial',
+        'vehiculo.sucursal_id',
+        'sucursal.codigo',
+        'vehiculo.activo',
+      ])
+      .where('vehiculo.id', '=', id)
+      .where('vehiculo.deleted_at', 'is', null)
+      .executeTakeFirst();
+
+    return fila ? aVehiculo(fila) : undefined;
+  }
+
+  /**
+   * `cambios` nunca llega vacio: el servicio lo comprueba antes. Un `.set({})`
+   * genera SQL invalido, asi que el chequeo no es cortesia, es necesario.
+   *
+   * La sucursal no se toca (D3), asi que el codigo se lee de la fila que ya
+   * existe y no hace falta un segundo join en el `returning`.
+   */
+  async actualizar(
+    id: string,
+    cambios: { nombre?: string; km_inicial?: number; activo?: boolean },
+  ): Promise<Vehiculo> {
+    const fila = await this.db
+      .updateTable('vehiculo')
+      .set(cambios)
+      .where('id', '=', id)
+      .returning(['id', 'nombre', 'km_inicial', 'sucursal_id', 'activo'])
+      .executeTakeFirstOrThrow();
+
+    const sucursal = await this.db
+      .selectFrom('sucursal')
+      .select('codigo')
+      .where('id', '=', fila.sucursal_id)
+      .executeTakeFirstOrThrow();
+
+    return aVehiculo({ ...fila, codigo: sucursal.codigo });
+  }
+
   /**
    * La sucursal del usuario. Distingue tres casos que NO se pueden colapsar:
    *   - `undefined`                 -> el usuario no existe o esta dado de baja
