@@ -5,7 +5,7 @@ export default function Venta() {
     <PantallaPendiente
       titulo="Venta"
       ticket="T-16"
-      descripcion="El vendedor solo captura cantidades; el total sale de cantidad x precio del cliente. Las notas fisicas de credito se siguen firmando en papel."
+      descripcion="El vendedor solo captura cantidades; el total sale de cantidad × precio del cliente. Las notas físicas de crédito se siguen firmando en papel."
     />
   );
 }

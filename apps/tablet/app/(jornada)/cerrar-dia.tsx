@@ -1,9 +1,14 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Text } from 'react-native';
 
 import { ErrorJornada } from '@/datos';
 import { useJawa } from '@/estado/proveedor-jawa';
-import { colores, estilos } from '@/ui/tema';
+import { Boton } from '@/ui/boton';
+import { Campo } from '@/ui/campo';
+import { Cifra } from '@/ui/cifra';
+import { Pantalla, Pastilla, Tarjeta } from '@/ui/pantalla';
+import { useTema } from '@/ui/tema';
+import { espacio } from '@/ui/tokens';
 
 /**
  * Cerrar el dia: kilometraje final y, despues, el corte.
@@ -15,11 +20,13 @@ import { colores, estilos } from '@/ui/tema';
  */
 export default function CerrarDia() {
   const { datos, jornada, refrescarJornada } = useJawa();
+  const { estilos } = useTema();
   const [km, setKm] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const kmNumero = Number(km.replace(',', '.'));
   const puedeCerrar = km.trim() !== '' && Number.isFinite(kmNumero);
+  const pendientes = datos.jornadas.pendientesDeSincronizar().length;
 
   function cerrar() {
     setError(null);
@@ -28,65 +35,78 @@ export default function CerrarDia() {
       datos.jornadas.cerrar(jornada.id, kmNumero);
       refrescarJornada();
     } catch (e) {
-      setError(e instanceof ErrorJornada ? e.message : 'No se pudo cerrar el dia.');
+      setError(e instanceof ErrorJornada ? e.message : 'No se pudo cerrar el día.');
     }
   }
 
   if (jornada?.estado === 'cerrada') {
     return (
-      <ScrollView style={estilos.pantalla}>
-        <Text style={estilos.titulo}>Dia cerrado</Text>
-        <Text style={estilos.subtitulo}>
-          Kilometraje {jornada.km_inicial} → {jornada.km_final} (
-          {(jornada.km_final ?? 0) - jornada.km_inicial} km recorridos).
-        </Text>
-        <View style={estilos.tarjeta}>
-          <Text style={estilos.etiqueta}>Proximamente</Text>
-          <Text style={estilos.textoTarjeta}>El corte del dia se implementa en T-38</Text>
+      <Pantalla
+        titulo="Día cerrado"
+        subtitulo={
+          <Text style={estilos.subtitulo}>
+            Kilometraje <Cifra valor={jornada.km_inicial} tono="suave" /> →{' '}
+            <Cifra valor={jornada.km_final ?? 0} tono="suave" /> (
+            <Cifra valor={(jornada.km_final ?? 0) - jornada.km_inicial} tono="suave" /> km
+            recorridos).
+          </Text>
+        }
+      >
+        <Tarjeta estado="pendiente" etiqueta="Próximamente">
+          <Text style={estilos.textoTarjeta}>El corte del día se implementa en T-38</Text>
           <Text style={estilos.textoSuave}>
-            Incluira ventas por presentacion, cobranza, gastos, tesoreria (= cobranza − gastos),
-            comision del dia, efectividad de ruta e impresion desde la tablet.
+            Incluirá ventas por presentación, cobranza, gastos, tesorería (= cobranza − gastos),
+            comisión del día, efectividad de ruta e impresión desde la tablet.
           </Text>
-        </View>
-        <View style={estilos.tarjeta}>
-          <Text style={estilos.etiqueta}>Sincronizacion</Text>
-          <Text style={estilos.textoTarjeta}>
-            {datos.jornadas.pendientesDeSincronizar().length} registro(s) esperando WiFi
+        </Tarjeta>
+
+        <Tarjeta
+          estado={pendientes > 0 ? 'pendiente' : 'listo'}
+          etiqueta="Sincronización"
+        >
+          <Pastilla
+            numero={pendientes}
+            texto={pendientes === 1 ? 'registro esperando WiFi' : 'registros esperando WiFi'}
+            estado={pendientes > 0 ? 'pendiente' : 'listo'}
+          />
+          <Text style={estilos.textoSuave}>
+            Suben solos al volver al WiFi del negocio, o con «Sincronizar ahora» desde la jornada.
           </Text>
-          <Text style={estilos.textoSuave}>La subida al portal se implementa en T-07.</Text>
-        </View>
-      </ScrollView>
+        </Tarjeta>
+      </Pantalla>
     );
   }
 
   return (
-    <ScrollView style={estilos.pantalla}>
-      <Text style={estilos.titulo}>Cerrar el dia</Text>
-      <Text style={estilos.subtitulo}>
-        Captura el kilometraje final antes de enviar el corte. Abriste el dia con{' '}
-        {jornada?.km_inicial} km.
-      </Text>
-
-      <Text style={estilos.etiqueta}>Kilometraje final</Text>
-      <TextInput
-        style={estilos.campo}
-        value={km}
-        onChangeText={setKm}
+    <Pantalla
+      formulario
+      titulo="Cerrar el día"
+      subtitulo={
+        <Text style={estilos.subtitulo}>
+          Captura el kilometraje final antes de enviar el corte. Abriste el día con{' '}
+          <Cifra valor={jornada?.km_inicial ?? 0} tono="suave" /> km.
+        </Text>
+      }
+    >
+      <Campo
+        etiqueta="Kilometraje final"
+        cifra
+        // Ver la nota gemela en `abrir-dia.tsx`: el odometro puede traer decimal.
         keyboardType="numeric"
         inputMode="decimal"
+        value={km}
+        onChangeText={setKm}
         placeholder={`Mayor o igual a ${jornada?.km_inicial ?? 0}`}
-        placeholderTextColor={colores.textoSuave}
       />
 
       {error ? <Text style={estilos.error}>{error}</Text> : null}
 
-      <Pressable
+      <Boton
+        etiqueta="Cerrar el día"
         onPress={cerrar}
-        disabled={!puedeCerrar}
-        style={[estilos.boton, { marginTop: 24 }, !puedeCerrar && estilos.botonDeshabilitado]}
-      >
-        <Text style={estilos.botonTexto}>Cerrar el dia</Text>
-      </Pressable>
-    </ScrollView>
+        deshabilitado={!puedeCerrar}
+        estilo={{ marginTop: espacio.lg }}
+      />
+    </Pantalla>
   );
 }
