@@ -16,15 +16,22 @@ import { useTema } from '@/ui/tema';
  *       no alfabetico; la ruta baja del portal con la sincronizacion.
  */
 export default function ListaClientes() {
-  const { datos, sucursalId } = useJawa();
+  const { datos, sucursalId, versionCatalogos } = useJawa();
   const { estilos } = useTema();
   // `sucursalId` es null si no hay sesion. Aqui no puede pasar (el layout del
   // grupo ya redirige al login), pero el tipo lo admite y devolver la lista
   // vacia es mas honesto que forzar el tipo con un `!`.
-  const clientes = useMemo<Cliente[]>(
-    () => (sucursalId ? datos.catalogos.listarClientes(sucursalId) : []),
-    [datos, sucursalId],
-  );
+  //
+  // `versionCatalogos` hace que la lista se rehaga cuando el `pull` escribe.
+  // Aqui el sintoma es menos grave que en "Abrir el dia" (no bloquea), pero es
+  // el mismo defecto, y con el refresco automatico de las 11:00/14:00 (T-44)
+  // sera el caso normal: el vendedor mirando la lista mientras baja la nueva.
+  const clientes = useMemo<Cliente[]>(() => {
+    // Ver la nota gemela en `abrir-dia.tsx`: la lectura es para que el linter
+    // no marque como sobrante la dependencia que evita el defecto.
+    void versionCatalogos;
+    return sucursalId ? datos.catalogos.listarClientes(sucursalId) : [];
+  }, [datos, sucursalId, versionCatalogos]);
 
   return (
     <Pantalla

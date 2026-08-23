@@ -24,17 +24,41 @@ import { colores, espacio, grosor } from '@/ui/tokens';
  * **estructural** (afecta la navegacion completa), no parte de un modulo.
  */
 export default function AbrirDia() {
-  const { datos, vendedor, sucursalId, jornada, refrescarJornada } = useJawa();
+  const { datos, vendedor, sucursalId, jornada, refrescarJornada, versionCatalogos } = useJawa();
   const { estilos } = useTema();
 
-  const vehiculos = useMemo<Vehiculo[]>(
-    () => (sucursalId ? datos.catalogos.listarVehiculos(sucursalId) : []),
-    [datos, sucursalId],
-  );
+  // `versionCatalogos` es la dependencia que faltaba. Sin ella, en una tablet
+  // recien instalada esta pantalla se quedaba con la lista vacia que leyo al
+  // montarse —el `pull` iba en camino— y el vendedor no podia abrir el dia hasta
+  // reiniciar la app. Ver `datos/repositorios/catalogos.ts`.
+  const vehiculos = useMemo<Vehiculo[]>(() => {
+    // Se lee de verdad, y no solo se lista abajo, porque `exhaustive-deps` no
+    // puede saber que una dependencia que no se usa en el cuerpo SI importa:
+    // su valor no se ocupa para nada, lo que importa es que al cambiar obliga a
+    // volver a consultar SQLite. Sin esta linea el linter la marca como
+    // sobrante y el siguiente que "limpie el aviso" reintroduce el bloqueo.
+    void versionCatalogos;
+    return sucursalId ? datos.catalogos.listarVehiculos(sucursalId) : [];
+  }, [datos, sucursalId, versionCatalogos]);
 
-  const [vehiculoId, setVehiculoId] = useState<string | null>(vehiculos[0]?.id ?? null);
+  const [vehiculoElegido, setVehiculoElegido] = useState<string | null>(null);
   const [km, setKm] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * El vehiculo seleccionado se **deriva**, no se siembra en el estado inicial.
+   *
+   * La otra mitad del mismo defecto: `useState(vehiculos[0]?.id)` se evalua una
+   * sola vez, y cuando esta pantalla monta la lista suele estar vacia. Aunque el
+   * pull bajara el vehiculo un segundo despues, la seleccion se quedaba en
+   * `null` para siempre y el boton seguia apagado con la lista ya llena.
+   *
+   * Derivarlo tambien cubre el caso contrario: si el portal da de baja el
+   * vehiculo que el vendedor habia elegido, la seleccion cae sola al primero
+   * disponible en vez de apuntar a una fila que ya no se lista.
+   */
+  const vehiculoId =
+    vehiculos.find((v) => v.id === vehiculoElegido)?.id ?? vehiculos[0]?.id ?? null;
 
   const kmNumero = Number(km.replace(',', '.'));
   const puedeAbrir = vehiculoId !== null && km.trim() !== '' && Number.isFinite(kmNumero);
@@ -95,7 +119,7 @@ export default function AbrirDia() {
                 accessibilityRole="radio"
                 accessibilityState={{ selected: seleccionado }}
                 accessibilityLabel={vehiculo.nombre}
-                onPress={() => setVehiculoId(vehiculo.id)}
+                onPress={() => setVehiculoElegido(vehiculo.id)}
                 style={({ pressed }) => [
                   estilos.tarjeta,
                   estilos.celdaRejilla,
