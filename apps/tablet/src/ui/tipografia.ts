@@ -1,16 +1,19 @@
-import {
-  Barlow_400Regular,
-  Barlow_500Medium,
-  Barlow_600SemiBold,
-} from '@expo-google-fonts/barlow';
-import {
-  BarlowCondensed_600SemiBold,
-  BarlowCondensed_700Bold,
-} from '@expo-google-fonts/barlow-condensed';
-import {
-  IBMPlexMono_500Medium,
-  IBMPlexMono_600SemiBold,
-} from '@expo-google-fonts/ibm-plex-mono';
+// Se importa **el corte concreto**, no el paquete.
+//
+// `@expo-google-fonts/barlow` es un `index.js` con un `require()` de cada peso
+// en el nivel superior: tocarlo mete los 18 cortes de la familia en el grafo, y
+// Metro no puede podar un `require` incondicional. Medido con `expo export`:
+// importando desde la raiz el bundle se llevaba **51 .ttf (~5,4 MB)** para usar
+// 7. Importando el subcamino, solo bajan los 7.
+//
+// No es una micro-optimizacion: el APK se instala por WiFi en tablets de campo.
+import { Barlow_400Regular } from '@expo-google-fonts/barlow/400Regular';
+import { Barlow_500Medium } from '@expo-google-fonts/barlow/500Medium';
+import { Barlow_600SemiBold } from '@expo-google-fonts/barlow/600SemiBold';
+import { BarlowCondensed_600SemiBold } from '@expo-google-fonts/barlow-condensed/600SemiBold';
+import { BarlowCondensed_700Bold } from '@expo-google-fonts/barlow-condensed/700Bold';
+import { IBMPlexMono_500Medium } from '@expo-google-fonts/ibm-plex-mono/500Medium';
+import { IBMPlexMono_600SemiBold } from '@expo-google-fonts/ibm-plex-mono/600SemiBold';
 import { useFonts } from 'expo-font';
 
 /**
