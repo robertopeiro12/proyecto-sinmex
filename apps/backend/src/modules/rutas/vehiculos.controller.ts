@@ -1,7 +1,9 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { UsuarioActual } from '../auth/usuario-actual.decorator';
+import { RequierePermiso } from '../auth/requiere-permiso.decorator';
 import { normalizarSucursalPedida } from '../sucursales/alcance-sucursal';
 import { VehiculosService } from './vehiculos.service';
+import { CrearVehiculoDto } from './dto/crear-vehiculo.dto';
 import type { Vehiculo } from './vehiculos.repository';
 
 // Sin @Publico(): el guard global de app.module.ts protege todo por defecto.
@@ -19,5 +21,14 @@ export class VehiculosController {
     @Query('sucursal') sucursal?: string,
   ): Promise<Vehiculo[]> {
     return this.vehiculos.listar(usuarioId, normalizarSucursalPedida(sucursal));
+  }
+
+  @Post()
+  @RequierePermiso('vehiculo.gestionar')
+  async crear(
+    @UsuarioActual() usuarioId: string,
+    @Body() dto: CrearVehiculoDto,
+  ): Promise<Vehiculo> {
+    return this.vehiculos.crear(usuarioId, dto);
   }
 }

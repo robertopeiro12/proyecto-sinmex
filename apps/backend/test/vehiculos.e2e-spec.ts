@@ -218,4 +218,150 @@ describe('Vehiculos (e2e)', () => {
       await request(app.getHttpServer()).get('/vehiculos').expect(401);
     });
   });
+
+  describe('POST /vehiculos', () => {
+    it('un usuario atado crea en SU sucursal sin mandarla', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieTijuana)
+        .send({ nombre: `${PREFIJO} Nissan TJ`, kmInicial: 145230.5 })
+        .expect(201);
+
+      const vehiculo = res.body as VehiculoRespuesta;
+      expect(vehiculo.sucursalCodigo).toBe('TJ');
+      expect(vehiculo.kmInicial).toBe(145230.5);
+      expect(vehiculo.activo).toBe(true);
+    });
+
+    // D3: el cliente propone, el servidor dispone. Mandar otra sucursal no es un
+    // intento de escalada (el formulario ni siquiera pinta el campo para el), es
+    // un cuerpo que sobra: se ignora en silencio, no se responde 403.
+    it('a un usuario atado se le IGNORA el sucursalId que mande', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieTijuana)
+        .send({
+          nombre: `${PREFIJO} Colado`,
+          kmInicial: 100,
+          sucursalId: idMexicali,
+        })
+        .expect(201);
+
+      expect((res.body as VehiculoRespuesta).sucursalCodigo).toBe('TJ');
+    });
+
+    it('el usuario General elige la sucursal', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieGeneral)
+        .send({
+          nombre: `${PREFIJO} Nissan MX`,
+          kmInicial: 200,
+          sucursalId: idMexicali,
+        })
+        .expect(201);
+
+      expect((res.body as VehiculoRespuesta).sucursalCodigo).toBe('MX');
+    });
+
+    it('el usuario General sin sucursalId recibe 400', async () => {
+      await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieGeneral)
+        .send({ nombre: `${PREFIJO} Sin sucursal`, kmInicial: 300 })
+        .expect(400);
+    });
+
+    it('rechaza un nombre repetido en la misma sucursal con 409', async () => {
+      const cuerpo = { nombre: `${PREFIJO} Repetido`, kmInicial: 400 };
+      await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieTijuana)
+        .send(cuerpo)
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieTijuana)
+        .send(cuerpo)
+        .expect(409);
+    });
+
+    it('rechaza un nombre repetido que solo cambia en mayusculas', async () => {
+      await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieTijuana)
+        .send({ nombre: `${PREFIJO} Mayusculas`, kmInicial: 500 })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieTijuana)
+        .send({ nombre: `${PREFIJO} MAYUSCULAS`, kmInicial: 500 })
+        .expect(409);
+    });
+
+    // D4: el indice no filtra por `activo`, asi que desactivar no libera el
+    // nombre. Lo que se quiere en ese caso es reactivar, no duplicar.
+    it('un vehiculo desactivado sigue reservando su nombre', async () => {
+      const id = await sembrarVehiculo(`${PREFIJO} Dormido`, idTijuana);
+      await db
+        .updateTable('vehiculo')
+        .set({ activo: false })
+        .where('id', '=', id)
+        .execute();
+
+      await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieTijuana)
+        .send({ nombre: `${PREFIJO} Dormido`, kmInicial: 600 })
+        .expect(409);
+    });
+
+    it('acepta el mismo nombre en dos sucursales distintas', async () => {
+      await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieGeneral)
+        .send({
+          nombre: `${PREFIJO} Compartido`,
+          kmInicial: 700,
+          sucursalId: idTijuana,
+        })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieGeneral)
+        .send({
+          nombre: `${PREFIJO} Compartido`,
+          kmInicial: 700,
+          sucursalId: idMexicali,
+        })
+        .expect(201);
+    });
+
+    it('rechaza crear sin el permiso vehiculo.gestionar', async () => {
+      await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieSinPermiso)
+        .send({ nombre: `${PREFIJO} Prohibido`, kmInicial: 800 })
+        .expect(403);
+    });
+
+    it('rechaza un kilometraje negativo con 400', async () => {
+      await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieTijuana)
+        .send({ nombre: `${PREFIJO} Negativo`, kmInicial: -1 })
+        .expect(400);
+    });
+
+    it('rechaza un nombre vacio con 400', async () => {
+      await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieTijuana)
+        .send({ nombre: '   ', kmInicial: 900 })
+        .expect(400);
+    });
+  });
 });

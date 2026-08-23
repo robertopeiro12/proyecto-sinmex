@@ -92,6 +92,30 @@ export class VehiculosRepository {
   }
 
   /**
+   * Sin transaccion: es un solo insert. La lectura del codigo de sucursal va
+   * despues porque `returning` no puede traer columnas de la tabla del join.
+   */
+  async crear(
+    nombre: string,
+    kmInicial: number,
+    sucursalId: string,
+  ): Promise<Vehiculo> {
+    const fila = await this.db
+      .insertInto('vehiculo')
+      .values({ nombre, km_inicial: kmInicial, sucursal_id: sucursalId })
+      .returning(['id', 'nombre', 'km_inicial', 'sucursal_id', 'activo'])
+      .executeTakeFirstOrThrow();
+
+    const sucursal = await this.db
+      .selectFrom('sucursal')
+      .select('codigo')
+      .where('id', '=', sucursalId)
+      .executeTakeFirstOrThrow();
+
+    return aVehiculo({ ...fila, codigo: sucursal.codigo });
+  }
+
+  /**
    * La sucursal del usuario. Distingue tres casos que NO se pueden colapsar:
    *   - `undefined`                 -> el usuario no existe o esta dado de baja
    *   - `{ id: null, codigo: null }` -> existe y es General
