@@ -86,7 +86,7 @@ Esperado: **5** filas en `lista_precio` (incluida `Especial`, todavía activa �
 
 **Interfaces:**
 - Consumes: nada.
-- Produces: exactamente 4 filas activas en `lista_precio`; el constraint `uq_precio_vigencia` sobre `precio(presentacion_id, lista_precio_id, sucursal_id, vigente_desde)`, del que depende el `ON CONFLICT` de la Task 3; el permiso `precio.gestionar`, del que depende `@RequierePermiso` en la Task 3.
+- Produces: exactamente 4 filas activas en `lista_precio`; el constraint `uq_precio_vigencia` sobre `precio(presentacion_id, lista_precio_id, sucursal_id, vigente_desde)`, del que depende el `ON CONFLICT` de `PreciosRepository.upsert()` en la Task 2; el permiso `precio.gestionar`, del que depende `@RequierePermiso` en `PreciosController.actualizar()`, también Task 2.
 
 - [ ] **Step 1: Escribir la prueba pgTAP que falla**
 
@@ -286,7 +286,7 @@ interface FilaVigente {
   presentacion_id: string;
   lista_precio_id: string;
   precio: string;
-  vigente_desde: Date;
+  vigente_desde: string;
 }
 
 function aPrecioVigente(fila: FilaVigente): PrecioVigente {
@@ -297,7 +297,7 @@ function aPrecioVigente(fila: FilaVigente): PrecioVigente {
     // `km_inicial` de vehiculo en T-11). `aNumero()` se importa de
     // sincronizacion/dinero.ts en vez de duplicarse.
     precio: aNumero(fila.precio) ?? 0,
-    vigenteDesde: fila.vigente_desde.toISOString().slice(0, 10),
+    vigenteDesde: fila.vigente_desde,
   };
 }
 
@@ -326,11 +326,21 @@ export class PreciosRepository {
    * Mexicali estan detras de UTC, asi que la fecha local del navegador (la que
    * escribio el PATCH de la Task 3) nunca queda por delante de la fecha UTC
    * del servidor en el mismo instante.
+   *
+   * `p.vigente_desde::text`: sin el cast, el driver `pg` parsea una columna
+   * `date` como un `Date` de JS a la medianoche LOCAL del proceso de Node, no
+   * UTC. Volver a convertir ese `Date` a texto con `toISOString()` (que SI es
+   * UTC) corre la fecha un dia hacia atras en cualquier maquina cuyo huso
+   * horario este ADELANTE de UTC -- el entorno de desarrollo de este equipo
+   * (Europe/Madrid) es exactamente ese caso. Mismo espiritu que `aNumero()`
+   * en dinero.ts: no confiar en el parseo de tipos de `pg`, quedarse con el
+   * texto que Postgres ya formateo bien.
    */
   async listarVigentes(sucursalCodigo: string): Promise<PrecioVigente[]> {
     const filas = await sql<FilaVigente>`
       select distinct on (p.presentacion_id, p.lista_precio_id)
-        p.presentacion_id, p.lista_precio_id, p.precio, p.vigente_desde
+        p.presentacion_id, p.lista_precio_id, p.precio,
+        p.vigente_desde::text as vigente_desde
       from precio p
       join sucursal s on s.id = p.sucursal_id
       where s.codigo = ${sucursalCodigo}
@@ -347,6 +357,12 @@ export class PreciosRepository {
    * combinacion en la fecha que trae `datos.vigenteDesde`, corrige esa fila;
    * si no, abre un tramo nuevo de historia. El constraint es lo que hace esto
    * atomico sin un SELECT previo.
+   *
+   * Sin `.returning()`: no hace falta leer de vuelta lo que la base acaba de
+   * guardar, porque ya lo conocemos -- son los mismos `datos` que mandamos.
+   * Evita ademas tener que re-convertir un `vigente_desde` que volviera como
+   * `Date` (ver el comentario de `listarVigentes` sobre el riesgo de huso
+   * horario de `toISOString()`); aqui ese riesgo ni siquiera puede aparecer.
    */
   async upsert(datos: {
     presentacionId: string;
@@ -355,7 +371,7 @@ export class PreciosRepository {
     precio: number;
     vigenteDesde: string;
   }): Promise<PrecioVigente> {
-    const fila = await this.db
+    await this.db
       .insertInto('precio')
       .values({
         presentacion_id: datos.presentacionId,
@@ -369,15 +385,14 @@ export class PreciosRepository {
           .constraint('uq_precio_vigencia')
           .doUpdateSet({ precio: datos.precio.toString() }),
       )
-      .returning([
-        'presentacion_id',
-        'lista_precio_id',
-        'precio',
-        'vigente_desde',
-      ])
       .executeTakeFirstOrThrow();
 
-    return aPrecioVigente(fila);
+    return {
+      presentacionId: datos.presentacionId,
+      listaPrecioId: datos.listaPrecioId,
+      precio: datos.precio,
+      vigenteDesde: datos.vigenteDesde,
+    };
   }
 
   /**
