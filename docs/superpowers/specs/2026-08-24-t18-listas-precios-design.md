@@ -75,6 +75,18 @@ día, y el criterio de aceptación ("no retroactivo, conserva histórico") queda
 una fecha al usuario. Se decidió explícitamente no dar la opción de programar una vigencia futura
 (fuera de alcance, ver arriba).
 
+> [!warning] "Hoy" lo calcula el navegador, no el servidor
+> Mismo riesgo que el `CLAUDE.md` ya advierte para `fecha_operacion` de folios: derivar "hoy" de
+> UTC en el servidor puede desalinearse de la fecha local del negocio. Aquí no hace falta que el
+> usuario vea ni toque una fecha — sigue siendo invisible — pero el valor que viaja en el `PATCH`
+> es la fecha local del navegador (`new Date().getFullYear()/getMonth()/getDate()`, no
+> `toISOString()`, que es UTC), no algo que el backend derive. El backend la usa tal cual para
+> `vigente_desde`. La lectura (`GET /precios`) sí compara contra `current_date` de Postgres para
+> decidir qué fila es la vigente — es una comparación `<=` tolerante, y Tijuana/Mexicali están
+> **detrás** de UTC, así que la fecha local del navegador nunca queda por delante de la fecha UTC
+> del servidor en el mismo instante; no hay ventana en la que una fila recién guardada se vea como
+> "todavía no vigente".
+
 El **precio vigente** para lectura (`GET /precios`, y más adelante T-16) es, por combinación de
 presentación+lista+sucursal, la fila con `vigente_desde` más reciente que sea `<= hoy` y no dada de
 baja. Se resuelve con `DISTINCT ON` de Postgres:
@@ -192,7 +204,7 @@ Migraciones nuevas de T-18:
 |---|---|---|---|
 | `GET` | `/listas-precio` | solo sesión | Las 4 filas activas de `lista_precio`, `{ id, nombre }`. |
 | `GET` | `/precios?sucursal=TJ` | solo sesión | Acotado por `resolverAlcance()`. Precio vigente por presentación×lista (D3). Combinaciones sin precio no aparecen (D6). |
-| `PATCH` | `/precios` | `precio.gestionar` | Body `{ presentacionId, listaPrecioId, sucursalId, precio }`. Upsert sobre hoy (D3/D4). `403` si `sucursalId` no está en el alcance del usuario. `400` si `precio <= 0` o algún id no existe. |
+| `PATCH` | `/precios` | `precio.gestionar` | Body `{ presentacionId, listaPrecioId, sucursalId, precio, vigenteDesde }`. `vigenteDesde` es la fecha local del navegador (D3), no la calcula el servidor. Upsert sobre esa fecha (D4). `403` si `sucursalId` no está en el alcance del usuario. `400` si `precio <= 0`. `404` si `presentacionId`/`listaPrecioId` no existen (D4/D5 del backend, ver Archivos). |
 
 `sucursalId` en el `PATCH` (y no inferido del alcance) porque un Administrador General edita varias
 sucursales desde el mismo selector de la pantalla — mismo patrón que el `sucursal_id` opcional que
