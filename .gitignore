@@ -6,3 +6,4 @@ dist/
 supabase/.temp/
 .supabase-access-token
 .claude/worktrees/
+.playwright-mcp/

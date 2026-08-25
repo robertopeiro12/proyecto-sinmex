@@ -22,6 +22,7 @@ export const navSections: NavSection[] = [
       { label: "Vendedores", href: "/catalogo/vendedores" },
       { label: "Vehículos", href: "/catalogo/vehiculos" },
       { label: "Productos", href: "/catalogo/productos" },
+      { label: "Listas de Precios", href: "/catalogo/precios" },
       { label: "Usuarios", href: "/catalogo/usuarios" },
       { label: "Perfiles y Permisos", href: "/catalogo/perfiles-y-permisos" },
     ],
