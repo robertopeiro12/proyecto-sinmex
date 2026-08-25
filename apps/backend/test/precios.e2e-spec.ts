@@ -31,9 +31,6 @@ const PREFIJO = `ZZ-e2e-precios-${SUFIJO}`;
 // Fecha LOCAL del navegador en produccion (D3); aqui basta con la fecha del
 // runner de CI, que es UTC, para probar la plomeria -- no hay logica de
 // zona horaria que probar del lado del cliente en este archivo.
-// Sin uso todavia: queda lista para las pruebas del PATCH que agrega la
-// Task 3 al mismo archivo (mismo motivo que `idMexicali` mas abajo).
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const HOY = new Date().toISOString().slice(0, 10);
 
 describe('Precios (e2e)', () => {
@@ -42,9 +39,6 @@ describe('Precios (e2e)', () => {
   const usuarioIds: string[] = [];
   const productoIds: string[] = [];
   let idTijuana: string;
-  // Sin uso todavia: la Task 3 agrega al PATCH pruebas de sucursal cruzada
-  // (TJ vs MX) al mismo archivo y la va a necesitar.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let idMexicali: string;
   let idLista1: string;
   let idLista2: string;
@@ -373,6 +367,260 @@ describe('Precios (e2e)', () => {
       await request(app.getHttpServer())
         .get('/precios?sucursal=TJ')
         .expect(401);
+    });
+  });
+
+  describe('PATCH /precios', () => {
+    it('crea un precio nuevo cuando no existia ninguno', async () => {
+      const presentacionId = await sembrarPresentacion(
+        `${PREFIJO} Alta`,
+        '500 ml',
+      );
+
+      const res = await request(app.getHttpServer())
+        .patch('/precios')
+        .set('Cookie', cookieGeneral)
+        .send({
+          presentacionId,
+          listaPrecioId: idLista1,
+          sucursalId: idTijuana,
+          precio: 12.5,
+          vigenteDesde: HOY,
+        })
+        .expect(200);
+
+      expect((res.body as PrecioRespuesta).precio).toBe(12.5);
+
+      const filas = await db
+        .selectFrom('precio')
+        .select('id')
+        .where('presentacion_id', '=', presentacionId)
+        .where('lista_precio_id', '=', idLista1)
+        .where('sucursal_id', '=', idTijuana)
+        .execute();
+      expect(filas).toHaveLength(1);
+    });
+
+    it('editar la misma vigencia corrige la fila, no la duplica', async () => {
+      const presentacionId = await sembrarPresentacion(
+        `${PREFIJO} Corrige`,
+        '1 L',
+      );
+      const cuerpo = {
+        presentacionId,
+        listaPrecioId: idLista1,
+        sucursalId: idTijuana,
+        vigenteDesde: HOY,
+      };
+
+      await request(app.getHttpServer())
+        .patch('/precios')
+        .set('Cookie', cookieGeneral)
+        .send({ ...cuerpo, precio: 10 })
+        .expect(200);
+
+      const segunda = await request(app.getHttpServer())
+        .patch('/precios')
+        .set('Cookie', cookieGeneral)
+        .send({ ...cuerpo, precio: 15 })
+        .expect(200);
+
+      expect((segunda.body as PrecioRespuesta).precio).toBe(15);
+
+      const filas = await db
+        .selectFrom('precio')
+        .select('precio')
+        .where('presentacion_id', '=', presentacionId)
+        .where('lista_precio_id', '=', idLista1)
+        .where('sucursal_id', '=', idTijuana)
+        .execute();
+      expect(filas).toHaveLength(1);
+      expect(Number(filas[0].precio)).toBe(15);
+    });
+
+    it('un usuario de TJ edita en TJ sin problema', async () => {
+      const presentacionId = await sembrarPresentacion(
+        `${PREFIJO} PropioTJ`,
+        '500 ml',
+      );
+
+      await request(app.getHttpServer())
+        .patch('/precios')
+        .set('Cookie', cookieTijuana)
+        .send({
+          presentacionId,
+          listaPrecioId: idLista1,
+          sucursalId: idTijuana,
+          precio: 9,
+          vigenteDesde: HOY,
+        })
+        .expect(200);
+    });
+
+    it('un usuario de TJ no puede editar un precio de MX', async () => {
+      const presentacionId = await sembrarPresentacion(
+        `${PREFIJO} AjenoMX`,
+        '500 ml',
+      );
+
+      await request(app.getHttpServer())
+        .patch('/precios')
+        .set('Cookie', cookieTijuana)
+        .send({
+          presentacionId,
+          listaPrecioId: idLista1,
+          sucursalId: idMexicali,
+          precio: 9,
+          vigenteDesde: HOY,
+        })
+        .expect(403);
+    });
+
+    it('el usuario General puede editar en cualquier sucursal', async () => {
+      const presentacionId = await sembrarPresentacion(
+        `${PREFIJO} GeneralMX`,
+        '500 ml',
+      );
+
+      await request(app.getHttpServer())
+        .patch('/precios')
+        .set('Cookie', cookieGeneral)
+        .send({
+          presentacionId,
+          listaPrecioId: idLista1,
+          sucursalId: idMexicali,
+          precio: 9,
+          vigenteDesde: HOY,
+        })
+        .expect(200);
+    });
+
+    it('rechaza sin el permiso precio.gestionar', async () => {
+      const presentacionId = await sembrarPresentacion(
+        `${PREFIJO} SinPermiso`,
+        '500 ml',
+      );
+
+      await request(app.getHttpServer())
+        .patch('/precios')
+        .set('Cookie', cookieSinPermiso)
+        .send({
+          presentacionId,
+          listaPrecioId: idLista1,
+          sucursalId: idTijuana,
+          precio: 9,
+          vigenteDesde: HOY,
+        })
+        .expect(403);
+    });
+
+    it('rechaza sin sesion', async () => {
+      await request(app.getHttpServer())
+        .patch('/precios')
+        .send({
+          presentacionId: idLista1,
+          listaPrecioId: idLista1,
+          sucursalId: idTijuana,
+          precio: 9,
+          vigenteDesde: HOY,
+        })
+        .expect(401);
+    });
+
+    it('rechaza un precio en cero o negativo', async () => {
+      const presentacionId = await sembrarPresentacion(
+        `${PREFIJO} Cero`,
+        '500 ml',
+      );
+      const base = {
+        presentacionId,
+        listaPrecioId: idLista1,
+        sucursalId: idTijuana,
+        vigenteDesde: HOY,
+      };
+
+      await request(app.getHttpServer())
+        .patch('/precios')
+        .set('Cookie', cookieGeneral)
+        .send({ ...base, precio: 0 })
+        .expect(400);
+
+      await request(app.getHttpServer())
+        .patch('/precios')
+        .set('Cookie', cookieGeneral)
+        .send({ ...base, precio: -5 })
+        .expect(400);
+    });
+
+    it('rechaza mas de 2 decimales', async () => {
+      const presentacionId = await sembrarPresentacion(
+        `${PREFIJO} Decimales`,
+        '500 ml',
+      );
+
+      await request(app.getHttpServer())
+        .patch('/precios')
+        .set('Cookie', cookieGeneral)
+        .send({
+          presentacionId,
+          listaPrecioId: idLista1,
+          sucursalId: idTijuana,
+          precio: 10.123,
+          vigenteDesde: HOY,
+        })
+        .expect(400);
+    });
+
+    it('una presentacion que no existe responde 404', async () => {
+      await request(app.getHttpServer())
+        .patch('/precios')
+        .set('Cookie', cookieGeneral)
+        .send({
+          presentacionId: '00000000-0000-0000-0000-000000000000',
+          listaPrecioId: idLista1,
+          sucursalId: idTijuana,
+          precio: 9,
+          vigenteDesde: HOY,
+        })
+        .expect(404);
+    });
+
+    it('un id mal formado responde 400, no 500', async () => {
+      const presentacionId = await sembrarPresentacion(
+        `${PREFIJO} Malformado`,
+        '500 ml',
+      );
+
+      await request(app.getHttpServer())
+        .patch('/precios')
+        .set('Cookie', cookieGeneral)
+        .send({
+          presentacionId,
+          listaPrecioId: 'no-soy-un-uuid',
+          sucursalId: idTijuana,
+          precio: 9,
+          vigenteDesde: HOY,
+        })
+        .expect(400);
+    });
+
+    it('una fecha con formato invalido responde 400', async () => {
+      const presentacionId = await sembrarPresentacion(
+        `${PREFIJO} FechaMala`,
+        '500 ml',
+      );
+
+      await request(app.getHttpServer())
+        .patch('/precios')
+        .set('Cookie', cookieGeneral)
+        .send({
+          presentacionId,
+          listaPrecioId: idLista1,
+          sucursalId: idTijuana,
+          precio: 9,
+          vigenteDesde: '24-08-2026',
+        })
+        .expect(400);
     });
   });
 });
