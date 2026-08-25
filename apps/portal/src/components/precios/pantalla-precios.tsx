@@ -18,6 +18,25 @@ interface PrecioCelda {
   precio: number;
 }
 
+/** El mismo Card/CardHeader/CardTitle que usa esta pantalla en sus tres
+ * estados sin matriz (General sin filtro, cargando, codigo sin resolver):
+ * evita repetir el marcado tres veces. */
+function TarjetaMensaje({ mensaje }: { mensaje: string }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Listas de Precios</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <p className="text-muted-foreground">{mensaje}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+const MENSAJE_ELIGE_SUCURSAL =
+  "Elige una sucursal en el filtro para ver y editar sus precios.";
+
 export function PantallaPrecios({ sucursal }: { sucursal: string | null }) {
   const { usuario, puede } = useAuth();
   const puedeGestionar = puede("precio.gestionar");
@@ -37,23 +56,21 @@ export function PantallaPrecios({ sucursal }: { sucursal: string | null }) {
     usuario?.sucursal ?? sucursales.find((s) => s.codigo === sucursal) ?? null;
 
   if (usuario !== null && usuario.sucursal === null && !sucursal) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Listas de Precios</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">
-            Elige una sucursal en el filtro para ver y editar sus precios.
-          </p>
-        </CardContent>
-      </Card>
-    );
+    return <TarjetaMensaje mensaje={MENSAJE_ELIGE_SUCURSAL} />;
   }
 
   if (!sucursalActual) {
-    // Sesion o lista de sucursales todavia cargando.
-    return null;
+    // Sesion o lista de sucursales todavia cargando: mismo shell que usa
+    // MatrizPrecios para su propio "Cargando...", asi la pantalla nunca se ve
+    // en blanco.
+    if (usuario === null || sucursales.length === 0) {
+      return <TarjetaMensaje mensaje="Cargando…" />;
+    }
+    // Ya cargo todo y el codigo pedido no resolvio a ninguna sucursal (URL
+    // vieja, sucursal desactivada, o alguien escribio el query param a mano):
+    // mismo mensaje que el caso de General sin filtro, en vez de un callejon
+    // sin salida en blanco.
+    return <TarjetaMensaje mensaje={MENSAJE_ELIGE_SUCURSAL} />;
   }
 
   return (
@@ -168,10 +185,14 @@ function MatrizPrecios({
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left text-muted-foreground">
-                <th className="py-2 font-medium">Producto</th>
-                <th className="py-2 font-medium">Presentación</th>
+                <th scope="col" className="py-2 font-medium">
+                  Producto
+                </th>
+                <th scope="col" className="py-2 font-medium">
+                  Presentación
+                </th>
                 {listas.map((lista) => (
-                  <th key={lista.id} className="py-2 font-medium">
+                  <th key={lista.id} scope="col" className="py-2 font-medium">
                     {lista.nombre}
                   </th>
                 ))}
@@ -181,7 +202,14 @@ function MatrizPrecios({
               {productos.flatMap((producto) =>
                 producto.presentaciones.map((presentacion) => (
                   <tr key={presentacion.id} className="border-b last:border-0">
-                    <td className="py-2">{producto.nombre}</td>
+                    <td className="py-2">
+                      {producto.nombre}
+                      {!producto.activo && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          Inactivo
+                        </span>
+                      )}
+                    </td>
                     <td className="py-2">{presentacion.volumen}</td>
                     {listas.map((lista) => (
                       <td key={lista.id} className="py-2">

@@ -204,10 +204,16 @@ describe('Precios (e2e)', () => {
         .set('Cookie', cookieSinPermiso)
         .expect(200);
 
-      const nombres = (res.body as ListaPrecioRespuesta[])
-        .map((l) => l.nombre)
-        .sort();
-      expect(nombres).toEqual(['Lista 1', 'Lista 2', 'Lista 3', 'Lista 4']);
+      // No exacta contra TODA la tabla lista_precio: cualquier otra suite
+      // que sembrara una lista adicional rompería esto sin relación con lo
+      // que aquí se prueba (misma clase de fragilidad cross-suite que ya se
+      // corrigió en otras partes de esta rama). Se afirman solo las dos
+      // propiedades que importan: las 4 activas están, Especial no.
+      const nombres = (res.body as ListaPrecioRespuesta[]).map((l) => l.nombre);
+      expect(nombres).toEqual(
+        expect.arrayContaining(['Lista 1', 'Lista 2', 'Lista 3', 'Lista 4']),
+      );
+      expect(nombres).not.toContain('Especial');
     });
 
     it('rechaza a quien no tiene sesion', async () => {
@@ -515,10 +521,15 @@ describe('Precios (e2e)', () => {
     });
 
     it('rechaza sin sesion', async () => {
+      const presentacionId = await sembrarPresentacion(
+        `${PREFIJO} SinSesion`,
+        '500 ml',
+      );
+
       await request(app.getHttpServer())
         .patch('/precios')
         .send({
-          presentacionId: idLista1,
+          presentacionId,
           listaPrecioId: idLista1,
           sucursalId: idTijuana,
           precio: 9,

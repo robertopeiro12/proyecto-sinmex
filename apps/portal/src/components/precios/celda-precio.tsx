@@ -53,15 +53,32 @@ export function CeldaPrecio({
       return;
     }
 
-    await enviar(async () => {
-      const actualizado = await actualizarPrecio({
-        presentacionId,
-        listaPrecioId,
-        sucursalId,
-        precio: numero,
-      });
-      alGuardar(actualizado.precio);
-    }, () => {});
+    // `accion` es SOLO la llamada a la API (mismo contrato que el resto de
+    // los formularios que usan este hook -- ver formulario-vehiculo.tsx,
+    // formulario-sucursal.tsx). `exito` se marca en `alTerminar`, que
+    // `useEnvioFormulario` tambien corre dentro de su try/catch, asi que
+    // sigue sin ser el lugar seguro para `alGuardar`: si `alGuardar`
+    // (el `setPrecios` del padre) fallara, ese try/catch lo confundiria con
+    // un fallo del PATCH. Por eso `alGuardar` se llama DESPUES de que
+    // `enviar()` ya resolvio, fuera de cualquier try/catch de este hook.
+    // `numero` (no `actualizado.precio`) es intencional: el backend
+    // devuelve el mismo valor que mandamos, sin releerlo de la base (ver el
+    // comentario de `upsert()` en precios.repository.ts), asi que no hace
+    // falta esperar la respuesta para saber que precio quedo.
+    let exito = false;
+    await enviar(
+      () =>
+        actualizarPrecio({
+          presentacionId,
+          listaPrecioId,
+          sucursalId,
+          precio: numero,
+        }),
+      () => {
+        exito = true;
+      },
+    );
+    if (exito) alGuardar(numero);
   }
 
   if (!editable) {
@@ -77,10 +94,14 @@ export function CeldaPrecio({
         min={0.01}
         step="0.01"
         placeholder="Sin precio"
+        aria-label="Precio"
         disabled={enviando}
         value={valor}
         onChange={(e) => setValor(e.target.value)}
         onBlur={() => void guardar()}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
         className="w-24 rounded-md border px-2 py-1 text-sm"
       />
       {error && <span className="text-xs text-destructive">{error}</span>}
