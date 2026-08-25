@@ -581,7 +581,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
       try {
         const res = await pull().expect(200);
         const precio = (res.body as RespuestaPull).catalogos.precios.find(
-          (p) => p.cliente_id === clienteId,
+          (p) =>
+            p.cliente_id === clienteId && p.presentacion_id === presentacionId,
         );
         expect(precio?.precio_centavos).toBe(1010);
       } finally {
