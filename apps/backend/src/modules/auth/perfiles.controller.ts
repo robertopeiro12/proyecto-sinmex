@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -44,5 +45,13 @@ export class PerfilesController {
     @Body() dto: EditarPerfilDto,
   ): Promise<PerfilResumen> {
     return this.perfiles.renombrar(id, dto.nombre);
+  }
+
+  @Delete(':id')
+  async darDeBaja(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ id: string }> {
+    await this.perfiles.darDeBaja(id);
+    return { id };
   }
 }

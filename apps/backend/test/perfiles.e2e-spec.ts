@@ -127,6 +127,14 @@ describe('Perfiles (e2e)', () => {
   });
 
   afterAll(async () => {
+    // Usuarios primero (FK a perfil), luego permisos y perfiles.
+    if (usuarioIds.length > 0) {
+      await db
+        .deleteFrom('sesion_refresh')
+        .where('usuario_id', 'in', usuarioIds)
+        .execute();
+      await db.deleteFrom('usuario').where('id', 'in', usuarioIds).execute();
+    }
     if (perfilIds.length > 0) {
       // perfil_permiso.perfil_id no tiene ON DELETE: hay que borrar las
       // asignaciones antes que el perfil o el FK truena.
@@ -135,13 +143,6 @@ describe('Perfiles (e2e)', () => {
         .where('perfil_id', 'in', perfilIds)
         .execute();
       await db.deleteFrom('perfil').where('id', 'in', perfilIds).execute();
-    }
-    if (usuarioIds.length > 0) {
-      await db
-        .deleteFrom('sesion_refresh')
-        .where('usuario_id', 'in', usuarioIds)
-        .execute();
-      await db.deleteFrom('usuario').where('id', 'in', usuarioIds).execute();
     }
     await app.close();
   });
@@ -309,6 +310,83 @@ describe('Perfiles (e2e)', () => {
         .set('Cookie', cookieConPermiso)
         .send({ nombre: 'Lo que sea' })
         .expect(400);
+    });
+  });
+
+  describe('DELETE /perfiles/:id', () => {
+    it('rechaza sin perfil.gestionar', async () => {
+      const id = await sembrarPerfil(`${PREFIJO} Baja sin permiso`);
+      await request(app.getHttpServer())
+        .delete(`/perfiles/${id}`)
+        .set('Cookie', cookieSinPermiso)
+        .expect(403);
+    });
+
+    it('da de baja un perfil sin usuarios asignados', async () => {
+      const id = await sembrarPerfil(`${PREFIJO} Baja limpia`);
+      await request(app.getHttpServer())
+        .delete(`/perfiles/${id}`)
+        .set('Cookie', cookieConPermiso)
+        .expect(200);
+
+      const enMatriz = await request(app.getHttpServer())
+        .get('/perfiles')
+        .set('Cookie', cookieConPermiso)
+        .expect(200);
+      const sigueAhi = (
+        enMatriz.body as { perfiles: { id: string }[] }
+      ).perfiles.some((p) => p.id === id);
+      expect(sigueAhi).toBe(false);
+    });
+
+    it('rechaza dar de baja al perfil maestro', async () => {
+      await request(app.getHttpServer())
+        .delete(`/perfiles/${idMaestro}`)
+        .set('Cookie', cookieConPermiso)
+        .expect(409);
+    });
+
+    it('rechaza la baja si hay un usuario activo con ese perfil, y la permite tras reasignarlo', async () => {
+      const id = await sembrarPerfil(`${PREFIJO} Con usuario`);
+      const loginUsuarioDePrueba = `e2e-perf-usr-${SUFIJO}`;
+      const hash = await app.get(PasswordService).hashear(PASSWORD);
+      const { id: usuarioDePruebaId } = await db
+        .insertInto('usuario')
+        .values({
+          login: loginUsuarioDePrueba,
+          nombre: loginUsuarioDePrueba,
+          password_hash: hash,
+          perfil_id: id,
+          sucursal_id: null,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      usuarioIds.push(usuarioDePruebaId);
+
+      await request(app.getHttpServer())
+        .delete(`/perfiles/${id}`)
+        .set('Cookie', cookieConPermiso)
+        .expect(409);
+
+      // Reasignar (a mano, como haria un admin sin pantalla de Usuarios
+      // todavia -- T-13) y reintentar: ahora si pasa.
+      await db
+        .updateTable('usuario')
+        .set({ perfil_id: idMaestro })
+        .where('id', '=', usuarioDePruebaId)
+        .execute();
+
+      await request(app.getHttpServer())
+        .delete(`/perfiles/${id}`)
+        .set('Cookie', cookieConPermiso)
+        .expect(200);
+    });
+
+    it('un id que no existe responde 404', async () => {
+      await request(app.getHttpServer())
+        .delete('/perfiles/00000000-0000-0000-0000-000000000000')
+        .set('Cookie', cookieConPermiso)
+        .expect(404);
     });
   });
 });

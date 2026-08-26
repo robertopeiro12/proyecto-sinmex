@@ -103,4 +103,22 @@ export class PerfilesRepository {
       .returning(['id', 'nombre'])
       .executeTakeFirstOrThrow();
   }
+
+  async contarUsuariosActivos(perfilId: string): Promise<number> {
+    const fila = await this.db
+      .selectFrom('usuario')
+      .select((eb) => eb.fn.countAll<string>().as('total'))
+      .where('perfil_id', '=', perfilId)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirstOrThrow();
+    return Number(fila.total);
+  }
+
+  async darDeBaja(id: string): Promise<void> {
+    await this.db
+      .updateTable('perfil')
+      .set({ deleted_at: new Date() })
+      .where('id', '=', id)
+      .execute();
+  }
 }

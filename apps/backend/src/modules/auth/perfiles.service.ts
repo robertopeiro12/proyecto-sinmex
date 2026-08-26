@@ -100,6 +100,20 @@ export class PerfilesService {
     }
   }
 
+  async darDeBaja(id: string): Promise<void> {
+    const perfil = await this.buscarActivoOFallar(id);
+    if (esMaestro(perfil.nombre)) {
+      throw new ConflictException('El perfil maestro no se puede dar de baja.');
+    }
+    const usuariosActivos = await this.repo.contarUsuariosActivos(id);
+    if (usuariosActivos > 0) {
+      throw new ConflictException(
+        'Hay usuarios activos con este perfil. Reasígnalos antes de darlo de baja.',
+      );
+    }
+    await this.repo.darDeBaja(id);
+  }
+
   /**
    * Compartido por renombrar/dar de baja/togglear (Tasks 4-6): las tres
    * operaciones necesitan el nombre ACTUAL del perfil para decidir si es el
