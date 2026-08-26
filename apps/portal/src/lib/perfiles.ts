@@ -26,15 +26,26 @@ export function obtenerPerfiles(): Promise<MatrizPerfiles> {
   return apiFetch<MatrizPerfiles>("/perfiles");
 }
 
-export function crearPerfil(nombre: string): Promise<Perfil> {
-  return apiFetch<Perfil>("/perfiles", {
+// POST /perfiles y PATCH /perfiles/:id devuelven PerfilResumen ({id, nombre}
+// nada mas -- ver perfiles.controller.ts), no la forma completa de `Perfil`
+// (que trae esMaestro/permisos, solo presente en la respuesta de GET
+// /perfiles). Tipar estas dos como Promise<Perfil> dejaria a un futuro
+// caller leer `.esMaestro`/`.permisos` de un perfil recien creado o
+// renombrado sin error de compilacion, y obtener `undefined` en runtime.
+export function crearPerfil(
+  nombre: string,
+): Promise<{ id: string; nombre: string }> {
+  return apiFetch("/perfiles", {
     method: "POST",
     body: JSON.stringify({ nombre }),
   });
 }
 
-export function renombrarPerfil(id: string, nombre: string): Promise<Perfil> {
-  return apiFetch<Perfil>(`/perfiles/${id}`, {
+export function renombrarPerfil(
+  id: string,
+  nombre: string,
+): Promise<{ id: string; nombre: string }> {
+  return apiFetch(`/perfiles/${id}`, {
     method: "PATCH",
     body: JSON.stringify({ nombre }),
   });
