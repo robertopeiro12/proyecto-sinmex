@@ -22,8 +22,8 @@ Ver `10-Dominio/Entidades/Perfil.md` en el vault.
 ### Dentro
 
 1. Backend: `GET /perfiles` (perfiles + su matriz + catálogo de permisos, todo en una respuesta),
-   `POST /perfiles` (alta), `PATCH /perfiles/:id` (renombrar y/o dar de baja), `PATCH
-   /perfiles/:id/permisos` (togglear una celda perfil↔permiso).
+   `POST /perfiles` (alta), `PATCH /perfiles/:id` (renombrar), `DELETE /perfiles/:id` (baja
+   lógica), `PATCH /perfiles/:id/permisos` (togglear una celda perfil↔permiso).
 2. Permiso nuevo `perfil.gestionar` (grupo `General`), sembrado por migración. Exigido en **los
    cuatro** endpoints (a diferencia de precios/productos/vehículos, aquí ni siquiera la lectura es
    pública — ver D3).
@@ -68,7 +68,7 @@ riesgo que se puede cerrar sin tocarlo: `PerfilesService` reimporta `esMaestro` 
 lo duplica) y lo usa para rechazar, con `409`, cualquier intento de:
 
 - Renombrar el perfil maestro (`PATCH /perfiles/:id` con `nombre` cuando `esMaestro(actual.nombre)`).
-- Darlo de baja (`PATCH /perfiles/:id` con `activo: false` en las mismas condiciones).
+- Darlo de baja (`DELETE /perfiles/:id` en las mismas condiciones).
 - Togglear una celda suya (`PATCH /perfiles/:id/permisos`) — sería una escritura muerta: el maestro
   nunca consulta `perfil_permiso` (`permisos.repository.ts:43-44` corta antes), así que una fila ahí
   no haría nada. Rechazarlo evita el dato fantasma en vez de dejarlo pasar en silencio.
@@ -90,13 +90,14 @@ disparar un `GET` que sabe de antemano que va a volver `403`.
 
 ### D4 — Dar de baja un perfil se bloquea si tiene usuarios activos asignados
 
-`usuario.perfil_id` no tiene `on delete` especial y la baja de un perfil es lógica (`deleted_at`),
-así que Postgres no impide nada por sí solo — y `permisosDe()` filtra `perfil.deleted_at is null`
-en su join (`permisos.repository.ts:29`), así que un usuario con un perfil dado de baja pasaría a
-tener **cero permisos** sin ningún aviso. `PerfilesService.darDeBaja()` cuenta primero
-`usuario` activos (`deleted_at is null`) con ese `perfil_id`; si hay al menos uno, `409` antes de
-tocar la fila. Hay que reasignarlos primero — ese flujo de reasignación no tiene pantalla propia
-hasta T-13, así que por ahora significa hacerlo a mano en la base si hiciera falta.
+`usuario.perfil_id` no tiene `on delete` especial y la baja de un perfil es lógica (`deleted_at`;
+`perfil` no tiene columna `activo` como `vehiculo`/`producto`/`sucursal` — ver Modelo de datos), así
+que Postgres no impide nada por sí solo — y `permisosDe()` filtra `perfil.deleted_at is null` en su
+join (`permisos.repository.ts:29`), así que un usuario con un perfil dado de baja pasaría a tener
+**cero permisos** sin ningún aviso. `PerfilesService.darDeBaja()` (`DELETE /perfiles/:id`) cuenta
+primero `usuario` activos (`deleted_at is null`) con ese `perfil_id`; si hay al menos uno, `409`
+antes de tocar la fila. Hay que reasignarlos primero — ese flujo de reasignación no tiene pantalla
+propia hasta T-13, así que por ahora significa hacerlo a mano en la base si hiciera falta.
 
 ### D5 — Orientación de la matriz: permisos en filas, perfiles en columnas
 
@@ -173,7 +174,8 @@ Todos bajo `@RequierePermiso('perfil.gestionar')` (D3).
 |---|---|---|---|
 | `GET` | `/perfiles` | — | `{ permisos: PermisoDto[], perfiles: PerfilDto[] }` — ver forma abajo. Una sola llamada, para que la matriz se pinte de una sin condiciones de carrera entre catálogo y asignaciones. |
 | `POST` | `/perfiles` | `{ nombre }` | Alta sin permisos (D7). `409` si el nombre ya existe (unique de `perfil.nombre`, mismo criterio `esDuplicado()`/`23505` que T-09/T-10/T-11). |
-| `PATCH` | `/perfiles/:id` | `{ nombre?, activo? }` | Al menos uno de los dos. `409` si `id` es el maestro y se manda `nombre` o `activo: false` (D2). `409` si `activo: false` y hay usuarios activos con ese perfil (D4). `409` si el nuevo `nombre` ya existe. |
+| `PATCH` | `/perfiles/:id` | `{ nombre }` | Solo renombra. `409` si `id` es el maestro (D2). `409` si el nuevo `nombre` ya existe. |
+| `DELETE` | `/perfiles/:id` | — | Baja lógica (`deleted_at`; `perfil` no tiene columna `activo`, ver Modelo de datos). `409` si `id` es el maestro (D2). `409` si hay usuarios activos con ese perfil (D4). Primer `@Delete` del backend — hasta ahora toda baja de otras entidades viajaba como `PATCH { activo: false }`, pero `perfil` no tiene esa columna que togglear. |
 | `PATCH` | `/perfiles/:id/permisos` | `{ permisoId, habilitado }` | Upsert (si `habilitado: true`) o baja lógica (si `false`) de la fila en `perfil_permiso`, sobre el unique `(perfil_id, permiso_id)` — mismo criterio "la base decide" que T-09/T-10/T-11/T-14/T-18. `409` si `id` es el maestro (D2). `404` si `permisoId` no existe. |
 
 ### Forma de `GET /perfiles`
@@ -201,11 +203,11 @@ sesión. El portal usa esa lista para pintar su columna toda marcada y deshabili
 
 | Archivo | Qué hace |
 |---|---|
-| `perfiles.repository.ts` | `listarConPermisos()` (el `GET` completo, con el catálogo de permisos y el join a `perfil_permiso`), `crear(nombre)`, `editar(id, cambios)`, `contarUsuariosActivos(perfilId)`, `togglePermiso(perfilId, permisoId, habilitado)` (upsert/baja lógica sobre el unique). |
-| `perfiles.service.ts` | Las reglas de D2/D4: reimporta `esMaestro` de `permisos.ts`, rechaza operaciones sobre el maestro, cuenta usuarios activos antes de dar de baja. Mapea `23505` a `409` (nombre duplicado) y `23503`/`buscar()` vacío a `404` (permiso inexistente). |
-| `perfiles.controller.ts` | Los cuatro endpoints. |
+| `perfiles.repository.ts` | `catalogoPermisos()`, `listarPerfiles()`, `listarAsignaciones()` (las tres piezas del `GET`), `crear(nombre)`, `buscarPorId(id)`, `renombrar(id, nombre)`, `contarUsuariosActivos(perfilId)`, `darDeBaja(id)`, `togglePermiso(perfilId, permisoId, habilitado)` (upsert/baja lógica sobre el unique). |
+| `perfiles.service.ts` | Las reglas de D2/D4: reimporta `esMaestro` de `permisos.ts`, rechaza operaciones sobre el maestro, cuenta usuarios activos antes de dar de baja. Mapea `23505` a `409` (nombre duplicado) y `buscar()` vacío a `404` (perfil/permiso inexistente). |
+| `perfiles.controller.ts` | Los cinco endpoints. |
 | `dto/crear-perfil.dto.ts` | `nombre` (string, 1–80, recortado como `EditarVehiculoDto`). |
-| `dto/editar-perfil.dto.ts` | `nombre?`, `activo?` — mismo patrón `IsOptional` en ambos que `EditarVehiculoDto`; el servicio rechaza `400` si ninguno llega. |
+| `dto/editar-perfil.dto.ts` | `nombre` (string, 1–80, recortado; único campo — a diferencia de `EditarVehiculoDto`, aquí no hay un segundo campo opcional porque la baja es su propio `DELETE`). |
 | `dto/actualizar-permiso-perfil.dto.ts` | `permisoId` (uuid), `habilitado` (boolean). |
 | `auth.module.ts` | Registra `PerfilesController`, `PerfilesService`, `PerfilesRepository`. |
 
@@ -225,7 +227,7 @@ sesión. El portal usa esa lista para pintar su columna toda marcada y deshabili
 |---|---|
 | **pgTAP** | El permiso `perfil.gestionar` queda sembrado · el unique `(perfil_id, permiso_id)` rechaza una fila duplicada. |
 | **Unitarias** | `PerfilesService`: rechaza renombrar/dar de baja/togglear sobre el perfil cuyo nombre es `'Administrador General'` · rechaza la baja cuando `contarUsuariosActivos` devuelve > 0 · la permite cuando devuelve 0. |
-| **e2e** (`perfiles.e2e-spec.ts`) | `GET /perfiles` sin `perfil.gestionar` → `403` · con el permiso, devuelve catálogo + perfiles con sus claves · `POST` crea un perfil sin permisos · `POST` con nombre repetido → `409` · `PATCH .../permisos` togglea una celda y una segunda llamada la revierte · `PATCH` sobre el maestro (nombre, baja, o permiso) → `409` en los tres casos · `PATCH` de baja con un usuario activo asignado → `409`; sin usuarios → pasa. |
+| **e2e** (`perfiles.e2e-spec.ts`) | `GET /perfiles` sin `perfil.gestionar` → `403` · con el permiso, devuelve catálogo + perfiles con sus claves · `POST` crea un perfil sin permisos · `POST` con nombre repetido → `409` · `PATCH .../permisos` togglea una celda y una segunda llamada la revierte · `PATCH` (renombrar) y `DELETE` sobre el maestro → `409` en los dos casos, y `PATCH .../permisos` sobre el maestro → `409` también · `DELETE` con un usuario activo asignado → `409`; sin usuarios → `200`/`204` y el perfil deja de aparecer en `GET`. |
 | **Portal** | Sin pruebas de pantalla propias, mismo gap conocido del resto del portal. |
 
 ### Verificación manual (Playwright, Postgres **local**)
