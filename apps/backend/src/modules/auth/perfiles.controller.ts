@@ -1,6 +1,8 @@
-import { Controller, Get } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
 import { RequierePermiso } from './requiere-permiso.decorator';
 import { PerfilesService, type MatrizPerfiles } from './perfiles.service';
+import { CrearPerfilDto } from './dto/crear-perfil.dto';
+import type { PerfilResumen } from './perfiles.repository';
 
 // Sin @Publico(): el guard global de app.module.ts protege todo por defecto.
 // A diferencia de sucursales/productos/vehiculos/precios, el decorador va a
@@ -18,5 +20,11 @@ export class PerfilesController {
   @Get()
   async obtener(): Promise<MatrizPerfiles> {
     return this.perfiles.obtenerMatriz();
+  }
+
+  @Post()
+  @HttpCode(201)
+  async crear(@Body() dto: CrearPerfilDto): Promise<PerfilResumen> {
+    return this.perfiles.crear(dto.nombre);
   }
 }

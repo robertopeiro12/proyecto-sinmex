@@ -86,4 +86,12 @@ export class PerfilesRepository {
       .where('deleted_at', 'is', null)
       .executeTakeFirst();
   }
+
+  async crear(nombre: string): Promise<PerfilResumen> {
+    return this.db
+      .insertInto('perfil')
+      .values({ nombre })
+      .returning(['id', 'nombre'])
+      .executeTakeFirstOrThrow();
+  }
 }

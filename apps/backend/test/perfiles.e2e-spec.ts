@@ -201,4 +201,59 @@ describe('Perfiles (e2e)', () => {
       expect(propio?.permisos).toEqual(['perfil.gestionar']);
     });
   });
+
+  describe('POST /perfiles', () => {
+    it('rechaza sin perfil.gestionar', async () => {
+      await request(app.getHttpServer())
+        .post('/perfiles')
+        .set('Cookie', cookieSinPermiso)
+        .send({ nombre: `${PREFIJO} Sin permiso` })
+        .expect(403);
+    });
+
+    it('crea un perfil sin ningun permiso asignado', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/perfiles')
+        .set('Cookie', cookieConPermiso)
+        .send({ nombre: `${PREFIJO} Nuevo` })
+        .expect(201);
+
+      const creado = res.body as { id: string; nombre: string };
+      perfilIds.push(creado.id);
+      expect(creado.nombre).toBe(`${PREFIJO} Nuevo`);
+
+      const enMatriz = await request(app.getHttpServer())
+        .get('/perfiles')
+        .set('Cookie', cookieConPermiso)
+        .expect(200);
+      const propio = (
+        enMatriz.body as { perfiles: { id: string; permisos: string[] }[] }
+      ).perfiles.find((p) => p.id === creado.id);
+      expect(propio?.permisos).toEqual([]);
+    });
+
+    it('rechaza un nombre repetido', async () => {
+      const nombre = `${PREFIJO} Repetido`;
+      const primero = await request(app.getHttpServer())
+        .post('/perfiles')
+        .set('Cookie', cookieConPermiso)
+        .send({ nombre })
+        .expect(201);
+      perfilIds.push((primero.body as { id: string }).id);
+
+      await request(app.getHttpServer())
+        .post('/perfiles')
+        .set('Cookie', cookieConPermiso)
+        .send({ nombre })
+        .expect(409);
+    });
+
+    it('rechaza un nombre vacio', async () => {
+      await request(app.getHttpServer())
+        .post('/perfiles')
+        .set('Cookie', cookieConPermiso)
+        .send({ nombre: '   ' })
+        .expect(400);
+    });
+  });
 });
