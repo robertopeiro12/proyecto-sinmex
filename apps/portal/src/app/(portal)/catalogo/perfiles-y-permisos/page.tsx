@@ -1,5 +1,5 @@
-import { Placeholder } from "@/components/layout/placeholder";
+import { PantallaPerfiles } from "@/components/perfiles/pantalla-perfiles";
 
 export default function Page() {
-  return <Placeholder title="Perfiles y Permisos" />;
+  return <PantallaPerfiles />;
 }

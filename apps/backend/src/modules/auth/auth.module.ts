@@ -6,6 +6,9 @@ import { AuthService } from './auth.service';
 import { AuthVendedorController } from './auth-vendedor.controller';
 import { AuthVendedorService } from './auth-vendedor.service';
 import { PasswordService } from './password.service';
+import { PerfilesController } from './perfiles.controller';
+import { PerfilesRepository } from './perfiles.repository';
+import { PerfilesService } from './perfiles.service';
 import { PermisosRepository } from './permisos.repository';
 import { SesionRepository } from './sesion.repository';
 import { SesionVendedorRepository } from './sesion-vendedor.repository';
@@ -34,7 +37,7 @@ import { TokenVendedorService } from './token-vendedor.service';
       },
     }),
   ],
-  controllers: [AuthController, AuthVendedorController],
+  controllers: [AuthController, AuthVendedorController, PerfilesController],
   providers: [
     AuthService,
     AuthVendedorService,
@@ -44,6 +47,8 @@ import { TokenVendedorService } from './token-vendedor.service';
     SesionRepository,
     SesionVendedorRepository,
     PermisosRepository,
+    PerfilesRepository,
+    PerfilesService,
   ],
   // TokenVendedorService y PermisosRepository se exportan porque los inyectan
   // los guards que app.module.ts registra como APP_GUARD, y por tanto se
