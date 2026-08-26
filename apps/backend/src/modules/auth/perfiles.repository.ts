@@ -42,9 +42,19 @@ export class PerfilesRepository {
       .where('deleted_at', 'is', null)
       .execute();
 
+    // Un grupo fuera de ORDEN_GRUPOS (indexOf = -1) va al FINAL, no al
+    // principio: `indexOf` a secas ordenaria un grupo desconocido primero,
+    // lo que es enganoso. No es alcanzable con el catalogo de hoy (los 25
+    // permisos caen en uno de los 4 grupos conocidos), pero el proximo
+    // ticket que agregue una categoria nueva no tiene por que abrir este
+    // archivo para no romper el orden.
+    const indice = (grupo: string) => {
+      const i = ORDEN_GRUPOS.indexOf(grupo);
+      return i === -1 ? ORDEN_GRUPOS.length : i;
+    };
+
     return filas.sort((a, b) => {
-      const diferenciaGrupo =
-        ORDEN_GRUPOS.indexOf(a.grupo) - ORDEN_GRUPOS.indexOf(b.grupo);
+      const diferenciaGrupo = indice(a.grupo) - indice(b.grupo);
       return diferenciaGrupo !== 0
         ? diferenciaGrupo
         : a.clave.localeCompare(b.clave);

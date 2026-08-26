@@ -8,6 +8,8 @@ interface Props {
   permisoId: string;
   habilitadoInicial: boolean;
   editable: boolean;
+  /** Identifica la celda para lectores de pantalla: "<permiso> · <perfil>". */
+  etiqueta: string;
 }
 
 /**
@@ -21,6 +23,7 @@ export function CeldaPermiso({
   permisoId,
   habilitadoInicial,
   editable,
+  etiqueta,
 }: Props) {
   const [habilitado, setHabilitado] = useState(habilitadoInicial);
   const [guardando, setGuardando] = useState(false);
@@ -46,7 +49,7 @@ export function CeldaPermiso({
         type="checkbox"
         checked={habilitado}
         disabled
-        aria-label="Permiso (perfil maestro, siempre habilitado)"
+        aria-label={`${etiqueta} (perfil maestro, siempre habilitado)`}
       />
     );
   }
@@ -55,7 +58,7 @@ export function CeldaPermiso({
     <div className="flex items-center gap-1">
       <input
         type="checkbox"
-        aria-label="Permiso"
+        aria-label={etiqueta}
         checked={habilitado}
         disabled={guardando}
         onChange={(e) => void alCambiar(e.target.checked)}

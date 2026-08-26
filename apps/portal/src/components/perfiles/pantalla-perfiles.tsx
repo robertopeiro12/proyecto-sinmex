@@ -93,7 +93,15 @@ function Matriz() {
     return <TarjetaMensaje mensaje="Cargando…" />;
   }
 
-  const grupos = ORDEN_GRUPOS.filter((g) => datos.permisos.some((p) => p.grupo === g));
+  // Un permiso con un grupo fuera de ORDEN_GRUPOS debe seguir apareciendo en
+  // la matriz aunque no tenga posicion fija: si se filtra, ese permiso nunca
+  // se renderiza como fila y ningun administrador puede otorgarlo, sin que
+  // nada avise del problema.
+  const gruposConocidos = ORDEN_GRUPOS.filter((g) => datos.permisos.some((p) => p.grupo === g));
+  const gruposDesconocidos = [...new Set(datos.permisos.map((p) => p.grupo))].filter(
+    (g) => !ORDEN_GRUPOS.includes(g),
+  );
+  const grupos = [...gruposConocidos, ...gruposDesconocidos];
   const columnas = datos.perfiles.length + 2; // Permiso + N perfiles + alta
 
   return (
@@ -146,7 +154,9 @@ function Matriz() {
                     .filter((p) => p.grupo === grupo)
                     .map((permiso) => (
                       <tr key={permiso.id} className="border-b last:border-0">
-                        <td className="py-2">{permiso.descripcion ?? permiso.clave}</td>
+                        <th scope="row" className="py-2 text-left font-normal">
+                          {permiso.descripcion ?? permiso.clave}
+                        </th>
                         {datos.perfiles.map((perfil) => (
                           <td key={perfil.id} className="py-2">
                             <CeldaPermiso
@@ -154,6 +164,7 @@ function Matriz() {
                               permisoId={permiso.id}
                               habilitadoInicial={perfil.permisos.includes(permiso.clave)}
                               editable={!perfil.esMaestro}
+                              etiqueta={`${permiso.descripcion ?? permiso.clave} · ${perfil.nombre}`}
                             />
                           </td>
                         ))}
