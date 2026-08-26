@@ -256,4 +256,59 @@ describe('Perfiles (e2e)', () => {
         .expect(400);
     });
   });
+
+  describe('PATCH /perfiles/:id', () => {
+    it('rechaza sin perfil.gestionar', async () => {
+      const id = await sembrarPerfil(`${PREFIJO} Renombrar sin permiso`);
+      await request(app.getHttpServer())
+        .patch(`/perfiles/${id}`)
+        .set('Cookie', cookieSinPermiso)
+        .send({ nombre: 'Otro nombre' })
+        .expect(403);
+    });
+
+    it('renombra un perfil normal', async () => {
+      const id = await sembrarPerfil(`${PREFIJO} Original`);
+      const res = await request(app.getHttpServer())
+        .patch(`/perfiles/${id}`)
+        .set('Cookie', cookieConPermiso)
+        .send({ nombre: `${PREFIJO} Renombrado` })
+        .expect(200);
+
+      expect((res.body as { nombre: string }).nombre).toBe(
+        `${PREFIJO} Renombrado`,
+      );
+    });
+
+    it('rechaza renombrar al perfil maestro', async () => {
+      await request(app.getHttpServer())
+        .patch(`/perfiles/${idMaestro}`)
+        .set('Cookie', cookieConPermiso)
+        .send({ nombre: 'Ya no soy el maestro' })
+        .expect(409);
+
+      const fila = await db
+        .selectFrom('perfil')
+        .select('nombre')
+        .where('id', '=', idMaestro)
+        .executeTakeFirstOrThrow();
+      expect(fila.nombre).toBe('Administrador General');
+    });
+
+    it('un id que no existe responde 404', async () => {
+      await request(app.getHttpServer())
+        .patch('/perfiles/00000000-0000-0000-0000-000000000000')
+        .set('Cookie', cookieConPermiso)
+        .send({ nombre: 'Lo que sea' })
+        .expect(404);
+    });
+
+    it('un id mal formado responde 400, no 500', async () => {
+      await request(app.getHttpServer())
+        .patch('/perfiles/no-soy-un-uuid')
+        .set('Cookie', cookieConPermiso)
+        .send({ nombre: 'Lo que sea' })
+        .expect(400);
+    });
+  });
 });

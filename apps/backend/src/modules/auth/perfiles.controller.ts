@@ -1,7 +1,17 @@
-import { Body, Controller, Get, HttpCode, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+} from '@nestjs/common';
 import { RequierePermiso } from './requiere-permiso.decorator';
 import { PerfilesService, type MatrizPerfiles } from './perfiles.service';
 import { CrearPerfilDto } from './dto/crear-perfil.dto';
+import { EditarPerfilDto } from './dto/editar-perfil.dto';
 import type { PerfilResumen } from './perfiles.repository';
 
 // Sin @Publico(): el guard global de app.module.ts protege todo por defecto.
@@ -26,5 +36,13 @@ export class PerfilesController {
   @HttpCode(201)
   async crear(@Body() dto: CrearPerfilDto): Promise<PerfilResumen> {
     return this.perfiles.crear(dto.nombre);
+  }
+
+  @Patch(':id')
+  async renombrar(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: EditarPerfilDto,
+  ): Promise<PerfilResumen> {
+    return this.perfiles.renombrar(id, dto.nombre);
   }
 }

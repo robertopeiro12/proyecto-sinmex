@@ -94,4 +94,13 @@ export class PerfilesRepository {
       .returning(['id', 'nombre'])
       .executeTakeFirstOrThrow();
   }
+
+  async renombrar(id: string, nombre: string): Promise<PerfilResumen> {
+    return this.db
+      .updateTable('perfil')
+      .set({ nombre })
+      .where('id', '=', id)
+      .returning(['id', 'nombre'])
+      .executeTakeFirstOrThrow();
+  }
 }
