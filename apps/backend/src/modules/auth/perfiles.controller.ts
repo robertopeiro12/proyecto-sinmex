@@ -13,6 +13,7 @@ import { RequierePermiso } from './requiere-permiso.decorator';
 import { PerfilesService, type MatrizPerfiles } from './perfiles.service';
 import { CrearPerfilDto } from './dto/crear-perfil.dto';
 import { EditarPerfilDto } from './dto/editar-perfil.dto';
+import { ActualizarPermisoPerfilDto } from './dto/actualizar-permiso-perfil.dto';
 import type { PerfilResumen } from './perfiles.repository';
 
 // Sin @Publico(): el guard global de app.module.ts protege todo por defecto.
@@ -53,5 +54,18 @@ export class PerfilesController {
   ): Promise<{ id: string }> {
     await this.perfiles.darDeBaja(id);
     return { id };
+  }
+
+  @Patch(':id/permisos')
+  async togglePermiso(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ActualizarPermisoPerfilDto,
+  ): Promise<{ perfilId: string; permisoId: string; habilitado: boolean }> {
+    await this.perfiles.togglePermiso(id, dto.permisoId, dto.habilitado);
+    return {
+      perfilId: id,
+      permisoId: dto.permisoId,
+      habilitado: dto.habilitado,
+    };
   }
 }

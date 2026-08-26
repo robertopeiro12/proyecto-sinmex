@@ -121,4 +121,47 @@ export class PerfilesRepository {
       .where('id', '=', id)
       .execute();
   }
+
+  async existePermiso(id: string): Promise<boolean> {
+    const fila = await this.db
+      .selectFrom('permiso')
+      .select('id')
+      .where('id', '=', id)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    return fila !== undefined;
+  }
+
+  /**
+   * `habilitado: true` -> upsert sobre el unique `(perfil_id, permiso_id)`
+   * (T-05): si la fila no existia, la crea; si existia dada de baja (D del
+   * spec de T-18, mismo criterio), la revive limpiando `deleted_at`.
+   * `habilitado: false` -> baja logica de la fila si existe; si nunca
+   * existio, no hay nada que hacer (el permiso ya esta "apagado" por
+   * ausencia, que es el mismo estado final).
+   */
+  async togglePermiso(
+    perfilId: string,
+    permisoId: string,
+    habilitado: boolean,
+  ): Promise<void> {
+    if (habilitado) {
+      await this.db
+        .insertInto('perfil_permiso')
+        .values({ perfil_id: perfilId, permiso_id: permisoId })
+        .onConflict((oc) =>
+          oc
+            .columns(['perfil_id', 'permiso_id'])
+            .doUpdateSet({ deleted_at: null }),
+        )
+        .execute();
+    } else {
+      await this.db
+        .updateTable('perfil_permiso')
+        .set({ deleted_at: new Date() })
+        .where('perfil_id', '=', perfilId)
+        .where('permiso_id', '=', permisoId)
+        .execute();
+    }
+  }
 }

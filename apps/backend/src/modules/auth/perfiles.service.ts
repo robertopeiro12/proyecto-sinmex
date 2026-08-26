@@ -114,6 +114,23 @@ export class PerfilesService {
     await this.repo.darDeBaja(id);
   }
 
+  async togglePermiso(
+    perfilId: string,
+    permisoId: string,
+    habilitado: boolean,
+  ): Promise<void> {
+    const perfil = await this.buscarActivoOFallar(perfilId);
+    if (esMaestro(perfil.nombre)) {
+      throw new ConflictException(
+        'El perfil maestro ya tiene todos los permisos; no se administra por celda.',
+      );
+    }
+    if (!(await this.repo.existePermiso(permisoId))) {
+      throw new NotFoundException('Ese permiso no existe.');
+    }
+    await this.repo.togglePermiso(perfilId, permisoId, habilitado);
+  }
+
   /**
    * Compartido por renombrar/dar de baja/togglear (Tasks 4-6): las tres
    * operaciones necesitan el nombre ACTUAL del perfil para decidir si es el

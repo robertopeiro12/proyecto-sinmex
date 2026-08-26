@@ -389,4 +389,101 @@ describe('Perfiles (e2e)', () => {
         .expect(404);
     });
   });
+
+  describe('PATCH /perfiles/:id/permisos', () => {
+    it('rechaza sin perfil.gestionar', async () => {
+      const id = await sembrarPerfil(`${PREFIJO} Toggle sin permiso`);
+      await request(app.getHttpServer())
+        .patch(`/perfiles/${id}/permisos`)
+        .set('Cookie', cookieSinPermiso)
+        .send({ permisoId: idPermisoGestionar, habilitado: true })
+        .expect(403);
+    });
+
+    it('habilita una celda y una segunda llamada la revierte', async () => {
+      const id = await sembrarPerfil(`${PREFIJO} Toggle`);
+
+      await request(app.getHttpServer())
+        .patch(`/perfiles/${id}/permisos`)
+        .set('Cookie', cookieConPermiso)
+        .send({ permisoId: idPermisoGestionar, habilitado: true })
+        .expect(200);
+
+      let matriz = await request(app.getHttpServer())
+        .get('/perfiles')
+        .set('Cookie', cookieConPermiso)
+        .expect(200);
+      let propio = (
+        matriz.body as { perfiles: { id: string; permisos: string[] }[] }
+      ).perfiles.find((p) => p.id === id);
+      expect(propio?.permisos).toEqual(['perfil.gestionar']);
+
+      await request(app.getHttpServer())
+        .patch(`/perfiles/${id}/permisos`)
+        .set('Cookie', cookieConPermiso)
+        .send({ permisoId: idPermisoGestionar, habilitado: false })
+        .expect(200);
+
+      matriz = await request(app.getHttpServer())
+        .get('/perfiles')
+        .set('Cookie', cookieConPermiso)
+        .expect(200);
+      propio = (
+        matriz.body as { perfiles: { id: string; permisos: string[] }[] }
+      ).perfiles.find((p) => p.id === id);
+      expect(propio?.permisos).toEqual([]);
+    });
+
+    it('habilitar dos veces seguidas no duplica la fila', async () => {
+      const id = await sembrarPerfil(`${PREFIJO} Doble toggle`);
+
+      await request(app.getHttpServer())
+        .patch(`/perfiles/${id}/permisos`)
+        .set('Cookie', cookieConPermiso)
+        .send({ permisoId: idPermisoGestionar, habilitado: true })
+        .expect(200);
+      await request(app.getHttpServer())
+        .patch(`/perfiles/${id}/permisos`)
+        .set('Cookie', cookieConPermiso)
+        .send({ permisoId: idPermisoGestionar, habilitado: true })
+        .expect(200);
+
+      const filas = await db
+        .selectFrom('perfil_permiso')
+        .select('id')
+        .where('perfil_id', '=', id)
+        .where('permiso_id', '=', idPermisoGestionar)
+        .execute();
+      expect(filas).toHaveLength(1);
+    });
+
+    it('rechaza togglear una celda del maestro', async () => {
+      await request(app.getHttpServer())
+        .patch(`/perfiles/${idMaestro}/permisos`)
+        .set('Cookie', cookieConPermiso)
+        .send({ permisoId: idPermisoGestionar, habilitado: true })
+        .expect(409);
+    });
+
+    it('un permisoId que no existe responde 404', async () => {
+      const id = await sembrarPerfil(`${PREFIJO} Permiso inexistente`);
+      await request(app.getHttpServer())
+        .patch(`/perfiles/${id}/permisos`)
+        .set('Cookie', cookieConPermiso)
+        .send({
+          permisoId: '00000000-0000-0000-0000-000000000000',
+          habilitado: true,
+        })
+        .expect(404);
+    });
+
+    it('un permisoId mal formado responde 400, no 500', async () => {
+      const id = await sembrarPerfil(`${PREFIJO} Id malformado`);
+      await request(app.getHttpServer())
+        .patch(`/perfiles/${id}/permisos`)
+        .set('Cookie', cookieConPermiso)
+        .send({ permisoId: 'no-soy-un-uuid', habilitado: true })
+        .expect(400);
+    });
+  });
 });
