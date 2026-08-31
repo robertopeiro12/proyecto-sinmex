@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { ClientesController } from './clientes.controller';
+import { ClientesRepository } from './clientes.repository';
+import { ClientesService } from './clientes.service';
 import { ListasPrecioController } from './listas-precio.controller';
 import { PreciosController } from './precios.controller';
 import { PreciosRepository } from './precios.repository';
@@ -13,11 +16,14 @@ import { TiposNegocioService } from './tipos-negocio.service';
 // tarea agrega Tipos de Negocio; Clientes se registra en la Task 5).
 @Module({
   controllers: [
+    ClientesController,
     ListasPrecioController,
     PreciosController,
     TiposNegocioController,
   ],
   providers: [
+    ClientesService,
+    ClientesRepository,
     PreciosService,
     PreciosRepository,
     TiposNegocioService,
