@@ -12,12 +12,20 @@ describe('reconciliarPromocionProductos', () => {
   });
 
   it('con promocion "ninguna" y productos existentes, los da de baja', () => {
-    const plan = reconciliarPromocionProductos('ninguna', ['p1', 'p2'], ['p1', 'p2']);
+    const plan = reconciliarPromocionProductos(
+      'ninguna',
+      ['p1', 'p2'],
+      ['p1', 'p2'],
+    );
     expect(plan).toEqual({ insertar: [], eliminar: ['p1', 'p2'] });
   });
 
   it('inserta los nuevos y da de baja los que ya no vienen', () => {
-    const plan = reconciliarPromocionProductos('20+1', ['p1', 'p2'], ['p2', 'p3']);
+    const plan = reconciliarPromocionProductos(
+      '20+1',
+      ['p1', 'p2'],
+      ['p2', 'p3'],
+    );
     expect(plan.insertar).toEqual(['p3']);
     expect(plan.eliminar).toEqual(['p1']);
   });
