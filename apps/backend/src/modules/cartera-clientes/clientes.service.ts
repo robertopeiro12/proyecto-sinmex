@@ -1,10 +1,14 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { resolverAlcance, type Alcance } from '../sucursales/alcance-sucursal';
+import { esViolacionFk } from '../../database/errores-postgres';
+import { reconciliarPromocionProductos } from './reconciliar-promocion-productos';
+import type { CrearClienteDto } from './dto/crear-cliente.dto';
 import {
   ClientesRepository,
   type ClienteDetalle,
@@ -47,6 +51,66 @@ export class ClientesService {
     }
 
     return cliente;
+  }
+
+  async crear(
+    usuarioId: string,
+    dto: CrearClienteDto,
+  ): Promise<ClienteDetalle> {
+    const fila = await this.repo.buscarSucursalUsuario(usuarioId);
+    if (!fila) {
+      throw new UnauthorizedException('Sesion invalida.');
+    }
+
+    // D6: la sucursal sale del alcance, no del cuerpo.
+    const sucursalId = fila.id ?? dto.sucursalId;
+    if (!sucursalId) {
+      throw new BadRequestException(
+        'Indica a qué sucursal pertenece el cliente.',
+      );
+    }
+
+    const plan = reconciliarPromocionProductos(
+      dto.promocion,
+      [],
+      dto.productosPromocion,
+    );
+
+    try {
+      return await this.repo.crear(
+        {
+          nombre: dto.nombre,
+          domicilio: dto.domicilio,
+          telefono: dto.telefono,
+          encargado: dto.encargado ?? null,
+          factura: dto.factura,
+          tipo: dto.tipo,
+          tipo_negocio_id: dto.tipoNegocioId ?? null,
+          lista_precio_id: dto.listaPrecioId,
+          pct_comision: dto.pctComision ?? null,
+          promocion: dto.promocion,
+          plazo_credito_dias: dto.plazoCreditoDias ?? null,
+          lat: dto.lat ?? null,
+          lng: dto.lng ?? null,
+          comentarios: dto.comentarios ?? null,
+          sucursal_id: sucursalId,
+        },
+        plan.insertar,
+        // En el alta, un override con `precio: null` no tiene nada que
+        // limpiar (no hay fila previa) -- se descarta antes de llegar al
+        // repositorio.
+        dto.overridesPrecio.filter(
+          (o): o is { presentacionId: string; precio: number } =>
+            o.precio !== null,
+        ),
+        dto.vigenteDesde,
+      );
+    } catch (error) {
+      if (esViolacionFk(error)) {
+        throw new NotFoundException('Alguno de los datos enviados no existe.');
+      }
+      throw error;
+    }
   }
 
   protected async alcanceDe(

@@ -251,6 +251,78 @@ export class ClientesRepository {
     );
   }
 
+  /**
+   * Alta: cliente, productos de promocion y overrides de precio en una sola
+   * transaccion (D4 del spec) -- mismo criterio que
+   * `ProductosRepository.crear` de T-10 (producto + presentaciones juntos).
+   * `cliente_id` es nuevo en esta transaccion, asi que ni el unique de
+   * `cliente_promocion_producto` ni `uq_cliente_precio_vigencia` pueden
+   * chocar todavia: a diferencia de `actualizar()` (Task 7), aqui no hace
+   * falta `on conflict`.
+   */
+  async crear(
+    datos: DatosClienteBase & { tipo: TipoCliente; sucursal_id: string },
+    productosPromocion: string[],
+    overridesPrecio: { presentacionId: string; precio: number }[],
+    vigenteDesde: string,
+  ): Promise<ClienteDetalle> {
+    const id = await this.db.transaction().execute(async (trx) => {
+      const cliente = await trx
+        .insertInto('cliente')
+        .values({
+          nombre: datos.nombre,
+          domicilio: datos.domicilio,
+          telefono: datos.telefono,
+          encargado: datos.encargado,
+          factura: datos.factura,
+          tipo: datos.tipo,
+          tipo_negocio_id: datos.tipo_negocio_id,
+          lista_precio_id: datos.lista_precio_id,
+          pct_comision: datos.pct_comision?.toString() ?? null,
+          promocion: datos.promocion,
+          plazo_credito_dias: datos.plazo_credito_dias,
+          lat: datos.lat?.toString() ?? null,
+          lng: datos.lng?.toString() ?? null,
+          comentarios: datos.comentarios,
+          sucursal_id: datos.sucursal_id,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+
+      if (productosPromocion.length > 0) {
+        await trx
+          .insertInto('cliente_promocion_producto')
+          .values(
+            productosPromocion.map((producto_id) => ({
+              cliente_id: cliente.id,
+              producto_id,
+            })),
+          )
+          .execute();
+      }
+
+      if (overridesPrecio.length > 0) {
+        await trx
+          .insertInto('cliente_precio')
+          .values(
+            overridesPrecio.map((o) => ({
+              cliente_id: cliente.id,
+              presentacion_id: o.presentacionId,
+              precio: o.precio.toString(),
+              vigente_desde: vigenteDesde,
+            })),
+          )
+          .execute();
+      }
+
+      return cliente.id;
+    });
+
+    // Fuera de la transaccion: `obtener()` ya sabe leer overrides+promocion,
+    // y reusarlo evita duplicar esa lectura dentro de la transaccion.
+    return (await this.obtener(id))!;
+  }
+
   /** Delegado al helper compartido (D9 del plan, Task 2). */
   async buscarSucursalUsuario(
     usuarioId: string,

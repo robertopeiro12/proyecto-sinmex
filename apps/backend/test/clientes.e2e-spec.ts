@@ -118,6 +118,23 @@ describe('Clientes (e2e)', () => {
     return id;
   };
 
+  /** Producto con una presentacion, para las pruebas de override y promocion. */
+  const sembrarProducto = async (
+    nombre: string,
+  ): Promise<{ productoId: string; presentacionId: string }> => {
+    const producto = await db
+      .insertInto('producto')
+      .values({ nombre })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    const presentacion = await db
+      .insertInto('presentacion')
+      .values({ producto_id: producto.id, volumen: '500 ml' })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    return { productoId: producto.id, presentacionId: presentacion.id };
+  };
+
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -170,10 +187,19 @@ describe('Clientes (e2e)', () => {
         .execute();
       await db.deleteFrom('cliente').where('id', 'in', clienteIds).execute();
     }
-    await db
-      .deleteFrom('producto')
+    const productos = await db
+      .selectFrom('producto')
+      .select('id')
       .where('nombre', 'like', `${PREFIJO}%`)
       .execute();
+    const productoIds = productos.map((p) => p.id);
+    if (productoIds.length > 0) {
+      await db
+        .deleteFrom('presentacion')
+        .where('producto_id', 'in', productoIds)
+        .execute();
+      await db.deleteFrom('producto').where('id', 'in', productoIds).execute();
+    }
     await db
       .deleteFrom('tipo_negocio')
       .where('nombre', 'like', `${PREFIJO}%`)
@@ -291,6 +317,128 @@ describe('Clientes (e2e)', () => {
         .get('/clientes/no-es-un-uuid')
         .set('Cookie', cookieGeneral)
         .expect(400);
+    });
+  });
+
+  describe('POST /clientes', () => {
+    const datosMinimos = (extra: Record<string, unknown> = {}) => ({
+      nombre: `${PREFIJO} Alta`,
+      domicilio: 'Domicilio',
+      telefono: '000',
+      factura: false,
+      tipo: 'cliente',
+      listaPrecioId: listaId,
+      promocion: 'ninguna',
+      productosPromocion: [],
+      overridesPrecio: [],
+      vigenteDesde: '2026-08-31',
+      ...extra,
+    });
+
+    it('da de alta un cliente completo con override y promocion', async () => {
+      const { productoId, presentacionId } = await sembrarProducto(
+        `${PREFIJO} Producto Alta`,
+      );
+
+      const res = await request(app.getHttpServer())
+        .post('/clientes')
+        .set('Cookie', cookieTijuana)
+        .send(
+          datosMinimos({
+            nombre: `${PREFIJO} Completo`,
+            promocion: '10+1',
+            productosPromocion: [productoId],
+            overridesPrecio: [{ presentacionId, precio: 18.5 }],
+          }),
+        )
+        .expect(201);
+
+      const cliente = res.body as ClienteDetalleRespuesta;
+      clienteIds.push(cliente.id);
+      expect(cliente.sucursalCodigo).toBe('TJ');
+      expect(cliente.promocion).toBe('10+1');
+      expect(cliente.productosPromocion).toEqual([productoId]);
+      expect(cliente.overridesPrecio).toEqual([
+        { presentacionId, precio: 18.5, vigenteDesde: '2026-08-31' },
+      ]);
+    });
+
+    it('promocion "ninguna" ignora productosPromocion aunque se manden ids (D4)', async () => {
+      const { productoId } = await sembrarProducto(
+        `${PREFIJO} Producto Ignorado`,
+      );
+
+      const res = await request(app.getHttpServer())
+        .post('/clientes')
+        .set('Cookie', cookieTijuana)
+        .send(datosMinimos({ productosPromocion: [productoId] }))
+        .expect(201);
+
+      const cliente = res.body as ClienteDetalleRespuesta;
+      clienteIds.push(cliente.id);
+      expect(cliente.productosPromocion).toEqual([]);
+    });
+
+    it('un usuario atado a TJ no puede mandar sucursalId de MX: se ignora, no 403', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/clientes')
+        .set('Cookie', cookieTijuana)
+        .send(datosMinimos({ sucursalId: idMexicali }))
+        .expect(201);
+
+      const cliente = res.body as ClienteDetalleRespuesta;
+      clienteIds.push(cliente.id);
+      expect(cliente.sucursalCodigo).toBe('TJ');
+    });
+
+    it('un usuario General sin sucursalId recibe 400', async () => {
+      await request(app.getHttpServer())
+        .post('/clientes')
+        .set('Cookie', cookieGeneral)
+        .send(datosMinimos())
+        .expect(400);
+    });
+
+    it('un usuario General con sucursalId da de alta en esa sucursal', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/clientes')
+        .set('Cookie', cookieGeneral)
+        .send(datosMinimos({ sucursalId: idMexicali }))
+        .expect(201);
+
+      const cliente = res.body as ClienteDetalleRespuesta;
+      clienteIds.push(cliente.id);
+      expect(cliente.sucursalCodigo).toBe('MX');
+    });
+
+    it('responde 404 si listaPrecioId no existe', async () => {
+      await request(app.getHttpServer())
+        .post('/clientes')
+        .set('Cookie', cookieTijuana)
+        .send(
+          datosMinimos({
+            listaPrecioId: '00000000-0000-0000-0000-000000000000',
+          }),
+        )
+        .expect(404);
+    });
+
+    it('responde 400 si falta un campo obligatorio', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { nombre: _nombre, ...sinNombre } = datosMinimos();
+      await request(app.getHttpServer())
+        .post('/clientes')
+        .set('Cookie', cookieTijuana)
+        .send(sinNombre)
+        .expect(400);
+    });
+
+    it('rechaza sin cliente.gestionar con 403', async () => {
+      await request(app.getHttpServer())
+        .post('/clientes')
+        .set('Cookie', cookieSinPermiso)
+        .send(datosMinimos())
+        .expect(403);
     });
   });
 });
