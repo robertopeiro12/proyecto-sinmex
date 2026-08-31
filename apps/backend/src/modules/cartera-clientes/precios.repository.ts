@@ -131,7 +131,7 @@ export class PreciosRepository {
 
   /**
    * Delegado al helper compartido (D9 de T-12) -- el metodo se conserva para
-   * no tocar `VehiculosService`, que sigue llamando `this.repo.buscarSucursalUsuario(...)`.
+   * no tocar `PreciosService`, que sigue llamando `this.repo.buscarSucursalUsuario(...)`.
    */
   async buscarSucursalUsuario(
     usuarioId: string,
