@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import { aNumero } from '../sincronizacion/dinero';
+import { buscarSucursalUsuario as buscarSucursalUsuarioCompartido } from '../sucursales/buscar-sucursal-usuario';
 
 export interface ListaPrecio {
   id: string;
@@ -129,21 +130,12 @@ export class PreciosRepository {
   }
 
   /**
-   * La sucursal del usuario. Duplica ~10 lineas de VehiculosRepository de
-   * T-11 a proposito (D7 de ese spec, mismo criterio aqui): la alternativa es
-   * una capa compartida de "repositorio con alcance" que hoy usarian tres
-   * modulos. Se extrae cuando el patron este claro con una cuarta copia, no
-   * antes.
+   * Delegado al helper compartido (D9 de T-12) -- el metodo se conserva para
+   * no tocar `VehiculosService`, que sigue llamando `this.repo.buscarSucursalUsuario(...)`.
    */
   async buscarSucursalUsuario(
     usuarioId: string,
   ): Promise<{ id: string | null; codigo: string | null } | undefined> {
-    return this.db
-      .selectFrom('usuario')
-      .leftJoin('sucursal', 'sucursal.id', 'usuario.sucursal_id')
-      .select(['sucursal.id as id', 'sucursal.codigo as codigo'])
-      .where('usuario.id', '=', usuarioId)
-      .where('usuario.deleted_at', 'is', null)
-      .executeTakeFirst();
+    return buscarSucursalUsuarioCompartido(this.db, usuarioId);
   }
 }
