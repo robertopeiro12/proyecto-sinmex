@@ -68,8 +68,13 @@ export function PantallaClientes({
     if (!window.confirm(`¿Dar de baja a "${item.nombre}"? Se conserva su historial.`)) {
       return;
     }
-    await eliminarCliente(item.id);
-    void catalogo.recargar();
+    setErrorDetalle(null);
+    try {
+      await eliminarCliente(item.id);
+      void catalogo.recargar();
+    } catch {
+      setErrorDetalle("No se pudo dar de baja ese cliente.");
+    }
   }
 
   return (
@@ -80,7 +85,11 @@ export function PantallaClientes({
           <FiltroTipo valor={tipo} />
         </div>
         {puedeGestionar && (
-          <Button size="sm" disabled={edicion !== null} onClick={() => setEdicion("nueva")}>
+          <Button
+            size="sm"
+            disabled={edicion !== null || cargandoDetalleId !== null}
+            onClick={() => setEdicion("nueva")}
+          >
             Nuevo cliente
           </Button>
         )}
@@ -135,7 +144,7 @@ export function PantallaClientes({
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={edicion !== null || cargandoDetalleId === c.id}
+                        disabled={edicion !== null || cargandoDetalleId !== null}
                         onClick={() => void abrirEdicion(c)}
                       >
                         {cargandoDetalleId === c.id ? "Cargando…" : "Editar"}
@@ -143,7 +152,7 @@ export function PantallaClientes({
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={edicion !== null}
+                        disabled={edicion !== null || cargandoDetalleId !== null}
                         onClick={() => void eliminar(c)}
                       >
                         Eliminar
