@@ -3,12 +3,25 @@ import { ListasPrecioController } from './listas-precio.controller';
 import { PreciosController } from './precios.controller';
 import { PreciosRepository } from './precios.repository';
 import { PreciosService } from './precios.service';
+import { TiposNegocioController } from './tipos-negocio.controller';
+import { TiposNegocioRepository } from './tipos-negocio.repository';
+import { TiposNegocioService } from './tipos-negocio.service';
 
 // Cartera de Clientes es el modulo de dominio del vault que agrupa Cliente y
 // Lista de precios (Lista de precios.md declara `modulo: cartera-clientes`).
-// Precios es lo primero que lo llena; Cliente llega con T-12.
+// Precios lo lleno T-18; Tipos de Negocio y Cliente llegan con T-12 (esta
+// tarea agrega Tipos de Negocio; Clientes se registra en la Task 5).
 @Module({
-  controllers: [ListasPrecioController, PreciosController],
-  providers: [PreciosService, PreciosRepository],
+  controllers: [
+    ListasPrecioController,
+    PreciosController,
+    TiposNegocioController,
+  ],
+  providers: [
+    PreciosService,
+    PreciosRepository,
+    TiposNegocioService,
+    TiposNegocioRepository,
+  ],
 })
 export class CarteraClientesModule {}
