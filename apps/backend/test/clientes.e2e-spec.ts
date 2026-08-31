@@ -554,6 +554,58 @@ describe('Clientes (e2e)', () => {
       expect(cliente.productosPromocion).toEqual([productoId]);
     });
 
+    it('quitar y volver a agregar el mismo override el mismo dia revive la fila, no la deja invisible', async () => {
+      const id = await sembrarCliente(`${PREFIJO} Override Vuelta`, idTijuana);
+      const { presentacionId } = await sembrarProducto(
+        `${PREFIJO} Producto Override Vuelta`,
+      );
+
+      // 1. Fija un override hoy.
+      await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(cambios({ overridesPrecio: [{ presentacionId, precio: 15 }] }))
+        .expect(200);
+
+      // 2. Lo quita el mismo dia (D5): la fila queda dada de baja.
+      await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(cambios({ overridesPrecio: [{ presentacionId, precio: null }] }))
+        .expect(200);
+
+      // 3. Lo vuelve a fijar el mismo dia: el ON CONFLICT de
+      // uq_cliente_precio_vigencia cae sobre la MISMA fila dada de baja en
+      // el paso 2 (mismo cliente_id, presentacion_id, vigente_desde). Si el
+      // upsert no resetea `deleted_at`, el precio nuevo queda invisible.
+      const res = await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(cambios({ overridesPrecio: [{ presentacionId, precio: 17 }] }))
+        .expect(200);
+
+      const cliente = res.body as ClienteDetalleRespuesta;
+      expect(cliente.overridesPrecio).toEqual([
+        { presentacionId, precio: 17, vigenteDesde: '2026-08-31' },
+      ]);
+
+      const detalle = await request(app.getHttpServer())
+        .get(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .expect(200);
+      expect((detalle.body as ClienteDetalleRespuesta).overridesPrecio).toEqual(
+        [{ presentacionId, precio: 17, vigenteDesde: '2026-08-31' }],
+      );
+
+      const filas = await db
+        .selectFrom('cliente_precio')
+        .select('id')
+        .where('cliente_id', '=', id)
+        .where('presentacion_id', '=', presentacionId)
+        .execute();
+      expect(filas).toHaveLength(1);
+    });
+
     it('un usuario atado a TJ no puede editar un cliente de MX', async () => {
       const id = await sembrarCliente(`${PREFIJO} Editar MX`, idMexicali);
 

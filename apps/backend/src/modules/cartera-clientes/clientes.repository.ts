@@ -419,9 +419,19 @@ export class ClientesRepository {
             vigente_desde: vigenteDesde,
           })
           .onConflict((oc) =>
-            oc
-              .constraint('uq_cliente_precio_vigencia')
-              .doUpdateSet({ precio: (override.precio as number).toString() }),
+            oc.constraint('uq_cliente_precio_vigencia').doUpdateSet({
+              precio: (override.precio as number).toString(),
+              // uq_cliente_precio_vigencia (a diferencia de
+              // uq_vehiculo_nombre_sucursal de T-11) tampoco excluye
+              // `deleted_at`: la fila de HOY que el bloque de arriba
+              // acaba de dar de baja sigue ocupando (cliente_id,
+              // presentacion_id, vigente_desde). Sin resetear
+              // `deleted_at` aqui, un alta-baja-alta el mismo dia deja el
+              // precio nuevo invisible para `obtener()` aunque el PATCH
+              // responda 200 -- mismo gotcha que la revivida de
+              // cliente_promocion_producto un poco mas arriba.
+              deleted_at: null,
+            }),
           )
           .execute();
       }
