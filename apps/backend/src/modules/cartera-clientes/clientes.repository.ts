@@ -3,6 +3,7 @@ import { sql } from 'kysely';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import { buscarSucursalUsuario } from '../sucursales/buscar-sucursal-usuario';
 import { aNumero } from '../sincronizacion/dinero';
+import type { PlanPromocionProductos } from './reconciliar-promocion-productos';
 
 export type TipoCliente = 'cliente' | 'prospecto';
 export type TipoFiltro = TipoCliente | 'todos';
@@ -321,6 +322,120 @@ export class ClientesRepository {
     // Fuera de la transaccion: `obtener()` ya sabe leer overrides+promocion,
     // y reusarlo evita duplicar esa lectura dentro de la transaccion.
     return (await this.obtener(id))!;
+  }
+
+  /**
+   * Edición: datos base + productos de promocion + overrides, todo en una
+   * transaccion. A diferencia de `crear()`, aqui SI puede haber conflicto
+   * (el cliente ya existe), asi que las dos colecciones usan `on conflict`
+   * en vez de un `insert` liso.
+   */
+  async actualizar(
+    id: string,
+    cambios: DatosClienteBase,
+    planPromocion: PlanPromocionProductos,
+    overridesPrecio: { presentacionId: string; precio: number | null }[],
+    vigenteDesde: string,
+  ): Promise<ClienteDetalle> {
+    await this.db.transaction().execute(async (trx) => {
+      await trx
+        .updateTable('cliente')
+        .set({
+          nombre: cambios.nombre,
+          domicilio: cambios.domicilio,
+          telefono: cambios.telefono,
+          encargado: cambios.encargado,
+          factura: cambios.factura,
+          tipo_negocio_id: cambios.tipo_negocio_id,
+          lista_precio_id: cambios.lista_precio_id,
+          pct_comision: cambios.pct_comision?.toString() ?? null,
+          promocion: cambios.promocion,
+          plazo_credito_dias: cambios.plazo_credito_dias,
+          lat: cambios.lat?.toString() ?? null,
+          lng: cambios.lng?.toString() ?? null,
+          comentarios: cambios.comentarios,
+        })
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow();
+
+      if (planPromocion.eliminar.length > 0) {
+        await trx
+          .updateTable('cliente_promocion_producto')
+          .set({ deleted_at: new Date() })
+          .where('cliente_id', '=', id)
+          .where('producto_id', 'in', planPromocion.eliminar)
+          .execute();
+      }
+
+      if (planPromocion.insertar.length > 0) {
+        // El unique (cliente_id, producto_id) de T-05 NO excluye
+        // `deleted_at` (a diferencia de uq_vehiculo_nombre_sucursal de
+        // T-11): una fila dada de baja sigue ocupando la combinacion. Un
+        // `insert` liso chocaria con 23505 al volver a agregar un producto
+        // que antes se habia quitado de la promocion -- revivir la fila con
+        // `on conflict ... do update` es obligatorio, no una optimizacion.
+        await trx
+          .insertInto('cliente_promocion_producto')
+          .values(
+            planPromocion.insertar.map((producto_id) => ({
+              cliente_id: id,
+              producto_id,
+            })),
+          )
+          .onConflict((oc) =>
+            oc
+              .columns(['cliente_id', 'producto_id'])
+              .doUpdateSet({ deleted_at: null }),
+          )
+          .execute();
+      }
+
+      for (const override of overridesPrecio) {
+        if (override.precio === null) {
+          // Solo borra la fila de HOY si existe (D5): no hay nada que
+          // limpiar de un override que nunca se guardo en esta fecha.
+          // `vigente_desde` es `date` en Postgres pero el codegen de Kysely lo
+          // tipa como `Timestamp` (Date en la posicion de SELECT): comparar
+          // contra el string AAAA-MM-DD del DTO con el builder tipado no
+          // compila. Mismo motivo por el que `obtener()` y
+          // `PreciosRepository.listarVigentes` (T-18) usan `sql` plano para
+          // tocar esta columna.
+          await trx
+            .updateTable('cliente_precio')
+            .set({ deleted_at: new Date() })
+            .where('cliente_id', '=', id)
+            .where('presentacion_id', '=', override.presentacionId)
+            .where(sql<boolean>`vigente_desde = ${vigenteDesde}::date`)
+            .execute();
+          continue;
+        }
+
+        await trx
+          .insertInto('cliente_precio')
+          .values({
+            cliente_id: id,
+            presentacion_id: override.presentacionId,
+            precio: override.precio.toString(),
+            vigente_desde: vigenteDesde,
+          })
+          .onConflict((oc) =>
+            oc
+              .constraint('uq_cliente_precio_vigencia')
+              .doUpdateSet({ precio: (override.precio as number).toString() }),
+          )
+          .execute();
+      }
+    });
+
+    return (await this.obtener(id))!;
+  }
+
+  async eliminar(id: string): Promise<void> {
+    await this.db
+      .updateTable('cliente')
+      .set({ deleted_at: new Date() })
+      .where('id', '=', id)
+      .executeTakeFirstOrThrow();
   }
 
   /** Delegado al helper compartido (D9 del plan, Task 2). */

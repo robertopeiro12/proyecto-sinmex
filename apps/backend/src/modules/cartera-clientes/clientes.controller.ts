@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -12,6 +14,7 @@ import { RequierePermiso } from '../auth/requiere-permiso.decorator';
 import { normalizarSucursalPedida } from '../sucursales/alcance-sucursal';
 import { ClientesService, normalizarTipoPedido } from './clientes.service';
 import { CrearClienteDto } from './dto/crear-cliente.dto';
+import { EditarClienteDto } from './dto/editar-cliente.dto';
 import type { ClienteDetalle, ClienteResumen } from './clientes.repository';
 
 // Sin @Publico(): el guard global protege todo por defecto. Ni listar ni
@@ -49,5 +52,25 @@ export class ClientesController {
     @Body() dto: CrearClienteDto,
   ): Promise<ClienteDetalle> {
     return this.clientes.crear(usuarioId, dto);
+  }
+
+  @Patch(':id')
+  @RequierePermiso('cliente.gestionar')
+  async editar(
+    @UsuarioActual() usuarioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: EditarClienteDto,
+  ): Promise<ClienteDetalle> {
+    return this.clientes.editar(usuarioId, id, dto);
+  }
+
+  @Delete(':id')
+  @RequierePermiso('cliente.gestionar')
+  async eliminar(
+    @UsuarioActual() usuarioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ id: string }> {
+    await this.clientes.eliminar(usuarioId, id);
+    return { id };
   }
 }

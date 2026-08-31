@@ -441,4 +441,200 @@ describe('Clientes (e2e)', () => {
         .expect(403);
     });
   });
+
+  describe('PATCH /clientes/:id', () => {
+    const cambios = (extra: Record<string, unknown> = {}) => ({
+      nombre: `${PREFIJO} Editado`,
+      domicilio: 'Domicilio editado',
+      telefono: '111',
+      factura: true,
+      listaPrecioId: listaId,
+      promocion: 'ninguna',
+      productosPromocion: [],
+      overridesPrecio: [],
+      vigenteDesde: '2026-08-31',
+      ...extra,
+    });
+
+    it('edita los datos base de un cliente', async () => {
+      const id = await sembrarCliente(`${PREFIJO} Editar`, idTijuana);
+
+      const res = await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(cambios())
+        .expect(200);
+
+      const cliente = res.body as ClienteDetalleRespuesta;
+      expect(cliente.nombre).toBe(`${PREFIJO} Editado`);
+      expect(cliente.telefono).toBe('111');
+      expect(cliente.factura).toBe(true);
+      expect(cliente.sucursalCodigo).toBe('TJ');
+    });
+
+    it('corrige el mismo override el mismo dia en vez de duplicarlo', async () => {
+      const id = await sembrarCliente(`${PREFIJO} Override`, idTijuana);
+      const { presentacionId } = await sembrarProducto(
+        `${PREFIJO} Producto Override`,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(cambios({ overridesPrecio: [{ presentacionId, precio: 15 }] }))
+        .expect(200);
+
+      const res = await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(cambios({ overridesPrecio: [{ presentacionId, precio: 16 }] }))
+        .expect(200);
+
+      const cliente = res.body as ClienteDetalleRespuesta;
+      expect(cliente.overridesPrecio).toEqual([
+        { presentacionId, precio: 16, vigenteDesde: '2026-08-31' },
+      ]);
+
+      const filas = await db
+        .selectFrom('cliente_precio')
+        .select('id')
+        .where('cliente_id', '=', id)
+        .where('presentacion_id', '=', presentacionId)
+        .execute();
+      expect(filas).toHaveLength(1);
+    });
+
+    it('precio: null quita el override del dia (D5)', async () => {
+      const id = await sembrarCliente(`${PREFIJO} Quitar Override`, idTijuana);
+      const { presentacionId } = await sembrarProducto(
+        `${PREFIJO} Producto Quitar`,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(cambios({ overridesPrecio: [{ presentacionId, precio: 15 }] }))
+        .expect(200);
+
+      const res = await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(cambios({ overridesPrecio: [{ presentacionId, precio: null }] }))
+        .expect(200);
+
+      const cliente = res.body as ClienteDetalleRespuesta;
+      expect(cliente.overridesPrecio).toEqual([]);
+    });
+
+    it('quitar y volver a agregar el mismo producto de promocion no revienta con 23505', async () => {
+      const id = await sembrarCliente(`${PREFIJO} Promo Vuelta`, idTijuana);
+      const { productoId } = await sembrarProducto(
+        `${PREFIJO} Producto Vuelta`,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(cambios({ promocion: '10+1', productosPromocion: [productoId] }))
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(cambios({ promocion: 'ninguna', productosPromocion: [] }))
+        .expect(200);
+
+      const res = await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(cambios({ promocion: '20+1', productosPromocion: [productoId] }))
+        .expect(200);
+
+      const cliente = res.body as ClienteDetalleRespuesta;
+      expect(cliente.productosPromocion).toEqual([productoId]);
+    });
+
+    it('un usuario atado a TJ no puede editar un cliente de MX', async () => {
+      const id = await sembrarCliente(`${PREFIJO} Editar MX`, idMexicali);
+
+      await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(cambios())
+        .expect(403);
+    });
+
+    it('responde 404 para un id que no existe', async () => {
+      await request(app.getHttpServer())
+        .patch('/clientes/00000000-0000-0000-0000-000000000000')
+        .set('Cookie', cookieTijuana)
+        .send(cambios())
+        .expect(404);
+    });
+
+    it('rechaza sin cliente.gestionar con 403', async () => {
+      const id = await sembrarCliente(
+        `${PREFIJO} Sin Permiso Editar`,
+        idTijuana,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieSinPermiso)
+        .send(cambios())
+        .expect(403);
+    });
+  });
+
+  describe('DELETE /clientes/:id', () => {
+    it('da de baja logica: desaparece del listado pero sigue en la base', async () => {
+      const id = await sembrarCliente(`${PREFIJO} Baja`, idTijuana);
+
+      await request(app.getHttpServer())
+        .delete(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .expect(200);
+
+      const res = await request(app.getHttpServer())
+        .get('/clientes')
+        .set('Cookie', cookieTijuana)
+        .expect(200);
+      const nombres = (res.body as ClienteResumenRespuesta[]).map(
+        (c) => c.nombre,
+      );
+      expect(nombres).not.toContain(`${PREFIJO} Baja`);
+
+      const fila = await db
+        .selectFrom('cliente')
+        .select('deleted_at')
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow();
+      expect(fila.deleted_at).not.toBeNull();
+    });
+
+    it('un usuario atado a TJ no puede dar de baja un cliente de MX', async () => {
+      const id = await sembrarCliente(`${PREFIJO} Baja MX`, idMexicali);
+
+      await request(app.getHttpServer())
+        .delete(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .expect(403);
+    });
+
+    it('responde 404 para un id que no existe', async () => {
+      await request(app.getHttpServer())
+        .delete('/clientes/00000000-0000-0000-0000-000000000000')
+        .set('Cookie', cookieTijuana)
+        .expect(404);
+    });
+
+    it('rechaza sin cliente.gestionar con 403', async () => {
+      const id = await sembrarCliente(`${PREFIJO} Sin Permiso Baja`, idTijuana);
+
+      await request(app.getHttpServer())
+        .delete(`/clientes/${id}`)
+        .set('Cookie', cookieSinPermiso)
+        .expect(403);
+    });
+  });
 });

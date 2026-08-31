@@ -9,6 +9,7 @@ import { resolverAlcance, type Alcance } from '../sucursales/alcance-sucursal';
 import { esViolacionFk } from '../../database/errores-postgres';
 import { reconciliarPromocionProductos } from './reconciliar-promocion-productos';
 import type { CrearClienteDto } from './dto/crear-cliente.dto';
+import type { EditarClienteDto } from './dto/editar-cliente.dto';
 import {
   ClientesRepository,
   type ClienteDetalle,
@@ -113,7 +114,72 @@ export class ClientesService {
     }
   }
 
-  protected async alcanceDe(
+  async editar(
+    usuarioId: string,
+    id: string,
+    dto: EditarClienteDto,
+  ): Promise<ClienteDetalle> {
+    const cliente = await this.repo.obtener(id);
+    if (!cliente) {
+      throw new NotFoundException('No existe ese cliente.');
+    }
+
+    const alcance = await this.alcanceDe(usuarioId, null);
+    if (alcance.tipo === 'una' && alcance.codigo !== cliente.sucursalCodigo) {
+      throw new ForbiddenException('No tienes acceso a esa sucursal.');
+    }
+
+    const plan = reconciliarPromocionProductos(
+      dto.promocion,
+      cliente.productosPromocion,
+      dto.productosPromocion,
+    );
+
+    try {
+      return await this.repo.actualizar(
+        id,
+        {
+          nombre: dto.nombre,
+          domicilio: dto.domicilio,
+          telefono: dto.telefono,
+          encargado: dto.encargado ?? null,
+          factura: dto.factura,
+          tipo_negocio_id: dto.tipoNegocioId ?? null,
+          lista_precio_id: dto.listaPrecioId,
+          pct_comision: dto.pctComision ?? null,
+          promocion: dto.promocion,
+          plazo_credito_dias: dto.plazoCreditoDias ?? null,
+          lat: dto.lat ?? null,
+          lng: dto.lng ?? null,
+          comentarios: dto.comentarios ?? null,
+        },
+        plan,
+        dto.overridesPrecio,
+        dto.vigenteDesde,
+      );
+    } catch (error) {
+      if (esViolacionFk(error)) {
+        throw new NotFoundException('Alguno de los datos enviados no existe.');
+      }
+      throw error;
+    }
+  }
+
+  async eliminar(usuarioId: string, id: string): Promise<void> {
+    const cliente = await this.repo.obtener(id);
+    if (!cliente) {
+      throw new NotFoundException('No existe ese cliente.');
+    }
+
+    const alcance = await this.alcanceDe(usuarioId, null);
+    if (alcance.tipo === 'una' && alcance.codigo !== cliente.sucursalCodigo) {
+      throw new ForbiddenException('No tienes acceso a esa sucursal.');
+    }
+
+    await this.repo.eliminar(id);
+  }
+
+  private async alcanceDe(
     usuarioId: string,
     sucursalPedida: string | null,
   ): Promise<Alcance> {
