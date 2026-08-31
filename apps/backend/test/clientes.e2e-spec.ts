@@ -526,6 +526,48 @@ describe('Clientes (e2e)', () => {
       expect(cliente.overridesPrecio).toEqual([]);
     });
 
+    it('quitar un override guardado un dia anterior tambien lo quita', async () => {
+      const id = await sembrarCliente(
+        `${PREFIJO} Override Dia Anterior`,
+        idTijuana,
+      );
+      const { presentacionId } = await sembrarProducto(
+        `${PREFIJO} Producto Override Dia Anterior`,
+      );
+
+      // Simula un override que se guardo hace varios dias: se inserta
+      // directo en la base (no via la API) con `vigente_desde` en el
+      // pasado, para que `PATCH` no encuentre ninguna fila fechada HOY.
+      await db
+        .insertInto('cliente_precio')
+        .values({
+          cliente_id: id,
+          presentacion_id: presentacionId,
+          precio: '15',
+          vigente_desde: '2026-08-20',
+        })
+        .execute();
+
+      const res = await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(cambios({ overridesPrecio: [{ presentacionId, precio: null }] }))
+        .expect(200);
+
+      const cliente = res.body as ClienteDetalleRespuesta;
+      expect(cliente.overridesPrecio).toEqual([]);
+
+      // Prueba que no es solo el PATCH devolviendo un eco optimista: una
+      // lectura aparte confirma que la fila vieja de verdad se dio de baja.
+      const detalle = await request(app.getHttpServer())
+        .get(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .expect(200);
+      expect((detalle.body as ClienteDetalleRespuesta).overridesPrecio).toEqual(
+        [],
+      );
+    });
+
     it('quitar y volver a agregar el mismo producto de promocion no revienta con 23505', async () => {
       const id = await sembrarCliente(`${PREFIJO} Promo Vuelta`, idTijuana);
       const { productoId } = await sembrarProducto(

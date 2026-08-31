@@ -54,10 +54,11 @@ export function FormularioCliente({ cliente, alGuardar, alCancelar }: Props) {
   const [sucursalId, setSucursalId] = useState("");
 
   // Punto de partida de los overrides: presentacionId -> texto del input.
-  // Se calcula UNA vez (no en un efecto) porque PantallaClientes remonta
-  // este formulario con `key={cliente.id}` al cambiar de fila (mismo motivo
-  // que documenta CeldaPrecio en T-18), asi que nunca hace falta
-  // resincronizar con un prop que cambio por debajo.
+  // Se calcula UNA vez (no en un efecto) porque PantallaClientes envuelve
+  // este formulario en un `key` que cambia entre alta y cada cliente
+  // distinto (ver pantalla-clientes.tsx), remontandolo al cambiar de fila
+  // (mismo motivo que documenta CeldaPrecio en T-18), asi que nunca hace
+  // falta resincronizar con un prop que cambio por debajo.
   const [overridesIniciales] = useState(
     () =>
       new Map((cliente?.overridesPrecio ?? []).map((o) => [o.presentacionId, o.precio.toString()])),
@@ -122,16 +123,25 @@ export function FormularioCliente({ cliente, alGuardar, alCancelar }: Props) {
 
     // Un override que existia al abrir el formulario y ya no aparece en
     // `overrides` (el usuario lo vacio) viaja como `precio: null` para que
-    // el backend lo borre (D5 del spec); uno que sigue o es nuevo viaja con
-    // su número.
+    // el backend lo borre (D5 del spec); uno nuevo o realmente modificado
+    // viaja con su número. Uno que sigue exactamente IGUAL a como estaba al
+    // abrir el formulario se OMITE del payload: `vigenteDesde` siempre es
+    // hoy, asi que reenviarlo sin cambios re-dataria su vigencia a hoy en
+    // cada guardado y borraria el historial real de "vigente desde tal
+    // fecha" sin que el usuario haya tocado ese precio.
     const overridesPrecio = Array.from(overridesIniciales.keys())
       .filter((id) => !overrides.has(id))
       .map((presentacionId) => ({ presentacionId, precio: null as number | null }))
       .concat(
-        Array.from(overrides.entries()).map(([presentacionId, texto]) => ({
-          presentacionId,
-          precio: Number(texto),
-        })),
+        Array.from(overrides.entries())
+          .filter(
+            ([presentacionId, texto]) =>
+              overridesIniciales.get(presentacionId) !== texto,
+          )
+          .map(([presentacionId, texto]) => ({
+            presentacionId,
+            precio: Number(texto),
+          })),
       );
 
     const datos = {
@@ -331,6 +341,11 @@ export function FormularioCliente({ cliente, alGuardar, alCancelar }: Props) {
                   <div key={presentacion.id} className="flex items-center gap-2 text-sm">
                     <span className="w-56">
                       {producto.nombre} · {presentacion.volumen}
+                      {!producto.activo && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          Inactivo
+                        </span>
+                      )}
                     </span>
                     <input
                       type="number"
@@ -417,6 +432,11 @@ export function FormularioCliente({ cliente, alGuardar, alCancelar }: Props) {
                     onChange={() => alternarProducto(producto.id)}
                   />
                   {producto.nombre}
+                  {!producto.activo && (
+                    <span className="text-xs text-muted-foreground">
+                      Inactivo
+                    </span>
+                  )}
                 </label>
               ))}
             </div>

@@ -46,7 +46,7 @@ export interface ClienteDetalle {
   productosPromocion: string[];
 }
 
-/** Los campos de `cliente` que Task 6/7 escriben, en snake_case (columnas). */
+/** Los campos de `cliente` que escriben `crear()`/`actualizar()`, en snake_case (columnas). */
 export interface DatosClienteBase {
   nombre: string;
   domicilio: string;
@@ -392,20 +392,22 @@ export class ClientesRepository {
 
       for (const override of overridesPrecio) {
         if (override.precio === null) {
-          // Solo borra la fila de HOY si existe (D5): no hay nada que
-          // limpiar de un override que nunca se guardo en esta fecha.
-          // `vigente_desde` es `date` en Postgres pero el codegen de Kysely lo
-          // tipa como `Timestamp` (Date en la posicion de SELECT): comparar
-          // contra el string AAAA-MM-DD del DTO con el builder tipado no
-          // compila. Mismo motivo por el que `obtener()` y
-          // `PreciosRepository.listarVigentes` (T-18) usan `sql` plano para
-          // tocar esta columna.
+          // Da de baja TODAS las filas activas de este par (cliente,
+          // presentacion), no solo la de HOY: `vigenteDesde` en todo este
+          // sistema es siempre "hoy" (el formulario no ofrece programar un
+          // cambio a futuro), asi que nunca deberia haber mas de una fila
+          // simultaneamente activa para el mismo par. Si el override se
+          // guardo en un dia anterior, esa fila vieja sigue con
+          // `deleted_at is null` y `obtener()` (que lee
+          // `vigente_desde <= current_date`) la volveria a mostrar aunque el
+          // usuario acabe de "quitarla" -- limpiar solo la fila de hoy dejaba
+          // ese caso sin forma de borrarse desde la UI.
           await trx
             .updateTable('cliente_precio')
             .set({ deleted_at: new Date() })
             .where('cliente_id', '=', id)
             .where('presentacion_id', '=', override.presentacionId)
-            .where(sql<boolean>`vigente_desde = ${vigenteDesde}::date`)
+            .where('deleted_at', 'is', null)
             .execute();
           continue;
         }

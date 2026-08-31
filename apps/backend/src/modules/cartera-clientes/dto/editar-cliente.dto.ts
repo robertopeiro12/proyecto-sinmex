@@ -78,12 +78,15 @@ export class EditarClienteDto {
   promocion!: 'ninguna' | '10+1' | '20+1';
 
   @IsArray()
-  @IsUUID('4', { each: true })
+  @IsUUID(undefined, { each: true })
   productosPromocion!: string[];
 
   @IsOptional()
   @IsInt()
   @Min(0, { message: 'El plazo de crédito no puede ser negativo.' })
+  @Max(36500, {
+    message: 'El plazo de crédito no puede pasar de 36,500 días.',
+  })
   plazoCreditoDias?: number;
 
   @IsOptional()

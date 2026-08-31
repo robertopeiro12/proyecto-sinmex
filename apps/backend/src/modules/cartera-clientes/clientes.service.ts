@@ -77,6 +77,19 @@ export class ClientesService {
       dto.productosPromocion,
     );
 
+    // El alta inserta los overrides en un solo `insertInto(...).values([...])`
+    // (D4 del spec): dos entradas con el mismo `presentacionId` chocarian con
+    // `uq_cliente_precio_vigencia` (23505). El formulario no puede producir
+    // esto (usa un Map por presentacion), pero un caller de la API si -- se
+    // deduplica aqui quedandose con la ULTIMA entrada por presentacion, mismo
+    // criterio "gana la ultima" que `reconciliarPromocionProductos` aplica a
+    // `productosPromocion` via `Set`.
+    const overridesUnicos = [
+      ...new Map(
+        dto.overridesPrecio.map((o) => [o.presentacionId, o]),
+      ).values(),
+    ];
+
     try {
       return await this.repo.crear(
         {
@@ -100,7 +113,7 @@ export class ClientesService {
         // En el alta, un override con `precio: null` no tiene nada que
         // limpiar (no hay fila previa) -- se descarta antes de llegar al
         // repositorio.
-        dto.overridesPrecio.filter(
+        overridesUnicos.filter(
           (o): o is { presentacionId: string; precio: number } =>
             o.precio !== null,
         ),

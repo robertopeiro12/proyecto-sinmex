@@ -19,7 +19,8 @@ import type { ClienteDetalle, ClienteResumen } from './clientes.repository';
 
 // Sin @Publico(): el guard global protege todo por defecto. Ni listar ni
 // leer el detalle exigen cliente.gestionar (D2 del spec): el candado va
-// solo en escritura (Task 6/7), igual que Vehiculos (T-11) y Productos (T-10).
+// solo en los endpoints de escritura (crear/editar/eliminar), igual que
+// Vehiculos (T-11) y Productos (T-10).
 @Controller('clientes')
 export class ClientesController {
   constructor(private readonly clientes: ClientesService) {}

@@ -79,12 +79,15 @@ export class CrearClienteDto {
   // estado completo (D4 del spec), igual que `presentaciones` en
   // EditarProductoDto de T-10.
   @IsArray()
-  @IsUUID('4', { each: true })
+  @IsUUID(undefined, { each: true })
   productosPromocion!: string[];
 
   @IsOptional()
   @IsInt()
   @Min(0, { message: 'El plazo de crédito no puede ser negativo.' })
+  @Max(36500, {
+    message: 'El plazo de crédito no puede pasar de 36,500 días.',
+  })
   plazoCreditoDias?: number;
 
   // numeric(9,6): hasta 6 decimales, y el rango geografico real de una

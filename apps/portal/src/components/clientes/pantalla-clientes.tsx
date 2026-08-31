@@ -41,6 +41,7 @@ export function PantallaClientes({
 
   const [edicion, setEdicion] = useState<Edicion>(null);
   const [cargandoDetalleId, setCargandoDetalleId] = useState<string | null>(null);
+  const [eliminandoId, setEliminandoId] = useState<string | null>(null);
   const [errorDetalle, setErrorDetalle] = useState<string | null>(null);
 
   async function abrirEdicion(resumen: ClienteResumen) {
@@ -68,12 +69,15 @@ export function PantallaClientes({
     if (!window.confirm(`¿Dar de baja a "${item.nombre}"? Se conserva su historial.`)) {
       return;
     }
+    setEliminandoId(item.id);
     setErrorDetalle(null);
     try {
       await eliminarCliente(item.id);
       void catalogo.recargar();
     } catch {
       setErrorDetalle("No se pudo dar de baja ese cliente.");
+    } finally {
+      setEliminandoId(null);
     }
   }
 
@@ -87,7 +91,7 @@ export function PantallaClientes({
         {puedeGestionar && (
           <Button
             size="sm"
-            disabled={edicion !== null || cargandoDetalleId !== null}
+            disabled={edicion !== null || cargandoDetalleId !== null || eliminandoId !== null}
             onClick={() => setEdicion("nueva")}
           >
             Nuevo cliente
@@ -144,7 +148,11 @@ export function PantallaClientes({
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={edicion !== null || cargandoDetalleId !== null}
+                        disabled={
+                          edicion !== null ||
+                          cargandoDetalleId !== null ||
+                          eliminandoId !== null
+                        }
                         onClick={() => void abrirEdicion(c)}
                       >
                         {cargandoDetalleId === c.id ? "Cargando…" : "Editar"}
@@ -152,10 +160,14 @@ export function PantallaClientes({
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={edicion !== null || cargandoDetalleId !== null}
+                        disabled={
+                          edicion !== null ||
+                          cargandoDetalleId !== null ||
+                          eliminandoId !== null
+                        }
                         onClick={() => void eliminar(c)}
                       >
-                        Eliminar
+                        {eliminandoId === c.id ? "Eliminando…" : "Eliminar"}
                       </Button>
                     </div>
                   )
