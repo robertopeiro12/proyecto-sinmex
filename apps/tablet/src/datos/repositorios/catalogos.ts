@@ -118,7 +118,57 @@ const NO_BORRAR_CON_NULO: Record<string, readonly string[]> = {
  * escritura es aplicar el snapshot que manda el portal.
  */
 export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
+  /**
+   * Cuantas veces ha cambiado el catalogo en este arranque de la app.
+   *
+   * > [!bug] Esto arregla un bloqueo visto en dispositivo real (2026-08-23)
+   * > Tras el primer login de una instalacion nueva, "Abrir el dia" decia
+   * > **"Sin vehiculos en el catalogo local"** aunque el `pull` ya habia escrito
+   * > el vehiculo en SQLite. La pantalla leia la lista con
+   * > `useMemo(..., [datos, sucursalId])`, y **ninguna de esas dos cosas cambia
+   * > cuando el pull escribe**: React no volvia a consultar nunca. El vendedor
+   * > se quedaba atrapado en la pantalla bloqueante hasta reiniciar la app.
+   *
+   * SQLite no avisa a nadie cuando cambia, y React no puede adivinarlo. La
+   * escritura tiene que **publicar la novedad**, y este contador es esa
+   * publicacion: un numero que solo sube, que las pantallas meten en sus
+   * dependencias y que `useSyncExternalStore` sabe observar.
+   *
+   * Se arregla **aqui y no en la pantalla** porque el defecto no es de esa
+   * pantalla: es de todo el que consulte un catalogo mientras el pull corre.
+   * Hoy son "Abrir el dia" y la lista de clientes; con el refresco automatico
+   * de las 11:00/14:00 (T-44) sera **cualquier pantalla abierta**, que es el
+   * caso normal y no la excepcion.
+   */
+  let version = 0;
+  const oyentes = new Set<() => void>();
+
   return {
+    /**
+     * Version actual del catalogo. Sirve de dependencia de un `useMemo` y de
+     * `getSnapshot` de `useSyncExternalStore`.
+     *
+     * Es un numero (no el contenido) a proposito: comparar dos enteros es
+     * barato y estable, mientras que comparar dos listas recien leidas de
+     * SQLite daria siempre "distinto" y volveria a pintar en cada render.
+     */
+    version(): number {
+      return version;
+    },
+
+    /**
+     * Avisa cuando el catalogo cambie. Devuelve como dejar de escuchar.
+     *
+     * La firma es la que espera `useSyncExternalStore` — a proposito, para que
+     * la capa de React sea un cable y no una traduccion.
+     */
+    suscribir(oyente: () => void): () => void {
+      oyentes.add(oyente);
+      return () => {
+        oyentes.delete(oyente);
+      };
+    },
+
     /**
      * Aplica el snapshot de catalogos recibido del portal.
      *
@@ -142,22 +192,41 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
      *
      * Todo va en una sola transaccion: la tablet nunca queda con medio catalogo
      * si la bajada se corta a la mitad.
+     *
+     * ### Y avisa de que cambio
+     *
+     * Es la **unica** escritura del repositorio, asi que es el unico sitio que
+     * tiene que publicar la senal. Ver el comentario de `version` arriba.
      */
     guardarSnapshot(snapshot: SnapshotCatalogos): void {
       const ahora = reloj.ahora();
 
-      enTransaccion(bd, () => {
+      const filasEscritas = enTransaccion(bd, () => {
         // Orden de llaves foraneas: sucursal -> vendedor/vehiculo/cliente,
         // producto -> presentacion -> cliente_precio -> nota_pendiente.
-        upsert(bd, 'sucursal', COLUMNAS.sucursal, snapshot.sucursales, ahora);
-        upsert(bd, 'vendedor', COLUMNAS.vendedor, snapshot.vendedores, ahora);
-        upsert(bd, 'vehiculo', COLUMNAS.vehiculo, snapshot.vehiculos, ahora);
-        upsert(bd, 'producto', COLUMNAS.producto, snapshot.productos, ahora);
-        upsert(bd, 'presentacion', COLUMNAS.presentacion, snapshot.presentaciones, ahora);
-        upsert(bd, 'cliente', COLUMNAS.cliente, snapshot.clientes, ahora);
-        upsert(bd, 'cliente_precio', COLUMNAS.cliente_precio, snapshot.precios, ahora);
-        upsert(bd, 'nota_pendiente', COLUMNAS.nota_pendiente, snapshot.notas, ahora);
+        return (
+          upsert(bd, 'sucursal', COLUMNAS.sucursal, snapshot.sucursales, ahora) +
+          upsert(bd, 'vendedor', COLUMNAS.vendedor, snapshot.vendedores, ahora) +
+          upsert(bd, 'vehiculo', COLUMNAS.vehiculo, snapshot.vehiculos, ahora) +
+          upsert(bd, 'producto', COLUMNAS.producto, snapshot.productos, ahora) +
+          upsert(bd, 'presentacion', COLUMNAS.presentacion, snapshot.presentaciones, ahora) +
+          upsert(bd, 'cliente', COLUMNAS.cliente, snapshot.clientes, ahora) +
+          upsert(bd, 'cliente_precio', COLUMNAS.cliente_precio, snapshot.precios, ahora) +
+          upsert(bd, 'nota_pendiente', COLUMNAS.nota_pendiente, snapshot.notas, ahora)
+        );
       });
+
+      // Un pull incremental que no trae nada (lo normal a media manana) no es un
+      // cambio: avisar igual haria repintar todas las pantallas abiertas cada
+      // vez que el refresco de las 11:00/14:00 no encuentre novedades.
+      if (filasEscritas === 0) return;
+
+      // **Fuera de la transaccion, no dentro.** Quien escucha va a volver a
+      // consultar en cuanto le avisen, y desde dentro leeria un estado a medio
+      // escribir. Sobre una copia del conjunto porque un oyente puede darse de
+      // baja mientras se le avisa (una pantalla que se desmonta al repintar).
+      version += 1;
+      for (const oyente of [...oyentes]) oyente();
     },
 
     /** Vehiculos activos de una sucursal, para la pantalla de abrir el dia. */
@@ -249,6 +318,9 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
  * El nombre de tabla y las columnas se interpolan en el SQL, pero salen de la
  * constante `COLUMNAS` de este archivo — nunca de datos externos. Los **valores**
  * si van enlazados como parametros.
+ *
+ * Devuelve **cuantas filas escribio**, que es lo que le permite a
+ * `guardarSnapshot` distinguir un pull con novedades de uno vacio.
  */
 function upsert(
   bd: BaseDatos,
@@ -256,8 +328,8 @@ function upsert(
   columnas: readonly string[],
   filas: readonly Record<string, unknown>[] | undefined,
   sincronizadoEn: string,
-): void {
-  if (!filas || filas.length === 0) return;
+): number {
+  if (!filas || filas.length === 0) return 0;
 
   const todas = [...columnas, 'sincronizado_en'];
   const marcadores = todas.map((c) => `$${c}`).join(', ');
@@ -283,4 +355,6 @@ function upsert(
     }
     bd.runSync(sql, params);
   }
+
+  return filas.length;
 }

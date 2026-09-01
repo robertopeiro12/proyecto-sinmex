@@ -169,4 +169,115 @@ describe('repositorio de catalogos', () => {
       expect(catalogos.notasPendientesDe('cli-2')).toEqual([]);
     });
   });
+
+  /**
+   * El defecto bloqueante encontrado en dispositivo real el 2026-08-23: tras el
+   * primer login de una instalacion nueva, "Abrir el dia" seguia diciendo "Sin
+   * vehiculos en el catalogo local" aunque el `pull` ya habia escrito la fila.
+   * Ver `40-Equipo/Bitacora/2026-08-23.md` en el vault.
+   */
+  describe('senal de cambio del catalogo', () => {
+    it('la version arranca en cero y sube con cada snapshot con novedades', () => {
+      const deps = depsDePrueba();
+      const catalogos = crearRepositorioCatalogos(deps);
+
+      expect(catalogos.version()).toBe(0);
+      catalogos.guardarSnapshot(snapshotDePrueba());
+      expect(catalogos.version()).toBe(1);
+      catalogos.guardarSnapshot({ vehiculos: [snapshotDePrueba().vehiculos![0]!] });
+      expect(catalogos.version()).toBe(2);
+    });
+
+    it('avisa a quien este suscrito, y deja de avisarle al darse de baja', () => {
+      const { catalogos } = conCatalogos();
+      const avisos: number[] = [];
+
+      const dejarDeEscuchar = catalogos.suscribir(() => avisos.push(catalogos.version()));
+
+      catalogos.guardarSnapshot({ vehiculos: [snapshotDePrueba().vehiculos![0]!] });
+      catalogos.guardarSnapshot({ clientes: [snapshotDePrueba().clientes![0]!] });
+      expect(avisos).toEqual([2, 3]);
+
+      dejarDeEscuchar();
+      catalogos.guardarSnapshot({ vehiculos: [snapshotDePrueba().vehiculos![0]!] });
+      expect(avisos).toEqual([2, 3]);
+    });
+
+    it('un pull que no trae nada no despierta a nadie', () => {
+      // El caso del refresco de media manana (T-44): lo normal es que no haya
+      // novedades, y repintar todas las pantallas abiertas por nada seria peor
+      // que no avisar.
+      const { catalogos } = conCatalogos();
+      const versionAntes = catalogos.version();
+      let avisos = 0;
+      catalogos.suscribir(() => (avisos += 1));
+
+      catalogos.guardarSnapshot({});
+      catalogos.guardarSnapshot({ vehiculos: [] });
+
+      expect(avisos).toBe(0);
+      expect(catalogos.version()).toBe(versionAntes);
+    });
+
+    /**
+     * La reproduccion del defecto, sin dispositivo.
+     *
+     * `useMemo` en miniatura: recalcula solo si alguna dependencia cambio. Es
+     * exactamente lo que hacia la pantalla, y basta para demostrar por que se
+     * quedaba en blanco y por que la version lo arregla.
+     */
+    it('sin la version en las dependencias, la pantalla se queda con el catalogo vacio', () => {
+      const deps = depsDePrueba();
+      const catalogos = crearRepositorioCatalogos(deps);
+
+      // Las dos pantallas hacen la MISMA consulta. Lo unico que las distingue
+      // son las dependencias con las que la memorizan.
+      const comoEstaba = memo(() => catalogos.listarVehiculos('suc-tj'));
+      const conLaSenal = memo(() => catalogos.listarVehiculos('suc-tj'));
+
+      const depsViejas = () => [catalogos, 'suc-tj'];
+      const depsNuevas = () => [catalogos, 'suc-tj', catalogos.version()];
+
+      // Primer render en una instalacion nueva: el pull todavia no ha bajado.
+      expect(comoEstaba(depsViejas())).toEqual([]);
+      expect(conLaSenal(depsNuevas())).toEqual([]);
+
+      // El pull escribe el vehiculo en SQLite. La fila ya esta ahi...
+      catalogos.guardarSnapshot(snapshotDePrueba());
+      expect(catalogos.listarVehiculos('suc-tj').map((v) => v.id)).toEqual(['veh-1']);
+
+      // ...pero con las dependencias de antes del arreglo —la capa de datos y
+      // la sucursal, que no cambian nunca— la pantalla NO vuelve a consultar.
+      // Este es el bloqueo: el vendedor no puede abrir el dia.
+      expect(comoEstaba(depsViejas())).toEqual([]);
+
+      // Con la version del catalogo en las dependencias, si.
+      expect(conLaSenal(depsNuevas()).map((v) => v.id)).toEqual(['veh-1']);
+    });
+  });
 });
+
+/**
+ * `useMemo` reducido a lo esencial, para poder probar en Node la regla de
+ * invalidacion que en la app aplica React.
+ *
+ * No pretende imitar a React: solo su unica regla relevante aqui — el valor se
+ * recalcula si y solo si alguna dependencia cambio de identidad.
+ */
+function memo<T>(calcular: () => T): (dependencias: unknown[]) => T {
+  let anteriores: unknown[] | null = null;
+  let valor: T;
+
+  return (dependencias) => {
+    const cambio =
+      anteriores === null ||
+      dependencias.length !== anteriores.length ||
+      dependencias.some((d, i) => !Object.is(d, anteriores![i]));
+
+    if (cambio) {
+      anteriores = dependencias;
+      valor = calcular();
+    }
+    return valor;
+  };
+}
