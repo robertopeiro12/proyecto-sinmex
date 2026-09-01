@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import { aNumero } from '../sincronizacion/dinero';
+import { buscarSucursalUsuario as buscarSucursalUsuarioCompartido } from '../sucursales/buscar-sucursal-usuario';
 
 export interface Vehiculo {
   id: string;
@@ -162,30 +163,12 @@ export class VehiculosRepository {
   }
 
   /**
-   * La sucursal del usuario. Distingue tres casos que NO se pueden colapsar:
-   *   - `undefined`                 -> el usuario no existe o esta dado de baja
-   *   - `{ id: null, codigo: null }` -> existe y es General
-   *   - `{ id: '…', codigo: 'TJ' }`  -> existe y esta atado a Tijuana
-   * Devolver null para los dos primeros convertiria a un usuario borrado en uno
-   * con acceso a todas las sucursales.
-   *
-   * Duplica ~10 lineas del repositorio de sucursales a proposito (D7): la
-   * alternativa es una capa compartida de "repositorio con alcance" que hoy solo
-   * usarian dos modulos. Se extrae cuando aparezca la tercera copia, no antes --
-   * mismo criterio con el que T-10 dejo `esDuplicado()` triplicado.
-   *
-   * Diferencia con el de sucursales: este devuelve tambien el `id`, porque el
-   * alta lo necesita para el insert (D3).
+   * Delegado al helper compartido (D9 de T-12) -- el metodo se conserva para
+   * no tocar `VehiculosService`, que sigue llamando `this.repo.buscarSucursalUsuario(...)`.
    */
   async buscarSucursalUsuario(
     usuarioId: string,
   ): Promise<{ id: string | null; codigo: string | null } | undefined> {
-    return this.db
-      .selectFrom('usuario')
-      .leftJoin('sucursal', 'sucursal.id', 'usuario.sucursal_id')
-      .select(['sucursal.id as id', 'sucursal.codigo as codigo'])
-      .where('usuario.id', '=', usuarioId)
-      .where('usuario.deleted_at', 'is', null)
-      .executeTakeFirst();
+    return buscarSucursalUsuarioCompartido(this.db, usuarioId);
   }
 }
