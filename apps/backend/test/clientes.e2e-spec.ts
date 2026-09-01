@@ -40,7 +40,11 @@ interface ClienteDetalleRespuesta extends ClienteResumenRespuesta {
   productosPromocion: string[];
 }
 
-const SUFIJO = Date.now();
+// El PID va pegado al timestamp porque Jest corre archivos en paralelo, en
+// procesos distintos: dos suites que arrancan en el mismo milisegundo
+// generarian el mismo PREFIJO, y el afterAll de una borraria filas que la
+// otra todavia necesita (foreign key violation cruzada entre suites).
+const SUFIJO = `${Date.now()}-${process.pid}`;
 const LOGIN_GENERAL = `e2e-cli-gen-${SUFIJO}`;
 const LOGIN_TIJUANA = `e2e-cli-tj-${SUFIJO}`;
 const LOGIN_SIN_PERMISO = `e2e-cli-sin-${SUFIJO}`;
