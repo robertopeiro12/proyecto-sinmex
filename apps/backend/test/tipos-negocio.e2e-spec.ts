@@ -15,7 +15,11 @@ interface TipoNegocioRespuesta {
   nombre: string;
 }
 
-const SUFIJO = Date.now();
+// El PID va pegado al timestamp porque Jest corre archivos en paralelo, en
+// procesos distintos: dos suites que arrancan en el mismo milisegundo
+// generarian el mismo PREFIJO, y el afterAll de una borraria filas que la
+// otra todavia necesita (foreign key violation cruzada entre suites).
+const SUFIJO = `${Date.now()}-${process.pid}`;
 const LOGIN_GENERAL = `e2e-tneg-gen-${SUFIJO}`;
 const LOGIN_SIN_PERMISO = `e2e-tneg-sin-${SUFIJO}`;
 const PASSWORD = 'contrasena-de-prueba';

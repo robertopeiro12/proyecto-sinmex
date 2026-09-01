@@ -22,7 +22,14 @@ interface PrecioRespuesta {
   vigenteDesde: string;
 }
 
-const SUFIJO = Date.now();
+// El PID va pegado al timestamp por consistencia con el resto de los e2e
+// (clientes/productos/vehiculos/tipos-negocio.e2e-spec.ts): ahi el mismo
+// SUFIJO colisionando entre dos archivos corriendo en paralelo hace que el
+// afterAll de uno borre filas que el otro todavia necesita, porque limpian
+// por `nombre like PREFIJO%`. Este archivo limpia por id (`productoIds`), asi
+// que no tenia ese riesgo, pero el PID no hace dano y evita reinventar el
+// criterio archivo por archivo.
+const SUFIJO = `${Date.now()}-${process.pid}`;
 const LOGIN_GENERAL = `e2e-pre-gen-${SUFIJO}`;
 const LOGIN_TIJUANA = `e2e-pre-tj-${SUFIJO}`;
 const LOGIN_SIN_PERMISO = `e2e-pre-sin-${SUFIJO}`;

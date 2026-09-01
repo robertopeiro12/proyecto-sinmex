@@ -29,7 +29,11 @@ interface MatrizRespuesta {
   perfiles: PerfilRespuesta[];
 }
 
-const SUFIJO = Date.now();
+// El PID va pegado al timestamp por consistencia con el resto de los e2e
+// (ver el comentario de PREFIJO abajo: este archivo limpia por id, asi que
+// nunca tuvo el riesgo de colision cruzada que sufren clientes/productos/
+// vehiculos/tipos-negocio.e2e-spec.ts al limpiar por `nombre like`).
+const SUFIJO = `${Date.now()}-${process.pid}`;
 const LOGIN_CON_PERMISO = `e2e-perf-con-${SUFIJO}`;
 const LOGIN_SIN_PERMISO = `e2e-perf-sin-${SUFIJO}`;
 const PASSWORD = 'contrasena-de-prueba';
