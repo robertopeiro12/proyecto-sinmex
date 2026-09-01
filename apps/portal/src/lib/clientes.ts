@@ -117,3 +117,10 @@ export function editarCliente(
 export function eliminarCliente(id: string): Promise<void> {
   return apiFetch<void>(`/clientes/${id}`, { method: "DELETE" });
 }
+
+/** Un solo sentido: Prospecto -> Cliente, nunca al reves. */
+export function convertirACliente(id: string): Promise<ClienteDetalle> {
+  return apiFetch<ClienteDetalle>(`/clientes/${id}/convertir-a-cliente`, {
+    method: "POST",
+  });
+}

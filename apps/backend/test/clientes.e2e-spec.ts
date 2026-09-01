@@ -735,4 +735,79 @@ describe('Clientes (e2e)', () => {
         .expect(403);
     });
   });
+
+  describe('POST /clientes/:id/convertir-a-cliente', () => {
+    it('convierte un prospecto en cliente', async () => {
+      const id = await sembrarCliente(
+        `${PREFIJO} Convertir`,
+        idTijuana,
+        'prospecto',
+      );
+
+      const res = await request(app.getHttpServer())
+        .post(`/clientes/${id}/convertir-a-cliente`)
+        .set('Cookie', cookieTijuana)
+        .expect(201);
+
+      const cliente = res.body as ClienteDetalleRespuesta;
+      expect(cliente.tipo).toBe('cliente');
+
+      const enLista = await request(app.getHttpServer())
+        .get('/clientes?tipo=cliente')
+        .set('Cookie', cookieTijuana)
+        .expect(200);
+      const nombres = (enLista.body as ClienteResumenRespuesta[]).map(
+        (c) => c.nombre,
+      );
+      expect(nombres).toContain(`${PREFIJO} Convertir`);
+    });
+
+    it('responde 409 si ya es cliente', async () => {
+      const id = await sembrarCliente(
+        `${PREFIJO} Ya Cliente`,
+        idTijuana,
+        'cliente',
+      );
+
+      await request(app.getHttpServer())
+        .post(`/clientes/${id}/convertir-a-cliente`)
+        .set('Cookie', cookieTijuana)
+        .expect(409);
+    });
+
+    it('un usuario atado a TJ no puede convertir un prospecto de MX', async () => {
+      const id = await sembrarCliente(
+        `${PREFIJO} Convertir MX`,
+        idMexicali,
+        'prospecto',
+      );
+
+      await request(app.getHttpServer())
+        .post(`/clientes/${id}/convertir-a-cliente`)
+        .set('Cookie', cookieTijuana)
+        .expect(403);
+    });
+
+    it('responde 404 para un id que no existe', async () => {
+      await request(app.getHttpServer())
+        .post(
+          '/clientes/00000000-0000-0000-0000-000000000000/convertir-a-cliente',
+        )
+        .set('Cookie', cookieTijuana)
+        .expect(404);
+    });
+
+    it('rechaza sin cliente.gestionar con 403', async () => {
+      const id = await sembrarCliente(
+        `${PREFIJO} Sin Permiso Convertir`,
+        idTijuana,
+        'prospecto',
+      );
+
+      await request(app.getHttpServer())
+        .post(`/clientes/${id}/convertir-a-cliente`)
+        .set('Cookie', cookieSinPermiso)
+        .expect(403);
+    });
+  });
 });

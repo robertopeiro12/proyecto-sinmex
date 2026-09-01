@@ -450,6 +450,21 @@ export class ClientesRepository {
       .executeTakeFirstOrThrow();
   }
 
+  /**
+   * Un solo sentido (Prospecto -> Cliente, nunca al reves): el servicio ya
+   * verifico que el cliente existe y que `tipo` sigue siendo 'prospecto'
+   * antes de llamar aqui, asi que esto es un `UPDATE` liso, sin condicion.
+   */
+  async convertirACliente(id: string): Promise<ClienteDetalle> {
+    await this.db
+      .updateTable('cliente')
+      .set({ tipo: 'cliente' })
+      .where('id', '=', id)
+      .executeTakeFirstOrThrow();
+
+    return (await this.obtener(id))!;
+  }
+
   /** Delegado al helper compartido (D9 del plan, Task 2). */
   async buscarSucursalUsuario(
     usuarioId: string,
