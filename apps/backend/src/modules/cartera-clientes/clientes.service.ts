@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -190,6 +191,32 @@ export class ClientesService {
     }
 
     await this.repo.eliminar(id);
+  }
+
+  /**
+   * Un solo sentido: Prospecto -> Cliente, nunca al reves (respuesta directa
+   * de Roberto/el cliente: la conversion la decide un administrador a mano
+   * desde el Portal, no algo automatico ni bidireccional).
+   */
+  async convertirACliente(
+    usuarioId: string,
+    id: string,
+  ): Promise<ClienteDetalle> {
+    const cliente = await this.repo.obtener(id);
+    if (!cliente) {
+      throw new NotFoundException('No existe ese cliente.');
+    }
+
+    const alcance = await this.alcanceDe(usuarioId, null);
+    if (alcance.tipo === 'una' && alcance.codigo !== cliente.sucursalCodigo) {
+      throw new ForbiddenException('No tienes acceso a esa sucursal.');
+    }
+
+    if (cliente.tipo === 'cliente') {
+      throw new ConflictException('Ya es cliente.');
+    }
+
+    return this.repo.convertirACliente(id);
   }
 
   private async alcanceDe(

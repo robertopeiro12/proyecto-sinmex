@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { useCatalogo } from "@/components/catalogo/use-catalogo";
 import { TablaCatalogo } from "@/components/catalogo/tabla-catalogo";
 import {
+  convertirACliente,
   eliminarCliente,
   listarClientes,
   obtenerCliente,
@@ -42,7 +43,13 @@ export function PantallaClientes({
   const [edicion, setEdicion] = useState<Edicion>(null);
   const [cargandoDetalleId, setCargandoDetalleId] = useState<string | null>(null);
   const [eliminandoId, setEliminandoId] = useState<string | null>(null);
+  const [convirtiendoId, setConvirtiendoId] = useState<string | null>(null);
   const [errorDetalle, setErrorDetalle] = useState<string | null>(null);
+  const enCurso =
+    edicion !== null ||
+    cargandoDetalleId !== null ||
+    eliminandoId !== null ||
+    convirtiendoId !== null;
 
   async function abrirEdicion(resumen: ClienteResumen) {
     setCargandoDetalleId(resumen.id);
@@ -81,6 +88,22 @@ export function PantallaClientes({
     }
   }
 
+  async function convertir(item: ClienteResumen) {
+    if (!window.confirm(`¿Convertir a "${item.nombre}" en Cliente? No se puede deshacer.`)) {
+      return;
+    }
+    setConvirtiendoId(item.id);
+    setErrorDetalle(null);
+    try {
+      await convertirACliente(item.id);
+      void catalogo.recargar();
+    } catch {
+      setErrorDetalle("No se pudo convertir ese prospecto en cliente.");
+    } finally {
+      setConvirtiendoId(null);
+    }
+  }
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
@@ -89,11 +112,7 @@ export function PantallaClientes({
           <FiltroTipo valor={tipo} />
         </div>
         {puedeGestionar && (
-          <Button
-            size="sm"
-            disabled={edicion !== null || cargandoDetalleId !== null || eliminandoId !== null}
-            onClick={() => setEdicion("nueva")}
-          >
+          <Button size="sm" disabled={enCurso} onClick={() => setEdicion("nueva")}>
             Nuevo cliente
           </Button>
         )}
@@ -145,14 +164,20 @@ export function PantallaClientes({
               puedeGestionar
                 ? (c) => (
                     <div className="flex justify-end gap-2">
+                      {c.tipo === "prospecto" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={enCurso}
+                          onClick={() => void convertir(c)}
+                        >
+                          {convirtiendoId === c.id ? "Convirtiendo…" : "Convertir a Cliente"}
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={
-                          edicion !== null ||
-                          cargandoDetalleId !== null ||
-                          eliminandoId !== null
-                        }
+                        disabled={enCurso}
                         onClick={() => void abrirEdicion(c)}
                       >
                         {cargandoDetalleId === c.id ? "Cargando…" : "Editar"}
@@ -160,11 +185,7 @@ export function PantallaClientes({
                       <Button
                         variant="outline"
                         size="sm"
-                        disabled={
-                          edicion !== null ||
-                          cargandoDetalleId !== null ||
-                          eliminandoId !== null
-                        }
+                        disabled={enCurso}
                         onClick={() => void eliminar(c)}
                       >
                         {eliminandoId === c.id ? "Eliminando…" : "Eliminar"}

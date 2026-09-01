@@ -32,6 +32,7 @@ const obtenerCliente = vi.mocked(clientesLib.obtenerCliente);
 const crearCliente = vi.mocked(clientesLib.crearCliente);
 const editarCliente = vi.mocked(clientesLib.editarCliente);
 const eliminarCliente = vi.mocked(clientesLib.eliminarCliente);
+const convertirACliente = vi.mocked(clientesLib.convertirACliente);
 const usarAuthMock = vi.mocked(useAuth);
 
 function mockAuth(puede: (clave: string) => boolean) {
@@ -48,6 +49,15 @@ const RESUMEN: ClienteResumen = {
   nombre: "Abarrotes Lupita",
   telefono: "664-000-0000",
   tipo: "cliente",
+  tipoNegocio: null,
+  sucursalCodigo: "TJ",
+};
+
+const PROSPECTO: ClienteResumen = {
+  id: "2",
+  nombre: "Tienda El Prospecto",
+  telefono: "664-111-1111",
+  tipo: "prospecto",
   tipoNegocio: null,
   sucursalCodigo: "TJ",
 };
@@ -206,5 +216,52 @@ describe("PantallaClientes", () => {
     await usuario.click(screen.getByRole("button", { name: "Eliminar" }));
 
     expect(eliminarCliente).not.toHaveBeenCalled();
+  });
+
+  it('muestra "Convertir a Cliente" solo para prospectos', async () => {
+    mockAuth(() => true);
+    listarClientes.mockResolvedValue([RESUMEN, PROSPECTO]);
+
+    render(<PantallaClientes sucursal={null} tipo="todos" />);
+    await screen.findByText("Tienda El Prospecto");
+
+    expect(
+      screen.getAllByRole("button", { name: "Convertir a Cliente" }),
+    ).toHaveLength(1);
+  });
+
+  it("convierte un prospecto en cliente tras confirmar, y recarga la lista", async () => {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    listarClientes.mockResolvedValueOnce([PROSPECTO]);
+    convertirACliente.mockResolvedValue({ ...DETALLE, id: "2", tipo: "cliente" });
+    listarClientes.mockResolvedValueOnce([
+      { ...PROSPECTO, tipo: "cliente" },
+    ]);
+
+    render(<PantallaClientes sucursal={null} tipo="todos" />);
+    await screen.findByText("Tienda El Prospecto");
+
+    await usuario.click(screen.getByRole("button", { name: "Convertir a Cliente" }));
+
+    await waitFor(() => expect(convertirACliente).toHaveBeenCalledWith("2"));
+    expect(
+      screen.queryByRole("button", { name: "Convertir a Cliente" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("no llama a convertirACliente si el usuario cancela la confirmacion", async () => {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    vi.spyOn(window, "confirm").mockReturnValue(false);
+    listarClientes.mockResolvedValue([PROSPECTO]);
+
+    render(<PantallaClientes sucursal={null} tipo="todos" />);
+    await screen.findByText("Tienda El Prospecto");
+
+    await usuario.click(screen.getByRole("button", { name: "Convertir a Cliente" }));
+
+    expect(convertirACliente).not.toHaveBeenCalled();
   });
 });

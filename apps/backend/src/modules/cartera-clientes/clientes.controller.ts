@@ -74,4 +74,14 @@ export class ClientesController {
     await this.clientes.eliminar(usuarioId, id);
     return { id };
   }
+
+  // Un solo sentido (Prospecto -> Cliente): sin cuerpo, la accion es fija.
+  @Post(':id/convertir-a-cliente')
+  @RequierePermiso('cliente.gestionar')
+  async convertirACliente(
+    @UsuarioActual() usuarioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ClienteDetalle> {
+    return this.clientes.convertirACliente(usuarioId, id);
+  }
 }
