@@ -35,8 +35,14 @@ describe('calcularExcepciones', () => {
     const resultado = calcularExcepciones(marcados, delPerfil);
 
     expect(resultado).toHaveLength(2);
-    expect(resultado).toContainEqual({ clave: 'vendedor.gestionar', habilitado: true });
-    expect(resultado).toContainEqual({ clave: 'producto.gestionar', habilitado: false });
+    expect(resultado).toContainEqual({
+      clave: 'vendedor.gestionar',
+      habilitado: true,
+    });
+    expect(resultado).toContainEqual({
+      clave: 'producto.gestionar',
+      habilitado: false,
+    });
   });
 
   it('es la inversa exacta de combinarPermisos: aplicar el resultado reproduce "marcados"', () => {
