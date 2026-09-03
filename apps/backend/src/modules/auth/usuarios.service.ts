@@ -1,14 +1,23 @@
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import {
+  esViolacionFk,
+  esViolacionUnicidad,
+} from '../../database/errores-postgres';
 import { resolverAlcance, type Alcance } from '../sucursales/alcance-sucursal';
+import { calcularExcepciones } from './calcular-excepciones';
+import { PasswordService } from './password.service';
 import { PerfilesService, type MatrizPerfiles } from './perfiles.service';
 import { PermisosRepository } from './permisos.repository';
+import type { CrearUsuarioDto } from './dto/crear-usuario.dto';
 import {
   UsuariosRepository,
+  type ExcepcionConId,
   type UsuarioBase,
   type UsuarioDetalle,
   type UsuarioResumen,
@@ -20,6 +29,7 @@ export class UsuariosService {
     private readonly repo: UsuariosRepository,
     private readonly perfiles: PerfilesService,
     private readonly permisosRepo: PermisosRepository,
+    private readonly password: PasswordService,
   ) {}
 
   async catalogoPerfiles(): Promise<MatrizPerfiles> {
@@ -85,5 +95,76 @@ export class UsuariosService {
   ): Promise<void> {
     const alcance = await this.alcanceDe(usuarioId, null);
     this.exigirAlcanceSobreCodigo(alcance, codigo);
+  }
+
+  async crear(
+    usuarioId: string,
+    dto: CrearUsuarioDto,
+  ): Promise<UsuarioDetalle> {
+    const actor = await this.filaActor(usuarioId);
+    // D8: si esta atado, la sucursal sale del alcance -- se ignora lo que
+    // mande el body, mismo criterio que D6 de CrearClienteDto (T-12).
+    const sucursalId = actor.id ?? dto.sucursalId ?? null;
+
+    const matriz = await this.perfiles.obtenerMatriz();
+    const perfil = matriz.perfiles.find((p) => p.id === dto.perfilId);
+    if (!perfil) {
+      throw new NotFoundException('No existe ese perfil.');
+    }
+
+    const excepciones = this.excepcionesConId(
+      dto.permisosMarcados,
+      perfil,
+      matriz,
+    );
+    const hash = await this.password.hashear(dto.contrasena);
+
+    try {
+      const creado = await this.repo.crear(
+        {
+          login: dto.login,
+          nombre: dto.nombre,
+          password_hash: hash,
+          perfil_id: dto.perfilId,
+          sucursal_id: sucursalId,
+        },
+        excepciones,
+      );
+      return this.aDetalle(creado);
+    } catch (error) {
+      if (esViolacionUnicidad(error)) {
+        throw new ConflictException(
+          `Ya existe un usuario con el login "${dto.login}".`,
+        );
+      }
+      if (esViolacionFk(error)) {
+        throw new NotFoundException('Alguno de los datos enviados no existe.');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * D4 del spec: el perfil maestro no consulta usuario_permiso
+   * (permisos.repository.ts:43 corta antes) -- si el formulario de todos
+   * modos manda permisosMarcados para un usuario con ese perfil, se ignora
+   * en vez de escribir excepciones muertas.
+   */
+  protected excepcionesConId(
+    marcados: string[],
+    perfil: { esMaestro: boolean; permisos: string[] },
+    matriz: MatrizPerfiles,
+  ): ExcepcionConId[] {
+    if (perfil.esMaestro) {
+      return [];
+    }
+    const claveAId = new Map(matriz.permisos.map((p) => [p.clave, p.id]));
+    const excepciones = calcularExcepciones(new Set(marcados), perfil.permisos);
+    return excepciones
+      .map((e) => ({
+        permiso_id: claveAId.get(e.clave),
+        habilitado: e.habilitado,
+      }))
+      .filter((e): e is ExcepcionConId => e.permiso_id !== undefined);
   }
 }

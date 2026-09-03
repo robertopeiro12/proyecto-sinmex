@@ -88,9 +88,8 @@ describe('Usuarios (e2e)', () => {
    * que `sembrarPerfil()` en `perfiles.e2e-spec.ts` (T-08b), un paso mas
    * lejos (ese no necesitaba asignarle ningun permiso).
    *
-   * Consumida por las Tasks 5-6, no por esta tarea.
+   * Consumida por las Tasks 5-6.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const sembrarPerfilConPermiso = async (
     nombre: string,
     clavePermiso: string,
@@ -316,6 +315,130 @@ describe('Usuarios (e2e)', () => {
         .get('/usuarios/no-es-un-uuid')
         .set('Cookie', cookieGeneral)
         .expect(400);
+    });
+  });
+
+  describe('POST /usuarios', () => {
+    it('da de alta un usuario con permisos por excepcion sobre su perfil', async () => {
+      // Perfil desechable con UN SOLO permiso controlado (ver
+      // sembrarPerfilConPermiso, Task 3) -- determinista, no depende de que
+      // otro archivo de e2e haya tocado perfil_permiso de los 6 sembrados.
+      const perfil = await sembrarPerfilConPermiso(
+        `${PREFIJO}-perfil-alta`,
+        'cliente.gestionar',
+      );
+      // Desmarca el permiso que el perfil SI da, marca uno que NO da.
+      const marcados = ['vendedor.gestionar'];
+
+      const res = await request(app.getHttpServer())
+        .post('/usuarios')
+        .set('Cookie', cookieGeneral)
+        .send({
+          login: `${PREFIJO}-alta`,
+          nombre: 'Usuario de prueba',
+          contrasena: 'una-contrasena-larga',
+          perfilId: perfil.id,
+          permisosMarcados: marcados,
+        })
+        .expect(201);
+
+      const creado = res.body as { id: string; permisosEfectivos: string[] };
+      usuarioIds.push(creado.id);
+      expect(creado.permisosEfectivos).toContain('vendedor.gestionar');
+      expect(creado.permisosEfectivos).not.toContain('cliente.gestionar');
+    });
+
+    it('el perfil maestro ignora permisosMarcados: siempre recibe el catalogo completo', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/usuarios')
+        .set('Cookie', cookieGeneral)
+        .send({
+          login: `${PREFIJO}-alta-maestro`,
+          nombre: 'Maestro de prueba',
+          contrasena: 'una-contrasena-larga',
+          perfilId: idPerfilMaestro,
+          permisosMarcados: [],
+        })
+        .expect(201);
+
+      const creado = res.body as { id: string; permisosEfectivos: string[] };
+      usuarioIds.push(creado.id);
+      expect(creado.permisosEfectivos.length).toBeGreaterThan(0);
+    });
+
+    it('rechaza un login duplicado con 409', async () => {
+      await request(app.getHttpServer())
+        .post('/usuarios')
+        .set('Cookie', cookieGeneral)
+        .send({
+          login: LOGIN_SIN_PERMISO,
+          nombre: 'Repetido',
+          contrasena: 'una-contrasena-larga',
+          perfilId: idPerfilAuxiliar,
+          permisosMarcados: [],
+        })
+        .expect(409);
+    });
+
+    it('a un usuario atado se le ignora el sucursalId que mande (D8): se le asigna la suya', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/usuarios')
+        .set('Cookie', cookieTijuana)
+        .send({
+          login: `${PREFIJO}-alta-atado`,
+          nombre: 'Atado de prueba',
+          contrasena: 'una-contrasena-larga',
+          perfilId: idPerfilAuxiliar,
+          sucursalId: idMexicali,
+          permisosMarcados: [],
+        })
+        .expect(201);
+
+      const creado = res.body as { id: string; sucursalId: string };
+      usuarioIds.push(creado.id);
+      expect(creado.sucursalId).toBe(idTijuana);
+    });
+
+    it('rechaza sin usuario.gestionar', async () => {
+      await request(app.getHttpServer())
+        .post('/usuarios')
+        .set('Cookie', cookieSinPermiso)
+        .send({
+          login: `${PREFIJO}-sin-permiso`,
+          nombre: 'X',
+          contrasena: 'una-contrasena-larga',
+          perfilId: idPerfilAuxiliar,
+          permisosMarcados: [],
+        })
+        .expect(403);
+    });
+
+    it('rechaza una contrasena corta con 400', async () => {
+      await request(app.getHttpServer())
+        .post('/usuarios')
+        .set('Cookie', cookieGeneral)
+        .send({
+          login: `${PREFIJO}-corta`,
+          nombre: 'X',
+          contrasena: '123',
+          perfilId: idPerfilAuxiliar,
+          permisosMarcados: [],
+        })
+        .expect(400);
+    });
+
+    it('rechaza un perfilId que no existe con 404', async () => {
+      await request(app.getHttpServer())
+        .post('/usuarios')
+        .set('Cookie', cookieGeneral)
+        .send({
+          login: `${PREFIJO}-perfil-inexistente`,
+          nombre: 'X',
+          contrasena: 'una-contrasena-larga',
+          perfilId: '00000000-0000-0000-0000-000000000000',
+          permisosMarcados: [],
+        })
+        .expect(404);
     });
   });
 });

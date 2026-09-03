@@ -1,7 +1,17 @@
-import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { UsuarioActual } from './usuario-actual.decorator';
 import { RequierePermiso } from './requiere-permiso.decorator';
 import { normalizarSucursalPedida } from '../sucursales/alcance-sucursal';
+import { CrearUsuarioDto } from './dto/crear-usuario.dto';
 import { UsuariosService } from './usuarios.service';
 import type { MatrizPerfiles } from './perfiles.service';
 import type { UsuarioDetalle, UsuarioResumen } from './usuarios.repository';
@@ -39,5 +49,14 @@ export class UsuariosController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<UsuarioDetalle> {
     return this.usuarios.obtener(usuarioId, id);
+  }
+
+  @Post()
+  @HttpCode(201)
+  async crear(
+    @UsuarioActual() usuarioId: string,
+    @Body() dto: CrearUsuarioDto,
+  ): Promise<UsuarioDetalle> {
+    return this.usuarios.crear(usuarioId, dto);
   }
 }
