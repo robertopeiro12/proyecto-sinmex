@@ -106,10 +106,11 @@ perfiles + el catálogo de permisos + qué le da cada perfil, para poder precarg
 dejarían de poder configurarse por separado.
 
 En vez de eso: `GET /usuarios/catalogo-perfiles`, gateado con `usuario.gestionar` (el mismo permiso
-de todo este controlador), que arma la misma forma de datos reutilizando `PerfilesRepository`
-(`catalogoPermisos()`, `listarPerfiles()`, `listarAsignaciones()`) sin duplicarla — `PerfilesRepository`
-ya vive en `AuthModule` y no necesita exportarse fuera de él, `UsuariosService` está en el mismo
-módulo.
+de todo este controlador), que reutiliza **directamente** `PerfilesService.obtenerMatriz()`
+(T-08b) — no se recompone nada: esa función ya arma exactamente `{ permisos, perfiles }`, con cada
+perfil trayendo su `permisos: string[]` (claves efectivas, el maestro ya expandido al catálogo
+completo por `esMaestro`). `PerfilesService` ya vive en `AuthModule` como provider; `UsuariosService`
+lo consume por inyección directa, sin exportarlo fuera del módulo.
 
 ### D6 — `usuario.gestionar` gatea los cinco endpoints por igual, lectura incluida
 
@@ -210,7 +211,7 @@ Todos bajo `@RequierePermiso('usuario.gestionar')` a nivel de clase (D6), como `
 |---|---|---|
 | `GET` | `/usuarios?sucursal=` | Lista acotada por `resolverAlcance()` (D8). Campos de lista: login, nombre, perfil, sucursal, activo. |
 | `GET` | `/usuarios/:id` | Detalle + permisos **efectivos actuales** (`permisosDe()` de T-08a, reutilizado) para precargar la matriz del formulario de edición (D3). |
-| `GET` | `/usuarios/catalogo-perfiles` | `{ perfiles: PerfilResumen[]; permisos: Permiso[]; asignaciones: Asignacion[] }` — misma forma que ya arma `PerfilesRepository`, sin exponer el endpoint gateado por `perfil.gestionar` (D5). |
+| `GET` | `/usuarios/catalogo-perfiles` | `MatrizPerfiles` (`{ permisos: Permiso[]; perfiles: PerfilConPermisos[] }`), la misma forma que ya devuelve `GET /perfiles` — pero sin exigir `perfil.gestionar` (D5). |
 | `POST` | `/usuarios` | `{ login, nombre, contrasena, perfilId, sucursalId: string \| null, permisosMarcados: string[] }`. `409` si el login ya existe (activo). |
 | `PATCH` | `/usuarios/:id` | Mismo payload, `contrasena` opcional (D2). `409` en los casos de D7. `403` si la sucursal destino queda fuera del alcance de quien edita (D8). |
 | `DELETE` | `/usuarios/:id` | Baja lógica. `409` en los casos de D7. |
