@@ -43,6 +43,17 @@ function aBase(fila: FilaUsuario): UsuarioBase {
   };
 }
 
+function aResumen(fila: FilaUsuario): UsuarioResumen {
+  return {
+    id: fila.id,
+    login: fila.login,
+    nombre: fila.nombre,
+    perfil: fila.perfil_nombre,
+    perfilId: fila.perfil_id,
+    sucursalCodigo: fila.sucursal_codigo,
+  };
+}
+
 @Injectable()
 export class UsuariosRepository {
   constructor(@Inject(DB_CONNECTION) private readonly db: Database) {}
@@ -66,7 +77,7 @@ export class UsuariosRepository {
 
   async listar(): Promise<UsuarioResumen[]> {
     const filas = await this.consultaBase().orderBy('usuario.nombre').execute();
-    return filas.map(aBase);
+    return filas.map(aResumen);
   }
 
   async listarPorCodigoSucursal(codigo: string): Promise<UsuarioResumen[]> {
@@ -74,7 +85,7 @@ export class UsuariosRepository {
       .where('sucursal.codigo', '=', codigo)
       .orderBy('usuario.nombre')
       .execute();
-    return filas.map(aBase);
+    return filas.map(aResumen);
   }
 
   async obtener(id: string): Promise<UsuarioBase | undefined> {
