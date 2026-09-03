@@ -351,6 +351,7 @@ describe('Usuarios (e2e)', () => {
   let app: INestApplication<App>;
   let db: Database;
   const usuarioIds: string[] = [];
+  const perfilIds: string[] = [];
   let idTijuana: string;
   let idMexicali: string;
   let idPerfilMaestro: string;
@@ -390,6 +391,38 @@ describe('Usuarios (e2e)', () => {
       .executeTakeFirstOrThrow();
     usuarioIds.push(id);
     return id;
+  };
+
+  /**
+   * Perfil DESECHABLE con exactamente un permiso -- para las Tasks 5-6, que
+   * necesitan un caso determinista de "el perfil SI da este permiso, no da
+   * este otro". Los 6 perfiles sembrados (Auxiliar Administrativo, Jefe de
+   * Ventas, ...) nacen SIN ninguna fila en `perfil_permiso` (CLAUDE.md) y su
+   * estado real depende de que otro archivo de e2e los haya tocado en esta
+   * misma corrida -- leerlos en vivo seria no determinista. Mismo criterio
+   * que `sembrarPerfil()` en `perfiles.e2e-spec.ts` (T-08b), un paso mas
+   * lejos (ese no necesitaba asignarle ningun permiso).
+   */
+  const sembrarPerfilConPermiso = async (
+    nombre: string,
+    clavePermiso: string,
+  ): Promise<{ id: string; clave: string }> => {
+    const permiso = await db
+      .selectFrom('permiso')
+      .select('id')
+      .where('clave', '=', clavePermiso)
+      .executeTakeFirstOrThrow();
+    const { id } = await db
+      .insertInto('perfil')
+      .values({ nombre })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    perfilIds.push(id);
+    await db
+      .insertInto('perfil_permiso')
+      .values({ perfil_id: id, permiso_id: permiso.id })
+      .execute();
+    return { id, clave: clavePermiso };
   };
 
   beforeAll(async () => {
@@ -452,6 +485,12 @@ describe('Usuarios (e2e)', () => {
       await db.deleteFrom('usuario').where('id', 'in', usuarioIds).execute();
     }
     await db.deleteFrom('usuario').where('login', 'like', `${PREFIJO}%`).execute();
+    // Despues de los usuarios (usuario.perfil_id los referencia, sin cascade):
+    // borrar un perfil desechable con usuarios activos violaria la FK.
+    if (perfilIds.length > 0) {
+      await db.deleteFrom('perfil_permiso').where('perfil_id', 'in', perfilIds).execute();
+      await db.deleteFrom('perfil').where('id', 'in', perfilIds).execute();
+    }
     await app.close();
   });
 
@@ -1032,20 +1071,12 @@ Agrega a `apps/backend/test/usuarios.e2e-spec.ts`, después de `describe('GET /u
 ```typescript
   describe('POST /usuarios', () => {
     it('da de alta un usuario con permisos por excepcion sobre su perfil', async () => {
-      const catalogo = (
-        await request(app.getHttpServer())
-          .get('/usuarios/catalogo-perfiles')
-          .set('Cookie', cookieGeneral)
-          .expect(200)
-      ).body as {
-        permisos: { clave: string }[];
-        perfiles: { id: string; nombre: string; permisos: string[] }[];
-      };
-      const auxiliar = catalogo.perfiles.find((p) => p.nombre === 'Auxiliar Administrativo')!;
-      // Desmarca el primer permiso que el perfil SI da, marca uno que NO da.
-      const permisoQueDa = auxiliar.permisos[0];
-      const permisoQueNoDa = catalogo.permisos.find((p) => !auxiliar.permisos.includes(p.clave))!.clave;
-      const marcados = auxiliar.permisos.filter((c) => c !== permisoQueDa).concat(permisoQueNoDa);
+      // Perfil desechable con UN SOLO permiso controlado (ver
+      // sembrarPerfilConPermiso, Task 3) -- determinista, no depende de que
+      // otro archivo de e2e haya tocado perfil_permiso de los 6 sembrados.
+      const perfil = await sembrarPerfilConPermiso(`${PREFIJO}-perfil-alta`, 'cliente.gestionar');
+      // Desmarca el permiso que el perfil SI da, marca uno que NO da.
+      const marcados = ['vendedor.gestionar'];
 
       const res = await request(app.getHttpServer())
         .post('/usuarios')
@@ -1054,15 +1085,15 @@ Agrega a `apps/backend/test/usuarios.e2e-spec.ts`, después de `describe('GET /u
           login: `${PREFIJO}-alta`,
           nombre: 'Usuario de prueba',
           contrasena: 'una-contrasena-larga',
-          perfilId: auxiliar.id,
+          perfilId: perfil.id,
           permisosMarcados: marcados,
         })
         .expect(201);
 
       const creado = res.body as { id: string; permisosEfectivos: string[] };
       usuarioIds.push(creado.id);
-      expect(creado.permisosEfectivos).toContain(permisoQueNoDa);
-      expect(creado.permisosEfectivos).not.toContain(permisoQueDa);
+      expect(creado.permisosEfectivos).toContain('vendedor.gestionar');
+      expect(creado.permisosEfectivos).not.toContain('cliente.gestionar');
     });
 
     it('el perfil maestro ignora permisosMarcados: siempre recibe el catalogo completo', async () => {
@@ -1544,50 +1575,46 @@ Agrega a `apps/backend/test/usuarios.e2e-spec.ts`, después de `describe('POST /
     });
 
     it('recalcula las excepciones al cambiar de perfil: lo que sobra se borra', async () => {
-      const catalogo = (
-        await request(app.getHttpServer())
-          .get('/usuarios/catalogo-perfiles')
-          .set('Cookie', cookieGeneral)
-          .expect(200)
-      ).body as { perfiles: { id: string; nombre: string; permisos: string[] }[] };
-      const auxiliar = catalogo.perfiles.find((p) => p.nombre === 'Auxiliar Administrativo')!;
-      const jefeVentas = catalogo.perfiles.find((p) => p.nombre === 'Jefe de Ventas')!;
+      // Dos perfiles desechables con UN permiso cada uno (ver
+      // sembrarPerfilConPermiso, Task 3) -- determinista, sin depender del
+      // estado en vivo de los 6 perfiles sembrados.
+      const perfilA = await sembrarPerfilConPermiso(`${PREFIJO}-perfil-recalc-a`, 'cliente.gestionar');
+      const perfilB = await sembrarPerfilConPermiso(`${PREFIJO}-perfil-recalc-b`, 'vendedor.gestionar');
 
-      const id = await crearUsuarioFixture(`${PREFIJO}-recalcula`, idPerfilAuxiliar, idTijuana);
-      const extra = jefeVentas.permisos.find((c) => !auxiliar.permisos.includes(c))!;
+      const id = await crearUsuarioFixture(`${PREFIJO}-recalcula`, perfilA.id, idTijuana);
 
-      // Se le da de alta con una excepcion propia del perfil de Jefe de
-      // Ventas, encima de su perfil de Auxiliar.
+      // Se le da de alta con una excepcion propia de perfilB, encima de
+      // perfilA.
       await request(app.getHttpServer())
         .patch(`/usuarios/${id}`)
         .set('Cookie', cookieGeneral)
         .send({
           login: `${PREFIJO}-recalcula`,
           nombre: 'X',
-          perfilId: auxiliar.id,
+          perfilId: perfilA.id,
           sucursalId: idTijuana,
-          permisosMarcados: [...auxiliar.permisos, extra],
+          permisosMarcados: [perfilA.clave, perfilB.clave],
         })
         .expect(200);
 
-      // Cambia a Jefe de Ventas SIN marcar `extra` explicitamente en la
-      // lista nueva -- si `extra` ya lo da el perfil nuevo, no hace falta
-      // repetirlo; la prueba real es que la excepcion vieja (atada al
-      // permiso_id) no sobrevive fantasma con un habilitado obsoleto.
+      // Cambia a perfilB SIN marcar `perfilB.clave` explicitamente en la
+      // lista nueva -- ya lo da el perfil, no hace falta repetirlo; la
+      // prueba real es que la excepcion vieja (atada al permiso_id de
+      // perfilA.clave) no sobrevive fantasma con un habilitado obsoleto.
       const res = await request(app.getHttpServer())
         .patch(`/usuarios/${id}`)
         .set('Cookie', cookieGeneral)
         .send({
           login: `${PREFIJO}-recalcula`,
           nombre: 'X',
-          perfilId: jefeVentas.id,
+          perfilId: perfilB.id,
           sucursalId: idTijuana,
-          permisosMarcados: jefeVentas.permisos,
+          permisosMarcados: [perfilB.clave],
         })
         .expect(200);
 
       const detalle = res.body as { permisosEfectivos: string[] };
-      expect(detalle.permisosEfectivos.sort()).toEqual([...jefeVentas.permisos].sort());
+      expect(detalle.permisosEfectivos).toEqual([perfilB.clave]);
     });
 
     it('rechaza cambiarle el perfil al ultimo Administrador General activo (D7)', async () => {
