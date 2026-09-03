@@ -38,14 +38,10 @@ describe('Usuarios (e2e)', () => {
   const usuarioIds: string[] = [];
   const perfilIds: string[] = [];
   let idTijuana: string;
-  // Consumida por las Tasks 4-7, no por esta tarea.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let idMexicali: string;
   let idPerfilMaestro: string;
   let idPerfilAuxiliar: string;
   let cookieGeneral: string;
-  // Consumida por las Tasks 4-7, no por esta tarea.
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   let cookieTijuana: string;
   let cookieSinPermiso: string;
 
@@ -220,6 +216,106 @@ describe('Usuarios (e2e)', () => {
       await request(app.getHttpServer())
         .get('/usuarios/catalogo-perfiles')
         .expect(401);
+    });
+  });
+
+  describe('GET /usuarios', () => {
+    it('lista los usuarios con su perfil y codigo de sucursal', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/usuarios')
+        .set('Cookie', cookieGeneral)
+        .expect(200);
+
+      const usuarios = res.body as {
+        login: string;
+        perfil: string;
+        sucursalCodigo: string | null;
+      }[];
+      const propio = usuarios.find((u) => u.login === LOGIN_TIJUANA);
+      expect(propio).toBeDefined();
+      expect(propio?.perfil).toBe('Administrador General');
+      expect(propio?.sucursalCodigo).toBe('TJ');
+      expect(propio).not.toHaveProperty('deleted_at');
+      expect(propio).not.toHaveProperty('password_hash');
+    });
+
+    it('un usuario atado a TJ no ve los usuarios de MX ni los General', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/usuarios')
+        .set('Cookie', cookieTijuana)
+        .expect(200);
+
+      const logins = (res.body as { login: string }[]).map((u) => u.login);
+      expect(logins).not.toContain(LOGIN_GENERAL);
+    });
+
+    it('un usuario atado que pide OTRA sucursal recibe 403', async () => {
+      await request(app.getHttpServer())
+        .get('/usuarios?sucursal=MX')
+        .set('Cookie', cookieTijuana)
+        .expect(403);
+    });
+
+    it('rechaza sin usuario.gestionar', async () => {
+      await request(app.getHttpServer())
+        .get('/usuarios')
+        .set('Cookie', cookieSinPermiso)
+        .expect(403);
+    });
+
+    it('rechaza a quien no tiene sesion', async () => {
+      await request(app.getHttpServer()).get('/usuarios').expect(401);
+    });
+  });
+
+  describe('GET /usuarios/:id', () => {
+    it('devuelve el detalle con los permisos efectivos del perfil maestro', async () => {
+      const id = await crearUsuarioFixture(
+        `${PREFIJO}-detalle-maestro`,
+        idPerfilMaestro,
+        idTijuana,
+      );
+
+      const res = await request(app.getHttpServer())
+        .get(`/usuarios/${id}`)
+        .set('Cookie', cookieGeneral)
+        .expect(200);
+
+      const detalle = res.body as {
+        login: string;
+        sucursalId: string | null;
+        permisosEfectivos: string[];
+      };
+      expect(detalle.login).toBe(`${PREFIJO}-detalle-maestro`);
+      expect(detalle.sucursalId).toBe(idTijuana);
+      expect(detalle.permisosEfectivos.length).toBeGreaterThan(0);
+    });
+
+    it('responde 404 para un id que no existe', async () => {
+      await request(app.getHttpServer())
+        .get('/usuarios/00000000-0000-0000-0000-000000000000')
+        .set('Cookie', cookieGeneral)
+        .expect(404);
+    });
+
+    it('un usuario atado a TJ no puede leer el detalle de un usuario de MX', async () => {
+      const id = await crearUsuarioFixture(
+        `${PREFIJO}-detalle-mx`,
+        idPerfilAuxiliar,
+        idMexicali,
+      );
+
+      await request(app.getHttpServer())
+        .get(`/usuarios/${id}`)
+        .set('Cookie', cookieTijuana)
+        .expect(403);
+    });
+
+    it('responde 400 para un id mal formado', async () => {
+      await request(app.getHttpServer())
+        .get('/usuarios/no-es-un-uuid')
+        .set('Cookie', cookieGeneral)
+        .expect(400);
     });
   });
 });

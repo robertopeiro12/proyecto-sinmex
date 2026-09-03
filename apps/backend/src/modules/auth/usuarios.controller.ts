@@ -1,7 +1,10 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import { UsuarioActual } from './usuario-actual.decorator';
 import { RequierePermiso } from './requiere-permiso.decorator';
+import { normalizarSucursalPedida } from '../sucursales/alcance-sucursal';
 import { UsuariosService } from './usuarios.service';
 import type { MatrizPerfiles } from './perfiles.service';
+import type { UsuarioDetalle, UsuarioResumen } from './usuarios.repository';
 
 // Sin @Publico(): el guard global protege todo por defecto. Igual que
 // PerfilesController (T-08b): el decorador va a nivel de CLASE -- los seis
@@ -20,5 +23,21 @@ export class UsuariosController {
   @Get('catalogo-perfiles')
   async catalogoPerfiles(): Promise<MatrizPerfiles> {
     return this.usuarios.catalogoPerfiles();
+  }
+
+  @Get()
+  async listar(
+    @UsuarioActual() usuarioId: string,
+    @Query('sucursal') sucursal?: string,
+  ): Promise<UsuarioResumen[]> {
+    return this.usuarios.listar(usuarioId, normalizarSucursalPedida(sucursal));
+  }
+
+  @Get(':id')
+  async obtener(
+    @UsuarioActual() usuarioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<UsuarioDetalle> {
+    return this.usuarios.obtener(usuarioId, id);
   }
 }

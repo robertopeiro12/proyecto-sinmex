@@ -15,6 +15,7 @@ import { SesionVendedorRepository } from './sesion-vendedor.repository';
 import { TokenService } from './token.service';
 import { TokenVendedorService } from './token-vendedor.service';
 import { UsuariosController } from './usuarios.controller';
+import { UsuariosRepository } from './usuarios.repository';
 import { UsuariosService } from './usuarios.service';
 
 @Module({
@@ -56,6 +57,7 @@ import { UsuariosService } from './usuarios.service';
     PermisosRepository,
     PerfilesRepository,
     PerfilesService,
+    UsuariosRepository,
     UsuariosService,
   ],
   // TokenVendedorService y PermisosRepository se exportan porque los inyectan
