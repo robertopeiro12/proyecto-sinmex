@@ -706,4 +706,159 @@ describe('Usuarios (e2e)', () => {
         .expect(403);
     });
   });
+
+  describe('DELETE /usuarios/:id', () => {
+    it('da de baja un usuario y libera su login (D1)', async () => {
+      const login = `${PREFIJO}-baja`;
+      const id = await crearUsuarioFixture(login, idPerfilAuxiliar, idTijuana);
+
+      await request(app.getHttpServer())
+        .delete(`/usuarios/${id}`)
+        .set('Cookie', cookieGeneral)
+        .expect(200);
+
+      const listado = await request(app.getHttpServer())
+        .get('/usuarios')
+        .set('Cookie', cookieGeneral)
+        .expect(200);
+      expect((listado.body as { id: string }[]).some((u) => u.id === id)).toBe(
+        false,
+      );
+
+      // D1: el login queda libre de inmediato para un alta nueva.
+      const res = await request(app.getHttpServer())
+        .post('/usuarios')
+        .set('Cookie', cookieGeneral)
+        .send({
+          login,
+          nombre: 'Reusa el login',
+          contrasena: 'una-contrasena-larga',
+          perfilId: idPerfilAuxiliar,
+          sucursalId: idTijuana,
+          permisosMarcados: [],
+        })
+        .expect(201);
+      usuarioIds.push((res.body as { id: string }).id);
+    });
+
+    it('rechaza que un usuario se de de baja a si mismo', async () => {
+      const login = `${PREFIJO}-autobaja`;
+      // Perfil maestro, no auxiliar: quien intenta la peticion necesita
+      // usuario.gestionar para siquiera llegar al controller -- con perfil
+      // auxiliar (sin permisos) el guard responde 403 antes de que el
+      // servicio evalue la auto-baja, y la prueba nunca ejercita el 409.
+      const id = await crearUsuarioFixture(login, idPerfilMaestro, null);
+      const cookiePropia = await iniciarSesion(login);
+
+      await request(app.getHttpServer())
+        .delete(`/usuarios/${id}`)
+        .set('Cookie', cookiePropia)
+        .expect(409);
+    });
+
+    it('rechaza dar de baja al ultimo Administrador General activo (D7)', async () => {
+      const idUnico = await crearUsuarioFixture(
+        `${PREFIJO}-unico-baja`,
+        idPerfilMaestro,
+        null,
+      );
+      const cookieUnico = await iniciarSesion(`${PREFIJO}-unico-baja`);
+
+      // Misma tecnica de ventana angosta que la prueba equivalente de
+      // PATCH (D7): ver el comentario ahi.
+      const otrosMaestrosActivos = await db
+        .selectFrom('usuario')
+        .select('id')
+        .where('perfil_id', '=', idPerfilMaestro)
+        .where('deleted_at', 'is', null)
+        .where('id', '!=', idUnico)
+        .execute();
+      const idsOtros = otrosMaestrosActivos.map((f) => f.id);
+
+      try {
+        if (idsOtros.length > 0) {
+          await db
+            .updateTable('usuario')
+            .set({ perfil_id: idPerfilAuxiliar })
+            .where('id', 'in', idsOtros)
+            .execute();
+        }
+
+        // La baja la pide OTRO usuario (cookieGeneral quedo temporalmente
+        // sin perfil maestro): usa una cookie sin usuario.gestionar seria
+        // 403 antes de llegar al 409, asi que se crea un tercer fixture
+        // exclusivo para hacer la peticion. NO puede ser un cuarto
+        // Administrador General activo (eso volveria a subir el conteo de
+        // contarActivosConPerfil() a 2 y el 409 nunca dispararia): en vez
+        // de eso lleva perfil auxiliar con una excepcion habilitada de
+        // usuario.gestionar (mismo mecanismo de usuario_permiso que D3).
+        const permisoUsuarioGestionar = await db
+          .selectFrom('permiso')
+          .select('id')
+          .where('clave', '=', 'usuario.gestionar')
+          .executeTakeFirstOrThrow();
+        const idSolicitante = await crearUsuarioFixture(
+          `${PREFIJO}-solicitante-baja`,
+          idPerfilAuxiliar,
+          null,
+        );
+        await db
+          .insertInto('usuario_permiso')
+          .values({
+            usuario_id: idSolicitante,
+            permiso_id: permisoUsuarioGestionar.id,
+            habilitado: true,
+          })
+          .execute();
+        const cookieSolicitante = await iniciarSesion(
+          `${PREFIJO}-solicitante-baja`,
+        );
+
+        await request(app.getHttpServer())
+          .delete(`/usuarios/${idUnico}`)
+          .set('Cookie', cookieSolicitante)
+          .expect(409);
+        void cookieUnico;
+      } finally {
+        await db
+          .updateTable('usuario')
+          .set({ perfil_id: idPerfilMaestro })
+          .where('id', 'in', idsOtros)
+          .execute();
+      }
+    });
+
+    it('un usuario atado a TJ no puede dar de baja a un usuario de MX', async () => {
+      const id = await crearUsuarioFixture(
+        `${PREFIJO}-baja-mx`,
+        idPerfilAuxiliar,
+        idMexicali,
+      );
+
+      await request(app.getHttpServer())
+        .delete(`/usuarios/${id}`)
+        .set('Cookie', cookieTijuana)
+        .expect(403);
+    });
+
+    it('responde 404 para un id que no existe', async () => {
+      await request(app.getHttpServer())
+        .delete('/usuarios/00000000-0000-0000-0000-000000000000')
+        .set('Cookie', cookieGeneral)
+        .expect(404);
+    });
+
+    it('rechaza sin usuario.gestionar', async () => {
+      const id = await crearUsuarioFixture(
+        `${PREFIJO}-baja-sin-permiso`,
+        idPerfilAuxiliar,
+        null,
+      );
+
+      await request(app.getHttpServer())
+        .delete(`/usuarios/${id}`)
+        .set('Cookie', cookieSinPermiso)
+        .expect(403);
+    });
+  });
 });

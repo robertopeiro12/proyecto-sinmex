@@ -235,6 +235,37 @@ export class UsuariosService {
    * modos manda permisosMarcados para un usuario con ese perfil, se ignora
    * en vez de escribir excepciones muertas.
    */
+  async eliminar(usuarioId: string, id: string): Promise<void> {
+    // D7: sin auto-baja, comprobado ANTES de tocar la base -- comparar
+    // solo los ids evita una consulta de mas para el caso mas comun (nadie
+    // se da de baja a si mismo por accidente sin intentarlo).
+    if (id === usuarioId) {
+      throw new ConflictException('No puedes dar de baja tu propio usuario.');
+    }
+
+    const actual = await this.repo.obtener(id);
+    if (!actual) {
+      throw new NotFoundException('No existe ese usuario.');
+    }
+
+    const alcance = await (async () => {
+      const actor = await this.filaActor(usuarioId);
+      return resolverAlcance(actor.codigo, null);
+    })();
+    this.exigirAlcanceSobreCodigo(alcance, actual.sucursalCodigo);
+
+    if (esMaestro(actual.perfil)) {
+      const activos = await this.repo.contarActivosConPerfil(actual.perfilId);
+      if (activos <= 1) {
+        throw new ConflictException(
+          'Debe quedar al menos un Administrador General activo.',
+        );
+      }
+    }
+
+    await this.repo.darDeBaja(id);
+  }
+
   protected excepcionesConId(
     marcados: string[],
     perfil: { esMaestro: boolean; permisos: string[] },

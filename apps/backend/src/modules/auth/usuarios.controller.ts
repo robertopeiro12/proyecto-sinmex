@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -69,5 +70,14 @@ export class UsuariosController {
     @Body() dto: EditarUsuarioDto,
   ): Promise<UsuarioDetalle> {
     return this.usuarios.editar(usuarioId, id, dto);
+  }
+
+  @Delete(':id')
+  async eliminar(
+    @UsuarioActual() usuarioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ id: string }> {
+    await this.usuarios.eliminar(usuarioId, id);
+    return { id };
   }
 }

@@ -177,6 +177,14 @@ export class UsuariosRepository {
     return Number(fila.total);
   }
 
+  async darDeBaja(id: string): Promise<void> {
+    await this.db
+      .updateTable('usuario')
+      .set({ deleted_at: new Date() })
+      .where('id', '=', id)
+      .executeTakeFirstOrThrow();
+  }
+
   /**
    * Reconcilia usuario_permiso contra el estado final que ya trae resuelto
    * el servicio (D3 del spec): da de baja toda excepcion vigente que ya NO
