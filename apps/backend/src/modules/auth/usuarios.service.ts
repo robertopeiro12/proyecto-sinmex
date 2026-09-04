@@ -229,12 +229,6 @@ export class UsuariosService {
     }
   }
 
-  /**
-   * D4 del spec: el perfil maestro no consulta usuario_permiso
-   * (permisos.repository.ts:43 corta antes) -- si el formulario de todos
-   * modos manda permisosMarcados para un usuario con ese perfil, se ignora
-   * en vez de escribir excepciones muertas.
-   */
   async eliminar(usuarioId: string, id: string): Promise<void> {
     // D7: sin auto-baja, comprobado ANTES de tocar la base -- comparar
     // solo los ids evita una consulta de mas para el caso mas comun (nadie
@@ -266,6 +260,12 @@ export class UsuariosService {
     await this.repo.darDeBaja(id);
   }
 
+  /**
+   * D4 del spec: el perfil maestro no consulta usuario_permiso
+   * (permisos.repository.ts:43 corta antes) -- si el formulario de todos
+   * modos manda permisosMarcados para un usuario con ese perfil, se ignora
+   * en vez de escribir excepciones muertas.
+   */
   protected excepcionesConId(
     marcados: string[],
     perfil: { esMaestro: boolean; permisos: string[] },
