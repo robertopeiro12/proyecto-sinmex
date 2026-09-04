@@ -68,7 +68,10 @@ const RESUMEN: UsuarioResumen = {
 const DETALLE: UsuarioDetalle = {
   ...RESUMEN,
   sucursalId: "suc-1",
-  permisosEfectivos: ["cliente.gestionar"],
+  // vendedor.gestionar deliberadamente NO esta en los defaults del perfil
+  // Auxiliar (CATALOGO): si la precarga leyera del perfil en vez de leer
+  // esto, la prueba de edicion (D4) fallaria.
+  permisosEfectivos: ["cliente.gestionar", "vendedor.gestionar"],
 };
 
 describe("PantallaUsuarios", () => {
@@ -124,6 +127,12 @@ describe("PantallaUsuarios", () => {
     await screen.findByText("No hay usuarios que mostrar.");
 
     await usuario.click(screen.getByRole("button", { name: "Nuevo usuario" }));
+
+    // D8: SESION_GENERAL no esta atado a una sucursal (sucursal: null), asi
+    // que el selector de Sucursal SI debe aparecer -- contraparte del test
+    // de mas abajo que prueba que se oculta para un actor atado.
+    expect(screen.getByLabelText("Sucursal")).toBeInTheDocument();
+
     await usuario.type(screen.getByLabelText("Login"), "jgarcia");
     await usuario.type(screen.getByLabelText("Nombre"), "Juan García");
     await usuario.type(screen.getByLabelText("Contraseña"), "una-contrasena-larga");
@@ -178,10 +187,13 @@ describe("PantallaUsuarios", () => {
     await usuario.click(screen.getByRole("button", { name: "Editar" }));
     await waitFor(() => expect(obtenerUsuario).toHaveBeenCalledWith("1"));
 
-    // permisosEfectivos de DETALLE es solo ["cliente.gestionar"]: la
-    // matriz se precarga con eso, no con lo que da el perfil.
+    // permisosEfectivos de DETALLE es ["cliente.gestionar", "vendedor.gestionar"],
+    // que difiere a proposito de lo que da por default el perfil Auxiliar
+    // (CATALOGO: solo cliente.gestionar). Que vendedor.gestionar tambien
+    // aparezca marcado solo se explica si la matriz se precarga desde
+    // permisosEfectivos y no desde los defaults del perfil.
     expect(await screen.findByRole("checkbox", { name: /cliente\.gestionar/ })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: /vendedor\.gestionar/ })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /vendedor\.gestionar/ })).toBeChecked();
 
     // El campo de contrasena existe pero se deja vacio -- no debe viajar.
     const campoContrasena = screen.getByLabelText(
