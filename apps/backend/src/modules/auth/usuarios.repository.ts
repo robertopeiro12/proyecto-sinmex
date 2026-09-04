@@ -140,6 +140,43 @@ export class UsuariosRepository {
     return (await this.obtener(id))!;
   }
 
+  async actualizar(
+    id: string,
+    datos: DatosUsuarioBase & { password_hash?: string },
+    excepciones: ExcepcionConId[],
+  ): Promise<UsuarioBase> {
+    await this.db.transaction().execute(async (trx) => {
+      await trx
+        .updateTable('usuario')
+        .set({
+          login: datos.login,
+          nombre: datos.nombre,
+          perfil_id: datos.perfil_id,
+          sucursal_id: datos.sucursal_id,
+          ...(datos.password_hash
+            ? { password_hash: datos.password_hash }
+            : {}),
+        })
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow();
+
+      await this.reemplazarExcepciones(trx, id, excepciones);
+    });
+
+    return (await this.obtener(id))!;
+  }
+
+  /** D7 del spec: cuenta cuantos usuarios activos tienen un perfil dado (mismo patron que PerfilesRepository.contarUsuariosActivos, T-08b). */
+  async contarActivosConPerfil(perfilId: string): Promise<number> {
+    const fila = await this.db
+      .selectFrom('usuario')
+      .select((eb) => eb.fn.countAll<string>().as('total'))
+      .where('perfil_id', '=', perfilId)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirstOrThrow();
+    return Number(fila.total);
+  }
+
   /**
    * Reconcilia usuario_permiso contra el estado final que ya trae resuelto
    * el servicio (D3 del spec): da de baja toda excepcion vigente que ya NO

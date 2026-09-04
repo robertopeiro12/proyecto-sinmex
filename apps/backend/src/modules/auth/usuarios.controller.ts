@@ -5,6 +5,7 @@ import {
   HttpCode,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -12,6 +13,7 @@ import { UsuarioActual } from './usuario-actual.decorator';
 import { RequierePermiso } from './requiere-permiso.decorator';
 import { normalizarSucursalPedida } from '../sucursales/alcance-sucursal';
 import { CrearUsuarioDto } from './dto/crear-usuario.dto';
+import { EditarUsuarioDto } from './dto/editar-usuario.dto';
 import { UsuariosService } from './usuarios.service';
 import type { MatrizPerfiles } from './perfiles.service';
 import type { UsuarioDetalle, UsuarioResumen } from './usuarios.repository';
@@ -58,5 +60,14 @@ export class UsuariosController {
     @Body() dto: CrearUsuarioDto,
   ): Promise<UsuarioDetalle> {
     return this.usuarios.crear(usuarioId, dto);
+  }
+
+  @Patch(':id')
+  async editar(
+    @UsuarioActual() usuarioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: EditarUsuarioDto,
+  ): Promise<UsuarioDetalle> {
+    return this.usuarios.editar(usuarioId, id, dto);
   }
 }

@@ -12,9 +12,11 @@ import {
 import { resolverAlcance, type Alcance } from '../sucursales/alcance-sucursal';
 import { calcularExcepciones } from './calcular-excepciones';
 import { PasswordService } from './password.service';
+import { esMaestro } from './permisos';
 import { PerfilesService, type MatrizPerfiles } from './perfiles.service';
 import { PermisosRepository } from './permisos.repository';
 import type { CrearUsuarioDto } from './dto/crear-usuario.dto';
+import type { EditarUsuarioDto } from './dto/editar-usuario.dto';
 import {
   UsuariosRepository,
   type ExcepcionConId,
@@ -131,6 +133,89 @@ export class UsuariosService {
         excepciones,
       );
       return this.aDetalle(creado);
+    } catch (error) {
+      if (esViolacionUnicidad(error)) {
+        throw new ConflictException(
+          `Ya existe un usuario con el login "${dto.login}".`,
+        );
+      }
+      if (esViolacionFk(error)) {
+        throw new NotFoundException('Alguno de los datos enviados no existe.');
+      }
+      throw error;
+    }
+  }
+
+  async editar(
+    usuarioId: string,
+    id: string,
+    dto: EditarUsuarioDto,
+  ): Promise<UsuarioDetalle> {
+    const actual = await this.repo.obtener(id);
+    if (!actual) {
+      throw new NotFoundException('No existe ese usuario.');
+    }
+
+    const actor = await this.filaActor(usuarioId);
+    const alcance = resolverAlcance(actor.codigo, null);
+    // D8: la sucursal ACTUAL del editado tiene que estar dentro del
+    // alcance de quien edita, igual que ClientesService.editar() (T-12).
+    this.exigirAlcanceSobreCodigo(alcance, actual.sucursalCodigo);
+
+    let sucursalId: string | null;
+    if (actor.id === null) {
+      // General: puede mover a cualquiera, incluida "General" (null).
+      sucursalId = dto.sucursalId ?? null;
+    } else {
+      // Atado: el DESTINO tambien tiene que ser su propia sucursal (D8) --
+      // variacion propia de T-13 sobre ClientesService, que ahi ni siquiera
+      // deja mandar el campo (sucursal inmutable, T-12 D6).
+      if (dto.sucursalId !== undefined && dto.sucursalId !== actor.id) {
+        throw new ForbiddenException('No tienes acceso a esa sucursal.');
+      }
+      sucursalId = actor.id;
+    }
+
+    const matriz = await this.perfiles.obtenerMatriz();
+    const perfilNuevo = matriz.perfiles.find((p) => p.id === dto.perfilId);
+    if (!perfilNuevo) {
+      throw new NotFoundException('No existe ese perfil.');
+    }
+
+    // D7 (mitad de PATCH): no dejar sin ningun Administrador General
+    // activo. Solo aplica si el perfil ACTUAL es el maestro y el nuevo NO
+    // lo es -- cualquier otro cambio de perfil no puede vaciar la cuenta.
+    if (esMaestro(actual.perfil) && !perfilNuevo.esMaestro) {
+      const activos = await this.repo.contarActivosConPerfil(actual.perfilId);
+      if (activos <= 1) {
+        throw new ConflictException(
+          'Debe quedar al menos un Administrador General activo.',
+        );
+      }
+    }
+
+    const excepciones = this.excepcionesConId(
+      dto.permisosMarcados,
+      perfilNuevo,
+      matriz,
+    );
+    const hash = dto.contrasena
+      ? await this.password.hashear(dto.contrasena)
+      : undefined;
+
+    try {
+      const actualizado = await this.repo.actualizar(
+        id,
+        {
+          login: dto.login,
+          nombre: dto.nombre,
+          perfil_id: dto.perfilId,
+          sucursal_id: sucursalId,
+          password_hash: hash,
+        },
+        excepciones,
+      );
+      return this.aDetalle(actualizado);
     } catch (error) {
       if (esViolacionUnicidad(error)) {
         throw new ConflictException(

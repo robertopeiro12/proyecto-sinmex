@@ -441,4 +441,269 @@ describe('Usuarios (e2e)', () => {
         .expect(404);
     });
   });
+
+  describe('PATCH /usuarios/:id', () => {
+    it('edita datos basicos sin tocar la contrasena si el campo no viene', async () => {
+      const id = await crearUsuarioFixture(
+        `${PREFIJO}-editar-sin-pass`,
+        idPerfilAuxiliar,
+        idTijuana,
+      );
+      const cookieEditado = await iniciarSesion(`${PREFIJO}-editar-sin-pass`);
+
+      await request(app.getHttpServer())
+        .patch(`/usuarios/${id}`)
+        .set('Cookie', cookieGeneral)
+        .send({
+          login: `${PREFIJO}-editar-sin-pass`,
+          nombre: 'Nombre editado',
+          perfilId: idPerfilAuxiliar,
+          sucursalId: idTijuana,
+          permisosMarcados: [],
+        })
+        .expect(200);
+
+      // La sesion vieja de este usuario sigue viva: si el PATCH hubiera
+      // tocado la contrasena sin que el campo viniera, el login de abajo
+      // fallaria.
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ login: `${PREFIJO}-editar-sin-pass`, password: PASSWORD })
+        .expect(200);
+      void cookieEditado;
+    });
+
+    it('cambia la contrasena cuando el campo si viene', async () => {
+      const id = await crearUsuarioFixture(
+        `${PREFIJO}-editar-con-pass`,
+        idPerfilAuxiliar,
+        idTijuana,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/usuarios/${id}`)
+        .set('Cookie', cookieGeneral)
+        .send({
+          login: `${PREFIJO}-editar-con-pass`,
+          nombre: 'X',
+          contrasena: 'una-contrasena-nueva',
+          perfilId: idPerfilAuxiliar,
+          sucursalId: idTijuana,
+          permisosMarcados: [],
+        })
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({
+          login: `${PREFIJO}-editar-con-pass`,
+          password: 'una-contrasena-nueva',
+        })
+        .expect(200);
+    });
+
+    it('recalcula las excepciones al cambiar de perfil: lo que sobra se borra', async () => {
+      // Dos perfiles desechables con UN permiso cada uno (ver
+      // sembrarPerfilConPermiso, Task 3) -- determinista, sin depender del
+      // estado en vivo de los 6 perfiles sembrados.
+      const perfilA = await sembrarPerfilConPermiso(
+        `${PREFIJO}-perfil-recalc-a`,
+        'cliente.gestionar',
+      );
+      const perfilB = await sembrarPerfilConPermiso(
+        `${PREFIJO}-perfil-recalc-b`,
+        'vendedor.gestionar',
+      );
+
+      const id = await crearUsuarioFixture(
+        `${PREFIJO}-recalcula`,
+        perfilA.id,
+        idTijuana,
+      );
+
+      // Se le da de alta con una excepcion propia de perfilB, encima de
+      // perfilA.
+      await request(app.getHttpServer())
+        .patch(`/usuarios/${id}`)
+        .set('Cookie', cookieGeneral)
+        .send({
+          login: `${PREFIJO}-recalcula`,
+          nombre: 'X',
+          perfilId: perfilA.id,
+          sucursalId: idTijuana,
+          permisosMarcados: [perfilA.clave, perfilB.clave],
+        })
+        .expect(200);
+
+      // Cambia a perfilB SIN marcar `perfilB.clave` explicitamente en la
+      // lista nueva -- ya lo da el perfil, no hace falta repetirlo; la
+      // prueba real es que la excepcion vieja (atada al permiso_id de
+      // perfilA.clave) no sobrevive fantasma con un habilitado obsoleto.
+      const res = await request(app.getHttpServer())
+        .patch(`/usuarios/${id}`)
+        .set('Cookie', cookieGeneral)
+        .send({
+          login: `${PREFIJO}-recalcula`,
+          nombre: 'X',
+          perfilId: perfilB.id,
+          sucursalId: idTijuana,
+          permisosMarcados: [perfilB.clave],
+        })
+        .expect(200);
+
+      const detalle = res.body as { permisosEfectivos: string[] };
+      expect(detalle.permisosEfectivos).toEqual([perfilB.clave]);
+    });
+
+    it('rechaza cambiarle el perfil al ultimo Administrador General activo (D7)', async () => {
+      const idUnico = await crearUsuarioFixture(
+        `${PREFIJO}-unico-admin`,
+        idPerfilMaestro,
+        null,
+      );
+      const cookieUnico = await iniciarSesion(`${PREFIJO}-unico-admin`);
+
+      // Ventana angosta a proposito: D7 es la primera regla de negocio de
+      // este backend que depende de un conteo GLOBAL sobre un perfil que
+      // no se puede crear desechable (esMaestro() compara por nombre
+      // fijo, a diferencia de sembrarPerfil() en T-08b). `test:e2e` no fija
+      // --runInBand, asi que puede haber Administrador General activos de
+      // OTROS archivos de e2e corriendo en paralelo -- se bajan
+      // TEMPORALMENTE (nunca al propio `idUnico`, que hace la peticion con
+      // su propia sesion), se hace la asercion, y se restauran de
+      // inmediato en el `finally`. Riesgo residual: si otro worker crea o
+      // borra un Administrador General en esta misma ventana de
+      // milisegundos, esta prueba puede fallar de forma intermitente.
+      const otrosMaestrosActivos = await db
+        .selectFrom('usuario')
+        .select('id')
+        .where('perfil_id', '=', idPerfilMaestro)
+        .where('deleted_at', 'is', null)
+        .where('id', '!=', idUnico)
+        .execute();
+      const idsOtros = otrosMaestrosActivos.map((f) => f.id);
+
+      try {
+        if (idsOtros.length > 0) {
+          await db
+            .updateTable('usuario')
+            .set({ perfil_id: idPerfilAuxiliar })
+            .where('id', 'in', idsOtros)
+            .execute();
+        }
+
+        await request(app.getHttpServer())
+          .patch(`/usuarios/${idUnico}`)
+          .set('Cookie', cookieUnico)
+          .send({
+            login: `${PREFIJO}-unico-admin`,
+            nombre: 'X',
+            perfilId: idPerfilAuxiliar,
+            permisosMarcados: [],
+          })
+          .expect(409);
+      } finally {
+        if (idsOtros.length > 0) {
+          await db
+            .updateTable('usuario')
+            .set({ perfil_id: idPerfilMaestro })
+            .where('id', 'in', idsOtros)
+            .execute();
+        }
+      }
+    });
+
+    it('un usuario atado a TJ no puede editar un usuario de MX', async () => {
+      const id = await crearUsuarioFixture(
+        `${PREFIJO}-editar-mx`,
+        idPerfilAuxiliar,
+        idMexicali,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/usuarios/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send({
+          login: `${PREFIJO}-editar-mx`,
+          nombre: 'X',
+          perfilId: idPerfilAuxiliar,
+          permisosMarcados: [],
+        })
+        .expect(403);
+    });
+
+    it('un usuario atado a TJ no puede mover a un usuario a MX (D8)', async () => {
+      const id = await crearUsuarioFixture(
+        `${PREFIJO}-mover-mx`,
+        idPerfilAuxiliar,
+        idTijuana,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/usuarios/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send({
+          login: `${PREFIJO}-mover-mx`,
+          nombre: 'X',
+          perfilId: idPerfilAuxiliar,
+          sucursalId: idMexicali,
+          permisosMarcados: [],
+        })
+        .expect(403);
+    });
+
+    it('un usuario General si puede mover a otro entre sucursales', async () => {
+      const id = await crearUsuarioFixture(
+        `${PREFIJO}-mover-general`,
+        idPerfilAuxiliar,
+        idTijuana,
+      );
+
+      const res = await request(app.getHttpServer())
+        .patch(`/usuarios/${id}`)
+        .set('Cookie', cookieGeneral)
+        .send({
+          login: `${PREFIJO}-mover-general`,
+          nombre: 'X',
+          perfilId: idPerfilAuxiliar,
+          sucursalId: idMexicali,
+          permisosMarcados: [],
+        })
+        .expect(200);
+
+      expect((res.body as { sucursalId: string }).sucursalId).toBe(idMexicali);
+    });
+
+    it('responde 404 para un id que no existe', async () => {
+      await request(app.getHttpServer())
+        .patch('/usuarios/00000000-0000-0000-0000-000000000000')
+        .set('Cookie', cookieGeneral)
+        .send({
+          login: 'x',
+          nombre: 'x',
+          perfilId: idPerfilAuxiliar,
+          permisosMarcados: [],
+        })
+        .expect(404);
+    });
+
+    it('rechaza sin usuario.gestionar', async () => {
+      const id = await crearUsuarioFixture(
+        `${PREFIJO}-editar-sin-permiso`,
+        idPerfilAuxiliar,
+        null,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/usuarios/${id}`)
+        .set('Cookie', cookieSinPermiso)
+        .send({
+          login: `${PREFIJO}-editar-sin-permiso`,
+          nombre: 'X',
+          perfilId: idPerfilAuxiliar,
+          permisosMarcados: [],
+        })
+        .expect(403);
+    });
+  });
 });
