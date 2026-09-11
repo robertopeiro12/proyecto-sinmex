@@ -1,9 +1,16 @@
-import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import type { ReactNode } from "react";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { Cifra } from './cifra';
-import { useTema } from './tema';
-import { colores, espacio, fuente, grosor, radio, tipo } from './tokens';
+import { Cifra } from "./cifra";
+import { useTema } from "./tema";
+import { colores, espacio, fuente, grosor, radio, tipo } from "./tokens";
 
 /**
  * Envoltura de una pantalla: fondo, margen segun dispositivo, columna de
@@ -21,22 +28,36 @@ export function Pantalla({
   subtitulo,
   children,
   formulario = false,
+  sinCabecera = false,
 }: {
   titulo?: string;
   subtitulo?: ReactNode;
   children: ReactNode;
   formulario?: boolean;
+  /**
+   * La pantalla se dibuja **sin cabecera de navegacion** (`headerShown: false`).
+   *
+   * Cuando hay cabecera, React Navigation ya reserva el alto de la barra de
+   * estado; cuando no la hay, nadie lo hace y el titulo se mete **debajo del
+   * reloj**. Se vio asi en el emulador, en `login`, que es la primera pantalla
+   * que ve el vendedor cada manana.
+   */
+  sinCabecera?: boolean;
 }) {
   const { estilos } = useTema();
+  const insets = useSafeAreaInsets();
 
   const cuerpo = (
     <ScrollView
       style={estilos.pantalla}
-      contentContainerStyle={formulario ? estilos.contenidoCentrado : estilos.contenido}
+      contentContainerStyle={[
+        formulario ? estilos.contenidoCentrado : estilos.contenido,
+        sinCabecera && { paddingTop: insets.top + espacio.md },
+      ]}
       keyboardShouldPersistTaps="handled"
     >
       {titulo ? <Text style={estilos.titulo}>{titulo}</Text> : null}
-      {typeof subtitulo === 'string' ? (
+      {typeof subtitulo === "string" ? (
         <Text style={estilos.subtitulo}>{subtitulo}</Text>
       ) : (
         subtitulo
@@ -52,7 +73,7 @@ export function Pantalla({
       style={{ flex: 1, backgroundColor: colores.papel }}
       // En Android el ajuste lo hace el sistema (`windowSoftInputMode`);
       // forzar `padding` aqui pelea con el y deja huecos.
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       {cuerpo}
     </KeyboardAvoidingView>
@@ -60,15 +81,36 @@ export function Pantalla({
 }
 
 /** Estado semantico de una tarjeta o pastilla. */
-export type Estado = 'neutro' | 'pendiente' | 'listo' | 'error' | 'accion';
+export type Estado = "neutro" | "pendiente" | "listo" | "error" | "accion";
 
-const PALETA: Record<Estado, { linea: string; fondo: string; texto: string }> = {
-  neutro: { linea: colores.borde, fondo: colores.superficie, texto: colores.tintaSuave },
-  pendiente: { linea: colores.aviso, fondo: colores.avisoTenue, texto: colores.aviso },
-  listo: { linea: colores.exito, fondo: colores.exitoTenue, texto: colores.exito },
-  error: { linea: colores.peligro, fondo: colores.peligroTenue, texto: colores.peligro },
-  accion: { linea: colores.primario, fondo: colores.primarioTenue, texto: colores.primario },
-};
+const PALETA: Record<Estado, { linea: string; fondo: string; texto: string }> =
+  {
+    neutro: {
+      linea: colores.borde,
+      fondo: colores.superficie,
+      texto: colores.tintaSuave,
+    },
+    pendiente: {
+      linea: colores.aviso,
+      fondo: colores.avisoTenue,
+      texto: colores.aviso,
+    },
+    listo: {
+      linea: colores.exito,
+      fondo: colores.exitoTenue,
+      texto: colores.exito,
+    },
+    error: {
+      linea: colores.peligro,
+      fondo: colores.peligroTenue,
+      texto: colores.peligro,
+    },
+    accion: {
+      linea: colores.primario,
+      fondo: colores.primarioTenue,
+      texto: colores.primario,
+    },
+  };
 
 /**
  * Tarjeta con una **barra de acento** a la izquierda que codifica su estado.
@@ -79,7 +121,7 @@ const PALETA: Record<Estado, { linea: string; fondo: string; texto: string }> = 
  */
 export function Tarjeta({
   children,
-  estado = 'neutro',
+  estado = "neutro",
   etiqueta,
 }: {
   children: ReactNode;
@@ -93,7 +135,7 @@ export function Tarjeta({
     <View
       style={[
         estilos.tarjeta,
-        estado !== 'neutro' && {
+        estado !== "neutro" && {
           borderLeftWidth: grosor.acento,
           borderLeftColor: p.linea,
           backgroundColor: p.fondo,
@@ -115,7 +157,7 @@ export function Tarjeta({
  */
 export function Pastilla({
   texto,
-  estado = 'neutro',
+  estado = "neutro",
   numero,
 }: {
   texto: string;
@@ -128,9 +170,9 @@ export function Pastilla({
   return (
     <View
       style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        alignSelf: 'flex-start',
+        flexDirection: "row",
+        alignItems: "center",
+        alignSelf: "flex-start",
         gap: espacio.xs,
         paddingHorizontal: espacio.sm,
         paddingVertical: espacio.xs,
@@ -145,15 +187,15 @@ export function Pastilla({
           valor={numero}
           tamano="menor"
           tono={
-            estado === 'pendiente'
-              ? 'aviso'
-              : estado === 'listo'
-                ? 'exito'
-                : estado === 'error'
-                  ? 'peligro'
-                  : estado === 'accion'
-                    ? 'primario'
-                    : 'suave'
+            estado === "pendiente"
+              ? "aviso"
+              : estado === "listo"
+                ? "exito"
+                : estado === "error"
+                  ? "peligro"
+                  : estado === "accion"
+                    ? "primario"
+                    : "suave"
           }
         />
       ) : null}
@@ -162,7 +204,7 @@ export function Pastilla({
           fontFamily: fuente.cuerpoFuerte,
           fontSize: t(tipo.menor),
           letterSpacing: 0.6,
-          textTransform: 'uppercase',
+          textTransform: "uppercase",
           color: p.texto,
         }}
       >

@@ -1,8 +1,8 @@
-import { Link, type Href } from 'expo-router';
-import { Pressable, Text, View } from 'react-native';
+import { useRouter, type Href } from "expo-router";
+import { Pressable, Text, View } from "react-native";
 
-import { useTema } from './tema';
-import { colores, espacio, fuente, grosor, tipo } from './tokens';
+import { useTema } from "./tema";
+import { colores, espacio, fuente, grosor, tipo } from "./tokens";
 
 /**
  * Tarjeta grande de navegacion de la jornada.
@@ -31,52 +31,52 @@ export function BotonMenu({
   destacada?: boolean;
 }) {
   const { estilos, dispositivo, t } = useTema();
+  const router = useRouter();
 
   return (
-    <Link href={destino} asChild>
-      <Pressable
-        accessibilityRole="link"
-        accessibilityLabel={`${titulo}. ${descripcion}`}
-        style={({ pressed }) => [
-          estilos.tarjeta,
-          estilos.celdaRejilla,
-          {
-            borderWidth: grosor.fuerte,
-            borderColor: destacada ? colores.primario : colores.bordeFuerte,
-            minHeight: Math.max(dispositivo.tactil + espacio.xl, 104),
-          },
-          destacada && { backgroundColor: colores.primarioTenue },
-          pressed && { transform: [{ translateY: grosor.fuerte }], opacity: 0.9 },
-        ]}
-      >
-        <View style={{ gap: espacio.xs }}>
+    <Pressable
+      onPress={() => router.push(destino)}
+      accessibilityRole="link"
+      accessibilityLabel={`${titulo}. ${descripcion}`}
+      style={({ pressed }) => [
+        estilos.tarjeta,
+        estilos.celdaRejilla,
+        {
+          borderWidth: grosor.fuerte,
+          borderColor: destacada ? colores.primario : colores.bordeFuerte,
+          minHeight: Math.max(dispositivo.tactil + espacio.xl, 104),
+        },
+        destacada && { backgroundColor: colores.primarioTenue },
+        pressed && { transform: [{ translateY: grosor.fuerte }], opacity: 0.9 },
+      ]}
+    >
+      <View style={{ gap: espacio.xs }}>
+        <Text
+          style={{
+            fontFamily: fuente.tituloMedio,
+            fontSize: t(tipo.subtitulo),
+            lineHeight: t(tipo.subtitulo) * 1.15,
+            color: colores.tinta,
+          }}
+        >
+          {titulo}
+        </Text>
+        <Text style={estilos.textoSuave}>{descripcion}</Text>
+        {nota ? (
           <Text
             style={{
-              fontFamily: fuente.tituloMedio,
-              fontSize: t(tipo.subtitulo),
-              lineHeight: t(tipo.subtitulo) * 1.15,
-              color: colores.tinta,
+              fontFamily: fuente.cuerpoFuerte,
+              fontSize: t(tipo.menor),
+              letterSpacing: 0.6,
+              textTransform: "uppercase",
+              color: colores.primario,
+              marginTop: espacio.xs,
             }}
           >
-            {titulo}
+            {nota}
           </Text>
-          <Text style={estilos.textoSuave}>{descripcion}</Text>
-          {nota ? (
-            <Text
-              style={{
-                fontFamily: fuente.cuerpoFuerte,
-                fontSize: t(tipo.menor),
-                letterSpacing: 0.6,
-                textTransform: 'uppercase',
-                color: colores.primario,
-                marginTop: espacio.xs,
-              }}
-            >
-              {nota}
-            </Text>
-          ) : null}
-        </View>
-      </Pressable>
-    </Link>
+        ) : null}
+      </View>
+    </Pressable>
   );
 }

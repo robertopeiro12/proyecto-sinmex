@@ -108,8 +108,20 @@ function construirEstilos(d: Dispositivo) {
     },
     celdaRejilla: {
       flexGrow: 1,
-      // -1% de holgura: sin ella, el redondeo de dp parte la ultima columna.
-      flexBasis: `${100 / d.columnas - 1}%`,
+      /*
+       * La holgura tiene que cubrir los HUECOS, no un redondeo.
+       *
+       * Con `-1%` fijo, en `amplio` las tres columnas salian a 32,33% cada una:
+       * dentro de la columna de lectura (900dp menos 32 de margen a cada lado =
+       * 836dp utiles) eso son 811dp de tarjetas + 32dp de huecos = 843dp, siete
+       * de mas. La tercera saltaba de linea y la tablet mostraba DOS columnas.
+       * Verificado en el emulador, no deducido.
+       *
+       * Entre N columnas hay N-1 huecos. Se reserva 2,5% por hueco, que cubre
+       * un `gap` de 16dp en cualquier contenedor de 640dp o mas — y por debajo
+       * de eso `columnas` ya es 1 y no hay huecos que cubrir.
+       */
+      flexBasis: `${(100 - (d.columnas - 1) * 2.5) / d.columnas}%`,
       minHeight: Math.max(d.tactil + espacio.lg, 96),
       justifyContent: 'center',
       marginBottom: 0,
