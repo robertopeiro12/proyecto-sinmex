@@ -1,11 +1,15 @@
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import type { MotivoAbandono } from '@/sincronizacion/motor';
+import { Boton } from '@/ui/boton';
 import { BotonMenu } from '@/ui/boton-menu';
-import { colores, espacio, estilos } from '@/ui/tema';
+import { Cifra } from '@/ui/cifra';
+import { Pantalla, Pastilla, Tarjeta } from '@/ui/pantalla';
+import { useTema } from '@/ui/tema';
+import { espacio } from '@/ui/tokens';
 
 /**
  * Lo que se le dice al vendedor cuando la sincronizacion no sale.
@@ -14,10 +18,10 @@ import { colores, espacio, estilos } from '@/ui/tema';
  * no puede hacer nada con un "409 contrato incompatible".
  */
 const MENSAJE: Record<MotivoAbandono, string> = {
-  'sin-sesion': 'Tu sesion ya no vale. Vuelve a entrar con el WiFi del negocio.',
-  'sin-red': 'No hay conexion con el negocio. Lo capturado sigue guardado aqui.',
-  contrato: 'Esta tablet y el servidor no coinciden de version. Avisa a la oficina.',
-  alcance: 'El servidor rechazo la peticion. Avisa a la oficina.',
+  'sin-sesion': 'Tu sesión ya no vale. Vuelve a entrar con el WiFi del negocio.',
+  'sin-red': 'No hay conexión con el negocio. Lo capturado sigue guardado aquí.',
+  contrato: 'Esta tablet y el servidor no coinciden de versión. Avisa a la oficina.',
+  alcance: 'El servidor rechazó la petición. Avisa a la oficina.',
 };
 
 /**
@@ -27,7 +31,19 @@ const MENSAJE: Record<MotivoAbandono, string> = {
 export default function MenuJornada() {
   const { jornada, vendedor, datos } = useJawa();
   const { salir, sincronizar, ultimaSincronizacion } = useSesion();
+  const { estilos } = useTema();
   const [sincronizando, setSincronizando] = useState(false);
+
+  const pendientes = datos.jornadas.pendientesDeSincronizar().length;
+  const falloUltima = ultimaSincronizacion !== null && !ultimaSincronizacion.ok;
+
+  /**
+   * Estado de la sincronizacion en un solo valor, en orden de gravedad: un
+   * fallo manda sobre "quedan pendientes", y "quedan pendientes" manda sobre
+   * "todo subido". Lo usan la tarjeta y la pastilla, asi que las dos no pueden
+   * contradecirse.
+   */
+  const estadoSync = falloUltima ? 'error' : pendientes > 0 ? 'pendiente' : 'listo';
 
   /**
    * Sincronizacion manual.
@@ -42,7 +58,7 @@ export default function MenuJornada() {
     try {
       const r = await sincronizar();
       Alert.alert(
-        r.ok ? 'Sincronizacion completa' : 'No se pudo terminar',
+        r.ok ? 'Sincronización completa' : 'No se pudo terminar',
         r.ok
           ? `Se bajaron ${r.pull?.filas ?? 0} registro(s) y se subieron ${r.push?.aplicadas ?? 0}.` +
             (r.push?.rechazadas ? ` ${r.push.rechazadas} quedaron con error.` : '')
@@ -61,26 +77,29 @@ export default function MenuJornada() {
    */
   function confirmarSalida() {
     Alert.alert(
-      'Cerrar sesion',
-      'Se borrara tu sesion de esta tablet. Para volver a entrar necesitaras conectarte al WiFi del negocio. Lo capturado hoy NO se borra.',
+      'Cerrar sesión',
+      'Se borrará tu sesión de esta tablet. Para volver a entrar necesitarás conectarte al WiFi del negocio. Lo capturado hoy NO se borra.',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { text: 'Cerrar sesion', style: 'destructive', onPress: () => void salir() },
+        { text: 'Cerrar sesión', style: 'destructive', onPress: () => void salir() },
       ],
     );
   }
 
   return (
-    <ScrollView style={estilos.pantalla}>
-      <Text style={estilos.titulo}>Jornada del {jornada?.fecha}</Text>
-      <Text style={estilos.subtitulo}>
-        {vendedor?.nombre ?? 'Sin vendedor'} · {vendedor?.sucursalCodigo ?? '—'} · km inicial{' '}
-        {jornada?.km_inicial} · esquema local v{datos.versionEsquema}
-      </Text>
-
+    <Pantalla
+      titulo={`Jornada del ${jornada?.fecha}`}
+      subtitulo={
+        <Text style={estilos.subtitulo}>
+          {vendedor?.nombre ?? 'Sin vendedor'} · {vendedor?.sucursalCodigo ?? '—'} · km inicial{' '}
+          <Cifra valor={jornada?.km_inicial ?? 0} tono="suave" /> · esquema local v
+          <Cifra valor={datos.versionEsquema} tono="suave" />
+        </Text>
+      }
+    >
       <View style={estilos.rejilla}>
         <BotonMenu
-          titulo="Operacion por cliente"
+          titulo="Operación por cliente"
           descripcion="Venta, cobranza, visita sin venta y registros de campo"
           destino="/(jornada)/operacion"
         />
@@ -91,56 +110,62 @@ export default function MenuJornada() {
         />
         <BotonMenu
           titulo="Ruta y GPS"
-          descripcion="Mapa de clientes del dia y orden real de la ruta"
+          descripcion="Mapa de clientes del día y orden real de la ruta"
           destino="/(jornada)/ruta"
         />
         <BotonMenu
-          titulo="Cerrar el dia"
-          descripcion="Kilometraje final, corte e impresion"
+          titulo="Cerrar el día"
+          descripcion="Kilometraje final, corte e impresión"
           destino="/(jornada)/cerrar-dia"
         />
       </View>
 
-      <View style={estilos.tarjeta}>
-        <Text style={estilos.etiqueta}>Sincronizacion</Text>
-        <Text style={estilos.textoTarjeta}>
-          {datos.jornadas.pendientesDeSincronizar().length} registro(s) pendiente(s) de subir
-        </Text>
+      <Tarjeta estado={estadoSync} etiqueta="Sincronización">
+        <Pastilla
+          numero={pendientes}
+          texto={pendientes === 1 ? 'registro por subir' : 'registros por subir'}
+          estado={pendientes > 0 ? 'pendiente' : 'listo'}
+        />
         <Text style={estilos.textoSuave}>
-          Catalogos bajados: {datos.catalogos.frescuraCatalogos() ?? 'nunca'}
+          Catálogos bajados: {datos.catalogos.frescuraCatalogos() ?? 'nunca'}
         </Text>
         {ultimaSincronizacion ? (
-          <Text style={estilos.textoSuave}>
-            {ultimaSincronizacion.ok
-              ? `Ultima sincronizacion correcta · ${ultimaSincronizacion.pull?.filas ?? 0} bajados · ${ultimaSincronizacion.push?.aplicadas ?? 0} subidos`
-              : MENSAJE[ultimaSincronizacion.motivo ?? 'sin-red']}
-          </Text>
+          ultimaSincronizacion.ok ? (
+            <Text style={estilos.textoSuave}>
+              Última sincronización correcta ·{' '}
+              <Cifra valor={ultimaSincronizacion.pull?.filas ?? 0} tono="suave" /> bajados ·{' '}
+              <Cifra valor={ultimaSincronizacion.push?.aplicadas ?? 0} tono="suave" /> subidos
+            </Text>
+          ) : (
+            <Text style={estilos.textoSuave}>
+              {MENSAJE[ultimaSincronizacion.motivo ?? 'sin-red']}
+            </Text>
+          )
         ) : null}
-        <Pressable
+        {/* Unica accion primaria de la pantalla: lo demas son tarjetas de navegacion. */}
+        <Boton
+          etiqueta={sincronizando ? 'Sincronizando…' : 'Sincronizar ahora'}
+          glifo="↻"
           onPress={() => void sincronizarAhora()}
-          disabled={sincronizando}
-          style={[
-            estilos.boton,
-            { marginTop: espacio.md },
-            sincronizando ? { opacity: 0.5 } : null,
-          ]}
-        >
-          <Text style={estilos.botonTexto}>
-            {sincronizando ? 'Sincronizando...' : 'Sincronizar ahora'}
-          </Text>
-        </Pressable>
-      </View>
+          ocupado={sincronizando}
+          estilo={{ marginTop: espacio.md }}
+        />
+      </Tarjeta>
 
-      <Pressable
+      {/*
+        Aislado del resto a proposito, y en `peligro` (contorno rojo, no
+        relleno). Esta a un dedo de "Cerrar el dia", que suena parecido y hace
+        algo completamente distinto: uno termina la jornada, el otro deja al
+        vendedor fuera de la app hasta volver al WiFi. El hueco de arriba y el
+        tono son lo que impide confundirlos con el pulgar en movimiento.
+      */}
+      <Boton
+        etiqueta="Cerrar sesión"
+        tono="peligro"
+        glifo="×"
         onPress={confirmarSalida}
-        style={[
-          estilos.boton,
-          { backgroundColor: colores.superficie, borderWidth: 1, borderColor: colores.alerta },
-          { marginTop: espacio.md, marginBottom: espacio.xl },
-        ]}
-      >
-        <Text style={[estilos.botonTexto, { color: colores.alerta }]}>Cerrar sesion</Text>
-      </Pressable>
-    </ScrollView>
+        estilo={{ marginTop: espacio.xl, marginBottom: espacio.xl }}
+      />
+    </Pantalla>
   );
 }

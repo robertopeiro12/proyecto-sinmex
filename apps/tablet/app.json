@@ -4,7 +4,7 @@
     "slug": "jawa-tablet",
     "scheme": "jawatablet",
     "version": "0.1.0",
-    "orientation": "landscape",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
@@ -26,7 +26,8 @@
     "plugins": [
       "expo-router",
       "expo-sqlite",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-font"
     ]
   }
 }
