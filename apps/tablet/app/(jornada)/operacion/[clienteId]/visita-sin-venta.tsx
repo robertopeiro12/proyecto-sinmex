@@ -5,7 +5,7 @@ export default function VisitaSinVenta() {
     <PantallaPendiente
       titulo="Visita sin venta"
       ticket="T-33"
-      descripcion="Motivo por el que el cliente no se surtio (tenia producto, sin dinero, no estaba el encargado, competencia, cerrado), con hora y quien atendio."
+      descripcion="Motivo por el que el cliente no se surtió (tenía producto, sin dinero, no estaba el encargado, competencia, cerrado), con hora y quién atendió."
     />
   );
 }

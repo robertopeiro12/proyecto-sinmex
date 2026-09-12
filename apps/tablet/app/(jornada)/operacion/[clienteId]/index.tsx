@@ -1,9 +1,11 @@
 import { useLocalSearchParams } from 'expo-router';
-import { ScrollView, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import { useJawa } from '@/estado/proveedor-jawa';
 import { BotonMenu } from '@/ui/boton-menu';
-import { estilos } from '@/ui/tema';
+import { Cifra } from '@/ui/cifra';
+import { Pantalla } from '@/ui/pantalla';
+import { useTema } from '@/ui/tema';
 
 /**
  * Menu de operacion de un cliente: las 4 cosas que [[App Tablet]] permite hacer
@@ -12,28 +14,41 @@ import { estilos } from '@/ui/tema';
 export default function OperacionCliente() {
   const { clienteId } = useLocalSearchParams<{ clienteId: string }>();
   const { datos } = useJawa();
+  const { estilos } = useTema();
   const cliente = datos.catalogos.obtenerCliente(clienteId);
 
   if (!cliente) {
     return (
-      <View style={estilos.pantalla}>
-        <Text style={estilos.titulo}>Cliente no encontrado</Text>
-        <Text style={estilos.subtitulo}>No esta en el catalogo local de esta tablet.</Text>
-      </View>
+      <Pantalla
+        titulo="Cliente no encontrado"
+        subtitulo="No está en el catálogo local de esta tablet."
+      >
+        <Text style={estilos.textoSuave}>
+          Puede que lo hayan dado de alta después de tu última sincronización.
+        </Text>
+      </Pantalla>
     );
   }
 
   const params = { clienteId };
 
   return (
-    <ScrollView style={estilos.pantalla}>
-      <Text style={estilos.titulo}>{cliente.nombre}</Text>
-      <Text style={estilos.subtitulo}>
-        {cliente.domicilio}
-        {cliente.encargado ? ` · atiende ${cliente.encargado}` : ''}
-        {cliente.plazo_credito_dias ? ` · credito ${cliente.plazo_credito_dias} dias` : ''}
-      </Text>
-
+    <Pantalla
+      titulo={cliente.nombre}
+      subtitulo={
+        <Text style={estilos.subtitulo}>
+          {cliente.domicilio}
+          {cliente.encargado ? ` · atiende ${cliente.encargado}` : ''}
+          {cliente.plazo_credito_dias ? (
+            <>
+              {' · crédito '}
+              <Cifra valor={cliente.plazo_credito_dias} tono="suave" />
+              {' días'}
+            </>
+          ) : null}
+        </Text>
+      }
+    >
       <View style={estilos.rejilla}>
         <BotonMenu
           titulo="Venta"
@@ -47,15 +62,15 @@ export default function OperacionCliente() {
         />
         <BotonMenu
           titulo="Visita sin venta"
-          descripcion="Registrar el motivo por el que no se surtio"
+          descripcion="Registrar el motivo por el que no se surtió"
           destino={{ pathname: '/(jornada)/operacion/[clienteId]/visita-sin-venta', params }}
         />
         <BotonMenu
-          titulo="Merma, promocion, consumo y gasto"
+          titulo="Merma, promoción, consumo y gasto"
           descripcion="Registros de campo que afectan el inventario y el corte"
           destino={{ pathname: '/(jornada)/operacion/[clienteId]/registros', params }}
         />
       </View>
-    </ScrollView>
+    </Pantalla>
   );
 }
