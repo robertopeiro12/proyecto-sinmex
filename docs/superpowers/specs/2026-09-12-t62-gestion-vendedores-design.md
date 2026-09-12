@@ -132,16 +132,22 @@ Este cambio **no puede fallar por datos existentes**: el índice viejo era estri
 estricto (único entre *todos* los vendedores vivos), así que ningún dato actual puede violar la
 versión con scope por sucursal — es una relajación, no una restricción nueva.
 
-**Regla de aplicación** (`VendedoresService`, y la comparte `crear-vendedor.ts`):
+**Regla de aplicación** (`VendedoresService`, y la comparte `crear-vendedor.ts`) — **sin consulta
+previa**, misma doctrina que T-09/T-10/T-11/T-14/T-18 ("la base decide, no una consulta entre el
+`SELECT` y el `INSERT`"):
 
 1. Se calcula el candidato de la regla del ADR — `candidatosDeSegmento(nombre)[0]` de
    `segmento-vendedor.ts` (sin cambios: sigue siendo la función pura que reduce el nombre a sus
-   iniciales, con el mismo fallback de 2 letras para un nombre de una sola palabra).
-2. Se compara contra los vendedores **no borrados** (`deleted_at is null`, sin filtrar por
-   `activo` — ver D7) de la **misma sucursal**.
-3. Si ya está tomado → **409** ("Ya hay un vendedor en esta sucursal con esas iniciales (AP).
-   Ajusta el nombre para diferenciarlo.") y no se inserta/actualiza nada.
-4. Si está libre, se asigna tal cual — no se camina ninguna lista de alternativas.
+   iniciales, con el mismo fallback de 2 letras para un nombre de una sola palabra). **No** se
+   camina la lista de alternativas — solo el primer candidato, tal cual la regla del ADR.
+2. Se intenta el `INSERT`/`UPDATE` directamente con ese segmento.
+3. Si el `unique (folio_segmento, sucursal_id)` lo rechaza (`23505`), el repositorio deja subir el
+   error tal cual (con `error.constraint` intacto) y el servicio distingue **qué** índice chocó con
+   el mismo patrón `nombreDelIndice()` que `ProductosService.editar()` (T-10) ya usa para distinguir
+   `uq_producto_nombre` de `uq_presentacion_volumen` — aquí distingue `uq_vendedor_folio_segmento`
+   (→ 409 "Ya hay un vendedor en esta sucursal con esas iniciales (AP). Ajusta el nombre para
+   diferenciarlo.", usando el `segmento` ya calculado en el paso 1) de `uq_vendedor_login` (→ 409 de
+   login, D4).
 
 `asignarSegmento()` (la función que hoy auto-asigna caminando `candidatosDeSegmento`) **deja de
 usarse** en el alta — solo la usaban `crear-vendedor.ts` y su propio spec, así que no hay más
@@ -168,14 +174,22 @@ validación que `VendedoresService.crear()` — mismo criterio de D6. Un alta de
 consola ya no puede crear un segmento que el portal habría rechazado. El bloque de "restablecer
 contraseña" del script no cambia (sigue revocando `sesion_vendedor` al resetear).
 
-### D9 — Sin abstracciones nuevas: se reusa `PantallaCatalogo` y el patrón de Vehículos
+### D9 — Sin abstracciones nuevas: se reusa `PantallaCatalogo`, y los helpers YA extraídos por T-12
 
 En el portal, `PantallaCatalogo<Vendedor>` sin props nuevos — el campo condicional de sucursal
 (solo visible para un usuario General) vive en `FormularioVendedor`, calcado de
 `FormularioVehiculo` (T-11) y el patrón de "contraseña opcional en edición" de `FormularioUsuario`
-(T-13). En el backend, `VendedoresRepository` tiene su propio `buscarSucursalUsuario()` — misma
-duplicación deliberada de ~10 líneas que Vehículos, por la misma razón (YAGNI, T-10 ya fijó el
-criterio de extraer solo en la tercera/cuarta copia).
+(T-13).
+
+> [!warning] Corrección sobre el borrador anterior de este spec
+> Este spec decía que `VendedoresRepository` iba a duplicar `buscarSucursalUsuario()`, "misma
+> duplicación deliberada que Vehículos". Eso ya no es así: **T-12 extrajo ese helper** en su cuarta
+> copia (`modules/sucursales/buscar-sucursal-usuario.ts`, función `buscarSucursalUsuario(db,
+> usuarioId)`) y lo usan Vehículos, Clientes y Precios. `VendedoresRepository` debe **importar el
+> helper compartido**, no duplicarlo — sería la cuarta copia de algo que T-12 ya dejó en su
+> tercera. Mismo caso con el mapeo de errores de Postgres: `esViolacionUnicidad`/`esViolacionFk` ya
+> viven en `database/errores-postgres.ts` (extraídos también en T-12) y `VendedoresService` debe
+> usarlos en vez de escribir su propio `esDuplicado()`.
 
 ## Modelo de datos
 
@@ -238,8 +252,8 @@ sucursal ya acota lo que cada quien ve; el permiso solo protege la escritura.
 
 | Archivo | Qué hace |
 |---|---|
-| `vendedores.repository.ts` | `listar()`, `listarPorCodigoSucursal()`, `buscarPorId()`, `buscarPorLogin()`, `contarConSegmentoEnSucursal()`, `crear()`, `actualizar()`, `buscarSucursalUsuario()`. |
-| `vendedores.service.ts` | Alcance (D3), rechazo por colisión de segmento (D6) usando `candidatosDeSegmento` de `sincronizacion/segmento-vendedor.ts`, mapeo de `23505` → 409 (login y — de respaldo — el unique de segmento), `400` de `PATCH` vacío, `404`. |
+| `vendedores.repository.ts` | `listar()`, `listarPorCodigoSucursal()`, `buscarPorId()`, `crear()`, `actualizar()`, `buscarSucursalUsuario()` (delega en el helper compartido de `modules/sucursales/buscar-sucursal-usuario.ts`, D9). |
+| `vendedores.service.ts` | Alcance (D3), rechazo por colisión de segmento (D6) usando `candidatosDeSegmento` de `sincronizacion/segmento-vendedor.ts`, mapeo de errores con `esViolacionUnicidad`/`esViolacionFk` de `database/errores-postgres.ts` (D9), `400` de `PATCH` vacío, `404`. |
 | `vendedores.controller.ts` | Los tres endpoints con sus decoradores. |
 | `dto/crear-vendedor.dto.ts` | `nombre` (1–120, recortado), `login` (1–60, `@Transform` a minúsculas), `contrasena` (1–200, sin mínimo — D5), `sucursalId?` (uuid). |
 | `dto/editar-vendedor.dto.ts` | `nombre?`, `contrasena?`, `activo?`. Sin `sucursalId` (D3) ni `login` (no se pidió editarlo; si hiciera falta, mismo `@Transform` que el alta). |
@@ -272,7 +286,7 @@ sucursal ya acota lo que cada quien ve; el permiso solo protege la escritura.
 | Capa | Qué se prueba |
 |---|---|
 | **pgTAP** | `uq_vendedor_login`: rechaza login duplicado case-insensitive entre vivos · lo libera un `deleted_at` · `uq_vendedor_folio_segmento`: rechaza mismo segmento en la misma sucursal · **permite** el mismo segmento en sucursales distintas (el caso "Juan Pérez" del cliente) · un `deleted_at` libera el segmento; `activo = false` **no** lo libera (D7). |
-| **Unitarias** | La regla de rechazo de D6 como función pura (mismo criterio que `alcance-sucursal.spec.ts`): nombre nuevo con iniciales libres en su sucursal → pasa; mismas iniciales en la misma sucursal con un vendedor activo → rechaza; mismas iniciales pero en otra sucursal → pasa; mismas iniciales pero el otro vendedor está dado de baja (`deleted_at`) → pasa; mismas iniciales pero el otro solo está `activo = false` (no borrado) → **rechaza** (D7). |
+| **Unitarias** | Ninguna nueva. La regla de rechazo (D6) se prueba solo por e2e — mismo criterio que `VehiculosService`/`ProductosService`, que tampoco tienen `.spec.ts` propio: la decisión la toma el `unique` de la base, no una función pura que valga la pena aislar. `candidatosDeSegmento()` ya tiene sus pruebas desde T-14 (`segmento-vendedor.spec.ts`) y no cambia. |
 | **e2e backend** (`vendedores.e2e-spec.ts`) | CRUD completo · alcance por sucursal en alta/edición (como Vehículos) · colisión de segmento en la misma sucursal → 409 · sin colisión en sucursal distinta → 201 · login duplicado (incluida variación de mayúsculas) → 409 · sin `vendedor.gestionar` → 403 en escritura · `GET` sin permiso funciona · contraseña de 1 carácter se acepta (D5) · editar contraseña en blanco no la cambia. |
 | **Portal** | Pantalla de integración siguiendo T-65, `pantalla-vehiculos.tsx` como referencia más cercana (selector de sucursal condicional): carga con/sin `vendedor.gestionar`, alta completa, edición con contraseña en blanco, mensaje del 409 de colisión de segmento legible en el formulario. |
 
