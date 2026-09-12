@@ -102,7 +102,11 @@ async function main(): Promise<void> {
       '\n',
     );
 
-    const login = (await rl.question('Login: ')).trim();
+    // Mismo trato que CrearUsuarioDto/EditarUsuarioDto (T-13, revision
+    // final): el login se normaliza a minusculas al escribir, para que el
+    // indice parcial insensible a mayusculas (uq_usuario_login) diga la
+    // verdad sin importar por que puerta entro el alta.
+    const login = (await rl.question('Login: ')).trim().toLowerCase();
     const nombre = (await rl.question('Nombre: ')).trim();
     const contrasena = (await preguntarOculto(rl, 'Contrasena: ')).trim();
     const nombrePerfil = (await rl.question('Perfil: ')).trim();
@@ -128,10 +132,14 @@ async function main(): Promise<void> {
       sucursalId = sucursal.id;
     }
 
+    // D1 (T-13): un login dado de baja queda libre -- sin el filtro de
+    // deleted_at este script se negaria a reusarlo aunque el indice de la
+    // base ya lo permita.
     const yaExiste = await db
       .selectFrom('usuario')
       .select('id')
       .where('login', '=', login)
+      .where('deleted_at', 'is', null)
       .executeTakeFirst();
     if (yaExiste) {
       throw new Error(`Ya existe un usuario con login "${login}".`);

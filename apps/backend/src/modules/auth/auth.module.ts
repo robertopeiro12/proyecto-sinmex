@@ -14,6 +14,9 @@ import { SesionRepository } from './sesion.repository';
 import { SesionVendedorRepository } from './sesion-vendedor.repository';
 import { TokenService } from './token.service';
 import { TokenVendedorService } from './token-vendedor.service';
+import { UsuariosController } from './usuarios.controller';
+import { UsuariosRepository } from './usuarios.repository';
+import { UsuariosService } from './usuarios.service';
 
 @Module({
   imports: [
@@ -37,7 +40,12 @@ import { TokenVendedorService } from './token-vendedor.service';
       },
     }),
   ],
-  controllers: [AuthController, AuthVendedorController, PerfilesController],
+  controllers: [
+    AuthController,
+    AuthVendedorController,
+    PerfilesController,
+    UsuariosController,
+  ],
   providers: [
     AuthService,
     AuthVendedorService,
@@ -49,6 +57,8 @@ import { TokenVendedorService } from './token-vendedor.service';
     PermisosRepository,
     PerfilesRepository,
     PerfilesService,
+    UsuariosRepository,
+    UsuariosService,
   ],
   // TokenVendedorService y PermisosRepository se exportan porque los inyectan
   // los guards que app.module.ts registra como APP_GUARD, y por tanto se
