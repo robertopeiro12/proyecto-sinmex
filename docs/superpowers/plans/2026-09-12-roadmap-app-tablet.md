@@ -157,28 +157,29 @@ los tickets del portal/backend **solo** en la parte que la app necesita.
 | # | Ticket | Tamaño | Depende de (issue) | Parte que se hace | Bloqueo abierto |
 |---|---|---|---|---|---|
 | 1 | **T-16** Venta (app) | L | T-12 ✅ #81 · T-10 ✅ #74 · T-14 ✅ #72 | completo + fundación ADR-0009 | — |
-| 2 | **T-38** Jornada y kilometraje (app) | M | T-04 ✅ · T-11 ✅ · T-16 | completo | — |
-| 3 | **T-20** Cobranza / abono (app) | M | T-16 | completo | — |
-| 4 | **T-40** Prospectos (app) | S | T-12 ✅ · T-04 ✅ | sin foto | Foto: ¿Supabase Storage? |
-| 5 | **T-37** Ruta diaria | M | T-12 ✅ | **backend + tablet**; pantalla del portal según respuesta | ¿Quién hace la UI del portal? |
-| 6 | **T-39** Visita sin venta (app) | M | T-16 · T-37 | completo | Motivos cerrados o con "otro" (cliente) |
-| 7 | **T-45** Comisión | M | T-16 · T-12 ✅ | backend + cálculo local en tablet | ¿Congelada o recalculada? (cliente) |
-| 8 | **T-46** Efectividad de ruta | S | T-37 · T-16 | backend + cálculo local en tablet | — |
-| 9 | **T-41** GPS y mapa (app) | L | T-12 ✅ · T-37 | **spike + ADR de mapas antes del spec** | Proveedor/API key de mapas; GPS por visita o continuo (el criterio dice *"detecta vueltas personales"*, que exige continuo) |
-| 10 | **T-28** Tesorería: campos + saldo inicial | M | T-05 ✅ · T-03 ✅ | backend | UI del portal |
-| 11 | **T-29** Tesorería: depósitos, retiros, traspasos | M | T-28 | backend | UI del portal |
-| 12 | **T-30** Egresos: campos + tipos | M | T-05 ✅ · T-28 | backend + catálogo en `pull` | UI del portal |
-| 13 | **T-31** Registrar gasto | M | T-30 · T-29 | backend + captura en tablet | UI del portal |
-| 14 | **T-24** Inventario PT y envases | M | T-10 ✅ · T-16 | backend + **ADR del modelo de inventario** | Sabor o presentación (cliente) |
-| 15 | **T-25** Producción por día | M | T-10 ✅ | backend | UI del portal |
-| 16 | **T-26** Recarga a vendedores | M | T-25 · T-11 ✅ | backend + carga del día en `pull` | UI del portal |
-| 17 | **T-27** Inventario de repartidor, cuadre en 0 (app) | L | T-16 · T-24 (y T-26 en la práctica: sin carga no hay inventario inicial) | completo | — |
-| 18 | **T-33** Cierre del día (app) | L | T-20 · T-27 · T-31 (y T-45/T-46 para mostrar comisión y efectividad) | completo, **ver conflicto abajo** | Conflicto issue ↔ vault |
-| 19 | **T-43** Motor de sincronización + conflictos | L | T-07 ✅ · T-16 · T-20 · T-27 | completo | — |
-| 20 | **T-44** Sync intermedia 11:00 / 14:00 (app) | S | T-43 | completo | — |
-| 21 | **T-48** Impresión térmica del corte (app) | M | T-33 · T-45 · T-46 | **spike con impresora real** | Modelo de impresora; el vault avisa que puede requerir salir del *managed workflow* de Expo |
+| 2 | **T-20** Cobranza / abono (app) | M | T-16 | completo | — |
+| 3 | **T-17** Registrar, modificar y eliminar venta (portal) | L | T-12 ✅ · T-10 ✅ · T-05 ✅ | completo (backend + portal) | Folio de las ventas capturadas en el portal (ver ficha) |
+| 4 | **T-38** Jornada y kilometraje (app) | M | T-04 ✅ · T-11 ✅ · T-16 | completo | — |
+| 5 | **T-40** Prospectos (app) | S | T-12 ✅ · T-04 ✅ | sin foto | Foto: ¿Supabase Storage? |
+| 6 | **T-37** Ruta diaria | M | T-12 ✅ | **backend + tablet**; pantalla del portal según respuesta | ¿Quién hace la UI del portal? |
+| 7 | **T-39** Visita sin venta (app) | M | T-16 · T-37 | completo | Motivos cerrados o con "otro" (cliente) |
+| 8 | **T-45** Comisión | M | T-16 · T-12 ✅ | backend + cálculo local en tablet | ¿Congelada o recalculada? (cliente) |
+| 9 | **T-46** Efectividad de ruta | S | T-37 · T-16 | backend + cálculo local en tablet | — |
+| 10 | **T-41** GPS y mapa (app) | L | T-12 ✅ · T-37 | **spike + ADR de mapas antes del spec** | Proveedor/API key de mapas; GPS por visita o continuo (el criterio dice *"detecta vueltas personales"*, que exige continuo) |
+| 11 | **T-28** Tesorería: campos + saldo inicial | M | T-05 ✅ · T-03 ✅ | backend | UI del portal |
+| 12 | **T-29** Tesorería: depósitos, retiros, traspasos | M | T-28 | backend | UI del portal |
+| 13 | **T-30** Egresos: campos + tipos | M | T-05 ✅ · T-28 | backend + catálogo en `pull` | UI del portal |
+| 14 | **T-31** Registrar gasto | M | T-30 · T-29 | backend + captura en tablet | UI del portal |
+| 15 | **T-24** Inventario PT y envases | M | T-10 ✅ · T-16 | backend + **ADR del modelo de inventario** | Sabor o presentación (cliente) |
+| 16 | **T-25** Producción por día | M | T-10 ✅ | backend | UI del portal |
+| 17 | **T-26** Recarga a vendedores | M | T-25 · T-11 ✅ | backend + carga del día en `pull` | UI del portal |
+| 18 | **T-27** Inventario de repartidor, cuadre en 0 (app) | L | T-16 · T-24 (y T-26 en la práctica: sin carga no hay inventario inicial) | completo | — |
+| 19 | **T-33** Cierre del día (app) | L | T-20 · T-27 · T-31 (y T-45/T-46 para mostrar comisión y efectividad) | completo, **ver conflicto abajo** | Conflicto issue ↔ vault |
+| 20 | **T-43** Motor de sincronización + conflictos | L | T-07 ✅ · T-16 · T-20 · T-27 | completo | — |
+| 21 | **T-44** Sync intermedia 11:00 / 14:00 (app) | S | T-43 | completo | — |
+| 22 | **T-48** Impresión térmica del corte (app) | M | T-33 · T-45 · T-46 | **spike con impresora real** | Modelo de impresora; el vault avisa que puede requerir salir del *managed workflow* de Expo |
 
-**Fuera de este roadmap** (la app no los necesita): T-15, T-17, T-19, T-21, T-22, T-23, T-32,
+**Fuera de este roadmap** (la app no los necesita): T-15, T-19, T-21, T-22, T-23, T-32,
 T-34, T-35, T-36, T-47, T-49…T-59, T-62, T-63, T-64 y T-60 (endurecimiento final). Notas:
 T-35 (captura de merma en el portal) no es necesario porque T-27 captura en la tablet; T-34
 (eliminar cobranza con autorización) es el complemento de T-20 del lado del portal.
@@ -202,16 +203,13 @@ ticket las fija.
   `venta_nota` + `venta_nota_detalle`. Migración: `sync_operacion_id` en `venta_nota`.
 - **Tablet:** migración local (ventas y líneas), repositorio que llama a `folios.emitir()`
   **dentro de la misma transacción**, `venta.tsx`, el motor de sync sube ventas.
-- **El spec debe fijar, antes que nada: la cobranza dentro de la venta.** El criterio del issue
-  dice *"muestra productos y notas pendientes"* y el vault es explícito: *"al registrar la venta
-  debe poder marcarse la cobranza de notas pendientes/abonadas en la misma operación"*
-  (`Status de venta` → casos límite; `Ventas y Cobranza` → *Cobranza dentro de la misma venta*).
-  Con consignación como caso normal, hay dos caminos: **(a)** T-16 solo *muestra* las notas y
-  T-20 añade pagarlas; **(b)** `CobranzasService.registrarCobranza` nace en T-16 y T-20 queda
-  como la pantalla de cobranza suelta. (b) sube T-16 a ~18 tareas y cambia el orden
-  T-16 → T-38 → T-20.
-- **El spec debe fijar también:** la forma de `datos` de `venta`; si el precio lo manda la tablet (el que
-  bajó en `pull`) o lo resuelve el servidor a la `fecha_operacion`, y qué pasa si difieren; los
+- **Decidido con Mario (2026-09-12):** (a) T-16 **muestra** las notas pendientes y T-20 las cobra,
+  también desde la pantalla de venta, como operaciones `cobranza` separadas; (b) el precio de cada
+  línea es **el de la nota firmada** (el que manda la tablet); (c) una venta grabada en la tablet
+  **nunca se edita ni se anula**: se corrige desde el portal (**T-17**, añadido al roadmap).
+- **`registrarVenta` se diseña para las dos puertas desde el día uno:** T-17 lo reutiliza desde el
+  portal (ADR-0009 §2.2).
+- **El spec debe fijar también:** la forma de `datos` de `venta`; los
   códigos de rechazo nuevos; si una venta de contado genera también su `cobranza_abono`.
 - **Ya decidido por el vault:** contado → `pagada`, crédito → `pendiente`, promoción →
   `promocion`; `# de nota` obligatorio; promoción por línea, no suma al importe.
@@ -219,12 +217,56 @@ ticket las fija.
   (`visita-sin-venta.tsx` dice T-33 y es **T-39**; `prospectos.tsx` dice T-24 y es **T-40**;
   `ruta.tsx` dice T-34 y es **T-41**; `registros.tsx` dice T-22, ticket de cuentas por cobrar del
   portal, cuando esa pantalla es de **T-27/T-31**). Se corrigen con los números de GitHub.
-- **Tareas (~14):** 3 `haiku` (migración, función pura de status/semana/mes, tipos del contrato) ·
+- **Tareas (~15):** 4 `haiku` (independizar `92_folios_test.sql` de los datos locales —
+  hallazgo de la línea base—, migración, función pura de status/semana/mes, tipos del contrato) ·
   8 `sonnet` (servicio de ventas, e2e de `push`, repositorio y migración de la tablet, motor,
   pantalla, pruebas de pantalla, cierre) · 1 `opus` (refactor transaccional de `push`).
   Revisión final: `fable` (techo) u `opus`.
 
-### 2 · T-38 Jornada y kilometraje (M)
+### 2 · T-20 Cobranza / abono (M)
+
+- **Criterios:** notas pendientes/abonadas con saldo; liquidación o abono parcial; grabado
+  offline que alimenta corte y tesorería.
+- **Backend:** `CobranzasService.registrarCobranza` → `cobranza_abono`; status
+  `pendiente → abonado → pagada`; **saldo derivado** (monto − Σ abonos, regla del vault);
+  método de pago por defecto `efectivo` desde la app. Respeta el orden del lote (una cobranza
+  sobre una nota vendida en el mismo lote).
+- **Tablet:** `cobranza.tsx`, actualización local de `nota_pendiente`.
+- **Consignación (decidido en T-16):** el cobro de notas también se ofrece desde la pantalla de
+  venta, como operaciones `cobranza` separadas en el mismo lote, cada una con su clave.
+- **El spec debe fijar:** qué hace `saldo_pendiente` (foto del momento del abono, nunca fuente);
+  rechazos `nota-no-encontrada` y `monto-excede-saldo`.
+- **Tareas (~9):** 2 `haiku` · 6 `sonnet` (la de proyección con revisor `opus`) · cierre.
+
+### 3 · T-17 Registrar, modificar y eliminar venta — Portal (L)
+
+- **Por qué entra:** decisión del 2026-09-12 en el spec de T-16 — una venta grabada en la tablet
+  nunca se edita, así que **el portal es el único camino para corregirla**. Sus dependencias
+  (T-12, T-10, T-05) ya están mergeadas.
+- **Criterios del issue:** registrar con los mismos campos que la app (la fecha permite días
+  pasados); modificar y eliminar buscando por fecha, cliente o `# de nota`; corregir el bug v2.0 de
+  que el monto en $ no sumaba en ventas creadas desde el portal.
+- **Backend:** reutiliza `VentasService.registrarVenta` de T-16 con `contexto.usuarioId` y
+  `syncOperacionId = null` ("un solo servicio, dos puertas", ADR-0009 §2.2); agrega
+  `modificarVenta` y `eliminarVenta` (baja lógica) en `ventas-cobranza/`; endpoints con
+  `@RequierePermiso` y alcance por sucursal; permiso nuevo con el patrón de migración de T-13.
+- **Portal:** búsqueda por fecha, cliente o `# de nota`; formulario con los mismos campos que la
+  app; baja con confirmación; pruebas de pantalla con el patrón de T-65.
+- **El spec debe fijar:**
+  - **El folio de una venta capturada en el portal.** ADR-0001 y ADR-0007 dicen que el folio lo
+    emite la tablet; ADR-0009 §2.2 dice que desde el portal lo emite el servidor. Si el servidor
+    emite con el segmento del repartidor elegido, su contador **no conoce** los números que ese
+    vendedor ya usó offline ese día, y la tablet chocaría (`folio-duplicado`) al sincronizar. Hay
+    que elegir entre una numeración separada para el portal o no foliar las ventas de oficina.
+  - **Qué se puede modificar de una venta que vino de la tablet**, con `sync_operacion` intacta
+    como bitácora, y cómo le llega el cambio a la tablet (`notas_pendientes` en el `pull`).
+  - **Modificar o eliminar una venta con abonos** (T-20): bloquearlo, o exigir primero eliminar
+    la cobranza (T-34, fuera del roadmap).
+- **Tareas (~14):** 3 `haiku` · 9 `sonnet` (endpoints, búsqueda, formulario, pruebas de pantalla) ·
+  1 `opus` (reglas de edición con abonos y folio) · cierre. Revisión final `opus`.
+- **Desbloquea, fuera de este roadmap:** T-19, T-21, T-32, T-35, T-49, T-52, T-57.
+
+### 4 · T-38 Jornada y kilometraje (M)
 
 - **Criterios:** vehículo + km inicial obligatorio para operar (ya existe); km final
   obligatorio antes de enviar el corte; km del día = final − inicial para el reporte.
@@ -236,20 +278,7 @@ ticket las fija.
   hasta T-43.
 - **Tareas (~7):** 2 `haiku` · 5 `sonnet`.
 
-### 3 · T-20 Cobranza / abono (M)
-
-- **Criterios:** notas pendientes/abonadas con saldo; liquidación o abono parcial; grabado
-  offline que alimenta corte y tesorería.
-- **Backend:** `CobranzasService.registrarCobranza` → `cobranza_abono`; status
-  `pendiente → abonado → pagada`; **saldo derivado** (monto − Σ abonos, regla del vault);
-  método de pago por defecto `efectivo` desde la app. Respeta el orden del lote (una cobranza
-  sobre una nota vendida en el mismo lote).
-- **Tablet:** `cobranza.tsx`, actualización local de `nota_pendiente`.
-- **El spec debe fijar:** qué hace `saldo_pendiente` (foto del momento del abono, nunca fuente);
-  rechazos `nota-no-encontrada` y `monto-excede-saldo`.
-- **Tareas (~9):** 2 `haiku` · 6 `sonnet` (la de proyección con revisor `opus`) · cierre.
-
-### 4 · T-40 Prospectos (S)
+### 5 · T-40 Prospectos (S)
 
 - **Backend:** tipo de push nuevo `prospecto` → `ClientesService.crearProspecto`
   (`cliente.tipo = 'prospecto'`); `domicilio` deja de ser obligatorio **solo** para prospectos;
@@ -258,7 +287,7 @@ ticket las fija.
 - **Fuera por ahora:** la foto, hasta que el equipo decida el alcance de Supabase (Storage).
 - **Tareas (~6):** 2 `haiku` · 4 `sonnet`.
 
-### 5 · T-37 Ruta diaria (M)
+### 6 · T-37 Ruta diaria (M)
 
 - **Backend:** endpoints de asignación por vendedor y fecha con orden; permiso propio de *Ruta
   Diaria* (patrón de migración de permiso de T-13); alcance por sucursal con `resolverAlcance`;
@@ -267,7 +296,7 @@ ticket las fija.
 - **Portal:** según la respuesta sobre quién hace la UI. Si nadie: API + pgTAP + e2e.
 - **Tareas (~8):** 2 `haiku` · 6 `sonnet`.
 
-### 6 · T-39 Visita sin venta (M)
+### 7 · T-39 Visita sin venta (M)
 
 - **Backend:** tabla `visita` (cliente, `fecha_operacion`, hora, motivo, persona que atendió,
   lat/lng opcionales, `sync_operacion_id`); `rutas/VisitasService.registrarVisita` proyecta el
@@ -275,7 +304,7 @@ ticket las fija.
 - **Tablet:** `visita-sin-venta.tsx`.
 - **Tareas (~7):** 2 `haiku` · 5 `sonnet`.
 
-### 7 · T-45 Comisión (M) y 8 · T-46 Efectividad (S)
+### 8 · T-45 Comisión (M) y 9 · T-46 Efectividad (S)
 
 - **T-45:** función pura (monto × % / 100; promoción = $0); agregado por periodo y vendedor.
   Dónde se guarda depende de la pregunta al cliente. En la tablet, la comisión del día se calcula
@@ -284,7 +313,7 @@ ticket las fija.
   para el cierre, en backend para el portal.
 - **Tareas:** T-45 ~5 (3 `haiku`, 2 `sonnet`) · T-46 ~4 (2 `haiku`, 2 `sonnet`).
 
-### 9 · T-41 GPS y mapa (L)
+### 10 · T-41 GPS y mapa (L)
 
 - **Antes del spec:** un *spike* `opus` (desechable) para probar mapa + ubicación en segundo
   plano en el teléfono de prueba, y un **ADR de mapas** (proveedor, API key, costo) — hoy está en
@@ -294,7 +323,7 @@ ticket las fija.
 - **Tareas (~12):** 1 spike `opus` · 3 `haiku` · 6 `sonnet` · 2 `opus` (módulo nativo, segundo
   plano).
 
-### 10–13 · T-28, T-29, T-30, T-31 Tesorería y gastos (M cada uno)
+### 11–14 · T-28, T-29, T-30, T-31 Tesorería y gastos (M cada uno)
 
 - **T-28:** `tesoreria/` — campos (Efectivo, Caja Chica, bancos) y saldo inicial.
 - **T-29:** libro de movimientos de tesorería; traspaso = dos movimientos atómicos; saldo
@@ -307,7 +336,7 @@ ticket las fija.
 - **Tareas:** ~6–9 cada uno, mayoría `sonnet`, migraciones y semillas `haiku`, proyección de
   `gasto` con revisor `opus`.
 
-### 14–17 · T-24, T-25, T-26, T-27 Inventario (M, M, M, L)
+### 15–18 · T-24, T-25, T-26, T-27 Inventario (M, M, M, L)
 
 - **T-24:** **ADR del modelo de inventario** (tarea `opus`) — la propuesta del vault es un
   libro de movimientos; tabla `movimiento_inventario`; inventario PT y envases a una fecha como
@@ -320,7 +349,7 @@ ticket las fija.
   la fórmula detallada (teórico vs. validado). **Regla de acciones opuestas obligatoria** (ADR-0008).
 - **Tareas:** T-24 ~9 · T-25 ~6 · T-26 ~7 · T-27 ~12.
 
-### 18 · T-33 Cierre del día (L)
+### 19 · T-33 Cierre del día (L)
 
 - **Conflicto a resolver en el spec.** Los criterios del issue piden *Caja Final = Caja Inicial +
   Cobranza − Gastos* y el **flujo de preguntas para diferencias**. La regla `Corte de caja` del vault dice
@@ -331,7 +360,7 @@ ticket las fija.
 - **Tareas (~10):** 3 `haiku` · 6 `sonnet` · 1 `opus` (consistencia del resumen con lo
   proyectado).
 
-### 19 · T-43 Motor de conflictos (L) y 20 · T-44 Sync 11:00/14:00 (S)
+### 20 · T-43 Motor de conflictos (L) y 21 · T-44 Sync 11:00/14:00 (S)
 
 - **T-43:** versión por fila en las tablas que bajan en `pull` (la *"solución correcta a largo
   plazo"* según ADR-0006), `pull` por versión, reconciliación de folios y cobranzas, frescura del
@@ -341,7 +370,7 @@ ticket las fija.
   gracias a la versión de T-43.
 - **Tareas:** T-43 ~12 (4 `opus`) · T-44 ~5.
 
-### 21 · T-48 Impresión térmica (M)
+### 22 · T-48 Impresión térmica (M)
 
 - **Antes del spec:** spike con la impresora real. Sin el aparato no se toma.
 - **Tareas (~8):** 1 spike `opus` · resto `sonnet`.
