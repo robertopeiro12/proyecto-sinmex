@@ -92,6 +92,22 @@ trastear sin ensuciar, apunta `DATABASE_URL` de `.env.development` al Postgres l
 Descubierto en T-09, cuando una verificación "local" acabó creando una sucursal de prueba en
 `sinmex dev`.
 
+**Después de cada `git pull` / merge de `main`, actualiza el Postgres local — siempre, sin que te
+lo pidan.** Las migraciones viajan por git (`supabase/migrations/`), pero nadie las aplica a tu
+Docker por ti: tras un pull la base local se queda atrás y `test:e2e`, pgTAP y `db:types` corren
+contra un esquema viejo. La rutina, con Docker corriendo, es:
+
+```
+npm run supabase start                          # solo si el stack no está arriba
+npx supabase migration list --local             # muestra cuáles faltan (columna "remote" vacía)
+npx supabase migration up --local               # aplica solo las pendientes; conserva tus datos
+npm run db:types --workspace=apps/backend       # y comprueba que schema.d.ts no cambia (git diff)
+```
+
+Si el pull trajo migraciones y prefieres partir limpio, `npx supabase db reset` reaplica las
+23+ desde cero (las semillas base son una migración, así que vuelven solas). Descubierto el
+2026-09-12: tras traer T-13 la local tenía 21 de 23 migraciones y nadie se había enterado.
+
 **Dos actores, dos autenticaciones (T-06) — no las mezcles:**
 
 | | Portal Web | App de tablet |
