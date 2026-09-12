@@ -750,6 +750,72 @@ describe('Usuarios (e2e)', () => {
         })
         .expect(403);
     });
+
+    it('rechaza que un usuario se auto-eleve el perfil via PATCH (Important #4)', async () => {
+      // Mismo patron de fixture que D5 arriba: perfil Auxiliar (vacio) +
+      // excepcion puntual de usuario.gestionar, para tener un actor con el
+      // permiso SIN ser Administrador General.
+      const permisoUsuarioGestionar = await db
+        .selectFrom('permiso')
+        .select('id')
+        .where('clave', '=', 'usuario.gestionar')
+        .executeTakeFirstOrThrow();
+      const login = `${PREFIJO}-auto-eleva`;
+      const id = await crearUsuarioFixture(login, idPerfilAuxiliar, null);
+      await db
+        .insertInto('usuario_permiso')
+        .values({
+          usuario_id: id,
+          permiso_id: permisoUsuarioGestionar.id,
+          habilitado: true,
+        })
+        .execute();
+      const cookiePropia = await iniciarSesion(login);
+
+      await request(app.getHttpServer())
+        .patch(`/usuarios/${id}`)
+        .set('Cookie', cookiePropia)
+        .send({
+          login,
+          nombre: 'X',
+          perfilId: idPerfilMaestro,
+          permisosMarcados: [],
+        })
+        .expect(409);
+    });
+
+    it('permite que ese mismo actor se edite solo el nombre, sin tocar perfil ni permisos', async () => {
+      const permisoUsuarioGestionar = await db
+        .selectFrom('permiso')
+        .select('id')
+        .where('clave', '=', 'usuario.gestionar')
+        .executeTakeFirstOrThrow();
+      const login = `${PREFIJO}-auto-edita-nombre`;
+      const id = await crearUsuarioFixture(login, idPerfilAuxiliar, null);
+      await db
+        .insertInto('usuario_permiso')
+        .values({
+          usuario_id: id,
+          permiso_id: permisoUsuarioGestionar.id,
+          habilitado: true,
+        })
+        .execute();
+      const cookiePropia = await iniciarSesion(login);
+
+      // perfilId y permisosMarcados van IDENTICOS a los que ya tiene -- asi
+      // es como el formulario del portal ya lo hace hoy (D8, marcados nace
+      // de permisosEfectivos). Solo cambia nombre.
+      await request(app.getHttpServer())
+        .patch(`/usuarios/${id}`)
+        .set('Cookie', cookiePropia)
+        .send({
+          login,
+          nombre: 'Nombre editado por si mismo',
+          perfilId: idPerfilAuxiliar,
+          permisosMarcados: ['usuario.gestionar'],
+        })
+        .expect(200);
+    });
   });
 
   describe('DELETE /usuarios/:id', () => {

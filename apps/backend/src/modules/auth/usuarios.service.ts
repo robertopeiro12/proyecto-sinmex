@@ -156,6 +156,26 @@ export class UsuariosService {
       throw new NotFoundException('No existe ese usuario.');
     }
 
+    // Auto-elevacion/auto-degradacion: nadie se cambia su propio perfil ni
+    // sus propios permisos via PATCH, aunque tenga usuario.gestionar --
+    // mismo estilo de excepcion que la guardia de auto-baja en eliminar()
+    // (linea ~236-238). Va ANTES de la comprobacion D7 de abajo: si un
+    // maestro se auto-edita el perfil, el mensaje correcto es este, no el
+    // de "debe quedar al menos un administrador".
+    if (id === usuarioId) {
+      const cambiaPerfil = dto.perfilId !== actual.perfilId;
+      const permisosActuales = await this.permisosRepo.permisosDe(actual.id);
+      const permisosNuevos = new Set(dto.permisosMarcados);
+      const cambiaPermisos =
+        permisosActuales.size !== permisosNuevos.size ||
+        [...permisosActuales].some((clave) => !permisosNuevos.has(clave));
+      if (cambiaPerfil || cambiaPermisos) {
+        throw new ConflictException(
+          'No puedes cambiar tu propio perfil ni tus propios permisos.',
+        );
+      }
+    }
+
     const actor = await this.filaActor(usuarioId);
     const alcance = resolverAlcance(actor.codigo, null);
     // D8: la sucursal ACTUAL del editado tiene que estar dentro del
