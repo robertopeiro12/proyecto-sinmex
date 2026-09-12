@@ -220,17 +220,19 @@ permiso.
 |---|---|---|---|
 | `GET` | `/vendedores?sucursal=TJ` | solo sesión | Acotado por `resolverAlcance()`. Devuelve activos e inactivos — no hay reactivación desde el portal (ver "Fuera, a propósito"), pero la tabla necesita mostrar quién está dado de baja, igual que Vehículos y Usuarios. |
 | `POST` | `/vendedores` | `vendedor.gestionar` | Sucursal según D3. `409 folio-segmento-repetido` si las iniciales ya están tomadas en esa sucursal (D6). `409` si el login ya existe (D4). |
-| `PATCH` | `/vendedores/:id` | `vendedor.gestionar` | `nombre?`, `contrasena?`, `activo?`. Si `nombre` cambia, se re-evalúa la colisión de segmento (D6) — el segmento **no se recalcula** si no colisiona, pero si el nuevo nombre chocara con otro vendedor activo de esa sucursal, se rechaza igual que en el alta. `403` si el vendedor es de otra sucursal. `400` si no hay nada que actualizar. |
+| `PATCH` | `/vendedores/:id` | `vendedor.gestionar` | `nombre?`, `contrasena?`, `activo?`. `403` si el vendedor es de otra sucursal. `400` si no hay nada que actualizar. |
 
 `GET` no exige permiso, igual que `/sucursales`, `/productos` y `/vehiculos` — el filtro de
 sucursal ya acota lo que cada quien ve; el permiso solo protege la escritura.
 
-> [!warning] Editar el nombre de un vendedor YA existente no puede cambiarle el segmento
-> El segmento se **pina** al alta (D6, misma doctrina que el ADR). Si `PATCH` cambia `nombre` pero
-> el segmento ya asignado sigue libre de colisión con el nuevo nombre, el segmento **no se
-> recalcula** — solo se usa para decidir si el nuevo nombre choca con OTRO vendedor. Reevaluar y
-> reasignar el propio segmento de alguien que ya tiene folios en la calle repetiría el error que
-> ADR-0007 ya descartó para el código de sucursal.
+> [!warning] Editar el nombre NO re-evalúa ni recalcula el segmento — a propósito
+> El segmento se **pina** al alta (D6) y una edición de `nombre` **no lo toca en absoluto**: el
+> `PATCH` no vuelve a calcular `candidatosDeSegmento()` ni compara contra otros vendedores. Esto es
+> deliberado y no una omisión: ni el cliente ni ninguna fuente piden una regla de colisión al
+> *renombrar* — solo la piden al **dar de alta**. Inventar un re-chequeo al editar sería una regla
+> de negocio no confirmada (un borrador anterior de este spec sí la traía; se retira aquí). Si el
+> cliente pide después "no permitir un nombre que ya luce como el de otro vendedor de la sucursal",
+> es una decisión nueva con su propio ticket — no se anticipa.
 
 ### Forma de la respuesta
 
