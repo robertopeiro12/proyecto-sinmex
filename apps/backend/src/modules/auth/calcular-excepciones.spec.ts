@@ -1,4 +1,5 @@
 import { calcularExcepciones } from './calcular-excepciones';
+import { combinarPermisos } from './permisos';
 
 describe('calcularExcepciones', () => {
   it('sin marcados y sin perfil, no hay excepciones', () => {
@@ -50,11 +51,10 @@ describe('calcularExcepciones', () => {
     const marcados = new Set(['cliente.gestionar', 'vendedor.gestionar']);
     const excepciones = calcularExcepciones(marcados, delPerfil);
 
-    const efectivos = new Set(delPerfil);
-    for (const { clave, habilitado } of excepciones) {
-      if (habilitado) efectivos.add(clave);
-      else efectivos.delete(clave);
-    }
+    // Usa la funcion real, no una reimplementacion del bucle: si
+    // combinarPermisos cambiara de comportamiento, esta prueba tiene que
+    // poder romperse (antes no importaba la funcion real, asi que no).
+    const efectivos = combinarPermisos(delPerfil, excepciones);
 
     expect(efectivos).toEqual(marcados);
   });

@@ -166,17 +166,6 @@ export class UsuariosRepository {
     return (await this.obtener(id))!;
   }
 
-  /** D7 del spec: cuenta cuantos usuarios activos tienen un perfil dado (mismo patron que PerfilesRepository.contarUsuariosActivos, T-08b). */
-  async contarActivosConPerfil(perfilId: string): Promise<number> {
-    const fila = await this.db
-      .selectFrom('usuario')
-      .select((eb) => eb.fn.countAll<string>().as('total'))
-      .where('perfil_id', '=', perfilId)
-      .where('deleted_at', 'is', null)
-      .executeTakeFirstOrThrow();
-    return Number(fila.total);
-  }
-
   async darDeBaja(id: string): Promise<void> {
     await this.db
       .updateTable('usuario')

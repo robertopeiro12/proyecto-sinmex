@@ -2,6 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import { UsuariosService } from './usuarios.service';
 import type { EditarUsuarioDto } from './dto/editar-usuario.dto';
 import type { PasswordService } from './password.service';
+import type { PerfilesRepository } from './perfiles.repository';
 import type { MatrizPerfiles, PerfilesService } from './perfiles.service';
 import type { PermisosRepository } from './permisos.repository';
 import type { UsuarioBase, UsuariosRepository } from './usuarios.repository';
@@ -44,14 +45,23 @@ const dtoBajaAPerfilNoMaestro: EditarUsuarioDto = {
 };
 
 /** Repo doble: solo los metodos que editar()/eliminar() llaman en este camino. */
-const repoCon = (activosConPerfil: number): UsuariosRepository =>
+const repoCon = (): UsuariosRepository =>
   ({
     obtener: () => Promise.resolve(actualMaestro),
     buscarSucursalUsuario: () => Promise.resolve({ id: null, codigo: null }),
-    contarActivosConPerfil: () => Promise.resolve(activosConPerfil),
     actualizar: () => Promise.resolve(actualMaestro),
     darDeBaja: () => Promise.resolve(undefined),
   }) as unknown as UsuariosRepository;
+
+/**
+ * Doble de PerfilesRepository.contarUsuariosActivos -- D7 reutiliza este
+ * conteo en vez de duplicarlo (era una copia literal, ver Minor #1 de la
+ * revision final).
+ */
+const perfilesRepoCon = (activosConPerfil: number): PerfilesRepository =>
+  ({
+    contarUsuariosActivos: () => Promise.resolve(activosConPerfil),
+  }) as unknown as PerfilesRepository;
 
 /** Matriz doble: un unico perfil destino, NO maestro. */
 const perfilesConDestinoNoMaestro = (): PerfilesService =>
@@ -82,10 +92,11 @@ describe('UsuariosService (D7: ultimo Administrador General activo)', () => {
   describe('editar()', () => {
     it('rechaza con ConflictException si es el ultimo activo (activos <= 1)', async () => {
       const service = new UsuariosService(
-        repoCon(1),
+        repoCon(),
         perfilesConDestinoNoMaestro(),
         permisosRepoDoble,
         passwordDoble,
+        perfilesRepoCon(1),
       );
 
       await expect(
@@ -95,10 +106,11 @@ describe('UsuariosService (D7: ultimo Administrador General activo)', () => {
 
     it('continua (no rechaza por esta regla) si quedan otros activos', async () => {
       const service = new UsuariosService(
-        repoCon(2),
+        repoCon(),
         perfilesConDestinoNoMaestro(),
         permisosRepoDoble,
         passwordDoble,
+        perfilesRepoCon(2),
       );
 
       await expect(
@@ -110,10 +122,11 @@ describe('UsuariosService (D7: ultimo Administrador General activo)', () => {
   describe('eliminar()', () => {
     it('rechaza con ConflictException si es el ultimo activo (activos <= 1)', async () => {
       const service = new UsuariosService(
-        repoCon(1),
+        repoCon(),
         perfilesConDestinoNoMaestro(),
         permisosRepoDoble,
         passwordDoble,
+        perfilesRepoCon(1),
       );
 
       await expect(
@@ -123,10 +136,11 @@ describe('UsuariosService (D7: ultimo Administrador General activo)', () => {
 
     it('continua (no rechaza por esta regla) si quedan otros activos', async () => {
       const service = new UsuariosService(
-        repoCon(2),
+        repoCon(),
         perfilesConDestinoNoMaestro(),
         permisosRepoDoble,
         passwordDoble,
+        perfilesRepoCon(2),
       );
 
       await expect(

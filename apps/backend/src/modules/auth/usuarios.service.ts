@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -13,6 +14,7 @@ import { resolverAlcance, type Alcance } from '../sucursales/alcance-sucursal';
 import { calcularExcepciones } from './calcular-excepciones';
 import { PasswordService } from './password.service';
 import { esMaestro } from './permisos';
+import { PerfilesRepository } from './perfiles.repository';
 import { PerfilesService, type MatrizPerfiles } from './perfiles.service';
 import { PermisosRepository } from './permisos.repository';
 import type { CrearUsuarioDto } from './dto/crear-usuario.dto';
@@ -32,6 +34,7 @@ export class UsuariosService {
     private readonly perfiles: PerfilesService,
     private readonly permisosRepo: PermisosRepository,
     private readonly password: PasswordService,
+    private readonly perfilesRepo: PerfilesRepository,
   ) {}
 
   async catalogoPerfiles(): Promise<MatrizPerfiles> {
@@ -185,6 +188,12 @@ export class UsuariosService {
     let sucursalId: string | null;
     if (actor.id === null) {
       // General: puede mover a cualquiera, incluida "General" (null).
+      // OJO para cualquier consumidor que no sea el portal (script, curl,
+      // una app futura): omitir el campo aqui MUEVE al usuario a "General"
+      // -- el mismo campo ausente significa lo opuesto (conservar) en la
+      // rama de abajo para un actor atado. El portal siempre manda el
+      // campo (formulario-usuario.tsx) precisamente para no depender de
+      // este default.
       sucursalId = dto.sucursalId ?? null;
     } else {
       // Atado: el DESTINO tambien tiene que ser su propia sucursal (D8) --
@@ -206,7 +215,9 @@ export class UsuariosService {
     // activo. Solo aplica si el perfil ACTUAL es el maestro y el nuevo NO
     // lo es -- cualquier otro cambio de perfil no puede vaciar la cuenta.
     if (esMaestro(actual.perfil) && !perfilNuevo.esMaestro) {
-      const activos = await this.repo.contarActivosConPerfil(actual.perfilId);
+      const activos = await this.perfilesRepo.contarUsuariosActivos(
+        actual.perfilId,
+      );
       if (activos <= 1) {
         throw new ConflictException(
           'Debe quedar al menos un Administrador General activo.',
@@ -269,7 +280,9 @@ export class UsuariosService {
     this.exigirAlcanceSobreCodigo(alcance, actual.sucursalCodigo);
 
     if (esMaestro(actual.perfil)) {
-      const activos = await this.repo.contarActivosConPerfil(actual.perfilId);
+      const activos = await this.perfilesRepo.contarUsuariosActivos(
+        actual.perfilId,
+      );
       if (activos <= 1) {
         throw new ConflictException(
           'Debe quedar al menos un Administrador General activo.',
@@ -295,12 +308,16 @@ export class UsuariosService {
       return [];
     }
     const claveAId = new Map(matriz.permisos.map((p) => [p.clave, p.id]));
+    const desconocidas = marcados.filter((clave) => !claveAId.has(clave));
+    if (desconocidas.length > 0) {
+      throw new BadRequestException(
+        `Permiso(s) desconocido(s): ${desconocidas.join(', ')}.`,
+      );
+    }
     const excepciones = calcularExcepciones(new Set(marcados), perfil.permisos);
-    return excepciones
-      .map((e) => ({
-        permiso_id: claveAId.get(e.clave),
-        habilitado: e.habilitado,
-      }))
-      .filter((e): e is ExcepcionConId => e.permiso_id !== undefined);
+    return excepciones.map((e) => ({
+      permiso_id: claveAId.get(e.clave)!,
+      habilitado: e.habilitado,
+    }));
   }
 }
