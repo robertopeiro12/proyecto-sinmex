@@ -637,63 +637,19 @@ describe('Usuarios (e2e)', () => {
       expect(detalle.permisosEfectivos).toEqual([perfilB.clave]);
     });
 
-    it('rechaza cambiarle el perfil al ultimo Administrador General activo (D7)', async () => {
-      const idUnico = await crearUsuarioFixture(
-        `${PREFIJO}-unico-admin`,
-        idPerfilMaestro,
-        null,
-      );
-      const cookieUnico = await iniciarSesion(`${PREFIJO}-unico-admin`);
-
-      // Ventana angosta a proposito: D7 es la primera regla de negocio de
-      // este backend que depende de un conteo GLOBAL sobre un perfil que
-      // no se puede crear desechable (esMaestro() compara por nombre
-      // fijo, a diferencia de sembrarPerfil() en T-08b). `test:e2e` no fija
-      // --runInBand, asi que puede haber Administrador General activos de
-      // OTROS archivos de e2e corriendo en paralelo -- se bajan
-      // TEMPORALMENTE (nunca al propio `idUnico`, que hace la peticion con
-      // su propia sesion), se hace la asercion, y se restauran de
-      // inmediato en el `finally`. Riesgo residual: si otro worker crea o
-      // borra un Administrador General en esta misma ventana de
-      // milisegundos, esta prueba puede fallar de forma intermitente.
-      const otrosMaestrosActivos = await db
-        .selectFrom('usuario')
-        .select('id')
-        .where('perfil_id', '=', idPerfilMaestro)
-        .where('deleted_at', 'is', null)
-        .where('id', '!=', idUnico)
-        .execute();
-      const idsOtros = otrosMaestrosActivos.map((f) => f.id);
-
-      try {
-        if (idsOtros.length > 0) {
-          await db
-            .updateTable('usuario')
-            .set({ perfil_id: idPerfilAuxiliar })
-            .where('id', 'in', idsOtros)
-            .execute();
-        }
-
-        await request(app.getHttpServer())
-          .patch(`/usuarios/${idUnico}`)
-          .set('Cookie', cookieUnico)
-          .send({
-            login: `${PREFIJO}-unico-admin`,
-            nombre: 'X',
-            perfilId: idPerfilAuxiliar,
-            permisosMarcados: [],
-          })
-          .expect(409);
-      } finally {
-        if (idsOtros.length > 0) {
-          await db
-            .updateTable('usuario')
-            .set({ perfil_id: idPerfilMaestro })
-            .where('id', 'in', idsOtros)
-            .execute();
-        }
-      }
-    });
+    // D7 ("no dejar sin ningun Administrador General activo" al cambiar de
+    // perfil) se prueba ahora de forma UNITARIA en
+    // apps/backend/src/modules/auth/usuarios.service.spec.ts, con el
+    // repositorio mockeado. La version e2e que vivia aqui bajaba
+    // TEMPORALMENTE a todos los Administrador General activos de la base
+    // -incluidos los de OTROS archivos de e2e corriendo en paralelo, Jest
+    // sin --runInBand- para forzar "queda exactamente uno": una escritura
+    // global sobre datos que la prueba no creaba, que podia tumbar pruebas
+    // de otros archivos con un 409/falso 403. Mismo criterio que ya usa
+    // perfiles.e2e-spec.ts para sus reglas del perfil maestro: nunca tocar
+    // datos que la prueba no creo. Este describe conserva solo integracion
+    // real: auto-baja y camino feliz (mover de sucursal, recalculo de
+    // excepciones, etc.).
 
     it('un usuario atado a TJ no puede editar un usuario de MX', async () => {
       const id = await crearUsuarioFixture(
@@ -904,77 +860,15 @@ describe('Usuarios (e2e)', () => {
         .expect(409);
     });
 
-    it('rechaza dar de baja al ultimo Administrador General activo (D7)', async () => {
-      const idUnico = await crearUsuarioFixture(
-        `${PREFIJO}-unico-baja`,
-        idPerfilMaestro,
-        null,
-      );
-      const cookieUnico = await iniciarSesion(`${PREFIJO}-unico-baja`);
-
-      // Misma tecnica de ventana angosta que la prueba equivalente de
-      // PATCH (D7): ver el comentario ahi.
-      const otrosMaestrosActivos = await db
-        .selectFrom('usuario')
-        .select('id')
-        .where('perfil_id', '=', idPerfilMaestro)
-        .where('deleted_at', 'is', null)
-        .where('id', '!=', idUnico)
-        .execute();
-      const idsOtros = otrosMaestrosActivos.map((f) => f.id);
-
-      try {
-        if (idsOtros.length > 0) {
-          await db
-            .updateTable('usuario')
-            .set({ perfil_id: idPerfilAuxiliar })
-            .where('id', 'in', idsOtros)
-            .execute();
-        }
-
-        // La baja la pide OTRO usuario (cookieGeneral quedo temporalmente
-        // sin perfil maestro): usa una cookie sin usuario.gestionar seria
-        // 403 antes de llegar al 409, asi que se crea un tercer fixture
-        // exclusivo para hacer la peticion. NO puede ser un cuarto
-        // Administrador General activo (eso volveria a subir el conteo de
-        // contarActivosConPerfil() a 2 y el 409 nunca dispararia): en vez
-        // de eso lleva perfil auxiliar con una excepcion habilitada de
-        // usuario.gestionar (mismo mecanismo de usuario_permiso que D3).
-        const permisoUsuarioGestionar = await db
-          .selectFrom('permiso')
-          .select('id')
-          .where('clave', '=', 'usuario.gestionar')
-          .executeTakeFirstOrThrow();
-        const idSolicitante = await crearUsuarioFixture(
-          `${PREFIJO}-solicitante-baja`,
-          idPerfilAuxiliar,
-          null,
-        );
-        await db
-          .insertInto('usuario_permiso')
-          .values({
-            usuario_id: idSolicitante,
-            permiso_id: permisoUsuarioGestionar.id,
-            habilitado: true,
-          })
-          .execute();
-        const cookieSolicitante = await iniciarSesion(
-          `${PREFIJO}-solicitante-baja`,
-        );
-
-        await request(app.getHttpServer())
-          .delete(`/usuarios/${idUnico}`)
-          .set('Cookie', cookieSolicitante)
-          .expect(409);
-        void cookieUnico;
-      } finally {
-        await db
-          .updateTable('usuario')
-          .set({ perfil_id: idPerfilMaestro })
-          .where('id', 'in', idsOtros)
-          .execute();
-      }
-    });
+    // D7 ("no dejar sin ningun Administrador General activo" al dar de
+    // baja) se prueba ahora de forma UNITARIA en
+    // apps/backend/src/modules/auth/usuarios.service.spec.ts -- mismo
+    // motivo que la prueba equivalente que vivia en el describe de PATCH
+    // (ver el comentario ahi): la version e2e bajaba TEMPORALMENTE a todos
+    // los Administrador General activos de la base, incluidos los de
+    // OTROS archivos de e2e en paralelo, y podia tumbarlos con un 409
+    // falso. Este describe conserva solo integracion real: auto-baja
+    // (arriba) y camino feliz.
 
     it('un usuario atado a TJ no puede dar de baja a un usuario de MX', async () => {
       const id = await crearUsuarioFixture(
