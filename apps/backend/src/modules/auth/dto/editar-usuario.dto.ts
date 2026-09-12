@@ -12,6 +12,13 @@ import {
 const recortar = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
 
+// El indice de unicidad de la migracion es sobre lower(login) (case-insensitive),
+// pero AuthService.validarCredenciales compara el login tal cual quedo guardado.
+// Se normaliza aqui, al escribir, para que lo que se guarda sea canonico y lo
+// que se ve en la lista sea lo que hay que teclear -- no se toca auth.service.ts.
+const normalizarLogin = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string' ? value.trim().toLowerCase() : value;
+
 /**
  * Mismos campos que CrearUsuarioDto, con dos diferencias (D2, D8 del spec):
  * `contrasena` es OPCIONAL -- ausente o `undefined` significa "no cambiar".
@@ -23,7 +30,7 @@ const recortar = ({ value }: { value: unknown }): unknown =>
  * (D8).
  */
 export class EditarUsuarioDto {
-  @Transform(recortar)
+  @Transform(normalizarLogin)
   @IsString()
   @MinLength(1, { message: 'El login es obligatorio.' })
   @MaxLength(60, { message: 'El login no puede pasar de 60 caracteres.' })

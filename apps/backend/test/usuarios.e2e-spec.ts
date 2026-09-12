@@ -380,6 +380,51 @@ describe('Usuarios (e2e)', () => {
         .expect(409);
     });
 
+    it('normaliza el login a minusculas al escribir, para que auth/login (case-sensitive) siga entrando (Important #1)', async () => {
+      const loginMixto = `${PREFIJO}-MixCase`;
+      const res = await request(app.getHttpServer())
+        .post('/usuarios')
+        .set('Cookie', cookieGeneral)
+        .send({
+          login: loginMixto,
+          nombre: 'Login mixto',
+          contrasena: 'una-contrasena-larga',
+          perfilId: idPerfilAuxiliar,
+          permisosMarcados: [],
+        })
+        .expect(201);
+
+      const creado = res.body as { id: string; login: string };
+      usuarioIds.push(creado.id);
+      expect(creado.login).toBe(loginMixto.toLowerCase());
+
+      // AuthService.validarCredenciales compara EXACTO -- hay que teclear
+      // lo mismo que quedo guardado (minusculas), no lo que se tecleo en el
+      // alta.
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({
+          login: loginMixto.toLowerCase(),
+          password: 'una-contrasena-larga',
+        })
+        .expect(200);
+
+      // El indice parcial de la migracion es sobre lower(login): otra
+      // capitalizacion del mismo login ya normalizado tiene que chocar
+      // igual con 409.
+      await request(app.getHttpServer())
+        .post('/usuarios')
+        .set('Cookie', cookieGeneral)
+        .send({
+          login: loginMixto.toUpperCase(),
+          nombre: 'Repetido en otra capitalizacion',
+          contrasena: 'una-contrasena-larga',
+          perfilId: idPerfilAuxiliar,
+          permisosMarcados: [],
+        })
+        .expect(409);
+    });
+
     it('a un usuario atado se le ignora el sucursalId que mande (D8): se le asigna la suya', async () => {
       const res = await request(app.getHttpServer())
         .post('/usuarios')
