@@ -216,6 +216,43 @@ describe('Usuarios (e2e)', () => {
         .get('/usuarios/catalogo-perfiles')
         .expect(401);
     });
+
+    it('permite el catalogo a quien tiene usuario.gestionar por excepcion, sin perfil.gestionar (D5)', async () => {
+      // El controller entero solo exige usuario.gestionar (D5 del spec): un
+      // actor con perfil Auxiliar (vacio) y SOLO esa excepcion puntual en
+      // usuario_permiso debe llegar al catalogo igual -- ninguna de las
+      // otras pruebas de este bloque demuestra eso: cookieGeneral es
+      // perfil maestro (ya tiene TODOS los permisos, incluido
+      // perfil.gestionar) y cookieSinPermiso no tiene ninguno. Misma
+      // tecnica de excepcion que el fixture "idSolicitante" del bloque
+      // DELETE, mas abajo.
+      const permisoUsuarioGestionar = await db
+        .selectFrom('permiso')
+        .select('id')
+        .where('clave', '=', 'usuario.gestionar')
+        .executeTakeFirstOrThrow();
+      const idSolicitante = await crearUsuarioFixture(
+        `${PREFIJO}-catalogo-excepcion`,
+        idPerfilAuxiliar,
+        null,
+      );
+      await db
+        .insertInto('usuario_permiso')
+        .values({
+          usuario_id: idSolicitante,
+          permiso_id: permisoUsuarioGestionar.id,
+          habilitado: true,
+        })
+        .execute();
+      const cookieSolicitante = await iniciarSesion(
+        `${PREFIJO}-catalogo-excepcion`,
+      );
+
+      await request(app.getHttpServer())
+        .get('/usuarios/catalogo-perfiles')
+        .set('Cookie', cookieSolicitante)
+        .expect(200);
+    });
   });
 
   describe('GET /usuarios', () => {
