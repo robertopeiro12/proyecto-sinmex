@@ -74,6 +74,21 @@ const DETALLE: UsuarioDetalle = {
   permisosEfectivos: ["cliente.gestionar", "vendedor.gestionar"],
 };
 
+const RESUMEN_MAESTRO: UsuarioResumen = {
+  id: "2",
+  login: "admin2",
+  nombre: "Admin Dos",
+  perfil: "Administrador General",
+  perfilId: MAESTRO_ID,
+  sucursalCodigo: null,
+};
+
+const DETALLE_MAESTRO: UsuarioDetalle = {
+  ...RESUMEN_MAESTRO,
+  sucursalId: null,
+  permisosEfectivos: ["cliente.gestionar", "vendedor.gestionar"],
+};
+
 describe("PantallaUsuarios", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -137,6 +152,10 @@ describe("PantallaUsuarios", () => {
     await usuario.type(screen.getByLabelText("Nombre"), "Juan García");
     await usuario.type(screen.getByLabelText("Contraseña"), "una-contrasena-larga");
     await usuario.selectOptions(screen.getByLabelText("Perfil"), AUXILIAR_ID);
+    // Elegir una sucursal es la mitad de D8 que la prueba original no
+    // cubria: que el valor SI llegue al payload, no solo que el selector
+    // aparezca.
+    await usuario.selectOptions(await screen.findByLabelText("Sucursal"), "suc-1");
 
     // El perfil Auxiliar solo da cliente.gestionar (CATALOGO): esa casilla
     // nace marcada, vendedor.gestionar no.
@@ -149,6 +168,7 @@ describe("PantallaUsuarios", () => {
     const payload = crearUsuario.mock.calls[0][0];
     expect(payload.login).toBe("jgarcia");
     expect(payload.perfilId).toBe(AUXILIAR_ID);
+    expect(payload.sucursalId).toBe("suc-1");
     expect(payload.permisosMarcados).toEqual(["cliente.gestionar"]);
 
     expect(await screen.findByText("jgarcia")).toBeInTheDocument();
@@ -210,6 +230,26 @@ describe("PantallaUsuarios", () => {
     const payload = editarUsuario.mock.calls[0][1];
     expect(payload.contrasena).toBeUndefined();
     expect(await screen.findByText("Juan García López")).toBeInTheDocument();
+  });
+
+  it("edita un usuario con perfil maestro: la matriz llega marcada por completo y deshabilitada (D4)", async () => {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    listarUsuarios.mockResolvedValue([RESUMEN_MAESTRO]);
+    obtenerUsuario.mockResolvedValue(DETALLE_MAESTRO);
+
+    render(<PantallaUsuarios sucursal={null} />);
+    await screen.findByText("admin2");
+
+    await usuario.click(screen.getByRole("button", { name: "Editar" }));
+    await waitFor(() => expect(obtenerUsuario).toHaveBeenCalledWith("2"));
+
+    const casillaCliente = await screen.findByRole("checkbox", { name: /cliente\.gestionar/ });
+    const casillaVendedor = screen.getByRole("checkbox", { name: /vendedor\.gestionar/ });
+    expect(casillaCliente).toBeChecked();
+    expect(casillaVendedor).toBeChecked();
+    expect(casillaCliente).toBeDisabled();
+    expect(casillaVendedor).toBeDisabled();
   });
 
   it("da de baja un usuario tras confirmar, y recarga la lista", async () => {

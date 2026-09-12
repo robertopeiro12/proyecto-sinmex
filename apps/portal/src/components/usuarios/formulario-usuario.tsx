@@ -60,12 +60,27 @@ export function FormularioUsuario({ usuario, alGuardar, alCancelar }: Props) {
     let vigente = true;
     listarSucursales()
       .then((lista) => {
-        if (vigente) setSucursales(lista.filter((s) => s.activa));
+        if (!vigente) return;
+        // La sucursal ACTUAL del usuario que se edita se incluye aunque ya
+        // este desactivada -- si no, el <select> controlado no encuentra
+        // su value entre las opciones y aparenta "General" sin serlo (el
+        // dato real no se pierde, solo deja de verse). No aplica en el
+        // alta: ahi sucursalId todavia no tiene valor.
+        const activas = lista.filter((s) => s.activa);
+        const actual = usuario
+          ? lista.find((s) => s.id === usuario.sucursalId)
+          : undefined;
+        setSucursales(
+          actual && !activas.some((s) => s.id === actual.id)
+            ? [...activas, actual]
+            : activas,
+        );
       })
       .catch(() => {});
     return () => {
       vigente = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- usuario.sucursalId no cambia tras el montaje (PantallaUsuarios remonta con `key` en cada edicion, ver Task 10/11).
   }, [eligeSucursal]);
 
   const perfilElegido = catalogo?.perfiles.find((p) => p.id === perfilId) ?? null;
@@ -230,6 +245,7 @@ export function FormularioUsuario({ usuario, alGuardar, alCancelar }: Props) {
                 {sucursales.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.codigo} — {s.nombre}
+                    {!s.activa ? " (inactiva)" : ""}
                   </option>
                 ))}
               </select>

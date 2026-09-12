@@ -47,6 +47,7 @@ export function MatrizPermisosUsuario({ catalogo, marcados, onCambiar, disabled 
                   <span className="font-mono">{permiso.clave}</span>
                   {permiso.descripcion && (
                     <span
+                      role="img"
                       title={permiso.descripcion}
                       aria-label={permiso.descripcion}
                       className="cursor-help text-muted-foreground"
