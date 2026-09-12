@@ -168,7 +168,7 @@ propia; `push` la traduce. T-17 la traducirá a HTTP.
 |---|---|---|
 | `datos-invalidos` (**amplía su significado**: *"`datos` no cumple la forma de su tipo"*) | Venta sin `cliente_id` o sin `folio`; `lineas` vacía, con más de 50 o con presentación repetida; cantidades negativas, no enteras o las dos en 0; `precio_centavos` ausente, negativo o no entero, o en 0 en una línea con cantidad > 0; `num_nota` vacío; `contado_credito` o `factura` fuera de sus valores. El `motivo` nombra el campo | Es un bug: marca error y lo muestra |
 | `presentacion-inactiva` (**nuevo**) | La presentación no existe, está borrada, o su producto está inactivo o borrado | Marca error; se reintenta en la siguiente sincronización (D19) |
-| `precio-no-asignado` (**nuevo**) | Una línea con cantidad > 0 y el cliente no tiene precio vigente a `fecha_operacion` para esa presentación | Igual; el administrador asigna el precio y la siguiente sincronización la sube |
+| `precio-no-asignado` (**nuevo**) | Una línea con cantidad > 0 y el cliente no tiene **ningún** precio vigente a `fecha_operacion` para esa presentación. Es una comprobación de **existencia**, nunca de valor: el precio que manda la tablet no se compara (D2) | Igual; el administrador asigna el precio y la siguiente sincronización la sube |
 
 #### D13 — El precio solo se exige en líneas con cantidad > 0
 
@@ -356,9 +356,12 @@ deja de estar "pendiente").
 | `modules/sincronizacion/contrato.ts` + `docs/contrato-sincronizacion.md` | `DatosVenta`, códigos nuevos |
 | `test/sincronizacion.e2e-spec.ts` (+ helper) | `ventaValida()` (D20) y casos nuevos |
 
-`contexto` de `registrarVenta`: `{ sucursalId, fechaOperacion, folio: string | null, vendedorId:
-string | null, usuarioId: string | null }`. T-16 solo lo llama con `vendedorId` y `folio`, pero la
-firma no los exige, para que T-17 lo use desde el portal sin cambiarla. Ojo: `venta_nota.folio`
+`contexto` de `registrarVenta`: `{ sucursalId, fechaOperacion, vendedorId: string, folio: string |
+null, usuarioId: string | null }`. **`vendedorId` es obligatorio siempre**: es el repartidor de la
+venta (`venta_nota.vendedor_id not null`, y *Repartidor* es obligatorio en `Venta-Nota`), también en
+una venta de oficina. `usuarioId` es **quién la capturó** (portal) y no lo sustituye. T-16 lo llama
+con `folio` y sin `usuarioId`; la firma no exige ninguno de los dos, para que T-17 la use sin
+cambiarla. Ojo: `venta_nota.folio`
 sigue siendo `not null unique` en la base, así que una venta de portal sin folio fallaría ahí; qué
 folio lleva una venta de oficina lo decide el spec de T-17 (ver su ficha en el roadmap).
 
@@ -428,7 +431,9 @@ Las pruebas no traen conteos escritos: se comparan contra la línea base medida
 ## Después del merge
 
 - `supabase db push` a `sinmex dev` — **no lo corre el agente**; dueño por acordar.
-- Vault: enmienda de ADR-0009 §2.4 (D11); `Venta-Nota` y `Ventas y Cobranza` con lo
+- Vault: **dos enmiendas a ADR-0009** — §2.4, trazabilidad con `entidad_tabla`/`entidad_id` en vez
+  de `sync_operacion_id` (D11); §2.1, la fila `venta` ya no incluye "cobranza de notas pendientes en
+  la misma operación": pasa a T-20 como operaciones `cobranza` separadas (D1); `Venta-Nota` y `Ventas y Cobranza` con lo
   implementado; `Sincronización offline` (la venta ya se procesa); `App Tablet` (estado de T-16 y
   numeración corregida); `Estado del proyecto`; bitácora.
 - Pendientes con el cliente que salen de aquí: convención de `semana` (D6) y unicidad de `# de
