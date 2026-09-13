@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -14,6 +15,7 @@ import {
 import { PasswordService } from '../auth/password.service';
 import { candidatosDeSegmento } from '../sincronizacion/segmento-vendedor';
 import type { CrearVendedorDto } from './dto/crear-vendedor.dto';
+import type { EditarVendedorDto } from './dto/editar-vendedor.dto';
 
 /**
  * El driver `pg` expone en `error.constraint` el indice que violo el unique.
@@ -96,6 +98,53 @@ export class VendedoresService {
       }
       throw error;
     }
+  }
+
+  /**
+   * A diferencia de `crear()`, NO puede disparar ninguno de los dos `unique`
+   * de la tabla: `login` no es editable (D4 solo aplica al alta) y el
+   * segmento no se recalcula al cambiar `nombre` (advertencia del spec) --
+   * por eso no hace falta ningun try/catch de violacion aqui.
+   */
+  async editar(
+    usuarioId: string,
+    id: string,
+    dto: EditarVendedorDto,
+  ): Promise<Vendedor> {
+    if (
+      dto.nombre === undefined &&
+      dto.contrasena === undefined &&
+      dto.activo === undefined
+    ) {
+      throw new BadRequestException('No hay nada que actualizar.');
+    }
+
+    const vendedor = await this.repo.buscarPorId(id);
+    if (!vendedor) {
+      throw new NotFoundException('No existe ese vendedor.');
+    }
+
+    const alcance = await this.alcanceDe(usuarioId, null);
+    if (alcance.tipo === 'una' && alcance.codigo !== vendedor.sucursalCodigo) {
+      throw new ForbiddenException('No tienes acceso a esa sucursal.');
+    }
+
+    const cambios: {
+      nombre?: string;
+      password_hash?: string;
+      activo?: boolean;
+    } = {};
+    if (dto.nombre !== undefined) {
+      cambios.nombre = dto.nombre;
+    }
+    if (dto.contrasena !== undefined) {
+      cambios.password_hash = await this.password.hashear(dto.contrasena);
+    }
+    if (dto.activo !== undefined) {
+      cambios.activo = dto.activo;
+    }
+
+    return this.repo.actualizar(id, cambios);
   }
 
   protected async alcanceDe(

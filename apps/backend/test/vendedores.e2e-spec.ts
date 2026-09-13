@@ -437,4 +437,177 @@ describe('Vendedores (e2e)', () => {
         .expect(400);
     });
   });
+
+  describe('PATCH /vendedores/:id', () => {
+    it('edita el nombre sin tocar el segmento ya asignado', async () => {
+      const id = await sembrarVendedor(
+        `e2e-editable-${SUFIJO}`,
+        `${PREFIJO} Nombre Viejo`,
+        idTijuana,
+        'NV',
+      );
+
+      const res = await request(app.getHttpServer())
+        .patch(`/vendedores/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send({ nombre: `${PREFIJO} Nombre Nuevo` })
+        .expect(200);
+
+      const vendedor = res.body as VendedorRespuesta;
+      expect(vendedor.nombre).toBe(`${PREFIJO} Nombre Nuevo`);
+      // El segmento NO se recalcula al editar (advertencia del spec): sigue
+      // siendo el de "Nombre Viejo", no el que le tocaria a "Nombre Nuevo".
+      expect(vendedor.folioSegmento).toBe('NV');
+    });
+
+    it('cambia la contraseña', async () => {
+      const id = await sembrarVendedor(
+        `e2e-passcambia-${SUFIJO}`,
+        `${PREFIJO} Cambia Password`,
+        idTijuana,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/vendedores/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send({ contrasena: 'nueva' })
+        .expect(200);
+
+      const fila = await db
+        .selectFrom('vendedor')
+        .select('password_hash')
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow();
+      // El servicio de la app de vendedores (T-06) es quien de verdad
+      // verifica el hash; aqui solo importa que cambio.
+      expect(fila.password_hash).not.toBe('x');
+    });
+
+    it('da de baja y vuelve a activar', async () => {
+      const id = await sembrarVendedor(
+        `e2e-baja-${SUFIJO}`,
+        `${PREFIJO} Baja`,
+        idTijuana,
+      );
+
+      const baja = await request(app.getHttpServer())
+        .patch(`/vendedores/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send({ activo: false })
+        .expect(200);
+      expect((baja.body as VendedorRespuesta).activo).toBe(false);
+
+      const lista = await request(app.getHttpServer())
+        .get('/vendedores')
+        .set('Cookie', cookieTijuana)
+        .expect(200);
+      expect((lista.body as VendedorRespuesta[]).some((v) => v.id === id)).toBe(
+        true,
+      );
+
+      const alta = await request(app.getHttpServer())
+        .patch(`/vendedores/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send({ activo: true })
+        .expect(200);
+      expect((alta.body as VendedorRespuesta).activo).toBe(true);
+    });
+
+    it('un usuario de TJ no puede editar un vendedor de MX', async () => {
+      const id = await sembrarVendedor(
+        `e2e-ajeno-${SUFIJO}`,
+        `${PREFIJO} Ajeno`,
+        idMexicali,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/vendedores/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send({ nombre: `${PREFIJO} Secuestrado` })
+        .expect(403);
+    });
+
+    it('el usuario General si puede editar en cualquier sucursal', async () => {
+      const id = await sembrarVendedor(
+        `e2e-genedita-${SUFIJO}`,
+        `${PREFIJO} General Edita`,
+        idMexicali,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/vendedores/${id}`)
+        .set('Cookie', cookieGeneral)
+        .send({ nombre: `${PREFIJO} General Edito` })
+        .expect(200);
+    });
+
+    it('un PATCH sin ningun campo responde 400', async () => {
+      const id = await sembrarVendedor(
+        `e2e-vacio-${SUFIJO}`,
+        `${PREFIJO} Vacio`,
+        idTijuana,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/vendedores/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send({})
+        .expect(400);
+    });
+
+    it('un id que no existe responde 404', async () => {
+      await request(app.getHttpServer())
+        .patch('/vendedores/00000000-0000-0000-0000-000000000000')
+        .set('Cookie', cookieGeneral)
+        .send({ nombre: `${PREFIJO} Fantasma` })
+        .expect(404);
+    });
+
+    it('un id mal formado responde 400, no 500', async () => {
+      await request(app.getHttpServer())
+        .patch('/vendedores/no-soy-un-uuid')
+        .set('Cookie', cookieGeneral)
+        .send({ nombre: `${PREFIJO} Basura` })
+        .expect(400);
+    });
+
+    it('rechaza editar sin el permiso vendedor.gestionar', async () => {
+      const id = await sembrarVendedor(
+        `e2e-blindado-${SUFIJO}`,
+        `${PREFIJO} Blindado`,
+        idTijuana,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/vendedores/${id}`)
+        .set('Cookie', cookieSinPermiso)
+        .send({ nombre: `${PREFIJO} Hackeado` })
+        .expect(403);
+    });
+
+    // D3: la sucursal de un vendedor no se puede cambiar, y el DTO ni
+    // siquiera lleva el campo. Mismo mecanismo que vehiculos.e2e-spec.ts: el
+    // ValidationPipe (whitelist sin forbidNonWhitelisted) descarta el campo
+    // en silencio, y el 400 sale de "no hay nada que actualizar".
+    it('no deja cambiar la sucursal de un vendedor', async () => {
+      const id = await sembrarVendedor(
+        `e2e-arraigado-${SUFIJO}`,
+        `${PREFIJO} Arraigado`,
+        idTijuana,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/vendedores/${id}`)
+        .set('Cookie', cookieGeneral)
+        .send({ sucursalId: idMexicali })
+        .expect(400);
+
+      const fila = await db
+        .selectFrom('vendedor')
+        .select('sucursal_id')
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow();
+      expect(fila.sucursal_id).toBe(idTijuana);
+    });
+  });
 });

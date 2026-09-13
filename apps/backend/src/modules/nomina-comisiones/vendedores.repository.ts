@@ -116,6 +116,49 @@ export class VendedoresRepository {
     return aVendedor({ ...fila, codigo: sucursal.codigo });
   }
 
+  async buscarPorId(id: string): Promise<Vendedor | undefined> {
+    const fila = await this.db
+      .selectFrom('vendedor')
+      .innerJoin('sucursal', 'sucursal.id', 'vendedor.sucursal_id')
+      .select(COLUMNAS)
+      .where('vendedor.id', '=', id)
+      .where('vendedor.deleted_at', 'is', null)
+      .executeTakeFirst();
+
+    return fila ? aVendedor(fila) : undefined;
+  }
+
+  /**
+   * `cambios` nunca llega vacio: el servicio lo comprueba antes. La sucursal
+   * y el segmento NO se tocan aqui (D3, D6): el codigo no le abre la puerta.
+   */
+  async actualizar(
+    id: string,
+    cambios: { nombre?: string; password_hash?: string; activo?: boolean },
+  ): Promise<Vendedor> {
+    const fila = await this.db
+      .updateTable('vendedor')
+      .set(cambios)
+      .where('id', '=', id)
+      .returning([
+        'id',
+        'nombre',
+        'login',
+        'sucursal_id',
+        'folio_segmento',
+        'activo',
+      ])
+      .executeTakeFirstOrThrow();
+
+    const sucursal = await this.db
+      .selectFrom('sucursal')
+      .select('codigo')
+      .where('id', '=', fila.sucursal_id)
+      .executeTakeFirstOrThrow();
+
+    return aVendedor({ ...fila, codigo: sucursal.codigo });
+  }
+
   /**
    * Delegado al helper compartido de T-12 (D9 del spec) -- NO se duplica
    * aqui: `VehiculosRepository`, `ClientesRepository` y `PreciosRepository`
