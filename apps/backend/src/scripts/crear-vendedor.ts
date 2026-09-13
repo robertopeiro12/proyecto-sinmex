@@ -20,7 +20,7 @@ import { config as cargarEnv } from 'dotenv';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
 import { PasswordService } from '../modules/auth/password.service';
-import { asignarSegmento } from '../modules/sincronizacion/segmento-vendedor';
+import { candidatosDeSegmento } from '../modules/sincronizacion/segmento-vendedor';
 import type { DB } from '../database/schema';
 
 cargarEnv({
@@ -165,60 +165,51 @@ async function main(): Promise<void> {
     // El 5o segmento de su [[Folios|folio]] (T-14).
     //
     // Se asigna AQUI y no en la tablet porque la tablet no puede: del `pull`
-    // solo baja su propia ficha, asi que no ve a sus companeros y no puede
-    // saber si comparte iniciales con alguno. Y se **pina** en vez de
-    // recalcularse: un folio emitido esta escrito en una nota fisica firmada y
-    // no se corrige hacia atras, asi que dar de alta a alguien con las mismas
-    // iniciales no puede cambiarle el segmento a quien ya folio con el.
+    // solo baja su propia ficha, asi que no ve a sus companeros. Se **pina**
+    // en vez de recalcularse: un folio emitido no se corrige hacia atras.
     //
-    // ESTRATEGIA PROVISIONAL: como se desambigua sigue pendiente de confirmar
-    // con el cliente. Ver `segmento-vendedor.ts` y ADR-0007 en el vault.
-    const ocupados = new Set(
-      (
-        await db
-          .selectFrom('vendedor')
-          .select('folio_segmento')
-          .where('folio_segmento', 'is not', null)
-          .where('deleted_at', 'is', null)
-          .execute()
-      ).map((f) => f.folio_segmento as string),
-    );
+    // T-62 (enmienda de ADR-0007, confirmada por el cliente): si las
+    // iniciales ya estan tomadas por otro vendedor ACTIVO de la MISMA
+    // sucursal, el alta se RECHAZA -- ya no se cede a la siguiente
+    // combinacion como hacia la version anterior de este script. Mismo
+    // criterio, sin consulta previa: se intenta el insert con el primer
+    // candidato y se distingue el error por su `constraint`.
+    const segmento = candidatosDeSegmento(nombre)[0];
 
-    const segmento = asignarSegmento(nombre, ocupados);
-    if (segmento === null) {
-      throw new Error(
-        'No queda ningun segmento de folio libre (las 676 combinaciones estan tomadas).',
-      );
-    }
+    try {
+      const creado = await db
+        .insertInto('vendedor')
+        .values({
+          login,
+          nombre,
+          password_hash: passwordHash,
+          sucursal_id: sucursal.id,
+          folio_segmento: segmento,
+        })
+        .returning(['id', 'login'])
+        .executeTakeFirstOrThrow();
 
-    const creado = await db
-      .insertInto('vendedor')
-      .values({
-        login,
-        nombre,
-        password_hash: passwordHash,
-        sucursal_id: sucursal.id,
-        folio_segmento: segmento,
-      })
-      .returning(['id', 'login'])
-      .executeTakeFirstOrThrow();
-
-    console.log(`\n✅ Vendedor "${creado.login}" creado (${creado.id}).`);
-
-    const iniciales = asignarSegmento(nombre, new Set());
-    console.log(
-      `   Segmento de folio: ${segmento} (p. ej. ${sucursal.codigo}260807${segmento}01).`,
-    );
-    if (segmento !== iniciales) {
+      console.log(`\n✅ Vendedor "${creado.login}" creado (${creado.id}).`);
       console.log(
-        `   ⚠  Sus iniciales (${iniciales}) ya estaban tomadas por otro vendedor, asi que`,
+        `   Segmento de folio: ${segmento} (p. ej. ${sucursal.codigo}260807${segmento}01).`,
       );
-      console.log(
-        '      se le asigno el siguiente segmento libre. Como desambiguar iniciales',
-      );
-      console.log(
-        '      repetidas sigue PENDIENTE DE CONFIRMAR con el cliente (ADR-0007).',
-      );
+    } catch (error) {
+      const codigo =
+        typeof error === 'object' && error !== null && 'code' in error
+          ? (error as { code?: unknown }).code
+          : undefined;
+      const constraint =
+        typeof error === 'object' && error !== null && 'constraint' in error
+          ? (error as { constraint?: unknown }).constraint
+          : undefined;
+
+      if (codigo === '23505' && constraint === 'uq_vendedor_folio_segmento') {
+        throw new Error(
+          `Ya hay un vendedor activo en "${sucursal.codigo}" con las iniciales "${segmento}". ` +
+            'Da de alta a este vendedor con un nombre que no choque (mismo criterio que usa el portal, T-62).',
+        );
+      }
+      throw error;
     }
   } finally {
     rl.close();
