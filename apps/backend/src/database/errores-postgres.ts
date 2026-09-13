@@ -30,3 +30,13 @@ export function esViolacionUnicidad(error: unknown): boolean {
 export function esViolacionFk(error: unknown): boolean {
   return codigoDeError(error) === '23503';
 }
+
+/**
+ * `40P01` es deadlock_detected y `40001` serialization_failure. Postgres ya
+ * hizo rollback de la transaccion victima, asi que repetirla desde el
+ * principio es seguro: no dejo nada escrito.
+ */
+export function esConflictoDeConcurrencia(error: unknown): boolean {
+  const codigo = codigoDeError(error);
+  return codigo === '40P01' || codigo === '40001';
+}

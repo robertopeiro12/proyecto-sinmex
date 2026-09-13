@@ -2142,6 +2142,12 @@ describe('Sincronizacion pull/push (e2e)', () => {
         // no gana, vive en `SincronizacionService.clasificarColision`
         // (`buscarPorClave` antes que `duenoDelFolio`) — rama defensiva que
         // esta prueba no puede forzar a tomar.
+        //
+        // A veces Postgres resuelve el choque de las dos inserciones (clave y
+        // folio a la vez) con un deadlock (`40P01`) en vez de hacer esperar a
+        // una. La transaccion victima se repite (`reintentarAnteConflicto`,
+        // T-16) y en el reintento ya ve la fila confirmada: cae en uno de los
+        // dos caminos de arriba, no en un 500.
         const op = conFolio({}, '2026-08-07', 32);
 
         const respuestas = await Promise.all([

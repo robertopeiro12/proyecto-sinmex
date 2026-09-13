@@ -27,6 +27,7 @@ import {
   type Proyeccion,
 } from './despacho';
 import type { PullDto, PushDto } from './dto/sincronizacion.dto';
+import { reintentarAnteConflicto } from './reintento';
 import {
   claveReportable,
   hoyEnTijuana,
@@ -292,6 +293,11 @@ export class SincronizacionService {
    * consultas de la clasificacion corren con la conexion normal. Con el `23505`
    * de un folio no hay otra forma: Postgres aborta la transaccion entera y
    * cualquier consulta posterior con el mismo `trx` fallaria (D10).
+   *
+   * Un deadlock entre dos reintentos simultaneos del mismo lote repite **solo
+   * la transaccion de esta operacion** (`reintentarAnteConflicto`): la victima
+   * ya no dejo nada y, al repetirse, ve la fila confirmada de la otra. La
+   * clasificacion de la colision sigue fuera, despues del ultimo rollback.
    */
   private async aplicar(
     vendedor: VendedorConSucursal,
@@ -300,8 +306,8 @@ export class SincronizacionService {
     proyeccion: Proyeccion | null,
   ): Promise<ResultadoOperacion> {
     try {
-      const guardado = await this.repo.enTransaccion(
-        async (trx): Promise<ResultadoGuardado> => {
+      const guardado = await reintentarAnteConflicto(() =>
+        this.repo.enTransaccion(async (trx): Promise<ResultadoGuardado> => {
           const buzon = await this.repo.guardarOperacion(
             vendedor.id,
             vendedor.sucursal_id,
@@ -315,7 +321,7 @@ export class SincronizacionService {
           const entidad = await this.proyectar(proyeccion, vendedor, op, trx);
           await this.repo.marcarProyectada(buzon.id, entidad, trx);
           return buzon;
-        },
+        }),
       );
 
       return {
