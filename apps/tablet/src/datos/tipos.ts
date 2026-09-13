@@ -146,3 +146,45 @@ export interface Jornada {
   /** Motivo por el que el servidor la rechazo, si `sync_estado = 'error'`. */
   sync_error: string | null;
 }
+
+export type ContadoCredito = 'contado' | 'credito';
+
+/** Desde la tablet solo estos dos: el numero de factura lo asigna el portal (T-19). */
+export type FacturaVenta = 'N/A' | 'pendiente';
+
+/**
+ * Una venta grabada en la tablet (T-16). Ver la migracion `004-ventas.ts`.
+ *
+ * No lleva `status`: lo decide el servidor al proyectarla. Y no se edita: una
+ * vez grabada, solo cambia su estado de sincronizacion.
+ */
+export interface Venta {
+  /** uuid v4 generado al grabar. Es la clave de idempotencia del push. */
+  id: string;
+  /** Dia de trabajo (`reloj.hoy()`), el mismo del folio y de `fecha_operacion`. */
+  fecha: FechaISO;
+  cliente_id: string;
+  vendedor_id: string;
+  sucursal_id: string;
+  folio: string;
+  num_nota: string;
+  contado_credito: ContadoCredito;
+  factura: FacturaVenta;
+  comentarios: string | null;
+  /** Suma de cantidad x precio; las piezas de promocion no suman. */
+  monto_total_centavos: number;
+  grabada_en: MomentoISO;
+  sync_estado: SyncEstado;
+  /** Motivo con el que el servidor la rechazo, si `sync_estado = 'error'`. */
+  sync_error: string | null;
+  sincronizado_en: MomentoISO | null;
+}
+
+export interface VentaLinea {
+  venta_id: string;
+  presentacion_id: string;
+  cantidad: number;
+  cantidad_promocion: number;
+  /** El del catalogo local al grabar; 0 solo en lineas de pura promocion. */
+  precio_centavos: number;
+}
