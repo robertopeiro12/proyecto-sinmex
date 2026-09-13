@@ -29,5 +29,9 @@ import { TiposNegocioService } from './tipos-negocio.service';
     TiposNegocioService,
     TiposNegocioRepository,
   ],
+  // T-16: ventas-cobranza consulta los precios vigentes de un cliente para
+  // validar una venta. Cartera de Clientes es la duena de los precios, asi que
+  // la consulta vive aqui y se exporta en vez de duplicarse.
+  exports: [PreciosRepository],
 })
 export class CarteraClientesModule {}

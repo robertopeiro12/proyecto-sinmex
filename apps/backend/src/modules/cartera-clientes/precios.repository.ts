@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
-import { aNumero } from '../sincronizacion/dinero';
+import { aCentavos, aNumero } from '../sincronizacion/dinero';
 import { buscarSucursalUsuario as buscarSucursalUsuarioCompartido } from '../sucursales/buscar-sucursal-usuario';
 
 export interface ListaPrecio {
@@ -84,6 +84,83 @@ export class PreciosRepository {
     `.execute(this.db);
 
     return filas.rows.map(aPrecioVigente);
+  }
+
+  /**
+   * Presentaciones que se le pueden vender a un cliente en `fecha`, con su
+   * precio vigente en centavos o `null` si no tiene ninguno (T-16).
+   *
+   * Es lo que usa `VentasService` para decidir si una venta de la tablet se
+   * aplica: una presentacion que no esta en el mapa ya no se vende
+   * (`presentacion-inactiva`), y una con `null` solo se puede regalar como
+   * promocion (`precio-no-asignado` si la linea trae cantidad).
+   *
+   * > [!danger] Tiene que dar el MISMO precio que baja en el `pull`
+   * > Resuelve igual que `SincronizacionRepository.precios()`: el registro
+   * > vigente mas reciente de la lista del cliente para su sucursal, y el
+   * > override del cliente encima **solo si la lista tiene precio** para esa
+   * > presentacion (el `pull` hace el mismo `left join` desde la lista). Si las
+   * > dos consultas divergieran, la tablet cobraria con un precio que el
+   * > servidor no reconoce. Un e2e las compara.
+   *
+   * La fecha es `fecha_operacion` tal cual llego de la tablet, nunca el reloj
+   * del servidor: una venta de ayer que se sube hoy se valida con los precios
+   * de ayer.
+   *
+   * Recibe la conexion en `trx` porque `push` la llama dentro de la transaccion
+   * de la operacion (ADR-0009); cualquier `Kysely<DB>` sirve, y una
+   * `Transaction<DB>` lo es.
+   */
+  async presentacionesConPrecio(
+    clienteId: string,
+    fecha: string,
+    trx: Database,
+  ): Promise<Map<string, number | null>> {
+    const filas = await sql<{
+      presentacion_id: string;
+      precio: string | null;
+    }>`
+      with cli as (
+        select lista_precio_id, sucursal_id
+          from cliente
+         where id = ${clienteId}
+      ),
+      vigente_lista as (
+        select distinct on (p.presentacion_id) p.presentacion_id, p.precio
+          from precio p
+          join cli on cli.lista_precio_id = p.lista_precio_id
+                  and cli.sucursal_id = p.sucursal_id
+         where p.deleted_at is null
+           and p.vigente_desde <= ${fecha}::date
+         order by p.presentacion_id, p.vigente_desde desc
+      ),
+      vigente_cliente as (
+        select distinct on (cp.presentacion_id) cp.presentacion_id, cp.precio
+          from cliente_precio cp
+         where cp.cliente_id = ${clienteId}
+           and cp.deleted_at is null
+           and cp.vigente_desde <= ${fecha}::date
+         order by cp.presentacion_id, cp.vigente_desde desc
+      )
+      select pr.id as presentacion_id,
+             case when vl.presentacion_id is null then null
+                  else coalesce(vc.precio, vl.precio)
+             end as precio
+        from presentacion pr
+        join producto prod on prod.id = pr.producto_id
+        left join vigente_lista vl on vl.presentacion_id = pr.id
+        left join vigente_cliente vc on vc.presentacion_id = pr.id
+       where pr.deleted_at is null
+         and prod.deleted_at is null
+         and prod.activo
+    `.execute(trx);
+
+    return new Map<string, number | null>(
+      filas.rows.map((f): [string, number | null] => [
+        f.presentacion_id,
+        f.precio === null ? null : aCentavos(f.precio),
+      ]),
+    );
   }
 
   /**

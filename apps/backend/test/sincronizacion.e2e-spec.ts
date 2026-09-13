@@ -9,8 +9,10 @@ import {
   type Database,
 } from './../src/database/database.tokens';
 import { PasswordService } from './../src/modules/auth/password.service';
+import { PreciosRepository } from './../src/modules/cartera-clientes/precios.repository';
 import { CONTRATO_ACTUAL } from './../src/modules/sincronizacion/contrato';
 import { formarFolio } from './../src/modules/sincronizacion/folio';
+import { hoyEnTijuana } from './../src/modules/sincronizacion/operaciones';
 import { asignarSegmento } from './../src/modules/sincronizacion/segmento-vendedor';
 import type {
   RespuestaPull,
@@ -67,6 +69,13 @@ describe('Sincronizacion pull/push (e2e)', () => {
   let notaId: string;
   let precioId: string;
   let clientePrecioId: string;
+
+  // T-16: presentaciones de prueba para lo que se vende y lo que no.
+  let presentacionSinPrecioId: string;
+  let presentacionBorradaId: string;
+  let productoInactivoId: string;
+  let presentacionInactivaId: string;
+  let precioInactivaId: string;
 
   let bearer: string;
 
@@ -305,6 +314,63 @@ describe('Sincronizacion pull/push (e2e)', () => {
         .executeTakeFirstOrThrow()
     ).id;
 
+    // --- T-16: lo que se puede vender y lo que no.
+    //
+    // Una presentacion activa SIN ningun precio (ni de lista ni override): se
+    // ofrece para regalar como promocion, pero no para vender.
+    presentacionSinPrecioId = (
+      await db
+        .insertInto('presentacion')
+        .values({ producto_id: productoId, volumen: '500 ml' })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+
+    // Una presentacion dada de baja en el portal (baja logica).
+    presentacionBorradaId = (
+      await db
+        .insertInto('presentacion')
+        .values({
+          producto_id: productoId,
+          volumen: '2 L',
+          deleted_at: new Date(),
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+
+    // Un producto desactivado CON precio en la lista del cliente: demuestra que
+    // lo que lo saca de la venta es el producto, no la falta de precio.
+    productoInactivoId = (
+      await db
+        .insertInto('producto')
+        .values({ nombre: `Tamarindo inactivo ${SUFIJO}`, activo: false })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+
+    presentacionInactivaId = (
+      await db
+        .insertInto('presentacion')
+        .values({ producto_id: productoInactivoId, volumen: '1 L' })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+
+    precioInactivaId = (
+      await db
+        .insertInto('precio')
+        .values({
+          presentacion_id: presentacionInactivaId,
+          lista_precio_id: lista.id,
+          sucursal_id: sucursalId,
+          precio: '9.50',
+          vigente_desde: '2026-01-01',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+
     // --- Una nota pendiente por cobrar, con un abono parcial.
     notaId = (
       await db
@@ -357,16 +423,27 @@ describe('Sincronizacion pull/push (e2e)', () => {
       .deleteFrom('cliente_precio')
       .where('id', '=', clientePrecioId)
       .execute();
-    await db.deleteFrom('precio').where('id', '=', precioId).execute();
+    await db
+      .deleteFrom('precio')
+      .where('id', 'in', [precioId, precioInactivaId])
+      .execute();
     await db
       .deleteFrom('cliente')
       .where('id', 'in', [clienteId, clienteAjenoId])
       .execute();
     await db
       .deleteFrom('presentacion')
-      .where('id', '=', presentacionId)
+      .where('id', 'in', [
+        presentacionId,
+        presentacionSinPrecioId,
+        presentacionBorradaId,
+        presentacionInactivaId,
+      ])
       .execute();
-    await db.deleteFrom('producto').where('id', '=', productoId).execute();
+    await db
+      .deleteFrom('producto')
+      .where('id', 'in', [productoId, productoInactivoId])
+      .execute();
     await db.deleteFrom('vehiculo').where('id', '=', vehiculoId).execute();
     await db
       .deleteFrom('sesion_vendedor')
@@ -725,6 +802,119 @@ describe('Sincronizacion pull/push (e2e)', () => {
           sucursalCodigo,
         );
       });
+    });
+  });
+
+  /* ================================================================ */
+  /* Precios para vender (T-16)                                       */
+  /* ================================================================ */
+
+  /**
+   * `presentacionesConPrecio` es con lo que el servidor decide si una venta de
+   * la tablet se puede aplicar. Tiene que dar **el mismo precio que baja en el
+   * pull**: si no, la tablet cobraria con un precio que el servidor no reconoce
+   * y la venta se rechazaria con `precio-no-asignado` sin que nadie se hubiera
+   * equivocado.
+   *
+   * Se compara solo contra las presentaciones de este archivo: otros e2e
+   * escriben precios de la misma lista en paralelo, y comparar el catalogo
+   * entero volveria la prueba intermitente.
+   */
+  describe('precios para vender (T-16)', () => {
+    let precios: PreciosRepository;
+
+    beforeAll(() => {
+      precios = app.get(PreciosRepository);
+    });
+
+    /** Los precios de `clienteId` que baja el pull, por presentacion. */
+    const preciosDelPull = async () => {
+      const cuerpo = (await pull().expect(200)).body as RespuestaPull;
+      return new Map<string, number>(
+        cuerpo.catalogos.precios
+          .filter((p) => p.cliente_id === clienteId)
+          .map((p): [string, number] => [p.presentacion_id, p.precio_centavos]),
+      );
+    };
+
+    it('el override del cliente gana, igual que en el pull', async () => {
+      const paraVender = await precios.presentacionesConPrecio(
+        clienteId,
+        hoyEnTijuana(),
+        db,
+      );
+      expect(paraVender.get(presentacionId)).toBe(800);
+      expect((await preciosDelPull()).get(presentacionId)).toBe(800);
+    });
+
+    it('sin override, sale de la lista sin perder centavos, igual que en el pull', async () => {
+      await db
+        .updateTable('cliente_precio')
+        .set({ deleted_at: new Date() })
+        .where('id', '=', clientePrecioId)
+        .execute();
+      try {
+        const paraVender = await precios.presentacionesConPrecio(
+          clienteId,
+          hoyEnTijuana(),
+          db,
+        );
+        expect(paraVender.get(presentacionId)).toBe(1010);
+        expect((await preciosDelPull()).get(presentacionId)).toBe(1010);
+      } finally {
+        await db
+          .updateTable('cliente_precio')
+          .set({ deleted_at: null })
+          .where('id', '=', clientePrecioId)
+          .execute();
+      }
+    });
+
+    it('una presentacion activa sin ningun precio se ofrece con null (se puede regalar, no vender)', async () => {
+      const paraVender = await precios.presentacionesConPrecio(
+        clienteId,
+        hoyEnTijuana(),
+        db,
+      );
+      expect(paraVender.has(presentacionSinPrecioId)).toBe(true);
+      expect(paraVender.get(presentacionSinPrecioId)).toBeNull();
+      expect((await preciosDelPull()).has(presentacionSinPrecioId)).toBe(false);
+    });
+
+    it('no ofrece una presentacion dada de baja ni la de un producto inactivo, aunque tenga precio', async () => {
+      const paraVender = await precios.presentacionesConPrecio(
+        clienteId,
+        hoyEnTijuana(),
+        db,
+      );
+      expect(paraVender.has(presentacionBorradaId)).toBe(false);
+      expect(paraVender.has(presentacionInactivaId)).toBe(false);
+    });
+
+    it('el precio es el vigente en la fecha pedida, no el de hoy', async () => {
+      // Lista desde 2026-01-01 (10.10) y override desde 2026-02-01 (8.00).
+      const enero = await precios.presentacionesConPrecio(
+        clienteId,
+        '2026-01-15',
+        db,
+      );
+      expect(enero.get(presentacionId)).toBe(1010);
+
+      const antes = await precios.presentacionesConPrecio(
+        clienteId,
+        '2025-12-31',
+        db,
+      );
+      expect(antes.get(presentacionId)).toBeNull();
+    });
+
+    it('lee dentro de la transaccion que le pasen (la de push)', async () => {
+      const dentro = await db
+        .transaction()
+        .execute((trx) =>
+          precios.presentacionesConPrecio(clienteId, hoyEnTijuana(), trx),
+        );
+      expect(dentro.get(presentacionId)).toBe(800);
     });
   });
 
