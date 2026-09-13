@@ -421,11 +421,12 @@ folio, y la tablet **no puede detectarlo** porque de `vendedores` solo baja **su
 propia ficha** — no ve a sus compañeros. Solo el servidor tiene la visibilidad
 global.
 
-> [!warning] Estrategia **provisional** — pendiente de confirmar con el cliente
-> Cómo desambiguar iniciales repetidas **no está en ninguna fuente**. Lo
-> implementado (ceder de forma determinista conservando la inicial del nombre,
-> con un `unique` en la base) es una elección nuestra marcada como provisional.
-> Ver `ADR-0007` y `10-Dominio/Reglas/Folios.md` en el vault.
+> [!success] Implementado — enmienda de ADR-0007 (T-62, 2026-09-12)
+> Cómo desambiguar iniciales repetidas lo confirmó el cliente: el alta se
+> **rechaza** (no se cede a la siguiente combinación) si las iniciales ya
+> están tomadas por otro vendedor de la misma sucursal. La colisión se
+> evalúa **por sucursal**, no globalmente. Ver `ADR-0007` (enmienda
+> 2026-09-12) y `10-Dominio/Entidades/Vendedor.md` en el vault.
 
 Es un campo **aditivo**: no sube la versión del contrato. Un servidor que no lo
 mande deja a la tablet sin poder foliar, pero no rompe nada de lo que ya

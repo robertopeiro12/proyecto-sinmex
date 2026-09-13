@@ -86,7 +86,13 @@ async function main(): Promise<void> {
       '\n',
     );
 
-    const login = (await rl.question('Login del vendedor: ')).trim();
+    // Mismo trato que CrearVendedorDto (T-62): el login se normaliza a
+    // minusculas al escribir, para que el indice parcial insensible a
+    // mayusculas (uq_vendedor_login) diga la verdad sin importar por que
+    // puerta entro el alta.
+    const login = (await rl.question('Login del vendedor: '))
+      .trim()
+      .toLowerCase();
     const contrasena = (await preguntarOculto(rl, 'Contrasena: ')).trim();
 
     if (!login || !contrasena) {
@@ -95,21 +101,20 @@ async function main(): Promise<void> {
 
     const passwordHash = await new PasswordService().hashear(contrasena);
 
-    // Se busca incluyendo los dados de baja: si existe uno con ese login y
-    // deleted_at puesto, hay que enterarse en vez de chocar contra el unique.
+    // Se busca solo entre los vivos: T-62 (uq_vendedor_login, indice
+    // parcial) libera el login al dar de baja, igual que T-13 hizo con
+    // usuario.login (crear-usuario.ts). Sin el filtro de deleted_at, este
+    // script se negaria a reusar un login que la base ya permite reusar,
+    // apuntando a una restauracion desde el portal que T-62 no construyo
+    // (ver spec, "Fuera, a proposito").
     const existente = await db
       .selectFrom('vendedor')
-      .select(['id', 'nombre', 'deleted_at'])
+      .select(['id', 'nombre'])
       .where('login', '=', login)
+      .where('deleted_at', 'is', null)
       .executeTakeFirst();
 
     if (existente) {
-      if (existente.deleted_at !== null) {
-        throw new Error(
-          `El login "${login}" pertenece a un vendedor dado de baja. Restauralo desde el portal (T-62) antes de reasignarlo.`,
-        );
-      }
-
       const confirmar = (
         await rl.question(
           `El vendedor "${existente.nombre}" ya existe. ¿Restablecer su contrasena? (s/N): `,
@@ -169,7 +174,7 @@ async function main(): Promise<void> {
     // en vez de recalcularse: un folio emitido no se corrige hacia atras.
     //
     // T-62 (enmienda de ADR-0007, confirmada por el cliente): si las
-    // iniciales ya estan tomadas por otro vendedor ACTIVO de la MISMA
+    // iniciales ya estan tomadas por otro vendedor de la MISMA
     // sucursal, el alta se RECHAZA -- ya no se cede a la siguiente
     // combinacion como hacia la version anterior de este script. Mismo
     // criterio, sin consulta previa: se intenta el insert con el primer
@@ -205,7 +210,7 @@ async function main(): Promise<void> {
 
       if (codigo === '23505' && constraint === 'uq_vendedor_folio_segmento') {
         throw new Error(
-          `Ya hay un vendedor activo en "${sucursal.codigo}" con las iniciales "${segmento}". ` +
+          `Ya hay un vendedor en "${sucursal.codigo}" con las iniciales "${segmento}". ` +
             'Da de alta a este vendedor con un nombre que no choque (mismo criterio que usa el portal, T-62).',
         );
       }

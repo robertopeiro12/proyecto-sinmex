@@ -298,8 +298,9 @@ sucursal ya acota lo que cada quien ve; el permiso solo protege la escritura.
 2. Alta de un segundo vendedor con las mismas iniciales en TJ → error legible, no se crea.
 3. El mismo nombre/iniciales, pero eligiendo MX (como Administrador General) → se crea sin
    problema — replica el ejemplo del cliente (Juan Pérez en TJ y MX).
-4. Editar el nombre de un vendedor a algo que colisiona con otro de su misma sucursal → rechazado,
-   el vendedor conserva su nombre y segmento originales.
+4. Editar el nombre de un vendedor a algo que colisionaría con otro de su misma sucursal → se
+   permite sin problema: el segmento queda pinado al del alta y no se recalcula ni se re-evalúa
+   (ver la advertencia en D6/Endpoints sobre por qué esto es deliberado).
 5. Desactivar un vendedor y confirmar que su login/segmento **no** se liberan (dar de alta a otro
    con las mismas iniciales en esa sucursal sigue fallando).
 6. Como Administrador General: el desplegable de sucursal se pinta al dar de alta.

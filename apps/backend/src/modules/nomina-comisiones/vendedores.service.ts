@@ -147,7 +147,7 @@ export class VendedoresService {
     return this.repo.actualizar(id, cambios);
   }
 
-  protected async alcanceDe(
+  private async alcanceDe(
     usuarioId: string,
     sucursalPedida: string | null,
   ): Promise<Alcance> {
