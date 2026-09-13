@@ -1,4 +1,7 @@
-import { esConflictoDeConcurrencia } from '../../database/errores-postgres';
+import {
+  codigoDeError,
+  esConflictoDeConcurrencia,
+} from '../../database/errores-postgres';
 
 /**
  * Cuantas veces se ejecuta, como maximo, la transaccion de UNA operacion del
@@ -22,9 +25,17 @@ export const INTENTOS_ANTE_CONFLICTO = 3;
  * `tarea` tiene que abrir su propia transaccion en cada llamada: repetir
  * consultas sobre una transaccion ya abortada fallaria igual. Cualquier otro
  * error sale en el primer intento, tal cual.
+ *
+ * `alReintentar` se llama justo antes de cada repeticion, con el intento que
+ * fallo y el codigo de Postgres; no se llama si la tarea sale bien ni cuando
+ * el error ya se propaga. Existe para que quien llama deje rastro en el log:
+ * el deadlock que motivo esto no se pudo reproducir a voluntad, y en
+ * produccion es la unica senal de que esta pasando. Queda como callback para
+ * que este modulo siga sin depender de Nest.
  */
 export async function reintentarAnteConflicto<T>(
   tarea: () => Promise<T>,
+  alReintentar?: (intento: number, codigo: string) => void,
 ): Promise<T> {
   for (let intento = 1; ; intento++) {
     try {
@@ -32,6 +43,7 @@ export async function reintentarAnteConflicto<T>(
     } catch (error) {
       if (intento >= INTENTOS_ANTE_CONFLICTO) throw error;
       if (!esConflictoDeConcurrencia(error)) throw error;
+      alReintentar?.(intento, codigoDeError(error) as string);
     }
   }
 }

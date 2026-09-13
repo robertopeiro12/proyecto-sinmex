@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import type { Transaction } from 'kysely';
@@ -27,7 +28,7 @@ import {
   type Proyeccion,
 } from './despacho';
 import type { PullDto, PushDto } from './dto/sincronizacion.dto';
-import { reintentarAnteConflicto } from './reintento';
+import { INTENTOS_ANTE_CONFLICTO, reintentarAnteConflicto } from './reintento';
 import {
   claveReportable,
   hoyEnTijuana,
@@ -57,6 +58,8 @@ const RETRASO_CURSOR_MS = 5_000;
 
 @Injectable()
 export class SincronizacionService {
+  private readonly logger = new Logger(SincronizacionService.name);
+
   constructor(
     private readonly repo: SincronizacionRepository,
     // ADR-0009: sincronizacion despacha a los modulos de dominio, nunca al reves.
@@ -306,22 +309,29 @@ export class SincronizacionService {
     proyeccion: Proyeccion | null,
   ): Promise<ResultadoOperacion> {
     try {
-      const guardado = await reintentarAnteConflicto(() =>
-        this.repo.enTransaccion(async (trx): Promise<ResultadoGuardado> => {
-          const buzon = await this.repo.guardarOperacion(
-            vendedor.id,
-            vendedor.sucursal_id,
-            contrato,
-            op,
-            trx,
-          );
-          // Ya estaba: no se proyecta otra vez. Es lo que hace seguro reenviar.
-          if (buzon.duplicada || proyeccion === null) return buzon;
+      const guardado = await reintentarAnteConflicto(
+        () =>
+          this.repo.enTransaccion(async (trx): Promise<ResultadoGuardado> => {
+            const buzon = await this.repo.guardarOperacion(
+              vendedor.id,
+              vendedor.sucursal_id,
+              contrato,
+              op,
+              trx,
+            );
+            // Ya estaba: no se proyecta otra vez. Es lo que hace seguro reenviar.
+            if (buzon.duplicada || proyeccion === null) return buzon;
 
-          const entidad = await this.proyectar(proyeccion, vendedor, op, trx);
-          await this.repo.marcarProyectada(buzon.id, entidad, trx);
-          return buzon;
-        }),
+            const entidad = await this.proyectar(proyeccion, vendedor, op, trx);
+            await this.repo.marcarProyectada(buzon.id, entidad, trx);
+            return buzon;
+          }),
+        // Solo la clave, el intento y el codigo: `datos` puede traer datos del
+        // cliente y no debe acabar en el log.
+        (intento, codigo) =>
+          this.logger.warn(
+            `push: la operacion ${op.clave} choco con ${codigo} en el intento ${intento} de ${INTENTOS_ANTE_CONFLICTO}; se repite su transaccion`,
+          ),
       );
 
       return {

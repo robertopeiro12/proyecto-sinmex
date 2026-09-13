@@ -13,7 +13,7 @@
  * duplicada (`perfiles.service.ts`, `productos.service.ts`,
  * `vehiculos.service.ts`) no se tocan aqui: solo el codigo nuevo la usa.
  */
-function codigoDeError(error: unknown): string | undefined {
+export function codigoDeError(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null || !('code' in error)) {
     return undefined;
   }
