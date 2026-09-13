@@ -290,10 +290,47 @@ hace que Postgres reviente con `invalid input syntax for type uuid`, y eso
 saldría como **500 para todo el lote** — el todo-o-nada que este contrato promete
 no hacer.
 
-`datos` es **libre en esta versión**. Ventas, cobranza, gastos, merma y ruta son
-T-16/T-20/T-27/T-33/T-39 y todavía no existen: T-07 define por dónde viajan y
-las guarda tal cual. Su forma la fijará el ticket de cada módulo, y eso es un
-cambio **aditivo** que no sube la versión del contrato.
+`datos` lo fija el ticket de cada módulo, y fijarlo es un cambio **aditivo** que
+no sube la versión del contrato. Hoy tiene forma fija **`venta`** (T-16, abajo);
+cobranza, gastos, merma y ruta siguen libres hasta T-20/T-27/T-33/T-39, y el
+servidor las guarda tal cual.
+
+### `datos` de una venta (T-16)
+
+```jsonc
+{
+  "clave": "uuid de la venta local",
+  "tipo": "venta",
+  "fecha_operacion": "2026-09-14",
+  "ocurrido_en": "2026-09-14T11:32:05.000-07:00",
+  "cliente_id": "uuid",              // obligatorio en venta
+  "folio": "TJ260914AP03",           // obligatorio en venta
+  "datos": {
+    "num_nota": "2346",              // obligatorio, ≤ 30, se recorta
+    "contado_credito": "credito",    // contado | credito
+    "factura": "N/A",                // N/A | pendiente (ausente = N/A)
+    "comentarios": null,             // opcional, ≤ 500
+    "lineas": [                      // 1..50, sin presentación repetida
+      { "presentacion_id": "uuid", "cantidad": 24, "cantidad_promocion": 2, "precio_centavos": 1350 }
+      // enteros ≥ 0; cantidad + cantidad_promocion > 0;
+      // precio_centavos siempre presente, > 0 si cantidad > 0 (0 solo en líneas de pura promoción)
+    ]
+  }
+}
+```
+
+- `cliente_id` y `folio` viajan **en el sobre**, no dentro de `datos`, y en una venta son
+  **obligatorios**: sin cualquiera de los dos → `datos-invalidos`.
+- **No hay monto ni status.** El servidor calcula `monto_total = Σ (cantidad × precio_centavos)`
+  (las piezas de promoción no suman) y decide el status: contado → `pagada`, crédito →
+  `pendiente`, monto 0 → `promocion`. `semana` (ISO-8601) y `mes` salen de `fecha_operacion`
+  **tal cual llegó**, nunca de `ocurrido_en`.
+- **Vale el precio de la nota firmada.** El servidor guarda el `precio_centavos` que manda la
+  tablet y **no lo compara** con su catálogo. Solo comprueba que la presentación se venda
+  (`presentacion-inactiva`) y que el cliente tenga **algún** precio vigente para ella cuando la
+  línea lleva cantidad (`precio-no-asignado`). Una línea de pura promoción no necesita precio.
+- Cada venta se aplica en **su propia transacción** junto con su fila del buzón: si se rechaza,
+  no queda ni la venta ni la operación (§7).
 
 ### Respuesta `200` — parcial y honesta
 
@@ -332,10 +369,12 @@ texto en español** si reintenta o si avisa al vendedor.
 | `fecha-invalida` | `fecha_operacion` no es `AAAA-MM-DD` |
 | `fecha-futura` | `fecha_operacion` más de 1 día por delante (§4) |
 | `momento-invalido` | `ocurrido_en` no es ISO-8601 |
-| `datos-invalidos` | `datos` no es un objeto (o la operación entera no lo es) |
+| `datos-invalidos` | `datos` no cumple la forma de su tipo (o la operación entera no es un objeto). En una venta, el `motivo` nombra el campo (`lineas[2].cantidad: …`). Es un bug de la tablet |
 | `cliente-fuera-de-alcance` | El `cliente_id` no existe, no es de su sucursal, o no es un uuid válido |
 | `folio-invalido` | El `folio` no tiene el formato de ADR-0001, o contradice a su propia operación (dice otra sucursal, otra fecha u otro vendedor) |
 | `folio-duplicado` | **Colisión de folios**: otra operación ya subió ese folio |
+| `presentacion-inactiva` | Una línea de venta nombra una presentación que no existe, está dada de baja o cuyo producto está inactivo. Se reintenta en la siguiente sincronización (T-16) |
+| `precio-no-asignado` | Una línea con cantidad > 0 y el cliente no tiene **ningún** precio vigente a `fecha_operacion` para esa presentación. Comprueba existencia, nunca valor. Se recupera cuando el portal asigna el precio (T-16) |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo

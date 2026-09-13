@@ -33,6 +33,32 @@ export type TipoOperacion =
 
 export type EstadoOperacion = 'aplicada' | 'duplicada' | 'rechazada';
 
+/**
+ * Motivos de rechazo que conoce esta tablet. Copia del enum del backend.
+ *
+ * `ResultadoOperacion.codigo` sigue siendo `string` y no este tipo a proposito:
+ * un servidor mas nuevo puede mandar un codigo que esta tablet no conoce, y eso
+ * no puede reventar la sincronizacion.
+ */
+export const CODIGOS_RECHAZO = [
+  'tipo-desconocido',
+  'clave-invalida',
+  'clave-repetida-en-el-lote',
+  'fecha-invalida',
+  'fecha-futura',
+  'momento-invalido',
+  'datos-invalidos',
+  'cliente-fuera-de-alcance',
+  'folio-invalido',
+  'folio-duplicado',
+  /** T-16: la presentacion no se vende. Se reintenta en la siguiente sincronizacion. */
+  'presentacion-inactiva',
+  /** T-16: el cliente no tiene precio para esa presentacion. Lo arregla el portal. */
+  'precio-no-asignado',
+] as const;
+
+export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
+
 /** Fila de catalogo: la baja llega como `activo: 0`, nunca como ausencia. */
 interface FilaSincronizable {
   id: string;
@@ -173,11 +199,51 @@ export interface OperacionSaliente {
   datos: Record<string, unknown>;
 }
 
+/* ------------------------------------------------------------------ */
+/* Forma de `datos` por tipo                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Una linea de una venta (T-16).
+ *
+ * `precio_centavos` va **siempre**: es el precio de la nota que firmo el
+ * cliente, el que bajo en el ultimo `pull`, y el servidor lo guarda sin
+ * compararlo con su catalogo (vale el de la nota firmada). Entero >= 0; solo
+ * puede ser 0 en una linea de pura promocion (`cantidad` 0).
+ */
+export type LineaVenta = {
+  presentacion_id: string;
+  cantidad: number;
+  cantidad_promocion: number;
+  precio_centavos: number;
+};
+
+/**
+ * `datos` de una operacion `tipo: "venta"` (T-16).
+ *
+ * `cliente_id` y `folio` viajan en el **sobre**, no aqui, y en una venta son
+ * obligatorios. No lleva monto ni status: los calcula el servidor (el monto
+ * como suma de cantidad x precio, sin las piezas de promocion).
+ *
+ * Es `type` y no `interface` a proposito: la tablet lo asigna a
+ * `OperacionSaliente.datos` (`Record<string, unknown>`), y una interface no
+ * tiene la firma de indice implicita que eso exige.
+ */
+export type DatosVenta = {
+  num_nota: string;
+  contado_credito: 'contado' | 'credito';
+  factura: 'N/A' | 'pendiente';
+  comentarios: string | null;
+  /** De 1 a 50, sin presentacion repetida. */
+  lineas: LineaVenta[];
+};
+
 export interface ResultadoOperacion {
   clave: string;
   tipo: string;
   estado: EstadoOperacion;
   id_servidor?: string;
+  /** Uno de {@link CODIGOS_RECHAZO}, o uno que esta tablet aun no conoce. */
   codigo?: string;
   motivo?: string;
 }

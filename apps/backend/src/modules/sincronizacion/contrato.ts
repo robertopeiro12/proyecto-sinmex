@@ -41,12 +41,11 @@ export const MAX_OPERACIONES_POR_LOTE = 500;
 /**
  * Tipos de operacion que la tablet puede empujar.
  *
- * Cada uno corresponde a un modulo de negocio que **todavia no existe**: T-07
- * define solo por donde viajan y las guarda en `sync_operacion` sin
- * interpretarlas. El contenido de `datos` es libre en esta version y lo fijara
- * el ticket de cada modulo.
+ * Cada uno corresponde a un modulo de negocio. T-07 definio por donde viajan y
+ * los guarda en `sync_operacion`; el ticket de cada modulo fija la forma de su
+ * `datos` y lo proyecta a sus tablas (ADR-0009).
  *
- * TODO: T-16 — `venta` (cabecera + lineas, ver [[Venta-Nota]]).
+ * Hecho: T-16 — `venta` (cabecera + lineas, ver {@link DatosVenta} y [[Venta-Nota]]).
  * TODO: T-20 — `cobranza` (abono/liquidacion sobre una nota, ver [[Cobranza-Abono]]).
  * TODO: T-27 — `gasto` (hielo, gasolina, reparacion, adelanto).
  * TODO: T-33 — `merma` (los 3 tipos de merma del documento de julio 2026).
@@ -90,7 +89,12 @@ export const CODIGOS_RECHAZO = [
   'fecha-futura',
   /** `ocurrido_en` no es un instante ISO-8601 valido. */
   'momento-invalido',
-  /** `datos` no es un objeto. */
+  /**
+   * `datos` no cumple la forma de su tipo (o la operacion entera no es un
+   * objeto). T-16 amplia su significado: en una venta, el `motivo` nombra el
+   * campo (`lineas[2].cantidad: ...`). Es un bug de la tablet, no un dato de
+   * campo que el vendedor pueda corregir.
+   */
   'datos-invalidos',
   /** El `cliente_id` no existe o no es de la sucursal del vendedor. */
   'cliente-fuera-de-alcance',
@@ -109,9 +113,65 @@ export const CODIGOS_RECHAZO = [
    * hechos de negocio distintos que dicen tener el mismo identificador.
    */
   'folio-duplicado',
+  /**
+   * Una linea de venta nombra una presentacion que no se vende: no existe,
+   * esta dada de baja, o su producto esta inactivo o dado de baja. T-16.
+   *
+   * No es un bug de la tablet: su catalogo pudo quedarse viejo. Se reintenta
+   * en la siguiente sincronizacion, que ademas le baja el catalogo nuevo.
+   */
+  'presentacion-inactiva',
+  /**
+   * Una linea con cantidad > 0 y el cliente no tiene **ningun** precio vigente
+   * a `fecha_operacion` para esa presentacion. T-16.
+   *
+   * Comprueba **existencia, nunca valor**: el precio que manda la tablet es el
+   * de la nota que firmo el cliente y no se compara con el del servidor. Se
+   * recupera sola cuando el administrador asigna el precio en el portal.
+   */
+  'precio-no-asignado',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
+
+/* ------------------------------------------------------------------ */
+/* Forma de `datos` por tipo                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Una linea de una venta (T-16).
+ *
+ * `precio_centavos` va **siempre**: es el precio de la nota que firmo el
+ * cliente, el que bajo en el ultimo `pull`, y el servidor lo guarda sin
+ * compararlo con su catalogo (vale el de la nota firmada). Entero >= 0; solo
+ * puede ser 0 en una linea de pura promocion (`cantidad` 0).
+ */
+export type LineaVenta = {
+  presentacion_id: string;
+  cantidad: number;
+  cantidad_promocion: number;
+  precio_centavos: number;
+};
+
+/**
+ * `datos` de una operacion `tipo: "venta"` (T-16).
+ *
+ * `cliente_id` y `folio` viajan en el **sobre**, no aqui, y en una venta son
+ * obligatorios. No lleva monto ni status: los calcula el servidor (el monto
+ * como suma de cantidad x precio, sin las piezas de promocion).
+ *
+ * Es `type` y no `interface` a proposito: la tablet lo asigna a
+ * `OperacionSaliente.datos` (`Record<string, unknown>`), y una interface no
+ * tiene la firma de indice implicita que eso exige.
+ */
+export type DatosVenta = {
+  num_nota: string;
+  contado_credito: 'contado' | 'credito';
+  factura: 'N/A' | 'pendiente';
+  comentarios: string | null;
+  /** De 1 a 50, sin presentacion repetida. */
+  lineas: LineaVenta[];
+};
 
 export interface ResultadoOperacion {
   clave: string;
@@ -192,8 +252,9 @@ export interface VendedorPull extends FilaSincronizable {
    *
    * Es un campo **aditivo**: no sube la version del contrato. Un servidor que
    * no lo mande deja a la tablet sin poder foliar, pero no rompe nada de lo que
-   * ya funcionaba. TODO: T-16 — cuando emitir folio sea obligatorio para
-   * registrar una venta, revisar si toca subir `CONTRATO_ACTUAL`.
+   * ya funcionaba. T-16 lo hizo obligatorio para `venta` **sin** subir
+   * `CONTRATO_ACTUAL`: una venta sin folio es `datos-invalidos` por operacion, y
+   * una tablet vieja (que no captura ventas) no se entera del cambio.
    */
   folio_segmento: string | null;
 }
