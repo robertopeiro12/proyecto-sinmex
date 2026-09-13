@@ -416,6 +416,37 @@ Y por tanto **no consume su clave**. Si la consumiera, esa fila local quedaría
 rechazada para siempre y el vendedor no podría reenviar una versión corregida.
 El rechazo se recalcula en cada intento: es determinista y no necesita memoria.
 
+### Una transacción por operación (T-16, ADR-0009)
+
+Cuando un `tipo` tiene un módulo de dominio que lo proyecta (hoy solo `venta`),
+cada operación del lote se aplica **en su propia transacción**:
+
+1. `INSERT` en `sync_operacion` con `on conflict (vendedor_id, clave_idempotencia) do nothing`.
+   Si no insertó, es `duplicada` y **no se vuelve a proyectar**.
+2. El módulo dueño escribe sus tablas (`VentasService.registrarVenta` → `venta_nota` +
+   `venta_nota_detalle`) y el buzón anota `entidad_tabla` / `entidad_id`.
+3. `commit` → `aplicada`. Si el dominio rechaza (`presentacion-inactiva`,
+   `precio-no-asignado`), `rollback`: no queda **ni** la venta **ni** la fila del buzón.
+
+Los tipos sin módulo todavía (`jornada`, `cobranza`, `gasto`, `merma`, `ruta`) se
+guardan en el buzón y quedan `aplicada` con `entidad_id` nulo, como hasta ahora.
+Las operaciones se aplican **en el orden del lote**, y un error inesperado a mitad
+de lote deja comprometidas las anteriores (cada una tuvo su `commit`): el reintento
+de la tablet las recibe como `duplicada`.
+
+Si Postgres elige víctima de un deadlock (`40P01`) o de una serialización (`40001`)
+a la transacción de una operación, `push` la reintenta desde el principio hasta
+**3 intentos en total** (`reintentarAnteConflicto`, `apps/backend/src/modules/sincronizacion/reintento.ts`,
+con `esConflictoDeConcurrencia` en `database/errores-postgres.ts`); el perdedor de dos
+reintentos simultáneos del mismo lote ya ve la fila confirmada y cae en
+`on conflict do nothing` → `duplicada`.
+
+> [!danger] La colisión de folio se clasifica DESPUÉS del rollback
+> Un `unique_violation` aborta la transacción entera de Postgres: cualquier consulta
+> posterior con esa misma transacción falla. Por eso el desempate (¿ya existe esa
+> `clave` para el vendedor? → `duplicada`; si no → `folio-duplicado`) corre **fuera**
+> de la transacción, con la conexión normal.
+
 ### Cómo convive con el folio (T-14, implementado)
 
 > [!warning] Esto corrige lo que T-07 había escrito aquí
@@ -438,9 +469,11 @@ El rechazo se recalcula en cada intento: es determinista y no necesita memoria.
      que el servidor ya conoce por su cuenta. Si no coinciden → `folio-invalido`.
    - **Colisión** — un `unique` **global** sobre `sync_operacion.folio`. Si otra
      operación ya lo usó → `folio-duplicado`, rechazo **por operación**.
-4. Al proyectar (T-16/T-20), el folio se **copia** a `venta_nota.folio` (que ya
-   nació `unique` en T-05). **No se re-emite.** Un reenvío no vuelve a proyectar
-   y devuelve el mismo `entidad_id` — y con él, el mismo folio.
+4. Al proyectar, el folio se **copia** a `venta_nota.folio` (que ya nació
+   `unique` en T-05). **No se re-emite.** Implementado en T-16 para `venta`
+   (T-20 hará lo mismo con `cobranza`): un reenvío no vuelve a proyectar y
+   devuelve el mismo `id_servidor`, y el buzón guarda en `entidad_tabla` /
+   `entidad_id` a qué fila de negocio se convirtió la operación.
 
 Lo que T-07 dejó bien y sigue en pie: la clave y el folio viven en **capas
 distintas**. La clave identifica el *transporte* y no cambia entre reintentos;
@@ -471,8 +504,9 @@ global.
 Es un campo **aditivo**: no sube la versión del contrato. Un servidor que no lo
 mande deja a la tablet sin poder foliar, pero no rompe nada de lo que ya
 funcionaba — y la tablet lo dice en voz alta en vez de inventarse las iniciales.
-Cuando **T-16** haga obligatorio emitir folio para registrar una venta, habrá
-que revisar si toca subir `CONTRATO_ACTUAL`.
+**T-16 lo hizo obligatorio para `venta` sin subir `CONTRATO_ACTUAL`:** una venta
+sin folio es `datos-invalidos` **por operación**, y una tablet vieja —que no
+captura ventas— no se entera del cambio.
 
 ### Limitación conocida: el buzón es de solo escritura
 
@@ -526,8 +560,8 @@ sincronizar.
 |---|---|
 | Resolución de conflictos (portal y tablet tocan lo mismo) | **T-43** |
 | Sincronización automática 11:00/14:00 | **T-44** |
-| Forma de `datos` para venta / cobranza / gasto / merma / ruta | **T-16 / T-20 / T-27 / T-33 / T-39** |
-| Proyección de `sync_operacion` a las tablas de negocio (incluido **copiar el folio** a `venta_nota.folio`) | Los mismos |
+| Forma de `datos` para cobranza / gasto / merma / ruta (la de venta ya está, §6) | **T-20 / T-27 / T-33 / T-39** |
+| Proyección de `cobranza`, `gasto`, `merma`, `ruta` y `jornada` a sus tablas de negocio (la de `venta` ya existe, §7) | Los mismos, y **T-38** para `jornada` |
 | Permisos granulares en estos endpoints | **T-8** |
 
 El envelope está diseñado para que todo eso **quepa encima sin romper la
