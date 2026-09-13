@@ -5,9 +5,11 @@
 > subagentes y **qué modelo** usa cada tarea. Cada ticket, cuando se tome, pasa por su propio
 > `brainstorming → spec → writing-plans → subagent-driven-development`, igual que T-10…T-13.
 >
-> **Estado:** propuesto (2026-09-12). Nada de esto se ejecuta hasta que Mario lo apruebe.
+> **Estado:** aprobado por Mario el 2026-09-12. **T-16 está en ejecución** desde el 2026-09-13 en
+> la rama `feature/t-16-venta-app` (worktree `proyecto-sinmex-t16`). No arrancarlo de nuevo: §1
+> manda un ticket a la vez.
 
-**Base:** `main` en `a7c1ca8` (T-13 mergeado). Decisión de arquitectura que rige todos los
+**Base:** `main` en `943dec2` (T-62 mergeado, #88; antes T-13 en `a7c1ca8`). Decisión de arquitectura que rige todos los
 tickets: `ADR-0009 Proyección de operaciones sincronizadas a los módulos de dominio` (vault,
 `propuesto`).
 
@@ -60,7 +62,7 @@ Lo que la hace aplicable aquí: **los planes de este equipo llevan el código co
 
 | Tipo de tarea | Ejemplos en este proyecto | Implementador | Revisor |
 |---|---|---|---|
-| **Migración SQL + prueba pgTAP**, con el SQL completo en el plan | `jornada`, `visita`, `sync_operacion_id`, índices únicos, permisos nuevos | `haiku` | `sonnet` |
+| **Migración SQL + prueba pgTAP**, con el SQL completo en el plan | `jornada`, `visita`, índices únicos, permisos nuevos (sin `sync_operacion_id`: ADR-0009 enmienda §2.4) | `haiku` | `sonnet` |
 | **Función pura + pruebas unitarias**, código completo | status inicial de venta, saldo derivado, semana/mes, comisión, efectividad, cuadre de inventario | `haiku` | `sonnet` |
 | **Cambio mecánico repetido en varios archivos** (se agrupa en **una** tarea) | tipos del contrato duplicados `apps/backend` ↔ `apps/tablet`, códigos de rechazo, DTOs | `haiku` | `sonnet` |
 | **Endpoint completo**: repository + service + controller + e2e, con permisos y alcance por sucursal | `GET/PUT /rutas-diarias`, CRUD de campos de tesorería/egresos | `sonnet` | `sonnet` |
@@ -180,7 +182,9 @@ los tickets del portal/backend **solo** en la parte que la app necesita.
 | 22 | **T-48** Impresión térmica del corte (app) | M | T-33 · T-45 · T-46 | **spike con impresora real** | Modelo de impresora; el vault avisa que puede requerir salir del *managed workflow* de Expo |
 
 **Fuera de este roadmap** (la app no los necesita): T-15, T-19, T-21, T-22, T-23, T-32,
-T-34, T-35, T-36, T-47, T-49…T-59, T-62, T-63, T-64 y T-60 (endurecimiento final). Notas:
+T-34, T-35, T-36, T-47, T-49…T-59, T-63, T-64 y T-60 (endurecimiento final). T-62 (vendedores)
+ya se hizo (#88, 2026-09-13): toca el segmento de folio del vendedor, que la tablet sí consume
+vía `pull`. Notas:
 T-35 (captura de merma en el portal) no es necesario porque T-27 captura en la tablet; T-34
 (eliminar cobranza con autorización) es el complemento de T-20 del lado del portal.
 
@@ -200,7 +204,14 @@ ticket las fija.
 - **Backend:** **fundación de ADR-0009** — `push` pasa a una transacción por operación, con
   despachador por `tipo`; la clasificación de colisión de folio sale del `catch` y se hace
   después del rollback. Módulo `ventas-cobranza/` con `VentasService.registrarVenta` →
-  `venta_nota` + `venta_nota_detalle`. Migración: `sync_operacion_id` en `venta_nota`.
+  `venta_nota` + `venta_nota_detalle`. ~~Migración: `sync_operacion_id` en `venta_nota`.~~ Ver
+  la enmienda de abajo: no hay columna nueva.
+
+> [!warning] Enmienda 2026-09-13 de ADR-0009 (§2.4): **sin `sync_operacion_id`**
+> La trazabilidad va con `entidad_tabla` / `entidad_id` en `sync_operacion` (ya existen desde
+> T-07, migración `20260807203000`), **no** con una columna `sync_operacion_id` en cada tabla
+> de negocio: sería redundante y el ADR dice explícitamente que *no se agrega*. Donde esta ficha
+> la nombre, léase `entidad_tabla`/`entidad_id`. El camino inverso lo da el folio.
 - **Tablet:** migración local (ventas y líneas), repositorio que llama a `folios.emitir()`
   **dentro de la misma transacción**, `venta.tsx`, el motor de sync sube ventas.
 - **Decidido con Mario (2026-09-12):** (a) T-16 **muestra** las notas pendientes y T-20 las cobra,
@@ -247,7 +258,10 @@ ticket las fija.
   pasados); modificar y eliminar buscando por fecha, cliente o `# de nota`; corregir el bug v2.0 de
   que el monto en $ no sumaba en ventas creadas desde el portal.
 - **Backend:** reutiliza `VentasService.registrarVenta` de T-16 con `contexto.usuarioId` y
-  `syncOperacionId = null` ("un solo servicio, dos puertas", ADR-0009 §2.2); agrega
+  ~~`syncOperacionId = null`~~ ("un solo servicio, dos puertas", ADR-0009 §2.2). **Enmienda
+  §2.4:** `syncOperacionId` ya no viaja en el `contexto`; este es
+  `{ sucursalId, fechaOperacion, vendedorId, folio, usuarioId }` y **`vendedorId` es obligatorio
+  también en una venta de oficina** — la ficha no lo decía. Agrega
   `modificarVenta` y `eliminarVenta` (baja lógica) en `ventas-cobranza/`; endpoints con
   `@RequierePermiso` y alcance por sucursal; permiso nuevo con el patrón de migración de T-13.
 - **Portal:** búsqueda por fecha, cliente o `# de nota`; formulario con los mismos campos que la
@@ -271,7 +285,8 @@ ticket las fija.
 - **Criterios:** vehículo + km inicial obligatorio para operar (ya existe); km final
   obligatorio antes de enviar el corte; km del día = final − inicial para el reporte.
 - **Backend:** tabla `jornada` (vendedor, vehículo, `fecha_operacion`, km inicial, km final,
-  `sync_operacion_id`) — **no** en `vehiculo`, como manda la nota `Vehículo` del vault. `rutas/`
+  ~~`sync_operacion_id`~~ — trazabilidad por `entidad_tabla`/`entidad_id`, enmienda §2.4) —
+  **no** en `vehiculo`, como manda la nota `Vehículo` del vault. `rutas/`
   `JornadasService.cerrarJornada` proyecta el `tipo: 'jornada'` que el contrato ya acepta.
 - **Tablet:** `cerrar-dia.tsx` (hoy un placeholder de 112 líneas) exige el km final.
 - **Límite conocido:** el buzón es de solo escritura, así que solo suben jornadas **cerradas**
@@ -299,7 +314,7 @@ ticket las fija.
 ### 7 · T-39 Visita sin venta (M)
 
 - **Backend:** tabla `visita` (cliente, `fecha_operacion`, hora, motivo, persona que atendió,
-  lat/lng opcionales, `sync_operacion_id`); `rutas/VisitasService.registrarVisita` proyecta el
+  lat/lng opcionales, ~~`sync_operacion_id`~~ — enmienda §2.4); `rutas/VisitasService.registrarVisita` proyecta el
   `tipo: 'ruta'`. Hora y nombre obligatorios para *no estaba el encargado* y *cerrado*.
 - **Tablet:** `visita-sin-venta.tsx`.
 - **Tareas (~7):** 2 `haiku` · 5 `sonnet`.
@@ -391,23 +406,24 @@ ticket las fija.
 
 ## 9. Antes de arrancar T-16
 
-1. **Aprobación de este roadmap.**
-2. **Autorización permanente** para empujar la rama de cada ticket y abrir su PR, **sin
-   mergear**. Sin ella, cada ticket se detiene en la fase 7 hasta que la des.
-3. **Dos archivos sin commit** en `feature/diseno-app-responsivo`, que ya está mergeada en
-   `main` (#76): el cambio a `CLAUDE.md` (actualizar Supabase local tras cada pull) y **este
-   roadmap**. Hay que llevarlos a `main` antes de sacar `feature/t-16-*`, o viajarán dentro del PR
-   de T-16.
-4. **El commit `ae3269a` del vault (ADR-0009) no está empujado.** El otro dev no puede ver la
-   decisión sobre la que se construye T-16.
-5. **Limpieza, no bloqueante:**
-   - La tabla de `Estado del proyecto` todavía muestra T-10, T-11, T-18 y T-12 con "PR abierto"
-     (los cuatro están mergeados: #74, #75, #77, #81), y los issues #6, #7, #10 y #14 siguen
-     abiertos con sus PR mergeados.
-   - La numeración vieja de tickets no está solo en las pantallas placeholder: `App Tablet.md`
-     del vault (líneas 209-210) dice *"mapas/GPS (T-34), impresión (T-38), cámara para prospecto
-     (T-24)"*; son **T-41, T-48 y T-40**. Probablemente de ahí la copiaron las pantallas; se
-     corrigen juntas.
+> [!success] Resuelto el 2026-09-13 — se deja el texto original tachado como registro
+> Esta sección se escribió el 12; al día siguiente se cerró casi entera. Se conserva para que se
+> vea qué se pidió y con qué se resolvió, no para que alguien lo vuelva a hacer.
+
+1. ~~**Aprobación de este roadmap.**~~ Dada el 2026-09-12; T-16 arrancó el 13.
+2. ~~**Autorización permanente** para empujar la rama de cada ticket y abrir su PR, sin mergear.~~
+   En la práctica se empujó `feature/t-16-venta-app` y se abrieron #85 y #87. Sigue siendo
+   autorización **por PR**, no permanente: los merges los hace Mario.
+3. ~~**Dos archivos sin commit** en `feature/diseno-app-responsivo` … hay que llevarlos a `main`.~~
+   Son exactamente **este PR (#85)**; queda resuelto por su propio merge.
+4. ~~**El commit `ae3269a` del vault (ADR-0009) no está empujado.**~~ Está en `origin/main` del
+   vault desde el 13. Y el ADR recibió dos enmiendas ese día (cobranza fuera de `venta`;
+   trazabilidad sin `sync_operacion_id`) — las fichas de arriba ya las citan.
+5. ~~**Limpieza, no bloqueante:**~~ hecha el 13 (bitácora `2026-09-13`):
+   - `Estado del proyecto`: T-10/T-11/T-18/T-12 ya dicen "mergeado". Issues #6, #7, #10, #14
+     (y #1, #18) cerrados con comentario trazable.
+   - Numeración vieja en pantallas: **PR #87** (6 pantallas + repositorio + README). Fuera de
+     T-16 a propósito. `App Tablet.md` del vault corregido (T-41 / T-48 / T-40).
 
 Las preguntas abiertas de las fichas **no bloquean T-16**; cada una se resuelve antes del spec
 del ticket que la necesita.
