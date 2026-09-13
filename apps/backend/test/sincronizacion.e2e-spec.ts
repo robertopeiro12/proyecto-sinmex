@@ -115,6 +115,93 @@ describe('Sincronizacion pull/push (e2e)', () => {
     ...extra,
   });
 
+  /* ---------------------------------------------------------------- */
+  /* Ventas (T-16)                                                     */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Dia de las ventas de prueba que no fijan su propia fecha.
+   *
+   * Desde T-16 una `venta` necesita `datos` validos, `cliente_id` y un folio
+   * coherente con su dia, su sucursal y su vendedor, y el folio es unico en toda
+   * la base. Las pruebas de folios usan `2026-08-07` con consecutivos escritos a
+   * mano; este dia queda para `ventaValida()`, que reparte consecutivos sola y
+   * no puede chocar con aquellas.
+   */
+  const FECHA_VENTAS = '2026-08-08';
+  let ultimoConsecutivo = 0;
+  const siguienteConsecutivo = () => ++ultimoConsecutivo;
+
+  /** `datos` validos de una venta (contrato §6), con lo que se quiera cambiar encima. */
+  const datosVenta = (extra: Record<string, unknown> = {}) => ({
+    num_nota: '2346',
+    contado_credito: 'credito',
+    factura: 'N/A',
+    comentarios: null,
+    // 24 piezas a 8.00 (el override del cliente) + 2 de promocion = 192.00.
+    lineas: [
+      {
+        presentacion_id: presentacionId,
+        cantidad: 24,
+        cantidad_promocion: 2,
+        precio_centavos: 800,
+      },
+    ],
+    ...extra,
+  });
+
+  /**
+   * Una venta que el servidor acepta (D20). Sustituye a `operacion({ tipo:
+   * 'venta' })`, que servia de sobre generico mientras `datos` era libre.
+   *
+   * El folio se arma para el dia de la venta, salvo que `extra` traiga uno.
+   */
+  const ventaValida = (
+    extra: Record<string, unknown> = {},
+    fecha = FECHA_VENTAS,
+    consecutivo?: number,
+  ) =>
+    operacion({
+      tipo: 'venta',
+      cliente_id: clienteId,
+      fecha_operacion: fecha,
+      ocurrido_en: `${fecha}T14:03:22.000-07:00`,
+      folio:
+        'folio' in extra
+          ? extra.folio
+          : formarFolio(
+              sucursalCodigo,
+              fecha,
+              segmento,
+              consecutivo ?? siguienteConsecutivo(),
+            ),
+      datos: datosVenta(),
+      ...extra,
+    });
+
+  /** Las `venta_nota` con ese folio (0 o 1: el folio es unique). */
+  const ventasConFolio = (folio: string) =>
+    db
+      .selectFrom('venta_nota')
+      .selectAll()
+      .where('folio', '=', folio)
+      .execute();
+
+  /** La fila del buzon de esa clave para el vendedor de la prueba, si quedo. */
+  const buzonDe = (clave: string) =>
+    db
+      .selectFrom('sync_operacion')
+      .select(['id', 'entidad_tabla', 'entidad_id'])
+      .where('vendedor_id', '=', vendedorId)
+      .where('clave_idempotencia', '=', clave)
+      .executeTakeFirst();
+
+  /** `date` de Postgres a `AAAA-MM-DD`, con los componentes locales que puso el driver. */
+  const fechaTexto = (valor: Date | string) =>
+    valor instanceof Date
+      ? `${valor.getFullYear()}-${String(valor.getMonth() + 1).padStart(2, '0')}-${String(valor.getDate()).padStart(2, '0')}`
+      : String(valor).slice(0, 10);
+
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -418,7 +505,23 @@ describe('Sincronizacion pull/push (e2e)', () => {
       .deleteFrom('cobranza_abono')
       .where('venta_nota_id', '=', notaId)
       .execute();
-    await db.deleteFrom('venta_nota').where('id', '=', notaId).execute();
+    // T-16: las ventas que proyecto el push, ademas de `notaId`. Detalle antes
+    // que cabecera, y las dos antes que cliente, presentacion y vendedor.
+    await db
+      .deleteFrom('venta_nota_detalle')
+      .where(
+        'venta_nota_id',
+        'in',
+        db
+          .selectFrom('venta_nota')
+          .select('id')
+          .where('vendedor_id', 'in', [vendedorId, vendedorAjenoId]),
+      )
+      .execute();
+    await db
+      .deleteFrom('venta_nota')
+      .where('vendedor_id', 'in', [vendedorId, vendedorAjenoId])
+      .execute();
     await db
       .deleteFrom('cliente_precio')
       .where('id', '=', clientePrecioId)
@@ -929,11 +1032,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
           tipo: 'jornada',
           datos: { km_inicial: 100, km_final: 240 },
         }),
-        operacion({
-          tipo: 'venta',
-          cliente_id: clienteId,
-          datos: { lineas: [] },
-        }),
+        // T-16: una venta ya no es un sobre generico; necesita datos validos.
+        ventaValida(),
         operacion({
           tipo: 'cobranza',
           cliente_id: clienteId,
@@ -1145,7 +1245,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
           tipo: 'venta',
           cliente_id: 'no-soy-uuid',
         });
-        const buena2 = operacion({ tipo: 'venta', cliente_id: clienteId });
+        // `corrupta` no cambia: el uuid se rechaza antes de mirar `datos`.
+        const buena2 = ventaValida();
 
         const res = (
           await push({ operaciones: [buena1, corrupta, buena2] }).expect(200)
@@ -1205,9 +1306,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
         // Es un snapshot viejo, no un ataque: el portal pudo mover o dar de
         // baja al cliente mientras el vendedor estaba en ruta.
         const res = (await push({
-          operaciones: [
-            operacion({ tipo: 'venta', cliente_id: clienteAjenoId }),
-          ],
+          operaciones: [ventaValida({ cliente_id: clienteAjenoId })],
         }).expect(200)) as { body: RespuestaPush };
         expect(res.body.resultados[0].codigo).toBe('cliente-fuera-de-alcance');
       });
@@ -1256,6 +1355,124 @@ describe('Sincronizacion pull/push (e2e)', () => {
     });
   });
   /* ================================================================ */
+  /* Ventas (T-16): la base de ADR-0009 en el push                    */
+  /* ================================================================ */
+
+  describe('ventas (T-16)', () => {
+    it('una venta valida entra a venta_nota con su detalle, y el buzon dice a que fila se convirtio', async () => {
+      const op = ventaValida();
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(res.resultados[0].estado).toBe('aplicada');
+
+      const [venta] = await ventasConFolio(op.folio as string);
+      expect(venta).toMatchObject({
+        cliente_id: clienteId,
+        vendedor_id: vendedorId,
+        sucursal_id: sucursalId,
+        monto_total: '192.00',
+        num_nota: '2346',
+        contado_credito: 'credito',
+        factura: 'N/A',
+        comentarios: null,
+        semana: 32,
+        mes: 8,
+        status: 'pendiente',
+        pct_comision: '3.50',
+      });
+      expect(fechaTexto(venta.fecha)).toBe(FECHA_VENTAS);
+
+      const detalle = await db
+        .selectFrom('venta_nota_detalle')
+        .select(['presentacion_id', 'cantidad', 'cantidad_promocion', 'precio'])
+        .where('venta_nota_id', '=', venta.id)
+        .execute();
+      expect(detalle).toEqual([
+        {
+          presentacion_id: presentacionId,
+          cantidad: 24,
+          cantidad_promocion: 2,
+          precio: '8.00',
+        },
+      ]);
+
+      // Trazabilidad (enmienda a ADR-0009 §2.4): el buzon apunta a la venta.
+      expect(await buzonDe(op.clave)).toEqual({
+        id: res.resultados[0].id_servidor,
+        entidad_tabla: 'venta_nota',
+        entidad_id: venta.id,
+      });
+    });
+
+    it('una venta que el dominio rechaza no deja fila ni en el buzon ni en venta_nota', async () => {
+      const op = ventaValida({
+        datos: datosVenta({
+          lineas: [
+            {
+              presentacion_id: presentacionInactivaId,
+              cantidad: 5,
+              cantidad_promocion: 0,
+              precio_centavos: 900,
+            },
+          ],
+        }),
+      });
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'presentacion-inactiva',
+      });
+      expect(res.resultados[0].id_servidor).toBeUndefined();
+      // Contrato §7: rechazada no deja fila, para que se pueda corregir y reenviar.
+      expect(await buzonDe(op.clave)).toBeUndefined();
+      expect(await ventasConFolio(op.folio as string)).toHaveLength(0);
+    });
+
+    it('una venta con datos invalidos es datos-invalidos, nombra el campo y no deja fila', async () => {
+      const op = ventaValida({ datos: datosVenta({ num_nota: '   ' }) });
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'datos-invalidos',
+      });
+      expect(res.resultados[0].motivo).toContain('num_nota');
+      expect(await buzonDe(op.clave)).toBeUndefined();
+    });
+
+    it('una colision de folio se clasifica fuera de la transaccion y el resto del lote sigue entrando', async () => {
+      // El 23505 aborta la transaccion entera de Postgres. Si la clasificacion
+      // consultara con esa misma transaccion, esto seria un 500 para todo el
+      // lote en vez de un rechazo de UNA operacion (D10).
+      const folio = formarFolio(
+        sucursalCodigo,
+        FECHA_VENTAS,
+        segmento,
+        siguienteConsecutivo(),
+      );
+      const primera = ventaValida({ folio });
+      const choca = ventaValida({ folio });
+      const despues = operacion();
+
+      const res = (
+        await push({ operaciones: [primera, choca, despues] }).expect(200)
+      ).body as RespuestaPush;
+
+      expect(res.resultados.map((r) => r.estado)).toEqual([
+        'aplicada',
+        'rechazada',
+        'aplicada',
+      ]);
+      expect(res.resultados[1].codigo).toBe('folio-duplicado');
+      expect(await buzonDe(choca.clave)).toBeUndefined();
+      expect(await ventasConFolio(folio)).toHaveLength(1);
+    });
+  });
+
+  /* ================================================================ */
   /* Folios (T-14)                                                    */
   /* ================================================================ */
 
@@ -1267,21 +1484,17 @@ describe('Sincronizacion pull/push (e2e)', () => {
    * colisiones.
    */
   describe('folios', () => {
-    /** Una venta con folio bien emitido para este vendedor y este dia. */
+    /**
+     * Una venta con folio bien emitido para este vendedor y este dia.
+     *
+     * Desde T-16 es una venta de verdad (`ventaValida`): con `datos` libres, el
+     * servidor ya la rechazaria como `datos-invalidos` antes de mirar su folio.
+     */
     const conFolio = (
       extra: Record<string, unknown> = {},
       fecha = '2026-08-07',
       consecutivo = 1,
-    ) => {
-      const base = operacion({
-        tipo: 'venta',
-        fecha_operacion: fecha,
-        ocurrido_en: `${fecha}T14:03:22.000-07:00`,
-        folio: formarFolio(sucursalCodigo, fecha, segmento, consecutivo),
-        ...extra,
-      });
-      return base;
-    };
+    ) => ventaValida(extra, fecha, consecutivo);
 
     const filasConFolio = async (folio: string) =>
       db

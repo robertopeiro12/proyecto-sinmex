@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { sql } from 'kysely';
+import { sql, type Transaction } from 'kysely';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
+import type { DB } from '../../database/schema';
 import type {
   ClientePull,
   NotaPendientePull,
@@ -386,7 +387,20 @@ export class SincronizacionRepository {
   }
 
   /**
-   * Guarda una operacion, o descubre que ya estaba.
+   * Abre la transaccion de UNA operacion del lote (ADR-0009 §2.3).
+   *
+   * Vive en el repositorio para que el servicio no toque la conexion. Si `tarea`
+   * lanza, Kysely hace `rollback` y relanza: ni el buzon ni las tablas de
+   * negocio conservan nada de esa operacion (contrato §7).
+   */
+  async enTransaccion<T>(
+    tarea: (trx: Transaction<DB>) => Promise<T>,
+  ): Promise<T> {
+    return this.db.transaction().execute(tarea);
+  }
+
+  /**
+   * Guarda una operacion en el buzon, o descubre que ya estaba.
    *
    * `on conflict do nothing` + un `select` de respaldo, en vez de comprobar
    * antes si la clave existe: entre el SELECT y el INSERT de esa comprobacion
@@ -396,68 +410,43 @@ export class SincronizacionRepository {
    * Devuelve `duplicada: true` cuando la operacion ya estaba, con **el mismo
    * id** que devolvio el primer envio: es lo que hace que reintentar sea
    * seguro de punta a punta.
+   *
+   * > [!danger] Ya no atrapa el `23505` del folio (T-16)
+   * > Corre dentro de la transaccion de la operacion. Un `unique_violation`
+   * > aborta esa transaccion entera en Postgres, y cualquier consulta posterior
+   * > con el mismo `trx` fallaria. Por eso el error sale tal cual y la
+   * > clasificacion (`buscarPorClave` / `duenoDelFolio`) la hace el servicio
+   * > **despues del rollback**, con la conexion normal.
    */
   async guardarOperacion(
     vendedorId: string,
     sucursalId: string,
     contrato: number,
     op: OperacionNormalizada,
+    trx: Transaction<DB>,
   ): Promise<ResultadoGuardado> {
-    let insertada: { id: string } | undefined;
-    try {
-      insertada = await this.db
-        .insertInto('sync_operacion')
-        .values({
-          vendedor_id: vendedorId,
-          sucursal_id: sucursalId,
-          clave_idempotencia: op.clave,
-          tipo: op.tipo,
-          contrato,
-          fecha_operacion: op.fechaOperacion,
-          ocurrido_en: op.ocurridoEn,
-          folio: op.folio,
-          datos: JSON.stringify({ ...op.datos, cliente_id: op.clienteId }),
-        })
-        .onConflict((oc) =>
-          oc.columns(['vendedor_id', 'clave_idempotencia']).doNothing(),
-        )
-        .returning('id')
-        .executeTakeFirst();
-    } catch (error) {
-      // Aqui solo puede caer la violacion del unique del FOLIO: la de la clave
-      // de idempotencia la absorbe el `on conflict do nothing` de arriba.
-      //
-      // > [!danger] No todo 23505 de folio es una colision
-      // > El caso normal (reenvio secuencial del mismo lote) ni siquiera llega
-      // > aqui: el `on conflict (vendedor_id, clave_idempotencia) do nothing`
-      // > comprueba su indice arbitro primero, no intenta el insert y el unique
-      // > del folio nunca se dispara. Eso esta cubierto por un e2e.
-      // >
-      // > Pero `do nothing` **solo** absorbe conflictos de su arbitro. Si dos
-      // > peticiones identicas se solapan, la segunda puede no ver todavia la
-      // > fila de la primera (sin commit), seguir adelante y chocar contra el
-      // > unique del FOLIO — un 23505 para lo que en realidad es un reenvio.
-      // >
-      // > Por eso se desempata mirando la clave: si esa fila ya existe, era un
-      // > reenvio (`duplicada`); solo si no existe es una colision de verdad.
-      // > Traducir todo 23505 a `folio-duplicado` dejaria esos reintentos en
-      // > error para siempre — lo contrario de lo que promete T-07.
-      // >
-      // > Es **defensivo**: no se ha conseguido forzar ese solape desde una
-      // > prueba, asi que esta rama no esta cubierta por un test que falle sin
-      // > ella. Se conserva porque el modo de fallo que evita es peor que su
-      // > coste (una consulta que solo corre cuando ya hubo un 23505).
-      if (!esViolacionDeUnico(error)) throw error;
-
-      const propia = await this.buscarPorClave(vendedorId, op.clave);
-      if (propia) return { id: propia.id, duplicada: true };
-
-      return { colisionDeFolio: true };
-    }
+    const insertada = await trx
+      .insertInto('sync_operacion')
+      .values({
+        vendedor_id: vendedorId,
+        sucursal_id: sucursalId,
+        clave_idempotencia: op.clave,
+        tipo: op.tipo,
+        contrato,
+        fecha_operacion: op.fechaOperacion,
+        ocurrido_en: op.ocurridoEn,
+        folio: op.folio,
+        datos: JSON.stringify({ ...op.datos, cliente_id: op.clienteId }),
+      })
+      .onConflict((oc) =>
+        oc.columns(['vendedor_id', 'clave_idempotencia']).doNothing(),
+      )
+      .returning('id')
+      .executeTakeFirst();
 
     if (insertada) return { id: insertada.id, duplicada: false };
 
-    const existente = await this.db
+    const existente = await trx
       .selectFrom('sync_operacion')
       .select('id')
       .where('vendedor_id', '=', vendedorId)
@@ -467,8 +456,34 @@ export class SincronizacionRepository {
     return { id: existente.id, duplicada: true };
   }
 
-  /** La operacion de este vendedor con esa clave, si ya estaba guardada. */
-  private async buscarPorClave(
+  /**
+   * Anota en el buzon a que fila de negocio se convirtio la operacion.
+   *
+   * Enmienda de T-16 a ADR-0009 §2.4: T-07 dejo `entidad_tabla` / `entidad_id`
+   * precisamente para esto, asi que no hace falta un `sync_operacion_id` en
+   * cada tabla de negocio; el camino inverso lo da el folio. Mientras nadie la
+   * proyecte, una operacion queda con `entidad_id` nulo y la sigue listando
+   * `idx_sync_operacion_sin_proyectar`.
+   */
+  async marcarProyectada(
+    syncOperacionId: string,
+    entidad: EntidadProyectada,
+    trx: Transaction<DB>,
+  ): Promise<void> {
+    await trx
+      .updateTable('sync_operacion')
+      .set({ entidad_tabla: entidad.tabla, entidad_id: entidad.id })
+      .where('id', '=', syncOperacionId)
+      .execute();
+  }
+
+  /**
+   * La operacion de este vendedor con esa clave, si ya estaba guardada.
+   *
+   * Usa la conexion normal a proposito: se llama **despues** del rollback de una
+   * colision de folio, cuando la transaccion ya no sirve (T-16).
+   */
+  async buscarPorClave(
     vendedorId: string,
     clave: string,
   ): Promise<{ id: string } | undefined> {
@@ -501,21 +516,16 @@ export class SincronizacionRepository {
   }
 }
 
-/**
- * Resultado de guardar una operacion: entro, ya estaba, o **su folio choco con
- * el de otra operacion** (T-14).
- */
-export type ResultadoGuardado =
-  | { id: string; duplicada: boolean; colisionDeFolio?: false }
-  | { colisionDeFolio: true; id?: undefined; duplicada?: undefined };
+/** Resultado de guardar una operacion en el buzon: entro, o ya estaba. */
+export interface ResultadoGuardado {
+  id: string;
+  duplicada: boolean;
+}
 
-/** `23505 unique_violation` de Postgres. */
-function esViolacionDeUnico(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    (error as { code?: unknown }).code === '23505'
-  );
+/** La fila de negocio en la que se convirtio una operacion (ADR-0009 §2.4, enmendado). */
+export interface EntidadProyectada {
+  tabla: string;
+  id: string;
 }
 
 /** `date` de Postgres → `AAAA-MM-DD` sin pasar por UTC. */
