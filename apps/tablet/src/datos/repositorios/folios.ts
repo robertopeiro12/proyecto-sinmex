@@ -270,7 +270,7 @@ export function crearRepositorioFolios({ bd, reloj }: DepsRepositorio) {
       return fila?.ultimo ?? 0;
     },
 
-    /** Los folios emitidos ese dia, en orden. Para el corte del dia (T-38). */
+    /** Los folios emitidos ese dia, en orden. Para el corte del dia (T-33). */
     delDia(vendedorId: string, fecha: FechaISO = reloj.hoy()): FolioEmitido[] {
       return bd.getAllSync<FolioEmitido>(
         `select * from folio_emitido

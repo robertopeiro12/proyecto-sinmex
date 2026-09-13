@@ -264,7 +264,7 @@ describe("reinicio diario del contador", () => {
 
   it("el contador del dia anterior queda intacto", () => {
     // El reinicio no borra ni pisa nada: cada dia tiene su propia fila. Es lo
-    // que hace que el corte del dia (T-38) siga cuadrando hacia atras.
+    // que hace que el corte del dia (T-33) siga cuadrando hacia atras.
     const { folios, mover } = montar("2026-08-07T15:00:00.000Z");
     folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "a1" });
     folios.emitir({ vendedorId: VENDEDOR, claveOperacion: "a2" });

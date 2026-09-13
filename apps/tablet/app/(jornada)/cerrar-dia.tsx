@@ -16,7 +16,7 @@ import { espacio } from '@/ui/tokens';
  * El **kilometraje final** si se implementa aqui porque es un campo de la
  * jornada (la misma entidad que abre el dia) y alimenta el reporte de
  * Kilometraje del portal. El **corte** —ventas por presentacion, cobranza,
- * gastos, tesoreria, comision, efectividad de ruta e impresion— es T-38.
+ * gastos, tesoreria, comision, efectividad de ruta e impresion— es T-33.
  */
 export default function CerrarDia() {
   const { datos, jornada, refrescarJornada } = useJawa();
@@ -53,7 +53,7 @@ export default function CerrarDia() {
         }
       >
         <Tarjeta estado="pendiente" etiqueta="Próximamente">
-          <Text style={estilos.textoTarjeta}>El corte del día se implementa en T-38</Text>
+          <Text style={estilos.textoTarjeta}>El corte del día se implementa en T-33</Text>
           <Text style={estilos.textoSuave}>
             Incluirá ventas por presentación, cobranza, gastos, tesorería (= cobranza − gastos),
             comisión del día, efectividad de ruta e impresión desde la tablet.
