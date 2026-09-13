@@ -30,9 +30,9 @@ const LOGIN_TIJUANA = `e2e-ven-tj-${SUFIJO}`;
 const LOGIN_SIN_PERMISO = `e2e-ven-sin-${SUFIJO}`;
 const PASSWORD = 'contrasena-de-prueba';
 
-// Prefijo reservado: la limpieza de afterAll borra por `login like`. Sin el,
-// una corrida que deje basura envenena la siguiente con 409 inesperados.
-// Nota: se usa solo un espacio para no interferir con el calculo de segmento-vendedor.
+// Prefijo para nombres (un espacio): no interfiere con el calculo de
+// segmento-vendedor (palabrasDelNombre elimina espacios). La aislacion
+// entre corridas viene del SUFIJO en los logins, escoped en el cleanup.
 const PREFIJO = ` `;
 
 describe('Vendedores (e2e)', () => {
@@ -144,7 +144,7 @@ describe('Vendedores (e2e)', () => {
   afterAll(async () => {
     await db
       .deleteFrom('vendedor')
-      .where('login', 'like', `e2e-%`)
+      .where('login', 'like', `%${SUFIJO}`)
       .execute();
     if (usuarioIds.length > 0) {
       await db
