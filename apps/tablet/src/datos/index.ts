@@ -30,4 +30,18 @@ export type {
   PeticionFolio,
   RepositorioFolios,
 } from './repositorios/folios';
+export {
+  LARGO_MAX_COMENTARIOS,
+  LARGO_MAX_NUM_NOTA,
+  leerCantidad,
+  MAX_LINEAS_VENTA,
+  problemasDeCaptura,
+  resumirCaptura,
+} from './ventas-reglas';
+export type {
+  CapturaVenta,
+  LineaCaptura,
+  ResumenCaptura,
+  ResumenLinea,
+} from './ventas-reglas';
 export * from './tipos';
