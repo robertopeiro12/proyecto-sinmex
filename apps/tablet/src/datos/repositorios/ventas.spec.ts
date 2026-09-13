@@ -146,6 +146,23 @@ describe('repositorio de ventas (T-16)', () => {
       );
       expect(folios.consecutivoDe('ven-1')).toBe(0);
     });
+
+    it('la misma presentacion repetida en dos lineas no graba ni consume folio', () => {
+      const { deps, folios, ventas } = montar();
+      expect(() =>
+        ventas.registrar(
+          venta({
+            lineas: [
+              { presentacionId: 'pre-1', cantidad: 5, cantidadPromocion: 0 },
+              { presentacionId: 'pre-1', cantidad: 3, cantidadPromocion: 0 },
+            ],
+          }),
+        ),
+      ).toThrow(ErrorVenta);
+      expect(folios.consecutivoDe('ven-1')).toBe(0);
+      expect(cuantas(deps, 'folio_emitido')).toBe(0);
+      expect(cuantas(deps, 'venta')).toBe(0);
+    });
   });
 
   describe('consultas y cola de sincronizacion', () => {

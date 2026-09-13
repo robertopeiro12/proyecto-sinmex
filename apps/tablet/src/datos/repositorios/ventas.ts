@@ -57,8 +57,9 @@ export function crearRepositorioVentas(
     /**
      * Graba una venta y le emite su folio, en **una sola transaccion** (D16).
      *
-     * Todo lo que puede fallar por una regla (cliente, presentacion, precio,
-     * numero de nota) se comprueba ANTES de abrir la transaccion. Lo que falla
+     * Todo lo que puede fallar por una regla (cliente, presentacion repetida,
+     * presentacion, precio, numero de nota) se comprueba ANTES de abrir la
+     * transaccion. Lo que falla
      * dentro (sin segmento de folio, 99 operaciones del dia, cualquier error de
      * SQLite) hace `rollback` de todo, **incluido el contador de folios**:
      * `folios.emitir()` usa `savepoint` y se cuelga de esta transaccion. Asi un
@@ -82,6 +83,18 @@ export function crearRepositorioVentas(
           .presentacionesParaVenta(datos.clienteId, fecha)
           .map((p) => [p.presentacion_id, p] as const),
       );
+
+      // `venta_linea` tiene llave primaria (venta_id, presentacion_id): sin
+      // este chequeo, una linea repetida llegaria a la transaccion y fallaria
+      // ahi con un error tecnico de SQLite en vez de uno de negocio. El
+      // servidor rechaza lo mismo (datos-venta.ts, ventas-cobranza).
+      const presentacionesVistas = new Set<string>();
+      for (const l of datos.lineas) {
+        if (presentacionesVistas.has(l.presentacionId)) {
+          throw new ErrorVenta('La misma presentación viene en dos líneas de la venta.');
+        }
+        presentacionesVistas.add(l.presentacionId);
+      }
 
       const lineas: LineaCaptura[] = datos.lineas.map((l) => {
         const presentacion = vendibles.get(l.presentacionId);
