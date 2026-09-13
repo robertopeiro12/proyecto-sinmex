@@ -78,6 +78,45 @@ export class VendedoresRepository {
   }
 
   /**
+   * Sin transaccion: es un solo insert. La lectura del codigo de sucursal va
+   * despues porque `returning` no puede traer columnas de la tabla del join.
+   */
+  async crear(datos: {
+    nombre: string;
+    login: string;
+    passwordHash: string;
+    sucursalId: string;
+    folioSegmento: string;
+  }): Promise<Vendedor> {
+    const fila = await this.db
+      .insertInto('vendedor')
+      .values({
+        nombre: datos.nombre,
+        login: datos.login,
+        password_hash: datos.passwordHash,
+        sucursal_id: datos.sucursalId,
+        folio_segmento: datos.folioSegmento,
+      })
+      .returning([
+        'id',
+        'nombre',
+        'login',
+        'sucursal_id',
+        'folio_segmento',
+        'activo',
+      ])
+      .executeTakeFirstOrThrow();
+
+    const sucursal = await this.db
+      .selectFrom('sucursal')
+      .select('codigo')
+      .where('id', '=', datos.sucursalId)
+      .executeTakeFirstOrThrow();
+
+    return aVendedor({ ...fila, codigo: sucursal.codigo });
+  }
+
+  /**
    * Delegado al helper compartido de T-12 (D9 del spec) -- NO se duplica
    * aqui: `VehiculosRepository`, `ClientesRepository` y `PreciosRepository`
    * ya lo usan tal cual.

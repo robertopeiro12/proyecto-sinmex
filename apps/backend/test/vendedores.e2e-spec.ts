@@ -30,9 +30,10 @@ const LOGIN_TIJUANA = `e2e-ven-tj-${SUFIJO}`;
 const LOGIN_SIN_PERMISO = `e2e-ven-sin-${SUFIJO}`;
 const PASSWORD = 'contrasena-de-prueba';
 
-// Prefijo reservado: la limpieza de afterAll borra por `nombre like`. Sin el,
+// Prefijo reservado: la limpieza de afterAll borra por `login like`. Sin el,
 // una corrida que deje basura envenena la siguiente con 409 inesperados.
-const PREFIJO = `ZZ-e2e-${SUFIJO}`;
+// Nota: se usa solo un espacio para no interferir con el calculo de segmento-vendedor.
+const PREFIJO = ` `;
 
 describe('Vendedores (e2e)', () => {
   let app: INestApplication<App>;
@@ -143,7 +144,7 @@ describe('Vendedores (e2e)', () => {
   afterAll(async () => {
     await db
       .deleteFrom('vendedor')
-      .where('nombre', 'like', `${PREFIJO}%`)
+      .where('login', 'like', `e2e-%`)
       .execute();
     if (usuarioIds.length > 0) {
       await db
@@ -234,6 +235,206 @@ describe('Vendedores (e2e)', () => {
 
     it('rechaza a quien no tiene sesion', async () => {
       await request(app.getHttpServer()).get('/vendedores').expect(401);
+    });
+  });
+
+  describe('POST /vendedores', () => {
+    it('un usuario atado crea en SU sucursal sin mandarla, y le asigna segmento', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/vendedores')
+        .set('Cookie', cookieTijuana)
+        .send({
+          nombre: `${PREFIJO} Abraham Solis`,
+          login: `e2e-alta-${SUFIJO}`,
+          contrasena: 'x',
+        })
+        .expect(201);
+
+      const vendedor = res.body as VendedorRespuesta;
+      expect(vendedor.sucursalCodigo).toBe('TJ');
+      expect(vendedor.folioSegmento).toBe('AS');
+      expect(vendedor.activo).toBe(true);
+      expect(vendedor).not.toHaveProperty('password_hash');
+    });
+
+    // D3: el cliente propone, el servidor dispone. Mandar otra sucursal no es
+    // un intento de escalada (el formulario ni siquiera pinta el campo), se
+    // ignora en silencio.
+    it('a un usuario atado se le IGNORA el sucursalId que mande', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/vendedores')
+        .set('Cookie', cookieTijuana)
+        .send({
+          nombre: `${PREFIJO} Colado`,
+          login: `e2e-colado-${SUFIJO}`,
+          contrasena: 'x',
+          sucursalId: idMexicali,
+        })
+        .expect(201);
+
+      expect((res.body as VendedorRespuesta).sucursalCodigo).toBe('TJ');
+    });
+
+    it('el usuario General elige la sucursal', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/vendedores')
+        .set('Cookie', cookieGeneral)
+        .send({
+          nombre: `${PREFIJO} General Electo`,
+          login: `e2e-gen-elige-${SUFIJO}`,
+          contrasena: 'x',
+          sucursalId: idMexicali,
+        })
+        .expect(201);
+
+      expect((res.body as VendedorRespuesta).sucursalCodigo).toBe('MX');
+    });
+
+    it('el usuario General sin sucursalId recibe 400', async () => {
+      await request(app.getHttpServer())
+        .post('/vendedores')
+        .set('Cookie', cookieGeneral)
+        .send({
+          nombre: `${PREFIJO} Sin sucursal`,
+          login: `e2e-sinsuc-${SUFIJO}`,
+          contrasena: 'x',
+        })
+        .expect(400);
+    });
+
+    // D5: sin minimo de longitud -- el cliente lo confirmo.
+    it('acepta una contraseña de un solo caracter', async () => {
+      await request(app.getHttpServer())
+        .post('/vendedores')
+        .set('Cookie', cookieTijuana)
+        .send({
+          nombre: `${PREFIJO} Password Corta`,
+          login: `e2e-corta-${SUFIJO}`,
+          contrasena: 'x',
+        })
+        .expect(201);
+    });
+
+    it('rechaza una contraseña vacia con 400', async () => {
+      await request(app.getHttpServer())
+        .post('/vendedores')
+        .set('Cookie', cookieTijuana)
+        .send({
+          nombre: `${PREFIJO} Password Vacia`,
+          login: `e2e-vacia-${SUFIJO}`,
+          contrasena: '',
+        })
+        .expect(400);
+    });
+
+    it('rechaza un login duplicado (incluida variacion de mayusculas) con 409', async () => {
+      const login = `e2e-dup-${SUFIJO}`;
+      await request(app.getHttpServer())
+        .post('/vendedores')
+        .set('Cookie', cookieTijuana)
+        .send({ nombre: `${PREFIJO} Login Uno`, login, contrasena: 'x' })
+        .expect(201);
+
+      await request(app.getHttpServer())
+        .post('/vendedores')
+        .set('Cookie', cookieTijuana)
+        .send({
+          nombre: `${PREFIJO} Login Dos`,
+          login: login.toUpperCase(),
+          contrasena: 'x',
+        })
+        .expect(409);
+    });
+
+    // EL criterio de aceptacion (D6, enmienda ADR-0007): rechazar, no ceder.
+    it('rechaza el alta si las iniciales ya estan tomadas en la MISMA sucursal', async () => {
+      await sembrarVendedor(
+        `e2e-ocupado-${SUFIJO}`,
+        `${PREFIJO} Beto Ponce`,
+        idTijuana,
+        'BP',
+      );
+
+      await request(app.getHttpServer())
+        .post('/vendedores')
+        .set('Cookie', cookieTijuana)
+        .send({
+          nombre: `${PREFIJO} Berta Pineda`,
+          login: `e2e-choca-${SUFIJO}`,
+          contrasena: 'x',
+        })
+        .expect(409);
+    });
+
+    // El ejemplo textual del cliente: mismo segmento, sucursal distinta, SI
+    // se acepta -- porque el folio completo no choca.
+    it('permite el mismo segmento de iniciales en una sucursal distinta', async () => {
+      await sembrarVendedor(
+        `e2e-tjjp-${SUFIJO}`,
+        `${PREFIJO} Juan Perez TJ`,
+        idTijuana,
+        'JP',
+      );
+
+      const res = await request(app.getHttpServer())
+        .post('/vendedores')
+        .set('Cookie', cookieGeneral)
+        .send({
+          nombre: `${PREFIJO} Juan Perez MX`,
+          login: `e2e-mxjp-${SUFIJO}`,
+          contrasena: 'x',
+          sucursalId: idMexicali,
+        })
+        .expect(201);
+
+      expect((res.body as VendedorRespuesta).folioSegmento).toBe('JP');
+      expect((res.body as VendedorRespuesta).sucursalCodigo).toBe('MX');
+    });
+
+    // Un vendedor desactivado (activo=false, sin deleted_at) sigue bloqueando
+    // sus iniciales -- D7 del spec, ya fijado en la base por la Task 2.
+    it('un vendedor desactivado en la sucursal sigue bloqueando sus iniciales', async () => {
+      const id = await sembrarVendedor(
+        `e2e-dormido-${SUFIJO}`,
+        `${PREFIJO} Carla Ruiz`,
+        idTijuana,
+        'CR',
+      );
+      await db
+        .updateTable('vendedor')
+        .set({ activo: false })
+        .where('id', '=', id)
+        .execute();
+
+      await request(app.getHttpServer())
+        .post('/vendedores')
+        .set('Cookie', cookieTijuana)
+        .send({
+          nombre: `${PREFIJO} Carlos Reyes`,
+          login: `e2e-choca2-${SUFIJO}`,
+          contrasena: 'x',
+        })
+        .expect(409);
+    });
+
+    it('rechaza crear sin el permiso vendedor.gestionar', async () => {
+      await request(app.getHttpServer())
+        .post('/vendedores')
+        .set('Cookie', cookieSinPermiso)
+        .send({
+          nombre: `${PREFIJO} Prohibido`,
+          login: `e2e-prohibido-${SUFIJO}`,
+          contrasena: 'x',
+        })
+        .expect(403);
+    });
+
+    it('rechaza un nombre vacio con 400', async () => {
+      await request(app.getHttpServer())
+        .post('/vendedores')
+        .set('Cookie', cookieTijuana)
+        .send({ nombre: '   ', login: `e2e-nombre-${SUFIJO}`, contrasena: 'x' })
+        .expect(400);
     });
   });
 });

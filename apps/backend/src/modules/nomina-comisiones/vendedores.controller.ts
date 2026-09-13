@@ -1,8 +1,10 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { UsuarioActual } from '../auth/usuario-actual.decorator';
 import { normalizarSucursalPedida } from '../sucursales/alcance-sucursal';
 import { VendedoresService } from './vendedores.service';
 import type { Vendedor } from './vendedores.repository';
+import { RequierePermiso } from '../auth/requiere-permiso.decorator';
+import { CrearVendedorDto } from './dto/crear-vendedor.dto';
 
 // Sin @Publico(): el guard global protege todo por defecto. Listar NO exige
 // vendedor.gestionar a proposito: Rutas (T-36/T-37) y Nomina (T-47) van a
@@ -21,5 +23,14 @@ export class VendedoresController {
       usuarioId,
       normalizarSucursalPedida(sucursal),
     );
+  }
+
+  @Post()
+  @RequierePermiso('vendedor.gestionar')
+  async crear(
+    @UsuarioActual() usuarioId: string,
+    @Body() dto: CrearVendedorDto,
+  ): Promise<Vendedor> {
+    return this.vendedores.crear(usuarioId, dto);
   }
 }
