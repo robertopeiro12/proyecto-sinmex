@@ -264,6 +264,7 @@ export interface Vendedor {
 
 export interface VentaNota {
   cliente_id: string;
+  comentarios: string | null;
   contado_credito: string;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -274,6 +275,7 @@ export interface VentaNota {
   mes: number;
   monto_total: Generated<Numeric>;
   num_nota: string;
+  pct_comision: Numeric | null;
   semana: number;
   status: string;
   sucursal_id: string;
