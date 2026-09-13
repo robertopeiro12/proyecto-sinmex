@@ -12,7 +12,7 @@ import { useTema } from '@/ui/tema';
  * Clientes a visitar. Se leen de SQLite, sin red: es la demostracion de que la
  * capa de datos local sirve para **consultar offline**.
  *
- * TODO: T-33 — el orden real es el de la [[Rutas|ruta diaria]] del vendedor,
+ * TODO: T-37 — el orden real es el de la [[Rutas|ruta diaria]] del vendedor,
  *       no alfabetico; la ruta baja del portal con la sincronizacion.
  */
 export default function ListaClientes() {
