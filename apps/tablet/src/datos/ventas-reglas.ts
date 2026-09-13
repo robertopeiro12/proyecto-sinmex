@@ -14,6 +14,14 @@ export const MAX_LINEAS_VENTA = 50;
 export const LARGO_MAX_NUM_NOTA = 30;
 export const LARGO_MAX_COMENTARIOS = 500;
 
+/**
+ * Limites de datos duplicados del servidor (backend/src/modules/ventas-cobranza/datos-venta.ts).
+ * La tablet no puede importar del backend (Metro), asi que se duplican a proposito.
+ * Sirven para rechazar en la tablet lo que el servidor rechazaria al sincronizar.
+ */
+const MAX_ENTERO_POSTGRES = 2_147_483_647;
+const MAX_CENTAVOS = 999_999_999_999;
+
 /** Una fila de la captura: una presentacion con lo capturado y su precio del catalogo local. */
 export interface LineaCaptura {
   presentacionId: string;
@@ -51,13 +59,16 @@ export interface CapturaVenta {
  * Vacio es 0: el vendedor solo llena lo que vende. Cualquier cosa que no sean
  * digitos es `null`: con el teclado numerico casi no pasa, pero un teclado
  * externo o un pegado si, y un "1.5" de piezas no puede volverse 1 en silencio.
+ * Rechaza numeros mayores que MAX_ENTERO_POSTGRES.
  */
 export function leerCantidad(texto: string): number | null {
   const limpio = texto.trim();
   if (limpio === '') return 0;
   if (!/^\d+$/.test(limpio)) return null;
   const numero = Number(limpio);
-  return Number.isSafeInteger(numero) ? numero : null;
+  if (!Number.isSafeInteger(numero)) return null;
+  if (numero > MAX_ENTERO_POSTGRES) return null;
+  return numero;
 }
 
 /** Tiene algo capturado. Una cantidad ilegible (`NaN`) no cuenta como capturada. */
@@ -100,8 +111,10 @@ export function problemasDeCaptura(captura: CapturaVenta): string[] {
     const enteras =
       Number.isInteger(l.cantidad) &&
       l.cantidad >= 0 &&
+      l.cantidad <= MAX_ENTERO_POSTGRES &&
       Number.isInteger(l.cantidadPromocion) &&
-      l.cantidadPromocion >= 0;
+      l.cantidadPromocion >= 0 &&
+      l.cantidadPromocion <= MAX_ENTERO_POSTGRES;
     if (!enteras) {
       problemas.push(`${l.etiqueta}: las cantidades son piezas enteras.`);
     } else if (l.cantidad > 0 && (l.precioCentavos === null || l.precioCentavos === 0)) {
@@ -117,6 +130,11 @@ export function problemasDeCaptura(captura: CapturaVenta): string[] {
   }
   if (conAlgo > MAX_LINEAS_VENTA) {
     problemas.push(`Una venta lleva hasta ${MAX_LINEAS_VENTA} productos.`);
+  }
+
+  const resumen = resumirCaptura(captura.lineas);
+  if (resumen.totalCentavos > MAX_CENTAVOS) {
+    problemas.push('El total de la venta es demasiado grande.');
   }
 
   const numNota = captura.numNota.trim();

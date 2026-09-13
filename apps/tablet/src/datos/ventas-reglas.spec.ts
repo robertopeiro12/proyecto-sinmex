@@ -35,6 +35,11 @@ describe('leerCantidad', () => {
   ])('%p se lee como %p', (texto, esperado) => {
     expect(leerCantidad(texto)).toBe(esperado);
   });
+
+  it('rechaza integers mayores que MAX_ENTERO_POSTGRES', () => {
+    expect(leerCantidad('2147483647')).toBe(2147483647);
+    expect(leerCantidad('2147483648')).toBe(null);
+  });
 });
 
 describe('resumirCaptura', () => {
@@ -142,5 +147,47 @@ describe('problemasDeCaptura', () => {
     expect(problemasDeCaptura(captura({ lineas: [linea({ cantidad: Number.NaN })] }))).toContain(
       'Jamaica 1 L: las cantidades son piezas enteras.',
     );
+  });
+
+  it('rechaza cantidades mayores que MAX_ENTERO_POSTGRES', () => {
+    expect(
+      problemasDeCaptura(captura({ lineas: [linea({ cantidad: 2147483648 })] })),
+    ).toContain('Jamaica 1 L: las cantidades son piezas enteras.');
+  });
+
+  it('rechaza promocion mayor que MAX_ENTERO_POSTGRES', () => {
+    expect(
+      problemasDeCaptura(captura({ lineas: [linea({ cantidadPromocion: 2147483648 })] })),
+    ).toContain('Jamaica 1 L: las cantidades son piezas enteras.');
+  });
+
+  it('rechaza un total que excede MAX_CENTAVOS', () => {
+    const problemas = problemasDeCaptura(
+      captura({
+        lineas: [
+          linea({
+            cantidad: 2000000,
+            cantidadPromocion: 0,
+            precioCentavos: 600000,
+          }),
+        ],
+      }),
+    );
+    expect(problemas).toContain('El total de la venta es demasiado grande.');
+  });
+
+  it('acepta un total exactamente en MAX_CENTAVOS', () => {
+    const problemas = problemasDeCaptura(
+      captura({
+        lineas: [
+          linea({
+            cantidad: 1666666,
+            cantidadPromocion: 0,
+            precioCentavos: 600,
+          }),
+        ],
+      }),
+    );
+    expect(problemas).not.toContain('El total de la venta es demasiado grande.');
   });
 });
