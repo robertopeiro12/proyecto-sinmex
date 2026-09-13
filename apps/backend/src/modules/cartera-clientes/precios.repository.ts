@@ -104,8 +104,19 @@ export class PreciosRepository {
    * > servidor no reconoce. Un e2e las compara.
    *
    * La fecha es `fecha_operacion` tal cual llego de la tablet, nunca el reloj
-   * del servidor: una venta de ayer que se sube hoy se valida con los precios
-   * de ayer.
+   * del servidor. Sin opciones resuelve exactamente a esa fecha, igual que el
+   * `pull` (es lo que compara el e2e de paridad).
+   *
+   * `vigenteHastaHoy` es para la comprobacion de EXISTENCIA de una venta
+   * (enmienda de D12): mide a `greatest(fecha, current_date)`, asi que cuenta
+   * tambien los precios asignados despues de la venta, hasta hoy. El portal
+   * siempre da de alta los precios con vigencia desde hoy; sin esto, una venta
+   * de ayer rechazada por `precio-no-asignado` no se recuperaria nunca aunque
+   * el admin asigne el precio. `current_date` es solo un tope para la
+   * existencia: la fecha de la venta no cambia, y el valor que devuelve en ese
+   * modo no se usa para cobrar (D2, vale el precio de la tablet). Se calcula en
+   * Postgres y no en Node: `current_date` (UTC) nunca va detras de la fecha de
+   * Tijuana, y el huso del proceso de Node no importa.
    *
    * Recibe la conexion en `trx` porque `push` la llama dentro de la transaccion
    * de la operacion (ADR-0009); cualquier `Kysely<DB>` sirve, y una
@@ -115,7 +126,12 @@ export class PreciosRepository {
     clienteId: string,
     fecha: string,
     trx: Database,
+    opciones: { vigenteHastaHoy?: boolean } = {},
   ): Promise<Map<string, number | null>> {
+    const corte = opciones.vigenteHastaHoy
+      ? sql`greatest(${fecha}::date, current_date)`
+      : sql`${fecha}::date`;
+
     const filas = await sql<{
       presentacion_id: string;
       precio: string | null;
@@ -131,7 +147,7 @@ export class PreciosRepository {
           join cli on cli.lista_precio_id = p.lista_precio_id
                   and cli.sucursal_id = p.sucursal_id
          where p.deleted_at is null
-           and p.vigente_desde <= ${fecha}::date
+           and p.vigente_desde <= ${corte}
          order by p.presentacion_id, p.vigente_desde desc
       ),
       vigente_cliente as (
@@ -139,7 +155,7 @@ export class PreciosRepository {
           from cliente_precio cp
          where cp.cliente_id = ${clienteId}
            and cp.deleted_at is null
-           and cp.vigente_desde <= ${fecha}::date
+           and cp.vigente_desde <= ${corte}
          order by cp.presentacion_id, cp.vigente_desde desc
       )
       select pr.id as presentacion_id,

@@ -21,7 +21,7 @@ import { VentasRepository } from './ventas.repository';
 export interface ContextoVenta {
   /** Sucursal de la operacion. Desde la tablet, la del vendedor del token. */
   sucursalId: string;
-  /** Dia de trabajo `AAAA-MM-DD` tal cual llego: de aqui salen fecha, semana, mes y precios. */
+  /** Dia de trabajo `AAAA-MM-DD` tal cual llego: de aqui salen fecha, semana y mes, y desde aqui se mide la existencia de precio. */
   fechaOperacion: string;
   /**
    * El repartidor de la venta. **Obligatorio siempre**: `venta_nota.vendedor_id`
@@ -84,10 +84,14 @@ export class VentasService {
       });
     }
 
+    // Existencia de precio hasta hoy, no solo a la fecha de la venta: el portal
+    // asigna precios con vigencia desde hoy y el rechazo promete que asignarlo
+    // recupera la venta (enmienda de D12). El valor no se usa (D2).
     const precios = await this.precios.presentacionesConPrecio(
       venta.clienteId,
       contexto.fechaOperacion,
       trx,
+      { vigenteHastaHoy: true },
     );
     const rechazo = revisarLineas(venta.lineas, precios);
     if (rechazo) throw new VentaRechazada(rechazo);

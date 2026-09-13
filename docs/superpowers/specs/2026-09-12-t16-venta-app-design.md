@@ -168,7 +168,18 @@ propia; `push` la traduce. T-17 la traducirá a HTTP.
 |---|---|---|
 | `datos-invalidos` (**amplía su significado**: *"`datos` no cumple la forma de su tipo"*) | Venta sin `cliente_id` o sin `folio`; `lineas` vacía, con más de 50 o con presentación repetida; cantidades negativas, no enteras o las dos en 0; `precio_centavos` ausente, negativo o no entero, o en 0 en una línea con cantidad > 0; `num_nota` vacío; `contado_credito` o `factura` fuera de sus valores. El `motivo` nombra el campo | Es un bug: marca error y lo muestra |
 | `presentacion-inactiva` (**nuevo**) | La presentación no existe, está borrada, o su producto está inactivo o borrado | Marca error; se reintenta en la siguiente sincronización (D19) |
-| `precio-no-asignado` (**nuevo**) | Una línea con cantidad > 0 y el cliente no tiene **ningún** precio vigente a `fecha_operacion` para esa presentación. Es una comprobación de **existencia**, nunca de valor: el precio que manda la tablet no se compara (D2) | Igual; el administrador asigna el precio y la siguiente sincronización la sube |
+| `precio-no-asignado` (**nuevo**) | Una línea con cantidad > 0 y el cliente no tiene **ningún** precio para esa presentación vigente a `fecha_operacion` (ni asignado después, hasta hoy: ver la enmienda). Es una comprobación de **existencia**, nunca de valor: el precio que manda la tablet no se compara (D2) | Igual; el administrador asigna el precio y la siguiente sincronización la sube |
+
+> **Enmienda 2026-09-14 (revisión final).** La existencia del precio de una venta se evalúa a
+> `greatest(fecha_operacion, current_date)`: cuenta los precios vigentes en `fecha_operacion` y los
+> asignados después, hasta hoy. **Por qué:** el portal siempre da de alta los precios con
+> `vigente_desde` = hoy, así que medir a `fecha_operacion` rechazaba para siempre una venta del día N
+> cuyo precio el administrador asignó el día N+1, y la promesa de esta tabla y de D19 ("el
+> administrador asigna el precio y la siguiente sincronización la sube") no se cumplía. `current_date`
+> de Postgres (UTC) nunca va detrás de la fecha de Tijuana, así que un precio dado de alta "hoy" en
+> el portal siempre cuenta. Sigue siendo solo existencia (D2): el precio guardado es el de la
+> tablet. El `pull` sigue resolviendo precios a la fecha pedida, y `fecha`, `semana`, `mes` y el
+> folio siguen saliendo de `fecha_operacion` tal cual llegó.
 
 #### D13 — El precio solo se exige en líneas con cantidad > 0
 

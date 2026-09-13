@@ -331,6 +331,10 @@ servidor las guarda tal cual.
   tablet y **no lo compara** con su catálogo. Solo comprueba que la presentación se venda
   (`presentacion-inactiva`) y que el cliente tenga **algún** precio vigente para ella cuando la
   línea lleva cantidad (`precio-no-asignado`). Una línea de pura promoción no exige precio de lista: manda `precio_centavos: 0`.
+  Esa comprobación cuenta los precios vigentes en `fecha_operacion` **y los asignados después,
+  hasta hoy**: el portal da de alta los precios con vigencia desde hoy, así que asignar el precio
+  en el portal y volver a sincronizar recupera una venta de un día anterior. La fecha de la venta,
+  su `semana`, su `mes` y su folio no cambian.
 - Cada venta se aplica en **su propia transacción** junto con su fila del buzón: si se rechaza,
   no queda ni la venta ni la operación (§7).
 
@@ -376,7 +380,7 @@ texto en español** si reintenta o si avisa al vendedor.
 | `folio-invalido` | El `folio` no tiene el formato de ADR-0001, o contradice a su propia operación (dice otra sucursal, otra fecha u otro vendedor) |
 | `folio-duplicado` | **Colisión de folios**: otra operación ya subió ese folio |
 | `presentacion-inactiva` | Una línea de venta nombra una presentación que no existe, está dada de baja o cuyo producto está inactivo. Se reintenta en la siguiente sincronización (T-16) |
-| `precio-no-asignado` | Una línea con cantidad > 0 y el cliente no tiene **ningún** precio vigente a `fecha_operacion` para esa presentación. Comprueba existencia, nunca valor. Se recupera cuando el portal asigna el precio (T-16) |
+| `precio-no-asignado` | Una línea con cantidad > 0 y el cliente no tiene **ningún** precio para esa presentación vigente a `fecha_operacion` ni asignado después, hasta hoy. Comprueba existencia, nunca valor. Se recupera cuando el portal asigna el precio y la tablet vuelve a sincronizar (T-16) |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo

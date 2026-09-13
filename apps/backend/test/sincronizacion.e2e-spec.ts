@@ -1,5 +1,6 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
+import { sql, type RawBuilder } from 'kysely';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
@@ -1480,6 +1481,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
     // venta no puede repetir presentacion en dos lineas).
     let presentacion2Id: string;
     let precio2Id: string;
+    let listaId: string;
 
     beforeAll(async () => {
       const lista = await db
@@ -1487,6 +1489,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
         .select('id')
         .where('nombre', '=', 'Lista 1')
         .executeTakeFirstOrThrow();
+      listaId = lista.id;
 
       prospectoId = (
         await db
@@ -1608,6 +1611,95 @@ describe('Sincronizacion pull/push (e2e)', () => {
       });
       expect(await buzonDe(op.clave)).toBeUndefined();
       expect(await ventasConFolio(op.folio as string)).toHaveLength(0);
+    });
+
+    /**
+     * La promesa del rechazo: "asignalo en el portal y vuelve a sincronizar".
+     * El portal da de alta el precio con `vigente_desde` = hoy, asi que una venta
+     * de un dia anterior solo se recupera si la existencia cuenta los precios
+     * asignados despues de `fecha_operacion`, hasta hoy (enmienda de D12).
+     *
+     * Las fechas del precio las pone Postgres (`current_date`), no Node: el
+     * reloj de la maquina puede ir en otro huso y otro dia.
+     */
+    const conPrecioDesde = async (
+      vigenteDesde: RawBuilder<string>,
+      prueba: () => Promise<void>,
+    ) => {
+      const { id } = await db
+        .insertInto('precio')
+        .values({
+          presentacion_id: presentacionSinPrecioId,
+          lista_precio_id: listaId,
+          sucursal_id: sucursalId,
+          precio: '7.00',
+          vigente_desde: vigenteDesde,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      try {
+        await prueba();
+      } finally {
+        // El detalle de una venta aplicada lo limpia el afterAll de arriba (por
+        // vendedor); el precio tiene que irse ya: otras pruebas cuentan con que
+        // esta presentacion no tenga ninguno.
+        await db.deleteFrom('precio').where('id', '=', id).execute();
+      }
+    };
+
+    const ventaSinPrecioDeLista = () =>
+      ventaValida({
+        datos: datosVenta({
+          lineas: [
+            {
+              presentacion_id: presentacionSinPrecioId,
+              cantidad: 3,
+              cantidad_promocion: 0,
+              precio_centavos: 500,
+            },
+          ],
+        }),
+      });
+
+    it('una venta de un dia anterior se aplica si el precio se asigno despues, hasta hoy', async () => {
+      await conPrecioDesde(sql<string>`current_date`, async () => {
+        const op = ventaSinPrecioDeLista();
+        const res = (await push({ operaciones: [op] }).expect(200))
+          .body as RespuestaPush;
+
+        expect(res.resultados[0].estado).toBe('aplicada');
+        const [venta] = await ventasConFolio(op.folio as string);
+        // La fecha de la venta no se mueve: sigue siendo la de la operacion.
+        expect(fechaTexto(venta.fecha as Date | string)).toBe(FECHA_VENTAS);
+        // Se guarda el precio de la tablet (D2), no el 7.00 del portal.
+        expect(await detalleDe(venta.id)).toEqual([
+          expect.objectContaining({
+            presentacion_id: presentacionSinPrecioId,
+            precio: '5.00',
+          }),
+        ]);
+
+        // El pull sigue resolviendo a la fecha pedida: a esa fecha no habia precio.
+        const aLaFecha = await app
+          .get(PreciosRepository)
+          .presentacionesConPrecio(clienteId, FECHA_VENTAS, db);
+        expect(aLaFecha.get(presentacionSinPrecioId)).toBeNull();
+      });
+    });
+
+    it('un precio que empieza despues de hoy no cuenta: sigue siendo precio-no-asignado', async () => {
+      await conPrecioDesde(sql<string>`current_date + 1`, async () => {
+        const op = ventaSinPrecioDeLista();
+        const res = (await push({ operaciones: [op] }).expect(200))
+          .body as RespuestaPush;
+
+        expect(res.resultados[0]).toMatchObject({
+          estado: 'rechazada',
+          codigo: 'precio-no-asignado',
+        });
+        expect(await buzonDe(op.clave)).toBeUndefined();
+        expect(await ventasConFolio(op.folio as string)).toHaveLength(0);
+      });
     });
 
     it('una presentacion borrada rechaza la venta entera, aunque las otras lineas sean buenas', async () => {

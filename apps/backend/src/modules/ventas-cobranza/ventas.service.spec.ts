@@ -84,11 +84,14 @@ describe('VentasService.registrarVenta', () => {
       servicio.registrarVenta(venta(), contexto(), trx),
     ).resolves.toEqual({ id: 'venta-1' });
 
-    // Los precios se piden a la FECHA DE OPERACION, no a hoy (D6).
+    // La existencia de precio se mide desde la FECHA DE OPERACION y cuenta los
+    // precios asignados despues, hasta hoy (enmienda de D12): asi se recupera
+    // una venta rechazada cuando el portal asigna el precio.
     expect(precios.presentacionesConPrecio).toHaveBeenCalledWith(
       CLIENTE,
       '2026-09-14',
       trx,
+      { vigenteHastaHoy: true },
     );
     expect(repo.insertarVenta).toHaveBeenCalledWith(
       {
