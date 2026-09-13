@@ -33,7 +33,7 @@ apps/tablet/
 │       ├── operacion/         # clientes -> venta / cobranza / visita / registros
 │       ├── prospectos.tsx
 │       ├── ruta.tsx
-│       └── cerrar-dia.tsx     # km final (el corte es T-38)
+│       └── cerrar-dia.tsx     # km final (el corte es T-33)
 ├── src/
 │   ├── datos/                 # capa de datos local (SQLite)
 │   ├── seguridad/             # SHA-256 / PBKDF2 / verificador local (T-06)
@@ -155,5 +155,5 @@ solo cuando el portal suba a React 19.2.x, que no es alcance de T-04.
   implementar la sincronizacion. T-07 debe llamar a `gestor.renovar()` al
   conectarse: es lo que corre hacia adelante la ventana offline de la tablet.
 - **T-14** — folios (ver `ADR-0001`).
-- **T-16 / T-20 / T-22 / T-24 / T-33 / T-34 / T-38** — los modulos de la jornada;
+- **T-16 / T-20 / T-27 / T-31 / T-33 / T-37 / T-39 / T-40 / T-41** — los modulos de la jornada;
   hoy son placeholders.
