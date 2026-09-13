@@ -74,7 +74,13 @@ export type Promocion = 'ninguna' | '10+1' | '20+1';
 export interface Cliente {
   id: string;
   nombre: string;
-  domicilio: string;
+  /**
+   * `null` en un prospecto que dio de alta un vendedor desde la app (T-40): lo
+   * sustituye la ubicacion (`lat`/`lng`). El administrador lo completa en el
+   * portal al convertirlo en cliente, asi que un `tipo = 'cliente'` que baje del
+   * `pull` siempre lo trae.
+   */
+  domicilio: string | null;
   telefono: string;
   encargado: string | null;
   tipo: TipoCliente;

@@ -7,7 +7,11 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { resolverAlcance, type Alcance } from '../sucursales/alcance-sucursal';
-import { esViolacionFk } from '../../database/errores-postgres';
+import {
+  esViolacionCheck,
+  esViolacionFk,
+  restriccionDelError,
+} from '../../database/errores-postgres';
 import { reconciliarPromocionProductos } from './reconciliar-promocion-productos';
 import type { CrearClienteDto } from './dto/crear-cliente.dto';
 import type { EditarClienteDto } from './dto/editar-cliente.dto';
@@ -21,6 +25,29 @@ import {
 /** Cualquier valor que no sea 'cliente'/'prospecto' se trata como "todos" (D7 del spec): es un filtro de exhibicion, sin implicacion de seguridad. */
 export function normalizarTipoPedido(crudo: string | undefined): TipoFiltro {
   return crudo === 'cliente' || crudo === 'prospecto' ? crudo : 'todos';
+}
+
+/**
+ * Lo que a un prospecto le falta para poder ser cliente, en el espanol que lee
+ * el administrador.
+ *
+ * Es el reflejo exacto de `ck_cliente_domicilio_obligatorio` y
+ * `ck_cliente_lista_precio_obligatoria` (T-40). Pura y exportada para poder
+ * probarse sin Postgres, y **la base sigue siendo la que manda**: esto solo
+ * existe para dar un mensaje completo en vez del primer check que salte.
+ */
+export function camposQueFaltanParaSerCliente(cliente: {
+  domicilio: string | null;
+  listaPrecioId: string | null;
+}): string[] {
+  const faltan: string[] = [];
+  if (cliente.domicilio === null || cliente.domicilio.trim() === '') {
+    faltan.push('el domicilio');
+  }
+  if (cliente.listaPrecioId === null) {
+    faltan.push('la lista de precios');
+  }
+  return faltan;
 }
 
 @Injectable()
@@ -197,6 +224,13 @@ export class ClientesService {
    * Un solo sentido: Prospecto -> Cliente, nunca al reves (respuesta directa
    * de Roberto/el cliente: la conversion la decide un administrador a mano
    * desde el Portal, no algo automatico ni bidireccional).
+   *
+   * > [!info] T-40: un prospecto de la app puede llegar incompleto
+   * > El vendedor captura nombre, encargado, telefono, ubicacion, tipo de
+   * > negocio y comentario — **no domicilio ni lista de precios**. Esos dos son
+   * > "lo que falta" que el administrador agrega antes de convertirlo (respuesta
+   * > del cliente del 2026-09-02), y los checks de la base lo imponen. Se
+   * > traduce a un 409 que dice **que** falta, no a un 500.
    */
   async convertirACliente(
     usuarioId: string,
@@ -216,7 +250,32 @@ export class ClientesService {
       throw new ConflictException('Ya es cliente.');
     }
 
-    return this.repo.convertirACliente(id);
+    // Se comprueba ANTES de intentar el update, y no solo se atrapa el 23514
+    // despues, porque asi el mensaje puede nombrar **los dos** campos que
+    // faltan en una sola respuesta: el check de la base solo delata el primero.
+    const faltan = camposQueFaltanParaSerCliente(cliente);
+    if (faltan.length > 0) {
+      throw new ConflictException(
+        `Antes de convertir este prospecto en cliente hay que capturarle ${faltan.join(' y ')}.`,
+      );
+    }
+
+    try {
+      return await this.repo.convertirACliente(id);
+    } catch (error) {
+      // Red de seguridad para la carrera: otro usuario pudo vaciar uno de los
+      // dos campos entre el `obtener` y el `update`. La base es quien decide.
+      if (esViolacionCheck(error)) {
+        throw new ConflictException(
+          `Este prospecto no se puede convertir en cliente todavia: le falta ${
+            restriccionDelError(error) === 'ck_cliente_lista_precio_obligatoria'
+              ? 'la lista de precios'
+              : 'el domicilio'
+          }.`,
+        );
+      }
+      throw error;
+    }
   }
 
   private async alcanceDe(

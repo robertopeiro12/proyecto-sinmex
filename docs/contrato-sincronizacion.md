@@ -1,7 +1,8 @@
 # Contrato de sincronización tablet ↔ servidor
 
 **Versión del contrato: `1`** · Implementado en T-07 · Ampliado con folios en T-14
-· Última revisión: 2026-08-07
+· Ampliado con el tipo `prospecto` y el catálogo de tipos de negocio en T-40
+· Última revisión: 2026-09-14
 
 Este documento es la referencia legible del contrato. Las definiciones
 normativas están en el código:
@@ -192,6 +193,7 @@ nadie relacionaría con nada.
                          "encargado": null, "tipo": "cliente", "pct_comision": 3.5,
                          "promocion": "10+1", "plazo_credito_dias": 7,
                          "lat": 32.5149, "lng": -117.0382, "sucursal_id": "…", "activo": 1 }],
+    "tipos_negocio":  [{ "id": "…", "nombre": "Abarrotes", "activo": 1 }],
     "precios":        [{ "id": "<clienteId>:<presentacionId>", "cliente_id": "…",
                          "presentacion_id": "…", "precio_centavos": 800,
                          "vigente_desde": "2026-02-01", "activo": 1 }]
@@ -202,6 +204,47 @@ nadie relacionaría con nada.
                           "activo": 1 }]
 }
 ```
+
+### `domicilio` puede venir `null` en un prospecto (T-40)
+
+Un **prospecto que dio de alta un vendedor desde la app** no trae domicilio: el
+cliente dictó que lo que se captura es la **ubicación** (`lat`/`lng`), no la
+dirección — el vendedor está parado enfrente del negocio, al sol, con una
+tablet en la mano. En Postgres la columna se relajó y la obligatoriedad se
+conserva solo para `tipo = 'cliente'`
+(`ck_cliente_domicilio_obligatorio`). Lo mismo con `lista_precio_id`, que no
+viaja en el `pull`: el precio es del administrador a propósito.
+
+> [!warning] Es un cambio de significado y aun así NO subió la versión
+> El §3 dice que cambiar el significado de un valor sube `CONTRATO_ACTUAL`. Aquí
+> se decidió no subirla, y el motivo es que **subirla no protegería a nadie**:
+> `CONTRATO_MINIMO` seguiría en 1, así que una tablet vieja se seguiría
+> atendiendo y seguiría recibiendo el `null`. Lo único que la protegería es
+> subir `CONTRATO_MINIMO`, y eso es dejar sin servicio a tablets en la calle por
+> una rotura que **hoy no puede ocurrir**: la app no se ha publicado nunca y las
+> dos mitades salen del mismo monorepo. Es el mismo criterio con el que
+> `folio_segmento` (T-14) y el folio obligatorio de la venta (T-16) tampoco la
+> subieron.
+>
+> **Al publicar la primera tablet hay que revisarlo.** Donde toca resolverlo de
+> verdad es en **T-43** (versión por fila).
+
+La base local de la tablet relajó la misma columna (migración local
+`004-prospecto-campos-opcionales`). Sin eso, el `insert` del snapshot fallaría
+y, como se aplica todo en una transacción, **la tablet dejaría de sincronizar
+del todo** — y le pasaría a un compañero de sucursal que no dio de alta nada.
+
+### `tipos_negocio`: el catálogo del desplegable de prospectos (T-40)
+
+Colección **nueva** y por tanto aditiva (§3). Baja completa (no por sucursal:
+`tipo_negocio` no tiene sucursal) e incremental por `updated_at` como los demás
+catálogos, con la baja como `activo: 0`. Es el desplegable *Tipo de negocio* de
+la pantalla de prospectos; sin ella la tablet no tendría de dónde sacar la lista
+y tendría que dejar que el vendedor escribiera texto libre, que es exactamente
+lo que T-12 evitó al resolverlo con un catálogo.
+
+Una tablet vieja la ignora y sigue funcionando: es lo que el §3 pide de un
+cambio aditivo.
 
 ### La baja viaja como bandera, nunca como ausencia
 

@@ -110,7 +110,29 @@ export interface PresentacionPull extends FilaSincronizable {
 
 export interface ClientePull extends FilaSincronizable {
   nombre: string;
-  domicilio: string;
+  /**
+   * `null` en un prospecto que nacio en la app (T-40).
+   *
+   * > [!warning] Este campo dejo de ser siempre una cadena, y NO subio la version
+   * > Un prospecto que captura el vendedor no trae domicilio: lo sustituye la
+   * > ubicacion (`lat`/`lng`). En Postgres la columna se relajo con
+   * > `ck_cliente_domicilio_obligatorio`, que lo sigue exigiendo a un `cliente`.
+   * >
+   * > Estrictamente es un cambio de significado, del que el contrato §3 dice que
+   * > sube `CONTRATO_ACTUAL`. Se decidio **no subirla**, y el motivo es que
+   * > subirla no protegeria a nadie: `CONTRATO_MINIMO` seguiria en 1, asi que una
+   * > tablet vieja se seguiria atendiendo y seguiria recibiendo el `null`. Lo
+   * > unico que la protegeria es subir `CONTRATO_MINIMO`, y eso es dejar fuera de
+   * > servicio a tablets en la calle por una rotura que **hoy no puede ocurrir**:
+   * > la app no se ha publicado nunca (ver [[Sistema de diseno]], "No se ha visto
+   * > en una tablet") y las dos mitades salen de este mismo monorepo. Mismo
+   * > criterio con el que `folio_segmento` (T-14) y el folio obligatorio de la
+   * > venta (T-16) tampoco la subieron.
+   * >
+   * > **Cuando se publique la primera tablet hay que revisarlo**, y T-43 (version
+   * > por fila) es donde toca resolverlo de verdad.
+   */
+  domicilio: string | null;
   telefono: string;
   encargado: string | null;
   tipo: 'cliente' | 'prospecto';

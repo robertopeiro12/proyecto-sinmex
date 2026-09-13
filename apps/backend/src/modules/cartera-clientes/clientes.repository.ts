@@ -27,13 +27,24 @@ export interface OverridePrecio {
 export interface ClienteDetalle {
   id: string;
   nombre: string;
-  domicilio: string;
+  /**
+   * `null` solo en un prospecto que nacio en la app (T-40): el vendedor captura
+   * la ubicacion, no la direccion. El administrador lo completa al convertirlo
+   * en cliente — un `cliente` sin domicilio lo frena
+   * `ck_cliente_domicilio_obligatorio`.
+   */
+  domicilio: string | null;
   telefono: string;
   encargado: string | null;
   factura: boolean;
   tipo: TipoCliente;
   tipoNegocioId: string | null;
-  listaPrecioId: string;
+  /**
+   * `null` solo en un prospecto que nacio en la app (T-40): el precio es del
+   * administrador a proposito, no del vendedor. Ver
+   * `ck_cliente_lista_precio_obligatoria`.
+   */
+  listaPrecioId: string | null;
   pctComision: number | null;
   promocion: Promocion;
   plazoCreditoDias: number | null;
@@ -86,13 +97,13 @@ function aResumen(fila: FilaResumen): ClienteResumen {
 interface FilaDetalle {
   id: string;
   nombre: string;
-  domicilio: string;
+  domicilio: string | null;
   telefono: string;
   encargado: string | null;
   factura: boolean;
   tipo: string;
   tipo_negocio_id: string | null;
-  lista_precio_id: string;
+  lista_precio_id: string | null;
   pct_comision: string | null;
   promocion: string;
   plazo_credito_dias: number | null;
