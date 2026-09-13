@@ -450,11 +450,11 @@ describe('Vendedores (e2e)', () => {
       const res = await request(app.getHttpServer())
         .patch(`/vendedores/${id}`)
         .set('Cookie', cookieTijuana)
-        .send({ nombre: `${PREFIJO} Nombre Nuevo` })
+        .send({ nombre: 'Nombre Nuevo' })
         .expect(200);
 
       const vendedor = res.body as VendedorRespuesta;
-      expect(vendedor.nombre).toBe(`${PREFIJO} Nombre Nuevo`);
+      expect(vendedor.nombre).toBe('Nombre Nuevo');
       // El segmento NO se recalcula al editar (advertencia del spec): sigue
       // siendo el de "Nombre Viejo", no el que le tocaria a "Nombre Nuevo".
       expect(vendedor.folioSegmento).toBe('NV');
@@ -556,11 +556,14 @@ describe('Vendedores (e2e)', () => {
     });
 
     it('un id que no existe responde 404', async () => {
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .patch('/vendedores/00000000-0000-0000-0000-000000000000')
         .set('Cookie', cookieGeneral)
-        .send({ nombre: `${PREFIJO} Fantasma` })
+        .send({ nombre: 'Fantasma' })
         .expect(404);
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      expect(res.body.message).toContain('No existe ese vendedor');
     });
 
     it('un id mal formado responde 400, no 500', async () => {

@@ -1,3 +1,4 @@
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsOptional,
@@ -5,6 +6,9 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+
+const recortar = ({ value }: { value: unknown }): unknown =>
+  typeof value === 'string' ? value.trim() : value;
 
 /**
  * Los tres campos son opcionales: el servicio rechaza con 400 el cuerpo que
@@ -17,6 +21,7 @@ import {
  */
 export class EditarVendedorDto {
   @IsOptional()
+  @Transform(recortar)
   @IsString()
   @MinLength(1, { message: 'El nombre es obligatorio.' })
   @MaxLength(120, { message: 'El nombre no puede pasar de 120 caracteres.' })
