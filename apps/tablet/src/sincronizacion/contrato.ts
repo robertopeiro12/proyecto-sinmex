@@ -29,7 +29,9 @@ export type TipoOperacion =
   | 'cobranza'
   | 'gasto'
   | 'merma'
-  | 'ruta';
+  | 'ruta'
+  /** T-40. Un alta de prospecto: el servidor la proyecta a `cliente`. */
+  | 'prospecto';
 
 export type EstadoOperacion = 'aplicada' | 'duplicada' | 'rechazada';
 

@@ -52,6 +52,10 @@ export const MAX_OPERACIONES_POR_LOTE = 500;
  * TODO: T-39 — `ruta` (visitas, orden real, tiempos y GPS).
  * TODO: T-XX — la jornada (vehiculo + kilometraje inicial/final) no tiene tabla
  *       propia en Postgres todavia; hoy solo se recibe y se guarda.
+ *
+ * Hecho: T-40 — `prospecto`, el unico tipo que **crea** una fila de catalogo
+ *        (`cliente` con `tipo = 'prospecto'`) en vez de una de operacion. Es un
+ *        tipo nuevo, es decir un cambio **aditivo**: no sube la version.
  */
 export const TIPOS_OPERACION = [
   'jornada',
@@ -60,6 +64,7 @@ export const TIPOS_OPERACION = [
   'gasto',
   'merma',
   'ruta',
+  'prospecto',
 ] as const;
 
 export type TipoOperacion = (typeof TIPOS_OPERACION)[number];

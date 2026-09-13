@@ -54,6 +54,11 @@ export function prepararProyeccion(
       }
       return { ok: true, proyeccion: { tipo: 'venta', venta: r.venta } };
     }
+    // T-40: el tipo ya viaja en el contrato, pero su proyeccion
+    // (`ClientesService.crearProspecto`) llega mas adelante en esta misma rama.
+    // Hasta entonces se guarda en el buzon y queda `aplicada`, como cualquier
+    // tipo que todavia no tiene modulo de dominio.
+    case 'prospecto':
     case 'jornada':
     case 'cobranza':
     case 'gasto':
