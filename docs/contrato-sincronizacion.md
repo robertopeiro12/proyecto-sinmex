@@ -308,8 +308,8 @@ servidor las guarda tal cual.
   "datos": {
     "num_nota": "2346",              // obligatorio, ≤ 30, se recorta
     "contado_credito": "credito",    // contado | credito
-    "factura": "N/A",                // N/A | pendiente (ausente = N/A)
-    "comentarios": null,             // opcional, ≤ 500
+    "factura": "N/A",                // N/A | pendiente; la tablet siempre lo manda
+    "comentarios": null,             // null si no hay; ≤ 500
     "lineas": [                      // 1..50, sin presentación repetida
       { "presentacion_id": "uuid", "cantidad": 24, "cantidad_promocion": 2, "precio_centavos": 1350 }
       // enteros ≥ 0; cantidad + cantidad_promocion > 0;
@@ -321,6 +321,8 @@ servidor las guarda tal cual.
 
 - `cliente_id` y `folio` viajan **en el sobre**, no dentro de `datos`, y en una venta son
   **obligatorios**: sin cualquiera de los dos → `datos-invalidos`.
+- **Robustez del servidor.** Si faltara `factura` la toma como `N/A`, y si faltara `comentarios`,
+  como `null`. El contrato, sin embargo, los exige: la tablet siempre los manda.
 - **No hay monto ni status.** El servidor calcula `monto_total = Σ (cantidad × precio_centavos)`
   (las piezas de promoción no suman) y decide el status: contado → `pagada`, crédito →
   `pendiente`, monto 0 → `promocion`. `semana` (ISO-8601) y `mes` salen de `fecha_operacion`
@@ -328,7 +330,7 @@ servidor las guarda tal cual.
 - **Vale el precio de la nota firmada.** El servidor guarda el `precio_centavos` que manda la
   tablet y **no lo compara** con su catálogo. Solo comprueba que la presentación se venda
   (`presentacion-inactiva`) y que el cliente tenga **algún** precio vigente para ella cuando la
-  línea lleva cantidad (`precio-no-asignado`). Una línea de pura promoción no necesita precio.
+  línea lleva cantidad (`precio-no-asignado`). Una línea de pura promoción no exige precio de lista: manda `precio_centavos: 0`.
 - Cada venta se aplica en **su propia transacción** junto con su fila del buzón: si se rechaza,
   no queda ni la venta ni la operación (§7).
 
