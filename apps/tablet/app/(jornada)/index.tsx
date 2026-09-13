@@ -34,7 +34,11 @@ export default function MenuJornada() {
   const { estilos } = useTema();
   const [sincronizando, setSincronizando] = useState(false);
 
-  const pendientes = datos.jornadas.pendientesDeSincronizar().length;
+  // Suma ventas: si quedan sin subir, la jornada no puede decir "listo" aunque
+  // ella misma ya este sincronizada, o el vendedor cierra el dia sin WiFi
+  // creyendo que ya subio todo.
+  const pendientes =
+    datos.jornadas.pendientesDeSincronizar().length + datos.ventas.pendientesDeSincronizar().length;
   const falloUltima = ultimaSincronizacion !== null && !ultimaSincronizacion.ok;
 
   /**
