@@ -1472,6 +1472,473 @@ describe('Sincronizacion pull/push (e2e)', () => {
     });
   });
 
+  describe('ventas (T-16): reglas del dominio de punta a punta', () => {
+    let prospectoId: string;
+    // T-16: segunda presentacion vendible, con su propio precio de lista, para
+    // poder armar una venta con dos lineas VENDIDAS a distinto precio (la
+    // unica otra presentacion vendible del archivo es `presentacionId`, y una
+    // venta no puede repetir presentacion en dos lineas).
+    let presentacion2Id: string;
+    let precio2Id: string;
+
+    beforeAll(async () => {
+      const lista = await db
+        .selectFrom('lista_precio')
+        .select('id')
+        .where('nombre', '=', 'Lista 1')
+        .executeTakeFirstOrThrow();
+
+      prospectoId = (
+        await db
+          .insertInto('cliente')
+          .values({
+            nombre: `Prospecto sync ${SUFIJO}`,
+            domicilio: 'Av. Reforma 9',
+            telefono: '6647654321',
+            tipo: 'prospecto',
+            lista_precio_id: lista.id,
+            sucursal_id: sucursalId,
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+
+      presentacion2Id = (
+        await db
+          .insertInto('presentacion')
+          .values({ producto_id: productoId, volumen: '3 L' })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+
+      precio2Id = (
+        await db
+          .insertInto('precio')
+          .values({
+            presentacion_id: presentacion2Id,
+            lista_precio_id: lista.id,
+            sucursal_id: sucursalId,
+            precio: '20.00',
+            vigente_desde: '2026-01-01',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+    });
+
+    afterAll(async () => {
+      // Corre antes que el afterAll de arriba. La venta del prospecto le tiene
+      // llave foranea al cliente, que se borra aqui: primero detalle, luego
+      // cabecera, luego cliente.
+      await db
+        .deleteFrom('venta_nota_detalle')
+        .where(
+          'venta_nota_id',
+          'in',
+          db
+            .selectFrom('venta_nota')
+            .select('id')
+            .where('cliente_id', '=', prospectoId),
+        )
+        .execute();
+      await db
+        .deleteFrom('venta_nota')
+        .where('cliente_id', '=', prospectoId)
+        .execute();
+      await db.deleteFrom('cliente').where('id', '=', prospectoId).execute();
+
+      // El detalle de `presentacion2Id` es de una venta de `clienteId`: la
+      // cabecera la limpia el afterAll de mas arriba (por `vendedor_id`), pero
+      // esta fila tiene que irse antes para no dejar la llave foranea colgada.
+      await db
+        .deleteFrom('venta_nota_detalle')
+        .where('presentacion_id', '=', presentacion2Id)
+        .execute();
+      await db.deleteFrom('precio').where('id', '=', precio2Id).execute();
+      await db
+        .deleteFrom('presentacion')
+        .where('id', '=', presentacion2Id)
+        .execute();
+    });
+
+    const detalleDe = (ventaNotaId: string) =>
+      db
+        .selectFrom('venta_nota_detalle')
+        .select(['presentacion_id', 'cantidad', 'cantidad_promocion', 'precio'])
+        .where('venta_nota_id', '=', ventaNotaId)
+        .execute();
+
+    it('reenviar una venta devuelve duplicada con el mismo id y no crea una segunda venta', async () => {
+      const op = ventaValida();
+      const primero = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      const segundo = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(primero.resultados[0].estado).toBe('aplicada');
+      expect(segundo.resultados[0]).toMatchObject({
+        estado: 'duplicada',
+        id_servidor: primero.resultados[0].id_servidor,
+      });
+
+      const ventas = await ventasConFolio(op.folio as string);
+      expect(ventas).toHaveLength(1);
+      expect(await detalleDe(ventas[0].id)).toHaveLength(1);
+    });
+
+    it('una linea con cantidad y sin precio para el cliente es precio-no-asignado y no deja fila', async () => {
+      const op = ventaValida({
+        datos: datosVenta({
+          lineas: [
+            {
+              presentacion_id: presentacionSinPrecioId,
+              cantidad: 3,
+              cantidad_promocion: 0,
+              precio_centavos: 500,
+            },
+          ],
+        }),
+      });
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'precio-no-asignado',
+      });
+      expect(await buzonDe(op.clave)).toBeUndefined();
+      expect(await ventasConFolio(op.folio as string)).toHaveLength(0);
+    });
+
+    it('una presentacion borrada rechaza la venta entera, aunque las otras lineas sean buenas', async () => {
+      const op = ventaValida({
+        datos: datosVenta({
+          lineas: [
+            {
+              presentacion_id: presentacionId,
+              cantidad: 24,
+              cantidad_promocion: 0,
+              precio_centavos: 800,
+            },
+            {
+              presentacion_id: presentacionBorradaId,
+              cantidad: 2,
+              cantidad_promocion: 0,
+              precio_centavos: 800,
+            },
+          ],
+        }),
+      });
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'presentacion-inactiva',
+      });
+      // Ni media venta: la linea buena tampoco quedo.
+      expect(await ventasConFolio(op.folio as string)).toHaveLength(0);
+      expect(await buzonDe(op.clave)).toBeUndefined();
+    });
+
+    it('tras una colision con OTRA clave, el reintento legitimo de la primera sigue siendo duplicada', async () => {
+      const folio = formarFolio(
+        sucursalCodigo,
+        FECHA_VENTAS,
+        segmento,
+        siguienteConsecutivo(),
+      );
+      const legitima = ventaValida({ folio });
+      const otra = ventaValida({ folio });
+
+      const r1 = (await push({ operaciones: [legitima] }).expect(200))
+        .body as RespuestaPush;
+      const r2 = (await push({ operaciones: [otra] }).expect(200))
+        .body as RespuestaPush;
+      const r3 = (await push({ operaciones: [legitima] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(r1.resultados[0].estado).toBe('aplicada');
+      expect(r2.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'folio-duplicado',
+      });
+      expect(r3.resultados[0]).toMatchObject({
+        estado: 'duplicada',
+        id_servidor: r1.resultados[0].id_servidor,
+      });
+      expect(await ventasConFolio(folio)).toHaveLength(1);
+    });
+
+    it('un folio que ya existe en venta_nota pero SIN operacion en el buzon tambien colisiona (venta_nota_folio_key)', async () => {
+      // El caso que describe el comentario de `RESTRICCIONES_DE_FOLIO`
+      // (despacho.ts): una nota que no nacio del push (T-17, el portal) deja
+      // fila en `venta_nota` sin ninguna fila hermana en `sync_operacion`. El
+      // 23505 de ESE unique tiene que clasificarse igual que el del buzon.
+      const folio = formarFolio(
+        sucursalCodigo,
+        FECHA_VENTAS,
+        segmento,
+        siguienteConsecutivo(),
+      );
+      const notaAjenaAlPushId = (
+        await db
+          .insertInto('venta_nota')
+          .values({
+            folio,
+            fecha: FECHA_VENTAS,
+            cliente_id: clienteId,
+            vendedor_id: vendedorId,
+            monto_total: '50.00',
+            num_nota: '9999',
+            contado_credito: 'contado',
+            semana: 32,
+            mes: 8,
+            status: 'pagada',
+            sucursal_id: sucursalId,
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+
+      try {
+        const op = ventaValida({ folio });
+        const res = (await push({ operaciones: [op] }).expect(200))
+          .body as RespuestaPush;
+
+        expect(res.resultados[0]).toMatchObject({
+          estado: 'rechazada',
+          codigo: 'folio-duplicado',
+        });
+        expect(await buzonDe(op.clave)).toBeUndefined();
+        expect(await ventasConFolio(folio)).toHaveLength(1);
+      } finally {
+        await db
+          .deleteFrom('venta_nota')
+          .where('id', '=', notaAjenaAlPushId)
+          .execute();
+      }
+    });
+
+    it('regalar piezas a un prospecto sin lista de precios entra como promocion de $0 (D13)', async () => {
+      const op = ventaValida({
+        cliente_id: prospectoId,
+        datos: datosVenta({
+          contado_credito: 'contado',
+          lineas: [
+            {
+              presentacion_id: presentacionSinPrecioId,
+              cantidad: 0,
+              cantidad_promocion: 3,
+              precio_centavos: 0,
+            },
+          ],
+        }),
+      });
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(res.resultados[0].estado).toBe('aplicada');
+
+      const [venta] = await ventasConFolio(op.folio as string);
+      expect(venta).toMatchObject({
+        cliente_id: prospectoId,
+        monto_total: '0.00',
+        status: 'promocion',
+        pct_comision: null,
+      });
+      expect(await detalleDe(venta.id)).toEqual([
+        {
+          presentacion_id: presentacionSinPrecioId,
+          cantidad: 0,
+          cantidad_promocion: 3,
+          precio: '0.00',
+        },
+      ]);
+    });
+
+    it('una venta de contado nace pagada', async () => {
+      const op = ventaValida({
+        datos: datosVenta({ contado_credito: 'contado' }),
+      });
+      await push({ operaciones: [op] }).expect(200);
+
+      const [venta] = await ventasConFolio(op.folio as string);
+      expect(venta).toMatchObject({ status: 'pagada', monto_total: '192.00' });
+    });
+
+    it('un lote mixto entra parcial y en orden: jornada, venta buena, venta rechazada, jornada', async () => {
+      const jornada1 = operacion();
+      const buena = ventaValida();
+      const mala = ventaValida({
+        datos: datosVenta({
+          lineas: [
+            {
+              presentacion_id: presentacionSinPrecioId,
+              cantidad: 1,
+              cantidad_promocion: 0,
+              precio_centavos: 100,
+            },
+          ],
+        }),
+      });
+      const jornada2 = operacion();
+
+      const res = (
+        await push({ operaciones: [jornada1, buena, mala, jornada2] }).expect(
+          200,
+        )
+      ).body as RespuestaPush;
+
+      expect(res.resumen).toEqual({
+        recibidas: 4,
+        aplicadas: 3,
+        duplicadas: 0,
+        rechazadas: 1,
+      });
+      expect(res.resultados.map((r) => r.estado)).toEqual([
+        'aplicada',
+        'aplicada',
+        'rechazada',
+        'aplicada',
+      ]);
+      expect(res.resultados[2].codigo).toBe('precio-no-asignado');
+      expect(await ventasConFolio(buena.folio as string)).toHaveLength(1);
+      expect(await ventasConFolio(mala.folio as string)).toHaveLength(0);
+    });
+
+    it('la jornada sigue entrando solo al buzon, sin entidad proyectada', async () => {
+      const op = operacion();
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0].estado).toBe('aplicada');
+      expect(await buzonDe(op.clave)).toMatchObject({
+        entidad_tabla: null,
+        entidad_id: null,
+      });
+    });
+
+    it('semana y mes salen de fecha_operacion tal cual llego, no de ocurrido_en en UTC', async () => {
+      // 2026-06-01T02:00Z son las 19:00 del domingo 31 de mayo en Tijuana. El dia
+      // de trabajo es el 31 (semana ISO 22, mes 5); derivarlo del instante en
+      // UTC daria el lunes 1 de junio (semana 23, mes 6).
+      const op = ventaValida(
+        { ocurrido_en: '2026-06-01T02:00:00.000Z' },
+        '2026-05-31',
+        1,
+      );
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(res.resultados[0].estado).toBe('aplicada');
+
+      const [venta] = await ventasConFolio(op.folio as string);
+      expect(venta).toMatchObject({ semana: 22, mes: 5 });
+      expect(fechaTexto(venta.fecha)).toBe('2026-05-31');
+    });
+
+    it('guarda el precio de la nota firmada aunque el catalogo diga otro (D2)', async () => {
+      // El override del cliente es 8.00; la tablet vendio a 7.50.
+      const op = ventaValida({
+        datos: datosVenta({
+          lineas: [
+            {
+              presentacion_id: presentacionId,
+              cantidad: 10,
+              cantidad_promocion: 0,
+              precio_centavos: 750,
+            },
+          ],
+        }),
+      });
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(res.resultados[0].estado).toBe('aplicada');
+
+      const [venta] = await ventasConFolio(op.folio as string);
+      expect(venta.monto_total).toBe('75.00');
+      expect(await detalleDe(venta.id)).toEqual([
+        {
+          presentacion_id: presentacionId,
+          cantidad: 10,
+          cantidad_promocion: 0,
+          precio: '7.50',
+        },
+      ]);
+    });
+
+    it('varias lineas: dos vendidas a distinto precio y una de pura promocion suman el monto correcto y guardan cada renglon (D14)', async () => {
+      // 10 x 10.00 + 8 x 28.00 + 0 (promocion) = 324.00. La cantidad_promocion
+      // de la tercera linea NO suma al monto (reglas-venta.ts).
+      const op = ventaValida({
+        datos: datosVenta({
+          lineas: [
+            {
+              presentacion_id: presentacionId,
+              cantidad: 10,
+              cantidad_promocion: 0,
+              precio_centavos: 1000,
+            },
+            {
+              presentacion_id: presentacion2Id,
+              cantidad: 8,
+              cantidad_promocion: 0,
+              precio_centavos: 2800,
+            },
+            {
+              presentacion_id: presentacionSinPrecioId,
+              cantidad: 0,
+              cantidad_promocion: 4,
+              precio_centavos: 0,
+            },
+          ],
+        }),
+      });
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(res.resultados[0].estado).toBe('aplicada');
+
+      const [venta] = await ventasConFolio(op.folio as string);
+      expect(venta.monto_total).toBe('324.00');
+
+      const detalle = await detalleDe(venta.id);
+      expect(detalle).toHaveLength(3);
+      const porPresentacion = new Map(
+        detalle.map((d) => [d.presentacion_id, d]),
+      );
+      expect(porPresentacion.get(presentacionId)).toMatchObject({
+        cantidad: 10,
+        cantidad_promocion: 0,
+        precio: '10.00',
+      });
+      expect(porPresentacion.get(presentacion2Id)).toMatchObject({
+        cantidad: 8,
+        cantidad_promocion: 0,
+        precio: '28.00',
+      });
+      expect(porPresentacion.get(presentacionSinPrecioId)).toMatchObject({
+        cantidad: 0,
+        cantidad_promocion: 4,
+        precio: '0.00',
+      });
+    });
+
+    it('guarda la factura pendiente y los comentarios recortados', async () => {
+      const op = ventaValida({
+        datos: datosVenta({
+          factura: 'pendiente',
+          comentarios: '  Entregar en la bodega de atras  ',
+        }),
+      });
+      await push({ operaciones: [op] }).expect(200);
+
+      const [venta] = await ventasConFolio(op.folio as string);
+      expect(venta).toMatchObject({
+        factura: 'pendiente',
+        comentarios: 'Entregar en la bodega de atras',
+      });
+    });
+  });
+
   /* ================================================================ */
   /* Folios (T-14)                                                    */
   /* ================================================================ */
@@ -1671,9 +2138,10 @@ describe('Sincronizacion pull/push (e2e)', () => {
         //
         // Que camino toman por dentro depende de si las transacciones llegan a
         // solaparse, y eso no se puede forzar desde aqui. En la practica gana
-        // el `on conflict ... do nothing`. El desempate por clave del
-        // repositorio cubre el caso en que no: ver el comentario de
-        // `guardarOperacion`.
+        // el `on conflict ... do nothing`. El desempate por clave, para cuando
+        // no gana, vive en `SincronizacionService.clasificarColision`
+        // (`buscarPorClave` antes que `duenoDelFolio`) — rama defensiva que
+        // esta prueba no puede forzar a tomar.
         const op = conFolio({}, '2026-08-07', 32);
 
         const respuestas = await Promise.all([
