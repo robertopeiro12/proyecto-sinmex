@@ -181,7 +181,7 @@ usuario con sesion pasa.
   reenvío legítimo trae la misma clave y el mismo folio y es `duplicada`, no colisión.
 - **El segmento de vendedor (5º) lo asigna el SERVIDOR** y baja en el `pull`. La tablet no lo
   deriva de `nombre`: solo baja su propia ficha, así que no puede saber si comparte iniciales
-  con un compañero. La estrategia de desambiguación es **provisional** (ADR-0007).
+  con un compañero. La colisión de iniciales se **rechaza** (no se cede), evaluada por sucursal — ver `ADR-0007` (enmienda 2026-09-12) y `modules/nomina-comisiones/vendedores.service.ts`.
 
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
 `--`: sin él, npm se come los argumentos).
