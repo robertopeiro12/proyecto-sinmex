@@ -135,6 +135,16 @@ export const CODIGOS_RECHAZO = [
    * recupera sola cuando el administrador asigna el precio en el portal.
    */
   'precio-no-asignado',
+  /**
+   * El `tipo_negocio_id` de un alta de prospecto no existe o esta dado de
+   * baja. T-40.
+   *
+   * **No es un bug de la tablet**: su catalogo de tipos de negocio pudo
+   * quedarse viejo mientras estaba en ruta, o el administrador pudo dar de baja
+   * ese giro el mismo dia. Se reintenta en la siguiente sincronizacion, que
+   * ademas le baja el catalogo nuevo — igual que `presentacion-inactiva`.
+   */
+  'tipo-negocio-inexistente',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];

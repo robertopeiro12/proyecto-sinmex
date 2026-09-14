@@ -57,6 +57,12 @@ export const CODIGOS_RECHAZO = [
   'presentacion-inactiva',
   /** T-16: el cliente no tiene precio para esa presentacion. Lo arregla el portal. */
   'precio-no-asignado',
+  /**
+   * T-40: el giro que el vendedor eligio ya no esta en el catalogo del
+   * servidor. Se reintenta solo en la siguiente pasada, que ademas le baja el
+   * catalogo nuevo — el repositorio deja la fila en la cola, no la descarta.
+   */
+  'tipo-negocio-inexistente',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -350,7 +356,18 @@ export interface ResultadoOperacion {
   tipo: string;
   estado: EstadoOperacion;
   id_servidor?: string;
-  /** Uno de {@link CODIGOS_RECHAZO}, o uno que esta tablet aun no conoce. */
+  /**
+   * Uno de {@link CODIGOS_RECHAZO}, o uno que esta tablet aun no conoce.
+   *
+   * Sigue siendo `string` y no un tipo cerrado a proposito: un servidor mas
+   * nuevo puede mandar un codigo que esta tablet no conoce, y eso no puede
+   * reventar la sincronizacion.
+   *
+   * T-40 agrega `tipo-negocio-inexistente`: el giro que el vendedor eligio ya
+   * no esta en el catalogo del servidor. **Se reintenta solo** en la siguiente
+   * pasada, que ademas baja el catalogo nuevo — el repositorio deja la fila en
+   * la cola, no la descarta.
+   */
   codigo?: string;
   motivo?: string;
 }
