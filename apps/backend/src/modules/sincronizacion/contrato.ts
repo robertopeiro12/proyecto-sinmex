@@ -46,7 +46,7 @@ export const MAX_OPERACIONES_POR_LOTE = 500;
  * `datos` y lo proyecta a sus tablas (ADR-0009).
  *
  * Hecho: T-16 — `venta` (cabecera + lineas, ver {@link DatosVenta} y [[Venta-Nota]]).
- * TODO: T-20 — `cobranza` (abono/liquidacion sobre una nota, ver [[Cobranza-Abono]]).
+ * Hecho: T-20 — `cobranza` (abono/liquidacion sobre una nota, ver {@link DatosCobranza} y [[Cobranza-Abono]]).
  * TODO: T-27 — `gasto` (hielo, gasolina, reparacion, adelanto).
  * TODO: T-33 — `merma` (los 3 tipos de merma del documento de julio 2026).
  * TODO: T-39 — `ruta` (visitas, orden real, tiempos y GPS).
@@ -130,6 +130,16 @@ export const CODIGOS_RECHAZO = [
    * recupera sola cuando el administrador asigna el precio en el portal.
    */
   'precio-no-asignado',
+  /**
+   * La nota que se cobra no existe, su cliente no es de la sucursal del
+   * vendedor, o no es del `cliente_id` del sobre. T-20.
+   *
+   * Una nota ya pagada o cancelada en el servidor **no** cae aqui: el cobro se
+   * acepta y el monto va a las otras notas y al saldo a favor (el dinero si se
+   * cobro). Una cobranza sobre una venta que aun no se proyecto si cae aqui, y
+   * la tablet la reenvia en cada sincronizacion.
+   */
+  'nota-no-encontrada',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -171,6 +181,30 @@ export type DatosVenta = {
   comentarios: string | null;
   /** De 1 a 50, sin presentacion repetida. */
   lineas: LineaVenta[];
+};
+
+/** Catalogo de metodos de pago ([[Cobranza-Abono]]). En la app el default es `efectivo`. */
+export type MetodoPago = 'efectivo' | 'transferencia' | 'cheque';
+
+/**
+ * `datos` de una operacion `tipo: "cobranza"` (T-20).
+ *
+ * Un pago del cliente sobre UNA nota que eligio el vendedor. `cliente_id` y
+ * `folio` viajan en el **sobre** y en una cobranza son obligatorios. El
+ * servidor reparte el monto: primero la nota elegida hasta su saldo, despues
+ * las otras notas pendientes del cliente de la mas vieja a la mas nueva, y lo
+ * que sobre queda como saldo a favor. Un monto mayor al saldo se acepta.
+ *
+ * Es `type` y no `interface` por la misma razon que {@link DatosVenta}.
+ */
+export type DatosCobranza = {
+  /** uuid de la `venta_nota` (el `id` de una nota pendiente del pull). */
+  venta_nota_id: string;
+  /** Entero, de 1 a 999_999_999_999. */
+  monto_centavos: number;
+  metodo_pago: MetodoPago;
+  /** `AAAA-MM-DD`, no posterior a `fecha_operacion`. Informativa: el corte cuenta por `fecha_operacion`. */
+  fecha_pago: string;
 };
 
 export interface ResultadoOperacion {

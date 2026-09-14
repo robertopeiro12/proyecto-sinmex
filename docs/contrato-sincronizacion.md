@@ -291,9 +291,9 @@ saldría como **500 para todo el lote** — el todo-o-nada que este contrato pro
 no hacer.
 
 `datos` lo fija el ticket de cada módulo, y fijarlo es un cambio **aditivo** que
-no sube la versión del contrato. Hoy tiene forma fija **`venta`** (T-16, abajo);
-cobranza, gastos, merma y ruta siguen libres hasta T-20/T-27/T-33/T-39, y el
-servidor las guarda tal cual.
+no sube la versión del contrato. Hoy tienen forma fija **`venta`** (T-16) y
+**`cobranza`** (T-20), abajo; gastos, merma y ruta siguen libres hasta
+T-27/T-33/T-39, y el servidor las guarda tal cual.
 
 ### `datos` de una venta (T-16)
 
@@ -338,6 +338,40 @@ servidor las guarda tal cual.
 - Cada venta se aplica en **su propia transacción** junto con su fila del buzón: si se rechaza,
   no queda ni la venta ni la operación (§7).
 
+### `datos` de una cobranza (T-20)
+
+```jsonc
+{
+  "clave": "uuid del cobro local",
+  "tipo": "cobranza",
+  "fecha_operacion": "2026-09-14",
+  "ocurrido_en": "2026-09-14T12:10:00.000-07:00",
+  "cliente_id": "uuid",              // obligatorio en cobranza
+  "folio": "TJ260914AP04",           // obligatorio en cobranza; mismo contador del día que la venta
+  "datos": {
+    "venta_nota_id": "uuid",         // la nota que eligió el vendedor (id del pull)
+    "monto_centavos": 15000,         // entero, 1..999999999999; puede pasar del saldo
+    "metodo_pago": "efectivo",       // efectivo | transferencia | cheque
+    "fecha_pago": "2026-09-12"       // AAAA-MM-DD, no posterior a fecha_operacion
+  }
+}
+```
+
+- `cliente_id` y `folio` viajan **en el sobre** y son **obligatorios**: sin cualquiera de los dos →
+  `datos-invalidos`.
+- **El servidor reparte el pago**, en este orden: la nota elegida hasta su saldo; si sobra, las
+  **otras notas pendientes/abonadas del mismo cliente, de la más vieja a la más nueva** (`fecha` y
+  luego `folio`); lo que aún sobre queda como **saldo a favor** del cliente. Cada nota que recibe
+  dinero gana una fila en `cobranza_abono` con el mismo folio; queda `pagada` si su saldo llega a 0
+  y `abonado` si no.
+- **El saldo es derivado**: `monto_total − Σ abonos vivos`, calculado por el servidor al proyectar.
+- **Una nota ya pagada, cancelada o borrada no rechaza el cobro**: su saldo aplicable es 0 y todo el
+  monto pasa a las otras notas y al saldo a favor. El dinero sí se cobró.
+- El único rechazo del dominio es **`nota-no-encontrada`**: la nota no existe, su cliente no es de
+  la sucursal del vendedor, o no es del `cliente_id` del sobre.
+- `fecha_pago` es informativa: el corte cuenta el cobro en `fecha_operacion`.
+- Cada cobranza se aplica en **su propia transacción** junto con su fila del buzón (§7).
+
 ### Respuesta `200` — parcial y honesta
 
 ```jsonc
@@ -381,6 +415,7 @@ texto en español** si reintenta o si avisa al vendedor.
 | `folio-duplicado` | **Colisión de folios**: otra operación ya subió ese folio |
 | `presentacion-inactiva` | Una línea de venta nombra una presentación que no existe, está dada de baja o cuyo producto está inactivo. Se reintenta en la siguiente sincronización (T-16) |
 | `precio-no-asignado` | Una línea con cantidad > 0 y el cliente no tiene **ningún** precio para esa presentación vigente a `fecha_operacion` ni asignado después, hasta hoy. Comprueba existencia, nunca valor. Se recupera cuando el portal asigna el precio y la tablet vuelve a sincronizar (T-16) |
+| `nota-no-encontrada` | La nota que se cobra no existe, su cliente no es de la sucursal del vendedor, o no es del `cliente_id` del sobre. Una nota ya pagada o cancelada **no** cae aquí: el cobro se acepta y va a otras notas o a saldo a favor. La tablet la reenvía en cada sincronización (T-20) |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo

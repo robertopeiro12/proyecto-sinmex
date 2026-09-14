@@ -55,6 +55,8 @@ export const CODIGOS_RECHAZO = [
   'presentacion-inactiva',
   /** T-16: el cliente no tiene precio para esa presentacion. Lo arregla el portal. */
   'precio-no-asignado',
+  /** T-20: la nota cobrada no existe en el servidor o no es de este cliente. Se reenvia. */
+  'nota-no-encontrada',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -186,7 +188,7 @@ export interface OperacionSaliente {
    * (T-14), o ausente si su tipo no lleva folio.
    *
    * Hoy la `jornada` no lo lleva: no es una nota que nadie firme. Venta y
-   * cobranza si lo llevaran (T-16/T-20).
+   * cobranza si lo llevan, y en ellas es obligatorio (T-16/T-20).
    *
    * > [!danger] El folio NO es la clave de idempotencia
    * > Son capas distintas y hay que mantenerlas separadas (ADR-0006). `clave`
@@ -236,6 +238,25 @@ export type DatosVenta = {
   comentarios: string | null;
   /** De 1 a 50, sin presentacion repetida. */
   lineas: LineaVenta[];
+};
+
+/** Catalogo de metodos de pago. En la app el default es `efectivo`. */
+export type MetodoPago = 'efectivo' | 'transferencia' | 'cheque';
+
+/**
+ * `datos` de una operacion `tipo: "cobranza"` (T-20).
+ *
+ * Un pago sobre UNA nota; el servidor reparte el excedente a las otras notas
+ * del cliente y al saldo a favor. `cliente_id` y `folio` van en el sobre y son
+ * obligatorios.
+ */
+export type DatosCobranza = {
+  venta_nota_id: string;
+  /** Entero, de 1 a 999_999_999_999. */
+  monto_centavos: number;
+  metodo_pago: MetodoPago;
+  /** `AAAA-MM-DD`, no posterior a `fecha_operacion`. */
+  fecha_pago: string;
 };
 
 export interface ResultadoOperacion {
