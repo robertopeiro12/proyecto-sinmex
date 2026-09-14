@@ -18,8 +18,20 @@ import Database from 'better-sqlite3';
 import type { BaseDatos, ParametrosSQL, ResultadoEscritura } from './base-datos';
 
 /**
- * Abre una base en memoria (o en un archivo, si se pasa ruta) con los mismos
- * PRAGMA de conexion que usa la tablet.
+ * Abre una base en memoria (o en un archivo, si se pasa ruta).
+ *
+ * Solo fija `foreign_keys`, y no los otros dos pragmas de conexion de
+ * `driver-expo.ts` (`journal_mode = WAL`, `synchronous = FULL`) a proposito:
+ * las pruebas de esta capa abren siempre `:memory:` (ver `pruebas-apoyo.ts`),
+ * y ahi WAL no aplica —SQLite lo ignora en silencio y se queda en
+ * `journal_mode = memory`— y `synchronous` no tiene disco que sincronizar.
+ * Fijarlos igual seria honesto en el texto pero un placebo en el efecto: la
+ * durabilidad ante corte de corriente (ADR-0010) no es observable con este
+ * driver, y `foreign_keys` es el unico de los tres que cambia el
+ * **comportamiento del SQL** (rechaza violaciones de llave foranea), que es
+ * justo lo que estas pruebas necesitan igualar. La cobertura del pragma de
+ * durabilidad vive en `driver-expo.spec.ts`, con un doble de
+ * `openDatabaseSync`.
  */
 export function abrirBaseDatosNode(ruta = ':memory:'): BaseDatos {
   const bd = new Database(ruta);
