@@ -87,6 +87,7 @@ export class SincronizacionService {
       productos,
       presentaciones,
       clientes,
+      tiposNegocio,
       notasPendientes,
     ] = await Promise.all([
       this.repo.sucursales(vendedor.sucursal_id, desde),
@@ -95,6 +96,8 @@ export class SincronizacionService {
       this.repo.productos(desde),
       this.repo.presentaciones(desde),
       this.repo.clientes(vendedor.sucursal_id, desde),
+      // T-40: el desplegable de la pantalla de prospectos. No lleva sucursal.
+      this.repo.tiposNegocio(desde),
       this.repo.notasPendientes(vendedor.sucursal_id, desde),
     ]);
 
@@ -133,6 +136,7 @@ export class SincronizacionService {
         productos,
         presentaciones,
         clientes,
+        tipos_negocio: tiposNegocio,
         precios,
       },
       notas_pendientes: notasPendientes,

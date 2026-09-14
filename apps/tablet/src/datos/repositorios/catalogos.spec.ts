@@ -255,6 +255,39 @@ describe('repositorio de catalogos', () => {
       expect(conLaSenal(depsNuevas()).map((v) => v.id)).toEqual(['veh-1']);
     });
   });
+
+  describe('tipos de negocio (T-40)', () => {
+    it('lista solo los activos, por nombre', () => {
+      const { catalogos } = conCatalogos();
+
+      expect(catalogos.listarTiposNegocio().map((t) => t.nombre)).toEqual([
+        'Abarrotes',
+        'Taqueria',
+      ]);
+    });
+
+    it('obtenerTipoNegocio devuelve tambien uno dado de baja', () => {
+      // Hace falta para poder NOMBRAR el giro de un prospecto ya capturado: la
+      // fila no se borra, solo deja de ofrecerse (politica de purga de T-07).
+      const { catalogos } = conCatalogos();
+
+      expect(catalogos.obtenerTipoNegocio('tn-3')).toMatchObject({
+        nombre: 'Ciber (baja)',
+        activo: 0,
+      });
+      expect(catalogos.obtenerTipoNegocio('no-existe')).toBeNull();
+    });
+
+    it('una baja posterior deja de ofrecerse sin borrar la fila', () => {
+      const { catalogos } = conCatalogos();
+      catalogos.guardarSnapshot({
+        tiposNegocio: [{ id: 'tn-2', nombre: 'Taqueria', activo: 0 }],
+      });
+
+      expect(catalogos.listarTiposNegocio().map((t) => t.id)).toEqual(['tn-1']);
+      expect(catalogos.obtenerTipoNegocio('tn-2')).toMatchObject({ activo: 0 });
+    });
+  });
 });
 
 /**

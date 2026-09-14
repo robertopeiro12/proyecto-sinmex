@@ -282,6 +282,11 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
     productos: c.productos,
     presentaciones: c.presentaciones,
     clientes: c.clientes,
+    // T-40: un servidor anterior a este ticket no manda la coleccion. Se pasa
+    // `undefined` y `guardarSnapshot` simplemente no escribe nada de esa tabla;
+    // la pantalla de prospectos se queda sin desplegable y lo dice. Es lo que el
+    // contrato §3 pide de un cambio aditivo: ignorar lo que no se conoce.
+    tiposNegocio: c.tipos_negocio,
     precios: c.precios,
     notas: respuesta.notas_pendientes,
   };

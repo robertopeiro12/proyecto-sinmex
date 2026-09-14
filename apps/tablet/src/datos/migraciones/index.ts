@@ -3,6 +3,7 @@ import { sincronizacion } from './002-sincronizacion';
 import { folios } from './003-folios';
 import { ventas } from './004-ventas';
 import { prospectoCamposOpcionales } from './005-prospecto-campos-opcionales';
+import { prospectos } from './006-prospectos';
 import type { Migracion } from './motor';
 
 /**
@@ -20,6 +21,7 @@ export const migraciones: readonly Migracion[] = [
   folios,
   ventas,
   prospectoCamposOpcionales,
+  prospectos,
 ];
 
 export { ejecutarMigraciones, versionEsquema } from './motor';
