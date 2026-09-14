@@ -320,6 +320,12 @@ export interface ClientePull extends FilaSincronizable {
   lat: number | null;
   lng: number | null;
   sucursal_id: string;
+  /**
+   * Saldo a favor del cliente, en centavos: la suma de sus movimientos vivos de
+   * `saldo_favor_movimiento` (T-20, D5). La tablet solo lo muestra; usarlo es del
+   * portal. Aditivo: una tablet vieja lo ignora.
+   */
+  saldo_favor_centavos: number;
 }
 
 /**
@@ -339,15 +345,24 @@ export interface PrecioPull extends FilaSincronizable {
   vigente_desde: string;
 }
 
+/** Un abono vivo de una nota, para mostrar los pagos previos al cobrar (T-20). */
+export interface AbonoPull {
+  fecha_pago: string;
+  monto_centavos: number;
+  metodo_pago: MetodoPago;
+}
+
 /**
- * Nota pendiente por cobrar, para poder seleccionarla al cobrar/abonar sin red.
+ * Nota por cobrar, para poder seleccionarla al cobrar/abonar sin red.
  *
- * > [!warning] `saldo_centavos` viene de un campo almacenado
- * > Sale del `saldo_pendiente` del ultimo [[Cobranza-Abono|abono]] de la nota, y
- * > del monto total si aun no tiene ninguno. [[Cobranza-Abono]] deja
- * > **pendiente de confirmar** si el saldo debe ser almacenado o derivado
- * > (monto − Σ abonos); T-20 lo cerrara. Aqui se lee lo que hay, no se inventa
- * > un calculo.
+ * - `saldo_centavos` es **derivado** (T-20, D7): `monto_total − Σ abonos vivos`,
+ *   nunca negativo. `cobranza_abono.saldo_pendiente` es solo una foto.
+ * - Con `desde`, tambien bajan las notas a credito que dejaron de estar
+ *   pendientes (pagadas, canceladas, borradas) con `activo: 0`, para que la
+ *   tablet deje de ofrecerlas.
+ * - `status` **no se ensancha**: una nota cerrada viaja como `abonado` si tiene
+ *   abonos y como `pendiente` si no. Una tablet vieja guarda esta tabla con un
+ *   CHECK de esos dos valores y perderia el pull entero con otro.
  */
 export interface NotaPendientePull extends FilaSincronizable {
   folio: string;
@@ -357,6 +372,8 @@ export interface NotaPendientePull extends FilaSincronizable {
   status: 'pendiente' | 'abonado';
   monto_total_centavos: number;
   saldo_centavos: number;
+  /** Vivos, por fecha de pago. Aditivo: una tablet vieja lo ignora. */
+  abonos: AbonoPull[];
 }
 
 export interface RespuestaPull {

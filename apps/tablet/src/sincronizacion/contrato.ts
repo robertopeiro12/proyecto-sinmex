@@ -120,6 +120,8 @@ export interface ClientePull extends FilaSincronizable {
   lat: number | null;
   lng: number | null;
   sucursal_id: string;
+  /** T-20: suma de los movimientos vivos de saldo a favor, en centavos. Solo se muestra. */
+  saldo_favor_centavos: number;
 }
 
 export interface PrecioPull extends FilaSincronizable {
@@ -129,6 +131,18 @@ export interface PrecioPull extends FilaSincronizable {
   vigente_desde: string;
 }
 
+/** Un abono vivo de una nota (T-20). */
+export interface AbonoPull {
+  fecha_pago: string;
+  monto_centavos: number;
+  metodo_pago: MetodoPago;
+}
+
+/**
+ * Nota por cobrar. T-20: `saldo_centavos` es derivado (monto − Σ abonos vivos);
+ * con `desde` bajan tambien las notas cerradas con `activo: 0`, y su `status`
+ * sigue siendo `pendiente`/`abonado` para no romper el CHECK local.
+ */
 export interface NotaPendientePull extends FilaSincronizable {
   folio: string;
   num_nota: string;
@@ -137,6 +151,7 @@ export interface NotaPendientePull extends FilaSincronizable {
   status: 'pendiente' | 'abonado';
   monto_total_centavos: number;
   saldo_centavos: number;
+  abonos: AbonoPull[];
 }
 
 export interface RespuestaPull {

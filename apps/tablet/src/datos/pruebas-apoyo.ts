@@ -178,10 +178,11 @@ export function respuestaPullDePrueba(
       vehiculos: s.vehiculos ?? [],
       productos: s.productos ?? [],
       presentaciones: s.presentaciones ?? [],
-      clientes: s.clientes ?? [],
+      // T-20: el snapshot local aun no guarda estos campos (llegan en la migracion 005).
+      clientes: (s.clientes ?? []).map((c) => ({ ...c, saldo_favor_centavos: 0 })),
       precios: s.precios ?? [],
     },
-    notas_pendientes: s.notas ?? [],
+    notas_pendientes: (s.notas ?? []).map((n) => ({ ...n, abonos: [] })),
     ...extra,
   };
 }

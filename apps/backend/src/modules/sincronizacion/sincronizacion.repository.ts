@@ -4,6 +4,7 @@ import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import type { DB } from '../../database/schema';
 import type {
   ClientePull,
+  MetodoPago,
   NotaPendientePull,
   PrecioPull,
   PresentacionPull,
@@ -202,6 +203,17 @@ export class SincronizacionRepository {
         'sucursal_id',
         'deleted_at',
       ])
+      // T-20 (D5): el saldo a favor es la suma de los movimientos vivos. Con
+      // `desde`, un cliente vuelve a bajar porque `registrarCobranza` le toca
+      // `updated_at` al crearle un movimiento.
+      .select((eb) =>
+        eb
+          .selectFrom('saldo_favor_movimiento as sf')
+          .select(sql<string>`coalesce(sum(sf.monto), 0)::text`.as('total'))
+          .whereRef('sf.cliente_id', '=', 'cliente.id')
+          .where('sf.deleted_at', 'is', null)
+          .as('saldo_favor'),
+      )
       .where('sucursal_id', '=', sucursalId);
     if (desde) q = q.where('updated_at', '>', desde);
 
@@ -219,6 +231,7 @@ export class SincronizacionRepository {
       lat: aNumero(f.lat),
       lng: aNumero(f.lng),
       sucursal_id: f.sucursal_id,
+      saldo_favor_centavos: aCentavos(f.saldo_favor),
       activo: bandera(true, f.deleted_at),
     }));
   }
@@ -326,44 +339,76 @@ export class SincronizacionRepository {
       id: string;
       folio: string;
       num_nota: string;
-      fecha: Date;
+      fecha: string;
       cliente_id: string;
       status: string;
       monto_total: string;
-      saldo: string | null;
+      abonado: string;
+      abonos: { fecha_pago: string; monto: string; metodo_pago: string }[];
       borrada: Date | null;
     }>`
-      select vn.id, vn.folio, vn.num_nota, vn.fecha, vn.cliente_id, vn.status,
-             vn.monto_total,
-             (select ca.saldo_pendiente
-                from cobranza_abono ca
-               where ca.venta_nota_id = vn.id
-                 and ca.deleted_at is null
-               order by ca.fecha_pago desc, ca.created_at desc
-               limit 1) as saldo,
+      select vn.id, vn.folio, vn.num_nota,
+             to_char(vn.fecha, 'YYYY-MM-DD') as fecha,
+             vn.cliente_id, vn.status, vn.monto_total,
+             coalesce(a.abonado, 0)::text as abonado,
+             coalesce(a.abonos, '[]'::json) as abonos,
              vn.deleted_at as borrada
         from venta_nota vn
         join cliente c on c.id = vn.cliente_id
+        left join lateral (
+          select sum(ca.monto) as abonado,
+                 json_agg(
+                   json_build_object(
+                     'fecha_pago', to_char(ca.fecha_pago, 'YYYY-MM-DD'),
+                     'monto', ca.monto::text,
+                     'metodo_pago', ca.metodo_pago
+                   ) order by ca.fecha_pago, ca.created_at
+                 ) as abonos
+            from cobranza_abono ca
+           where ca.venta_nota_id = vn.id
+             and ca.deleted_at is null
+        ) a on true
        where c.sucursal_id = ${sucursalId}
-         and vn.status in ('pendiente', 'abonado')
-         ${desde ? sql`and vn.updated_at > ${desde}` : sql``}
-       order by vn.fecha
+         and ${
+           desde
+             ? // Incremental: lo que cambio, incluidas las notas a credito que
+               // se cerraron (D12). Una de contado nunca fue cobrable.
+               sql`vn.updated_at > ${desde}
+                   and (vn.status in ('pendiente', 'abonado') or vn.contado_credito = 'credito')`
+             : sql`vn.status in ('pendiente', 'abonado')`
+         }
+       order by vn.fecha, vn.folio
     `.execute(this.db);
 
-    return filas.rows.map((f) => ({
-      id: f.id,
-      folio: f.folio,
-      num_nota: f.num_nota,
-      fecha: fechaISO(f.fecha),
-      cliente_id: f.cliente_id,
-      status: f.status as 'pendiente' | 'abonado',
-      monto_total_centavos: aCentavos(f.monto_total),
-      // El saldo del ultimo abono; si no hay ninguno, la nota entera sigue a
-      // deber. Ver la advertencia de `NotaPendientePull` en `contrato.ts`.
-      saldo_centavos:
-        f.saldo === null ? aCentavos(f.monto_total) : aCentavos(f.saldo),
-      activo: bandera(true, f.borrada),
-    }));
+    return filas.rows.map((f) => {
+      const abierta = f.status === 'pendiente' || f.status === 'abonado';
+      return {
+        id: f.id,
+        folio: f.folio,
+        num_nota: f.num_nota,
+        fecha: f.fecha,
+        cliente_id: f.cliente_id,
+        // Una nota cerrada viaja con un status que el CHECK de una tablet vieja
+        // acepta; lo que la saca de la tablet es `activo: 0` (ver contrato).
+        status: abierta
+          ? (f.status as 'pendiente' | 'abonado')
+          : f.abonos.length > 0
+            ? 'abonado'
+            : 'pendiente',
+        monto_total_centavos: aCentavos(f.monto_total),
+        // D7: derivado, nunca de la foto `saldo_pendiente`.
+        saldo_centavos: Math.max(
+          0,
+          aCentavos(f.monto_total) - aCentavos(f.abonado),
+        ),
+        abonos: f.abonos.map((a) => ({
+          fecha_pago: a.fecha_pago,
+          monto_centavos: aCentavos(a.monto),
+          metodo_pago: a.metodo_pago as MetodoPago,
+        })),
+        activo: abierta && f.borrada === null ? 1 : 0,
+      };
+    });
   }
 
   /* ---------------------------------------------------------------- */

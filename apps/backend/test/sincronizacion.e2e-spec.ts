@@ -887,6 +887,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
       expect(cliente?.promocion).toBe('10+1');
       expect(cliente?.plazo_credito_dias).toBe(7);
       expect(cliente?.activo).toBe(1);
+      // T-20: sin movimientos, el saldo a favor es 0.
+      expect(cliente?.saldo_favor_centavos).toBe(0);
 
       // Productos y vehiculos.
       expect(cuerpo.catalogos.productos.some((p) => p.id === productoId)).toBe(
@@ -899,13 +901,20 @@ describe('Sincronizacion pull/push (e2e)', () => {
         true,
       );
 
-      // Notas pendientes, en centavos y con el saldo del ultimo abono.
+      // Notas pendientes, en centavos, con el saldo derivado (T-20, D7) y sus abonos.
       const nota = cuerpo.notas_pendientes.find((n) => n.id === notaId);
       expect(nota).toBeDefined();
       expect(nota?.status).toBe('abonado');
       expect(nota?.monto_total_centavos).toBe(25000);
       expect(nota?.saldo_centavos).toBe(15000);
       expect(nota?.cliente_id).toBe(clienteId);
+      expect(nota?.abonos).toEqual([
+        {
+          fecha_pago: '2026-08-03',
+          monto_centavos: 10000,
+          metodo_pago: 'efectivo',
+        },
+      ]);
     });
 
     it('NO baja clientes de otra sucursal', async () => {
@@ -2360,6 +2369,163 @@ describe('Sincronizacion pull/push (e2e)', () => {
       });
       expect(res.resultados[0].motivo).toMatch(/^folio: /);
       expect(await abonosDe(notas[0])).toEqual([]);
+    });
+  });
+
+  /* ================================================================ */
+  /* Pull (T-20): saldo derivado, abonos, saldo a favor               */
+  /* ================================================================ */
+
+  describe('pull (T-20)', () => {
+    it('el saldo es derivado de los abonos vivos, no de la foto saldo_pendiente', async () => {
+      const { notas } = await clienteConNotas([
+        {
+          monto: '300.00',
+          fecha: '2026-08-02',
+          status: 'abonado',
+          abonos: ['100.00', '50.00'],
+        },
+      ]);
+      // Un abono borrado no cuenta.
+      await db
+        .insertInto('cobranza_abono')
+        .values({
+          venta_nota_id: notas[0],
+          fecha_pago: '2026-08-02',
+          fecha_operacion: '2026-08-02',
+          vendedor_id: vendedorId,
+          monto: '25.00',
+          tipo: 'abono',
+          saldo_pendiente: '0.00',
+          metodo_pago: 'cheque',
+          deleted_at: new Date(),
+        })
+        .execute();
+
+      const cuerpo = (await pull().expect(200)).body as RespuestaPull;
+      const nota = cuerpo.notas_pendientes.find((n) => n.id === notas[0]);
+      expect(nota).toMatchObject({
+        status: 'abonado',
+        monto_total_centavos: 30000,
+        saldo_centavos: 15000,
+        activo: 1,
+      });
+      expect(nota?.abonos).toEqual([
+        {
+          fecha_pago: '2026-08-02',
+          monto_centavos: 10000,
+          metodo_pago: 'efectivo',
+        },
+        {
+          fecha_pago: '2026-08-02',
+          monto_centavos: 5000,
+          metodo_pago: 'efectivo',
+        },
+      ]);
+    });
+
+    it('el cliente baja con su saldo a favor: la suma de sus movimientos vivos', async () => {
+      const { clienteId: cli } = await clienteConNotas([]);
+      await db
+        .insertInto('saldo_favor_movimiento')
+        .values([
+          {
+            cliente_id: cli,
+            vendedor_id: vendedorId,
+            monto: '120.50',
+            origen: 'excedente_cobro',
+            fecha_operacion: FECHA_COBROS,
+          },
+          {
+            cliente_id: cli,
+            vendedor_id: vendedorId,
+            monto: '30.00',
+            origen: 'excedente_cobro',
+            fecha_operacion: FECHA_COBROS,
+          },
+          {
+            cliente_id: cli,
+            vendedor_id: vendedorId,
+            monto: '99.00',
+            origen: 'excedente_cobro',
+            fecha_operacion: FECHA_COBROS,
+            deleted_at: new Date(),
+          },
+        ])
+        .execute();
+
+      const cuerpo = (await pull().expect(200)).body as RespuestaPull;
+      const cliente = cuerpo.catalogos.clientes.find((c) => c.id === cli);
+      expect(cliente?.saldo_favor_centavos).toBe(15050);
+    });
+
+    it('con desde, una nota liquidada o cancelada baja con activo 0 y un status que una tablet vieja acepta', async () => {
+      const { clienteId: cli, notas } = await clienteConNotas([
+        { monto: '100.00', fecha: '2026-08-03' },
+        { monto: '70.00', fecha: '2026-08-04' },
+      ]);
+      const corte = ((await pull().expect(200)).body as RespuestaPull)
+        .servidor_en;
+
+      await push({
+        operaciones: [cobranzaValida(cli, notas[0], { monto_centavos: 10000 })],
+      }).expect(200);
+      await db
+        .updateTable('venta_nota')
+        .set({ status: 'cuenta_perdida' })
+        .where('id', '=', notas[1])
+        .execute();
+
+      const cuerpo = (await pull({ desde: corte }).expect(200))
+        .body as RespuestaPull;
+      const liquidada = cuerpo.notas_pendientes.find((n) => n.id === notas[0]);
+      const perdida = cuerpo.notas_pendientes.find((n) => n.id === notas[1]);
+
+      expect(liquidada).toMatchObject({
+        activo: 0,
+        status: 'abonado',
+        saldo_centavos: 0,
+      });
+      expect(liquidada?.abonos).toEqual([
+        {
+          fecha_pago: FECHA_COBROS,
+          monto_centavos: 10000,
+          metodo_pago: 'efectivo',
+        },
+      ]);
+      expect(perdida).toMatchObject({
+        activo: 0,
+        status: 'pendiente',
+        saldo_centavos: 7000,
+        abonos: [],
+      });
+    });
+
+    it('con desde, el cliente baja cuando un cobro le deja saldo a favor', async () => {
+      const { clienteId: cli, notas } = await clienteConNotas([
+        { monto: '100.00', fecha: '2026-08-03' },
+      ]);
+      const corte = ((await pull().expect(200)).body as RespuestaPull)
+        .servidor_en;
+
+      await push({
+        operaciones: [cobranzaValida(cli, notas[0], { monto_centavos: 15000 })],
+      }).expect(200);
+
+      const cuerpo = (await pull({ desde: corte }).expect(200))
+        .body as RespuestaPull;
+      const cliente = cuerpo.catalogos.clientes.find((c) => c.id === cli);
+      expect(cliente?.saldo_favor_centavos).toBe(5000);
+    });
+
+    it('sin desde, las notas cerradas no bajan', async () => {
+      const { notas } = await clienteConNotas([
+        { monto: '80.00', fecha: '2026-08-03', status: 'pagada' },
+      ]);
+      const cuerpo = (await pull().expect(200)).body as RespuestaPull;
+      expect(cuerpo.notas_pendientes.some((n) => n.id === notas[0])).toBe(
+        false,
+      );
     });
   });
 

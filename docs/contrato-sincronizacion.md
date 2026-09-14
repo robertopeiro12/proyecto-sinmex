@@ -191,7 +191,8 @@ nadie relacionaría con nada.
     "clientes":       [{ "id": "…", "nombre": "…", "domicilio": "…", "telefono": "…",
                          "encargado": null, "tipo": "cliente", "pct_comision": 3.5,
                          "promocion": "10+1", "plazo_credito_dias": 7,
-                         "lat": 32.5149, "lng": -117.0382, "sucursal_id": "…", "activo": 1 }],
+                         "lat": 32.5149, "lng": -117.0382, "sucursal_id": "…",
+                         "saldo_favor_centavos": 0, "activo": 1 }],
     "precios":        [{ "id": "<clienteId>:<presentacionId>", "cliente_id": "…",
                          "presentacion_id": "…", "precio_centavos": 800,
                          "vigente_desde": "2026-02-01", "activo": 1 }]
@@ -199,6 +200,8 @@ nadie relacionaría con nada.
   "notas_pendientes": [{ "id": "…", "folio": "TJ260801AP01", "num_nota": "1234",
                           "fecha": "2026-08-01", "cliente_id": "…", "status": "abonado",
                           "monto_total_centavos": 25000, "saldo_centavos": 15000,
+                          "abonos": [{ "fecha_pago": "2026-08-03", "monto_centavos": 10000,
+                                       "metodo_pago": "efectivo" }],
                           "activo": 1 }]
 }
 ```
@@ -246,12 +249,21 @@ listas en campo.
   perdería cambios. Se manda todo si alguna de las tres se movió desde `desde`,
   y nada si ninguna lo hizo.
 
-### `saldo_centavos` — pendiente de confirmar
+### Notas pendientes: saldo derivado, abonos y notas cerradas (T-20)
 
-Sale del `saldo_pendiente` del **último abono** de la nota (y del monto total si
-aún no tiene ninguno). `10-Dominio/Entidades/Cobranza-Abono.md` deja abierto si
-ese saldo debería ser almacenado o derivado (`monto − Σ abonos`); **T-20 lo
-cerrará**. Aquí se lee lo que hay, no se inventa un cálculo.
+- **`saldo_centavos` es derivado:** `monto_total − Σ abonos vivos`, nunca negativo. La columna
+  `cobranza_abono.saldo_pendiente` es una foto del saldo tras cada fila y no se lee como fuente.
+- **`abonos`** trae los abonos vivos de la nota (`fecha_pago`, `monto_centavos`, `metodo_pago`),
+  por fecha de pago, para mostrar los pagos previos al cobrar.
+- **Con `desde`, bajan también las notas a crédito que dejaron de estar pendientes** (pagadas,
+  canceladas, borradas) con `activo: 0`. Así la tablet deja de ofrecer una nota que liquidó otro
+  dispositivo o el portal. Una nota cerrada viaja con `status` `abonado` si tiene abonos y
+  `pendiente` si no: una tablet anterior a T-20 guarda esta tabla con un CHECK de esos dos valores
+  y, con otro, perdería el pull entero.
+- **`saldo_favor_centavos`** de cada cliente es la suma de sus movimientos vivos de saldo a favor.
+  Un cobro que deja saldo a favor le toca `updated_at` al cliente, así que vuelve a bajar en el
+  pull incremental (y con él, la colección de precios completa: es su regla de siempre).
+- Los tres campos son **aditivos**: una tablet vieja los ignora.
 
 ---
 
