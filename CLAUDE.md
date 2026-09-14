@@ -116,6 +116,9 @@ de un PR **no** se suben hasta que el PR se mergea. El motivo: si el PR cambia e
 queda con un esquema que `main` nunca tuvo, y una migración *correctiva* encima es peor que
 esperar. Quien mergea un PR con migraciones las empuja siguiendo este protocolo, en este orden:
 
+**En la práctica lo hace Roberto**, confirmado el 2026-09-14: él mergea y él empuja. Así llegó
+T-62 a la nube. Si mergeas tú, el push es tuyo — el protocolo no cambia, solo quién lo corre.
+
 1. **Pre-flight de solo lectura** contra la nube por cada `check`/`not null`/`unique` nuevo:
    una consulta que cuente las filas que lo violarían, y debe dar 0. `db push --dry-run` **no**
    sirve para esto — no ejecuta SQL, solo lista versiones. Y un push de varias versiones las
