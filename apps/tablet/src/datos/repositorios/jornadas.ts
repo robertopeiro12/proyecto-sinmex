@@ -92,7 +92,7 @@ export function crearRepositorioJornadas({ bd, reloj, generarId }: DepsRepositor
      * captura, y dejarlo pasar produciria kilometraje negativo en el reporte
      * del portal.
      *
-     * TODO: T-38 — el corte del dia (cobranza, gastos, comision, efectividad)
+     * TODO: T-33 — el corte del dia (cobranza, gastos, comision, efectividad)
      *       se calcula y se imprime en su propio ticket; aqui solo se cierra la
      *       jornada.
      */

@@ -2,16 +2,23 @@
  * El 5o segmento del [[Folios|folio]]: las 2 letras que identifican al
  * [[Vendedor]] (T-14).
  *
- * > [!warning] ESTRATEGIA PROVISIONAL — pendiente de confirmar con el cliente
+ * > [!success] Implementado — enmienda de ADR-0007 (T-62, 2026-09-12)
  * > [[ADR-0001 Formato de folios]] dice "inicial del nombre + inicial del
- * > apellido" y deja **explicitamente abierto** que pasa cuando dos vendedores
- * > comparten iniciales (dos "A P"). [[Vendedor]] repite la misma duda. Las
- * > fuentes no lo aclaran y `AGENTS.md` prohibe inventar reglas de negocio.
+ * > apellido" y dejaba explicitamente abierto que pasa cuando dos vendedores
+ * > comparten iniciales. El cliente confirmo dos veces (ver la cita completa
+ * > en ADR-0007): el alta se RECHAZA si las iniciales ya estan tomadas por
+ * > otro vendedor de la MISMA sucursal -- no se cede a la siguiente
+ * > combinacion. La colision se evalua por sucursal, no globalmente: el
+ * > folio ya lleva la sucursal como primer segmento, asi que TJ260912JP01 y
+ * > MX260912JP01 nunca chocan aunque compartan segmento de vendedor.
  * >
- * > Lo que hay aqui es una estrategia **defendible pero provisional**, marcada
- * > como tal en el vault (ADR-0007): se respeta la regla del ADR siempre que se
- * > pueda, y cuando choca se cede de forma **determinista** conservando la
- * > inicial del nombre. Puede cambiar en cuanto el cliente responda.
+ * > La regla vive en `VendedoresService.crear()`
+ * > (`modules/nomina-comisiones/vendedores.service.ts`): usa SOLO el primer
+ * > candidato de `candidatosDeSegmento()` (abajo), sin caminar la lista de
+ * > alternativas. `asignarSegmento()` (que SI camina la lista y cede) ya no
+ * > lo llama ningun alta en produccion -- se conserva por si hace falta un
+ * > modo de asignacion automatica explicito (p. ej. una herramienta de
+ * > migracion masiva), pero nada en T-62 la invoca.
  *
  * ## Por que lo decide el servidor y no la tablet
  *

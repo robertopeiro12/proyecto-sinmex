@@ -257,9 +257,11 @@ describe('Sincronizacion pull/push (e2e)', () => {
 
     // --- Segmento del folio (T-14).
     //
-    // Se asigna con la misma funcion que usa el alta real, contra lo que ya
-    // esta ocupado en la base: el segmento es unico entre vendedores vivos, y
-    // una corrida anterior que no limpiara podria tener el suyo tomado.
+    // Se asigna con la misma funcion que usaba el alta real antes de T-62.
+    // Consulta GLOBAL a proposito (mas estricta de lo necesario desde T-62,
+    // que hizo el unique de folio_segmento por sucursal): sigue siendo
+    // segura, y no acopla esta prueba a la sucursal de estos vendedores. Una
+    // corrida anterior que no limpiara podria tener el suyo tomado.
     const ocupados = new Set(
       (
         await db

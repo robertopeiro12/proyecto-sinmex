@@ -92,6 +92,25 @@ trastear sin ensuciar, apunta `DATABASE_URL` de `.env.development` al Postgres l
 Descubierto en T-09, cuando una verificación "local" acabó creando una sucursal de prueba en
 `sinmex dev`.
 
+**Después de cada `git pull` / merge de `main`, actualiza el Postgres local — siempre, sin que te
+lo pidan.** Las migraciones viajan por git (`supabase/migrations/`), pero nadie las aplica a tu
+Docker por ti: tras un pull la base local se queda atrás y `test:e2e`, pgTAP y `db:types` corren
+contra un esquema viejo. La rutina, con Docker corriendo, es:
+
+```
+npm run supabase start                          # solo si el stack no está arriba
+npm run supabase -- migration list --local      # muestra cuáles faltan (columna "remote" vacía)
+npm run supabase -- migration up --local        # aplica solo las pendientes; conserva tus datos
+npm run db:types --workspace=apps/backend       # y comprueba que schema.d.ts no cambia (git diff)
+```
+
+Si el pull trajo migraciones y prefieres partir limpio, `npm run supabase -- db reset` reaplica las
+23+ desde cero (las semillas base son una migración, así que vuelven solas). Descubierto el
+2026-09-12: tras traer T-13 la local tenía 21 de 23 migraciones y nadie se había enterado.
+
+Siempre con el `--`: `npm run supabase migration up --local` sin él se come `--local` en silencio
+y aplica al destino equivocado. Es el mismo aviso de más abajo, repetido a propósito.
+
 **Dos actores, dos autenticaciones (T-06) — no las mezcles:**
 
 | | Portal Web | App de tablet |
@@ -162,7 +181,7 @@ usuario con sesion pasa.
   reenvío legítimo trae la misma clave y el mismo folio y es `duplicada`, no colisión.
 - **El segmento de vendedor (5º) lo asigna el SERVIDOR** y baja en el `pull`. La tablet no lo
   deriva de `nombre`: solo baja su propia ficha, así que no puede saber si comparte iniciales
-  con un compañero. La estrategia de desambiguación es **provisional** (ADR-0007).
+  con un compañero. La colisión de iniciales se **rechaza** (no se cede), evaluada por sucursal — ver `ADR-0007` (enmienda 2026-09-12) y `modules/nomina-comisiones/vendedores.service.ts`.
 
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
 `--`: sin él, npm se come los argumentos).
@@ -176,9 +195,9 @@ usuario con sesion pasa.
 - Para que la tablet alcance el backend: `EXPO_PUBLIC_API_URL` (default `http://localhost:3000`,
   que **solo sirve en emulador**; en una tablet real hay que apuntar a la IP del servidor).
 - Para `test`, `test:e2e` y `db:types`: el stack local de Supabase arriba (un daemon de Docker
-  corriendo + `npm run supabase start`). En esta máquina el daemon lo da **Colima**
-  (`colima start` / `colima stop`), no Docker Desktop — no está instalado aquí. Antes de dar por
-  hecho cuál usa una máquina, confirma con `docker context ls` en vez de asumirlo. Además, un
+  corriendo + `npm run supabase start`). **El daemon de Docker cambia según la máquina**: una de
+  las dos del equipo usa Colima (`colima start`) y la otra Docker Desktop — este archivo llegó a
+  afirmar cada una de las dos como si fuera la única. Antes de asumir, `docker context ls`. Además, un
   `.env.test` en la raíz con `DATABASE_URL` (al Postgres local) y
   `JWT_SECRET`. `db:types` filtra con `--include-pattern='public.*'` para no traerse las tablas
   internas de Supabase (`auth.*`, `storage.*`, etc.), que contradicen el ADR-0002 (Supabase solo
