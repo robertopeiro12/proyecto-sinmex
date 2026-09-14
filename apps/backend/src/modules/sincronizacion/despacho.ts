@@ -1,10 +1,12 @@
 import { esViolacionUnicidad } from '../../database/errores-postgres';
+import type { ProspectoNormalizado } from '../cartera-clientes/datos-prospecto';
 import {
   normalizarDatosVenta,
   type VentaNormalizada,
 } from '../ventas-cobranza/datos-venta';
 import type { RazonRechazoVenta } from '../ventas-cobranza/venta-rechazada';
 import type { CodigoRechazo } from './contrato';
+import { prepararProspecto } from './despacho-prospecto';
 import type { OperacionNormalizada, Rechazo } from './operaciones';
 
 /**
@@ -21,7 +23,11 @@ import type { OperacionNormalizada, Rechazo } from './operaciones';
  * no tiene proyeccion: se guarda en el buzon y queda `aplicada`, como desde
  * T-07. T-20 agregara aqui `{ tipo: 'cobranza'; ... }`.
  */
-export type Proyeccion = { tipo: 'venta'; venta: VentaNormalizada };
+export type Proyeccion =
+  | { tipo: 'venta'; venta: VentaNormalizada }
+  // T-40. El unico tipo que crea una fila de CATALOGO (`cliente` con
+  // `tipo = 'prospecto'`) en vez de una de operacion.
+  | { tipo: 'prospecto'; prospecto: ProspectoNormalizado };
 
 export type ResultadoPreparacion =
   { ok: true; proyeccion: Proyeccion | null } | ({ ok: false } & Rechazo);
@@ -54,11 +60,17 @@ export function prepararProyeccion(
       }
       return { ok: true, proyeccion: { tipo: 'venta', venta: r.venta } };
     }
-    // T-40: el tipo ya viaja en el contrato, pero su proyeccion
-    // (`ClientesService.crearProspecto`) llega mas adelante en esta misma rama.
-    // Hasta entonces se guarda en el buzon y queda `aplicada`, como cualquier
-    // tipo que todavia no tiene modulo de dominio.
-    case 'prospecto':
+    case 'prospecto': {
+      // El folio, el `cliente_id` y la forma de `datos` los revisa
+      // `despacho-prospecto.ts`, para que este `switch` se quede en un `case`
+      // corto por tipo: lo van a tocar T-20, T-31, T-38 y T-39 tambien.
+      const r = prepararProspecto(op);
+      if (!r.ok) return r;
+      return {
+        ok: true,
+        proyeccion: { tipo: 'prospecto', prospecto: r.prospecto },
+      };
+    }
     case 'jornada':
     case 'cobranza':
     case 'gasto':

@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import type { Transaction } from 'kysely';
 import type { DB } from '../../database/schema';
+import { ClientesService } from '../cartera-clientes/clientes.service';
+import { ProspectoRechazado } from '../cartera-clientes/prospecto-rechazado';
 import {
   normalizarSucursalPedida,
   resolverAlcance,
@@ -27,6 +29,7 @@ import {
   prepararProyeccion,
   type Proyeccion,
 } from './despacho';
+import { CODIGO_POR_RAZON_PROSPECTO } from './despacho-prospecto';
 import type { PullDto, PushDto } from './dto/sincronizacion.dto';
 import { INTENTOS_ANTE_CONFLICTO, reintentarAnteConflicto } from './reintento';
 import {
@@ -64,6 +67,9 @@ export class SincronizacionService {
     private readonly repo: SincronizacionRepository,
     // ADR-0009: sincronizacion despacha a los modulos de dominio, nunca al reves.
     private readonly ventas: VentasService,
+    // T-40: Cartera de Clientes es la duena de `cliente`, y por tanto del alta
+    // de prospectos que sube la tablet.
+    private readonly clientes: ClientesService,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -354,6 +360,18 @@ export class SincronizacionService {
           motivo: error.message,
         };
       }
+      // T-40. Una razon de dominio de Cartera de Clientes. Como con la venta, la
+      // transaccion ya hizo rollback: el prospecto **no dejo fila** y un reenvio
+      // corregido vuelve a entrar (contrato §7).
+      if (error instanceof ProspectoRechazado) {
+        return {
+          clave: op.clave,
+          tipo: op.tipo,
+          estado: 'rechazada',
+          codigo: CODIGO_POR_RAZON_PROSPECTO[error.razon],
+          motivo: error.message,
+        };
+      }
       if (esColisionDeFolio(error)) {
         return this.clasificarColision(vendedor, op);
       }
@@ -388,6 +406,28 @@ export class SincronizacionService {
           trx,
         );
         return { tabla: 'venta_nota', id };
+      }
+      case 'prospecto': {
+        const { id } = await this.clientes.crearProspecto(
+          proyeccion.prospecto,
+          {
+            // Nace en la sucursal del vendedor del token, nunca en la que diga
+            // el cuerpo: `vendedorEnAlcance` ya paso por `resolverAlcance()`.
+            sucursalId: vendedor.sucursal_id,
+            // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
+            fechaOperacion: op.fechaOperacion,
+            vendedorId: vendedor.id,
+            // Un prospecto no lleva folio, y `prepararProspecto` rechaza el que
+            // venga con uno: aqui siempre es null.
+            folio: null,
+            usuarioId: null,
+          },
+          trx,
+        );
+        // `entidad_tabla` / `entidad_id` es lo que le da a la notificacion
+        // Prospectos (T-56) el camino del `cliente` a su `fecha_operacion` y su
+        // `vendedor_id` (ADR-0009 §2.4, enmendado).
+        return { tabla: 'cliente', id };
       }
     }
   }
