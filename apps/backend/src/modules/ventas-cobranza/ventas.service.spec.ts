@@ -1,6 +1,7 @@
 import type { Transaction } from 'kysely';
 import type { DB } from '../../database/schema';
 import type { PreciosRepository } from '../cartera-clientes/precios.repository';
+import type { CobranzasRepository } from './cobranzas.repository';
 import type { VentaNormalizada } from './datos-venta';
 import { VentaRechazada } from './venta-rechazada';
 import { VentasService, type ContextoVenta } from './ventas.service';
@@ -69,11 +70,15 @@ function montar(
         ]),
     ),
   };
+  const cobranzas = {
+    insertarAbono: jest.fn().mockResolvedValue('abono-1'),
+  };
   const servicio = new VentasService(
     repo,
     precios as unknown as PreciosRepository,
+    cobranzas as unknown as CobranzasRepository,
   );
-  return { servicio, repo, precios };
+  return { servicio, repo, precios, cobranzas };
 }
 
 describe('VentasService.registrarVenta', () => {
@@ -137,6 +142,56 @@ describe('VentasService.registrarVenta', () => {
       expect.objectContaining({ status: 'pagada', montoTotal: '324.00' }),
       trx,
     );
+  });
+
+  it('contado con monto deja su cobro venta_contado por el total (T-20, D2)', async () => {
+    const { servicio, cobranzas } = montar();
+    await servicio.registrarVenta(
+      venta({ contadoCredito: 'contado' }),
+      contexto(),
+      trx,
+    );
+    expect(cobranzas.insertarAbono).toHaveBeenCalledWith(
+      {
+        ventaNotaId: 'venta-1',
+        vendedorId: 'vendedor-1',
+        fechaPago: '2026-09-14',
+        fechaOperacion: '2026-09-14',
+        monto: '324.00',
+        tipo: 'cobranza',
+        saldoPendiente: '0.00',
+        metodoPago: 'efectivo',
+        folio: 'TJ260914AP03',
+        origen: 'venta_contado',
+      },
+      trx,
+    );
+  });
+
+  it('credito no deja cobro (T-20)', async () => {
+    const { servicio, cobranzas } = montar();
+    await servicio.registrarVenta(venta(), contexto(), trx);
+    expect(cobranzas.insertarAbono).not.toHaveBeenCalled();
+  });
+
+  it('una promocion de contado, de monto 0, no deja cobro (T-20, D2)', async () => {
+    const { servicio, cobranzas } = montar();
+    await servicio.registrarVenta(
+      venta({
+        contadoCredito: 'contado',
+        lineas: [
+          {
+            presentacionId: PRE_B,
+            cantidad: 0,
+            cantidadPromocion: 3,
+            precioCentavos: 0,
+          },
+        ],
+      }),
+      contexto(),
+      trx,
+    );
+    expect(cobranzas.insertarAbono).not.toHaveBeenCalled();
   });
 
   it('solo piezas de promocion, sin precio: nace promocion con monto 0 y precio 0 (D13)', async () => {

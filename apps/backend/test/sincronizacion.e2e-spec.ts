@@ -506,9 +506,18 @@ describe('Sincronizacion pull/push (e2e)', () => {
       .deleteFrom('sync_operacion')
       .where('vendedor_id', 'in', [vendedorId, vendedorAjenoId])
       .execute();
+    // T-20: los cobros de TODAS las notas de las pruebas (una venta de contado
+    // deja el suyo), antes que las notas.
     await db
       .deleteFrom('cobranza_abono')
-      .where('venta_nota_id', '=', notaId)
+      .where(
+        'venta_nota_id',
+        'in',
+        db
+          .selectFrom('venta_nota')
+          .select('id')
+          .where('vendedor_id', 'in', [vendedorId, vendedorAjenoId]),
+      )
       .execute();
     // T-16: las ventas que proyecto el push, ademas de `notaId`. Detalle antes
     // que cabecera, y las dos antes que cliente, presentacion y vendedor.
@@ -1860,6 +1869,48 @@ describe('Sincronizacion pull/push (e2e)', () => {
 
       const [venta] = await ventasConFolio(op.folio as string);
       expect(venta).toMatchObject({ status: 'pagada', monto_total: '192.00' });
+
+      // T-20 (D2): su cobro, distinguible de un cobro capturado.
+      const cobros = await db
+        .selectFrom('cobranza_abono')
+        .select([
+          'monto',
+          'tipo',
+          'saldo_pendiente',
+          'metodo_pago',
+          'origen',
+          'folio',
+          'vendedor_id',
+          'fecha_pago',
+          'fecha_operacion',
+        ])
+        .where('venta_nota_id', '=', venta.id)
+        .execute();
+      expect(cobros).toHaveLength(1);
+      expect(cobros[0]).toMatchObject({
+        monto: '192.00',
+        tipo: 'cobranza',
+        saldo_pendiente: '0.00',
+        metodo_pago: 'efectivo',
+        origen: 'venta_contado',
+        folio: op.folio as string,
+        vendedor_id: vendedorId,
+      });
+      expect(fechaTexto(cobros[0].fecha_pago)).toBe(FECHA_VENTAS);
+      expect(fechaTexto(cobros[0].fecha_operacion)).toBe(FECHA_VENTAS);
+    });
+
+    it('una venta a credito no deja cobro (T-20)', async () => {
+      const op = ventaValida();
+      await push({ operaciones: [op] }).expect(200);
+
+      const [venta] = await ventasConFolio(op.folio as string);
+      const cobros = await db
+        .selectFrom('cobranza_abono')
+        .select('id')
+        .where('venta_nota_id', '=', venta.id)
+        .execute();
+      expect(cobros).toEqual([]);
     });
 
     it('un lote mixto entra parcial y en orden: jornada, venta buena, venta rechazada, jornada', async () => {
