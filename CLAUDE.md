@@ -111,6 +111,31 @@ Si el pull trajo migraciones y prefieres partir limpio, `npm run supabase -- db 
 Siempre con el `--`: `npm run supabase migration up --local` sin él se come `--local` en silencio
 y aplica al destino equivocado. Es el mismo aviso de más abajo, repetido a propósito.
 
+**La nube (`sinmex dev`) refleja `main`, nunca una rama — decidido el 2026-09-14.** Las migraciones
+de un PR **no** se suben hasta que el PR se mergea. El motivo: si el PR cambia en revisión, la nube
+queda con un esquema que `main` nunca tuvo, y una migración *correctiva* encima es peor que
+esperar. Quien mergea un PR con migraciones las empuja siguiendo este protocolo, en este orden:
+
+1. **Pre-flight de solo lectura** contra la nube por cada `check`/`not null`/`unique` nuevo:
+   una consulta que cuente las filas que lo violarían, y debe dar 0. `db push --dry-run` **no**
+   sirve para esto — no ejecuta SQL, solo lista versiones. Y un push de varias versiones las
+   aplica una por una: si falla la segunda, la primera ya quedó arriba. Pre-flight de todas antes
+   de empujar ninguna.
+2. `npm run supabase -- migration list --db-url "$SINMEX_DEV_DB_URL"` — anota la lista **antes**.
+3. `npm run supabase -- db push --dry-run --db-url "$SINMEX_DEV_DB_URL"`, luego sin `--dry-run`.
+4. `migration list` otra vez — la lista **después**, y va al comentario del PR mergeado.
+
+La cadena vive en `.env.sinmex-dev` en la raíz (permisos 600, git lo ignora), como
+`SINMEX_DEV_DB_URL=…`. Es la del **Session pooler** (IPv4): la conexión directa en la red del
+equipo solo tiene IPv6. No hace falta `supabase link`; `--db-url` basta.
+
+> [!warning] `--include-all` solo cuando `main` se adelantó, y siempre explicado
+> Si la nube ya tiene un timestamp **posterior** al que vas a subir (pasó con T-62, mergeado y
+> empujado antes que T-16, que tiene fecha anterior), `db push` se niega y hace falta
+> `--include-all`. No es un atajo ni salta ninguna validación — es que el orden de merge no
+> coincidió con el de creación. Pero **escríbelo** en el comentario del PR: un `--include-all`
+> sin explicación es lo que dentro de dos meses nadie sabe justificar.
+
 **Dos actores, dos autenticaciones (T-06) — no las mezcles:**
 
 | | Portal Web | App de tablet |
