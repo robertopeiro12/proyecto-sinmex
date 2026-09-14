@@ -487,6 +487,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
       .values({
         venta_nota_id: notaId,
         fecha_pago: '2026-08-03',
+        // T-20: obligatoria desde 20260914160000 (D3).
+        fecha_operacion: '2026-08-03',
         vendedor_id: vendedorId,
         monto: '100.00',
         tipo: 'abono',
