@@ -26,7 +26,11 @@ export default function CerrarDia() {
 
   const kmNumero = Number(km.replace(',', '.'));
   const puedeCerrar = km.trim() !== '' && Number.isFinite(kmNumero);
-  const pendientes = datos.jornadas.pendientesDeSincronizar().length;
+  // Suma ventas: si quedan sin subir, el cierre no puede decir "listo" aunque
+  // la jornada misma ya este sincronizada, o el vendedor cierra el dia sin
+  // WiFi creyendo que ya subio todo.
+  const pendientes =
+    datos.jornadas.pendientesDeSincronizar().length + datos.ventas.pendientesDeSincronizar().length;
 
   function cerrar() {
     setError(null);

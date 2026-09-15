@@ -16,6 +16,7 @@ import { crearGestorSesion, type GestorSesion, type ResultadoEntrada } from '@/s
 import type { EstadoSesion, VendedorSesion } from '@/sesion/politica';
 import { crearClienteSync } from '@/sincronizacion/api';
 import { fuenteJornadas } from '@/sincronizacion/fuente-jornadas';
+import { fuenteVentas } from '@/sincronizacion/fuente-ventas';
 import {
   crearMotorSincronizacion,
   type MotorSincronizacion,
@@ -85,7 +86,8 @@ export function ProveedorSesion({
       api: crearClienteSync(),
       catalogos: datos.catalogos,
       sync: datos.sync,
-      fuentes: [fuenteJornadas(datos.jornadas)],
+      // T-16: las ventas del dia suben despues de la jornada.
+      fuentes: [fuenteJornadas(datos.jornadas), fuenteVentas(datos.ventas)],
       sesion: {
         renovar: () => gestor.renovar(),
         tokenAcceso: () => gestor.sesionGuardada()?.tokenAcceso ?? null,

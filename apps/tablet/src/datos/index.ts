@@ -14,7 +14,11 @@ export type { Reloj } from './reloj';
 export { enTransaccion } from './repositorios/deps';
 export type { DepsRepositorio } from './repositorios/deps';
 export { crearRepositorioCatalogos } from './repositorios/catalogos';
-export type { RepositorioCatalogos, SnapshotCatalogos } from './repositorios/catalogos';
+export type {
+  PresentacionParaVenta,
+  RepositorioCatalogos,
+  SnapshotCatalogos,
+} from './repositorios/catalogos';
 export { crearRepositorioJornadas, ErrorJornada } from './repositorios/jornadas';
 export type { DatosAperturaJornada, RepositorioJornadas } from './repositorios/jornadas';
 export { crearRepositorioSync, CURSOR_PULL } from './repositorios/sync';
@@ -30,4 +34,24 @@ export type {
   PeticionFolio,
   RepositorioFolios,
 } from './repositorios/folios';
+export { crearRepositorioVentas, ErrorVenta } from './repositorios/ventas';
+export type {
+  DatosRegistroVenta,
+  LineaRegistroVenta,
+  RepositorioVentas,
+} from './repositorios/ventas';
+export {
+  LARGO_MAX_COMENTARIOS,
+  LARGO_MAX_NUM_NOTA,
+  leerCantidad,
+  MAX_LINEAS_VENTA,
+  problemasDeCaptura,
+  resumirCaptura,
+} from './ventas-reglas';
+export type {
+  CapturaVenta,
+  LineaCaptura,
+  ResumenCaptura,
+  ResumenLinea,
+} from './ventas-reglas';
 export * from './tipos';

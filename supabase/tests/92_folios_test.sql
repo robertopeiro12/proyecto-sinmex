@@ -7,6 +7,20 @@ select plan(15);
 -- cree garantizar. Es la misma doctrina de T-09 y de la clave de idempotencia
 -- de T-07: las semillas, los scripts y cualquier carga futura entran por debajo
 -- de la API, asi que la regla tiene que estar en el esquema.
+--
+-- > [!warning] Esta prueba no puede depender de los datos de la base (T-16, D21)
+-- > La version anterior usaba el segmento `AP`, y la base local ya tenia un
+-- > vendedor vivo con `AP` (la prueba en dispositivo del 2026-08-23): chocaba con
+-- > `uq_vendedor_folio_segmento` y abortaba tras 4 de 15 pruebas. La CI no corre
+-- > pgTAP, asi que nadie lo vio. Un segmento que "ningun vendedor real puede
+-- > tener" no existe (el check es `^[A-Z]{2}$`), asi que se usan `ZZ`/`ZY` y,
+-- > ademas, se aparta a quien ya los tenga. Todo ocurre dentro de esta
+-- > transaccion y el `rollback` del final lo deshace.
+
+update vendedor set folio_segmento = null
+ where folio_segmento in ('ZZ', 'ZY') and deleted_at is null;
+update sync_operacion set folio = null
+ where folio in ('TJ260807ZZ01', 'GD260807ZZ01');
 
 ------------------------------------------------------------------
 -- Estructura
@@ -41,18 +55,18 @@ select
   (select id from sucursal where codigo = 'MX' limit 1) as sucursal_mx;
 
 insert into vendedor (login, nombre, password_hash, sucursal_id, folio_segmento)
-select 'pgtap-folio-1', 'Abraham Perez', 'x', sucursal_id, 'AP' from _ctx;
+select 'pgtap-folio-1', 'Zacarias Zamora', 'x', sucursal_id, 'ZZ' from _ctx;
 insert into vendedor (login, nombre, password_hash, sucursal_id, folio_segmento)
-select 'pgtap-folio-2', 'Ana Ponce', 'x', sucursal_id, 'AO' from _ctx;
+select 'pgtap-folio-2', 'Zoe Yanez', 'x', sucursal_id, 'ZY' from _ctx;
 
 select lives_ok(
   $$insert into sync_operacion
       (vendedor_id, sucursal_id, clave_idempotencia, tipo, contrato,
        fecha_operacion, ocurrido_en, datos, folio)
     select v.id, v.sucursal_id, 'clave-tablet-1', 'venta', 1,
-           '2026-08-07', '2026-08-07T14:00:00-07:00', '{}'::jsonb, 'TJ260807AP01'
+           '2026-08-07', '2026-08-07T14:00:00-07:00', '{}'::jsonb, 'TJ260807ZZ01'
       from vendedor v where v.login = 'pgtap-folio-1'$$,
-  'la primera tablet emite TJ260807AP01 y entra'
+  'la primera tablet emite TJ260807ZZ01 y entra'
 );
 
 select throws_ok(
@@ -60,7 +74,7 @@ select throws_ok(
       (vendedor_id, sucursal_id, clave_idempotencia, tipo, contrato,
        fecha_operacion, ocurrido_en, datos, folio)
     select v.id, v.sucursal_id, 'clave-tablet-2', 'venta', 1,
-           '2026-08-07', '2026-08-07T14:00:00-07:00', '{}'::jsonb, 'TJ260807AP01'
+           '2026-08-07', '2026-08-07T14:00:00-07:00', '{}'::jsonb, 'TJ260807ZZ01'
       from vendedor v where v.login = 'pgtap-folio-2'$$,
   '23505',
   null,
@@ -75,7 +89,7 @@ select throws_ok(
       (vendedor_id, sucursal_id, clave_idempotencia, tipo, contrato,
        fecha_operacion, ocurrido_en, datos, folio)
     select v.id, v.sucursal_id, 'clave-tablet-3', 'venta', 1,
-           '2026-08-07', '2026-08-07T14:00:00-07:00', '{}'::jsonb, 'TJ260807AP01'
+           '2026-08-07', '2026-08-07T14:00:00-07:00', '{}'::jsonb, 'TJ260807ZZ01'
       from vendedor v where v.login = 'pgtap-folio-1'$$,
   '23505',
   null,
@@ -105,7 +119,7 @@ select throws_ok(
       (vendedor_id, sucursal_id, clave_idempotencia, tipo, contrato,
        fecha_operacion, ocurrido_en, datos, folio)
     select v.id, v.sucursal_id, 'clave-corta', 'venta', 1,
-           '2026-08-07', '2026-08-07T14:00:00-07:00', '{}'::jsonb, 'TJ260807AP1'
+           '2026-08-07', '2026-08-07T14:00:00-07:00', '{}'::jsonb, 'TJ260807ZZ1'
       from vendedor v where v.login = 'pgtap-folio-1'$$,
   '23514',
   null,
@@ -117,7 +131,7 @@ select throws_ok(
       (vendedor_id, sucursal_id, clave_idempotencia, tipo, contrato,
        fecha_operacion, ocurrido_en, datos, folio)
     select v.id, v.sucursal_id, 'clave-minus', 'venta', 1,
-           '2026-08-07', '2026-08-07T14:00:00-07:00', '{}'::jsonb, 'tj260807ap01'
+           '2026-08-07', '2026-08-07T14:00:00-07:00', '{}'::jsonb, 'tj260807zz01'
       from vendedor v where v.login = 'pgtap-folio-1'$$,
   '23514',
   null,
@@ -131,7 +145,7 @@ select lives_ok(
       (vendedor_id, sucursal_id, clave_idempotencia, tipo, contrato,
        fecha_operacion, ocurrido_en, datos, folio)
     select v.id, v.sucursal_id, 'clave-sucursal-nueva', 'venta', 1,
-           '2026-08-07', '2026-08-07T14:00:00-07:00', '{}'::jsonb, 'GD260807AP01'
+           '2026-08-07', '2026-08-07T14:00:00-07:00', '{}'::jsonb, 'GD260807ZZ01'
       from vendedor v where v.login = 'pgtap-folio-1'$$,
   'acepta el codigo de una sucursal que todavia no existe (catalogo dinamico)'
 );
@@ -143,12 +157,14 @@ select lives_ok(
 select has_index('vendedor', 'uq_vendedor_folio_segmento',
   'el segmento de vendedor es unico en la base, no solo en el servicio');
 
--- Dos vendedores vivos no pueden compartir segmento. Es la estrategia
--- PROVISIONAL de desambiguacion (ADR-0007): mientras el cliente no diga como
--- se resuelve, el sistema garantiza al menos que no se repita.
+-- Dos vendedores vivos de la misma sucursal no pueden compartir segmento. Es la
+-- estrategia PROVISIONAL de desambiguacion (ADR-0007, desde T-62 el indice es
+-- por sucursal; ver 99_vendedor_segmento_sucursal_test.sql): mientras el
+-- cliente no diga como se resuelve, el sistema garantiza al menos que no se
+-- repita.
 select throws_ok(
   $$insert into vendedor (login, nombre, password_hash, sucursal_id, folio_segmento)
-    select 'pgtap-folio-3', 'Alonso Prieto', 'x', sucursal_id, 'AP' from _ctx$$,
+    select 'pgtap-folio-3', 'Zenon Zapata', 'x', sucursal_id, 'ZZ' from _ctx$$,
   '23505',
   null,
   'dos vendedores vivos no pueden compartir el segmento del folio'
@@ -172,7 +188,7 @@ select lives_ok(
       returning 1
     )
     insert into vendedor (login, nombre, password_hash, sucursal_id, folio_segmento)
-    select 'pgtap-folio-5', 'Aida Ochoa', 'x', sucursal_id, 'AO' from _ctx, baja$$,
+    select 'pgtap-folio-5', 'Zaida Yepez', 'x', sucursal_id, 'ZY' from _ctx, baja$$,
   'el segmento de un vendedor dado de baja queda libre para uno nuevo'
 );
 

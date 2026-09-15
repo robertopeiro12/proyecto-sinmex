@@ -281,3 +281,42 @@ function memo<T>(calcular: () => T): (dependencias: unknown[]) => T {
     return valor;
   };
 }
+
+describe('presentaciones para vender (T-16)', () => {
+  it('lista cada presentacion activa con el precio vigente del cliente, o null', () => {
+    const { catalogos } = conCatalogos();
+    expect(catalogos.presentacionesParaVenta('cli-1', '2026-08-07')).toEqual([
+      { presentacion_id: 'pre-1', producto_nombre: 'Jamaica', volumen: '1 L', precio_centavos: 2800 },
+      { presentacion_id: 'pre-2', producto_nombre: 'Jamaica', volumen: '500 ml', precio_centavos: null },
+    ]);
+  });
+
+  it('el precio es el vigente en la fecha pedida', () => {
+    const { catalogos } = conCatalogos();
+    const marzo = catalogos.presentacionesParaVenta('cli-1', '2026-03-15');
+    expect(marzo.find((p) => p.presentacion_id === 'pre-1')?.precio_centavos).toBe(2500);
+  });
+
+  it('a un prospecto sin lista le ofrece todo sin precio (para regalar como promocion)', () => {
+    const { catalogos } = conCatalogos();
+    expect(
+      catalogos.presentacionesParaVenta('cli-2', '2026-08-07').map((p) => p.precio_centavos),
+    ).toEqual([null, null]);
+  });
+
+  it('no ofrece una presentacion dada de baja', () => {
+    const { catalogos } = conCatalogos();
+    catalogos.guardarSnapshot({
+      presentaciones: [{ id: 'pre-2', producto_id: 'pro-1', volumen: '500 ml', activo: 0 }],
+    });
+    expect(
+      catalogos.presentacionesParaVenta('cli-1', '2026-08-07').map((p) => p.presentacion_id),
+    ).toEqual(['pre-1']);
+  });
+
+  it('no ofrece nada de un producto desactivado', () => {
+    const { catalogos } = conCatalogos();
+    catalogos.guardarSnapshot({ productos: [{ id: 'pro-1', nombre: 'Jamaica', activo: 0 }] });
+    expect(catalogos.presentacionesParaVenta('cli-1', '2026-08-07')).toEqual([]);
+  });
+});

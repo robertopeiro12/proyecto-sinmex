@@ -33,6 +33,15 @@ export interface SnapshotCatalogos {
   notas?: Omit<NotaPendiente, 'sincronizado_en'>[];
 }
 
+/** Una fila de la pantalla de venta: que se puede vender y a cuanto (T-16). */
+export interface PresentacionParaVenta {
+  presentacion_id: string;
+  producto_nombre: string;
+  volumen: string;
+  /** Centavos, o `null` si el cliente no tiene precio: solo se puede regalar. */
+  precio_centavos: number | null;
+}
+
 export type RepositorioCatalogos = ReturnType<typeof crearRepositorioCatalogos>;
 
 /** Columnas de cada catalogo, en el orden en que se escriben. */
@@ -291,6 +300,39 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
         { $cliente_id: clienteId, $presentacion_id: presentacionId, $fecha: fecha },
       );
       return fila?.precio_centavos ?? null;
+    },
+
+    /**
+     * Lo que se le puede vender a un cliente en `fecha`: cada presentacion
+     * activa de un producto activo, con el precio que le aplica o `null` (T-16).
+     *
+     * Resuelve igual que `precioVigente()` (el registro vigente mas reciente que
+     * no sea futuro), para todas las presentaciones de una vez: la pantalla de
+     * venta pinta una fila por presentacion, y el repositorio de ventas pone el
+     * precio de cada linea desde aqui y no desde la pantalla (D15).
+     *
+     * `null` no es "no se vende": una presentacion sin precio se puede regalar
+     * como promocion (D13), por ejemplo a un prospecto, que no tiene lista.
+     */
+    presentacionesParaVenta(clienteId: string, fecha: FechaISO): PresentacionParaVenta[] {
+      return bd.getAllSync<PresentacionParaVenta>(
+        `select pr.id as presentacion_id,
+                p.nombre as producto_nombre,
+                pr.volumen,
+                (select cp.precio_centavos
+                   from cliente_precio cp
+                  where cp.cliente_id = $cliente_id
+                    and cp.presentacion_id = pr.id
+                    and cp.vigente_desde <= $fecha
+                    and cp.activo = 1
+                  order by cp.vigente_desde desc
+                  limit 1) as precio_centavos
+           from presentacion pr
+           join producto p on p.id = pr.producto_id
+          where pr.activo = 1 and p.activo = 1
+          order by p.nombre, pr.volumen`,
+        { $cliente_id: clienteId, $fecha: fecha },
+      );
     },
 
     /**

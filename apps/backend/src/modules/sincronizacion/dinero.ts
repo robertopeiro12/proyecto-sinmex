@@ -53,8 +53,8 @@ export function aCentavos(valor: string | number | null | undefined): number {
  * Devuelve texto y no un numero por la misma razon por la que `pg` lo entrega
  * como texto: es lo unico que atraviesa la frontera sin perder exactitud.
  *
- * TODO: T-16/T-20 — la usaran al proyectar las ventas y la cobranza que hoy
- *       solo se guardan en `sync_operacion`.
+ * La usa `VentasService` al proyectar las ventas (T-16); T-20 la usara con la
+ * cobranza.
  */
 export function aPesos(centavos: number): string {
   if (!Number.isInteger(centavos)) {

@@ -3,12 +3,17 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import type { Transaction } from 'kysely';
+import type { DB } from '../../database/schema';
 import {
   normalizarSucursalPedida,
   resolverAlcance,
 } from '../sucursales/alcance-sucursal';
+import { VentaRechazada } from '../ventas-cobranza/venta-rechazada';
+import { VentasService } from '../ventas-cobranza/ventas.service';
 import {
   CONTRATO_ACTUAL,
   CONTRATO_MINIMO,
@@ -16,7 +21,14 @@ import {
   type RespuestaPush,
   type ResultadoOperacion,
 } from './contrato';
+import {
+  CODIGO_POR_RAZON,
+  esColisionDeFolio,
+  prepararProyeccion,
+  type Proyeccion,
+} from './despacho';
 import type { PullDto, PushDto } from './dto/sincronizacion.dto';
+import { INTENTOS_ANTE_CONFLICTO, reintentarAnteConflicto } from './reintento';
 import {
   claveReportable,
   hoyEnTijuana,
@@ -26,6 +38,8 @@ import {
 } from './operaciones';
 import {
   SincronizacionRepository,
+  type EntidadProyectada,
+  type ResultadoGuardado,
   type VendedorConSucursal,
 } from './sincronizacion.repository';
 
@@ -44,7 +58,13 @@ const RETRASO_CURSOR_MS = 5_000;
 
 @Injectable()
 export class SincronizacionService {
-  constructor(private readonly repo: SincronizacionRepository) {}
+  private readonly logger = new Logger(SincronizacionService.name);
+
+  constructor(
+    private readonly repo: SincronizacionRepository,
+    // ADR-0009: sincronizacion despacha a los modulos de dominio, nunca al reves.
+    private readonly ventas: VentasService,
+  ) {}
 
   /* ---------------------------------------------------------------- */
   /* Pull                                                              */
@@ -131,6 +151,14 @@ export class SincronizacionService {
    * La unica excepcion es el alcance: un lote que intenta escribir por otro
    * vendedor o en otra sucursal no es un fallo parcial, es un cliente que no
    * deberia estar mandando eso, y se responde 403 sin guardar nada.
+   *
+   * **Una transaccion por operacion** (T-16, ADR-0009 §2.3). Cada operacion
+   * entra al buzon y, si su `tipo` tiene modulo de dominio, se proyecta a sus
+   * tablas en la misma transaccion: o queda todo, o no queda nada. Las
+   * anteriores del lote ya hicieron commit, asi que un error inesperado a mitad
+   * de lote no las pierde y el reintento de la tablet las recibe como
+   * `duplicada`. Se aplican **en el orden del lote**: una cobranza de T-20 sobre
+   * una venta del mismo lote necesita que la venta ya este.
    */
   async push(vendedorId: string, dto: PushDto): Promise<RespuestaPush> {
     exigirContrato(dto.contrato);
@@ -203,7 +231,7 @@ export class SincronizacionService {
       clienteIds,
     );
 
-    // 3. Guardar lo que quedo en pie.
+    // 3. Aplicar lo que quedo en pie, en el orden del lote.
     for (const { posicion, op } of pendientes) {
       if (op.clienteId !== null && !enAlcance.has(op.clienteId)) {
         // Esto SI es un rechazo por operacion y no un 403: el vendedor puede
@@ -220,42 +248,25 @@ export class SincronizacionService {
         continue;
       }
 
-      const guardado = await this.repo.guardarOperacion(
-        vendedor.id,
-        vendedor.sucursal_id,
-        dto.contrato,
-        op,
-      );
-
-      // **Colision de folios** (T-14). Otra operacion ya subio este folio, casi
-      // siempre desde otra tablet. No se acepta en silencio: el folio es con lo
-      // que se cotejan las notas fisicas, y dos operaciones distintas con el
-      // mismo folio harian ese cotejo imposible para siempre.
-      //
-      // Se rechaza **por operacion** y no con un 4xx del lote, igual que
-      // cualquier otro rechazo de T-07: el resto de la jornada del vendedor
-      // entra igual.
-      if (guardado.colisionDeFolio) {
-        const dueno = op.folio ? await this.repo.duenoDelFolio(op.folio) : null;
+      // La forma de `datos` se valida despues del alcance y antes de abrir la
+      // transaccion: no toca la base, y `clientesEnAlcance` sigue siendo una
+      // sola consulta para todo el lote.
+      const preparada = prepararProyeccion(op);
+      if (preparada.ok === false) {
         resultados.set(posicion, {
           clave: op.clave,
           tipo: op.tipo,
           estado: 'rechazada',
-          codigo: 'folio-duplicado',
-          motivo:
-            dueno && dueno.vendedorId !== vendedor.id
-              ? `El folio ${op.folio} ya lo uso otro vendedor. Hay que reasignarle un folio a esta operacion.`
-              : `El folio ${op.folio} ya esta usado por otra operacion.`,
+          codigo: preparada.codigo,
+          motivo: preparada.motivo,
         });
         continue;
       }
 
-      resultados.set(posicion, {
-        clave: op.clave,
-        tipo: op.tipo,
-        estado: guardado.duplicada ? 'duplicada' : 'aplicada',
-        id_servidor: guardado.id,
-      });
+      resultados.set(
+        posicion,
+        await this.aplicar(vendedor, dto.contrato, op, preparada.proyeccion),
+      );
     }
 
     const lista = dto.operaciones.map(
@@ -276,6 +287,148 @@ export class SincronizacionService {
   }
 
   /* ---------------------------------------------------------------- */
+
+  /**
+   * UNA operacion: buzon + proyeccion en la misma transaccion (ADR-0009 §2.3).
+   *
+   * El `catch` esta **fuera** de `enTransaccion` a proposito. Cuando llega ahi,
+   * Kysely ya hizo `rollback`: nada de la operacion quedo escrito, y las
+   * consultas de la clasificacion corren con la conexion normal. Con el `23505`
+   * de un folio no hay otra forma: Postgres aborta la transaccion entera y
+   * cualquier consulta posterior con el mismo `trx` fallaria (D10).
+   *
+   * Un deadlock entre dos reintentos simultaneos del mismo lote repite **solo
+   * la transaccion de esta operacion** (`reintentarAnteConflicto`): la victima
+   * ya no dejo nada y, al repetirse, ve la fila confirmada de la otra. La
+   * clasificacion de la colision sigue fuera, despues del ultimo rollback.
+   */
+  private async aplicar(
+    vendedor: VendedorConSucursal,
+    contrato: number,
+    op: OperacionNormalizada,
+    proyeccion: Proyeccion | null,
+  ): Promise<ResultadoOperacion> {
+    try {
+      const guardado = await reintentarAnteConflicto(
+        () =>
+          this.repo.enTransaccion(async (trx): Promise<ResultadoGuardado> => {
+            const buzon = await this.repo.guardarOperacion(
+              vendedor.id,
+              vendedor.sucursal_id,
+              contrato,
+              op,
+              trx,
+            );
+            // Ya estaba: no se proyecta otra vez. Es lo que hace seguro reenviar.
+            if (buzon.duplicada || proyeccion === null) return buzon;
+
+            const entidad = await this.proyectar(proyeccion, vendedor, op, trx);
+            await this.repo.marcarProyectada(buzon.id, entidad, trx);
+            return buzon;
+          }),
+        // Solo la clave, el intento y el codigo: `datos` puede traer datos del
+        // cliente y no debe acabar en el log.
+        (intento, codigo) =>
+          this.logger.warn(
+            `push: la operacion ${op.clave} choco con ${codigo} en el intento ${intento} de ${INTENTOS_ANTE_CONFLICTO}; se repite su transaccion`,
+          ),
+      );
+
+      return {
+        clave: op.clave,
+        tipo: op.tipo,
+        estado: guardado.duplicada ? 'duplicada' : 'aplicada',
+        id_servidor: guardado.id,
+      };
+    } catch (error) {
+      if (error instanceof VentaRechazada) {
+        return {
+          clave: op.clave,
+          tipo: op.tipo,
+          estado: 'rechazada',
+          codigo: CODIGO_POR_RAZON[error.razon],
+          motivo: error.message,
+        };
+      }
+      if (esColisionDeFolio(error)) {
+        return this.clasificarColision(vendedor, op);
+      }
+      // Cualquier otro error es un bug: sale como 500, igual que antes de T-16.
+      throw error;
+    }
+  }
+
+  /**
+   * El despachador (ADR-0009 §2.1): cada `tipo` lo proyecta el modulo de
+   * dominio dueno. Ningun INSERT a una tabla de negocio se escribe en
+   * `sincronizacion/`.
+   */
+  private async proyectar(
+    proyeccion: Proyeccion,
+    vendedor: VendedorConSucursal,
+    op: OperacionNormalizada,
+    trx: Transaction<DB>,
+  ): Promise<EntidadProyectada> {
+    switch (proyeccion.tipo) {
+      case 'venta': {
+        const { id } = await this.ventas.registrarVenta(
+          proyeccion.venta,
+          {
+            sucursalId: vendedor.sucursal_id,
+            // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
+            fechaOperacion: op.fechaOperacion,
+            vendedorId: vendedor.id,
+            folio: op.folio,
+            usuarioId: null,
+          },
+          trx,
+        );
+        return { tabla: 'venta_nota', id };
+      }
+    }
+  }
+
+  /**
+   * **Colision de folios** (T-14), clasificada despues del rollback (T-16).
+   *
+   * No se acepta en silencio: el folio es con lo que se cotejan las notas
+   * fisicas, y dos operaciones distintas con el mismo folio harian ese cotejo
+   * imposible para siempre. Se rechaza **por operacion**: el resto de la jornada
+   * del vendedor entra igual.
+   *
+   * > [!danger] Primero la clave
+   * > Un reenvio legitimo que se solapa con el primero trae la misma clave Y el
+   * > mismo folio, y puede chocar contra el unique del folio antes de ver la
+   * > fila (sin commit) de la otra peticion. Si esa clave ya existe, era un
+   * > reenvio: `duplicada`, no colision. Traducir todo `23505` a
+   * > `folio-duplicado` dejaria esos reintentos en error para siempre.
+   */
+  private async clasificarColision(
+    vendedor: VendedorConSucursal,
+    op: OperacionNormalizada,
+  ): Promise<ResultadoOperacion> {
+    const propia = await this.repo.buscarPorClave(vendedor.id, op.clave);
+    if (propia) {
+      return {
+        clave: op.clave,
+        tipo: op.tipo,
+        estado: 'duplicada',
+        id_servidor: propia.id,
+      };
+    }
+
+    const dueno = op.folio ? await this.repo.duenoDelFolio(op.folio) : null;
+    return {
+      clave: op.clave,
+      tipo: op.tipo,
+      estado: 'rechazada',
+      codigo: 'folio-duplicado',
+      motivo:
+        dueno && dueno.vendedorId !== vendedor.id
+          ? `El folio ${op.folio} ya lo uso otro vendedor. Hay que reasignarle un folio a esta operacion.`
+          : `El folio ${op.folio} ya esta usado por otra operacion.`,
+    };
+  }
 
   /**
    * El vendedor del token, comprobando de paso que la sucursal que pide (si

@@ -13,7 +13,7 @@
  * duplicada (`perfiles.service.ts`, `productos.service.ts`,
  * `vehiculos.service.ts`) no se tocan aqui: solo el codigo nuevo la usa.
  */
-function codigoDeError(error: unknown): string | undefined {
+export function codigoDeError(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null || !('code' in error)) {
     return undefined;
   }
@@ -29,4 +29,14 @@ export function esViolacionUnicidad(error: unknown): boolean {
 /** `23503` es foreign_key_violation. */
 export function esViolacionFk(error: unknown): boolean {
   return codigoDeError(error) === '23503';
+}
+
+/**
+ * `40P01` es deadlock_detected y `40001` serialization_failure. Postgres ya
+ * hizo rollback de la transaccion victima, asi que repetirla desde el
+ * principio es seguro: no dejo nada escrito.
+ */
+export function esConflictoDeConcurrencia(error: unknown): boolean {
+  const codigo = codigoDeError(error);
+  return codigo === '40P01' || codigo === '40001';
 }

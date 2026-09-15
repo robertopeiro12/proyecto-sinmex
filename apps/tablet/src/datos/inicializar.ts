@@ -7,6 +7,7 @@ import { crearRepositorioCatalogos, type RepositorioCatalogos } from './reposito
 import { crearRepositorioFolios, type RepositorioFolios } from './repositorios/folios';
 import { crearRepositorioJornadas, type RepositorioJornadas } from './repositorios/jornadas';
 import { crearRepositorioSync, type RepositorioSync } from './repositorios/sync';
+import { crearRepositorioVentas, type RepositorioVentas } from './repositorios/ventas';
 import type { DepsRepositorio } from './repositorios/deps';
 
 /** Lo que la app usa para hablar con la base local. */
@@ -17,13 +18,12 @@ export interface CapaDatos {
   /** Cursor del pull incremental (T-07). */
   sync: RepositorioSync;
   /**
-   * Emision offline de folios (T-14).
-   *
-   * Hoy **nadie lo llama todavia**: la jornada no lleva folio y las entidades
-   * que si lo llevaran son T-16 (venta) y T-20 (cobranza). Se arma aqui para
-   * que esos tickets solo tengan que emitir dentro de su transaccion.
+   * Emision offline de folios (T-14). La usa `ventas` dentro de su propia
+   * transaccion (T-16); T-20 hara lo mismo con la cobranza.
    */
   folios: RepositorioFolios;
+  /** Ventas capturadas en ruta (T-16). */
+  ventas: RepositorioVentas;
   /** Version de esquema con la que quedo la base tras migrar. */
   versionEsquema: number;
 }
@@ -41,6 +41,9 @@ export function inicializarCapaDatos(): CapaDatos {
 
   const deps: DepsRepositorio = { bd, reloj: relojSistema, generarId: randomUUID };
   const catalogos = crearRepositorioCatalogos(deps);
+  // Una sola instancia: la que expone la capa de datos es la misma con la que
+  // las ventas emiten sus folios.
+  const folios = crearRepositorioFolios(deps);
 
   // Ya no hay semilla de desarrollo: los catalogos bajan del `pull` real
   // (T-07), que corre tras el primer login en linea. Ver
@@ -51,7 +54,8 @@ export function inicializarCapaDatos(): CapaDatos {
     catalogos,
     jornadas: crearRepositorioJornadas(deps),
     sync: crearRepositorioSync(deps),
-    folios: crearRepositorioFolios(deps),
+    folios,
+    ventas: crearRepositorioVentas(deps, { catalogos, folios }),
     versionEsquema: versionFinal,
   };
 }
