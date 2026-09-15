@@ -120,6 +120,7 @@ export default function PantallaVenta() {
   const [comentarios, setComentarios] = useState('');
   const [problemas, setProblemas] = useState<string[]>([]);
   const [grabada, setGrabada] = useState<Venta | null>(null);
+  const [grabando, setGrabando] = useState(false);
 
   const lineas = useMemo<LineaCaptura[]>(
     () =>
@@ -173,6 +174,10 @@ export default function PantallaVenta() {
   function grabar() {
     // `revisar` no deja llegar aqui sin elegir; la comprobacion es para el tipo.
     if (contadoCredito === null) return;
+    // Guardia contra doble toque: `registrar()` emite folio, y un segundo toque
+    // mientras el primero corre no debe emitir un segundo.
+    if (grabando) return;
+    setGrabando(true);
     try {
       const venta = datos.ventas.registrar({
         vendedorId,
@@ -197,6 +202,8 @@ export default function PantallaVenta() {
           ? e.message
           : 'No se pudo grabar la venta. No se consumió ningún folio; intenta de nuevo.',
       ]);
+    } finally {
+      setGrabando(false);
     }
   }
 
@@ -294,7 +301,7 @@ export default function PantallaVenta() {
         */}
         <View style={estilos.filaAcciones}>
           <Boton etiqueta="Corregir" tono="neutra" glifo="←" onPress={() => setPaso('captura')} />
-          <Boton etiqueta="Grabar venta" glifo="✓" onPress={grabar} />
+          <Boton etiqueta="Grabar venta" glifo="✓" onPress={grabar} ocupado={grabando} />
         </View>
       </Pantalla>
     );
