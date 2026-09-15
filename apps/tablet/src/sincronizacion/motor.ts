@@ -44,11 +44,9 @@ import {
 /**
  * De donde salen las operaciones que se suben.
  *
- * Cada modulo de negocio registrara la suya (venta, cobranza, gasto, merma,
- * ruta) sin tocar el motor. Hoy solo existe la jornada, que es la unica entidad
- * operativa que T-04 dejo implementada.
- *
- * TODO: T-16/T-20/T-27/T-33/T-39 — una fuente por modulo.
+ * Cada modulo de negocio registra la suya sin tocar el motor: hoy jornada
+ * (T-04), venta (T-16) y prospecto (T-40), en `proveedor-sesion.tsx`.
+ * Faltan cobranza (T-20), gasto, merma y ruta (T-27/T-33/T-39).
  */
 export interface FuenteOperaciones {
   tipo: TipoOperacion;

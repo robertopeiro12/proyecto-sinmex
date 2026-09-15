@@ -230,7 +230,7 @@ viaja en el `pull`: el precio es del administrador a propósito.
 > verdad es en **T-43** (versión por fila).
 
 La base local de la tablet relajó la misma columna (migración local
-`004-prospecto-campos-opcionales`). Sin eso, el `insert` del snapshot fallaría
+`005-prospecto-campos-opcionales`). Sin eso, el `insert` del snapshot fallaría
 y, como se aplica todo en una transacción, **la tablet dejaría de sincronizar
 del todo** — y le pasaría a un compañero de sucursal que no dio de alta nada.
 
