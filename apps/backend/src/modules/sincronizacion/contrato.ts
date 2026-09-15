@@ -122,12 +122,13 @@ export const CODIGOS_RECHAZO = [
    */
   'presentacion-inactiva',
   /**
-   * Una linea con cantidad > 0 y el cliente no tiene **ningun** precio vigente
-   * a `fecha_operacion` para esa presentacion. T-16.
+   * Una linea con cantidad > 0 y el cliente no tiene **ningun** precio para
+   * esa presentacion: ni vigente a `fecha_operacion` ni asignado despues,
+   * hasta hoy (enmienda a D12: el portal fecha los precios desde hoy, asi que
+   * asignarlo en el portal y volver a sincronizar recupera la venta). T-16.
    *
    * Comprueba **existencia, nunca valor**: el precio que manda la tablet es el
-   * de la nota que firmo el cliente y no se compara con el del servidor. Se
-   * recupera sola cuando el administrador asigna el precio en el portal.
+   * de la nota que firmo el cliente y no se compara con el del servidor.
    */
   'precio-no-asignado',
 ] as const;
