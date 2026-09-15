@@ -1,7 +1,8 @@
 # Contrato de sincronización tablet ↔ servidor
 
 **Versión del contrato: `1`** · Implementado en T-07 · Ampliado con folios en T-14
-· Última revisión: 2026-08-07
+· Ampliado con el tipo `prospecto` y el catálogo de tipos de negocio en T-40
+· Última revisión: 2026-09-14
 
 Este documento es la referencia legible del contrato. Las definiciones
 normativas están en el código:
@@ -192,6 +193,7 @@ nadie relacionaría con nada.
                          "encargado": null, "tipo": "cliente", "pct_comision": 3.5,
                          "promocion": "10+1", "plazo_credito_dias": 7,
                          "lat": 32.5149, "lng": -117.0382, "sucursal_id": "…", "activo": 1 }],
+    "tipos_negocio":  [{ "id": "…", "nombre": "Abarrotes", "activo": 1 }],
     "precios":        [{ "id": "<clienteId>:<presentacionId>", "cliente_id": "…",
                          "presentacion_id": "…", "precio_centavos": 800,
                          "vigente_desde": "2026-02-01", "activo": 1 }]
@@ -202,6 +204,47 @@ nadie relacionaría con nada.
                           "activo": 1 }]
 }
 ```
+
+### `domicilio` puede venir `null` en un prospecto (T-40)
+
+Un **prospecto que dio de alta un vendedor desde la app** no trae domicilio: el
+cliente dictó que lo que se captura es la **ubicación** (`lat`/`lng`), no la
+dirección — el vendedor está parado enfrente del negocio, al sol, con una
+tablet en la mano. En Postgres la columna se relajó y la obligatoriedad se
+conserva solo para `tipo = 'cliente'`
+(`ck_cliente_domicilio_obligatorio`). Lo mismo con `lista_precio_id`, que no
+viaja en el `pull`: el precio es del administrador a propósito.
+
+> [!warning] Es un cambio de significado y aun así NO subió la versión
+> El §3 dice que cambiar el significado de un valor sube `CONTRATO_ACTUAL`. Aquí
+> se decidió no subirla, y el motivo es que **subirla no protegería a nadie**:
+> `CONTRATO_MINIMO` seguiría en 1, así que una tablet vieja se seguiría
+> atendiendo y seguiría recibiendo el `null`. Lo único que la protegería es
+> subir `CONTRATO_MINIMO`, y eso es dejar sin servicio a tablets en la calle por
+> una rotura que **hoy no puede ocurrir**: la app no se ha publicado nunca y las
+> dos mitades salen del mismo monorepo. Es el mismo criterio con el que
+> `folio_segmento` (T-14) y el folio obligatorio de la venta (T-16) tampoco la
+> subieron.
+>
+> **Al publicar la primera tablet hay que revisarlo.** Donde toca resolverlo de
+> verdad es en **T-43** (versión por fila).
+
+La base local de la tablet relajó la misma columna (migración local
+`005-prospecto-campos-opcionales`). Sin eso, el `insert` del snapshot fallaría
+y, como se aplica todo en una transacción, **la tablet dejaría de sincronizar
+del todo** — y le pasaría a un compañero de sucursal que no dio de alta nada.
+
+### `tipos_negocio`: el catálogo del desplegable de prospectos (T-40)
+
+Colección **nueva** y por tanto aditiva (§3). Baja completa (no por sucursal:
+`tipo_negocio` no tiene sucursal) e incremental por `updated_at` como los demás
+catálogos, con la baja como `activo: 0`. Es el desplegable *Tipo de negocio* de
+la pantalla de prospectos; sin ella la tablet no tendría de dónde sacar la lista
+y tendría que dejar que el vendedor escribiera texto libre, que es exactamente
+lo que T-12 evitó al resolverlo con un catálogo.
+
+Una tablet vieja la ignora y sigue funcionando: es lo que el §3 pide de un
+cambio aditivo.
 
 ### La baja viaja como bandera, nunca como ausencia
 
@@ -267,7 +310,7 @@ cerrará**. Aquí se lee lo que hay, no se inventa un cálculo.
   "operaciones": [
     {
       "clave": "9e0b…-4a1f",             // OBLIGATORIA. Ver idempotencia
-      "tipo": "jornada",                  // jornada|venta|cobranza|gasto|merma|ruta
+      "tipo": "jornada",                  // jornada|venta|cobranza|gasto|merma|ruta|prospecto
       "fecha_operacion": "2026-08-07",   // día de trabajo (§4)
       "ocurrido_en": "2026-08-07T14:03:22.000-07:00",
       "cliente_id": "…",                  // opcional; se valida el alcance
@@ -291,9 +334,9 @@ saldría como **500 para todo el lote** — el todo-o-nada que este contrato pro
 no hacer.
 
 `datos` lo fija el ticket de cada módulo, y fijarlo es un cambio **aditivo** que
-no sube la versión del contrato. Hoy tiene forma fija **`venta`** (T-16, abajo);
-cobranza, gastos, merma y ruta siguen libres hasta T-20/T-27/T-33/T-39, y el
-servidor las guarda tal cual.
+no sube la versión del contrato. Hoy tienen forma fija **`venta`** (T-16) y
+**`prospecto`** (T-40), los dos abajo; cobranza, gastos, merma y ruta siguen
+libres hasta T-20/T-27/T-33/T-39, y el servidor las guarda tal cual.
 
 ### `datos` de una venta (T-16)
 
@@ -338,6 +381,69 @@ servidor las guarda tal cual.
 - Cada venta se aplica en **su propia transacción** junto con su fila del buzón: si se rechaza,
   no queda ni la venta ni la operación (§7).
 
+### `tipo: "prospecto"` — el alta de un prospecto (T-40)
+
+Es el **único** tipo que crea una fila de *catálogo* (`cliente` con
+`tipo = 'prospecto'`) en vez de una de operación. La proyecta
+`cartera-clientes/ClientesService.crearProspecto` (ADR-0009 §2.1).
+
+```jsonc
+{
+  "clave": "7f2c…-91ab",
+  "tipo": "prospecto",
+  "fecha_operacion": "2026-09-14",
+  "ocurrido_en": "2026-09-14T11:03:22.000-07:00",
+  // NO lleva `cliente_id` (lo está creando) ni `folio` (no es una nota firmada)
+  "datos": {
+    "nombre": "Tacos Aarón",          // nombre del negocio. Obligatorio
+    "telefono": "6641112233",          // obligatorio
+    "encargado": "Don Aarón",          // o null
+    "tipo_negocio_id": "…",            // del catálogo `tipos_negocio`, o null
+    "comentarios": "Quiere probar jamaica",  // o null
+    "lat": 32.514900, "lng": -117.038200,    // las dos o las dos null
+    "foto": null                       // reservado, siempre null por ahora
+  }
+}
+```
+
+Los campos son los que **dictó el cliente** en agosto de 2026 (ver
+`10-Dominio/Entidades/Cliente.md` en el vault). Lo que **no** viaja:
+
+- **`domicilio`**: no se captura. Lo sustituye la ubicación, y en Postgres la
+  columna dejó de ser obligatoria para un prospecto.
+- **`lista_precio_id`, `pct_comision`, `promocion`, `plazo_credito_dias`**: son
+  decisiones del administrador. El vendedor no puede dar de alta clientes
+  justamente porque el control del precio no es suyo (cambio v2.0).
+
+Tres reglas que se rechazan **por operación**, todas como `datos-invalidos`:
+
+| Qué llega | Por qué se rechaza |
+|---|---|
+| Un `folio` | `sync_operacion.folio` tiene un `unique` **global**: un folio pegado a un prospecto consumiría un número del espacio de las ventas, y una venta legítima con ese número se rechazaría después como `folio-duplicado` — un fallo que aparece en otra operación, días después |
+| Un `cliente_id` | El prospecto **es** el cliente que se está creando |
+| Media coordenada | No ubica nada y en el portal se vería como un punto en el meridiano cero: parece un dato bueno |
+
+**Sin ubicación es un caso normal**, no un error: el vendedor pudo negar el
+permiso o no haber señal, y eso no le impide registrar al prospecto.
+
+> [!info] La foto está diferida, y el campo ya viaja
+> El cliente la quiere (2026-08-23) *"si esto no se hace lento"*. Falta decidir
+> **dónde se guarda el archivo** — el candidato es Supabase Storage, y el alcance
+> de Supabase es justo lo que `ADR-0002` dejó abierto. `foto: null` viaja ya para
+> que ese ticket no tenga que cambiar el sobre ni la versión del contrato; el
+> servidor lo ignora. Ver `10-Dominio/Modulos/T-40 Registro de Prospectos.md`.
+
+> [!success] Con esto se cumple la notificación **Prospectos** (T-56), por dato
+> La notificación del portal muestra, los lunes, **qué vendedor registró qué
+> prospecto el día anterior**. Al proyectarse, el prospecto queda en `cliente`
+> con `tipo = 'prospecto'` y su fila del buzón queda con
+> `entidad_tabla = 'cliente'` / `entidad_id`, `vendedor_id` y
+> `fecha_operacion`. **Es `sync_operacion.fecha_operacion` y no
+> `cliente.created_at`** lo que la notificación tiene que usar: `created_at` es
+> cuando el servidor lo *recibió*, y un prospecto capturado el sábado que
+> sincroniza el lunes tendría `created_at` del lunes — justo el caso del fin de
+> semana que esa notificación describe. T-56 no se construye aquí.
+
 ### Respuesta `200` — parcial y honesta
 
 ```jsonc
@@ -381,6 +487,7 @@ texto en español** si reintenta o si avisa al vendedor.
 | `folio-duplicado` | **Colisión de folios**: otra operación ya subió ese folio |
 | `presentacion-inactiva` | Una línea de venta nombra una presentación que no existe, está dada de baja o cuyo producto está inactivo. Se reintenta en la siguiente sincronización (T-16) |
 | `precio-no-asignado` | Una línea con cantidad > 0 y el cliente no tiene **ningún** precio para esa presentación vigente a `fecha_operacion` ni asignado después, hasta hoy. Comprueba existencia, nunca valor. Se recupera cuando el portal asigna el precio y la tablet vuelve a sincronizar (T-16) |
+| `tipo-negocio-inexistente` | El `tipo_negocio_id` de un alta de `prospecto` no existe o está dado de baja (T-40). **No es un bug de la tablet**: su catálogo se quedó viejo. Se reintenta solo en la siguiente sincronización, que además le baja el catálogo nuevo |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo
