@@ -2,6 +2,7 @@ import { esquemaInicial } from './001-esquema-inicial';
 import { sincronizacion } from './002-sincronizacion';
 import { folios } from './003-folios';
 import { ventas } from './004-ventas';
+import { cobranzas } from './005-cobranzas';
 import type { Migracion } from './motor';
 
 /**
@@ -18,6 +19,7 @@ export const migraciones: readonly Migracion[] = [
   sincronizacion,
   folios,
   ventas,
+  cobranzas,
 ];
 
 export { ejecutarMigraciones, versionEsquema } from './motor';

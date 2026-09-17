@@ -10,9 +10,15 @@ import {
   SesionRechazadaError,
   type ClienteSync,
 } from './api';
-import type { OperacionSaliente, RespuestaPull, RespuestaPush } from './contrato';
+import type {
+  ClientePull,
+  NotaPendientePull,
+  OperacionSaliente,
+  RespuestaPull,
+  RespuestaPush,
+} from './contrato';
 import { fuenteJornadas } from './fuente-jornadas';
-import { crearMotorSincronizacion, type FuenteOperaciones } from './motor';
+import { aSnapshot, crearMotorSincronizacion, type FuenteOperaciones } from './motor';
 
 /** Respuesta de push que acepta todo lo que le manden. */
 function pushOk(operaciones: OperacionSaliente[]): RespuestaPush {
@@ -109,23 +115,27 @@ function conJornadaCerrada(
 }
 
 function respuestaPullSnapshot() {
-  const r = respuestaPullDePrueba();
-  return {
-    sucursales: r.catalogos.sucursales.map(({ id, codigo, nombre, activo }) => ({
-      id,
-      codigo,
-      nombre,
-      activa: activo,
-    })),
-    vendedores: r.catalogos.vendedores,
-    vehiculos: r.catalogos.vehiculos,
-    productos: r.catalogos.productos,
-    presentaciones: r.catalogos.presentaciones,
-    clientes: r.catalogos.clientes,
-    precios: r.catalogos.precios,
-    notas: r.notas_pendientes,
-  };
+  // T-20: la conversion de abonos a abonos_json vive en aSnapshot; se reusa.
+  return aSnapshot(respuestaPullDePrueba());
 }
+
+describe('aSnapshot (T-20)', () => {
+  it('guarda los abonos como JSON y tolera un servidor anterior a T-20', () => {
+    const respuesta = respuestaPullDePrueba();
+    expect(aSnapshot(respuesta).notas?.map((n) => n.abonos_json)).toEqual(
+      respuesta.notas_pendientes.map((n) => JSON.stringify(n.abonos)),
+    );
+
+    // Un servidor viejo no manda `abonos` ni `saldo_favor_centavos`.
+    const vieja = JSON.parse(JSON.stringify(respuesta)) as RespuestaPull;
+    for (const n of vieja.notas_pendientes) delete (n as Partial<NotaPendientePull>).abonos;
+    for (const c of vieja.catalogos.clientes) delete (c as Partial<ClientePull>).saldo_favor_centavos;
+
+    const snapshot = aSnapshot(vieja);
+    expect(snapshot.notas?.map((n) => n.abonos_json)).toEqual(['[]', '[]']);
+    expect(snapshot.clientes?.map((c) => c.saldo_favor_centavos)).toEqual([0, 0]);
+  });
+});
 
 describe('motor de sincronizacion', () => {
   describe('renovar la sesion es el PRIMER paso', () => {

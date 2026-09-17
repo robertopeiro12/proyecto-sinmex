@@ -168,6 +168,19 @@ describe('repositorio de catalogos', () => {
       const { catalogos } = conCatalogos();
       expect(catalogos.notasPendientesDe('cli-2')).toEqual([]);
     });
+
+    it('guarda los abonos de cada nota y el saldo a favor del cliente (T-20)', () => {
+      const { catalogos } = conCatalogos();
+      expect(JSON.parse(catalogos.notasPendientesDe('cli-1')[0]!.abonos_json)).toEqual([
+        { fecha_pago: '2026-08-03', monto_centavos: 10000, metodo_pago: 'efectivo' },
+      ]);
+      expect(catalogos.obtenerCliente('cli-1')?.saldo_favor_centavos).toBe(0);
+
+      catalogos.guardarSnapshot({
+        clientes: [{ ...snapshotDePrueba().clientes![0]!, saldo_favor_centavos: 4550 }],
+      });
+      expect(catalogos.obtenerCliente('cli-1')?.saldo_favor_centavos).toBe(4550);
+    });
   });
 
   /**

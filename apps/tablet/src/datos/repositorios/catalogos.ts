@@ -73,6 +73,8 @@ const COLUMNAS = {
     'lng',
     'sucursal_id',
     'activo',
+    // T-20 (D5): solo se muestra.
+    'saldo_favor_centavos',
   ],
   cliente_precio: [
     'id',
@@ -92,6 +94,8 @@ const COLUMNAS = {
     'monto_total_centavos',
     'saldo_centavos',
     'activo',
+    // T-20: los abonos previos, en JSON.
+    'abonos_json',
   ],
 } as const;
 

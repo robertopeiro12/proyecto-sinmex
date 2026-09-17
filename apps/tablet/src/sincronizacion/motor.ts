@@ -48,7 +48,8 @@ import {
  * ruta) sin tocar el motor. Hoy solo existe la jornada, que es la unica entidad
  * operativa que T-04 dejo implementada.
  *
- * TODO: T-16/T-20/T-27/T-33/T-39 — una fuente por modulo.
+ * Hechas: jornada, venta (T-16) y cobranza (T-20).
+ * TODO: T-27/T-33/T-39 — una fuente por modulo.
  */
 export interface FuenteOperaciones {
   tipo: TipoOperacion;
@@ -281,9 +282,17 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
     vehiculos: c.vehiculos,
     productos: c.productos,
     presentaciones: c.presentaciones,
-    clientes: c.clientes,
+    // T-20: un servidor anterior a T-20 no manda estos campos; con `?? 0` y
+    // `?? []` la tablet nueva no revienta el NOT NULL de su esquema.
+    clientes: c.clientes.map((cliente) => ({
+      ...cliente,
+      saldo_favor_centavos: cliente.saldo_favor_centavos ?? 0,
+    })),
     precios: c.precios,
-    notas: respuesta.notas_pendientes,
+    notas: respuesta.notas_pendientes.map(({ abonos, ...nota }) => ({
+      ...nota,
+      abonos_json: JSON.stringify(abonos ?? []),
+    })),
   };
 }
 

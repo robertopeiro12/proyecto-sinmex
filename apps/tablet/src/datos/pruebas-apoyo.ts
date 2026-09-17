@@ -2,7 +2,7 @@
  * Utilidades **solo para pruebas** de la capa de datos.
  * No se importa desde codigo de la app (arrastraria `better-sqlite3`).
  */
-import type { RespuestaPull } from '@/sincronizacion/contrato';
+import type { AbonoPull, RespuestaPull } from '@/sincronizacion/contrato';
 
 import { abrirBaseDatosNode } from './driver-node';
 import { ejecutarMigraciones, migraciones } from './migraciones';
@@ -74,6 +74,7 @@ export function snapshotDePrueba(): SnapshotCatalogos {
         lng: -117.0382,
         sucursal_id: 'suc-tj',
         activo: 1,
+        saldo_favor_centavos: 0,
       },
       {
         id: 'cli-2',
@@ -89,6 +90,7 @@ export function snapshotDePrueba(): SnapshotCatalogos {
         lng: null,
         sucursal_id: 'suc-tj',
         activo: 1,
+        saldo_favor_centavos: 0,
       },
     ],
     precios: [
@@ -127,6 +129,9 @@ export function snapshotDePrueba(): SnapshotCatalogos {
         status: 'abonado',
         monto_total_centavos: 25000,
         saldo_centavos: 15000,
+        abonos_json: JSON.stringify([
+          { fecha_pago: '2026-08-03', monto_centavos: 10000, metodo_pago: 'efectivo' },
+        ]),
         activo: 1,
       },
       {
@@ -138,6 +143,7 @@ export function snapshotDePrueba(): SnapshotCatalogos {
         status: 'pendiente',
         monto_total_centavos: 10000,
         saldo_centavos: 10000,
+        abonos_json: '[]',
         activo: 1,
       },
     ],
@@ -178,11 +184,14 @@ export function respuestaPullDePrueba(
       vehiculos: s.vehiculos ?? [],
       productos: s.productos ?? [],
       presentaciones: s.presentaciones ?? [],
-      // T-20: el snapshot local aun no guarda estos campos (llegan en la migracion 005).
-      clientes: (s.clientes ?? []).map((c) => ({ ...c, saldo_favor_centavos: 0 })),
+      clientes: s.clientes ?? [],
       precios: s.precios ?? [],
     },
-    notas_pendientes: (s.notas ?? []).map((n) => ({ ...n, abonos: [] })),
+    // El pull manda los abonos como lista; el snapshot local, como JSON.
+    notas_pendientes: (s.notas ?? []).map(({ abonos_json, ...n }) => ({
+      ...n,
+      abonos: JSON.parse(abonos_json) as AbonoPull[],
+    })),
     ...extra,
   };
 }

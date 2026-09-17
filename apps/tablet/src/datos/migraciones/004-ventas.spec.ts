@@ -44,10 +44,11 @@ const linea = (extra: Record<string, ValorSQL> = {}): Record<string, ValorSQL> =
 });
 
 describe('migracion 004: ventas (T-16)', () => {
-  it('deja la base en la version 4, con venta y venta_linea', () => {
+  it('deja la base migrada, con venta y venta_linea (version 4 en adelante)', () => {
     const bd = montar();
-    expect(migraciones).toHaveLength(4);
-    expect(versionEsquema(bd)).toBe(4);
+    // T-20 agrego la 005: aqui solo se afirma lo de la 004.
+    expect(migraciones[3]?.nombre).toBe('ventas');
+    expect(versionEsquema(bd)).toBe(migraciones.length);
     const tablas = bd.getAllSync<{ name: string }>(
       `select name from sqlite_master
         where type = 'table' and name in ('venta', 'venta_linea')
