@@ -2598,6 +2598,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
           codigo: 'datos-invalidos',
         });
         expect(res.resultados[0].motivo).toMatch(/^fecha_pago: /);
+        expect(await buzonDe(op.clave)).toBeUndefined();
+        expect(await abonosDe(notas[0])).toEqual([]);
       });
 
       it('una cobranza sobre una venta que subio en un lote anterior se aplica', async () => {
