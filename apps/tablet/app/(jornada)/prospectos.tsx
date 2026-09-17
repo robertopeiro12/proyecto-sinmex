@@ -4,6 +4,7 @@ import { Pressable, Text, View } from 'react-native';
 import { ErrorProspecto } from '@/datos';
 import type { Prospecto, TipoNegocio } from '@/datos/tipos';
 import { useJawa } from '@/estado/proveedor-jawa';
+import { useSesion } from '@/estado/proveedor-sesion';
 import { obtenerUbicacion } from '@/ubicacion/obtener';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
@@ -40,6 +41,7 @@ import { colores, espacio, grosor } from '@/ui/tokens';
  */
 export default function Prospectos() {
   const { datos, vendedor, sucursalId, versionCatalogos } = useJawa();
+  const { ultimaSincronizacion } = useSesion();
   const { estilos } = useTema();
 
   // `versionCatalogos` es la dependencia sin la que esta lista se queda con lo
@@ -73,11 +75,17 @@ export default function Prospectos() {
    */
   const tipoNegocioId = tiposNegocio.find((t) => t.id === tipoElegido)?.id ?? null;
 
+  // `ultimaSincronizacion` cubre el push que cambia el `sync_estado` de un
+  // prospecto ya listado: sin ella, la pastilla se queda en "por subir" hasta
+  // que algo mas vuelva a montar la pantalla, aunque el push haya terminado
+  // con ella montada (M-3, PR #90; mismo patron que
+  // `operacion/[clienteId]/index.tsx`).
   const prospectosDeHoy = useMemo<Prospecto[]>(() => {
     void refrescos;
     void versionCatalogos;
+    void ultimaSincronizacion;
     return vendedor ? datos.prospectos.delDia(vendedor.id) : [];
-  }, [datos, vendedor, refrescos, versionCatalogos]);
+  }, [datos, vendedor, refrescos, versionCatalogos, ultimaSincronizacion]);
 
   const puedeGuardar =
     vendedor !== null &&

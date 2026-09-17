@@ -3,6 +3,7 @@ import { Text } from 'react-native';
 
 import { ErrorJornada } from '@/datos';
 import { useJawa } from '@/estado/proveedor-jawa';
+import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
 import { Cifra } from '@/ui/cifra';
@@ -26,11 +27,11 @@ export default function CerrarDia() {
 
   const kmNumero = Number(km.replace(',', '.'));
   const puedeCerrar = km.trim() !== '' && Number.isFinite(kmNumero);
-  // Suma ventas: si quedan sin subir, el cierre no puede decir "listo" aunque
-  // la jornada misma ya este sincronizada, o el vendedor cierra el dia sin
-  // WiFi creyendo que ya subio todo.
-  const pendientes =
-    datos.jornadas.pendientesDeSincronizar().length + datos.ventas.pendientesDeSincronizar().length;
+  // Suma jornada, venta y prospecto (`contarPendientesDeSubir`, T-07/T-16/T-40):
+  // si algo de eso queda sin subir, el cierre no puede decir "listo" aunque la
+  // jornada misma ya este sincronizada, o el vendedor cierra el dia sin WiFi
+  // creyendo que ya subio todo.
+  const pendientes = contarPendientesDeSubir(datos);
 
   function cerrar() {
     setError(null);
