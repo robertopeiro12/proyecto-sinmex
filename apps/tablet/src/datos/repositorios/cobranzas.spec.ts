@@ -130,6 +130,30 @@ describe('repositorio de cobranzas (T-20)', () => {
     expect(nota(deps, 'nota-1')?.saldo_centavos).toBe(15000);
   });
 
+  it('un fallo DESPUES de emitir el folio tambien lo deshace: no se quema un numero (D16)', () => {
+    const { deps, folios, cobranzas } = montar();
+    // Se rompe a proposito la siguiente escritura de la transaccion (el
+    // reparto local): para entonces el folio ya se emitio y la cabecera del
+    // cobro ya se inserto. No se puede usar un `drop table` como en
+    // ventas.spec.ts:116-124 porque `registrar` lee `nota_pendiente`
+    // (notasPendientesDe) ANTES de abrir la transaccion, para validar la nota
+    // y calcular el reparto; soltar la tabla ahi impediria que el folio
+    // llegara a emitirse. Un trigger que aborta el UPDATE logra el mismo
+    // fallo tardio sin tocar esa lectura previa.
+    deps.bd.execSync(`
+      create trigger t20_bloquea_reparto
+      before update on nota_pendiente
+      begin
+        select raise(abort, 'fallo forzado de prueba');
+      end;
+    `);
+    expect(() => cobranzas.registrar(cobro())).toThrow();
+    expect(folios.consecutivoDe('ven-1')).toBe(0);
+    expect(cuantas(deps, 'folio_emitido')).toBe(0);
+    expect(cuantas(deps, 'cobranza')).toBe(0);
+    expect(nota(deps, 'nota-1')?.saldo_centavos).toBe(15000);
+  });
+
   it('un monto de $0 se rechaza antes de emitir folio', () => {
     const { deps, cobranzas } = montar();
     expect(() => cobranzas.registrar(cobro({ montoCentavos: 0 }))).toThrow(ErrorCobranza);
