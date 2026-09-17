@@ -24,6 +24,8 @@ const MENSAJE: Record<MotivoAbandono, string> = {
   'sin-red': 'No hay conexión con el negocio. Lo capturado sigue guardado aquí.',
   contrato: 'Esta tablet y el servidor no coinciden de versión. Avisa a la oficina.',
   alcance: 'El servidor rechazó la petición. Avisa a la oficina.',
+  'lote-grande':
+    'Un envío salió demasiado grande. Avisa a la oficina; lo capturado sigue guardado aquí.',
 };
 
 /**
