@@ -291,10 +291,27 @@ listas en campo.
 }
 ```
 
-Máximo **500 operaciones** por lote; pasarse es `400`. Un lote vacío también es
-`400`. **La tablet trocea sola** en lotes de 500 (`motor.ts`): sin eso, un día
-con muchas operaciones recibiría un 400 que el cliente traduce a "sin red", y
-reintentaría ese lote para siempre en silencio.
+Un lote tiene **dos topes, y manda el primero que se alcance**:
+
+| Tope | Valor | Quién lo aplica |
+|---|---|---|
+| Operaciones por lote | **500** (`MAX_OPERACIONES_POR_LOTE`) | La tablet trocea; pasarse es `400` |
+| Bytes del lote | **1 MB** (`MAX_BYTES_POR_LOTE`) | La tablet trocea; el servidor acepta hasta **5 MB** |
+
+Un lote vacío es `400`. **La tablet trocea sola** (`trocearLotes` en
+`src/sincronizacion/lotes.ts`): cierra el lote cuando la siguiente operación lo
+haría pasar de 1 MB —sumando el JSON de cada operación en UTF-8— o de 500
+operaciones. Una operación que ella sola pase de 1 MB **viaja sola en su lote**,
+nunca se descarta.
+
+El tope por cantidad no bastaba: 500 ventas pesan **218–754 kB** según cuántas
+líneas traiga cada una, y el parser del servidor venía con el default de 100 kB.
+El lote salía con `413` antes de llegar a la aplicación, el cliente lo leía como
+"sin red" y reenviaba **exactamente el mismo lote** en cada sincronización, para
+siempre y en silencio. Hoy el cliente distingue el `413` (motivo `lote-grande`,
+que sí llega a la pantalla del vendedor) y el servidor acepta 5 MB, cinco veces
+el tope de la tablet: **un `413` en producción es un bug de troceo, no un límite
+de negocio**.
 
 Un `cliente_id` que no sea un **uuid válido** se rechaza por operación, antes de
 llegar a la base. No es cosmético: `where id in ('abc')` no devuelve cero filas,

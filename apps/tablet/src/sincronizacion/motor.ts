@@ -30,16 +30,19 @@ import { SinRedError } from '@/sesion/api';
 import {
   ContratoIncompatibleError,
   FueraDeAlcanceError,
+  LoteDemasiadoGrandeError,
   SesionRechazadaError,
   type ClienteSync,
 } from './api';
 import {
+  MAX_BYTES_POR_LOTE,
   MAX_OPERACIONES_POR_LOTE,
   type OperacionSaliente,
   type RespuestaPull,
   type ResultadoOperacion,
   type TipoOperacion,
 } from './contrato';
+import { trocearLotes } from './lotes';
 
 /**
  * De donde salen las operaciones que se suben.
@@ -86,7 +89,9 @@ export type MotivoAbandono =
   /** Tablet y servidor hablan versiones distintas del contrato. */
   | 'contrato'
   /** El servidor rechazo el alcance. Es un bug, no una condicion de campo. */
-  | 'alcance';
+  | 'alcance'
+  /** Bug de troceo: el lote supero el limite del servidor. */
+  | 'lote-grande';
 
 export interface ResumenPull {
   completo: boolean;
@@ -199,16 +204,20 @@ export function crearMotorSincronizacion({
     for (const fuente of fuentes) {
       const operaciones = fuente.pendientes();
 
-      // Se trocea en lotes: el servidor rechaza con 400 un lote de mas de
-      // MAX_OPERACIONES_POR_LOTE, y la tablet traduce un 400 a "sin red", asi
-      // que un dia con muchas operaciones se reintentaria para siempre en
-      // silencio. Hoy solo hay jornadas (una al dia) y no se llega ni de lejos,
-      // pero el dia que T-16 registre ventas por cliente si.
+      // Se trocea por cantidad Y por tamano, y manda el tope que se alcance
+      // primero. Por cantidad solo no basta: un lote de 500 ventas cabe por
+      // cantidad y pesa 218-754 kB, mas de lo que el parser del servidor
+      // aceptaba, y ese 413 la tablet lo leia como "sin red" — reenviando
+      // exactamente el mismo lote en cada sincronizacion, para siempre y en
+      // silencio. Ver `lotes.ts` y MAX_BYTES_POR_LOTE.
       //
       // Cada lote es independiente: si el tercero falla por red, los dos
       // primeros ya quedaron aplicados y no se vuelven a mandar.
-      for (let i = 0; i < operaciones.length; i += MAX_OPERACIONES_POR_LOTE) {
-        const lote = operaciones.slice(i, i + MAX_OPERACIONES_POR_LOTE);
+      const lotes = trocearLotes(operaciones, {
+        maxOperaciones: MAX_OPERACIONES_POR_LOTE,
+        maxBytes: MAX_BYTES_POR_LOTE,
+      });
+      for (const lote of lotes) {
         const respuesta = await api.push(token, lote);
 
         total.enviadas += lote.length;
@@ -255,6 +264,9 @@ function traducir(error: unknown): { motivo: MotivoAbandono; detalle?: string } 
   }
   if (error instanceof FueraDeAlcanceError) {
     return { motivo: 'alcance', detalle: error.message };
+  }
+  if (error instanceof LoteDemasiadoGrandeError) {
+    return { motivo: 'lote-grande', detalle: error.message };
   }
   if (error instanceof SinRedError) {
     return { motivo: 'sin-red', detalle: error.message };

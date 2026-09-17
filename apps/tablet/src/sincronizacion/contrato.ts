@@ -23,6 +23,23 @@ export const CONTRATO_ACTUAL = 1;
 /** Maximo de operaciones por lote. Pasarse es un 400 del servidor. */
 export const MAX_OPERACIONES_POR_LOTE = 500;
 
+/**
+ * Tamano maximo de un lote de `push`, en bytes del JSON de sus operaciones
+ * (UTF-8).
+ *
+ * La tablet cierra el lote cuando la siguiente operacion lo haria pasar de este
+ * tamano o de {@link MAX_OPERACIONES_POR_LOTE} operaciones, **lo que ocurra
+ * primero**. El tope por cantidad no basta: 500 ventas pesan 218-754 kB segun
+ * cuantas lineas traiga cada una.
+ *
+ * Se mide la suma del JSON de cada operacion, no el cuerpo entero del envio
+ * (que suma ademas `{"contrato":1,"operaciones":[...]}` y las comas). Por eso
+ * el servidor acepta hasta **5 MB**: cinco veces este tope, holgura suficiente
+ * para el sobre y para una operacion suelta mas grande que el tope, que viaja
+ * sola en su lote en vez de descartarse.
+ */
+export const MAX_BYTES_POR_LOTE = 1_000_000;
+
 export type TipoOperacion =
   | 'jornada'
   | 'venta'
