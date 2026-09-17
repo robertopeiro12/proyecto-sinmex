@@ -1278,6 +1278,51 @@ describe('Sincronizacion pull/push (e2e)', () => {
       });
     });
 
+    describe('tamano del cuerpo', () => {
+      it('un lote de ~300 kB se procesa: nunca 413', async () => {
+        // El parser de body venia con el default de 100 kB (IMPORTANT-1 de la
+        // auditoria de PR #89). Un lote lleno de ventas pesa 218-754 kB, asi
+        // que el cuerpo se rechazaba ANTES de llegar a Nest, con 413, y la
+        // tablet leia cualquier no-ok como "sin red" y reenviaba el mismo lote
+        // para siempre. Aqui se comprueba que el tamano ya no decide nada.
+        //
+        // Las 400 operaciones traen folio invalido a proposito: se rechazan en
+        // la normalizacion, antes de tocar la base, asi que esta prueba no
+        // escribe ni una fila. Lo que se afirma es el codigo HTTP; los rechazos
+        // por operacion solo fijan que el lote se proceso entero y que ninguna
+        // llego a la base.
+        const operaciones = Array.from({ length: 400 }, () =>
+          operacion({
+            tipo: 'venta',
+            cliente_id: clienteId,
+            folio: 'NO-ES-UN-FOLIO',
+            datos: datosVenta({ comentarios: 'c'.repeat(500) }),
+          }),
+        );
+        const cuerpo = { contrato: CONTRATO_ACTUAL, operaciones };
+
+        // Sin esta guarda, encoger `comentarios` haria pasar la prueba por
+        // debajo del viejo tope de 100 kB sin que nadie se enterara.
+        expect(Buffer.byteLength(JSON.stringify(cuerpo))).toBeGreaterThan(
+          300_000,
+        );
+
+        const res = await push({ operaciones });
+        expect(res.status).toBe(200);
+
+        const respuesta = res.body as RespuestaPush;
+        expect(respuesta.resumen).toEqual({
+          recibidas: 400,
+          aplicadas: 0,
+          duplicadas: 0,
+          rechazadas: 400,
+        });
+        for (const r of respuesta.resultados) {
+          expect(r.codigo).toBe('folio-invalido');
+        }
+      });
+    });
+
     describe('alcance', () => {
       it('atribuir una operacion a OTRO vendedor responde 403 y no guarda nada', async () => {
         const buena = operacion();

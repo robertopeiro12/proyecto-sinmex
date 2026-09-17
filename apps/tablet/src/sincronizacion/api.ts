@@ -38,6 +38,22 @@ export class SesionRechazadaError extends Error {
   }
 }
 
+/**
+ * El cuerpo del envio paso el limite del servidor (413).
+ *
+ * Tiene su propia clase por la misma razon que `ContratoIncompatibleError`: **no
+ * se arregla reintentando**. Colado como `SinRedError`, la tablet reenviaria
+ * exactamente el mismo lote en cada sincronizacion, para siempre, y en pantalla
+ * no se distinguiria de una WiFi caida. Que llegue aqui significa que el troceo
+ * de `lotes.ts` fallo, no que el vendedor haya hecho nada raro.
+ */
+export class LoteDemasiadoGrandeError extends Error {
+  constructor(mensaje: string) {
+    super(mensaje);
+    this.name = 'LoteDemasiadoGrandeError';
+  }
+}
+
 /** El servidor rechazo el alcance: se pidio algo de otra sucursal o vendedor. */
 export class FueraDeAlcanceError extends Error {
   constructor(mensaje: string) {
@@ -94,6 +110,12 @@ async function pedir<T>(
 
   if (respuesta.status === 409) {
     throw new ContratoIncompatibleError(await mensajeDe(respuesta));
+  }
+
+  // Antes del cajon de sastre: un 413 es un bug de troceo (ver
+  // MAX_BYTES_POR_LOTE), y reintentarlo tal cual no lo arregla nunca.
+  if (respuesta.status === 413) {
+    throw new LoteDemasiadoGrandeError(await mensajeDe(respuesta));
   }
 
   if (!respuesta.ok) {

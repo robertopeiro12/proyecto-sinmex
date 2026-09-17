@@ -7,6 +7,7 @@ import { SinRedError } from '@/sesion/api';
 import {
   ContratoIncompatibleError,
   FueraDeAlcanceError,
+  LoteDemasiadoGrandeError,
   SesionRechazadaError,
   type ClienteSync,
 } from './api';
@@ -477,6 +478,20 @@ describe('motor de sincronizacion', () => {
       });
       const r = await motor.sincronizar();
       expect(r).toMatchObject({ ok: false, motivo: 'alcance' });
+    });
+
+    it('un lote demasiado grande NO es falta de red: es un bug de troceo', async () => {
+      // Un 413 leido como "sin red" es el bloqueo silencioso de IMPORTANT-1: la
+      // tablet reenvia exactamente el mismo lote en cada sincronizacion, para
+      // siempre, y en pantalla no se distingue de una WiFi caida.
+      const { motor, catalogos, jornadas } = montar({
+        push: () =>
+          Promise.reject(new LoteDemasiadoGrandeError('El servidor respondio 413.')),
+      });
+      conJornadaCerrada(jornadas, catalogos);
+
+      const r = await motor.sincronizar();
+      expect(r).toMatchObject({ ok: false, motivo: 'lote-grande' });
     });
 
     it('un error que no reconoce se deja propagar en vez de tragarselo', async () => {
