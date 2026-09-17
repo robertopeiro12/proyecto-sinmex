@@ -55,7 +55,10 @@ export const CODIGOS_RECHAZO = [
   'folio-duplicado',
   /** T-16: la presentacion no se vende. Se reintenta en la siguiente sincronizacion. */
   'presentacion-inactiva',
-  /** T-16: el cliente no tiene precio para esa presentacion. Lo arregla el portal. */
+  /**
+   * T-16: el cliente no tiene precio para esa presentacion (a la fecha ni
+   * despues, hasta hoy). Lo arregla el portal.
+   */
   'precio-no-asignado',
   /**
    * T-40: el giro que el vendedor eligio ya no esta en el catalogo del

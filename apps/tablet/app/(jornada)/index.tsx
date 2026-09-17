@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 
 import { useJawa } from '@/estado/proveedor-jawa';
@@ -37,8 +38,25 @@ export default function MenuJornada() {
   // Suma ventas: si quedan sin subir, la jornada no puede decir "listo" aunque
   // ella misma ya este sincronizada, o el vendedor cierra el dia sin WiFi
   // creyendo que ya subio todo.
-  const pendientes =
-    datos.jornadas.pendientesDeSincronizar().length + datos.ventas.pendientesDeSincronizar().length;
+  //
+  // Se relee al volver a esta pantalla (`useFocusEffect`): grabar una venta no
+  // mueve `datos`, y esta pantalla sigue montada mientras el vendedor captura en
+  // operacion/[clienteId]/venta.tsx y regresa con `router.back()` (Copilot,
+  // revision PR #89).
+  const [vueltas, setVueltas] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      setVueltas((n) => n + 1);
+    }, []),
+  );
+
+  const pendientes = useMemo(() => {
+    void vueltas;
+    void ultimaSincronizacion;
+    return (
+      datos.jornadas.pendientesDeSincronizar().length + datos.ventas.pendientesDeSincronizar().length
+    );
+  }, [datos, vueltas, ultimaSincronizacion]);
   const falloUltima = ultimaSincronizacion !== null && !ultimaSincronizacion.ok;
 
   /**

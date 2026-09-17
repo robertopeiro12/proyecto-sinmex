@@ -157,9 +157,11 @@ select lives_ok(
 select has_index('vendedor', 'uq_vendedor_folio_segmento',
   'el segmento de vendedor es unico en la base, no solo en el servicio');
 
--- Dos vendedores vivos no pueden compartir segmento. Es la estrategia
--- PROVISIONAL de desambiguacion (ADR-0007): mientras el cliente no diga como
--- se resuelve, el sistema garantiza al menos que no se repita.
+-- Dos vendedores vivos de la misma sucursal no pueden compartir segmento. Es la
+-- estrategia PROVISIONAL de desambiguacion (ADR-0007, desde T-62 el indice es
+-- por sucursal; ver 99_vendedor_segmento_sucursal_test.sql): mientras el
+-- cliente no diga como se resuelve, el sistema garantiza al menos que no se
+-- repita.
 select throws_ok(
   $$insert into vendedor (login, nombre, password_hash, sucursal_id, folio_segmento)
     select 'pgtap-folio-3', 'Zenon Zapata', 'x', sucursal_id, 'ZZ' from _ctx$$,

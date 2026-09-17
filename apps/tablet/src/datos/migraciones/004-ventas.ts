@@ -5,8 +5,10 @@ import type { Migracion } from './motor';
  *
  * ## Cabecera y lineas
  *
- * Igual que `venta_nota` / `venta_nota_detalle` en Postgres (T-05), para que el
- * sobre del push sea un mapeo directo y no una traduccion. Como el resto de la
+ * Misma forma que `venta_nota` / `venta_nota_detalle` en Postgres (T-05) con
+ * nombres locales mas cortos (`venta`, `venta_linea`); es la excepcion
+ * documentada en el README a la regla de nombres iguales, y
+ * `fuente-ventas.ts` hace la traduccion campo a campo. Como el resto de la
  * base local: dinero en **centavos enteros**, fechas como texto ISO.
  *
  * ## Lo que NO guarda, a proposito
