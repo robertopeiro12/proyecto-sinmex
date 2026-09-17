@@ -1,5 +1,5 @@
 begin;
-select plan(12);
+select plan(13);
 
 -- Integridad de venta_nota y venta_nota_detalle (T-16).
 --
@@ -142,6 +142,17 @@ select throws_ok(
   '23514',
   null,
   'rechaza un precio negativo'
+);
+
+-- La suma de cantidad y cantidad_promocion se evalua en bigint: dos integer
+-- validos por separado pueden desbordar integer al sumarse (22003, Copilot
+-- en PR #89).
+select lives_ok(
+  $$insert into venta_nota_detalle
+      (venta_nota_id, presentacion_id, cantidad, precio, cantidad_promocion)
+    select vn.id, t.pre_c, 1500000000, 0.00, 1000000000
+      from _t16 t join venta_nota vn on vn.folio = 'ZZPGTAPT1601'$$,
+  'acepta cantidades que desbordarian integer al sumarse sin el cast a bigint'
 );
 
 -- Una presentacion aparece una sola vez por venta: dos lineas de lo mismo

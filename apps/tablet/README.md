@@ -73,6 +73,9 @@ Node sin dispositivo ni emulador. El porque esta en
 
 - Nombres de tabla y columna iguales a `supabase/migrations/` (T-05), para que
   la sincronizacion de T-07 sea un mapeo 1:1.
+  - Excepcion (T-16): la venta local se llama `venta` / `venta_linea` y no
+    `venta_nota` / `venta_nota_detalle`; el sobre del push la traduce campo a
+    campo (`src/sincronizacion/fuente-ventas.ts`).
 - `id` es `text` (SQLite no tiene `uuid`).
 - **El dinero se guarda en centavos** (`*_centavos integer`). SQLite solo tiene
   `real` para decimales y el corte de caja tiene que cuadrar contra efectivo.

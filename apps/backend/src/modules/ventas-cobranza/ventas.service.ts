@@ -54,9 +54,10 @@ export class VentasService {
    * la transaccion de quien llama.
    *
    * No compara precios (D2): solo exige que cada presentacion se venda y que
-   * las lineas con cantidad tengan algun precio vigente para el cliente a la
-   * fecha de la operacion (D12, D13). El monto y el status los calcula aqui
-   * (D4, D14) y congela el % de comision del cliente (D8).
+   * las lineas con cantidad tengan algun precio para el cliente, vigente a la
+   * fecha de la operacion o asignado despues hasta hoy (D12 enmendada, D13).
+   * El monto y el status los calcula aqui (D4, D14) y congela el % de comision
+   * del cliente (D8).
    *
    * @throws {VentaRechazada} si el cliente no es de la sucursal, una
    * presentacion no se vende o falta precio. No escribe nada antes de lanzar.

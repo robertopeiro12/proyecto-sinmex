@@ -30,8 +30,9 @@ alter table venta_nota_detalle
   -- Piezas enteras, nunca negativas, y una linea tiene que llevar algo: venta,
   -- promocion o las dos. Una linea de pura promocion (cantidad 0) es valida:
   -- es como se regalan piezas a un prospecto (D13).
+  -- La suma se hace en bigint: dos integer validos pueden desbordar al sumarse (22003).
   add constraint ck_venta_detalle_cantidades
-    check (cantidad >= 0 and cantidad_promocion >= 0 and cantidad + cantidad_promocion > 0),
+    check (cantidad >= 0 and cantidad_promocion >= 0 and cantidad::bigint + cantidad_promocion > 0),
   -- 0 si se permite: una linea de pura promocion no necesita precio (D13).
   add constraint ck_venta_detalle_precio
     check (precio >= 0),
