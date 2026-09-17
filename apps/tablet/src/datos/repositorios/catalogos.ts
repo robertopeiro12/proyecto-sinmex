@@ -156,6 +156,17 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
   let version = 0;
   const oyentes = new Set<() => void>();
 
+  /**
+   * Publica la novedad. **Fuera de la transaccion, no dentro**: quien escucha
+   * vuelve a consultar en cuanto le avisan, y desde dentro leeria un estado a
+   * medio escribir. Sobre una copia del conjunto porque un oyente puede darse de
+   * baja mientras se le avisa.
+   */
+  function avisar(): void {
+    version += 1;
+    for (const oyente of [...oyentes]) oyente();
+  }
+
   return {
     /**
      * Version actual del catalogo. Sirve de dependencia de un `useMemo` y de
@@ -234,12 +245,16 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
       // vez que el refresco de las 11:00/14:00 no encuentre novedades.
       if (filasEscritas === 0) return;
 
-      // **Fuera de la transaccion, no dentro.** Quien escucha va a volver a
-      // consultar en cuanto le avisen, y desde dentro leeria un estado a medio
-      // escribir. Sobre una copia del conjunto porque un oyente puede darse de
-      // baja mientras se le avisa (una pantalla que se desmonta al repintar).
-      version += 1;
-      for (const oyente of [...oyentes]) oyente();
+      avisar();
+    },
+
+    /**
+     * Avisa que cambio algo que las pantallas leen del catalogo, cuando lo
+     * escribio otro repositorio (T-20: un cobro descuenta `nota_pendiente` y
+     * suma al saldo a favor del cliente). Se llama despues del `commit`.
+     */
+    publicarCambio(): void {
+      avisar();
     },
 
     /** Vehiculos activos de una sucursal, para la pantalla de abrir el dia. */

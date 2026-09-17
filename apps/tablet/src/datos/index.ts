@@ -54,6 +54,8 @@ export type {
   ResumenCaptura,
   ResumenLinea,
 } from './ventas-reglas';
+export { crearRepositorioCobranzas, ErrorCobranza } from './repositorios/cobranzas';
+export type { DatosRegistroCobranza, RepositorioCobranzas } from './repositorios/cobranzas';
 export {
   leerAbonos,
   leerMontoCentavos,

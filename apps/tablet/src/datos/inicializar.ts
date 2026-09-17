@@ -4,6 +4,7 @@ import { abrirBaseDatos } from './driver-expo';
 import { ejecutarMigraciones, migraciones } from './migraciones';
 import { relojSistema } from './reloj';
 import { crearRepositorioCatalogos, type RepositorioCatalogos } from './repositorios/catalogos';
+import { crearRepositorioCobranzas, type RepositorioCobranzas } from './repositorios/cobranzas';
 import { crearRepositorioFolios, type RepositorioFolios } from './repositorios/folios';
 import { crearRepositorioJornadas, type RepositorioJornadas } from './repositorios/jornadas';
 import { crearRepositorioSync, type RepositorioSync } from './repositorios/sync';
@@ -18,12 +19,14 @@ export interface CapaDatos {
   /** Cursor del pull incremental (T-07). */
   sync: RepositorioSync;
   /**
-   * Emision offline de folios (T-14). La usa `ventas` dentro de su propia
-   * transaccion (T-16); T-20 hara lo mismo con la cobranza.
+   * Emision offline de folios (T-14). La usan `ventas` (T-16) y `cobranzas`
+   * (T-20) dentro de su propia transaccion, con el mismo contador del dia.
    */
   folios: RepositorioFolios;
   /** Ventas capturadas en ruta (T-16). */
   ventas: RepositorioVentas;
+  /** Cobros y abonos capturados en ruta (T-20). */
+  cobranzas: RepositorioCobranzas;
   /** Version de esquema con la que quedo la base tras migrar. */
   versionEsquema: number;
 }
@@ -56,6 +59,7 @@ export function inicializarCapaDatos(): CapaDatos {
     sync: crearRepositorioSync(deps),
     folios,
     ventas: crearRepositorioVentas(deps, { catalogos, folios }),
+    cobranzas: crearRepositorioCobranzas(deps, { catalogos, folios }),
     versionEsquema: versionFinal,
   };
 }

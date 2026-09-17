@@ -169,6 +169,21 @@ describe('repositorio de catalogos', () => {
       expect(catalogos.notasPendientesDe('cli-2')).toEqual([]);
     });
 
+    it('publicarCambio sube la version y avisa, para quien escribe fuera del snapshot (T-20)', () => {
+      const { catalogos } = conCatalogos();
+      const antes = catalogos.version();
+      let avisos = 0;
+      const dejar = catalogos.suscribir(() => {
+        avisos += 1;
+      });
+
+      catalogos.publicarCambio();
+
+      expect(catalogos.version()).toBe(antes + 1);
+      expect(avisos).toBe(1);
+      dejar();
+    });
+
     it('guarda los abonos de cada nota y el saldo a favor del cliente (T-20)', () => {
       const { catalogos } = conCatalogos();
       expect(JSON.parse(catalogos.notasPendientesDe('cli-1')[0]!.abonos_json)).toEqual([
