@@ -2370,6 +2370,280 @@ describe('Sincronizacion pull/push (e2e)', () => {
       expect(res.resultados[0].motivo).toMatch(/^folio: /);
       expect(await abonosDe(notas[0])).toEqual([]);
     });
+
+    describe('reglas del reparto de punta a punta', () => {
+      it('dos abonos seguidos: cada fila guarda la foto de su saldo y la nota queda abonado', async () => {
+        const { clienteId: cli, notas } = await clienteConNotas([
+          { monto: '250.00', fecha: '2026-08-02' },
+        ]);
+        await push({
+          operaciones: [
+            cobranzaValida(cli, notas[0], { monto_centavos: 10000 }),
+          ],
+        }).expect(200);
+        await push({
+          operaciones: [
+            cobranzaValida(cli, notas[0], { monto_centavos: 5000 }),
+          ],
+        }).expect(200);
+
+        const abonos = await abonosDe(notas[0]);
+        expect(abonos.map((a) => [a.monto, a.tipo, a.saldo_pendiente])).toEqual(
+          [
+            ['100.00', 'abono', '150.00'],
+            ['50.00', 'abono', '100.00'],
+          ],
+        );
+        expect(await statusDe(notas[0])).toBe('abonado');
+      });
+
+      it('liquidar exacto deja la nota pagada y la fila es tipo cobranza', async () => {
+        const { clienteId: cli, notas } = await clienteConNotas([
+          {
+            monto: '250.00',
+            fecha: '2026-08-02',
+            status: 'abonado',
+            abonos: ['100.00'],
+          },
+        ]);
+        const op = cobranzaValida(cli, notas[0], {
+          monto_centavos: 15000,
+          metodo_pago: 'transferencia',
+        });
+        await push({ operaciones: [op] }).expect(200);
+
+        const abonos = await abonosDe(notas[0]);
+        expect(abonos[abonos.length - 1]).toMatchObject({
+          monto: '150.00',
+          tipo: 'cobranza',
+          saldo_pendiente: '0.00',
+          metodo_pago: 'transferencia',
+          folio: op.folio as string,
+        });
+        expect(await statusDe(notas[0])).toBe('pagada');
+        expect(await saldoFavorDe(cli)).toEqual([]);
+      });
+
+      it('el excedente va a las otras notas de la mas vieja a la mas nueva, con el mismo folio (D1)', async () => {
+        const { clienteId: cli, notas } = await clienteConNotas([
+          { monto: '100.00', fecha: '2026-08-05' }, // la elegida
+          { monto: '50.00', fecha: '2026-08-01' },
+          { monto: '80.00', fecha: '2026-08-03' },
+        ]);
+        const [elegida, vieja, media] = notas;
+        const op = cobranzaValida(cli, elegida, { monto_centavos: 20000 });
+        const res = (await push({ operaciones: [op] }).expect(200))
+          .body as RespuestaPush;
+        expect(res.resultados[0].estado).toBe('aplicada');
+
+        const [aElegida] = await abonosDe(elegida);
+        const [aVieja] = await abonosDe(vieja);
+        const [aMedia] = await abonosDe(media);
+        expect([aElegida.monto, aElegida.tipo, aElegida.folio]).toEqual([
+          '100.00',
+          'cobranza',
+          op.folio as string,
+        ]);
+        expect([aVieja.monto, aVieja.tipo, aVieja.folio]).toEqual([
+          '50.00',
+          'cobranza',
+          op.folio as string,
+        ]);
+        expect([
+          aMedia.monto,
+          aMedia.tipo,
+          aMedia.saldo_pendiente,
+          aMedia.folio,
+        ]).toEqual(['50.00', 'abono', '30.00', op.folio as string]);
+        expect(await statusDe(elegida)).toBe('pagada');
+        expect(await statusDe(vieja)).toBe('pagada');
+        expect(await statusDe(media)).toBe('abonado');
+        expect(await saldoFavorDe(cli)).toEqual([]);
+
+        // El buzon apunta a la primera fila: la de la nota elegida.
+        expect(await buzonDe(op.clave)).toMatchObject({
+          entidad_tabla: 'cobranza_abono',
+          entidad_id: aElegida.id,
+        });
+      });
+
+      it('lo que sobra de todas las notas queda como saldo a favor del cliente', async () => {
+        const { clienteId: cli, notas } = await clienteConNotas([
+          { monto: '100.00', fecha: '2026-08-02' },
+        ]);
+        const op = cobranzaValida(cli, notas[0], { monto_centavos: 13050 });
+        await push({ operaciones: [op] }).expect(200);
+
+        expect(await statusDe(notas[0])).toBe('pagada');
+        const favor = await saldoFavorDe(cli);
+        expect(favor).toHaveLength(1);
+        expect(favor[0]).toMatchObject({
+          monto: '30.50',
+          origen: 'excedente_cobro',
+          folio: op.folio as string,
+          vendedor_id: vendedorId,
+        });
+        expect(fechaTexto(favor[0].fecha_operacion)).toBe(FECHA_COBROS);
+      });
+
+      it('una nota ya pagada en el servidor no rechaza el cobro: el dinero va a las otras y a favor (D9)', async () => {
+        const { clienteId: cli, notas } = await clienteConNotas([
+          {
+            monto: '100.00',
+            fecha: '2026-08-01',
+            status: 'pagada',
+            abonos: ['100.00'],
+          },
+          { monto: '60.00', fecha: '2026-08-02' },
+        ]);
+        const [pagada, otra] = notas;
+        const op = cobranzaValida(cli, pagada, { monto_centavos: 10000 });
+        const res = (await push({ operaciones: [op] }).expect(200))
+          .body as RespuestaPush;
+        expect(res.resultados[0].estado).toBe('aplicada');
+
+        expect(await abonosDe(pagada)).toHaveLength(1); // solo el abono previo
+        const [aOtra] = await abonosDe(otra);
+        expect([aOtra.monto, aOtra.tipo]).toEqual(['60.00', 'cobranza']);
+        expect(await statusDe(otra)).toBe('pagada');
+        expect((await saldoFavorDe(cli)).map((f) => f.monto)).toEqual([
+          '40.00',
+        ]);
+        expect(await buzonDe(op.clave)).toMatchObject({
+          entidad_tabla: 'cobranza_abono',
+          entidad_id: aOtra.id,
+        });
+      });
+
+      it('si no hay nota que reciba dinero, el buzon apunta al movimiento de saldo a favor', async () => {
+        const { clienteId: cli, notas } = await clienteConNotas([
+          {
+            monto: '100.00',
+            fecha: '2026-08-01',
+            status: 'pagada',
+            abonos: ['100.00'],
+          },
+        ]);
+        const op = cobranzaValida(cli, notas[0], { monto_centavos: 5000 });
+        await push({ operaciones: [op] }).expect(200);
+
+        const favor = await saldoFavorDe(cli);
+        expect(favor.map((f) => f.monto)).toEqual(['50.00']);
+        expect(await buzonDe(op.clave)).toMatchObject({
+          entidad_tabla: 'saldo_favor_movimiento',
+          entidad_id: favor[0].id,
+        });
+      });
+
+      it('una nota de otra sucursal es nota-no-encontrada y no deja fila', async () => {
+        const { clienteId: cli } = await clienteConNotas([]);
+        const notaAjena = (
+          await db
+            .insertInto('venta_nota')
+            .values({
+              folio: `EA${SUFIJO}`.slice(0, 20),
+              fecha: '2026-08-02',
+              cliente_id: clienteAjenoId,
+              vendedor_id: vendedorAjenoId,
+              monto_total: '90.00',
+              num_nota: '901',
+              contado_credito: 'credito',
+              semana: 32,
+              mes: 8,
+              status: 'pendiente',
+              sucursal_id: sucursalAjenaId,
+            })
+            .returning('id')
+            .executeTakeFirstOrThrow()
+        ).id;
+
+        const op = cobranzaValida(cli, notaAjena);
+        const res = (await push({ operaciones: [op] }).expect(200))
+          .body as RespuestaPush;
+        expect(res.resultados[0]).toMatchObject({
+          estado: 'rechazada',
+          codigo: 'nota-no-encontrada',
+        });
+        expect(await buzonDe(op.clave)).toBeUndefined();
+        expect(await abonosDe(notaAjena)).toEqual([]);
+        expect(await statusDe(notaAjena)).toBe('pendiente');
+      });
+
+      it('una nota de otro cliente de la misma sucursal es nota-no-encontrada', async () => {
+        const uno = await clienteConNotas([]);
+        const otro = await clienteConNotas([
+          { monto: '90.00', fecha: '2026-08-02' },
+        ]);
+
+        const op = cobranzaValida(uno.clienteId, otro.notas[0]);
+        const res = (await push({ operaciones: [op] }).expect(200))
+          .body as RespuestaPush;
+        expect(res.resultados[0]).toMatchObject({
+          estado: 'rechazada',
+          codigo: 'nota-no-encontrada',
+        });
+        expect(await buzonDe(op.clave)).toBeUndefined();
+        expect(await abonosDe(otro.notas[0])).toEqual([]);
+      });
+
+      it('una fecha de pago posterior a la fecha de operacion es datos-invalidos', async () => {
+        const { clienteId: cli, notas } = await clienteConNotas([
+          { monto: '90.00', fecha: '2026-08-02' },
+        ]);
+        const op = cobranzaValida(cli, notas[0], { fecha_pago: '2026-08-10' });
+        const res = (await push({ operaciones: [op] }).expect(200))
+          .body as RespuestaPush;
+        expect(res.resultados[0]).toMatchObject({
+          estado: 'rechazada',
+          codigo: 'datos-invalidos',
+        });
+        expect(res.resultados[0].motivo).toMatch(/^fecha_pago: /);
+      });
+
+      it('una cobranza sobre una venta que subio en un lote anterior se aplica', async () => {
+        // Es el orden real: el motor de la tablet sube por fuente, primero las
+        // ventas y despues las cobranzas, en lotes distintos.
+        const { clienteId: cli } = await clienteConNotas([]);
+        const venta = ventaValida({ cliente_id: cli });
+        await push({ operaciones: [venta] }).expect(200);
+        const [nota] = await ventasConFolio(venta.folio as string);
+        expect(nota.monto_total).toBe('192.00');
+
+        const op = cobranzaValida(cli, nota.id, { monto_centavos: 19200 });
+        const res = (await push({ operaciones: [op] }).expect(200))
+          .body as RespuestaPush;
+        expect(res.resultados[0].estado).toBe('aplicada');
+        expect(await statusDe(nota.id)).toBe('pagada');
+      });
+
+      it('dos cobros simultaneos sobre la misma nota no reparten el mismo saldo (D13)', async () => {
+        const { clienteId: cli, notas } = await clienteConNotas([
+          { monto: '100.00', fecha: '2026-08-03' },
+        ]);
+        const a = cobranzaValida(cli, notas[0], { monto_centavos: 10000 });
+        const b = cobranzaValida(cli, notas[0], { monto_centavos: 10000 });
+
+        const [ra, rb] = await Promise.all([
+          push({ operaciones: [a] }).expect(200),
+          push({ operaciones: [b] }).expect(200),
+        ]);
+        expect((ra.body as RespuestaPush).resultados[0].estado).toBe(
+          'aplicada',
+        );
+        expect((rb.body as RespuestaPush).resultados[0].estado).toBe(
+          'aplicada',
+        );
+
+        // Gane quien gane el candado: una liquida la nota y la otra queda a favor.
+        expect((await abonosDe(notas[0])).map((x) => x.monto)).toEqual([
+          '100.00',
+        ]);
+        expect((await saldoFavorDe(cli)).map((f) => f.monto)).toEqual([
+          '100.00',
+        ]);
+        expect(await statusDe(notas[0])).toBe('pagada');
+      });
+    });
   });
 
   /* ================================================================ */
