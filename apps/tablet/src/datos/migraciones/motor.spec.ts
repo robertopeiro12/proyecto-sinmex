@@ -6,6 +6,110 @@ const uno: Migracion = { version: 1, nombre: 'uno', sql: 'create table a (id tex
 const dos: Migracion = { version: 2, nombre: 'dos', sql: 'create table b (id text primary key);' };
 
 describe('motor de migraciones locales', () => {
+  describe('sinLlavesForaneas (T-40)', () => {
+    /** Padre e hijo con una llave foranea y una fila en cada uno. */
+    function conLlave() {
+      const bd = abrirBaseDatosNode();
+      ejecutarMigraciones(bd, [
+        {
+          version: 1,
+          nombre: 'base',
+          sql: `create table padre (id text primary key, dato text not null);
+                create table hijo (id text primary key, padre_id text not null references padre(id));`,
+        },
+      ]);
+      bd.runSync("insert into padre values ('p1', 'algo')");
+      bd.runSync("insert into hijo values ('h1', 'p1')");
+      return bd;
+    }
+
+    const rehacerPadre: Migracion = {
+      version: 2,
+      nombre: 'rehacer-padre',
+      sinLlavesForaneas: true,
+      sql: `create table padre_nueva (id text primary key, dato text);
+            insert into padre_nueva (id, dato) select id, dato from padre;
+            drop table padre;
+            alter table padre_nueva rename to padre;`,
+    };
+
+    it('sin la bandera, rehacer una tabla referenciada falla', () => {
+      // Lo que demuestra que la bandera hace falta: la MISMA migracion sin ella.
+      const { sinLlavesForaneas: _omitida, ...sinBandera } = rehacerPadre;
+      expect(() => ejecutarMigraciones(conLlave(), [{ version: 1, nombre: 'base', sql: 'select 1;' }, sinBandera])).toThrow(
+        /FOREIGN KEY constraint failed/i,
+      );
+    });
+
+    it('con la bandera, rehace la tabla sin perder al hijo ni su referencia', () => {
+      const bd = conLlave();
+      ejecutarMigraciones(bd, [{ version: 1, nombre: 'base', sql: 'select 1;' }, rehacerPadre]);
+
+      expect(versionEsquema(bd)).toBe(2);
+      expect(bd.getFirstSync('select * from hijo')).toEqual({ id: 'h1', padre_id: 'p1' });
+      expect(
+        bd.getFirstSync<{ sql: string }>(
+          "select sql from sqlite_master where name = 'hijo'",
+        )?.sql,
+      ).toMatch(/references padre\(id\)/);
+    });
+
+    it('vuelve a encender las llaves foraneas al terminar', () => {
+      const bd = conLlave();
+      ejecutarMigraciones(bd, [{ version: 1, nombre: 'base', sql: 'select 1;' }, rehacerPadre]);
+
+      expect(bd.getFirstSync('pragma foreign_keys;')).toEqual({ foreign_keys: 1 });
+    });
+
+    it('con el chequeo acotado a las hijas, un huerfano preexistente en una tabla ajena no bloquea el commit', () => {
+      // Escenario real (M-2): una `jornada` que apunta a un `vehiculo` que ya
+      // no existe, sin ninguna relacion con `padre`/`hijo`. Se inserta con las
+      // llaves apagadas porque es la unica forma de crear un huerfano; en un
+      // dispositivo real puede llegar asi por datos viejos sin sincronizar.
+      const bd = conLlave();
+      bd.execSync(`create table vehiculo (id text primary key);
+                   create table jornada (id text primary key, vehiculo_id text not null references vehiculo(id));`);
+      bd.execSync('pragma foreign_keys = OFF;');
+      bd.runSync("insert into jornada values ('j1', 'no-existe')");
+      bd.execSync('pragma foreign_keys = ON;');
+
+      const rehacerPadreAcotado: Migracion = {
+        ...rehacerPadre,
+        sinLlavesForaneas: { comprobar: ['hijo'] },
+      };
+
+      ejecutarMigraciones(bd, [{ version: 1, nombre: 'base', sql: 'select 1;' }, rehacerPadreAcotado]);
+
+      // La migracion si confirmo: el huerfano ajeno no le importo.
+      expect(versionEsquema(bd)).toBe(2);
+      expect(bd.getFirstSync('select * from hijo')).toEqual({ id: 'h1', padre_id: 'p1' });
+      // Y el huerfano ajeno sigue ahi, intacto: el chequeo acotado no lo toco.
+      expect(bd.getFirstSync('select * from jornada')).toEqual({ id: 'j1', vehiculo_id: 'no-existe' });
+    });
+
+    it('revierte (y no confirma) una migracion que deja una referencia huerfana', () => {
+      const bd = conLlave();
+      const olvidaCopiar: Migracion = {
+        ...rehacerPadre,
+        nombre: 'olvida-copiar',
+        // Rehace el padre pero NO copia sus filas: el hijo queda huerfano. Sin
+        // `foreign_key_check` esto pasaria el commit sin una queja.
+        sql: `create table padre_nueva (id text primary key, dato text);
+              drop table padre;
+              alter table padre_nueva rename to padre;`,
+      };
+
+      expect(() =>
+        ejecutarMigraciones(bd, [{ version: 1, nombre: 'base', sql: 'select 1;' }, olvidaCopiar]),
+      ).toThrow(/huerfana/i);
+      // Y no se confirmo: la version sigue en 1 y el padre original esta intacto.
+      expect(versionEsquema(bd)).toBe(1);
+      expect(bd.getFirstSync('select * from padre')).toEqual({ id: 'p1', dato: 'algo' });
+      // Encendidas otra vez, aunque haya fallado.
+      expect(bd.getFirstSync('pragma foreign_keys;')).toEqual({ foreign_keys: 1 });
+    });
+  });
+
   it('una base nueva arranca en user_version 0', () => {
     expect(versionEsquema(abrirBaseDatosNode())).toBe(0);
   });

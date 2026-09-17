@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, Text, View } from 'react-native';
 
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import type { MotivoAbandono } from '@/sincronizacion/motor';
+import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 import { Boton } from '@/ui/boton';
 import { BotonMenu } from '@/ui/boton-menu';
 import { Cifra } from '@/ui/cifra';
@@ -22,6 +24,8 @@ const MENSAJE: Record<MotivoAbandono, string> = {
   'sin-red': 'No hay conexión con el negocio. Lo capturado sigue guardado aquí.',
   contrato: 'Esta tablet y el servidor no coinciden de versión. Avisa a la oficina.',
   alcance: 'El servidor rechazó la petición. Avisa a la oficina.',
+  'lote-grande':
+    'Un envío salió demasiado grande. Avisa a la oficina; lo capturado sigue guardado aquí.',
 };
 
 /**
@@ -34,7 +38,27 @@ export default function MenuJornada() {
   const { estilos } = useTema();
   const [sincronizando, setSincronizando] = useState(false);
 
-  const pendientes = datos.jornadas.pendientesDeSincronizar().length;
+  // Suma jornada, venta y prospecto (`contarPendientesDeSubir`, T-07/T-16/T-40):
+  // si algo de eso queda sin subir, la jornada no puede decir "listo" aunque
+  // ella misma ya este sincronizada, o el vendedor cierra el dia sin WiFi
+  // creyendo que ya subio todo.
+  //
+  // Se relee al volver a esta pantalla (`useFocusEffect`): grabar una venta no
+  // mueve `datos`, y esta pantalla sigue montada mientras el vendedor captura en
+  // operacion/[clienteId]/venta.tsx y regresa con `router.back()` (Copilot,
+  // revision PR #89).
+  const [vueltas, setVueltas] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      setVueltas((n) => n + 1);
+    }, []),
+  );
+
+  const pendientes = useMemo(() => {
+    void vueltas;
+    void ultimaSincronizacion;
+    return contarPendientesDeSubir(datos);
+  }, [datos, vueltas, ultimaSincronizacion]);
   const falloUltima = ultimaSincronizacion !== null && !ultimaSincronizacion.ok;
 
   /**

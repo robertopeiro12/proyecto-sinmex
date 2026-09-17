@@ -1,20 +1,63 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 
+import type { SyncEstado } from '@/datos/tipos';
 import { useJawa } from '@/estado/proveedor-jawa';
+import { useSesion } from '@/estado/proveedor-sesion';
 import { BotonMenu } from '@/ui/boton-menu';
-import { Cifra } from '@/ui/cifra';
-import { Pantalla } from '@/ui/pantalla';
+import { Cifra, pesos } from '@/ui/cifra';
+import { Pantalla, Pastilla, Tarjeta, type Estado } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
+import { espacio } from '@/ui/tokens';
+
+/** Como se le dice al vendedor en que va cada venta. */
+const ETIQUETA_SYNC: Record<SyncEstado, string> = {
+  pendiente: 'Por subir',
+  enviando: 'Subiendo',
+  sincronizado: 'Sincronizada',
+  error: 'Con error',
+};
+
+const ESTADO_SYNC: Record<SyncEstado, Estado> = {
+  pendiente: 'pendiente',
+  enviando: 'pendiente',
+  sincronizado: 'listo',
+  error: 'error',
+};
 
 /**
  * Menu de operacion de un cliente: las 4 cosas que [[App Tablet]] permite hacer
- * frente a el.
+ * frente a el, y lo que ya se le vendio hoy.
  */
 export default function OperacionCliente() {
   const { clienteId } = useLocalSearchParams<{ clienteId: string }>();
   const { datos } = useJawa();
+  const { ultimaSincronizacion } = useSesion();
   const { estilos } = useTema();
+
+  /**
+   * "Ventas de hoy" (D18): una venta a credito grabada hoy no aparece como nota
+   * pendiente hasta que el servidor la proyecta, asi que el vendedor la ve aqui
+   * mientras tanto.
+   *
+   * Se relee al volver a esta pantalla (`useFocusEffect`): grabar no mueve
+   * `versionCatalogos` y `router.back()` no la vuelve a montar.
+   * `ultimaSincronizacion` cubre el push que cambia su estado.
+   */
+  const [vueltas, setVueltas] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      setVueltas((n) => n + 1);
+    }, []),
+  );
+
+  const ventasDeHoy = useMemo(() => {
+    void vueltas;
+    void ultimaSincronizacion;
+    return datos.ventas.delDia(clienteId);
+  }, [datos, clienteId, vueltas, ultimaSincronizacion]);
+
   const cliente = datos.catalogos.obtenerCliente(clienteId);
 
   if (!cliente) {
@@ -31,6 +74,15 @@ export default function OperacionCliente() {
   }
 
   const params = { clienteId };
+
+  // Lo mas grave manda: un error sobre "falta subir", y "falta subir" sobre "todo subido".
+  const estadoVentas: Estado = ventasDeHoy.some((v) => v.sync_estado === 'error')
+    ? 'error'
+    : ventasDeHoy.some((v) => v.sync_estado !== 'sincronizado')
+      ? 'pendiente'
+      : ventasDeHoy.length > 0
+        ? 'listo'
+        : 'neutro';
 
   return (
     <Pantalla
@@ -71,6 +123,25 @@ export default function OperacionCliente() {
           destino={{ pathname: '/(jornada)/operacion/[clienteId]/registros', params }}
         />
       </View>
+
+      <Tarjeta estado={estadoVentas} etiqueta="Ventas de hoy">
+        {ventasDeHoy.length === 0 ? (
+          <Text style={estilos.textoSuave}>Todavía no le has vendido hoy.</Text>
+        ) : (
+          ventasDeHoy.map((v) => (
+            <View key={v.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
+              <Text style={estilos.textoTarjeta}>
+                <Cifra valor={v.folio} /> · <Cifra valor={pesos(v.monto_total_centavos)} /> ·{' '}
+                {v.contado_credito === 'contado' ? 'contado' : 'crédito'}
+              </Text>
+              <Pastilla texto={ETIQUETA_SYNC[v.sync_estado]} estado={ESTADO_SYNC[v.sync_estado]} />
+              {v.sync_estado === 'error' && v.sync_error ? (
+                <Text style={estilos.error}>{v.sync_error}</Text>
+              ) : null}
+            </View>
+          ))
+        )}
+      </Tarjeta>
     </Pantalla>
   );
 }

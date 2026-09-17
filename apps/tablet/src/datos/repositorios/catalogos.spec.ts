@@ -255,6 +255,39 @@ describe('repositorio de catalogos', () => {
       expect(conLaSenal(depsNuevas()).map((v) => v.id)).toEqual(['veh-1']);
     });
   });
+
+  describe('tipos de negocio (T-40)', () => {
+    it('lista solo los activos, por nombre', () => {
+      const { catalogos } = conCatalogos();
+
+      expect(catalogos.listarTiposNegocio().map((t) => t.nombre)).toEqual([
+        'Abarrotes',
+        'Taqueria',
+      ]);
+    });
+
+    it('obtenerTipoNegocio devuelve tambien uno dado de baja', () => {
+      // Hace falta para poder NOMBRAR el giro de un prospecto ya capturado: la
+      // fila no se borra, solo deja de ofrecerse (politica de purga de T-07).
+      const { catalogos } = conCatalogos();
+
+      expect(catalogos.obtenerTipoNegocio('tn-3')).toMatchObject({
+        nombre: 'Ciber (baja)',
+        activo: 0,
+      });
+      expect(catalogos.obtenerTipoNegocio('no-existe')).toBeNull();
+    });
+
+    it('una baja posterior deja de ofrecerse sin borrar la fila', () => {
+      const { catalogos } = conCatalogos();
+      catalogos.guardarSnapshot({
+        tiposNegocio: [{ id: 'tn-2', nombre: 'Taqueria', activo: 0 }],
+      });
+
+      expect(catalogos.listarTiposNegocio().map((t) => t.id)).toEqual(['tn-1']);
+      expect(catalogos.obtenerTipoNegocio('tn-2')).toMatchObject({ activo: 0 });
+    });
+  });
 });
 
 /**
@@ -281,3 +314,42 @@ function memo<T>(calcular: () => T): (dependencias: unknown[]) => T {
     return valor;
   };
 }
+
+describe('presentaciones para vender (T-16)', () => {
+  it('lista cada presentacion activa con el precio vigente del cliente, o null', () => {
+    const { catalogos } = conCatalogos();
+    expect(catalogos.presentacionesParaVenta('cli-1', '2026-08-07')).toEqual([
+      { presentacion_id: 'pre-1', producto_nombre: 'Jamaica', volumen: '1 L', precio_centavos: 2800 },
+      { presentacion_id: 'pre-2', producto_nombre: 'Jamaica', volumen: '500 ml', precio_centavos: null },
+    ]);
+  });
+
+  it('el precio es el vigente en la fecha pedida', () => {
+    const { catalogos } = conCatalogos();
+    const marzo = catalogos.presentacionesParaVenta('cli-1', '2026-03-15');
+    expect(marzo.find((p) => p.presentacion_id === 'pre-1')?.precio_centavos).toBe(2500);
+  });
+
+  it('a un prospecto sin lista le ofrece todo sin precio (para regalar como promocion)', () => {
+    const { catalogos } = conCatalogos();
+    expect(
+      catalogos.presentacionesParaVenta('cli-2', '2026-08-07').map((p) => p.precio_centavos),
+    ).toEqual([null, null]);
+  });
+
+  it('no ofrece una presentacion dada de baja', () => {
+    const { catalogos } = conCatalogos();
+    catalogos.guardarSnapshot({
+      presentaciones: [{ id: 'pre-2', producto_id: 'pro-1', volumen: '500 ml', activo: 0 }],
+    });
+    expect(
+      catalogos.presentacionesParaVenta('cli-1', '2026-08-07').map((p) => p.presentacion_id),
+    ).toEqual(['pre-1']);
+  });
+
+  it('no ofrece nada de un producto desactivado', () => {
+    const { catalogos } = conCatalogos();
+    catalogos.guardarSnapshot({ productos: [{ id: 'pro-1', nombre: 'Jamaica', activo: 0 }] });
+    expect(catalogos.presentacionesParaVenta('cli-1', '2026-08-07')).toEqual([]);
+  });
+});

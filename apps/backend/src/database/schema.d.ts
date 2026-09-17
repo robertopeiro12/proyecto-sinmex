@@ -29,12 +29,12 @@ export interface Cliente {
   comentarios: string | null;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
-  domicilio: string;
+  domicilio: string | null;
   encargado: string | null;
   factura: Generated<boolean>;
   id: Generated<string>;
   lat: Numeric | null;
-  lista_precio_id: string;
+  lista_precio_id: string | null;
   lng: Numeric | null;
   nombre: string;
   pct_comision: Numeric | null;
@@ -264,6 +264,7 @@ export interface Vendedor {
 
 export interface VentaNota {
   cliente_id: string;
+  comentarios: string | null;
   contado_credito: string;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -274,6 +275,7 @@ export interface VentaNota {
   mes: number;
   monto_total: Generated<Numeric>;
   num_nota: string;
+  pct_comision: Numeric | null;
   semana: number;
   status: string;
   sucursal_id: string;

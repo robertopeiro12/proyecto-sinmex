@@ -9,6 +9,7 @@ import type {
   Presentacion,
   Producto,
   Sucursal,
+  TipoNegocio,
   Vehiculo,
   Vendedor,
 } from '../tipos';
@@ -29,8 +30,19 @@ export interface SnapshotCatalogos {
   productos?: Omit<Producto, 'sincronizado_en'>[];
   presentaciones?: Omit<Presentacion, 'sincronizado_en'>[];
   clientes?: Omit<Cliente, 'sincronizado_en'>[];
+  /** T-40. Coleccion nueva del `pull`: el desplegable de la pantalla de prospectos. */
+  tiposNegocio?: Omit<TipoNegocio, 'sincronizado_en'>[];
   precios?: Omit<ClientePrecio, 'sincronizado_en'>[];
   notas?: Omit<NotaPendiente, 'sincronizado_en'>[];
+}
+
+/** Una fila de la pantalla de venta: que se puede vender y a cuanto (T-16). */
+export interface PresentacionParaVenta {
+  presentacion_id: string;
+  producto_nombre: string;
+  volumen: string;
+  /** Centavos, o `null` si el cliente no tiene precio: solo se puede regalar. */
+  precio_centavos: number | null;
 }
 
 export type RepositorioCatalogos = ReturnType<typeof crearRepositorioCatalogos>;
@@ -49,6 +61,7 @@ const COLUMNAS = {
   ],
   vehiculo: ['id', 'nombre', 'sucursal_id', 'activo'],
   producto: ['id', 'nombre', 'activo'],
+  tipo_negocio: ['id', 'nombre', 'activo'],
   presentacion: ['id', 'producto_id', 'volumen', 'activo'],
   cliente: [
     'id',
@@ -209,6 +222,9 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
           upsert(bd, 'vendedor', COLUMNAS.vendedor, snapshot.vendedores, ahora) +
           upsert(bd, 'vehiculo', COLUMNAS.vehiculo, snapshot.vehiculos, ahora) +
           upsert(bd, 'producto', COLUMNAS.producto, snapshot.productos, ahora) +
+          // Sin llaves foraneas hacia nadie, asi que su sitio en el orden es
+          // indiferente; va junto a los demas catalogos de empresa.
+          upsert(bd, 'tipo_negocio', COLUMNAS.tipo_negocio, snapshot.tiposNegocio, ahora) +
           upsert(bd, 'presentacion', COLUMNAS.presentacion, snapshot.presentaciones, ahora) +
           upsert(bd, 'cliente', COLUMNAS.cliente, snapshot.clientes, ahora) +
           upsert(bd, 'cliente_precio', COLUMNAS.cliente_precio, snapshot.precios, ahora) +
@@ -227,6 +243,27 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
       // baja mientras se le avisa (una pantalla que se desmonta al repintar).
       version += 1;
       for (const oyente of [...oyentes]) oyente();
+    },
+
+    /**
+     * Tipos de negocio **activos**, para el desplegable de prospectos (T-40).
+     *
+     * Solo los activos: un giro que el portal dio de baja no se debe poder
+     * asignar. Un prospecto ya capturado con ese giro **se conserva** — la fila
+     * no se borra, solo deja de ofrecerse (politica de purga de T-07).
+     */
+    listarTiposNegocio(): TipoNegocio[] {
+      return bd.getAllSync<TipoNegocio>(
+        'select * from tipo_negocio where activo = 1 order by nombre',
+      );
+    },
+
+    /** Un tipo de negocio por id, activo o no: para poder nombrar uno ya capturado. */
+    obtenerTipoNegocio(id: string): TipoNegocio | null {
+      return bd.getFirstSync<TipoNegocio>(
+        'select * from tipo_negocio where id = $id',
+        { $id: id },
+      );
     },
 
     /** Vehiculos activos de una sucursal, para la pantalla de abrir el dia. */
@@ -291,6 +328,39 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
         { $cliente_id: clienteId, $presentacion_id: presentacionId, $fecha: fecha },
       );
       return fila?.precio_centavos ?? null;
+    },
+
+    /**
+     * Lo que se le puede vender a un cliente en `fecha`: cada presentacion
+     * activa de un producto activo, con el precio que le aplica o `null` (T-16).
+     *
+     * Resuelve igual que `precioVigente()` (el registro vigente mas reciente que
+     * no sea futuro), para todas las presentaciones de una vez: la pantalla de
+     * venta pinta una fila por presentacion, y el repositorio de ventas pone el
+     * precio de cada linea desde aqui y no desde la pantalla (D15).
+     *
+     * `null` no es "no se vende": una presentacion sin precio se puede regalar
+     * como promocion (D13), por ejemplo a un prospecto, que no tiene lista.
+     */
+    presentacionesParaVenta(clienteId: string, fecha: FechaISO): PresentacionParaVenta[] {
+      return bd.getAllSync<PresentacionParaVenta>(
+        `select pr.id as presentacion_id,
+                p.nombre as producto_nombre,
+                pr.volumen,
+                (select cp.precio_centavos
+                   from cliente_precio cp
+                  where cp.cliente_id = $cliente_id
+                    and cp.presentacion_id = pr.id
+                    and cp.vigente_desde <= $fecha
+                    and cp.activo = 1
+                  order by cp.vigente_desde desc
+                  limit 1) as precio_centavos
+           from presentacion pr
+           join producto p on p.id = pr.producto_id
+          where pr.activo = 1 and p.activo = 1
+          order by p.nombre, pr.volumen`,
+        { $cliente_id: clienteId, $fecha: fecha },
+      );
     },
 
     /**

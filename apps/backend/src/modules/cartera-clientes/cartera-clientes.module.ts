@@ -29,5 +29,14 @@ import { TiposNegocioService } from './tipos-negocio.service';
     TiposNegocioService,
     TiposNegocioRepository,
   ],
+  // T-16: ventas-cobranza consulta los precios vigentes de un cliente para
+  // validar una venta. Cartera de Clientes es la duena de los precios, asi que
+  // la consulta vive aqui y se exporta en vez de duplicarse.
+  //
+  // T-40: `sincronizacion/` despacha el `tipo: 'prospecto'` del push a
+  // `ClientesService.crearProspecto` (ADR-0009 §2.1). La dependencia va de
+  // sincronizacion hacia aqui, nunca al reves: Cartera de Clientes es la duena
+  // de `cliente` y la regla vive una sola vez.
+  exports: [PreciosRepository, ClientesService],
 })
 export class CarteraClientesModule {}

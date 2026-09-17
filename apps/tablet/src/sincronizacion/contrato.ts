@@ -23,15 +23,69 @@ export const CONTRATO_ACTUAL = 1;
 /** Maximo de operaciones por lote. Pasarse es un 400 del servidor. */
 export const MAX_OPERACIONES_POR_LOTE = 500;
 
+/**
+ * Tamano maximo de un lote de `push`, en bytes del JSON de sus operaciones
+ * (UTF-8).
+ *
+ * La tablet cierra el lote cuando la siguiente operacion lo haria pasar de este
+ * tamano o de {@link MAX_OPERACIONES_POR_LOTE} operaciones, **lo que ocurra
+ * primero**. El tope por cantidad no basta: 500 ventas pesan 218-754 kB segun
+ * cuantas lineas traiga cada una.
+ *
+ * Se mide la suma del JSON de cada operacion, no el cuerpo entero del envio
+ * (que suma ademas `{"contrato":1,"operaciones":[...]}` y las comas). Por eso
+ * el servidor acepta hasta **5 MB**: cinco veces este tope, holgura suficiente
+ * para el sobre y para una operacion suelta mas grande que el tope, que viaja
+ * sola en su lote en vez de descartarse.
+ */
+export const MAX_BYTES_POR_LOTE = 1_000_000;
+
 export type TipoOperacion =
   | 'jornada'
   | 'venta'
   | 'cobranza'
   | 'gasto'
   | 'merma'
-  | 'ruta';
+  | 'ruta'
+  /** T-40. Un alta de prospecto: el servidor la proyecta a `cliente`. */
+  | 'prospecto';
 
 export type EstadoOperacion = 'aplicada' | 'duplicada' | 'rechazada';
+
+/**
+ * Motivos de rechazo que conoce esta tablet. Copia del enum del backend.
+ *
+ * `ResultadoOperacion.codigo` sigue siendo `string` y no este tipo a proposito:
+ * un servidor mas nuevo puede mandar un codigo que esta tablet no conoce, y eso
+ * no puede reventar la sincronizacion.
+ */
+export const CODIGOS_RECHAZO = [
+  'tipo-desconocido',
+  'clave-invalida',
+  'clave-repetida-en-el-lote',
+  'fecha-invalida',
+  'fecha-futura',
+  'momento-invalido',
+  'datos-invalidos',
+  'cliente-fuera-de-alcance',
+  'folio-invalido',
+  'folio-duplicado',
+  /** T-16: la presentacion no se vende. Se reintenta en la siguiente sincronizacion. */
+  'presentacion-inactiva',
+  /**
+   * T-16: el cliente no tiene precio para esa presentacion (a la fecha ni
+   * despues, hasta hoy). Lo arregla el portal.
+   */
+  'precio-no-asignado',
+  /**
+   * T-40: el giro que el vendedor eligio ya no esta en el catalogo del
+   * servidor. Se reintenta solo en la siguiente pasada, que ademas le baja el
+   * catalogo nuevo — el repositorio deja la fila en la cola, no la descarta.
+   */
+  'tipo-negocio-inexistente',
+] as const;
+
+export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
 
 /** Fila de catalogo: la baja llega como `activo: 0`, nunca como ausencia. */
 interface FilaSincronizable {
@@ -71,6 +125,24 @@ export interface VehiculoPull extends FilaSincronizable {
   sucursal_id: string;
 }
 
+/**
+ * Giro del negocio, para el desplegable de la pantalla de prospectos (T-40).
+ *
+ * Coleccion **nueva** y por tanto aditiva: no sube la version del contrato. Una
+ * tablet vieja la ignora y sigue funcionando.
+ *
+ * **No cuelga de una sucursal**: `tipo_negocio` es un catalogo de la empresa,
+ * igual que `productos`. Y no tiene columna `activo`: su unica baja es
+ * `deleted_at`, que viaja como `activo: 0` como todo lo demas.
+ *
+ * Sin esta coleccion la tablet no tendria de donde sacar la lista y habria que
+ * dejar que el vendedor escribiera texto libre — que es exactamente lo que T-12
+ * evito al resolver el giro con un catalogo y no con un campo suelto.
+ */
+export interface TipoNegocioPull extends FilaSincronizable {
+  nombre: string;
+}
+
 export interface ProductoPull extends FilaSincronizable {
   nombre: string;
 }
@@ -82,7 +154,29 @@ export interface PresentacionPull extends FilaSincronizable {
 
 export interface ClientePull extends FilaSincronizable {
   nombre: string;
-  domicilio: string;
+  /**
+   * `null` en un prospecto que nacio en la app (T-40).
+   *
+   * > [!warning] Este campo dejo de ser siempre una cadena, y NO subio la version
+   * > Un prospecto que captura el vendedor no trae domicilio: lo sustituye la
+   * > ubicacion (`lat`/`lng`). En Postgres la columna se relajo con
+   * > `ck_cliente_domicilio_obligatorio`, que lo sigue exigiendo a un `cliente`.
+   * >
+   * > Estrictamente es un cambio de significado, del que el contrato §3 dice que
+   * > sube `CONTRATO_ACTUAL`. Se decidio **no subirla**, y el motivo es que
+   * > subirla no protegeria a nadie: `CONTRATO_MINIMO` seguiria en 1, asi que una
+   * > tablet vieja se seguiria atendiendo y seguiria recibiendo el `null`. Lo
+   * > unico que la protegeria es subir `CONTRATO_MINIMO`, y eso es dejar fuera de
+   * > servicio a tablets en la calle por una rotura que **hoy no puede ocurrir**:
+   * > la app no se ha publicado nunca (ver [[Sistema de diseno]], "No se ha visto
+   * > en una tablet") y las dos mitades salen de este mismo monorepo. Mismo
+   * > criterio con el que `folio_segmento` (T-14) y el folio obligatorio de la
+   * > venta (T-16) tampoco la subieron.
+   * >
+   * > **Cuando se publique la primera tablet hay que revisarlo**, y T-43 (version
+   * > por fila) es donde toca resolverlo de verdad.
+   */
+  domicilio: string | null;
   telefono: string;
   encargado: string | null;
   tipo: 'cliente' | 'prospecto';
@@ -133,6 +227,17 @@ export interface RespuestaPull {
     productos: ProductoPull[];
     presentaciones: PresentacionPull[];
     clientes: ClientePull[];
+    /**
+     * T-40. **Opcional en la copia de la tablet, obligatoria en el servidor.**
+     *
+     * No es una divergencia del contrato: es la regla de evolucion §3 aplicada
+     * al lado que puede quedarse adelantado. Esta tablet puede hablar con un
+     * servidor que todavia no manda la coleccion (el dia del despliegue, entre
+     * que sale la app y sale el backend), y leer `undefined` de ahi no puede
+     * reventar la sincronizacion — se queda sin desplegable de tipos de negocio
+     * y lo dice, nada mas.
+     */
+    tipos_negocio?: TipoNegocioPull[];
     precios: PrecioPull[];
   };
   notas_pendientes: NotaPendientePull[];
@@ -173,11 +278,116 @@ export interface OperacionSaliente {
   datos: Record<string, unknown>;
 }
 
+/* ------------------------------------------------------------------ */
+/* Forma de `datos` por tipo                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Una linea de una venta (T-16).
+ *
+ * `precio_centavos` va **siempre**: es el precio de la nota que firmo el
+ * cliente, el que bajo en el ultimo `pull`, y el servidor lo guarda sin
+ * compararlo con su catalogo (vale el de la nota firmada). Entero >= 0; solo
+ * puede ser 0 en una linea de pura promocion (`cantidad` 0).
+ */
+export type LineaVenta = {
+  presentacion_id: string;
+  cantidad: number;
+  cantidad_promocion: number;
+  precio_centavos: number;
+};
+
+/**
+ * `datos` de una operacion `tipo: "venta"` (T-16).
+ *
+ * `cliente_id` y `folio` viajan en el **sobre**, no aqui, y en una venta son
+ * obligatorios. No lleva monto ni status: los calcula el servidor (el monto
+ * como suma de cantidad x precio, sin las piezas de promocion).
+ *
+ * Es `type` y no `interface` a proposito: la tablet lo asigna a
+ * `OperacionSaliente.datos` (`Record<string, unknown>`), y una interface no
+ * tiene la firma de indice implicita que eso exige.
+ */
+export type DatosVenta = {
+  num_nota: string;
+  contado_credito: 'contado' | 'credito';
+  factura: 'N/A' | 'pendiente';
+  comentarios: string | null;
+  /** De 1 a 50, sin presentacion repetida. */
+  lineas: LineaVenta[];
+};
+
+/**
+ * `datos` de una operacion `tipo: "prospecto"` (T-40).
+ *
+ * Son los campos que **dicto el cliente** en agosto de 2026 para el alta desde
+ * la app (ver [[Cliente]]): nombre del negocio, encargado, telefono, ubicacion,
+ * tipo de negocio, comentario y foto del lugar.
+ *
+ * Lo que NO viaja, y por que:
+ *
+ * - **`domicilio`**: no se captura. Lo sustituye la ubicacion, y en Postgres la
+ *   columna dejo de ser obligatoria para un prospecto.
+ * - **`lista_precio_id`, `pct_comision`, `promocion`, `plazo_credito_dias`**: son
+ *   decisiones del administrador. El vendedor no puede dar de alta clientes
+ *   justamente porque el control del precio no es suyo.
+ * - **`cliente_id` y `folio`**, que van en el sobre: un prospecto no tiene
+ *   `cliente_id` (lo esta CREANDO) y no lleva folio, porque no es una nota que
+ *   nadie firme. El servidor **rechaza** un prospecto que llegue con folio.
+ *
+ * Es `type` y no `interface` a proposito: la tablet lo asigna a
+ * `OperacionSaliente.datos` (`Record<string, unknown>`), y una interface no tiene
+ * la firma de indice implicita que eso exige.
+ */
+export type DatosProspecto = {
+  /** Nombre del negocio. Lo unico obligatorio junto al telefono. */
+  nombre: string;
+  telefono: string;
+  /** Nombre del encargado. */
+  encargado: string | null;
+  /** Del catalogo `tipos_negocio` que baja en el `pull`. */
+  tipo_negocio_id: string | null;
+  comentarios: string | null;
+  /**
+   * Ubicacion del dispositivo. **Las dos o ninguna**: media coordenada no ubica
+   * nada y en el portal se veria como un punto en el meridiano cero, que es peor
+   * que no tener ubicacion porque parece un dato bueno.
+   *
+   * `null` es un caso **normal**: el vendedor pudo negar el permiso o no haber
+   * senal, y eso no le impide registrar al prospecto.
+   */
+  lat: number | null;
+  lng: number | null;
+  /**
+   * **Reservado y siempre `null` por ahora.**
+   *
+   * El cliente confirmo que quiere la foto del lugar (2026-08-23), condicionada a
+   * que no haga lento el alta. Falta decidir **donde se guarda el archivo** — el
+   * candidato es Supabase Storage, y el alcance de Supabase es justo lo que
+   * `ADR-0002` dejo abierto. El campo viaja ya, con valor `null`, para que el dia
+   * que se decida no haya que cambiar el sobre ni la version del contrato: el
+   * servidor lo ignora. **La captura es un ticket aparte.**
+   */
+  foto: null;
+};
+
 export interface ResultadoOperacion {
   clave: string;
   tipo: string;
   estado: EstadoOperacion;
   id_servidor?: string;
+  /**
+   * Uno de {@link CODIGOS_RECHAZO}, o uno que esta tablet aun no conoce.
+   *
+   * Sigue siendo `string` y no un tipo cerrado a proposito: un servidor mas
+   * nuevo puede mandar un codigo que esta tablet no conoce, y eso no puede
+   * reventar la sincronizacion.
+   *
+   * T-40 agrega `tipo-negocio-inexistente`: el giro que el vendedor eligio ya
+   * no esta en el catalogo del servidor. **Se reintenta solo** en la siguiente
+   * pasada, que ademas baja el catalogo nuevo — el repositorio deja la fila en
+   * la cola, no la descarta.
+   */
   codigo?: string;
   motivo?: string;
 }

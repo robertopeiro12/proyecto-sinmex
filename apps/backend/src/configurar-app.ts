@@ -38,6 +38,15 @@ export const OPCIONES_NEST = { bodyParser: false } as const;
 export function configurarApp(app: INestApplication): void {
   app.use(cookieParser());
   // Unico parser de body: JSON. Ver OPCIONES_NEST para el porque.
-  app.use(express.json());
+  //
+  // El limite es explicito porque el default de body-parser son 100 kB y un
+  // lote de push cabe de sobra por encima: 500 ventas pesan 218-754 kB. Sin
+  // este limite el cuerpo se rechazaba con 413 antes de llegar a Nest, y la
+  // tablet leia cualquier no-ok como "sin red" y reenviaba el mismo lote para
+  // siempre. 5 MB son cinco veces MAX_BYTES_POR_LOTE (1 MB), el tope con el que
+  // la tablet cierra cada lote: la holgura absorbe el sobre del envio y una
+  // operacion suelta mas grande que el tope. **Un 413 en produccion es un bug
+  // de troceo de la tablet, no un limite de negocio.**
+  app.use(express.json({ limit: '5mb' }));
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 }

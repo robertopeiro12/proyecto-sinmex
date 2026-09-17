@@ -1,5 +1,6 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
+import { sql, type RawBuilder } from 'kysely';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
@@ -9,8 +10,10 @@ import {
   type Database,
 } from './../src/database/database.tokens';
 import { PasswordService } from './../src/modules/auth/password.service';
+import { PreciosRepository } from './../src/modules/cartera-clientes/precios.repository';
 import { CONTRATO_ACTUAL } from './../src/modules/sincronizacion/contrato';
 import { formarFolio } from './../src/modules/sincronizacion/folio';
+import { hoyEnTijuana } from './../src/modules/sincronizacion/operaciones';
 import { asignarSegmento } from './../src/modules/sincronizacion/segmento-vendedor';
 import type {
   RespuestaPull,
@@ -68,6 +71,13 @@ describe('Sincronizacion pull/push (e2e)', () => {
   let precioId: string;
   let clientePrecioId: string;
 
+  // T-16: presentaciones de prueba para lo que se vende y lo que no.
+  let presentacionSinPrecioId: string;
+  let presentacionBorradaId: string;
+  let productoInactivoId: string;
+  let presentacionInactivaId: string;
+  let precioInactivaId: string;
+
   let bearer: string;
 
   const entrar = async (login = LOGIN): Promise<Tokens> => {
@@ -105,6 +115,93 @@ describe('Sincronizacion pull/push (e2e)', () => {
     datos: { km_inicial: 120345 },
     ...extra,
   });
+
+  /* ---------------------------------------------------------------- */
+  /* Ventas (T-16)                                                     */
+  /* ---------------------------------------------------------------- */
+
+  /**
+   * Dia de las ventas de prueba que no fijan su propia fecha.
+   *
+   * Desde T-16 una `venta` necesita `datos` validos, `cliente_id` y un folio
+   * coherente con su dia, su sucursal y su vendedor, y el folio es unico en toda
+   * la base. Las pruebas de folios usan `2026-08-07` con consecutivos escritos a
+   * mano; este dia queda para `ventaValida()`, que reparte consecutivos sola y
+   * no puede chocar con aquellas.
+   */
+  const FECHA_VENTAS = '2026-08-08';
+  let ultimoConsecutivo = 0;
+  const siguienteConsecutivo = () => ++ultimoConsecutivo;
+
+  /** `datos` validos de una venta (contrato §6), con lo que se quiera cambiar encima. */
+  const datosVenta = (extra: Record<string, unknown> = {}) => ({
+    num_nota: '2346',
+    contado_credito: 'credito',
+    factura: 'N/A',
+    comentarios: null,
+    // 24 piezas a 8.00 (el override del cliente) + 2 de promocion = 192.00.
+    lineas: [
+      {
+        presentacion_id: presentacionId,
+        cantidad: 24,
+        cantidad_promocion: 2,
+        precio_centavos: 800,
+      },
+    ],
+    ...extra,
+  });
+
+  /**
+   * Una venta que el servidor acepta (D20). Sustituye a `operacion({ tipo:
+   * 'venta' })`, que servia de sobre generico mientras `datos` era libre.
+   *
+   * El folio se arma para el dia de la venta, salvo que `extra` traiga uno.
+   */
+  const ventaValida = (
+    extra: Record<string, unknown> = {},
+    fecha = FECHA_VENTAS,
+    consecutivo?: number,
+  ) =>
+    operacion({
+      tipo: 'venta',
+      cliente_id: clienteId,
+      fecha_operacion: fecha,
+      ocurrido_en: `${fecha}T14:03:22.000-07:00`,
+      folio:
+        'folio' in extra
+          ? extra.folio
+          : formarFolio(
+              sucursalCodigo,
+              fecha,
+              segmento,
+              consecutivo ?? siguienteConsecutivo(),
+            ),
+      datos: datosVenta(),
+      ...extra,
+    });
+
+  /** Las `venta_nota` con ese folio (0 o 1: el folio es unique). */
+  const ventasConFolio = (folio: string) =>
+    db
+      .selectFrom('venta_nota')
+      .selectAll()
+      .where('folio', '=', folio)
+      .execute();
+
+  /** La fila del buzon de esa clave para el vendedor de la prueba, si quedo. */
+  const buzonDe = (clave: string) =>
+    db
+      .selectFrom('sync_operacion')
+      .select(['id', 'entidad_tabla', 'entidad_id'])
+      .where('vendedor_id', '=', vendedorId)
+      .where('clave_idempotencia', '=', clave)
+      .executeTakeFirst();
+
+  /** `date` de Postgres a `AAAA-MM-DD`, con los componentes locales que puso el driver. */
+  const fechaTexto = (valor: Date | string) =>
+    valor instanceof Date
+      ? `${valor.getFullYear()}-${String(valor.getMonth() + 1).padStart(2, '0')}-${String(valor.getDate()).padStart(2, '0')}`
+      : String(valor).slice(0, 10);
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -307,6 +404,63 @@ describe('Sincronizacion pull/push (e2e)', () => {
         .executeTakeFirstOrThrow()
     ).id;
 
+    // --- T-16: lo que se puede vender y lo que no.
+    //
+    // Una presentacion activa SIN ningun precio (ni de lista ni override): se
+    // ofrece para regalar como promocion, pero no para vender.
+    presentacionSinPrecioId = (
+      await db
+        .insertInto('presentacion')
+        .values({ producto_id: productoId, volumen: '500 ml' })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+
+    // Una presentacion dada de baja en el portal (baja logica).
+    presentacionBorradaId = (
+      await db
+        .insertInto('presentacion')
+        .values({
+          producto_id: productoId,
+          volumen: '2 L',
+          deleted_at: new Date(),
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+
+    // Un producto desactivado CON precio en la lista del cliente: demuestra que
+    // lo que lo saca de la venta es el producto, no la falta de precio.
+    productoInactivoId = (
+      await db
+        .insertInto('producto')
+        .values({ nombre: `Tamarindo inactivo ${SUFIJO}`, activo: false })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+
+    presentacionInactivaId = (
+      await db
+        .insertInto('presentacion')
+        .values({ producto_id: productoInactivoId, volumen: '1 L' })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+
+    precioInactivaId = (
+      await db
+        .insertInto('precio')
+        .values({
+          presentacion_id: presentacionInactivaId,
+          lista_precio_id: lista.id,
+          sucursal_id: sucursalId,
+          precio: '9.50',
+          vigente_desde: '2026-01-01',
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+
     // --- Una nota pendiente por cobrar, con un abono parcial.
     notaId = (
       await db
@@ -354,21 +508,48 @@ describe('Sincronizacion pull/push (e2e)', () => {
       .deleteFrom('cobranza_abono')
       .where('venta_nota_id', '=', notaId)
       .execute();
-    await db.deleteFrom('venta_nota').where('id', '=', notaId).execute();
+    // T-16: las ventas que proyecto el push, ademas de `notaId`. Detalle antes
+    // que cabecera, y las dos antes que cliente, presentacion y vendedor.
+    await db
+      .deleteFrom('venta_nota_detalle')
+      .where(
+        'venta_nota_id',
+        'in',
+        db
+          .selectFrom('venta_nota')
+          .select('id')
+          .where('vendedor_id', 'in', [vendedorId, vendedorAjenoId]),
+      )
+      .execute();
+    await db
+      .deleteFrom('venta_nota')
+      .where('vendedor_id', 'in', [vendedorId, vendedorAjenoId])
+      .execute();
     await db
       .deleteFrom('cliente_precio')
       .where('id', '=', clientePrecioId)
       .execute();
-    await db.deleteFrom('precio').where('id', '=', precioId).execute();
+    await db
+      .deleteFrom('precio')
+      .where('id', 'in', [precioId, precioInactivaId])
+      .execute();
     await db
       .deleteFrom('cliente')
       .where('id', 'in', [clienteId, clienteAjenoId])
       .execute();
     await db
       .deleteFrom('presentacion')
-      .where('id', '=', presentacionId)
+      .where('id', 'in', [
+        presentacionId,
+        presentacionSinPrecioId,
+        presentacionBorradaId,
+        presentacionInactivaId,
+      ])
       .execute();
-    await db.deleteFrom('producto').where('id', '=', productoId).execute();
+    await db
+      .deleteFrom('producto')
+      .where('id', 'in', [productoId, productoInactivoId])
+      .execute();
     await db.deleteFrom('vehiculo').where('id', '=', vehiculoId).execute();
     await db
       .deleteFrom('sesion_vendedor')
@@ -731,6 +912,119 @@ describe('Sincronizacion pull/push (e2e)', () => {
   });
 
   /* ================================================================ */
+  /* Precios para vender (T-16)                                       */
+  /* ================================================================ */
+
+  /**
+   * `presentacionesConPrecio` es con lo que el servidor decide si una venta de
+   * la tablet se puede aplicar. Tiene que dar **el mismo precio que baja en el
+   * pull**: si no, la tablet cobraria con un precio que el servidor no reconoce
+   * y la venta se rechazaria con `precio-no-asignado` sin que nadie se hubiera
+   * equivocado.
+   *
+   * Se compara solo contra las presentaciones de este archivo: otros e2e
+   * escriben precios de la misma lista en paralelo, y comparar el catalogo
+   * entero volveria la prueba intermitente.
+   */
+  describe('precios para vender (T-16)', () => {
+    let precios: PreciosRepository;
+
+    beforeAll(() => {
+      precios = app.get(PreciosRepository);
+    });
+
+    /** Los precios de `clienteId` que baja el pull, por presentacion. */
+    const preciosDelPull = async () => {
+      const cuerpo = (await pull().expect(200)).body as RespuestaPull;
+      return new Map<string, number>(
+        cuerpo.catalogos.precios
+          .filter((p) => p.cliente_id === clienteId)
+          .map((p): [string, number] => [p.presentacion_id, p.precio_centavos]),
+      );
+    };
+
+    it('el override del cliente gana, igual que en el pull', async () => {
+      const paraVender = await precios.presentacionesConPrecio(
+        clienteId,
+        hoyEnTijuana(),
+        db,
+      );
+      expect(paraVender.get(presentacionId)).toBe(800);
+      expect((await preciosDelPull()).get(presentacionId)).toBe(800);
+    });
+
+    it('sin override, sale de la lista sin perder centavos, igual que en el pull', async () => {
+      await db
+        .updateTable('cliente_precio')
+        .set({ deleted_at: new Date() })
+        .where('id', '=', clientePrecioId)
+        .execute();
+      try {
+        const paraVender = await precios.presentacionesConPrecio(
+          clienteId,
+          hoyEnTijuana(),
+          db,
+        );
+        expect(paraVender.get(presentacionId)).toBe(1010);
+        expect((await preciosDelPull()).get(presentacionId)).toBe(1010);
+      } finally {
+        await db
+          .updateTable('cliente_precio')
+          .set({ deleted_at: null })
+          .where('id', '=', clientePrecioId)
+          .execute();
+      }
+    });
+
+    it('una presentacion activa sin ningun precio se ofrece con null (se puede regalar, no vender)', async () => {
+      const paraVender = await precios.presentacionesConPrecio(
+        clienteId,
+        hoyEnTijuana(),
+        db,
+      );
+      expect(paraVender.has(presentacionSinPrecioId)).toBe(true);
+      expect(paraVender.get(presentacionSinPrecioId)).toBeNull();
+      expect((await preciosDelPull()).has(presentacionSinPrecioId)).toBe(false);
+    });
+
+    it('no ofrece una presentacion dada de baja ni la de un producto inactivo, aunque tenga precio', async () => {
+      const paraVender = await precios.presentacionesConPrecio(
+        clienteId,
+        hoyEnTijuana(),
+        db,
+      );
+      expect(paraVender.has(presentacionBorradaId)).toBe(false);
+      expect(paraVender.has(presentacionInactivaId)).toBe(false);
+    });
+
+    it('el precio es el vigente en la fecha pedida, no el de hoy', async () => {
+      // Lista desde 2026-01-01 (10.10) y override desde 2026-02-01 (8.00).
+      const enero = await precios.presentacionesConPrecio(
+        clienteId,
+        '2026-01-15',
+        db,
+      );
+      expect(enero.get(presentacionId)).toBe(1010);
+
+      const antes = await precios.presentacionesConPrecio(
+        clienteId,
+        '2025-12-31',
+        db,
+      );
+      expect(antes.get(presentacionId)).toBeNull();
+    });
+
+    it('lee dentro de la transaccion que le pasen (la de push)', async () => {
+      const dentro = await db
+        .transaction()
+        .execute((trx) =>
+          precios.presentacionesConPrecio(clienteId, hoyEnTijuana(), trx),
+        );
+      expect(dentro.get(presentacionId)).toBe(800);
+    });
+  });
+
+  /* ================================================================ */
   /* PUSH                                                             */
   /* ================================================================ */
 
@@ -741,11 +1035,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
           tipo: 'jornada',
           datos: { km_inicial: 100, km_final: 240 },
         }),
-        operacion({
-          tipo: 'venta',
-          cliente_id: clienteId,
-          datos: { lineas: [] },
-        }),
+        // T-16: una venta ya no es un sobre generico; necesita datos validos.
+        ventaValida(),
         operacion({
           tipo: 'cobranza',
           cliente_id: clienteId,
@@ -957,7 +1248,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
           tipo: 'venta',
           cliente_id: 'no-soy-uuid',
         });
-        const buena2 = operacion({ tipo: 'venta', cliente_id: clienteId });
+        // `corrupta` no cambia: el uuid se rechaza antes de mirar `datos`.
+        const buena2 = ventaValida();
 
         const res = (
           await push({ operaciones: [buena1, corrupta, buena2] }).expect(200)
@@ -983,6 +1275,51 @@ describe('Sincronizacion pull/push (e2e)', () => {
         expect(res.resultados[0].estado).toBe('rechazada');
         expect(res.resultados[0].codigo).toBe('datos-invalidos');
         expect(res.resultados[1].estado).toBe('aplicada');
+      });
+    });
+
+    describe('tamano del cuerpo', () => {
+      it('un lote de ~300 kB se procesa: nunca 413', async () => {
+        // El parser de body venia con el default de 100 kB (IMPORTANT-1 de la
+        // auditoria de PR #89). Un lote lleno de ventas pesa 218-754 kB, asi
+        // que el cuerpo se rechazaba ANTES de llegar a Nest, con 413, y la
+        // tablet leia cualquier no-ok como "sin red" y reenviaba el mismo lote
+        // para siempre. Aqui se comprueba que el tamano ya no decide nada.
+        //
+        // Las 400 operaciones traen folio invalido a proposito: se rechazan en
+        // la normalizacion, antes de tocar la base, asi que esta prueba no
+        // escribe ni una fila. Lo que se afirma es el codigo HTTP; los rechazos
+        // por operacion solo fijan que el lote se proceso entero y que ninguna
+        // llego a la base.
+        const operaciones = Array.from({ length: 400 }, () =>
+          operacion({
+            tipo: 'venta',
+            cliente_id: clienteId,
+            folio: 'NO-ES-UN-FOLIO',
+            datos: datosVenta({ comentarios: 'c'.repeat(500) }),
+          }),
+        );
+        const cuerpo = { contrato: CONTRATO_ACTUAL, operaciones };
+
+        // Sin esta guarda, encoger `comentarios` haria pasar la prueba por
+        // debajo del viejo tope de 100 kB sin que nadie se enterara.
+        expect(Buffer.byteLength(JSON.stringify(cuerpo))).toBeGreaterThan(
+          300_000,
+        );
+
+        const res = await push({ operaciones });
+        expect(res.status).toBe(200);
+
+        const respuesta = res.body as RespuestaPush;
+        expect(respuesta.resumen).toEqual({
+          recibidas: 400,
+          aplicadas: 0,
+          duplicadas: 0,
+          rechazadas: 400,
+        });
+        for (const r of respuesta.resultados) {
+          expect(r.codigo).toBe('folio-invalido');
+        }
       });
     });
 
@@ -1017,9 +1354,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
         // Es un snapshot viejo, no un ataque: el portal pudo mover o dar de
         // baja al cliente mientras el vendedor estaba en ruta.
         const res = (await push({
-          operaciones: [
-            operacion({ tipo: 'venta', cliente_id: clienteAjenoId }),
-          ],
+          operaciones: [ventaValida({ cliente_id: clienteAjenoId })],
         }).expect(200)) as { body: RespuestaPush };
         expect(res.body.resultados[0].codigo).toBe('cliente-fuera-de-alcance');
       });
@@ -1068,6 +1403,682 @@ describe('Sincronizacion pull/push (e2e)', () => {
     });
   });
   /* ================================================================ */
+  /* Ventas (T-16): la base de ADR-0009 en el push                    */
+  /* ================================================================ */
+
+  describe('ventas (T-16)', () => {
+    it('una venta valida entra a venta_nota con su detalle, y el buzon dice a que fila se convirtio', async () => {
+      const op = ventaValida();
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(res.resultados[0].estado).toBe('aplicada');
+
+      const [venta] = await ventasConFolio(op.folio as string);
+      expect(venta).toMatchObject({
+        cliente_id: clienteId,
+        vendedor_id: vendedorId,
+        sucursal_id: sucursalId,
+        monto_total: '192.00',
+        num_nota: '2346',
+        contado_credito: 'credito',
+        factura: 'N/A',
+        comentarios: null,
+        semana: 32,
+        mes: 8,
+        status: 'pendiente',
+        pct_comision: '3.50',
+      });
+      expect(fechaTexto(venta.fecha)).toBe(FECHA_VENTAS);
+
+      const detalle = await db
+        .selectFrom('venta_nota_detalle')
+        .select(['presentacion_id', 'cantidad', 'cantidad_promocion', 'precio'])
+        .where('venta_nota_id', '=', venta.id)
+        .execute();
+      expect(detalle).toEqual([
+        {
+          presentacion_id: presentacionId,
+          cantidad: 24,
+          cantidad_promocion: 2,
+          precio: '8.00',
+        },
+      ]);
+
+      // Trazabilidad (enmienda a ADR-0009 §2.4): el buzon apunta a la venta.
+      expect(await buzonDe(op.clave)).toEqual({
+        id: res.resultados[0].id_servidor,
+        entidad_tabla: 'venta_nota',
+        entidad_id: venta.id,
+      });
+    });
+
+    it('una venta que el dominio rechaza no deja fila ni en el buzon ni en venta_nota', async () => {
+      const op = ventaValida({
+        datos: datosVenta({
+          lineas: [
+            {
+              presentacion_id: presentacionInactivaId,
+              cantidad: 5,
+              cantidad_promocion: 0,
+              precio_centavos: 900,
+            },
+          ],
+        }),
+      });
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'presentacion-inactiva',
+      });
+      expect(res.resultados[0].id_servidor).toBeUndefined();
+      // Contrato §7: rechazada no deja fila, para que se pueda corregir y reenviar.
+      expect(await buzonDe(op.clave)).toBeUndefined();
+      expect(await ventasConFolio(op.folio as string)).toHaveLength(0);
+    });
+
+    it('una venta con datos invalidos es datos-invalidos, nombra el campo y no deja fila', async () => {
+      const op = ventaValida({ datos: datosVenta({ num_nota: '   ' }) });
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'datos-invalidos',
+      });
+      expect(res.resultados[0].motivo).toContain('num_nota');
+      expect(await buzonDe(op.clave)).toBeUndefined();
+    });
+
+    it('una colision de folio se clasifica fuera de la transaccion y el resto del lote sigue entrando', async () => {
+      // El 23505 aborta la transaccion entera de Postgres. Si la clasificacion
+      // consultara con esa misma transaccion, esto seria un 500 para todo el
+      // lote en vez de un rechazo de UNA operacion (D10).
+      const folio = formarFolio(
+        sucursalCodigo,
+        FECHA_VENTAS,
+        segmento,
+        siguienteConsecutivo(),
+      );
+      const primera = ventaValida({ folio });
+      const choca = ventaValida({ folio });
+      const despues = operacion();
+
+      const res = (
+        await push({ operaciones: [primera, choca, despues] }).expect(200)
+      ).body as RespuestaPush;
+
+      expect(res.resultados.map((r) => r.estado)).toEqual([
+        'aplicada',
+        'rechazada',
+        'aplicada',
+      ]);
+      expect(res.resultados[1].codigo).toBe('folio-duplicado');
+      expect(await buzonDe(choca.clave)).toBeUndefined();
+      expect(await ventasConFolio(folio)).toHaveLength(1);
+    });
+  });
+
+  describe('ventas (T-16): reglas del dominio de punta a punta', () => {
+    let prospectoId: string;
+    // T-16: segunda presentacion vendible, con su propio precio de lista, para
+    // poder armar una venta con dos lineas VENDIDAS a distinto precio (la
+    // unica otra presentacion vendible del archivo es `presentacionId`, y una
+    // venta no puede repetir presentacion en dos lineas).
+    let presentacion2Id: string;
+    let precio2Id: string;
+    let listaId: string;
+
+    beforeAll(async () => {
+      const lista = await db
+        .selectFrom('lista_precio')
+        .select('id')
+        .where('nombre', '=', 'Lista 1')
+        .executeTakeFirstOrThrow();
+      listaId = lista.id;
+
+      prospectoId = (
+        await db
+          .insertInto('cliente')
+          .values({
+            nombre: `Prospecto sync ${SUFIJO}`,
+            domicilio: 'Av. Reforma 9',
+            telefono: '6647654321',
+            tipo: 'prospecto',
+            lista_precio_id: lista.id,
+            sucursal_id: sucursalId,
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+
+      presentacion2Id = (
+        await db
+          .insertInto('presentacion')
+          .values({ producto_id: productoId, volumen: '3 L' })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+
+      precio2Id = (
+        await db
+          .insertInto('precio')
+          .values({
+            presentacion_id: presentacion2Id,
+            lista_precio_id: lista.id,
+            sucursal_id: sucursalId,
+            precio: '20.00',
+            vigente_desde: '2026-01-01',
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+    });
+
+    afterAll(async () => {
+      // Corre antes que el afterAll de arriba. La venta del prospecto le tiene
+      // llave foranea al cliente, que se borra aqui: primero detalle, luego
+      // cabecera, luego cliente.
+      await db
+        .deleteFrom('venta_nota_detalle')
+        .where(
+          'venta_nota_id',
+          'in',
+          db
+            .selectFrom('venta_nota')
+            .select('id')
+            .where('cliente_id', '=', prospectoId),
+        )
+        .execute();
+      await db
+        .deleteFrom('venta_nota')
+        .where('cliente_id', '=', prospectoId)
+        .execute();
+      await db.deleteFrom('cliente').where('id', '=', prospectoId).execute();
+
+      // El detalle de `presentacion2Id` es de una venta de `clienteId`: la
+      // cabecera la limpia el afterAll de mas arriba (por `vendedor_id`), pero
+      // esta fila tiene que irse antes para no dejar la llave foranea colgada.
+      await db
+        .deleteFrom('venta_nota_detalle')
+        .where('presentacion_id', '=', presentacion2Id)
+        .execute();
+      await db.deleteFrom('precio').where('id', '=', precio2Id).execute();
+      await db
+        .deleteFrom('presentacion')
+        .where('id', '=', presentacion2Id)
+        .execute();
+    });
+
+    const detalleDe = (ventaNotaId: string) =>
+      db
+        .selectFrom('venta_nota_detalle')
+        .select(['presentacion_id', 'cantidad', 'cantidad_promocion', 'precio'])
+        .where('venta_nota_id', '=', ventaNotaId)
+        .execute();
+
+    it('reenviar una venta devuelve duplicada con el mismo id y no crea una segunda venta', async () => {
+      const op = ventaValida();
+      const primero = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      const segundo = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(primero.resultados[0].estado).toBe('aplicada');
+      expect(segundo.resultados[0]).toMatchObject({
+        estado: 'duplicada',
+        id_servidor: primero.resultados[0].id_servidor,
+      });
+
+      const ventas = await ventasConFolio(op.folio as string);
+      expect(ventas).toHaveLength(1);
+      expect(await detalleDe(ventas[0].id)).toHaveLength(1);
+    });
+
+    it('una linea con cantidad y sin precio para el cliente es precio-no-asignado y no deja fila', async () => {
+      const op = ventaValida({
+        datos: datosVenta({
+          lineas: [
+            {
+              presentacion_id: presentacionSinPrecioId,
+              cantidad: 3,
+              cantidad_promocion: 0,
+              precio_centavos: 500,
+            },
+          ],
+        }),
+      });
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'precio-no-asignado',
+      });
+      expect(await buzonDe(op.clave)).toBeUndefined();
+      expect(await ventasConFolio(op.folio as string)).toHaveLength(0);
+    });
+
+    /**
+     * La promesa del rechazo: "asignalo en el portal y vuelve a sincronizar".
+     * El portal da de alta el precio con `vigente_desde` = hoy, asi que una venta
+     * de un dia anterior solo se recupera si la existencia cuenta los precios
+     * asignados despues de `fecha_operacion`, hasta hoy (enmienda de D12).
+     *
+     * Las fechas del precio las pone Postgres (`current_date`), no Node: el
+     * reloj de la maquina puede ir en otro huso y otro dia.
+     */
+    const conPrecioDesde = async (
+      vigenteDesde: RawBuilder<string>,
+      prueba: () => Promise<void>,
+    ) => {
+      const { id } = await db
+        .insertInto('precio')
+        .values({
+          presentacion_id: presentacionSinPrecioId,
+          lista_precio_id: listaId,
+          sucursal_id: sucursalId,
+          precio: '7.00',
+          vigente_desde: vigenteDesde,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      try {
+        await prueba();
+      } finally {
+        // El detalle de una venta aplicada lo limpia el afterAll de arriba (por
+        // vendedor); el precio tiene que irse ya: otras pruebas cuentan con que
+        // esta presentacion no tenga ninguno.
+        await db.deleteFrom('precio').where('id', '=', id).execute();
+      }
+    };
+
+    const ventaSinPrecioDeLista = () =>
+      ventaValida({
+        datos: datosVenta({
+          lineas: [
+            {
+              presentacion_id: presentacionSinPrecioId,
+              cantidad: 3,
+              cantidad_promocion: 0,
+              precio_centavos: 500,
+            },
+          ],
+        }),
+      });
+
+    it('una venta de un dia anterior se aplica si el precio se asigno despues, hasta hoy', async () => {
+      await conPrecioDesde(sql<string>`current_date`, async () => {
+        const op = ventaSinPrecioDeLista();
+        const res = (await push({ operaciones: [op] }).expect(200))
+          .body as RespuestaPush;
+
+        expect(res.resultados[0].estado).toBe('aplicada');
+        const [venta] = await ventasConFolio(op.folio as string);
+        // La fecha de la venta no se mueve: sigue siendo la de la operacion.
+        expect(fechaTexto(venta.fecha as Date | string)).toBe(FECHA_VENTAS);
+        // Se guarda el precio de la tablet (D2), no el 7.00 del portal.
+        expect(await detalleDe(venta.id)).toEqual([
+          expect.objectContaining({
+            presentacion_id: presentacionSinPrecioId,
+            precio: '5.00',
+          }),
+        ]);
+
+        // El pull sigue resolviendo a la fecha pedida: a esa fecha no habia precio.
+        const aLaFecha = await app
+          .get(PreciosRepository)
+          .presentacionesConPrecio(clienteId, FECHA_VENTAS, db);
+        expect(aLaFecha.get(presentacionSinPrecioId)).toBeNull();
+      });
+    });
+
+    it('un precio que empieza despues de hoy no cuenta: sigue siendo precio-no-asignado', async () => {
+      await conPrecioDesde(sql<string>`current_date + 1`, async () => {
+        const op = ventaSinPrecioDeLista();
+        const res = (await push({ operaciones: [op] }).expect(200))
+          .body as RespuestaPush;
+
+        expect(res.resultados[0]).toMatchObject({
+          estado: 'rechazada',
+          codigo: 'precio-no-asignado',
+        });
+        expect(await buzonDe(op.clave)).toBeUndefined();
+        expect(await ventasConFolio(op.folio as string)).toHaveLength(0);
+      });
+    });
+
+    it('una presentacion borrada rechaza la venta entera, aunque las otras lineas sean buenas', async () => {
+      const op = ventaValida({
+        datos: datosVenta({
+          lineas: [
+            {
+              presentacion_id: presentacionId,
+              cantidad: 24,
+              cantidad_promocion: 0,
+              precio_centavos: 800,
+            },
+            {
+              presentacion_id: presentacionBorradaId,
+              cantidad: 2,
+              cantidad_promocion: 0,
+              precio_centavos: 800,
+            },
+          ],
+        }),
+      });
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'presentacion-inactiva',
+      });
+      // Ni media venta: la linea buena tampoco quedo.
+      expect(await ventasConFolio(op.folio as string)).toHaveLength(0);
+      expect(await buzonDe(op.clave)).toBeUndefined();
+    });
+
+    it('tras una colision con OTRA clave, el reintento legitimo de la primera sigue siendo duplicada', async () => {
+      const folio = formarFolio(
+        sucursalCodigo,
+        FECHA_VENTAS,
+        segmento,
+        siguienteConsecutivo(),
+      );
+      const legitima = ventaValida({ folio });
+      const otra = ventaValida({ folio });
+
+      const r1 = (await push({ operaciones: [legitima] }).expect(200))
+        .body as RespuestaPush;
+      const r2 = (await push({ operaciones: [otra] }).expect(200))
+        .body as RespuestaPush;
+      const r3 = (await push({ operaciones: [legitima] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(r1.resultados[0].estado).toBe('aplicada');
+      expect(r2.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'folio-duplicado',
+      });
+      expect(r3.resultados[0]).toMatchObject({
+        estado: 'duplicada',
+        id_servidor: r1.resultados[0].id_servidor,
+      });
+      expect(await ventasConFolio(folio)).toHaveLength(1);
+    });
+
+    it('un folio que ya existe en venta_nota pero SIN operacion en el buzon tambien colisiona (venta_nota_folio_key)', async () => {
+      // El caso que describe el comentario de `RESTRICCIONES_DE_FOLIO`
+      // (despacho.ts): una nota que no nacio del push (T-17, el portal) deja
+      // fila en `venta_nota` sin ninguna fila hermana en `sync_operacion`. El
+      // 23505 de ESE unique tiene que clasificarse igual que el del buzon.
+      const folio = formarFolio(
+        sucursalCodigo,
+        FECHA_VENTAS,
+        segmento,
+        siguienteConsecutivo(),
+      );
+      const notaAjenaAlPushId = (
+        await db
+          .insertInto('venta_nota')
+          .values({
+            folio,
+            fecha: FECHA_VENTAS,
+            cliente_id: clienteId,
+            vendedor_id: vendedorId,
+            monto_total: '50.00',
+            num_nota: '9999',
+            contado_credito: 'contado',
+            semana: 32,
+            mes: 8,
+            status: 'pagada',
+            sucursal_id: sucursalId,
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+
+      try {
+        const op = ventaValida({ folio });
+        const res = (await push({ operaciones: [op] }).expect(200))
+          .body as RespuestaPush;
+
+        expect(res.resultados[0]).toMatchObject({
+          estado: 'rechazada',
+          codigo: 'folio-duplicado',
+        });
+        expect(await buzonDe(op.clave)).toBeUndefined();
+        expect(await ventasConFolio(folio)).toHaveLength(1);
+      } finally {
+        await db
+          .deleteFrom('venta_nota')
+          .where('id', '=', notaAjenaAlPushId)
+          .execute();
+      }
+    });
+
+    it('regalar piezas a un prospecto sin lista de precios entra como promocion de $0 (D13)', async () => {
+      const op = ventaValida({
+        cliente_id: prospectoId,
+        datos: datosVenta({
+          contado_credito: 'contado',
+          lineas: [
+            {
+              presentacion_id: presentacionSinPrecioId,
+              cantidad: 0,
+              cantidad_promocion: 3,
+              precio_centavos: 0,
+            },
+          ],
+        }),
+      });
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(res.resultados[0].estado).toBe('aplicada');
+
+      const [venta] = await ventasConFolio(op.folio as string);
+      expect(venta).toMatchObject({
+        cliente_id: prospectoId,
+        monto_total: '0.00',
+        status: 'promocion',
+        pct_comision: null,
+      });
+      expect(await detalleDe(venta.id)).toEqual([
+        {
+          presentacion_id: presentacionSinPrecioId,
+          cantidad: 0,
+          cantidad_promocion: 3,
+          precio: '0.00',
+        },
+      ]);
+    });
+
+    it('una venta de contado nace pagada', async () => {
+      const op = ventaValida({
+        datos: datosVenta({ contado_credito: 'contado' }),
+      });
+      await push({ operaciones: [op] }).expect(200);
+
+      const [venta] = await ventasConFolio(op.folio as string);
+      expect(venta).toMatchObject({ status: 'pagada', monto_total: '192.00' });
+    });
+
+    it('un lote mixto entra parcial y en orden: jornada, venta buena, venta rechazada, jornada', async () => {
+      const jornada1 = operacion();
+      const buena = ventaValida();
+      const mala = ventaValida({
+        datos: datosVenta({
+          lineas: [
+            {
+              presentacion_id: presentacionSinPrecioId,
+              cantidad: 1,
+              cantidad_promocion: 0,
+              precio_centavos: 100,
+            },
+          ],
+        }),
+      });
+      const jornada2 = operacion();
+
+      const res = (
+        await push({ operaciones: [jornada1, buena, mala, jornada2] }).expect(
+          200,
+        )
+      ).body as RespuestaPush;
+
+      expect(res.resumen).toEqual({
+        recibidas: 4,
+        aplicadas: 3,
+        duplicadas: 0,
+        rechazadas: 1,
+      });
+      expect(res.resultados.map((r) => r.estado)).toEqual([
+        'aplicada',
+        'aplicada',
+        'rechazada',
+        'aplicada',
+      ]);
+      expect(res.resultados[2].codigo).toBe('precio-no-asignado');
+      expect(await ventasConFolio(buena.folio as string)).toHaveLength(1);
+      expect(await ventasConFolio(mala.folio as string)).toHaveLength(0);
+    });
+
+    it('la jornada sigue entrando solo al buzon, sin entidad proyectada', async () => {
+      const op = operacion();
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0].estado).toBe('aplicada');
+      expect(await buzonDe(op.clave)).toMatchObject({
+        entidad_tabla: null,
+        entidad_id: null,
+      });
+    });
+
+    it('semana y mes salen de fecha_operacion tal cual llego, no de ocurrido_en en UTC', async () => {
+      // 2026-06-01T02:00Z son las 19:00 del domingo 31 de mayo en Tijuana. El dia
+      // de trabajo es el 31 (semana ISO 22, mes 5); derivarlo del instante en
+      // UTC daria el lunes 1 de junio (semana 23, mes 6).
+      const op = ventaValida(
+        { ocurrido_en: '2026-06-01T02:00:00.000Z' },
+        '2026-05-31',
+        1,
+      );
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(res.resultados[0].estado).toBe('aplicada');
+
+      const [venta] = await ventasConFolio(op.folio as string);
+      expect(venta).toMatchObject({ semana: 22, mes: 5 });
+      expect(fechaTexto(venta.fecha)).toBe('2026-05-31');
+    });
+
+    it('guarda el precio de la nota firmada aunque el catalogo diga otro (D2)', async () => {
+      // El override del cliente es 8.00; la tablet vendio a 7.50.
+      const op = ventaValida({
+        datos: datosVenta({
+          lineas: [
+            {
+              presentacion_id: presentacionId,
+              cantidad: 10,
+              cantidad_promocion: 0,
+              precio_centavos: 750,
+            },
+          ],
+        }),
+      });
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(res.resultados[0].estado).toBe('aplicada');
+
+      const [venta] = await ventasConFolio(op.folio as string);
+      expect(venta.monto_total).toBe('75.00');
+      expect(await detalleDe(venta.id)).toEqual([
+        {
+          presentacion_id: presentacionId,
+          cantidad: 10,
+          cantidad_promocion: 0,
+          precio: '7.50',
+        },
+      ]);
+    });
+
+    it('varias lineas: dos vendidas a distinto precio y una de pura promocion suman el monto correcto y guardan cada renglon (D14)', async () => {
+      // 10 x 10.00 + 8 x 28.00 + 0 (promocion) = 324.00. La cantidad_promocion
+      // de la tercera linea NO suma al monto (reglas-venta.ts).
+      const op = ventaValida({
+        datos: datosVenta({
+          lineas: [
+            {
+              presentacion_id: presentacionId,
+              cantidad: 10,
+              cantidad_promocion: 0,
+              precio_centavos: 1000,
+            },
+            {
+              presentacion_id: presentacion2Id,
+              cantidad: 8,
+              cantidad_promocion: 0,
+              precio_centavos: 2800,
+            },
+            {
+              presentacion_id: presentacionSinPrecioId,
+              cantidad: 0,
+              cantidad_promocion: 4,
+              precio_centavos: 0,
+            },
+          ],
+        }),
+      });
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(res.resultados[0].estado).toBe('aplicada');
+
+      const [venta] = await ventasConFolio(op.folio as string);
+      expect(venta.monto_total).toBe('324.00');
+
+      const detalle = await detalleDe(venta.id);
+      expect(detalle).toHaveLength(3);
+      const porPresentacion = new Map(
+        detalle.map((d) => [d.presentacion_id, d]),
+      );
+      expect(porPresentacion.get(presentacionId)).toMatchObject({
+        cantidad: 10,
+        cantidad_promocion: 0,
+        precio: '10.00',
+      });
+      expect(porPresentacion.get(presentacion2Id)).toMatchObject({
+        cantidad: 8,
+        cantidad_promocion: 0,
+        precio: '28.00',
+      });
+      expect(porPresentacion.get(presentacionSinPrecioId)).toMatchObject({
+        cantidad: 0,
+        cantidad_promocion: 4,
+        precio: '0.00',
+      });
+    });
+
+    it('guarda la factura pendiente y los comentarios recortados', async () => {
+      const op = ventaValida({
+        datos: datosVenta({
+          factura: 'pendiente',
+          comentarios: '  Entregar en la bodega de atras  ',
+        }),
+      });
+      await push({ operaciones: [op] }).expect(200);
+
+      const [venta] = await ventasConFolio(op.folio as string);
+      expect(venta).toMatchObject({
+        factura: 'pendiente',
+        comentarios: 'Entregar en la bodega de atras',
+      });
+    });
+  });
+
+  /* ================================================================ */
   /* Folios (T-14)                                                    */
   /* ================================================================ */
 
@@ -1079,21 +2090,17 @@ describe('Sincronizacion pull/push (e2e)', () => {
    * colisiones.
    */
   describe('folios', () => {
-    /** Una venta con folio bien emitido para este vendedor y este dia. */
+    /**
+     * Una venta con folio bien emitido para este vendedor y este dia.
+     *
+     * Desde T-16 es una venta de verdad (`ventaValida`): con `datos` libres, el
+     * servidor ya la rechazaria como `datos-invalidos` antes de mirar su folio.
+     */
     const conFolio = (
       extra: Record<string, unknown> = {},
       fecha = '2026-08-07',
       consecutivo = 1,
-    ) => {
-      const base = operacion({
-        tipo: 'venta',
-        fecha_operacion: fecha,
-        ocurrido_en: `${fecha}T14:03:22.000-07:00`,
-        folio: formarFolio(sucursalCodigo, fecha, segmento, consecutivo),
-        ...extra,
-      });
-      return base;
-    };
+    ) => ventaValida(extra, fecha, consecutivo);
 
     const filasConFolio = async (folio: string) =>
       db
@@ -1270,9 +2277,16 @@ describe('Sincronizacion pull/push (e2e)', () => {
         //
         // Que camino toman por dentro depende de si las transacciones llegan a
         // solaparse, y eso no se puede forzar desde aqui. En la practica gana
-        // el `on conflict ... do nothing`. El desempate por clave del
-        // repositorio cubre el caso en que no: ver el comentario de
-        // `guardarOperacion`.
+        // el `on conflict ... do nothing`. El desempate por clave, para cuando
+        // no gana, vive en `SincronizacionService.clasificarColision`
+        // (`buscarPorClave` antes que `duenoDelFolio`) — rama defensiva que
+        // esta prueba no puede forzar a tomar.
+        //
+        // A veces Postgres resuelve el choque de las dos inserciones (clave y
+        // folio a la vez) con un deadlock (`40P01`) en vez de hacer esperar a
+        // una. La transaccion victima se repite (`reintentarAnteConflicto`,
+        // T-16) y en el reintento ya ve la fila confirmada: cae en uno de los
+        // dos caminos de arriba, no en un 500.
         const op = conFolio({}, '2026-08-07', 32);
 
         const respuestas = await Promise.all([

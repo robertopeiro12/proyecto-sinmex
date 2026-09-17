@@ -68,13 +68,33 @@ export interface Presentacion {
   sincronizado_en: MomentoISO;
 }
 
+/**
+ * Giro del negocio. Catalogo que baja del `pull` (T-40), no cuelga de sucursal.
+ *
+ * Es el desplegable de la pantalla de prospectos. Se guarda como catalogo y no
+ * como texto libre por la misma razon que en el portal (T-12): un giro escrito a
+ * mano en una tablet al sol no sirve para agrupar nada despues.
+ */
+export interface TipoNegocio {
+  id: string;
+  nombre: string;
+  activo: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
 export type TipoCliente = 'cliente' | 'prospecto';
 export type Promocion = 'ninguna' | '10+1' | '20+1';
 
 export interface Cliente {
   id: string;
   nombre: string;
-  domicilio: string;
+  /**
+   * `null` en un prospecto que dio de alta un vendedor desde la app (T-40): lo
+   * sustituye la ubicacion (`lat`/`lng`). El administrador lo completa en el
+   * portal al convertirlo en cliente, asi que un `tipo = 'cliente'` que baje del
+   * `pull` siempre lo trae.
+   */
+  domicilio: string | null;
   telefono: string;
   encargado: string | null;
   tipo: TipoCliente;
@@ -145,4 +165,84 @@ export interface Jornada {
   sincronizado_en: MomentoISO | null;
   /** Motivo por el que el servidor la rechazo, si `sync_estado = 'error'`. */
   sync_error: string | null;
+}
+
+export type ContadoCredito = 'contado' | 'credito';
+
+/** Desde la tablet solo estos dos: el numero de factura lo asigna el portal (T-19). */
+export type FacturaVenta = 'N/A' | 'pendiente';
+
+/**
+ * Una venta grabada en la tablet (T-16). Ver la migracion `004-ventas.ts`.
+ *
+ * No lleva `status`: lo decide el servidor al proyectarla. Y no se edita: una
+ * vez grabada, solo cambia su estado de sincronizacion.
+ */
+export interface Venta {
+  /** uuid v4 generado al grabar. Es la clave de idempotencia del push. */
+  id: string;
+  /** Dia de trabajo (`reloj.hoy()`), el mismo del folio y de `fecha_operacion`. */
+  fecha: FechaISO;
+  cliente_id: string;
+  vendedor_id: string;
+  sucursal_id: string;
+  folio: string;
+  num_nota: string;
+  contado_credito: ContadoCredito;
+  factura: FacturaVenta;
+  comentarios: string | null;
+  /** Suma de cantidad x precio; las piezas de promocion no suman. */
+  monto_total_centavos: number;
+  grabada_en: MomentoISO;
+  sync_estado: SyncEstado;
+  /** Motivo con el que el servidor la rechazo, si `sync_estado = 'error'`. */
+  sync_error: string | null;
+  sincronizado_en: MomentoISO | null;
+}
+
+export interface VentaLinea {
+  venta_id: string;
+  presentacion_id: string;
+  cantidad: number;
+  cantidad_promocion: number;
+  /** El del catalogo local al grabar; 0 solo en lineas de pura promocion. */
+  precio_centavos: number;
+}
+/**
+ * Prospecto que el vendedor dio de alta en ruta (T-40).
+ *
+ * > [!info] No es una fila de `cliente`, y eso es deliberado
+ * > `cliente` es el espejo de lo que manda el portal. Un prospecto capturado
+ * > aqui tiene el `id` que genero la tablet; el servidor le dara **otro** uuid al
+ * > proyectarlo, y en el siguiente `pull` bajara como un cliente mas. Guardarlo
+ * > en `cliente` dejaria dos filas para el mismo negocio sin nada que las
+ * > relacione. Ver `006-prospectos.ts`.
+ *
+ * `id` es tambien su clave de idempotencia en el push. **No lleva folio**: no es
+ * una nota que nadie firme.
+ */
+export interface Prospecto {
+  id: string;
+  fecha: FechaISO;
+  vendedor_id: string;
+  sucursal_id: string;
+  nombre: string;
+  telefono: string;
+  encargado: string | null;
+  tipo_negocio_id: string | null;
+  comentarios: string | null;
+  /** Las dos o ninguna. `null` si el vendedor nego el permiso o no hubo GPS. */
+  lat: number | null;
+  lng: number | null;
+  /**
+   * Ruta local de la foto del lugar. **Previsto y sin usar todavia**: falta
+   * decidir donde se guarda el archivo (candidato Supabase Storage, alcance que
+   * ADR-0002 dejo abierto). La captura es un ticket aparte.
+   */
+  foto_uri: string | null;
+  grabado_en: MomentoISO;
+  sync_estado: SyncEstado;
+  /** Motivo por el que el servidor lo rechazo, si `sync_estado = 'error'`. */
+  sync_error: string | null;
+  sincronizado_en: MomentoISO | null;
 }
