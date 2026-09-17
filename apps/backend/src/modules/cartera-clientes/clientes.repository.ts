@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { sql } from 'kysely';
+import { sql, type Transaction } from 'kysely';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
+import type { DB } from '../../database/schema';
 import { buscarSucursalUsuario } from '../sucursales/buscar-sucursal-usuario';
 import { aNumero } from '../sincronizacion/dinero';
 import type { PlanPromocionProductos } from './reconciliar-promocion-productos';
@@ -27,13 +28,24 @@ export interface OverridePrecio {
 export interface ClienteDetalle {
   id: string;
   nombre: string;
-  domicilio: string;
+  /**
+   * `null` solo en un prospecto que nacio en la app (T-40): el vendedor captura
+   * la ubicacion, no la direccion. El administrador lo completa al convertirlo
+   * en cliente — un `cliente` sin domicilio lo frena
+   * `ck_cliente_domicilio_obligatorio`.
+   */
+  domicilio: string | null;
   telefono: string;
   encargado: string | null;
   factura: boolean;
   tipo: TipoCliente;
   tipoNegocioId: string | null;
-  listaPrecioId: string;
+  /**
+   * `null` solo en un prospecto que nacio en la app (T-40): el precio es del
+   * administrador a proposito, no del vendedor. Ver
+   * `ck_cliente_lista_precio_obligatoria`.
+   */
+  listaPrecioId: string | null;
   pctComision: number | null;
   promocion: Promocion;
   plazoCreditoDias: number | null;
@@ -86,13 +98,13 @@ function aResumen(fila: FilaResumen): ClienteResumen {
 interface FilaDetalle {
   id: string;
   nombre: string;
-  domicilio: string;
+  domicilio: string | null;
   telefono: string;
   encargado: string | null;
   factura: boolean;
   tipo: string;
   tipo_negocio_id: string | null;
-  lista_precio_id: string;
+  lista_precio_id: string | null;
   pct_comision: string | null;
   promocion: string;
   plazo_credito_dias: number | null;
@@ -250,6 +262,82 @@ export class ClientesRepository {
       overrides.rows,
       productos.map((p) => p.producto_id),
     );
+  }
+
+  /**
+   * ¿Existe ese tipo de negocio y sigue vivo? (T-40)
+   *
+   * Se consulta en vez de dejar que reviente la llave foranea porque un `23503`
+   * dentro de la transaccion del `push` la aborta entera, y para entonces ya no
+   * se puede distinguir **que** falto ni responder un rechazo con motivo. Aqui
+   * es una lectura barata con la misma `trx`, antes de escribir nada.
+   *
+   * Filtra `deleted_at` a proposito: un tipo de negocio dado de baja no se puede
+   * asignar, aunque la fila siga existiendo (el portal nunca borra fisico).
+   */
+  async tipoNegocioVigente(
+    tipoNegocioId: string,
+    trx: Transaction<DB>,
+  ): Promise<boolean> {
+    const fila = await trx
+      .selectFrom('tipo_negocio')
+      .select('id')
+      .where('id', '=', tipoNegocioId)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    return fila !== undefined;
+  }
+
+  /**
+   * Inserta un prospecto que nacio en la app (T-40), **dentro de la transaccion
+   * de quien llama**.
+   *
+   * No abre la suya: el prospecto tiene que entrar o salir **junto con** la fila
+   * del buzon de `sync_operacion` (ADR-0009 §2.3). Mismo patron que
+   * `VentasRepository` de T-16.
+   *
+   * Sin `domicilio`, sin `lista_precio_id`, sin `pct_comision`, sin `promocion`
+   * y sin `plazo_credito_dias`: son decisiones del administrador, no del
+   * vendedor, y los dos primeros ahora aceptan nulo solo para un prospecto
+   * (`ck_cliente_domicilio_obligatorio`, `ck_cliente_lista_precio_obligatoria`).
+   *
+   * `lat`/`lng` van como texto y no como numero, igual que en `crear()`: el
+   * driver `pg` quiere `numeric` en texto y pasar por un `number` es la puerta a
+   * un redondeo que nadie pidio.
+   */
+  async insertarProspecto(
+    datos: {
+      nombre: string;
+      telefono: string;
+      encargado: string | null;
+      tipoNegocioId: string | null;
+      comentarios: string | null;
+      lat: number | null;
+      lng: number | null;
+      sucursalId: string;
+    },
+    trx: Transaction<DB>,
+  ): Promise<{ id: string }> {
+    return trx
+      .insertInto('cliente')
+      .values({
+        nombre: datos.nombre,
+        domicilio: null,
+        telefono: datos.telefono,
+        encargado: datos.encargado,
+        // El default de la columna es `false`, pero se escribe explicito: que un
+        // prospecto no lleve factura es una decision, no una omision.
+        factura: false,
+        tipo: 'prospecto',
+        tipo_negocio_id: datos.tipoNegocioId,
+        lista_precio_id: null,
+        comentarios: datos.comentarios,
+        lat: datos.lat?.toString() ?? null,
+        lng: datos.lng?.toString() ?? null,
+        sucursal_id: datos.sucursalId,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
   }
 
   /**

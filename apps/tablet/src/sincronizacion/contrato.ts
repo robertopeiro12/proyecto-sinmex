@@ -46,7 +46,9 @@ export type TipoOperacion =
   | 'cobranza'
   | 'gasto'
   | 'merma'
-  | 'ruta';
+  | 'ruta'
+  /** T-40. Un alta de prospecto: el servidor la proyecta a `cliente`. */
+  | 'prospecto';
 
 export type EstadoOperacion = 'aplicada' | 'duplicada' | 'rechazada';
 
@@ -75,6 +77,12 @@ export const CODIGOS_RECHAZO = [
    * despues, hasta hoy). Lo arregla el portal.
    */
   'precio-no-asignado',
+  /**
+   * T-40: el giro que el vendedor eligio ya no esta en el catalogo del
+   * servidor. Se reintenta solo en la siguiente pasada, que ademas le baja el
+   * catalogo nuevo — el repositorio deja la fila en la cola, no la descarta.
+   */
+  'tipo-negocio-inexistente',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -117,6 +125,24 @@ export interface VehiculoPull extends FilaSincronizable {
   sucursal_id: string;
 }
 
+/**
+ * Giro del negocio, para el desplegable de la pantalla de prospectos (T-40).
+ *
+ * Coleccion **nueva** y por tanto aditiva: no sube la version del contrato. Una
+ * tablet vieja la ignora y sigue funcionando.
+ *
+ * **No cuelga de una sucursal**: `tipo_negocio` es un catalogo de la empresa,
+ * igual que `productos`. Y no tiene columna `activo`: su unica baja es
+ * `deleted_at`, que viaja como `activo: 0` como todo lo demas.
+ *
+ * Sin esta coleccion la tablet no tendria de donde sacar la lista y habria que
+ * dejar que el vendedor escribiera texto libre — que es exactamente lo que T-12
+ * evito al resolver el giro con un catalogo y no con un campo suelto.
+ */
+export interface TipoNegocioPull extends FilaSincronizable {
+  nombre: string;
+}
+
 export interface ProductoPull extends FilaSincronizable {
   nombre: string;
 }
@@ -128,7 +154,29 @@ export interface PresentacionPull extends FilaSincronizable {
 
 export interface ClientePull extends FilaSincronizable {
   nombre: string;
-  domicilio: string;
+  /**
+   * `null` en un prospecto que nacio en la app (T-40).
+   *
+   * > [!warning] Este campo dejo de ser siempre una cadena, y NO subio la version
+   * > Un prospecto que captura el vendedor no trae domicilio: lo sustituye la
+   * > ubicacion (`lat`/`lng`). En Postgres la columna se relajo con
+   * > `ck_cliente_domicilio_obligatorio`, que lo sigue exigiendo a un `cliente`.
+   * >
+   * > Estrictamente es un cambio de significado, del que el contrato §3 dice que
+   * > sube `CONTRATO_ACTUAL`. Se decidio **no subirla**, y el motivo es que
+   * > subirla no protegeria a nadie: `CONTRATO_MINIMO` seguiria en 1, asi que una
+   * > tablet vieja se seguiria atendiendo y seguiria recibiendo el `null`. Lo
+   * > unico que la protegeria es subir `CONTRATO_MINIMO`, y eso es dejar fuera de
+   * > servicio a tablets en la calle por una rotura que **hoy no puede ocurrir**:
+   * > la app no se ha publicado nunca (ver [[Sistema de diseno]], "No se ha visto
+   * > en una tablet") y las dos mitades salen de este mismo monorepo. Mismo
+   * > criterio con el que `folio_segmento` (T-14) y el folio obligatorio de la
+   * > venta (T-16) tampoco la subieron.
+   * >
+   * > **Cuando se publique la primera tablet hay que revisarlo**, y T-43 (version
+   * > por fila) es donde toca resolverlo de verdad.
+   */
+  domicilio: string | null;
   telefono: string;
   encargado: string | null;
   tipo: 'cliente' | 'prospecto';
@@ -179,6 +227,17 @@ export interface RespuestaPull {
     productos: ProductoPull[];
     presentaciones: PresentacionPull[];
     clientes: ClientePull[];
+    /**
+     * T-40. **Opcional en la copia de la tablet, obligatoria en el servidor.**
+     *
+     * No es una divergencia del contrato: es la regla de evolucion §3 aplicada
+     * al lado que puede quedarse adelantado. Esta tablet puede hablar con un
+     * servidor que todavia no manda la coleccion (el dia del despliegue, entre
+     * que sale la app y sale el backend), y leer `undefined` de ahi no puede
+     * reventar la sincronizacion — se queda sin desplegable de tipos de negocio
+     * y lo dice, nada mas.
+     */
+    tipos_negocio?: TipoNegocioPull[];
     precios: PrecioPull[];
   };
   notas_pendientes: NotaPendientePull[];
@@ -258,12 +317,77 @@ export type DatosVenta = {
   lineas: LineaVenta[];
 };
 
+/**
+ * `datos` de una operacion `tipo: "prospecto"` (T-40).
+ *
+ * Son los campos que **dicto el cliente** en agosto de 2026 para el alta desde
+ * la app (ver [[Cliente]]): nombre del negocio, encargado, telefono, ubicacion,
+ * tipo de negocio, comentario y foto del lugar.
+ *
+ * Lo que NO viaja, y por que:
+ *
+ * - **`domicilio`**: no se captura. Lo sustituye la ubicacion, y en Postgres la
+ *   columna dejo de ser obligatoria para un prospecto.
+ * - **`lista_precio_id`, `pct_comision`, `promocion`, `plazo_credito_dias`**: son
+ *   decisiones del administrador. El vendedor no puede dar de alta clientes
+ *   justamente porque el control del precio no es suyo.
+ * - **`cliente_id` y `folio`**, que van en el sobre: un prospecto no tiene
+ *   `cliente_id` (lo esta CREANDO) y no lleva folio, porque no es una nota que
+ *   nadie firme. El servidor **rechaza** un prospecto que llegue con folio.
+ *
+ * Es `type` y no `interface` a proposito: la tablet lo asigna a
+ * `OperacionSaliente.datos` (`Record<string, unknown>`), y una interface no tiene
+ * la firma de indice implicita que eso exige.
+ */
+export type DatosProspecto = {
+  /** Nombre del negocio. Lo unico obligatorio junto al telefono. */
+  nombre: string;
+  telefono: string;
+  /** Nombre del encargado. */
+  encargado: string | null;
+  /** Del catalogo `tipos_negocio` que baja en el `pull`. */
+  tipo_negocio_id: string | null;
+  comentarios: string | null;
+  /**
+   * Ubicacion del dispositivo. **Las dos o ninguna**: media coordenada no ubica
+   * nada y en el portal se veria como un punto en el meridiano cero, que es peor
+   * que no tener ubicacion porque parece un dato bueno.
+   *
+   * `null` es un caso **normal**: el vendedor pudo negar el permiso o no haber
+   * senal, y eso no le impide registrar al prospecto.
+   */
+  lat: number | null;
+  lng: number | null;
+  /**
+   * **Reservado y siempre `null` por ahora.**
+   *
+   * El cliente confirmo que quiere la foto del lugar (2026-08-23), condicionada a
+   * que no haga lento el alta. Falta decidir **donde se guarda el archivo** — el
+   * candidato es Supabase Storage, y el alcance de Supabase es justo lo que
+   * `ADR-0002` dejo abierto. El campo viaja ya, con valor `null`, para que el dia
+   * que se decida no haya que cambiar el sobre ni la version del contrato: el
+   * servidor lo ignora. **La captura es un ticket aparte.**
+   */
+  foto: null;
+};
+
 export interface ResultadoOperacion {
   clave: string;
   tipo: string;
   estado: EstadoOperacion;
   id_servidor?: string;
-  /** Uno de {@link CODIGOS_RECHAZO}, o uno que esta tablet aun no conoce. */
+  /**
+   * Uno de {@link CODIGOS_RECHAZO}, o uno que esta tablet aun no conoce.
+   *
+   * Sigue siendo `string` y no un tipo cerrado a proposito: un servidor mas
+   * nuevo puede mandar un codigo que esta tablet no conoce, y eso no puede
+   * reventar la sincronizacion.
+   *
+   * T-40 agrega `tipo-negocio-inexistente`: el giro que el vendedor eligio ya
+   * no esta en el catalogo del servidor. **Se reintenta solo** en la siguiente
+   * pasada, que ademas baja el catalogo nuevo — el repositorio deja la fila en
+   * la cola, no la descarta.
+   */
   codigo?: string;
   motivo?: string;
 }

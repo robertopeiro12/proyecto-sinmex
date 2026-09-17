@@ -27,7 +27,13 @@
       "expo-router",
       "expo-sqlite",
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "JAWA usa tu ubicación para guardar dónde está el negocio cuando registras un prospecto."
+        }
+      ]
     ]
   }
 }

@@ -20,11 +20,13 @@ interface ClienteResumenRespuesta {
 }
 
 interface ClienteDetalleRespuesta extends ClienteResumenRespuesta {
-  domicilio: string;
+  /** `null` en un prospecto que nacio en la app (T-40). */
+  domicilio: string | null;
   encargado: string | null;
   factura: boolean;
   tipoNegocioId: string | null;
-  listaPrecioId: string;
+  /** `null` en un prospecto que nacio en la app (T-40). */
+  listaPrecioId: string | null;
   pctComision: number | null;
   promocion: 'ninguna' | '10+1' | '20+1';
   plazoCreditoDias: number | null;
@@ -104,16 +106,22 @@ describe('Clientes (e2e)', () => {
     nombre: string,
     sucursalId: string,
     tipo: 'cliente' | 'prospecto' = 'cliente',
+    /**
+     * `true` siembra el prospecto **como lo deja el push de la tablet** (T-40):
+     * sin domicilio y sin lista de precios. Es lo que la migracion
+     * `20260914120000` permite, y solo para un prospecto.
+     */
+    comoDeLaApp = false,
   ): Promise<string> => {
     const { id } = await db
       .insertInto('cliente')
       .values({
         nombre,
-        domicilio: 'Domicilio de prueba',
+        domicilio: comoDeLaApp ? null : 'Domicilio de prueba',
         telefono: '000',
         factura: false,
         tipo,
-        lista_precio_id: listaId,
+        lista_precio_id: comoDeLaApp ? null : listaId,
         sucursal_id: sucursalId,
       })
       .returning('id')
@@ -808,6 +816,81 @@ describe('Clientes (e2e)', () => {
         .post(`/clientes/${id}/convertir-a-cliente`)
         .set('Cookie', cookieSinPermiso)
         .expect(403);
+    });
+
+    // T-40: un prospecto que nacio en la app no trae domicilio ni lista de
+    // precios. Convertirlo sin completarlos violaria
+    // `ck_cliente_domicilio_obligatorio` / `ck_cliente_lista_precio_obligatoria`
+    // y, sin traducir el 23514, saldria como **500**.
+    it('responde 409 (no 500) al convertir un prospecto de la app sin completar', async () => {
+      const id = await sembrarCliente(
+        `${PREFIJO} Prospecto App`,
+        idTijuana,
+        'prospecto',
+        true,
+      );
+
+      const res = await request(app.getHttpServer())
+        .post(`/clientes/${id}/convertir-a-cliente`)
+        .set('Cookie', cookieTijuana)
+        .expect(409);
+
+      // El mensaje nombra LOS DOS campos que faltan, no solo el primero que
+      // habria delatado el check de la base.
+      const mensaje = (res.body as { message: string }).message;
+      expect(mensaje).toMatch(/domicilio/i);
+      expect(mensaje).toMatch(/lista de precios/i);
+
+      // Y sigue siendo prospecto: el 409 no dejo la fila a medias.
+      const despues = await db
+        .selectFrom('cliente')
+        .select('tipo')
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow();
+      expect(despues.tipo).toBe('prospecto');
+    });
+
+    it('convierte el prospecto de la app una vez que el administrador lo completa', async () => {
+      const id = await sembrarCliente(
+        `${PREFIJO} Prospecto App Completo`,
+        idTijuana,
+        'prospecto',
+        true,
+      );
+
+      // Exactamente lo que el cliente confirmo el 2026-09-02: "el administrador
+      // solo agrega lo que falta".
+      await db
+        .updateTable('cliente')
+        .set({ domicilio: 'Calle 5 #12', lista_precio_id: listaId })
+        .where('id', '=', id)
+        .execute();
+
+      const res = await request(app.getHttpServer())
+        .post(`/clientes/${id}/convertir-a-cliente`)
+        .set('Cookie', cookieTijuana)
+        .expect(201);
+
+      expect((res.body as ClienteDetalleRespuesta).tipo).toBe('cliente');
+    });
+
+    it('GET /clientes/:id devuelve domicilio y listaPrecioId nulos en un prospecto de la app', async () => {
+      const id = await sembrarCliente(
+        `${PREFIJO} Prospecto App Detalle`,
+        idTijuana,
+        'prospecto',
+        true,
+      );
+
+      const res = await request(app.getHttpServer())
+        .get(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .expect(200);
+
+      const cliente = res.body as ClienteDetalleRespuesta;
+      expect(cliente.domicilio).toBeNull();
+      expect(cliente.listaPrecioId).toBeNull();
+      expect(cliente.tipo).toBe('prospecto');
     });
   });
 });

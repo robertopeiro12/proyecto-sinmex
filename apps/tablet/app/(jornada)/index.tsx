@@ -5,6 +5,7 @@ import { Alert, Text, View } from 'react-native';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import type { MotivoAbandono } from '@/sincronizacion/motor';
+import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 import { Boton } from '@/ui/boton';
 import { BotonMenu } from '@/ui/boton-menu';
 import { Cifra } from '@/ui/cifra';
@@ -37,7 +38,8 @@ export default function MenuJornada() {
   const { estilos } = useTema();
   const [sincronizando, setSincronizando] = useState(false);
 
-  // Suma ventas: si quedan sin subir, la jornada no puede decir "listo" aunque
+  // Suma jornada, venta y prospecto (`contarPendientesDeSubir`, T-07/T-16/T-40):
+  // si algo de eso queda sin subir, la jornada no puede decir "listo" aunque
   // ella misma ya este sincronizada, o el vendedor cierra el dia sin WiFi
   // creyendo que ya subio todo.
   //
@@ -55,9 +57,7 @@ export default function MenuJornada() {
   const pendientes = useMemo(() => {
     void vueltas;
     void ultimaSincronizacion;
-    return (
-      datos.jornadas.pendientesDeSincronizar().length + datos.ventas.pendientesDeSincronizar().length
-    );
+    return contarPendientesDeSubir(datos);
   }, [datos, vueltas, ultimaSincronizacion]);
   const falloUltima = ultimaSincronizacion !== null && !ultimaSincronizacion.ok;
 

@@ -26,13 +26,20 @@ export interface OverridePrecio {
 export interface ClienteDetalle {
   id: string;
   nombre: string;
-  domicilio: string;
+  /**
+   * `null` en un prospecto que dio de alta un vendedor desde la app (T-40): el
+   * vendedor captura la ubicacion, no la direccion. El formulario lo trata como
+   * cadena vacia y lo sigue exigiendo para guardar — eso es exactamente "el
+   * administrador agrega lo que falta".
+   */
+  domicilio: string | null;
   telefono: string;
   encargado: string | null;
   factura: boolean;
   tipo: TipoCliente;
   tipoNegocioId: string | null;
-  listaPrecioId: string;
+  /** `null` en un prospecto de la app (T-40): el precio lo decide el administrador. */
+  listaPrecioId: string | null;
   pctComision: number | null;
   promocion: Promocion;
   plazoCreditoDias: number | null;

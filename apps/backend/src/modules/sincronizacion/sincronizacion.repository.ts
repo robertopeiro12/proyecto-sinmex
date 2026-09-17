@@ -9,6 +9,7 @@ import type {
   PresentacionPull,
   ProductoPull,
   SucursalPull,
+  TipoNegocioPull,
   VehiculoPull,
   VendedorPull,
 } from './contrato';
@@ -163,6 +164,26 @@ export class SincronizacionRepository {
       id: f.id,
       nombre: f.nombre,
       activo: bandera(f.activo, f.deleted_at),
+    }));
+  }
+
+  /**
+   * Los tipos de negocio tampoco cuelgan de una sucursal (T-40): el giro es un
+   * catalogo de la empresa, igual que los productos.
+   *
+   * `tipo_negocio` no tiene columna `activo`: su unica baja es `deleted_at`,
+   * igual que `presentacion`.
+   */
+  async tiposNegocio(desde: Date | null): Promise<TipoNegocioPull[]> {
+    let q = this.db
+      .selectFrom('tipo_negocio')
+      .select(['id', 'nombre', 'deleted_at']);
+    if (desde) q = q.where('updated_at', '>', desde);
+
+    return (await q.orderBy('nombre').execute()).map((f) => ({
+      id: f.id,
+      nombre: f.nombre,
+      activo: bandera(true, f.deleted_at),
     }));
   }
 
