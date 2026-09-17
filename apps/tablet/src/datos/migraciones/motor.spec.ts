@@ -61,6 +61,32 @@ describe('motor de migraciones locales', () => {
       expect(bd.getFirstSync('pragma foreign_keys;')).toEqual({ foreign_keys: 1 });
     });
 
+    it('con el chequeo acotado a las hijas, un huerfano preexistente en una tabla ajena no bloquea el commit', () => {
+      // Escenario real (M-2): una `jornada` que apunta a un `vehiculo` que ya
+      // no existe, sin ninguna relacion con `padre`/`hijo`. Se inserta con las
+      // llaves apagadas porque es la unica forma de crear un huerfano; en un
+      // dispositivo real puede llegar asi por datos viejos sin sincronizar.
+      const bd = conLlave();
+      bd.execSync(`create table vehiculo (id text primary key);
+                   create table jornada (id text primary key, vehiculo_id text not null references vehiculo(id));`);
+      bd.execSync('pragma foreign_keys = OFF;');
+      bd.runSync("insert into jornada values ('j1', 'no-existe')");
+      bd.execSync('pragma foreign_keys = ON;');
+
+      const rehacerPadreAcotado: Migracion = {
+        ...rehacerPadre,
+        sinLlavesForaneas: { comprobar: ['hijo'] },
+      };
+
+      ejecutarMigraciones(bd, [{ version: 1, nombre: 'base', sql: 'select 1;' }, rehacerPadreAcotado]);
+
+      // La migracion si confirmo: el huerfano ajeno no le importo.
+      expect(versionEsquema(bd)).toBe(2);
+      expect(bd.getFirstSync('select * from hijo')).toEqual({ id: 'h1', padre_id: 'p1' });
+      // Y el huerfano ajeno sigue ahi, intacto: el chequeo acotado no lo toco.
+      expect(bd.getFirstSync('select * from jornada')).toEqual({ id: 'j1', vehiculo_id: 'no-existe' });
+    });
+
     it('revierte (y no confirma) una migracion que deja una referencia huerfana', () => {
       const bd = conLlave();
       const olvidaCopiar: Migracion = {

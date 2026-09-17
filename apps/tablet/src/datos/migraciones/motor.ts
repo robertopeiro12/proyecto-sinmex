@@ -25,10 +25,12 @@ export interface Migracion {
    * >   `FOREIGN KEY constraint failed`.
    * > - `PRAGMA defer_foreign_keys = on` **no lo arregla** (comprobado en
    * >   SQLite 3.53.2: falla igual).
-   * > - `alter table cliente rename to cliente_vieja` es peor: con las llaves
-   * >   encendidas, SQLite **reescribe las clausulas `references`** de las otras
-   * >   tablas para que apunten a `cliente_vieja`, y el esquema queda corrupto en
-   * >   silencio.
+   * > - `alter table cliente rename to cliente_vieja` es peor: con
+   * >   `legacy_alter_table` apagado (el default desde SQLite 3.26) SQLite
+   * >   **siempre reescribe las clausulas `references`** de las hijas para que
+   * >   apunten a `cliente_vieja` — con las llaves foraneas encendidas o
+   * >   apagadas da igual — y `pragma foreign_key_check` no lo detecta mientras
+   * >   `cliente_vieja` siga existiendo: el esquema queda corrupto en silencio.
    * >
    * > Es el procedimiento que la propia documentacion de SQLite manda para esto,
    * > y exige apagar el pragma **fuera** de la transaccion: dentro es un no-op
@@ -36,8 +38,18 @@ export interface Migracion {
    *
    * Antes del `commit` se corre `pragma foreign_key_check`: si la migracion dejo
    * una referencia huerfana, se revierte en vez de confiarse.
+   *
+   * - `true` comprueba **toda la base**. Es el default seguro, pero un huerfano
+   *   preexistente en una tabla que la migracion ni toco (por ejemplo una
+   *   `jornada` que apunta a un `vehiculo` que ya no existe) tambien la hace
+   *   fallar, y como el chequeo corre en cada arranque, la app no vuelve a abrir
+   *   nunca.
+   * - `{ comprobar: [...] }` acota el chequeo a esas tablas **hijas** de la
+   *   tabla rehecha (una llamada a `pragma foreign_key_check(<tabla>)` por
+   *   tabla listada): solo revisa lo que esta migracion pudo haber roto. Es la
+   *   forma preferida cuando se conocen las hijas.
    */
-  sinLlavesForaneas?: true;
+  sinLlavesForaneas?: true | { comprobar: string[] };
 }
 
 export interface ResultadoMigraciones {
@@ -128,11 +140,26 @@ function validarCatalogo(migraciones: readonly Migracion[]): void {
  * `pragma foreign_key_check` **devuelve filas, no lanza**: sin esto, una tabla
  * rehecha a la que se le olvidara copiar la mitad de los datos pasaria el
  * `commit` sin una sola queja, y el fallo aparecerian dias despues en campo.
+ *
+ * Con `sinLlavesForaneas: true` se comprueba toda la base (`pragma
+ * foreign_key_check;`, sin argumento). Con `{ comprobar: [...] }` se llama al
+ * pragma una vez por tabla listada (`pragma foreign_key_check(<tabla>)`),
+ * acotando el chequeo a las hijas de la tabla que esta migracion rehizo: un
+ * huerfano preexistente en una tabla ajena no bloquea el arranque. Los
+ * nombres de tabla vienen del catalogo de migraciones (nunca de entrada del
+ * usuario), asi que interpolarlos en el pragma es seguro.
  */
 function exigirIntegridadReferencial(bd: BaseDatos, migracion: Migracion): void {
-  const huerfanas = bd.getAllSync<{ table: string; rowid: number | null }>(
-    'pragma foreign_key_check;',
-  );
+  const bandera = migracion.sinLlavesForaneas;
+  if (!bandera) return; // el llamador ya comprobo la bandera; esto es solo para el tipo
+  const huerfanas =
+    bandera === true
+      ? bd.getAllSync<{ table: string; rowid: number | null }>('pragma foreign_key_check;')
+      : bandera.comprobar.flatMap((tabla) =>
+          bd.getAllSync<{ table: string; rowid: number | null }>(
+            `pragma foreign_key_check(${tabla});`,
+          ),
+        );
   if (huerfanas.length > 0) {
     const tablas = [...new Set(huerfanas.map((f) => f.table))].join(', ');
     throw new Error(

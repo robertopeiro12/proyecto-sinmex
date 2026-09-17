@@ -23,7 +23,10 @@ import type { Migracion } from './motor';
  * la tabla nueva, copiar, borrar la vieja y renombrar — y eso exige apagar las
  * llaves foraneas **fuera** de la transaccion, que es lo que hace
  * `sinLlavesForaneas` (el porque, con lo que se probo y fallo, esta en
- * `motor.ts`). El motor corre `pragma foreign_key_check` antes del commit.
+ * `motor.ts`). El motor corre `pragma foreign_key_check` antes del commit,
+ * acotado a las tres hijas de `cliente` (`comprobar`): un huerfano preexistente
+ * en una tabla ajena (`jornada`, `folio_contador`, etc.) no tiene por que
+ * bloquear esta migracion.
  *
  * Se copian las columnas **por nombre y no con `select *`**: si el orden
  * cambiara, `select *` metería cada valor en la columna de al lado sin avisar.
@@ -31,7 +34,10 @@ import type { Migracion } from './motor';
 export const prospectoCamposOpcionales: Migracion = {
   version: 5,
   nombre: 'prospecto-campos-opcionales',
-  sinLlavesForaneas: true,
+  // Las tres hijas de `cliente` (confirmado contra `pragma foreign_key_list`
+  // en 001-004: no hay mas). Acotar el chequeo a ellas evita que un huerfano
+  // preexistente en una tabla ajena bloquee esta migracion (M-2).
+  sinLlavesForaneas: { comprobar: ['cliente_precio', 'nota_pendiente', 'venta'] },
   sql: `
     create table cliente_nueva (
       id                  text primary key,
