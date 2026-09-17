@@ -54,4 +54,18 @@ export type {
   ResumenCaptura,
   ResumenLinea,
 } from './ventas-reglas';
+export {
+  leerAbonos,
+  leerMontoCentavos,
+  MAX_CENTAVOS_COBRO,
+  problemasDeCobro,
+  repartirPago,
+} from './cobranzas-reglas';
+export type {
+  Aplicacion,
+  CapturaCobro,
+  NotaParaReparto,
+  Reparto,
+  TipoAbono,
+} from './cobranzas-reglas';
 export * from './tipos';
