@@ -33,3 +33,24 @@
 
 alter table cliente add column foto_archivo text;
 alter table cliente add column foto_subida_en timestamptz;
+
+-- Las dos columnas **se escriben juntas o ninguna**: el servicio anota el nombre
+-- y la fecha en el mismo UPDATE, despues de que el archivo ya esta en disco. El
+-- check lo hace cumplir en vez de confiar en que ningun camino futuro las separe.
+--
+-- Sin el, un estado a medias es representable y los dos lados son danos reales:
+-- nombre sin fecha significa que el portal intenta servir un archivo sin saber
+-- si llego completo; fecha sin nombre significa que la ficha dice "tiene foto" y
+-- no hay archivo que mostrar.
+--
+-- > [!info] Pre-flight para quien empuje esto a `sinmex dev`
+-- > El `CLAUDE.md` pide una consulta de solo lectura por cada `check` nuevo, que
+-- > debe dar 0. Aqui da 0 **por construccion** —las dos columnas nacen en esta
+-- > misma migracion, asi que todas las filas existentes las tienen en null y
+-- > `null = null` es cierto para el check— pero la consulta queda escrita para
+-- > que nadie tenga que deducirlo:
+-- >
+-- >   select count(*) from cliente
+-- >    where (foto_archivo is null) <> (foto_subida_en is null);
+alter table cliente add constraint ck_cliente_foto_completa
+  check ((foto_archivo is null) = (foto_subida_en is null));

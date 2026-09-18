@@ -1,5 +1,5 @@
 begin;
-select plan(10);
+select plan(12);
 
 -- T-40 (foto del prospecto): las dos columnas de `20260918120000_cliente_foto.sql`.
 --
@@ -71,6 +71,30 @@ select lives_ok(
            '99999999-8888-4777-8666-555555555555.jpg', now()
       from ref$$,
   'un cliente tambien puede tener foto: convertir un prospecto no la borra'
+);
+
+-- 11 y 12. El check `ck_cliente_foto_completa`: las dos columnas van juntas o
+-- ninguna. Los dos lados del estado a medias son danos reales, no simetria
+-- teorica: nombre sin fecha deja al portal sirviendo un archivo sin saber si
+-- llego completo, y fecha sin nombre deja la ficha diciendo "tiene foto" sin
+-- archivo que mostrar.
+select throws_ok(
+  $$insert into cliente (nombre, domicilio, telefono, factura, tipo, lista_precio_id, sucursal_id, foto_archivo)
+    select 'Foto A Medias Nombre', 'Calle 6 #13', '6641112244', false, 'cliente', lista, sucursal,
+           '77777777-6666-4555-8444-333333333333.jpg'
+      from ref$$,
+  '23514',
+  null,
+  'nombre de archivo sin fecha de subida: lo rechaza el check'
+);
+
+select throws_ok(
+  $$insert into cliente (nombre, domicilio, telefono, factura, tipo, lista_precio_id, sucursal_id, foto_subida_en)
+    select 'Foto A Medias Fecha', 'Calle 7 #14', '6641112255', false, 'cliente', lista, sucursal, now()
+      from ref$$,
+  '23514',
+  null,
+  'fecha de subida sin nombre de archivo: lo rechaza el check'
 );
 
 select * from finish();
