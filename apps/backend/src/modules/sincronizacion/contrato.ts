@@ -167,7 +167,8 @@ export const CODIGOS_RECHAZO = [
    * La nota que se cobra no existe, su cliente no es de la sucursal del
    * vendedor, o no es del `cliente_id` del sobre. T-20.
    *
-   * Una nota ya pagada o cancelada en el servidor **no** cae aqui: el cobro se
+   * Una nota que en el servidor ya esta pagada, cancelada, de promocion o
+   * borrada **no** cae aqui: el cobro se
    * acepta y el monto va a las otras notas y al saldo a favor (el dinero si se
    * cobro). Una cobranza sobre una venta que aun no se proyecto si cae aqui, y
    * la tablet la reenvia en cada sincronizacion.

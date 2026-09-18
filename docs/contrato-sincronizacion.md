@@ -551,7 +551,7 @@ texto en español** si reintenta o si avisa al vendedor.
 | `presentacion-inactiva` | Una línea de venta nombra una presentación que no existe, está dada de baja o cuyo producto está inactivo. Se reintenta en la siguiente sincronización (T-16) |
 | `precio-no-asignado` | Una línea con cantidad > 0 y el cliente no tiene **ningún** precio para esa presentación vigente a `fecha_operacion` ni asignado después, hasta hoy. Comprueba existencia, nunca valor. Se recupera cuando el portal asigna el precio y la tablet vuelve a sincronizar (T-16) |
 | `tipo-negocio-inexistente` | El `tipo_negocio_id` de un alta de `prospecto` no existe o está dado de baja (T-40). **No es un bug de la tablet**: su catálogo se quedó viejo. Se reintenta solo en la siguiente sincronización, que además le baja el catálogo nuevo |
-| `nota-no-encontrada` | La nota que se cobra no existe, su cliente no es de la sucursal del vendedor, o no es del `cliente_id` del sobre. Una nota ya pagada o cancelada **no** cae aquí: el cobro se acepta y va a otras notas o a saldo a favor. La tablet la reenvía en cada sincronización (T-20) |
+| `nota-no-encontrada` | La nota que se cobra no existe, su cliente no es de la sucursal del vendedor, o no es del `cliente_id` del sobre. Una nota que ya está pagada, cancelada, de promoción o borrada **no** cae aquí: el cobro se acepta y va a otras notas o a saldo a favor. La tablet la reenvía en cada sincronización (T-20) |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo

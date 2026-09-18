@@ -83,7 +83,10 @@ export const CODIGOS_RECHAZO = [
    * catalogo nuevo — el repositorio deja la fila en la cola, no la descarta.
    */
   'tipo-negocio-inexistente',
-  /** T-20: la nota cobrada no existe en el servidor o no es de este cliente. Se reenvia. */
+  /**
+   * T-20: la nota cobrada no existe en el servidor, es de otra sucursal o no es
+   * de este cliente. Se reenvia.
+   */
   'nota-no-encontrada',
 ] as const;
 
