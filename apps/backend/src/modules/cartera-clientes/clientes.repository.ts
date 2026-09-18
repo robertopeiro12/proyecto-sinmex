@@ -54,6 +54,18 @@ export interface ClienteDetalle {
   comentarios: string | null;
   sucursalId: string;
   sucursalCodigo: string;
+  /**
+   * ¿Tiene foto del lugar? (T-40)
+   *
+   * Un booleano y **no** el nombre del archivo a proposito: ese nombre es la
+   * clave de idempotencia de la operacion del push, y el portal no tiene por que
+   * conocer las claves internas de la sincronizacion. Lo unico que necesita
+   * saber es si hay algo que pedirle a `GET /clientes/:id/foto` — si no, no
+   * dibuja hueco.
+   */
+  tieneFoto: boolean;
+  /** Cuando la recibio el servidor, en ISO. `null` si no hay foto. */
+  fotoSubidaEn: string | null;
   overridesPrecio: OverridePrecio[];
   productosPromocion: string[];
 }
@@ -113,6 +125,8 @@ interface FilaDetalle {
   comentarios: string | null;
   sucursal_id: string;
   codigo: string;
+  foto_archivo: string | null;
+  foto_subida_en: Date | null;
 }
 
 interface FilaOverride {
@@ -144,6 +158,8 @@ function aDetalle(
     comentarios: fila.comentarios,
     sucursalId: fila.sucursal_id,
     sucursalCodigo: fila.codigo,
+    tieneFoto: fila.foto_archivo !== null,
+    fotoSubidaEn: fila.foto_subida_en?.toISOString() ?? null,
     overridesPrecio: overrides.map((o) => ({
       presentacionId: o.presentacion_id,
       precio: aNumero(o.precio) ?? 0,
@@ -180,6 +196,11 @@ const COLUMNAS_DETALLE = [
   'cliente.comentarios',
   'cliente.sucursal_id',
   'sucursal.codigo',
+  // T-40: no viajan al portal tal cual (`aDetalle` los convierte en `tieneFoto`
+  // y `fotoSubidaEn`); se leen aqui para no hacer una consulta de mas solo para
+  // saber si hay que dibujar la miniatura.
+  'cliente.foto_archivo',
+  'cliente.foto_subida_en',
 ] as const;
 
 @Injectable()

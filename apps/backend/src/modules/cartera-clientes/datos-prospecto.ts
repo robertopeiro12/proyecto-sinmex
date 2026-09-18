@@ -165,11 +165,16 @@ export function normalizarDatosProspecto(
   const ubicacion = normalizarUbicacion(datos.lat, datos.lng);
   if (!ubicacion.ok) return ubicacion.error;
 
-  // La FOTO no se valida porque todavia no se guarda en ningun lado: falta
-  // decidir donde vive el archivo (candidato Supabase Storage; el alcance de
-  // Supabase es lo que ADR-0002 dejo abierto). El contrato reserva el campo
-  // `foto: null` para que la tablet ya lo mande y el dia que se decida no haya
-  // que cambiar el sobre. Ver la nota `T-40 Registro de Prospectos` del vault.
+  // La FOTO no se valida aqui, y ya no es porque falte decidir donde vive: se
+  // decidio (disco del backend, 2026-09-18). Es que **la foto no viaja en el
+  // lote**. Va por `POST /sync/foto/:clave`, un request aparte que la tablet
+  // manda solo cuando el prospecto ya fue aceptado.
+  //
+  // > [!danger] Por que no viaja aqui
+  // > El contrato de ADR-0006 acepta o rechaza **cada operacion entera**. Una
+  // > imagen pesada o una subida a medias rechazaria el alta completa, o sea se
+  // > perderia un cliente potencial por no poder subir algo que es OPCIONAL. El
+  // > campo `foto: null` del sobre se ignora a proposito.
 
   return {
     ok: true,
