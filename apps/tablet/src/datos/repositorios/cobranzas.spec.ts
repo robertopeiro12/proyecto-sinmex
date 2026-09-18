@@ -228,4 +228,19 @@ describe('repositorio de cobranzas (T-20)', () => {
     expect(v.folio).toBe('TJ260807AP01');
     expect(c.folio).toBe('TJ260807AP02');
   });
+
+  it('si un oyente del refresco truena, el cobro ya grabado no se reporta como fallido', () => {
+    const { catalogos, cobranzas, deps } = montar();
+    catalogos.suscribir(() => {
+      throw new Error('una pantalla abierta truena al refrescar');
+    });
+
+    const grabada = cobranzas.registrar(cobro());
+
+    // El cobro esta firme y su folio consumido: propagar el error haria que la
+    // pantalla dijera "no se consumio ningun folio" e invitara a cobrar dos veces.
+    expect(grabada.folio).toBe('TJ260807AP01');
+    expect(cuantas(deps, 'cobranza')).toBe(1);
+    expect(nota(deps, 'nota-1')?.saldo_centavos).toBe(10000);
+  });
 });

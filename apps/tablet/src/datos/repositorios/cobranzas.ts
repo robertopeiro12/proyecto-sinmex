@@ -170,7 +170,14 @@ export function crearRepositorioCobranzas(
       });
 
       // Despues del commit: la ficha y la venta releen notas y saldo a favor.
-      catalogos.publicarCambio();
+      // Si un oyente truena, el cobro ya esta grabado y su folio consumido: no
+      // puede propagarse como si la grabacion hubiera fallado (la pantalla diria
+      // "no se consumio ningun folio" e invitaria a cobrar dos veces).
+      try {
+        catalogos.publicarCambio();
+      } catch {
+        // Solo se pierde el refresco de pantallas abiertas; el cobro esta firme.
+      }
 
       const grabada = repo.porId(id);
       if (!grabada) throw new ErrorCobranza('No se pudo leer el cobro recién grabado.');
