@@ -1,5 +1,6 @@
 import { depsDePrueba, snapshotDePrueba } from '@/datos/pruebas-apoyo';
 import { crearRepositorioCatalogos } from '@/datos/repositorios/catalogos';
+import { crearRepositorioCobranzas } from '@/datos/repositorios/cobranzas';
 import { crearRepositorioFolios } from '@/datos/repositorios/folios';
 import { crearRepositorioJornadas } from '@/datos/repositorios/jornadas';
 import { crearRepositorioProspectos } from '@/datos/repositorios/prospectos';
@@ -16,22 +17,24 @@ function montar() {
     jornadas: crearRepositorioJornadas(deps),
     ventas: crearRepositorioVentas(deps, { catalogos, folios }),
     prospectos: crearRepositorioProspectos(deps, { catalogos }),
+    cobranzas: crearRepositorioCobranzas(deps, { catalogos, folios }),
   };
 }
 
 describe('contarPendientesDeSubir', () => {
   it('sin nada capturado no hay pendientes', () => {
-    const { jornadas, ventas, prospectos } = montar();
-    expect(contarPendientesDeSubir({ jornadas, ventas, prospectos })).toBe(0);
+    const fuentes = montar();
+    expect(contarPendientesDeSubir(fuentes)).toBe(0);
   });
 
   /**
-   * Las 3 fuentes del push de hoy (T-07, T-16, T-40). Si se olvida una aqui, el
-   * menu de la jornada y "cerrar el dia" dicen "listo" con datos sin subir
-   * (I-1, PR #90).
+   * Las 4 fuentes del push de hoy (T-07, T-16, T-40, T-20). Si se olvida una
+   * aqui, el menu de la jornada y "cerrar el dia" dicen "listo" con datos sin
+   * subir (I-1, PR #90).
    */
-  it('suma jornada, venta y prospecto pendientes', () => {
-    const { jornadas, ventas, prospectos } = montar();
+  it('suma jornada, venta, prospecto y cobranza pendientes', () => {
+    const fuentes = montar();
+    const { jornadas, ventas, prospectos, cobranzas } = fuentes;
 
     jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
     ventas.registrar({
@@ -55,6 +58,15 @@ describe('contarPendientesDeSubir', () => {
       lng: null,
     });
 
-    expect(contarPendientesDeSubir({ jornadas, ventas, prospectos })).toBe(3);
+    cobranzas.registrar({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      ventaNotaId: 'nota-1',
+      montoCentavos: 5000,
+      metodoPago: 'efectivo',
+      fechaPago: '2026-08-07',
+    });
+
+    expect(contarPendientesDeSubir(fuentes)).toBe(4);
   });
 });

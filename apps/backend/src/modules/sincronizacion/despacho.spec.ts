@@ -36,7 +36,7 @@ const op = (
 });
 
 describe('prepararProyeccion', () => {
-  it.each(['jornada', 'cobranza', 'gasto', 'merma', 'ruta'] as const)(
+  it.each(['jornada', 'gasto', 'merma', 'ruta'] as const)(
     '%s no tiene modulo que la proyecte todavia: va al buzon sin mirar datos',
     (tipo) => {
       expect(
@@ -46,6 +46,33 @@ describe('prepararProyeccion', () => {
       ).toEqual({ ok: true, proyeccion: null });
     },
   );
+
+  it('una cobranza pasa por prepararCobranza y sale como proyeccion de cobranza (T-20)', () => {
+    const r = prepararProyeccion(
+      op({
+        tipo: 'cobranza',
+        datos: {
+          venta_nota_id: '7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f',
+          monto_centavos: 5000,
+          metodo_pago: 'efectivo',
+          fecha_pago: '2026-09-14',
+        },
+      }),
+    );
+    expect(r).toEqual({
+      ok: true,
+      proyeccion: {
+        tipo: 'cobranza',
+        cobranza: {
+          clienteId: CLIENTE,
+          ventaNotaId: '7c1d2e3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f',
+          montoCentavos: 5000,
+          metodoPago: 'efectivo',
+          fechaPago: '2026-09-14',
+        },
+      },
+    });
+  });
 
   it('una venta valida se prepara para VentasService', () => {
     expect(prepararProyeccion(op())).toEqual({

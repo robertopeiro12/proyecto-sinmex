@@ -67,4 +67,20 @@ export type {
   ResumenCaptura,
   ResumenLinea,
 } from './ventas-reglas';
+export { crearRepositorioCobranzas, ErrorCobranza } from './repositorios/cobranzas';
+export type { DatosRegistroCobranza, RepositorioCobranzas } from './repositorios/cobranzas';
+export {
+  leerAbonos,
+  leerMontoCentavos,
+  MAX_CENTAVOS_COBRO,
+  problemasDeCobro,
+  repartirPago,
+} from './cobranzas-reglas';
+export type {
+  Aplicacion,
+  CapturaCobro,
+  NotaParaReparto,
+  Reparto,
+  TipoAbono,
+} from './cobranzas-reglas';
 export * from './tipos';

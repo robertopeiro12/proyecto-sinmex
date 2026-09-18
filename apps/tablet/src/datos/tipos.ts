@@ -112,6 +112,11 @@ export interface Cliente {
    * siempre. Ver la migracion `002-sincronizacion.ts`.
    */
   activo: Booleano;
+  /**
+   * Saldo a favor en centavos (T-20, D5): el que manda el pull mas el excedente
+   * de los cobros locales. Solo se muestra; usarlo es del portal.
+   */
+  saldo_favor_centavos: number;
   sincronizado_en: MomentoISO;
 }
 
@@ -144,8 +149,48 @@ export interface NotaPendiente {
   status: StatusNotaPendiente;
   monto_total_centavos: number;
   saldo_centavos: number;
+  /**
+   * `AbonoNota[]` en JSON (T-20): los del pull mas los cobrados sin red. Se lee
+   * con `leerAbonos`, que tolera un texto corrupto.
+   */
+  abonos_json: string;
   activo: Booleano;
   sincronizado_en: MomentoISO;
+}
+
+export type MetodoPago = 'efectivo' | 'transferencia' | 'cheque';
+
+/** Un abono de una nota, para mostrar los pagos previos (T-20). */
+export interface AbonoNota {
+  fecha_pago: FechaISO;
+  monto_centavos: number;
+  metodo_pago: MetodoPago;
+}
+
+/**
+ * Un cobro grabado en la tablet (T-20). Ver la migracion `008-cobranzas.ts`.
+ *
+ * No guarda el reparto: lo recalcula el servidor. No se edita.
+ */
+export interface Cobranza {
+  /** uuid v4 generado al grabar. Es la clave de idempotencia del push. */
+  id: string;
+  /** Dia de trabajo, el del folio y de `fecha_operacion`. */
+  fecha: FechaISO;
+  cliente_id: string;
+  vendedor_id: string;
+  sucursal_id: string;
+  folio: string;
+  /** La nota que eligio el vendedor (id del servidor, bajado en el pull). */
+  venta_nota_id: string;
+  monto_centavos: number;
+  metodo_pago: MetodoPago;
+  fecha_pago: FechaISO;
+  grabada_en: MomentoISO;
+  sync_estado: SyncEstado;
+  /** Motivo con el que el servidor lo rechazo, si `sync_estado = 'error'`. */
+  sync_error: string | null;
+  sincronizado_en: MomentoISO | null;
 }
 
 export type EstadoJornada = 'abierta' | 'cerrada';

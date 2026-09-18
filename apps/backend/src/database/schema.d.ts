@@ -72,10 +72,13 @@ export interface ClientePromocionProducto {
 export interface CobranzaAbono {
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
+  fecha_operacion: Timestamp;
   fecha_pago: Timestamp;
+  folio: string | null;
   id: Generated<string>;
   metodo_pago: string;
   monto: Numeric;
+  origen: Generated<string>;
   saldo_pendiente: Numeric;
   tipo: string;
   updated_at: Generated<Timestamp>;
@@ -158,6 +161,19 @@ export interface Ruta {
   tipo: string;
   updated_at: Generated<Timestamp>;
   vendedor_id: string;
+}
+
+export interface SaldoFavorMovimiento {
+  cliente_id: string;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  fecha_operacion: Timestamp;
+  folio: string | null;
+  id: Generated<string>;
+  monto: Numeric;
+  origen: string;
+  updated_at: Generated<Timestamp>;
+  vendedor_id: string | null;
 }
 
 export interface SesionRefresh {
@@ -310,6 +326,7 @@ export interface DB {
   presentacion: Presentacion;
   producto: Producto;
   ruta: Ruta;
+  saldo_favor_movimiento: SaldoFavorMovimiento;
   sesion_refresh: SesionRefresh;
   sesion_vendedor: SesionVendedor;
   sucursal: Sucursal;
