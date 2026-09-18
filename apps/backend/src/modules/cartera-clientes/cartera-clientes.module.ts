@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ClientesController } from './clientes.controller';
 import { ClientesRepository } from './clientes.repository';
 import { ClientesService } from './clientes.service';
+import { FotosRepository } from './fotos.repository';
+import { FotosService } from './fotos.service';
 import { ListasPrecioController } from './listas-precio.controller';
 import { PreciosController } from './precios.controller';
 import { PreciosRepository } from './precios.repository';
@@ -24,6 +26,10 @@ import { TiposNegocioService } from './tipos-negocio.service';
   providers: [
     ClientesService,
     ClientesRepository,
+    // T-40 (foto del prospecto): el archivo vive en el disco del backend y las
+    // dos columnas en `cliente`, del que esta modulo es el dueno (ADR-0009).
+    FotosService,
+    FotosRepository,
     PreciosService,
     PreciosRepository,
     TiposNegocioService,
@@ -37,6 +43,10 @@ import { TiposNegocioService } from './tipos-negocio.service';
   // `ClientesService.crearProspecto` (ADR-0009 §2.1). La dependencia va de
   // sincronizacion hacia aqui, nunca al reves: Cartera de Clientes es la duena
   // de `cliente` y la regla vive una sola vez.
-  exports: [PreciosRepository, ClientesService],
+  //
+  // T-40 (foto): `sincronizacion/` expone `POST /sync/foto/:clave` —la clave de
+  // la URL es la del buzon del push— y despacha aqui a guardar el archivo. La
+  // dependencia sigue yendo de sincronizacion hacia Cartera de Clientes.
+  exports: [PreciosRepository, ClientesService, FotosService],
 })
 export class CarteraClientesModule {}

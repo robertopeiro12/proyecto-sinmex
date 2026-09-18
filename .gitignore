@@ -7,3 +7,7 @@ supabase/.temp/
 .supabase-access-token
 .claude/worktrees/
 .playwright-mcp/
+
+# Fotos de prospectos en desarrollo (default de FOTOS_DIR, T-40). Son datos de
+# prueba del disco local, no codigo.
+apps/backend/var/

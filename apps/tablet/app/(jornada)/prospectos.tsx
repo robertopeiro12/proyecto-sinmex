@@ -5,11 +5,13 @@ import { ErrorProspecto } from '@/datos';
 import type { Prospecto, TipoNegocio } from '@/datos/tipos';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
+import { OBJETIVO_BYTES, type FotoComprimida } from '@/fotos/comprimir';
+import { capturarFotoProspecto } from '@/fotos/expo';
 import { obtenerUbicacion } from '@/ubicacion/obtener';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
 import { Cifra } from '@/ui/cifra';
-import { Pantalla, Pastilla, Tarjeta } from '@/ui/pantalla';
+import { Pantalla, Pastilla, Tarjeta, type Estado } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
 import { colores, espacio, grosor } from '@/ui/tokens';
 
@@ -21,12 +23,15 @@ import { colores, espacio, grosor } from '@/ui/tokens';
  * dicto el cliente en agosto de 2026: nombre del negocio, encargado, telefono,
  * ubicacion, tipo de negocio y comentario.
  *
- * > [!info] La foto esta diferida, no olvidada
- * > El cliente la quiere (2026-08-23) *"si esto no se hace lento"*. Falta decidir
- * > donde se guarda el archivo — el candidato es Supabase Storage, y el alcance
- * > de Supabase es justo lo que `ADR-0002` dejo abierto. La columna `foto_uri`
- * > ya existe en la base local y el contrato ya manda `foto: null`, asi que ese
- * > ticket sera una pantalla y un upload, no una migracion.
+ * > [!warning] La foto NO bloquea el alta, igual que la ubicacion
+ * > El cliente la pidio (2026-08-23) *"si esto no se hace lento"*, y esa
+ * > condicion es la que manda: **un solo boton guarda el prospecto**, con foto o
+ * > sin ella. Si el vendedor no la toma, si niega el permiso de camara o si la
+ * > compresion no la deja en un tamano que el servidor acepte, el prospecto se
+ * > guarda igual y la pantalla lo dice. La foto se comprime aqui (~300 kB) y
+ * > sube sola en la siguiente sincronizacion, por un canal aparte del lote —
+ * > **jamas dentro del alta**, porque entonces una foto que falla se llevaria al
+ * > cliente potencial. Ver `src/fotos/` y el spec de T-40.
  *
  * > [!warning] La ubicacion NO bloquea el alta
  * > Si el vendedor niega el permiso o no hay senal, el prospecto se guarda sin
@@ -62,6 +67,9 @@ export default function Prospectos() {
   const [ubicacion, setUbicacion] = useState<{ lat: number; lng: number } | null>(null);
   const [avisoUbicacion, setAvisoUbicacion] = useState<string | null>(null);
   const [buscandoUbicacion, setBuscandoUbicacion] = useState(false);
+  const [foto, setFoto] = useState<FotoComprimida | null>(null);
+  const [avisoFoto, setAvisoFoto] = useState<string | null>(null);
+  const [tomandoFoto, setTomandoFoto] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [guardado, setGuardado] = useState<string | null>(null);
   const [refrescos, setRefrescos] = useState(0);
@@ -87,6 +95,9 @@ export default function Prospectos() {
     return vendedor ? datos.prospectos.delDia(vendedor.id) : [];
   }, [datos, vendedor, refrescos, versionCatalogos, ultimaSincronizacion]);
 
+  // La foto **no** aparece aqui a proposito, ni siquiera mientras la camara esta
+  // abierta: lo que habilita el boton son los dos campos que dicto el cliente.
+  // Un prospecto sin foto es un prospecto completo.
   const puedeGuardar =
     vendedor !== null &&
     sucursalId !== null &&
@@ -113,6 +124,39 @@ export default function Prospectos() {
     }
   }
 
+  /**
+   * Toma la foto y la comprime, sin tocar nada del formulario.
+   *
+   * `capturarFotoProspecto` no lanza nunca (ver su doc): todo llega como estado,
+   * y el peor de ellos deja `foto` en `null` y un aviso. Asi no hay ningun camino
+   * por el que la camara pueda impedir el alta.
+   */
+  async function tomarFoto() {
+    setAvisoFoto(null);
+    setTomandoFoto(true);
+    try {
+      const r = await capturarFotoProspecto();
+      if (r.estado === 'ok') {
+        setFoto(r.foto);
+        if (!r.foto.objetivoAlcanzado) {
+          // Pesa mas de lo previsto pero el servidor la acepta. Se avisa sin
+          // alarmar: la foto es buena, solo va a tardar un poco mas en subir.
+          setAvisoFoto('La foto quedó más pesada de lo normal; va a subir igual.');
+        }
+        return;
+      }
+      setFoto(null);
+      if (r.estado === 'cancelado') return; // se echo para atras: ni aviso
+      setAvisoFoto(
+        r.estado === 'permiso-negado'
+          ? 'Sin permiso de cámara. Puedes guardar el prospecto igual; la foto es opcional.'
+          : 'No se pudo preparar la foto. Puedes guardar el prospecto igual y volver a intentarlo.',
+      );
+    } finally {
+      setTomandoFoto(false);
+    }
+  }
+
   function guardar() {
     setError(null);
     setGuardado(null);
@@ -131,6 +175,9 @@ export default function Prospectos() {
         comentarios: comentarios.trim() === '' ? null : comentarios,
         lat: ubicacion?.lat ?? null,
         lng: ubicacion?.lng ?? null,
+        // Ya comprimida y medida. Si no hubo foto esto es `null` y el alta sigue
+        // exactamente igual que antes de T-40.
+        fotoUri: foto?.uri ?? null,
       });
 
       // Se limpia el formulario, no se navega: lo normal es registrar varios
@@ -142,6 +189,8 @@ export default function Prospectos() {
       setTipoElegido(null);
       setUbicacion(null);
       setAvisoUbicacion(null);
+      setFoto(null);
+      setAvisoFoto(null);
       setGuardado(
         p.lat === null
           ? `Guardado "${p.nombre}" sin ubicación. Queda pendiente de subir.`
@@ -268,6 +317,38 @@ export default function Prospectos() {
         {avisoUbicacion ? <Text style={estilos.textoSuave}>{avisoUbicacion}</Text> : null}
       </Tarjeta>
 
+      <Tarjeta estado={foto ? 'listo' : 'neutro'} etiqueta="Foto del lugar">
+        {foto ? (
+          <>
+            <Pastilla texto="foto lista" estado="listo" />
+            {/* El tamano real medido, en monoespaciada (regla 3): es una cifra
+                que el vendedor puede necesitar leerle a la oficina si una foto
+                no sube. */}
+            <Cifra valor={`${Math.round(foto.bytes / 1024)} kB`} tamano="menor" />
+          </>
+        ) : (
+          <Text style={estilos.textoSuave}>
+            Sin foto. No es obligatoria: el prospecto se guarda igual.
+          </Text>
+        )}
+
+        <Boton
+          etiqueta={foto ? 'Volver a tomar la foto' : 'Tomar foto'}
+          tono="neutra"
+          glifo="⬤"
+          onPress={tomarFoto}
+          ocupado={tomandoFoto}
+          estilo={{ marginTop: espacio.sm }}
+        />
+
+        {avisoFoto ? <Text style={estilos.textoSuave}>{avisoFoto}</Text> : null}
+
+        <Text style={estilos.textoSuave}>
+          Se guarda en la tablet y sube sola con la sincronización (máximo{' '}
+          {Math.round(OBJETIVO_BYTES / 1024)} kB).
+        </Text>
+      </Tarjeta>
+
       {error ? <Text style={estilos.error}>{error}</Text> : null}
 
       {guardado ? (
@@ -303,6 +384,22 @@ export default function Prospectos() {
   );
 }
 
+/**
+ * La pastilla de la foto, o `null` si el prospecto no lleva foto.
+ *
+ * Sin foto **no se dibuja nada**: un hueco que diga "sin foto" en cada fila
+ * convertiria lo opcional en una carencia, y el cliente pidio la foto
+ * condicionada, no obligatoria.
+ *
+ * El estado se deriva de las columnas, nunca se guarda: ver `007-foto-prospecto.ts`.
+ */
+function estadoFoto(p: Prospecto): { texto: string; estado: Estado } | null {
+  if (p.foto_uri === null) return null;
+  if (p.foto_subida_en !== null) return { texto: 'foto subida', estado: 'listo' };
+  if (p.foto_descartada === 1) return { texto: 'foto no subió', estado: 'error' };
+  return { texto: 'foto por subir', estado: 'pendiente' };
+}
+
 /** Estado de sincronizacion de una fila, en color + palabra (nunca color solo). */
 const ESTADO_SYNC = {
   pendiente: { estado: 'pendiente' as const, texto: 'por subir' },
@@ -315,6 +412,7 @@ function FilaProspecto({ prospecto }: { prospecto: Prospecto }) {
   const { datos } = useJawa();
   const { estilos } = useTema();
   const pastilla = ESTADO_SYNC[prospecto.sync_estado];
+  const foto = estadoFoto(prospecto);
   const tipo =
     prospecto.tipo_negocio_id === null
       ? null
@@ -331,9 +429,20 @@ function FilaProspecto({ prospecto }: { prospecto: Prospecto }) {
         {prospecto.lat === null ? (
           <Pastilla texto="sin ubicación" estado="neutro" />
         ) : null}
+        {/* La foto tiene su PROPIA pastilla, separada de la del prospecto. Es lo
+            mismo que el diseno pide del modelo de datos: el estado de la foto no
+            es el estado del prospecto, y mezclarlos en pantalla haria creer que
+            un alta no entro cuando lo que no entro fue una foto opcional. */}
+        {foto ? <Pastilla texto={foto.texto} estado={foto.estado} /> : null}
       </View>
       {prospecto.sync_error ? (
         <Text style={estilos.textoSuave}>{prospecto.sync_error}</Text>
+      ) : null}
+      {/* El motivo del fallo de la foto se muestra solo mientras siga importando:
+          si ya subio, un error viejo en pantalla se lee como un fallo que no
+          existe. */}
+      {prospecto.foto_error && prospecto.foto_subida_en === null ? (
+        <Text style={estilos.textoSuave}>Foto: {prospecto.foto_error}</Text>
       ) : null}
     </Tarjeta>
   );

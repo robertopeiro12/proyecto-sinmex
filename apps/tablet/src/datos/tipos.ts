@@ -235,11 +235,34 @@ export interface Prospecto {
   lat: number | null;
   lng: number | null;
   /**
-   * Ruta local de la foto del lugar. **Previsto y sin usar todavia**: falta
-   * decidir donde se guarda el archivo (candidato Supabase Storage, alcance que
-   * ADR-0002 dejo abierto). La captura es un ticket aparte.
+   * Ruta local de la foto del lugar, ya comprimida. `null` si el vendedor no
+   * tomo foto — que es un prospecto **completo**, no uno a medias.
+   *
+   * El archivo vive en la cache del equipo y sube por un canal aparte del push,
+   * despues de que el prospecto fue aceptado. Ver `src/fotos/`.
    */
   foto_uri: string | null;
+  /**
+   * Cuando la recibio el SERVIDOR, tal como lo devolvio. `null` = todavia no
+   * esta arriba.
+   *
+   * Es el reloj de alla y no el de la tablet a proposito: es el unico dato que
+   * confirma que la foto llego al otro lado.
+   */
+  foto_subida_en: MomentoISO | null;
+  /** Ultimo motivo por el que la foto no subio. Se limpia al subir. */
+  foto_error: string | null;
+  /**
+   * `1` = no recuperable, se deja de reintentar.
+   *
+   * Son los tres fallos que **no se arreglan reintentando**: el servidor
+   * responde 413 si la foto pasa de 2 MB, 415 si el contenido no es un JPEG de
+   * verdad, y el archivo local pudo desaparecer con una limpieza de cache.
+   * Mandar los mismos bytes otra vez da la misma respuesta, asi que sin esta
+   * bandera la tablet reintentaria para siempre. Un fallo de red **si** se
+   * reintenta.
+   */
+  foto_descartada: Booleano;
   grabado_en: MomentoISO;
   sync_estado: SyncEstado;
   /** Motivo por el que el servidor lo rechazo, si `sync_estado = 'error'`. */

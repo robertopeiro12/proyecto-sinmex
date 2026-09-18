@@ -35,6 +35,14 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "cameraPermission": "JAWA usa la cámara para la foto del lugar cuando registras un prospecto. Es opcional.",
+          "photosPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {

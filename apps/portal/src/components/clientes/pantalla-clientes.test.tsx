@@ -80,6 +80,10 @@ const DETALLE: ClienteDetalle = {
   comentarios: null,
   sucursalId: "suc-1",
   sucursalCodigo: "TJ",
+  // T-40: sin foto. El caso con foto lo cubre foto-prospecto.test.tsx, que es
+  // donde vive la regla de "sin foto no se dibuja hueco".
+  tieneFoto: false,
+  fotoSubidaEn: null,
   overridesPrecio: [],
   productosPromocion: [],
 };
