@@ -411,6 +411,51 @@ describe('Foto del prospecto (e2e)', () => {
     expect((res.body as { message: string }).message).toMatch(/Sincroniza/);
   });
 
+  /**
+   * El caso literal del spec: la foto de una operacion **rechazada**.
+   *
+   * Sale 404 y no un codigo propio porque por el contrato §7 un rechazo **no
+   * deja fila**: para el servidor es indistinguible de una clave que nunca
+   * llego. Esa es justamente la propiedad que hace el rechazo recuperable — el
+   * vendedor corrige, reenvia con la MISMA clave, el prospecto entra, y la foto
+   * entra detras sin que nadie tenga que reconciliar nada.
+   */
+  it('la foto de una operacion RECHAZADA es 404, y entra sola tras corregir el alta', async () => {
+    const clave = randomUUID();
+    const alta = {
+      clave,
+      tipo: 'prospecto',
+      fecha_operacion: '2026-09-18',
+      ocurrido_en: '2026-09-18T18:03:22.000Z',
+      datos: {
+        nombre: `${PREFIJO} Rechazada Y Corregida`,
+        telefono: '6641112233',
+        encargado: null,
+        tipo_negocio_id: tipoNegocioId,
+        comentarios: null,
+        lat: null,
+        lng: null,
+        foto: null,
+      },
+    };
+
+    // Un prospecto con folio se rechaza (no es una nota que nadie firme).
+    const rechazo = (
+      await push([{ ...alta, folio: 'TJ260918AP05' }]).expect(200)
+    ).body as RespuestaPush;
+    expect(rechazo.resultados[0].estado).toBe('rechazada');
+
+    const res = await subirFoto(clave, jpeg()).expect(404);
+    expect((res.body as { message: string }).message).toMatch(/Sincroniza/);
+    expect(await archivosDe(clave)).toEqual([]);
+
+    // El alta corregida entra con la misma clave, y ahora la foto tambien.
+    const ok = (await push([alta]).expect(200)).body as RespuestaPush;
+    expect(ok.resultados[0].estado).toBe('aplicada');
+    await subirFoto(clave, jpeg('por fin')).expect(200);
+    expect(await archivosDe(clave)).toEqual([`${clave}.jpg`]);
+  });
+
   it('una clave que no es un uuid es 400, y no toca el disco', async () => {
     // El nombre del archivo sale de la clave. Esta es la primera barrera contra
     // un `../..` en la URL; la segunda esta en `nombreArchivoFoto`.
