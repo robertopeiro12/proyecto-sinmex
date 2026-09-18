@@ -54,12 +54,31 @@ export default function CerrarDia() {
   function cerrar() {
     setError(null);
     if (!jornada) return;
+
+    // El cierre y el refresco van en try separados **a proposito**. Si los dos
+    // comparten uno, un fallo al refrescar la pantalla hace decir "No se pudo
+    // cerrar el dia" con el dia YA cerrado en SQLite: el kilometraje quedo
+    // escrito y el vendedor lee que no. Al reintentar, `cerrar()` le responde
+    // "La jornada ya esta cerrada" y se queda sin saber cual de los dos
+    // mensajes es cierto, al final de una jornada de 12 h y sin nadie a quien
+    // preguntar.
+    //
+    // La escritura es la que puede fallar por una razon que el vendedor
+    // entiende y puede corregir (kilometraje menor al inicial); el refresco no.
+    // Que el refresco truene es un problema de la pantalla, no del cierre, y no
+    // debe desmentir un dato que ya esta guardado.
+    //
+    // Patron detectado en la revision de T-20, donde la misma forma era peor:
+    // ahi invitaba a cobrar dos veces. Aqui no llega a eso porque `cerrar()`
+    // rechaza una jornada ya cerrada, pero el mensaje sigue siendo falso.
     try {
       datos.jornadas.cerrar(jornada.id, kmNumero);
-      refrescarJornada();
     } catch (e) {
       setError(e instanceof ErrorJornada ? e.message : 'No se pudo cerrar el día.');
+      return;
     }
+
+    refrescarJornada();
   }
 
   if (jornada?.estado === 'cerrada') {
