@@ -5,6 +5,7 @@ import { Alert, Text, View } from 'react-native';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import type { MotivoAbandono } from '@/sincronizacion/motor';
+import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 import { Boton } from '@/ui/boton';
 import { BotonMenu } from '@/ui/boton-menu';
 import { Cifra } from '@/ui/cifra';
@@ -37,10 +38,10 @@ export default function MenuJornada() {
   const { estilos } = useTema();
   const [sincronizando, setSincronizando] = useState(false);
 
-  // Suma ventas y cobros (T-20): si quedan sin subir, la jornada no puede decir
-  // "listo" aunque ella misma ya este sincronizada, o el vendedor cierra el dia
-  // sin WiFi creyendo que ya subio todo. Al integrar T-40 esto pasa a
-  // contarPendientesDeSubir(datos).
+  // Suma jornada, venta y prospecto (`contarPendientesDeSubir`, T-07/T-16/T-40):
+  // si algo de eso queda sin subir, la jornada no puede decir "listo" aunque
+  // ella misma ya este sincronizada, o el vendedor cierra el dia sin WiFi
+  // creyendo que ya subio todo.
   //
   // Se relee al volver a esta pantalla (`useFocusEffect`): grabar una venta no
   // mueve `datos`, y esta pantalla sigue montada mientras el vendedor captura en
@@ -56,11 +57,7 @@ export default function MenuJornada() {
   const pendientes = useMemo(() => {
     void vueltas;
     void ultimaSincronizacion;
-    return (
-      datos.jornadas.pendientesDeSincronizar().length +
-      datos.ventas.pendientesDeSincronizar().length +
-      datos.cobranzas.pendientesDeSincronizar().length
-    );
+    return contarPendientesDeSubir(datos);
   }, [datos, vueltas, ultimaSincronizacion]);
   const falloUltima = ultimaSincronizacion !== null && !ultimaSincronizacion.ok;
 

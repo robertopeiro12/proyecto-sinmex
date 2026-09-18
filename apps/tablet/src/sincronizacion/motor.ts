@@ -47,12 +47,9 @@ import { trocearLotes } from './lotes';
 /**
  * De donde salen las operaciones que se suben.
  *
- * Cada modulo de negocio registrara la suya (venta, cobranza, gasto, merma,
- * ruta) sin tocar el motor. Hoy solo existe la jornada, que es la unica entidad
- * operativa que T-04 dejo implementada.
- *
- * Hechas: jornada, venta (T-16) y cobranza (T-20).
- * TODO: T-27/T-33/T-39 — una fuente por modulo.
+ * Cada modulo de negocio registra la suya sin tocar el motor: hoy jornada
+ * (T-04), venta (T-16), prospecto (T-40) y cobranza (T-20), en
+ * `proveedor-sesion.tsx`. Faltan gasto, merma y ruta (T-27/T-33/T-39).
  */
 export interface FuenteOperaciones {
   tipo: TipoOperacion;
@@ -300,6 +297,11 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
       ...cliente,
       saldo_favor_centavos: cliente.saldo_favor_centavos ?? 0,
     })),
+    // T-40: un servidor anterior a este ticket no manda la coleccion. Se pasa
+    // `undefined` y `guardarSnapshot` simplemente no escribe nada de esa tabla;
+    // la pantalla de prospectos se queda sin desplegable y lo dice. Es lo que el
+    // contrato §3 pide de un cambio aditivo: ignorar lo que no se conoce.
+    tiposNegocio: c.tipos_negocio,
     precios: c.precios,
     notas: respuesta.notas_pendientes.map(({ abonos, ...nota }) => ({
       ...nota,

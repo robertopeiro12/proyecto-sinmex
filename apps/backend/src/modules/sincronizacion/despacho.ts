@@ -1,4 +1,5 @@
 import { esViolacionUnicidad } from '../../database/errores-postgres';
+import type { ProspectoNormalizado } from '../cartera-clientes/datos-prospecto';
 import {
   normalizarDatosVenta,
   type VentaNormalizada,
@@ -7,6 +8,7 @@ import type { CobranzaNormalizada } from '../ventas-cobranza/datos-cobranza';
 import type { RazonRechazoVenta } from '../ventas-cobranza/venta-rechazada';
 import type { CodigoRechazo } from './contrato';
 import { prepararCobranza } from './despacho-cobranza';
+import { prepararProspecto } from './despacho-prospecto';
 import type { OperacionNormalizada, Rechazo } from './operaciones';
 
 /**
@@ -25,6 +27,9 @@ import type { OperacionNormalizada, Rechazo } from './operaciones';
  */
 export type Proyeccion =
   | { tipo: 'venta'; venta: VentaNormalizada }
+  // T-40. El unico tipo que crea una fila de CATALOGO (`cliente` con
+  // `tipo = 'prospecto'`) en vez de una de operacion.
+  | { tipo: 'prospecto'; prospecto: ProspectoNormalizado }
   | { tipo: 'cobranza'; cobranza: CobranzaNormalizada };
 
 export type ResultadoPreparacion =
@@ -58,11 +63,17 @@ export function prepararProyeccion(
       }
       return { ok: true, proyeccion: { tipo: 'venta', venta: r.venta } };
     }
-    case 'jornada':
-    case 'gasto':
-    case 'merma':
-    case 'ruta':
-      return { ok: true, proyeccion: null };
+    case 'prospecto': {
+      // El folio, el `cliente_id` y la forma de `datos` los revisa
+      // `despacho-prospecto.ts`, para que este `switch` se quede en un `case`
+      // corto por tipo: lo van a tocar T-20, T-31, T-38 y T-39 tambien.
+      const r = prepararProspecto(op);
+      if (!r.ok) return r;
+      return {
+        ok: true,
+        proyeccion: { tipo: 'prospecto', prospecto: r.prospecto },
+      };
+    }
     case 'cobranza': {
       const r = prepararCobranza(op);
       if (!r.ok) return r;
@@ -71,6 +82,11 @@ export function prepararProyeccion(
         proyeccion: { tipo: 'cobranza', cobranza: r.cobranza },
       };
     }
+    case 'jornada':
+    case 'gasto':
+    case 'merma':
+    case 'ruta':
+      return { ok: true, proyeccion: null };
   }
 }
 

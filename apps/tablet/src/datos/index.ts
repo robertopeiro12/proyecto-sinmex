@@ -21,6 +21,19 @@ export type {
 } from './repositorios/catalogos';
 export { crearRepositorioJornadas, ErrorJornada } from './repositorios/jornadas';
 export type { DatosAperturaJornada, RepositorioJornadas } from './repositorios/jornadas';
+// Los topes de largo del prospecto NO se reexportan aqui: `LARGO_MAX_COMENTARIOS`
+// ya lo exporta `ventas-reglas` (T-16) con otro valor, y dos constantes con el
+// mismo nombre en la misma barrera es como se acaba aplicando el tope de la
+// venta al prospecto sin que nadie lo note. Quien los necesite (su propia
+// prueba) los importa de `repositorios/prospectos`.
+export {
+  crearRepositorioProspectos,
+  ErrorProspecto,
+} from './repositorios/prospectos';
+export type {
+  DatosRegistroProspecto,
+  RepositorioProspectos,
+} from './repositorios/prospectos';
 export { crearRepositorioSync, CURSOR_PULL } from './repositorios/sync';
 export type { RepositorioSync } from './repositorios/sync';
 export {

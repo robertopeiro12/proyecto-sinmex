@@ -55,6 +55,12 @@ export function snapshotDePrueba(): SnapshotCatalogos {
       { id: 'veh-2', nombre: 'Camioneta 02 (baja)', sucursal_id: 'suc-tj', activo: 0 },
     ],
     productos: [{ id: 'pro-1', nombre: 'Jamaica', activo: 1 }],
+    tiposNegocio: [
+      { id: 'tn-1', nombre: 'Abarrotes', activo: 1 },
+      { id: 'tn-2', nombre: 'Taqueria', activo: 1 },
+      // Dado de baja en el portal: baja igual, con la bandera, y no se ofrece.
+      { id: 'tn-3', nombre: 'Ciber (baja)', activo: 0 },
+    ],
     presentaciones: [
       { id: 'pre-1', producto_id: 'pro-1', volumen: '1 L', activo: 1 },
       { id: 'pre-2', producto_id: 'pro-1', volumen: '500 ml', activo: 1 },
@@ -185,6 +191,7 @@ export function respuestaPullDePrueba(
       productos: s.productos ?? [],
       presentaciones: s.presentaciones ?? [],
       clientes: s.clientes ?? [],
+      tipos_negocio: s.tiposNegocio ?? [],
       precios: s.precios ?? [],
     },
     // El pull manda los abonos como lista; el snapshot local, como JSON.

@@ -9,6 +9,7 @@ import type {
   Presentacion,
   Producto,
   Sucursal,
+  TipoNegocio,
   Vehiculo,
   Vendedor,
 } from '../tipos';
@@ -29,6 +30,8 @@ export interface SnapshotCatalogos {
   productos?: Omit<Producto, 'sincronizado_en'>[];
   presentaciones?: Omit<Presentacion, 'sincronizado_en'>[];
   clientes?: Omit<Cliente, 'sincronizado_en'>[];
+  /** T-40. Coleccion nueva del `pull`: el desplegable de la pantalla de prospectos. */
+  tiposNegocio?: Omit<TipoNegocio, 'sincronizado_en'>[];
   precios?: Omit<ClientePrecio, 'sincronizado_en'>[];
   notas?: Omit<NotaPendiente, 'sincronizado_en'>[];
 }
@@ -58,6 +61,7 @@ const COLUMNAS = {
   ],
   vehiculo: ['id', 'nombre', 'sucursal_id', 'activo'],
   producto: ['id', 'nombre', 'activo'],
+  tipo_negocio: ['id', 'nombre', 'activo'],
   presentacion: ['id', 'producto_id', 'volumen', 'activo'],
   cliente: [
     'id',
@@ -233,6 +237,9 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
           upsert(bd, 'vendedor', COLUMNAS.vendedor, snapshot.vendedores, ahora) +
           upsert(bd, 'vehiculo', COLUMNAS.vehiculo, snapshot.vehiculos, ahora) +
           upsert(bd, 'producto', COLUMNAS.producto, snapshot.productos, ahora) +
+          // Sin llaves foraneas hacia nadie, asi que su sitio en el orden es
+          // indiferente; va junto a los demas catalogos de empresa.
+          upsert(bd, 'tipo_negocio', COLUMNAS.tipo_negocio, snapshot.tiposNegocio, ahora) +
           upsert(bd, 'presentacion', COLUMNAS.presentacion, snapshot.presentaciones, ahora) +
           upsert(bd, 'cliente', COLUMNAS.cliente, snapshot.clientes, ahora) +
           upsert(bd, 'cliente_precio', COLUMNAS.cliente_precio, snapshot.precios, ahora) +
@@ -255,6 +262,27 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
      */
     publicarCambio(): void {
       avisar();
+    },
+
+    /**
+     * Tipos de negocio **activos**, para el desplegable de prospectos (T-40).
+     *
+     * Solo los activos: un giro que el portal dio de baja no se debe poder
+     * asignar. Un prospecto ya capturado con ese giro **se conserva** — la fila
+     * no se borra, solo deja de ofrecerse (politica de purga de T-07).
+     */
+    listarTiposNegocio(): TipoNegocio[] {
+      return bd.getAllSync<TipoNegocio>(
+        'select * from tipo_negocio where activo = 1 order by nombre',
+      );
+    },
+
+    /** Un tipo de negocio por id, activo o no: para poder nombrar uno ya capturado. */
+    obtenerTipoNegocio(id: string): TipoNegocio | null {
+      return bd.getFirstSync<TipoNegocio>(
+        'select * from tipo_negocio where id = $id',
+        { $id: id },
+      );
     },
 
     /** Vehiculos activos de una sucursal, para la pantalla de abrir el dia. */

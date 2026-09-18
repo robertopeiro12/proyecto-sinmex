@@ -23,11 +23,17 @@ const cobro = (extra: Record<string, string | number> = {}) => ({
   ...extra,
 });
 
-describe('migracion 005: cobranzas (T-20)', () => {
-  it('deja la base en la version 5, con la tabla cobranza', () => {
+describe('migracion 007: cobranzas (T-20)', () => {
+  it('deja la base en la version 7, con la tabla cobranza', () => {
     const bd = montar();
-    expect(migraciones).toHaveLength(5);
-    expect(versionEsquema(bd)).toBe(5);
+    // Se afirma **cual** es la migracion 7, no cuantas hay (mismo criterio que
+    // `004-ventas.spec.ts`). T-20 la escribio como la 005; al integrar T-40,
+    // que ya habia publicado la 005 y la 006 en `main`, paso a la 007 — y
+    // **tenia** que ir despues: la 005 de T-40 rehace la tabla `cliente`, asi
+    // que un `saldo_favor_centavos` agregado antes se habria perdido.
+    expect(migraciones[6]?.nombre).toBe('cobranzas');
+    expect(migraciones[6]?.version).toBe(7);
+    expect(versionEsquema(bd)).toBe(migraciones.length);
     const tablas = bd.getAllSync<{ name: string }>(
       `select name from sqlite_master where type = 'table' and name = 'cobranza'`,
     );

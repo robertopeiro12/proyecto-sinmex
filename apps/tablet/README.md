@@ -68,6 +68,17 @@ Node sin dispositivo ni emulador. El porque esta en
 2. Agregalo **al final** del arreglo de `migraciones/index.ts`.
 3. **Nunca edites una migracion ya publicada**: hay tablets en la calle con ese
    esquema aplicado.
+4. **Para rehacer una tabla** (quitar un `not null`, cambiar un `check`: nada
+   que `ALTER TABLE` sepa hacer solo) usa `sinLlavesForaneas`: crea la tabla
+   nueva, copia las filas **por nombre de columna** (nunca `select *`),
+   `drop table` de la vieja, `alter table ... rename to`, y recrea a mano los
+   indices (no viajan con el `rename`). Declara
+   `sinLlavesForaneas: { comprobar: ['hija1', 'hija2', ...] }` con las tablas
+   hijas que le apuntan (`pragma foreign_key_list` te las da): el motor corre
+   `pragma foreign_key_check` acotado a ellas antes del commit, no a toda la
+   base, para que un huerfano en una tabla ajena no bloquee el arranque. Usa
+   `true` solo si de verdad no se conocen las hijas. Detalle completo en el
+   docstring de `Migracion.sinLlavesForaneas` en `motor.ts`.
 
 ### Convenciones del esquema local
 

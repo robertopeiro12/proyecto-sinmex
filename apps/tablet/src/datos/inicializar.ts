@@ -7,6 +7,10 @@ import { crearRepositorioCatalogos, type RepositorioCatalogos } from './reposito
 import { crearRepositorioCobranzas, type RepositorioCobranzas } from './repositorios/cobranzas';
 import { crearRepositorioFolios, type RepositorioFolios } from './repositorios/folios';
 import { crearRepositorioJornadas, type RepositorioJornadas } from './repositorios/jornadas';
+import {
+  crearRepositorioProspectos,
+  type RepositorioProspectos,
+} from './repositorios/prospectos';
 import { crearRepositorioSync, type RepositorioSync } from './repositorios/sync';
 import { crearRepositorioVentas, type RepositorioVentas } from './repositorios/ventas';
 import type { DepsRepositorio } from './repositorios/deps';
@@ -25,6 +29,8 @@ export interface CapaDatos {
   folios: RepositorioFolios;
   /** Ventas capturadas en ruta (T-16). */
   ventas: RepositorioVentas;
+  /** Prospectos capturados en ruta (T-40). */
+  prospectos: RepositorioProspectos;
   /** Cobros y abonos capturados en ruta (T-20). */
   cobranzas: RepositorioCobranzas;
   /** Version de esquema con la que quedo la base tras migrar. */
@@ -59,6 +65,10 @@ export function inicializarCapaDatos(): CapaDatos {
     sync: crearRepositorioSync(deps),
     folios,
     ventas: crearRepositorioVentas(deps, { catalogos, folios }),
+    // Recibe el MISMO `catalogos` que expone la capa de datos: es quien publica
+    // la version que observan las pantallas y quien sabe si el tipo de negocio
+    // elegido sigue vivo en el catalogo local.
+    prospectos: crearRepositorioProspectos(deps, { catalogos }),
     cobranzas: crearRepositorioCobranzas(deps, { catalogos, folios }),
     versionEsquema: versionFinal,
   };

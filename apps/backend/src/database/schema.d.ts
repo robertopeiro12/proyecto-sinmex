@@ -29,12 +29,12 @@ export interface Cliente {
   comentarios: string | null;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
-  domicilio: string;
+  domicilio: string | null;
   encargado: string | null;
   factura: Generated<boolean>;
   id: Generated<string>;
   lat: Numeric | null;
-  lista_precio_id: string;
+  lista_precio_id: string | null;
   lng: Numeric | null;
   nombre: string;
   pct_comision: Numeric | null;

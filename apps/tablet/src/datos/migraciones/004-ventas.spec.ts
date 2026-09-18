@@ -44,10 +44,14 @@ const linea = (extra: Record<string, ValorSQL> = {}): Record<string, ValorSQL> =
 });
 
 describe('migracion 004: ventas (T-16)', () => {
-  it('deja la base migrada, con venta y venta_linea (version 4 en adelante)', () => {
+  it('crea venta y venta_linea, y es la version 4 del catalogo', () => {
     const bd = montar();
-    // T-20 agrego la 005: aqui solo se afirma lo de la 004.
+    // Se afirma **cual** es la migracion 4, no cuantas hay: `toHaveLength` se
+    // rompia con cada ticket que agregara una migracion despues (T-40 agrego
+    // dos), y ese fallo no dice nada sobre las ventas. La version del esquema
+    // tras migrar al dia es la de la ultima, no la de esta.
     expect(migraciones[3]?.nombre).toBe('ventas');
+    expect(migraciones[3]?.version).toBe(4);
     expect(versionEsquema(bd)).toBe(migraciones.length);
     const tablas = bd.getAllSync<{ name: string }>(
       `select name from sqlite_master
