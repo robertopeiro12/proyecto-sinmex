@@ -39,7 +39,7 @@ export class CobranzasService {
    *
    * Reparte el monto (D1): la nota elegida, las otras notas cobrables del
    * cliente por fecha y folio, y el resto a saldo a favor. Una nota elegida ya
-   * pagada, cancelada o borrada no se rechaza (D9).
+   * pagada, de cuenta perdida o borrada no se rechaza (D9).
    *
    * Devuelve la primera fila `cobranza_abono` creada o, si todo quedo a favor,
    * el movimiento de saldo a favor.

@@ -167,7 +167,7 @@ export const CODIGOS_RECHAZO = [
    * La nota que se cobra no existe, su cliente no es de la sucursal del
    * vendedor, o no es del `cliente_id` del sobre. T-20.
    *
-   * Una nota que en el servidor ya esta pagada, cancelada, de promocion o
+   * Una nota que en el servidor ya esta pagada, de cuenta perdida, de promocion o
    * borrada **no** cae aqui: el cobro se
    * acepta y el monto va a las otras notas y al saldo a favor (el dinero si se
    * cobro). Una cobranza sobre una venta que aun no se proyecto si cae aqui, y
@@ -486,7 +486,7 @@ export interface AbonoPull {
  * - `saldo_centavos` es **derivado** (T-20, D7): `monto_total − Σ abonos vivos`,
  *   nunca negativo. `cobranza_abono.saldo_pendiente` es solo una foto.
  * - Con `desde`, tambien bajan las notas a credito que dejaron de estar
- *   pendientes (pagadas, canceladas, borradas) con `activo: 0`, para que la
+ *   pendientes (pagadas, de cuenta perdida, borradas) con `activo: 0`, para que la
  *   tablet deje de ofrecerlas.
  * - `status` **no se ensancha**: una nota cerrada viaja como `abonado` si tiene
  *   abonos y como `pendiente` si no. Una tablet vieja guarda esta tabla con un

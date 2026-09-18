@@ -5,7 +5,7 @@
  * `push` la traduce a su codigo (`sincronizacion/despacho-cobranza.ts`) y el
  * portal de T-21 la traducira a HTTP.
  *
- * Hay una sola razon a proposito (D10): una nota ya pagada, cancelada o
+ * Hay una sola razon a proposito (D10): una nota ya pagada, de cuenta perdida o
  * borrada NO se rechaza — el dinero si se cobro y rechazarlo lo perderia (D9).
  */
 export type RazonRechazoCobranza =

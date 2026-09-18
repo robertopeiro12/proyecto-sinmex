@@ -299,7 +299,7 @@ listas en campo.
 - **`abonos`** trae los abonos vivos de la nota (`fecha_pago`, `monto_centavos`, `metodo_pago`),
   por fecha de pago, para mostrar los pagos previos al cobrar.
 - **Con `desde`, bajan también las notas a crédito que dejaron de estar pendientes** (pagadas,
-  canceladas, borradas) con `activo: 0`. Así la tablet deja de ofrecer una nota que liquidó otro
+  de cuenta perdida, borradas) con `activo: 0`. Así la tablet deja de ofrecer una nota que liquidó otro
   dispositivo o el portal. Una nota cerrada viaja con `status` `abonado` si tiene abonos y
   `pendiente` si no: una tablet anterior a T-20 guarda esta tabla con un CHECK de esos dos valores
   y, con otro, perdería el pull entero.
@@ -500,7 +500,7 @@ permiso o no haber señal, y eso no le impide registrar al prospecto.
   dinero gana una fila en `cobranza_abono` con el mismo folio; queda `pagada` si su saldo llega a 0
   y `abonado` si no.
 - **El saldo es derivado**: `monto_total − Σ abonos vivos`, calculado por el servidor al proyectar.
-- **Una nota ya pagada, cancelada o borrada no rechaza el cobro**: su saldo aplicable es 0 y todo el
+- **Una nota ya pagada, de cuenta perdida o borrada no rechaza el cobro**: su saldo aplicable es 0 y todo el
   monto pasa a las otras notas y al saldo a favor. El dinero sí se cobró.
 - El único rechazo del dominio es **`nota-no-encontrada`**: la nota no existe, su cliente no es de
   la sucursal del vendedor, o no es del `cliente_id` del sobre.
@@ -551,7 +551,7 @@ texto en español** si reintenta o si avisa al vendedor.
 | `presentacion-inactiva` | Una línea de venta nombra una presentación que no existe, está dada de baja o cuyo producto está inactivo. Se reintenta en la siguiente sincronización (T-16) |
 | `precio-no-asignado` | Una línea con cantidad > 0 y el cliente no tiene **ningún** precio para esa presentación vigente a `fecha_operacion` ni asignado después, hasta hoy. Comprueba existencia, nunca valor. Se recupera cuando el portal asigna el precio y la tablet vuelve a sincronizar (T-16) |
 | `tipo-negocio-inexistente` | El `tipo_negocio_id` de un alta de `prospecto` no existe o está dado de baja (T-40). **No es un bug de la tablet**: su catálogo se quedó viejo. Se reintenta solo en la siguiente sincronización, que además le baja el catálogo nuevo |
-| `nota-no-encontrada` | La nota que se cobra no existe, su cliente no es de la sucursal del vendedor, o no es del `cliente_id` del sobre. Una nota que ya está pagada, cancelada, de promoción o borrada **no** cae aquí: el cobro se acepta y va a otras notas o a saldo a favor. La tablet la reenvía en cada sincronización (T-20) |
+| `nota-no-encontrada` | La nota que se cobra no existe, su cliente no es de la sucursal del vendedor, o no es del `cliente_id` del sobre. Una nota que ya está pagada, de cuenta perdida, de promoción o borrada **no** cae aquí: el cobro se acepta y va a otras notas o a saldo a favor. La tablet la reenvía en cada sincronización (T-20) |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo

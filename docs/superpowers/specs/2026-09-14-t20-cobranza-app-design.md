@@ -113,7 +113,7 @@ Tras aplicar: saldo 0 → `pagada`; 0 < saldo < monto_total → `abonado`; saldo
 sin cambio. Solo notas en `pendiente`/`abonado` reciben excedente. `tipo` de cada fila: `cobranza`
 si deja la nota en saldo 0, `abono` si no.
 
-#### D9 — Nota ya pagada o cancelada en el servidor: no se rechaza
+#### D9 — Nota ya pagada o de cuenta perdida en el servidor: no se rechaza
 
 Si la nota elegida existe y es de un cliente de la sucursal del vendedor, pero ya está `pagada`,
 `cuenta_perdida`, `promocion` o borrada (otro dispositivo o el portal la cerró mientras la tablet
@@ -142,7 +142,7 @@ tope de 99 por vendedor y día.
 - `notasPendientes`: `saldo_centavos` pasa a ser **derivado** (`monto_total − Σ abonos vivos`), y
   cada nota trae `abonos: { fecha_pago, monto_centavos, metodo_pago }[]` (vivos, por fecha).
 - Con `desde` no nulo, también baja las notas **cambiadas desde `desde` que ya no están
-  pendiente/abonado** (pagadas, canceladas) con `activo: false`, para que la tablet deje de
+  pendiente/abonado** (pagadas, de cuenta perdida) con `activo: false`, para que la tablet deje de
   mostrarlas (hoy se quedan para siempre).
 - `ClientePull` gana `saldo_favor_centavos`.
 - Para que el cursor incremental vea los cambios, **`registrarCobranza` toca `updated_at` de cada
@@ -180,7 +180,7 @@ duplicados en backend, tablet y `docs/` en el mismo commit.
 
 #### D15 — Repositorio y fuente
 
-Migración local 005: tabla `cobranza` (id = clave, `fecha`, `cliente_id`, `vendedor_id`,
+Migración local 007: tabla `cobranza` (id = clave, `fecha`, `cliente_id`, `vendedor_id`,
 `sucursal_id`, `folio` unique, `venta_nota_id`, `monto_centavos`, `metodo_pago`, `fecha_pago`,
 `grabada_en`, `sync_estado`, `sync_error`, `sincronizado_en`); `nota_pendiente.abonos_json`
 (texto JSON, default `'[]'`); `cliente.saldo_favor_centavos` (default 0).
@@ -217,8 +217,8 @@ quedó en `CLAUDE.md` (PR #91, ya mergeado): la nube refleja `main`, así que la
 Cada migración nueva: `migration up --local` → pgTAP y e2e verdes → el PR se abre con su
 **pre-flight de solo lectura anotado** (consultas que prueban que las restricciones nuevas no
 fallan con las filas existentes) → al mergear, correr ese pre-flight y luego `supabase db push` a
-`sinmex dev`, verificando antes con `supabase migration list --linked` que la migración es
-posterior a la última aplicada en la nube (si no, hace falta `--include-all`).
+`sinmex dev` con `--db-url "$SINMEX_DEV_DB_URL"` (no hace falta `supabase link`), anotando la
+lista de `migration list` antes y después, como detalla `CLAUDE.md`.
 
 Motivo del cambio: empujar la migración de un PR abierto deja la nube con un esquema que no existe
 en `main`; si la revisión cambia esa migración hace falta una correctiva, porque una ya empujada
@@ -277,7 +277,7 @@ Tabla `cobranza`, columnas `nota_pendiente.abonos_json` y `cliente.saldo_favor_c
 | pgTAP | columnas y checks nuevos; `saldo_favor_movimiento` y su FK; backfill de `fecha_operacion` |
 | Unit backend | reparto (nota elegida, excedente a otras en orden, saldo a favor, nota con saldo 0, monto exacto); status y `tipo` resultantes; `normalizarDatosCobranza`; `prepararCobranza`; `registrarCobranza` con repositorio simulado; contado en `registrarVenta` |
 | E2E | abono parcial → `abonado`; liquidación → `pagada`; excedente a otra nota y a saldo a favor; nota ya pagada → todo excedente; `nota-no-encontrada` (inexistente, otra sucursal, cliente distinto) no deja fila; reenvío → `duplicada`; cobranza en el lote siguiente a su venta; venta contado crea su cobro `venta_contado`; `pull`: saldo derivado, `abonos`, `saldo_favor_centavos`, nota liquidada baja `activo: false` en incremental |
-| Tablet | migración 005; reparto local igual al del servidor (casos compartidos); `registrar` sin quemar folio; validaciones; `fuenteCobranzas`; `guardarSnapshot` con `abonos_json` y saldo a favor |
+| Tablet | migración 007; reparto local igual al del servidor (casos compartidos); `registrar` sin quemar folio; validaciones; `fuenteCobranzas`; `guardarSnapshot` con `abonos_json` y saldo a favor |
 | Migración de pruebas | `sincronizacion.e2e-spec.ts:~1041` (smoke de 6 tipos con `datos` ad hoc) → `cobranzaValida()`; `despacho.spec.ts:38-48` saca `cobranza` del `it.each`; fixture que inserta `cobranza_abono` directo gana `fecha_operacion` |
 
 ## Plan de tareas (orientativo; el plan lo fija)
@@ -290,7 +290,7 @@ Tabla `cobranza`, columnas `nota_pendiente.abonos_json` y `cliente.saldo_favor_c
 6. Despacho + `aplicar` + migración de pruebas genéricas + e2e base — `opus`
 7. `pull` (saldo derivado, abonos, saldo a favor, notas cerradas) + e2e — `sonnet` (revisor `opus`)
 8. E2E de reglas de cobranza — `sonnet`
-9. Tablet migración 005 + tipos + `guardarSnapshot` — `sonnet`
+9. Tablet migración 007 + tipos + `guardarSnapshot` — `sonnet`
 10. Tablet reparto puro + validación — `haiku`
 11. Tablet repositorio de cobranzas — `sonnet`
 12. `fuenteCobranzas` + contadores — `haiku`

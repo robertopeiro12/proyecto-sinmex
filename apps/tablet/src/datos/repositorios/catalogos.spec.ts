@@ -154,7 +154,7 @@ describe('repositorio de catalogos', () => {
       expect(notas[0]!.status).toBe('abonado');
     });
 
-    it('una nota cancelada en el portal deja de poder cobrarse', () => {
+    it('una nota cerrada en el portal deja de poder cobrarse', () => {
       const { catalogos } = conCatalogos();
 
       catalogos.guardarSnapshot({
