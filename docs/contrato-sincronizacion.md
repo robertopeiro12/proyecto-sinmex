@@ -593,17 +593,24 @@ El rechazo se recalcula en cada intento: es determinista y no necesita memoria.
 
 ### Una transacción por operación (T-16, ADR-0009)
 
-Cuando un `tipo` tiene un módulo de dominio que lo proyecta (hoy solo `venta`),
-cada operación del lote se aplica **en su propia transacción**:
+Cuando un `tipo` tiene un módulo de dominio que lo proyecta (hoy `venta` y
+`cobranza`), cada operación del lote se aplica **en su propia transacción**:
 
 1. `INSERT` en `sync_operacion` con `on conflict (vendedor_id, clave_idempotencia) do nothing`.
    Si no insertó, es `duplicada` y **no se vuelve a proyectar**.
-2. El módulo dueño escribe sus tablas (`VentasService.registrarVenta` → `venta_nota` +
-   `venta_nota_detalle`) y el buzón anota `entidad_tabla` / `entidad_id`.
+2. El módulo dueño escribe sus tablas y el buzón anota `entidad_tabla` / `entidad_id`:
+   - `VentasService.registrarVenta` → `venta_nota` + `venta_nota_detalle` (y, si es de contado
+     con monto > 0, su fila `cobranza_abono` de origen `venta_contado`); la entidad es la
+     `venta_nota`.
+   - `CobranzasService.registrarCobranza` → bloquea `for update`, en orden de `id`, las notas
+     cobrables del cliente y la elegida; reparte; escribe una fila `cobranza_abono` por nota que
+     recibe dinero (mismo folio), su `status` y, si sobra, un `saldo_favor_movimiento`. La entidad
+     es la primera fila `cobranza_abono` o, si todo quedó a favor, el movimiento.
 3. `commit` → `aplicada`. Si el dominio rechaza (`presentacion-inactiva`,
-   `precio-no-asignado`), `rollback`: no queda **ni** la venta **ni** la fila del buzón.
+   `precio-no-asignado`, `nota-no-encontrada`), `rollback`: no queda **ni** la fila de negocio
+   **ni** la del buzón.
 
-Los tipos sin módulo todavía (`jornada`, `cobranza`, `gasto`, `merma`, `ruta`) se
+Los tipos sin módulo todavía (`jornada`, `gasto`, `merma`, `ruta`) se
 guardan en el buzón y quedan `aplicada` con `entidad_id` nulo, como hasta ahora.
 Las operaciones se aplican **en el orden del lote**, y un error inesperado a mitad
 de lote deja comprometidas las anteriores (cada una tuvo su `commit`): el reintento
@@ -645,8 +652,9 @@ reintentos simultáneos del mismo lote ya ve la fila confirmada y cae en
    - **Colisión** — un `unique` **global** sobre `sync_operacion.folio`. Si otra
      operación ya lo usó → `folio-duplicado`, rechazo **por operación**.
 4. Al proyectar, el folio se **copia** a `venta_nota.folio` (que ya nació
-   `unique` en T-05). **No se re-emite.** Implementado en T-16 para `venta`
-   (T-20 hará lo mismo con `cobranza`): un reenvío no vuelve a proyectar y
+   `unique` en T-05). **No se re-emite.** Implementado en T-16 para `venta`; en
+   `cobranza` (T-20) se copia a cada fila `cobranza_abono` del cobro, donde **no** es
+   `unique` (la unicidad vive en el buzón). Un reenvío no vuelve a proyectar y
    devuelve el mismo `id_servidor`, y el buzón guarda en `entidad_tabla` /
    `entidad_id` a qué fila de negocio se convirtió la operación.
 
@@ -736,8 +744,9 @@ sincronizar.
 |---|---|
 | Resolución de conflictos (portal y tablet tocan lo mismo) | **T-43** |
 | Sincronización automática 11:00/14:00 | **T-44** |
-| Forma de `datos` para cobranza / gasto / merma / ruta (la de venta ya está, §6) | **T-20 / T-27 / T-33 / T-39** |
-| Proyección de `cobranza`, `gasto`, `merma`, `ruta` y `jornada` a sus tablas de negocio (la de `venta` ya existe, §7) | Los mismos, y **T-38** para `jornada` |
+| Forma de `datos` para gasto / merma / ruta (las de venta y cobranza ya están, §6) | **T-27 / T-33 / T-39** |
+| Proyección de `gasto`, `merma`, `ruta` y `jornada` a sus tablas de negocio (las de `venta` y `cobranza` ya existen, §7) | Los mismos, y **T-38** para `jornada` |
+| Usar el saldo a favor, eliminar una cobranza con autorización, cobranza desde el portal | **T-21 / T-34** |
 | Permisos granulares en estos endpoints | **T-8** |
 
 El envelope está diseñado para que todo eso **quepa encima sin romper la
