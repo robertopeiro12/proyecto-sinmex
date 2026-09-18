@@ -30,7 +30,7 @@ import type { Migracion } from './motor';
  * marca `activo = 0`, no `pagada`.
  */
 export const cobranzas: Migracion = {
-  version: 7,
+  version: 8,
   nombre: 'cobranzas',
   sql: `
     create table cobranza (

@@ -14,11 +14,25 @@
  * 2. **Pull.** Catalogos, precios ya resueltos y notas pendientes. Incremental
  *    si ya hay cursor guardado.
  * 3. **Push.** La operacion capturada offline, por lotes idempotentes.
+ * 4. **Fotos de prospectos** (T-40). Un `POST` por foto, fuera del lote.
  *
  * El pull va **antes** del push a proposito: si la conexion se corta a la
  * mitad, es preferible haber refrescado los catalogos (el vendedor puede seguir
  * trabajando) que haber subido el dia y quedarse con datos viejos. Y lo subido
  * no se pierde: sigue en la cola, y reenviarlo no duplica nada.
+ *
+ * Las fotos van **al final, despues del push, y eso es obligatorio**: antes de
+ * que el servidor acepte el alta no existe la fila `cliente` a la que la foto
+ * pertenece, asi que subirla solo podria dar 404. Un prospecto capturado en esta
+ * misma pasada ya es elegible en esta misma pasada, porque el push corrio antes.
+ *
+ * > [!danger] El paso 4 no puede tocar el estado de ningun prospecto
+ * > Es el fallo que todo el diseno de la foto existe para prevenir: si la foto se
+ * > llevara el alta, se perderia un cliente potencial **en silencio**. Por eso el
+ * > paso 4 escribe solo en las columnas de foto, y por eso un fallo aqui **no
+ * > pone `ok: false`** — el negocio del dia ya subio, y decirle al vendedor que
+ * > la sincronizacion fallo por una foto opcional seria mentirle. Lo que si hace
+ * > es reportarlo en `fotos`. Ver `subirFotos` y `api-foto.ts`.
  *
  * Todo esto es probable en Node: recibe la API, la capa de datos, la sesion y
  * el reloj por inyeccion. Ver `motor.spec.ts`.
@@ -34,6 +48,12 @@ import {
   SesionRechazadaError,
   type ClienteSync,
 } from './api';
+import {
+  FotoPermanenteError,
+  FotoTemporalError,
+  type ClienteFotos,
+} from './api-foto';
+import type { FuenteFotos } from './fuente-fotos';
 import {
   MAX_BYTES_POR_LOTE,
   MAX_OPERACIONES_POR_LOTE,
@@ -66,6 +86,19 @@ export interface DepsMotor {
   catalogos: RepositorioCatalogos;
   sync: RepositorioSync;
   fuentes: FuenteOperaciones[];
+  /**
+   * El canal de la foto (T-40): de donde salen y por donde suben.
+   *
+   * Es **obligatorio** y no opcional a proposito. Un motor al que se le pudiera
+   * olvidar el canal de la foto sincronizaria de maravilla y dejaria las fotos
+   * en el equipo para siempre, sin un solo error en ninguna parte: el tipo lo
+   * impide en tiempo de compilacion. Quien no tenga fotos que subir pasa una
+   * fuente vacia, que es una decision explicita y se lee como tal.
+   */
+  fotos: {
+    fuente: FuenteFotos;
+    api: ClienteFotos;
+  };
   /**
    * La sesion, reducida a lo que el motor necesita.
    *
@@ -104,6 +137,16 @@ export interface ResumenPush {
   rechazadas: number;
 }
 
+/** Lo que paso con las fotos. Informativo: nunca cambia `ok`. */
+export interface ResumenFotos {
+  intentadas: number;
+  subidas: number;
+  /** Fallaron esta vez y siguen en la cola. */
+  pendientes: number;
+  /** No van a entrar nunca (413, 415, archivo perdido): se dejaron de intentar. */
+  descartadas: number;
+}
+
 export interface ResultadoSincronizacion {
   ok: boolean;
   /** Presente solo si algo impidio completar. */
@@ -113,6 +156,14 @@ export interface ResultadoSincronizacion {
   sesionRenovada: boolean;
   pull?: ResumenPull;
   push?: ResumenPush;
+  /**
+   * El paso 4. Presente si se llego a intentarlo, aunque ninguna foto subiera.
+   *
+   * Que esto traiga `descartadas: 2` con `ok: true` es correcto y deliberado: el
+   * dia del vendedor esta arriba, y dos fotos no van a entrar. Un prospecto sin
+   * foto es un prospecto completo.
+   */
+  fotos?: ResumenFotos;
 }
 
 export type MotorSincronizacion = ReturnType<typeof crearMotorSincronizacion>;
@@ -122,6 +173,7 @@ export function crearMotorSincronizacion({
   catalogos,
   sync,
   fuentes,
+  fotos,
   sesion,
 }: DepsMotor) {
   return {
@@ -165,6 +217,18 @@ export function crearMotorSincronizacion({
       } catch (error) {
         return { ...resultado, ok: false, ...traducir(error) };
       }
+
+      // --- 4. Fotos de los prospectos que el push ya dejo sincronizados.
+      //
+      // Sin `try/catch` que convierta el fallo en un motivo, a diferencia de los
+      // otros dos pasos: `subirFotos` ya clasifica dentro lo que puede pasar en
+      // campo y no deja escapar nada de eso. Lo unico que llega aqui es un bug,
+      // y se propaga igual que en el pull y el push — tragarselo lo convertiria
+      // en "las fotos no suben y no se sabe por que".
+      //
+      // Llegados aqui el push ya esta confirmado en SQLite, asi que ni una
+      // excepcion puede perder el dia del vendedor.
+      resultado.fotos = await subirFotos(token);
 
       return resultado;
     },
@@ -225,6 +289,63 @@ export function crearMotorSincronizacion({
         for (const r of respuesta.resultados) {
           aplicarResultado(fuente, r);
         }
+      }
+    }
+
+    return total;
+  }
+
+  /**
+   * Sube, una por una, las fotos de los prospectos ya sincronizados.
+   *
+   * Una por una y no en lote a proposito: **una foto que falla no puede llevarse
+   * a las demas**, ni mucho menos al prospecto. Cada `POST` es independiente y
+   * su resultado se anota solo en las columnas de foto de su fila.
+   *
+   * El reparto de los fallos es el de `api-foto.ts`, y la diferencia entre los
+   * dos ultimos casos importa:
+   *
+   * - **Permanente** (413, 415, el archivo local ya no esta): se descarta. Son
+   *   juicios sobre *estos bytes*; reintentar da la misma respuesta para siempre.
+   * - **Temporal** (404, 409, 403, 400, 5xx): se anota y sigue en la cola. El
+   *   problema es de *esta pasada*, no de la foto.
+   * - **Sin red o sesion caida**: se anota y se **corta el paso**. No es un
+   *   problema de esta foto sino del canal, asi que intentar las siguientes solo
+   *   gastaria tiempo con el vendedor esperando. Las demas siguen en la cola,
+   *   intactas.
+   * - **Cualquier otra cosa**: se propaga. Es un bug.
+   */
+  async function subirFotos(token: string): Promise<ResumenFotos> {
+    const total: ResumenFotos = {
+      intentadas: 0,
+      subidas: 0,
+      pendientes: 0,
+      descartadas: 0,
+    };
+
+    for (const foto of fotos.fuente.pendientes()) {
+      total.intentadas += 1;
+      try {
+        const subidaEn = await fotos.api.subir(token, foto.clave, foto.uri);
+        fotos.fuente.marcarSubida(foto.clave, subidaEn);
+        total.subidas += 1;
+      } catch (error) {
+        if (error instanceof FotoPermanenteError) {
+          fotos.fuente.descartar(foto.clave, error.message);
+          total.descartadas += 1;
+          continue;
+        }
+        if (error instanceof FotoTemporalError) {
+          fotos.fuente.anotarError(foto.clave, error.message);
+          total.pendientes += 1;
+          continue;
+        }
+        if (error instanceof SinRedError || error instanceof SesionRechazadaError) {
+          fotos.fuente.anotarError(foto.clave, error.message);
+          total.pendientes += 1;
+          break;
+        }
+        throw error;
       }
     }
 

@@ -10,7 +10,7 @@ select plan(8);
 
 select has_column('cliente', 'domicilio');
 select has_column('cliente', 'lista_precio_id');
-select hasnt_column('cliente', 'foto', 'la foto sigue fuera del esquema: es un ticket aparte');
+select hasnt_column('cliente', 'foto', 'no hay columna `foto`: los bytes nunca entraron a Postgres. El ticket aparte se cerro con `foto_archivo`/`foto_subida_en` (ver 99_cliente_foto_test.sql), que guardan el NOMBRE del archivo que vive en el disco del backend');
 select has_check('cliente');
 
 -- Prerrequisitos autocontenidos (se revierten con el rollback).

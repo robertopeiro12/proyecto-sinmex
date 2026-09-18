@@ -14,8 +14,10 @@ import { crearClienteAuthApp } from '@/sesion/api';
 import { almacenSecureStore } from '@/sesion/almacen-secure-store';
 import { crearGestorSesion, type GestorSesion, type ResultadoEntrada } from '@/sesion/gestor';
 import type { EstadoSesion, VendedorSesion } from '@/sesion/politica';
+import { crearClienteFotosExpo } from '@/fotos/expo';
 import { crearClienteSync } from '@/sincronizacion/api';
 import { fuenteCobranzas } from '@/sincronizacion/fuente-cobranzas';
+import { fuenteFotosProspectos } from '@/sincronizacion/fuente-fotos';
 import { fuenteJornadas } from '@/sincronizacion/fuente-jornadas';
 import { fuenteProspectos } from '@/sincronizacion/fuente-prospectos';
 import { fuenteVentas } from '@/sincronizacion/fuente-ventas';
@@ -97,6 +99,13 @@ export function ProveedorSesion({
         fuenteProspectos(datos.prospectos),
         fuenteCobranzas(datos.cobranzas),
       ],
+      // T-40: el canal de la foto, aparte del lote del push. Corre despues, y
+      // solo para prospectos que el servidor ya acepto — antes no existe la fila
+      // `cliente` a la que la foto pertenece.
+      fotos: {
+        fuente: fuenteFotosProspectos(datos.prospectos),
+        api: crearClienteFotosExpo(),
+      },
       sesion: {
         renovar: () => gestor.renovar(),
         tokenAcceso: () => gestor.sesionGuardada()?.tokenAcceso ?? null,

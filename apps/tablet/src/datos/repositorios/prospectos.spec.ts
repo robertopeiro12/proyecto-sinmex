@@ -53,13 +53,50 @@ describe('repositorio de prospectos', () => {
     });
 
     /**
-     * La foto **no se captura todavia**: falta decidir donde se guarda el
-     * archivo. La columna existe para que ese ticket sea una pantalla y un
-     * upload, no una migracion que rehaga la tabla en tablets ya instaladas.
+     * > [!danger] La foto NO puede tener una forma de tumbar el alta
+     * > El cliente la pidio *"si esto no se hace lento"*. Que la ruta llegue o no
+     * > llegue **no cambia una sola validacion** de este insert: todo lo que podia
+     * > fallar de la foto (permiso, camara, compresion, tamano) fallo antes, en
+     * > `src/fotos/`, y en ese caso esto recibe `null`. Un prospecto sin foto es un
+     * > prospecto completo, no uno a medias.
      */
-    it('deja `foto_uri` en null: la captura de la foto es un ticket aparte', () => {
+    it('sin foto: se graba igual y queda como un prospecto completo', () => {
       const { prospectos } = montar();
-      expect(prospectos.registrar(captura()).foto_uri).toBeNull();
+
+      const p = prospectos.registrar(captura());
+
+      expect(p).toMatchObject({
+        foto_uri: null,
+        foto_subida_en: null,
+        foto_error: null,
+        foto_descartada: 0,
+        // Y lo que importa: el prospecto esta listo para subir, como cualquier otro.
+        sync_estado: 'pendiente',
+      });
+      expect(prospectos.pendientesDeSincronizar().map((x) => x.id)).toEqual([p.id]);
+    });
+
+    it('con foto: se guarda la ruta y nace pendiente de subir', () => {
+      const { prospectos } = montar();
+
+      const p = prospectos.registrar(
+        captura({ fotoUri: 'file:///cache/fachada.jpg' }),
+      );
+
+      expect(p).toMatchObject({
+        foto_uri: 'file:///cache/fachada.jpg',
+        foto_subida_en: null,
+        foto_descartada: 0,
+      });
+    });
+
+    it('`fotoUri` ni se pasa: el alta es la de siempre', () => {
+      // El campo es opcional en el tipo a proposito, para que ninguna pantalla
+      // tenga que mencionar la foto para dar de alta un prospecto.
+      const { prospectos } = montar();
+      const { fotoUri: _, ...sinCampo } = { ...captura(), fotoUri: undefined };
+
+      expect(prospectos.registrar(sinCampo).foto_uri).toBeNull();
     });
 
     /**
@@ -275,6 +312,170 @@ describe('repositorio de prospectos', () => {
         sync_error: 'tipo-negocio-inexistente: ya no existe',
       });
       expect(prospectos.pendientesDeSincronizar().map((x) => x.id)).toEqual([p.id]);
+    });
+  });
+  /**
+   * El estado de subida de la foto (T-40), que es un canal aparte.
+   *
+   * > [!danger] Todo este describe existe por una sola frase del diseno
+   * > **Una foto que falla no puede tocar el estado del prospecto.** Es el unico
+   * > fallo cuyo sintoma en produccion seria un cliente potencial perdido en
+   * > silencio: la pantalla diria "rechazado" de un alta que el servidor acepto
+   * > sin problemas, y nadie visitaria ese negocio.
+   */
+  describe('la foto', () => {
+    /** Un prospecto con foto, ya aceptado por el servidor. */
+    function conFotoSincronizada() {
+      const { prospectos, deps } = montar();
+      const p = prospectos.registrar(captura({ fotoUri: 'file:///cache/f.jpg' }));
+      prospectos.marcarSincronizado(p.id);
+      return { prospectos, deps, id: p.id };
+    }
+
+    describe('cuando es elegible para subir', () => {
+      /**
+       * > [!important] Antes del push no existe la fila `cliente` a la que la foto
+       * > pertenece
+       * > Subirla solo podria dar 404 o 409. Ese estado la tablet ya lo registra
+       * > desde T-07: la elegibilidad no necesita ninguna bandera nueva.
+       */
+      it('NO se ofrece mientras el prospecto no este sincronizado', () => {
+        const { prospectos } = montar();
+        const p = prospectos.registrar(captura({ fotoUri: 'file:///cache/f.jpg' }));
+
+        expect(prospectos.pendientesDeSubirFoto()).toEqual([]);
+
+        prospectos.marcarSincronizado(p.id);
+        expect(prospectos.pendientesDeSubirFoto().map((x) => x.id)).toEqual([p.id]);
+      });
+
+      it('tampoco si el servidor RECHAZO el prospecto', () => {
+        // Una operacion rechazada no deja fila en el servidor (contrato §7), asi
+        // que no hay `cliente` al que anotarle la foto.
+        const { prospectos } = montar();
+        const p = prospectos.registrar(captura({ fotoUri: 'file:///cache/f.jpg' }));
+        prospectos.marcarError(p.id, 'tipo-negocio-inexistente: ya no existe');
+
+        expect(prospectos.pendientesDeSubirFoto()).toEqual([]);
+      });
+
+      it('un prospecto sin foto nunca esta en la cola', () => {
+        const { prospectos } = montar();
+        const p = prospectos.registrar(captura());
+        prospectos.marcarSincronizado(p.id);
+
+        expect(prospectos.pendientesDeSubirFoto()).toEqual([]);
+      });
+
+      it('una foto ya subida sale de la cola y no vuelve', () => {
+        const { prospectos, id } = conFotoSincronizada();
+
+        prospectos.marcarFotoSubida(id, '2026-08-07T16:00:00.000Z');
+
+        expect(prospectos.pendientesDeSubirFoto()).toEqual([]);
+        expect(prospectos.porId(id)).toMatchObject({
+          foto_subida_en: '2026-08-07T16:00:00.000Z',
+          foto_error: null,
+        });
+      });
+
+      it('una descartada sale de la cola PARA SIEMPRE', () => {
+        // Es lo que corta el bucle: un 413 o un 415 son juicios sobre estos
+        // bytes, y reintentarlos da la misma respuesta en cada sincronizacion.
+        const { prospectos, id } = conFotoSincronizada();
+
+        prospectos.descartarFoto(id, 'La foto pesa mas de lo que el servidor acepta.');
+
+        expect(prospectos.pendientesDeSubirFoto()).toEqual([]);
+        expect(prospectos.porId(id)).toMatchObject({
+          foto_descartada: 1,
+          foto_error: 'La foto pesa mas de lo que el servidor acepta.',
+          // Se conserva la ruta: es la unica pista de que hubo una foto.
+          foto_uri: 'file:///cache/f.jpg',
+        });
+      });
+
+      it('una que fallo por red SIGUE en la cola', () => {
+        const { prospectos, id } = conFotoSincronizada();
+
+        prospectos.anotarErrorFoto(id, 'No se pudo contactar al servidor.');
+
+        expect(prospectos.pendientesDeSubirFoto().map((x) => x.id)).toEqual([id]);
+        expect(prospectos.porId(id)?.foto_error).toBe(
+          'No se pudo contactar al servidor.',
+        );
+      });
+    });
+
+    /**
+     * > [!danger] Las tres pruebas de aqui son LA prueba del diseno
+     * > Si una de ellas falla, un fallo de subida de una foto opcional esta
+     * > cambiando el estado de un alta que el servidor ya acepto — y el vendedor
+     * > ve "rechazado" en un prospecto perfectamente valido.
+     */
+    describe('un fallo de la foto NO toca el estado del prospecto', () => {
+      /** El estado del prospecto, sin una sola columna de foto. */
+      const estadoDelProspecto = (
+        prospectos: ReturnType<typeof montar>['prospectos'],
+        id: string,
+      ) => {
+        const p = prospectos.porId(id);
+        return {
+          sync_estado: p?.sync_estado,
+          sync_error: p?.sync_error,
+          sincronizado_en: p?.sincronizado_en,
+        };
+      };
+
+      it('anotarErrorFoto deja el prospecto exactamente como estaba', () => {
+        const { prospectos, id } = conFotoSincronizada();
+        const antes = estadoDelProspecto(prospectos, id);
+
+        prospectos.anotarErrorFoto(id, 'El servidor respondio 500.');
+
+        expect(estadoDelProspecto(prospectos, id)).toEqual(antes);
+        expect(antes.sync_estado).toBe('sincronizado');
+        // Y sigue fuera de la cola del push: si volviera, el servidor contestaria
+        // `duplicada` y la fila se quedaria oscilando sin motivo.
+        expect(prospectos.pendientesDeSincronizar()).toEqual([]);
+      });
+
+      it('descartarFoto deja el prospecto exactamente como estaba', () => {
+        const { prospectos, id } = conFotoSincronizada();
+        const antes = estadoDelProspecto(prospectos, id);
+
+        prospectos.descartarFoto(id, 'El contenido no es un JPEG completo.');
+
+        expect(estadoDelProspecto(prospectos, id)).toEqual(antes);
+        expect(prospectos.pendientesDeSincronizar()).toEqual([]);
+      });
+
+      it('marcarFotoSubida tampoco lo toca', () => {
+        // El aislamiento va en los dos sentidos: ni el exito ni el fallo de la
+        // foto son noticias sobre el prospecto.
+        const { prospectos, id } = conFotoSincronizada();
+        const antes = estadoDelProspecto(prospectos, id);
+
+        prospectos.marcarFotoSubida(id, '2026-08-07T16:00:00.000Z');
+
+        expect(estadoDelProspecto(prospectos, id)).toEqual(antes);
+      });
+
+      it('y al reves: el push no toca ninguna columna de foto', () => {
+        // `marcarError` de un rechazo del push no puede borrar el estado de una
+        // foto que ya subio, ni resucitar una descartada.
+        const { prospectos, id } = conFotoSincronizada();
+        prospectos.marcarFotoSubida(id, '2026-08-07T16:00:00.000Z');
+
+        prospectos.marcarError(id, 'fecha-futura: revisa el reloj');
+        prospectos.marcarSincronizado(id);
+
+        expect(prospectos.porId(id)).toMatchObject({
+          foto_uri: 'file:///cache/f.jpg',
+          foto_subida_en: '2026-08-07T16:00:00.000Z',
+          foto_descartada: 0,
+        });
+      });
     });
   });
 });

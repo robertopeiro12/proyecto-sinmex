@@ -32,6 +32,8 @@ export interface Cliente {
   domicilio: string | null;
   encargado: string | null;
   factura: Generated<boolean>;
+  foto_archivo: string | null;
+  foto_subida_en: Timestamp | null;
   id: Generated<string>;
   lat: Numeric | null;
   lista_precio_id: string | null;

@@ -1,6 +1,7 @@
-import { depsDePrueba, respuestaPullDePrueba } from '@/datos/pruebas-apoyo';
+import { depsDePrueba, respuestaPullDePrueba, snapshotDePrueba } from '@/datos/pruebas-apoyo';
 import { crearRepositorioCatalogos } from '@/datos/repositorios/catalogos';
 import { crearRepositorioJornadas } from '@/datos/repositorios/jornadas';
+import { crearRepositorioProspectos } from '@/datos/repositorios/prospectos';
 import { crearRepositorioSync } from '@/datos/repositorios/sync';
 import { SinRedError } from '@/sesion/api';
 
@@ -11,6 +12,11 @@ import {
   SesionRechazadaError,
   type ClienteSync,
 } from './api';
+import {
+  FotoPermanenteError,
+  FotoTemporalError,
+  type ClienteFotos,
+} from './api-foto';
 import type {
   ClientePull,
   NotaPendientePull,
@@ -18,7 +24,9 @@ import type {
   RespuestaPull,
   RespuestaPush,
 } from './contrato';
+import { fuenteFotosProspectos, type FuenteFotos } from './fuente-fotos';
 import { fuenteJornadas } from './fuente-jornadas';
+import { fuenteProspectos } from './fuente-prospectos';
 import { aSnapshot, crearMotorSincronizacion, type FuenteOperaciones } from './motor';
 
 /** Respuesta de push que acepta todo lo que le manden. */
@@ -44,26 +52,49 @@ function pushOk(operaciones: OperacionSaliente[]): RespuestaPush {
 interface Escenario {
   pulls: { token: string; desde: string | null }[];
   pushes: { token: string; operaciones: OperacionSaliente[] }[];
+  /** Cada `POST /sync/foto/:clave` que se intento (T-40). */
+  fotos: { token: string; clave: string; uri: string }[];
   renovaciones: number;
   /** Orden de las llamadas, para poder afirmar que `renovar` va primero. */
   orden: string[];
 }
+
+/** Momento con el que el servidor confirma una foto. */
+const FOTO_SUBIDA_EN = '2026-08-07T15:00:05.000Z';
+
+/** Fuente de fotos vacia: el caso de los tests que no miran el paso 4. */
+const SIN_FOTOS: FuenteFotos = {
+  tipo: 'prospecto',
+  pendientes: () => [],
+  marcarSubida: jest.fn(),
+  anotarError: jest.fn(),
+  descartar: jest.fn(),
+};
 
 function montar(opciones: {
   pull?: (desde: string | null) => RespuestaPull | Promise<never>;
   push?: (ops: OperacionSaliente[]) => RespuestaPush | Promise<never>;
   renovar?: () => Promise<boolean>;
   token?: () => string | null;
-  fuentes?: (jornadas: ReturnType<typeof crearRepositorioJornadas>) => FuenteOperaciones[];
+  fuentes?: (
+    jornadas: ReturnType<typeof crearRepositorioJornadas>,
+    prospectos: ReturnType<typeof crearRepositorioProspectos>,
+  ) => FuenteOperaciones[];
+  /** Que hace el servidor con cada foto. Por defecto, la acepta. */
+  subirFoto?: (clave: string, uri: string) => Promise<string>;
+  /** Fuente de fotos. Por defecto {@link SIN_FOTOS}. */
+  fotos?: (prospectos: ReturnType<typeof crearRepositorioProspectos>) => FuenteFotos;
 }) {
   const deps = depsDePrueba();
   const catalogos = crearRepositorioCatalogos(deps);
   const jornadas = crearRepositorioJornadas(deps);
+  const prospectos = crearRepositorioProspectos(deps, { catalogos });
   const sync = crearRepositorioSync(deps);
 
   const escenario: Escenario = {
     pulls: [],
     pushes: [],
+    fotos: [],
     renovaciones: 0,
     orden: [],
   };
@@ -81,13 +112,25 @@ function montar(opciones: {
     },
   };
 
+  const apiFotos: ClienteFotos = {
+    async subir(token, clave, uri) {
+      escenario.orden.push('foto');
+      escenario.fotos.push({ token, clave, uri });
+      return (opciones.subirFoto ?? (async () => FOTO_SUBIDA_EN))(clave, uri);
+    },
+  };
+
   const motor = crearMotorSincronizacion({
     api,
     catalogos,
     sync,
     fuentes: opciones.fuentes
-      ? opciones.fuentes(jornadas)
+      ? opciones.fuentes(jornadas, prospectos)
       : [fuenteJornadas(jornadas)],
+    fotos: {
+      fuente: opciones.fotos ? opciones.fotos(prospectos) : SIN_FOTOS,
+      api: apiFotos,
+    },
     sesion: {
       renovar: async () => {
         escenario.orden.push('renovar');
@@ -98,7 +141,46 @@ function montar(opciones: {
     },
   });
 
-  return { motor, catalogos, jornadas, sync, deps, escenario };
+  return { motor, catalogos, jornadas, prospectos, sync, deps, escenario };
+}
+
+/**
+ * Motor con el canal de la foto cableado a los repositorios REALES.
+ *
+ * Sin dobles en la capa de datos a proposito: lo que estas pruebas tienen que
+ * demostrar es que un fallo de la foto **no toca las columnas del prospecto**, y
+ * con una fuente falsa eso no se demostraria, se supondria.
+ */
+function montarConFotos(opciones: Parameters<typeof montar>[0] = {}) {
+  const montado = montar({
+    ...opciones,
+    fuentes: (jornadas, prospectos) => [
+      fuenteJornadas(jornadas),
+      fuenteProspectos(prospectos),
+    ],
+    fotos: (prospectos) => fuenteFotosProspectos(prospectos),
+  });
+  montado.catalogos.guardarSnapshot(snapshotDePrueba());
+  return montado;
+}
+
+/** Captura un prospecto con foto, todavia sin subir nada. */
+function conProspectoConFoto(
+  prospectos: ReturnType<typeof crearRepositorioProspectos>,
+  fotoUri: string | null = 'file:///cache/fachada.jpg',
+) {
+  return prospectos.registrar({
+    vendedorId: 'ven-1',
+    sucursalId: 'suc-tj',
+    nombre: 'Tacos Aaron',
+    telefono: '6641112233',
+    encargado: null,
+    tipoNegocioId: null,
+    comentarios: null,
+    lat: null,
+    lng: null,
+    fotoUri,
+  });
 }
 
 /** Deja una jornada CERRADA y pendiente de subir. */
@@ -509,6 +591,318 @@ describe('motor de sincronizacion', () => {
         pull: () => Promise.reject(new TypeError('undefined is not a function')),
       });
       await expect(motor.sincronizar()).rejects.toThrow(TypeError);
+    });
+  });
+  /**
+   * El paso 4: las fotos de los prospectos (T-40).
+   *
+   * Corre **despues** del push y por un canal aparte del lote. Todo lo de aqui
+   * usa los repositorios reales: lo que hay que demostrar es lo que queda escrito
+   * en SQLite, y con una fuente falsa eso se supondria en vez de probarse.
+   */
+  describe('fotos de prospectos', () => {
+    it('va DESPUES del push, y no antes', async () => {
+      // No es una preferencia: antes de que el servidor acepte el alta no existe
+      // la fila `cliente` a la que la foto pertenece, asi que subirla solo podria
+      // dar 404.
+      const { motor, prospectos, escenario } = montarConFotos();
+      conProspectoConFoto(prospectos);
+
+      await motor.sincronizar();
+
+      expect(escenario.orden).toEqual(['renovar', 'pull', 'push', 'foto']);
+    });
+
+    it('un prospecto capturado hoy sube su foto en la MISMA pasada', async () => {
+      // Consecuencia de que el paso 4 vaya despues del push: el push ya lo dejo
+      // sincronizado, asi que su foto ya es elegible. El vendedor no tiene que
+      // sincronizar dos veces.
+      const { motor, prospectos, escenario } = montarConFotos();
+      const p = conProspectoConFoto(prospectos);
+
+      const r = await motor.sincronizar();
+
+      expect(escenario.fotos).toEqual([
+        { token: 'token-vivo', clave: p.id, uri: 'file:///cache/fachada.jpg' },
+      ]);
+      expect(r.fotos).toEqual({
+        intentadas: 1,
+        subidas: 1,
+        pendientes: 0,
+        descartadas: 0,
+      });
+      expect(prospectos.porId(p.id)).toMatchObject({
+        foto_subida_en: FOTO_SUBIDA_EN,
+        foto_error: null,
+      });
+    });
+
+    it('un prospecto sin foto no genera ninguna peticion', async () => {
+      // Un prospecto sin foto es un prospecto completo: no hay nada que esperar,
+      // nada que reintentar y nada que avisar.
+      const { motor, prospectos, escenario } = montarConFotos();
+      conProspectoConFoto(prospectos, null);
+
+      const r = await motor.sincronizar();
+
+      expect(escenario.fotos).toEqual([]);
+      expect(r.ok).toBe(true);
+      expect(r.fotos?.intentadas).toBe(0);
+    });
+
+    it('si el push rechaza el prospecto, su foto NI SE INTENTA', async () => {
+      // Sin fila en el servidor no hay `cliente` al que anotarle la foto. La foto
+      // se queda en el equipo y se intenta cuando el prospecto entre.
+      const { motor, prospectos, escenario } = montarConFotos({
+        push: (ops) => ({
+          contrato: 1,
+          recibido_en: '2026-08-07T15:00:00.000Z',
+          resumen: { recibidas: ops.length, aplicadas: 0, duplicadas: 0, rechazadas: ops.length },
+          resultados: ops.map((o) => ({
+            clave: o.clave,
+            tipo: o.tipo,
+            estado: 'rechazada' as const,
+            codigo: 'tipo-negocio-inexistente',
+            motivo: 'Ese giro ya no existe.',
+          })),
+        }),
+      });
+      const p = conProspectoConFoto(prospectos);
+
+      await motor.sincronizar();
+
+      expect(escenario.fotos).toEqual([]);
+      // Y la foto sigue intacta, esperando: `foto_error` ni se toco, porque no
+      // hubo fallo de foto que anotar.
+      expect(prospectos.porId(p.id)).toMatchObject({
+        sync_estado: 'error',
+        foto_uri: 'file:///cache/fachada.jpg',
+        foto_subida_en: null,
+        foto_error: null,
+        foto_descartada: 0,
+      });
+    });
+
+    /**
+     * > [!danger] ESTA es la prueba que da sentido a todo el diseno de T-40
+     * > Si falla, una foto que no sube esta cambiando el estado de un alta que el
+     * > servidor **ya acepto**. El sintoma en produccion no seria un error en
+     * > pantalla: seria un prospecto marcado "rechazado" que nadie visita, es
+     * > decir **un cliente potencial perdido en silencio**. Es el unico fallo de
+     * > este ticket que el cliente pagaria.
+     */
+    describe('una foto que falla NO se lleva el prospecto', () => {
+      /** Lo que el push dejo escrito en la fila, sin una columna de foto. */
+      const estadoDelProspecto = (
+        prospectos: ReturnType<typeof crearRepositorioProspectos>,
+        id: string,
+      ) => {
+        const p = prospectos.porId(id);
+        return {
+          sync_estado: p?.sync_estado,
+          sync_error: p?.sync_error,
+          sincronizado_en: p?.sincronizado_en,
+        };
+      };
+
+      it('con un 413 permanente, el prospecto sigue sincronizado y limpio', async () => {
+        const { motor, prospectos } = montarConFotos({
+          subirFoto: () =>
+            Promise.reject(
+              new FotoPermanenteError('La foto pesa 3145728 bytes y el maximo es 2097152.'),
+            ),
+        });
+        const p = conProspectoConFoto(prospectos);
+
+        const r = await motor.sincronizar();
+
+        // 1. El prospecto, intacto y aceptado.
+        expect(estadoDelProspecto(prospectos, p.id)).toEqual({
+          sync_estado: 'sincronizado',
+          sync_error: null,
+          sincronizado_en: '2026-08-07T15:00:00.000Z',
+        });
+        // 2. No vuelve a la cola del push: reenviarlo daria `duplicada` y la fila
+        //    se quedaria oscilando por una foto opcional.
+        expect(prospectos.pendientesDeSincronizar()).toEqual([]);
+        // 3. El fallo esta anotado donde le toca, y solo ahi.
+        expect(prospectos.porId(p.id)).toMatchObject({
+          foto_descartada: 1,
+          foto_error: expect.stringContaining('3145728'),
+        });
+        // 4. Y la sincronizacion NO fallo: el dia del vendedor esta arriba.
+        expect(r.ok).toBe(true);
+        expect(r.push?.aplicadas).toBe(1);
+        expect(r.fotos).toMatchObject({ descartadas: 1, subidas: 0 });
+      });
+
+      it('con un fallo temporal, el prospecto sigue sincronizado y limpio', async () => {
+        const { motor, prospectos } = montarConFotos({
+          subirFoto: () => Promise.reject(new FotoTemporalError('El servidor respondio 500.')),
+        });
+        const p = conProspectoConFoto(prospectos);
+
+        const r = await motor.sincronizar();
+
+        expect(estadoDelProspecto(prospectos, p.id)).toEqual({
+          sync_estado: 'sincronizado',
+          sync_error: null,
+          sincronizado_en: '2026-08-07T15:00:00.000Z',
+        });
+        expect(prospectos.pendientesDeSincronizar()).toEqual([]);
+        expect(r.ok).toBe(true);
+        expect(r.fotos).toMatchObject({ pendientes: 1 });
+      });
+
+      it('con la WiFi caida a media foto, el prospecto sigue sincronizado y limpio', async () => {
+        const { motor, prospectos } = montarConFotos({
+          subirFoto: () => Promise.reject(new SinRedError()),
+        });
+        const p = conProspectoConFoto(prospectos);
+
+        const r = await motor.sincronizar();
+
+        expect(estadoDelProspecto(prospectos, p.id)).toEqual({
+          sync_estado: 'sincronizado',
+          sync_error: null,
+          sincronizado_en: '2026-08-07T15:00:00.000Z',
+        });
+        // Y `ok` sigue en true: decirle al vendedor que la sincronizacion fallo
+        // cuando su dia entero subio seria mentirle.
+        expect(r.ok).toBe(true);
+        expect(r.motivo).toBeUndefined();
+      });
+    });
+
+    describe('permanente contra temporal', () => {
+      it('un 413 NO se reintenta en la siguiente pasada', async () => {
+        // Es lo que corta el bucle infinito: el servidor ya juzgo ESTOS bytes, y
+        // mandarlos otra vez da la misma respuesta. Sin esto la tablet gastaria la
+        // WiFi del negocio en cada sincronizacion, para siempre y en silencio.
+        const { motor, prospectos, escenario } = montarConFotos({
+          subirFoto: () => Promise.reject(new FotoPermanenteError('Pesa demasiado.')),
+        });
+        conProspectoConFoto(prospectos);
+
+        await motor.sincronizar();
+        expect(escenario.fotos).toHaveLength(1);
+
+        await motor.sincronizar();
+        // Cero peticiones nuevas: la segunda pasada no la vuelve a intentar.
+        expect(escenario.fotos).toHaveLength(1);
+      });
+
+      it('un fallo temporal SI se reintenta, y acaba subiendo', async () => {
+        let intentos = 0;
+        const { motor, prospectos, escenario } = montarConFotos({
+          subirFoto: async () => {
+            intentos += 1;
+            if (intentos === 1) throw new SinRedError();
+            return FOTO_SUBIDA_EN;
+          },
+        });
+        const p = conProspectoConFoto(prospectos);
+
+        await motor.sincronizar();
+        expect(prospectos.porId(p.id)?.foto_subida_en).toBeNull();
+
+        await motor.sincronizar();
+
+        expect(escenario.fotos).toHaveLength(2);
+        expect(prospectos.porId(p.id)).toMatchObject({
+          foto_subida_en: FOTO_SUBIDA_EN,
+          // Y el error del primer intento se limpia: dejarlo en pantalla junto a
+          // una foto ya subida se lee como un fallo que no existe.
+          foto_error: null,
+        });
+      });
+
+      it('una ya subida no se vuelve a mandar', async () => {
+        const { motor, prospectos, escenario } = montarConFotos();
+        conProspectoConFoto(prospectos);
+
+        await motor.sincronizar();
+        await motor.sincronizar();
+
+        expect(escenario.fotos).toHaveLength(1);
+      });
+    });
+
+    describe('una foto no arrastra a las demas', () => {
+      it('un fallo permanente de una no impide que suba la siguiente', async () => {
+        // Una por una y no en lote justamente por esto.
+        const { motor, prospectos, escenario } = montarConFotos({
+          subirFoto: async (_clave, uri) => {
+            if (uri.includes('mala')) throw new FotoPermanenteError('No es un JPEG.');
+            return FOTO_SUBIDA_EN;
+          },
+        });
+        const mala = conProspectoConFoto(prospectos, 'file:///cache/mala.jpg');
+        const buena = conProspectoConFoto(prospectos, 'file:///cache/buena.jpg');
+
+        const r = await motor.sincronizar();
+
+        expect(escenario.fotos).toHaveLength(2);
+        expect(prospectos.porId(mala.id)?.foto_descartada).toBe(1);
+        expect(prospectos.porId(buena.id)?.foto_subida_en).toBe(FOTO_SUBIDA_EN);
+        expect(r.fotos).toEqual({
+          intentadas: 2,
+          subidas: 1,
+          pendientes: 0,
+          descartadas: 1,
+        });
+      });
+
+      it('si se cae la red, se corta el paso y el resto queda en la cola', async () => {
+        // Seguir intentando sin red solo gastaria tiempo con el vendedor
+        // esperando. Lo que NO puede pasar es que las demas se pierdan.
+        const { motor, prospectos, escenario } = montarConFotos({
+          subirFoto: () => Promise.reject(new SinRedError()),
+        });
+        const primera = conProspectoConFoto(prospectos, 'file:///cache/1.jpg');
+        const segunda = conProspectoConFoto(prospectos, 'file:///cache/2.jpg');
+
+        const r = await motor.sincronizar();
+
+        // Se intento una sola: la segunda ni se toco.
+        expect(escenario.fotos).toHaveLength(1);
+        expect(prospectos.porId(segunda.id)?.foto_error).toBeNull();
+        // Y las dos siguen en la cola para la proxima.
+        expect(prospectos.pendientesDeSubirFoto().map((x) => x.id)).toEqual([
+          primera.id,
+          segunda.id,
+        ]);
+        expect(r.fotos).toMatchObject({ intentadas: 1, pendientes: 1 });
+      });
+
+      it('una sesion rechazada tambien corta el paso', async () => {
+        const { motor, prospectos, escenario } = montarConFotos({
+          subirFoto: () => Promise.reject(new SesionRechazadaError()),
+        });
+        conProspectoConFoto(prospectos, 'file:///cache/1.jpg');
+        conProspectoConFoto(prospectos, 'file:///cache/2.jpg');
+
+        await motor.sincronizar();
+
+        expect(escenario.fotos).toHaveLength(1);
+      });
+    });
+
+    it('un error que no reconoce se deja propagar, igual que en el pull', async () => {
+      // La doctrina del motor: tragarselo lo convertiria en "las fotos no suben y
+      // no se sabe por que". El push ya esta confirmado en SQLite, asi que ni una
+      // excepcion aqui puede perder el dia del vendedor.
+      const { motor, prospectos } = montarConFotos({
+        subirFoto: () => Promise.reject(new TypeError('undefined is not a function')),
+      });
+      const p = conProspectoConFoto(prospectos);
+
+      await expect(motor.sincronizar()).rejects.toThrow(TypeError);
+
+      expect(prospectos.porId(p.id)).toMatchObject({
+        sync_estado: 'sincronizado',
+        sync_error: null,
+      });
     });
   });
 });

@@ -4,7 +4,8 @@ import { folios } from './003-folios';
 import { ventas } from './004-ventas';
 import { prospectoCamposOpcionales } from './005-prospecto-campos-opcionales';
 import { prospectos } from './006-prospectos';
-import { cobranzas } from './007-cobranzas';
+import { fotoProspecto } from './007-foto-prospecto';
+import { cobranzas } from './008-cobranzas';
 import type { Migracion } from './motor';
 
 /**
@@ -23,6 +24,7 @@ export const migraciones: readonly Migracion[] = [
   ventas,
   prospectoCamposOpcionales,
   prospectos,
+  fotoProspecto,
   cobranzas,
 ];
 

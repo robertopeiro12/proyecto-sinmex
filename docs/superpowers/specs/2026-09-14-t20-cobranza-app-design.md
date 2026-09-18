@@ -31,8 +31,9 @@ después de grabar la venta.
 4. **Contrato de sincronización (aditivo, sigue en v1):** forma de `datos` de `cobranza`; código de
    rechazo `nota-no-encontrada`; `pull` con saldo derivado, abonos por nota, saldo a favor por
    cliente y notas que dejaron de estar pendientes.
-5. **Tablet:** migración local 007 (nació como 005; se renumeró al traer `main`, cuya
-   `005-prospecto-campos-opcionales` reconstruye `cliente` sin `saldo_favor_centavos`),
+5. **Tablet:** migración local 008 (nació como 005; se renumeró a 007 al traer `main`, cuya
+   `005-prospecto-campos-opcionales` reconstruye `cliente` sin `saldo_favor_centavos`, y a 008
+   cuando `main` publicó la 007 de la foto del prospecto),
    repositorio de cobranzas con folio en la misma transacción y
    reparto local, fuente de operaciones, pantalla `cobranza.tsx` (captura → revisión → grabada),
    paso "¿Cobrar notas pendientes?" al grabar una venta, cobranzas en "registros por subir".
@@ -180,7 +181,7 @@ duplicados en backend, tablet y `docs/` en el mismo commit.
 
 #### D15 — Repositorio y fuente
 
-Migración local 007: tabla `cobranza` (id = clave, `fecha`, `cliente_id`, `vendedor_id`,
+Migración local 008: tabla `cobranza` (id = clave, `fecha`, `cliente_id`, `vendedor_id`,
 `sucursal_id`, `folio` unique, `venta_nota_id`, `monto_centavos`, `metodo_pago`, `fecha_pago`,
 `grabada_en`, `sync_estado`, `sync_error`, `sincronizado_en`); `nota_pendiente.abonos_json`
 (texto JSON, default `'[]'`); `cliente.saldo_favor_centavos` (default 0).
@@ -266,7 +267,7 @@ create trigger trg_saldo_favor_movimiento_updated before update on saldo_favor_m
 Pre-flight en `sinmex dev` antes del push: `select count(*) from cobranza_abono where monto <= 0 or
 saldo_pendiente < 0;` → 0.
 
-### Tablet — migración local 007
+### Tablet — migración local 008
 
 Tabla `cobranza`, columnas `nota_pendiente.abonos_json` y `cliente.saldo_favor_centavos` (D15).
 
@@ -277,7 +278,7 @@ Tabla `cobranza`, columnas `nota_pendiente.abonos_json` y `cliente.saldo_favor_c
 | pgTAP | columnas y checks nuevos; `saldo_favor_movimiento` y su FK; backfill de `fecha_operacion` |
 | Unit backend | reparto (nota elegida, excedente a otras en orden, saldo a favor, nota con saldo 0, monto exacto); status y `tipo` resultantes; `normalizarDatosCobranza`; `prepararCobranza`; `registrarCobranza` con repositorio simulado; contado en `registrarVenta` |
 | E2E | abono parcial → `abonado`; liquidación → `pagada`; excedente a otra nota y a saldo a favor; nota ya pagada → todo excedente; `nota-no-encontrada` (inexistente, otra sucursal, cliente distinto) no deja fila; reenvío → `duplicada`; cobranza en el lote siguiente a su venta; venta contado crea su cobro `venta_contado`; `pull`: saldo derivado, `abonos`, `saldo_favor_centavos`, nota liquidada baja `activo: false` en incremental |
-| Tablet | migración 007; reparto local igual al del servidor (casos compartidos); `registrar` sin quemar folio; validaciones; `fuenteCobranzas`; `guardarSnapshot` con `abonos_json` y saldo a favor |
+| Tablet | migración 008; reparto local igual al del servidor (casos compartidos); `registrar` sin quemar folio; validaciones; `fuenteCobranzas`; `guardarSnapshot` con `abonos_json` y saldo a favor |
 | Migración de pruebas | `sincronizacion.e2e-spec.ts:~1041` (smoke de 6 tipos con `datos` ad hoc) → `cobranzaValida()`; `despacho.spec.ts:38-48` saca `cobranza` del `it.each`; fixture que inserta `cobranza_abono` directo gana `fecha_operacion` |
 
 ## Plan de tareas (orientativo; el plan lo fija)
@@ -290,7 +291,7 @@ Tabla `cobranza`, columnas `nota_pendiente.abonos_json` y `cliente.saldo_favor_c
 6. Despacho + `aplicar` + migración de pruebas genéricas + e2e base — `opus`
 7. `pull` (saldo derivado, abonos, saldo a favor, notas cerradas) + e2e — `sonnet` (revisor `opus`)
 8. E2E de reglas de cobranza — `sonnet`
-9. Tablet migración 007 + tipos + `guardarSnapshot` — `sonnet`
+9. Tablet migración 008 + tipos + `guardarSnapshot` — `sonnet`
 10. Tablet reparto puro + validación — `haiku`
 11. Tablet repositorio de cobranzas — `sonnet`
 12. `fuenteCobranzas` + contadores — `haiku`
