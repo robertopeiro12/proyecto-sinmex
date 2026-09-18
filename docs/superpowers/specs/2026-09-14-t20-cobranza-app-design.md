@@ -31,11 +31,13 @@ después de grabar la venta.
 4. **Contrato de sincronización (aditivo, sigue en v1):** forma de `datos` de `cobranza`; código de
    rechazo `nota-no-encontrada`; `pull` con saldo derivado, abonos por nota, saldo a favor por
    cliente y notas que dejaron de estar pendientes.
-5. **Tablet:** migración local 005, repositorio de cobranzas con folio en la misma transacción y
+5. **Tablet:** migración local 007 (nació como 005; se renumeró al traer `main`, cuya
+   `005-prospecto-campos-opcionales` reconstruye `cliente` sin `saldo_favor_centavos`),
+   repositorio de cobranzas con folio en la misma transacción y
    reparto local, fuente de operaciones, pantalla `cobranza.tsx` (captura → revisión → grabada),
    paso "¿Cobrar notas pendientes?" al grabar una venta, cobranzas en "registros por subir".
-6. **Supabase:** cada migración nueva, en cuanto pase sus pruebas, se aplica al Postgres local **y a
-   `sinmex dev`** con `supabase db push`, con pre-flight antes (decisión de Mario, D17).
+6. **Supabase:** cada migración nueva se aplica al Postgres local; a `sinmex dev` sube **solo al
+   mergear el PR**, con el pre-flight de solo lectura corrido en ese momento (D17, enmendado).
 7. **Pruebas:** pgTAP, unitarias de reparto y validación (backend y tablet), e2e de `push`/`pull`,
    pruebas de la capa de datos de la tablet; migración de las pruebas que usan `cobranza` como sobre
    genérico.
@@ -205,14 +207,22 @@ Captura → revisión → grabada, mismo sistema de diseño que `venta.tsx`:
 
 ### Supabase
 
-#### D17 — Migraciones a `sinmex dev` en cuanto pasan sus pruebas (Mario)
+#### D17 — Migraciones a `sinmex dev` solo al mergear el PR (Mario)
 
-Cada migración nueva: `migration up --local` → pgTAP y e2e verdes → **pre-flight contra
-`sinmex dev`** (consultas que prueban que las restricciones nuevas no fallan con filas existentes) →
-`supabase db push` a `sinmex dev` (con `--db-url` de `.env.development`, primero `--dry-run`). Aplica
-también a la migración de T-16 (`20260912120000_venta_integridad`), aunque su PR siga abierto.
-Riesgo aceptado: si una revisión cambia una migración ya empujada, hace falta una migración
-correctiva, nunca editar la empujada.
+**Enmienda del 2026-09-18.** La redacción original decía que cada migración subía a `sinmex dev`
+en cuanto pasaran sus pruebas, aunque su PR siguiera abierto. Mario decidió lo contrario y así
+quedó en `CLAUDE.md` (PR #91, ya mergeado): la nube refleja `main`, así que la migración sube
+**solo al mergear el PR**, y la sube Roberto.
+
+Cada migración nueva: `migration up --local` → pgTAP y e2e verdes → el PR se abre con su
+**pre-flight de solo lectura anotado** (consultas que prueban que las restricciones nuevas no
+fallan con las filas existentes) → al mergear, correr ese pre-flight y luego `supabase db push` a
+`sinmex dev`, verificando antes con `supabase migration list --linked` que la migración es
+posterior a la última aplicada en la nube (si no, hace falta `--include-all`).
+
+Motivo del cambio: empujar la migración de un PR abierto deja la nube con un esquema que no existe
+en `main`; si la revisión cambia esa migración hace falta una correctiva, porque una ya empujada
+nunca se edita.
 
 ## Modelo de datos
 
@@ -256,7 +266,7 @@ create trigger trg_saldo_favor_movimiento_updated before update on saldo_favor_m
 Pre-flight en `sinmex dev` antes del push: `select count(*) from cobranza_abono where monto <= 0 or
 saldo_pendiente < 0;` → 0.
 
-### Tablet — migración local 005
+### Tablet — migración local 007
 
 Tabla `cobranza`, columnas `nota_pendiente.abonos_json` y `cliente.saldo_favor_centavos` (D15).
 
@@ -293,7 +303,8 @@ Revisión final de rama: `opus` (o `fable`).
 
 - **Rama apilada sobre un PR abierto:** cambios pedidos en #89 obligan a rebasar (y T-40 también
   toca `despacho.ts`/`aplicar`; orden acordado con esa sesión).
-- **Migraciones empujadas a `sinmex dev` antes del merge** (D17).
+- **Migraciones empujadas a `sinmex dev` antes del merge:** descartado por la enmienda de D17;
+  la nube refleja `main` y la migración sube al mergear.
 - **Reparto duplicado en tablet y servidor:** si divergen, el saldo local parpadea hasta el pull;
   se mitiga con casos de prueba idénticos en los dos lados.
 - **Tope de 99 folios por día** ahora compartido entre ventas y cobranzas.
