@@ -112,11 +112,19 @@ async function leerMensajeDeError(res: Response): Promise<string | undefined> {
 }
 
 /**
- * Llama a la API con las cookies de sesion. Ante un 401 intenta refrescar
- * UNA vez y reintenta; si tampoco funciona, propaga el 401 para que quien
- * llame mande al login.
+ * Llama a la API con las cookies de sesion y devuelve la Response cruda. Ante
+ * un 401 intenta refrescar UNA vez y reintenta; si tampoco funciona, propaga el
+ * 401 para que quien llame mande al login.
+ *
+ * Existe separado de `apiFetch` porque no todo lo que sirve la API es JSON: la
+ * foto de un prospecto (T-40) es un `image/jpeg`. Lo que NO puede hacerse es
+ * pedir esa imagen con un `<img src>` directo: un `<img>` no sabe hacer el
+ * baile del refresco, asi que en cuanto el access token cumple sus 15 minutos la
+ * miniatura sale rota — sin error en consola y sin forma de que el usuario
+ * entienda por que. Pasando por aqui, la imagen hereda el mismo reintento que
+ * todo lo demas.
  */
-export async function apiFetch<T>(ruta: string, init: RequestInit = {}): Promise<T> {
+async function pedir(ruta: string, init: RequestInit = {}): Promise<Response> {
   // new Headers() en vez de spread: `init.headers` puede ser un objeto Headers
   // o un array de pares, y esparcir cualquiera de los dos con `...` no copia
   // nada (un Headers no tiene propiedades enumerables propias), asi que las
@@ -150,5 +158,21 @@ export async function apiFetch<T>(ruta: string, init: RequestInit = {}): Promise
     );
   }
 
-  return (await res.json()) as T;
+  return res;
+}
+
+/** Lo de siempre: llama a la API y devuelve el JSON. */
+export async function apiFetch<T>(ruta: string, init: RequestInit = {}): Promise<T> {
+  return (await pedir(ruta, init)).json() as Promise<T>;
+}
+
+/**
+ * Lo mismo, pero devuelve los bytes: para lo que la API sirve como archivo.
+ *
+ * El `Content-Type: application/json` que `pedir` pone por defecto viaja igual y
+ * es inocuo: un GET sin cuerpo no tiene nada que tipar y el servidor lo ignora.
+ * Se deja en vez de complicar `pedir` con una excepcion.
+ */
+export async function apiFetchBlob(ruta: string): Promise<Blob> {
+  return (await pedir(ruta, { headers: { Accept: "image/jpeg" } })).blob();
 }

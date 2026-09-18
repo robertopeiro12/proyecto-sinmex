@@ -13,6 +13,7 @@ import {
   type ClienteDetalle,
   type Promocion,
 } from "@/lib/clientes";
+import { FotoProspecto } from "./foto-prospecto";
 import { SelectorTipoNegocio } from "./selector-tipo-negocio";
 
 interface Props {
@@ -276,6 +277,23 @@ export function FormularioCliente({ cliente, alGuardar, alCancelar }: Props) {
           onChange={setTipoNegocioId}
           disabled={enviando}
         />
+        {/*
+          La foto del lugar (T-40). Va aquí, con los datos básicos, porque es lo
+          que el administrador mira para reconocer el negocio del que le están
+          hablando — junto al nombre y al giro, no al final entre los precios.
+
+          Solo al editar: en un alta no hay `id` con el que pedirla, y la foto
+          nunca nace en el portal (la toma el vendedor en campo). Si el
+          prospecto no tiene foto, `FotoProspecto` no dibuja NADA: sin hueco.
+        */}
+        {!esAlta && (
+          <FotoProspecto
+            clienteId={cliente.id}
+            tieneFoto={cliente.tieneFoto}
+            fotoSubidaEn={cliente.fotoSubidaEn}
+            nombre={cliente.nombre}
+          />
+        )}
         {!esAlta && (
           <p className="text-xs text-muted-foreground">
             Sucursal: {cliente.sucursalCodigo}. La sucursal de un cliente no se
