@@ -1,4 +1,4 @@
-import type { FechaISO, Prospecto } from '../tipos';
+import type { FechaISO, MomentoISO, Prospecto } from '../tipos';
 import type { RepositorioCatalogos } from './catalogos';
 import type { DepsRepositorio } from './deps';
 
@@ -33,6 +33,16 @@ export interface DatosRegistroProspecto {
    */
   lat: number | null;
   lng: number | null;
+  /**
+   * Ruta local de la foto del lugar, **ya comprimida** por `src/fotos/`.
+   *
+   * Opcional de verdad: si el vendedor no la tomo, o si la camara o la
+   * compresion fallaron, llega `null` (o ni se pasa) y el alta sigue su curso.
+   * **Un prospecto sin foto es un prospecto completo** — el cliente pidio la
+   * foto *"si esto no se hace lento"*, y perder el alta por no poder tomarla
+   * seria exactamente lo contrario.
+   */
+  fotoUri?: string | null;
 }
 
 export const LARGO_MAX_NOMBRE = 200;
@@ -135,7 +145,7 @@ export function crearRepositorioProspectos(
            tipo_negocio_id, comentarios, lat, lng, foto_uri, grabado_en, sync_estado
          ) values (
            $id, $fecha, $vendedor_id, $sucursal_id, $nombre, $telefono, $encargado,
-           $tipo_negocio_id, $comentarios, $lat, $lng, null, $grabado_en, 'pendiente'
+           $tipo_negocio_id, $comentarios, $lat, $lng, $foto_uri, $grabado_en, 'pendiente'
          )`,
         {
           $id: id,
@@ -151,8 +161,11 @@ export function crearRepositorioProspectos(
           $comentarios: comentarios,
           $lat: datos.lat,
           $lng: datos.lng,
-          // `foto_uri` va explicitamente null: la columna esta prevista pero la
-          // captura de la foto es un ticket aparte (falta decidir Storage).
+          // La foto, si la hubo. No se valida nada de ella aqui a proposito:
+          // todo lo que podia fallar (permiso, camara, compresion, tamano) ya
+          // fallo antes de llegar, y en ese caso esto vale `null`. Este `insert`
+          // **no puede** tener una forma de fracasar por la foto.
+          $foto_uri: datos.fotoUri ?? null,
           $grabado_en: ahora,
         },
       );
@@ -218,6 +231,97 @@ export function crearRepositorioProspectos(
     marcarError(id: string, motivo: string): void {
       bd.runSync(
         `update prospecto set sync_estado = 'error', sync_error = $motivo where id = $id`,
+        { $motivo: motivo, $id: id },
+      );
+    },
+
+    // ----------------------------------------------------------------------
+    // La foto (T-40). Canal aparte del push, y por eso columnas aparte.
+    //
+    // > [!danger] Ninguno de los tres `update` de abajo menciona `sync_estado`
+    // > ni `sync_error`, y eso NO es casual
+    // > Es el requisito que da sentido a todo el diseno de la foto: **una foto
+    // > que falla no puede tocar el estado del prospecto**. Si un fallo de
+    // > subida devolviera el prospecto a `error`, la siguiente pasada lo
+    // > reenviaria al push, el servidor contestaria `duplicada` y la fila se
+    // > quedaria oscilando; peor aun, la pantalla diria "rechazado" de un
+    // > prospecto que el servidor acepto perfectamente. El sintoma en produccion
+    // > seria un cliente potencial que nadie visita porque parece no haber
+    // > entrado. Hay prueba de esto en `prospectos.spec.ts` y en `motor.spec.ts`.
+    //
+    // Y al reves tambien: `marcarSincronizado` y `marcarError` no tocan ninguna
+    // columna de foto. Las dos mitades son independientes en los dos sentidos.
+    // ----------------------------------------------------------------------
+
+    /**
+     * Las fotos que toca subir: de prospectos **ya sincronizados**, con archivo,
+     * sin subir y no descartadas.
+     *
+     * > [!important] `sync_estado = 'sincronizado'` no es un filtro de eficiencia
+     * > Antes de que el servidor acepte el alta **no existe la fila `cliente` a
+     * > la que la foto pertenece**, asi que la subida solo puede responder 404 o
+     * > 409. Ese estado la tablet ya lo registra desde T-07: no hace falta
+     * > ninguna bandera nueva para saber cuando la foto es elegible.
+     *
+     * No filtra por vendedor. La tablet puede compartirse, y si el equipo cambia
+     * de manos la foto de un prospecto ajeno no va a subir (el servidor responde
+     * 403 porque la operacion no es de quien manda el token): eso se anota como
+     * error **temporal** y se reintenta, para que suba el dia que su vendedor
+     * vuelva a entrar. Descartarla seria perder una foto que si tenia destino.
+     */
+    pendientesDeSubirFoto(): Prospecto[] {
+      return bd.getAllSync<Prospecto>(
+        `select * from prospecto
+          where sync_estado = 'sincronizado'
+            and foto_uri is not null
+            and foto_subida_en is null
+            and foto_descartada = 0
+          order by fecha, grabado_en, rowid`,
+      );
+    },
+
+    /**
+     * La foto esta arriba. `subidaEn` es lo que respondio el SERVIDOR.
+     *
+     * Se limpia `foto_error`: un motivo viejo junto a una foto ya subida se lee
+     * en pantalla como un fallo que no existe.
+     */
+    marcarFotoSubida(id: string, subidaEn: MomentoISO): void {
+      bd.runSync(
+        `update prospecto set foto_subida_en = $subida_en, foto_error = null where id = $id`,
+        { $subida_en: subidaEn, $id: id },
+      );
+    },
+
+    /**
+     * Fallo **temporal**: se anota el motivo y la foto sigue en la cola.
+     *
+     * Es el caso de la WiFi que se cayo a medias, del prospecto que el servidor
+     * todavia no proyecto (409) y del 403 de un equipo que cambio de manos.
+     * Todos se arreglan solos con el tiempo.
+     */
+    anotarErrorFoto(id: string, motivo: string): void {
+      bd.runSync(`update prospecto set foto_error = $motivo where id = $id`, {
+        $motivo: motivo,
+        $id: id,
+      });
+    },
+
+    /**
+     * Fallo **permanente**: se deja de reintentar.
+     *
+     * Solo tres motivos, y los tres son juicios sobre *estos bytes* que no
+     * cambian por mandarlos otra vez: 413 (pasa de 2 MB), 415 (no es un JPEG de
+     * verdad) y el archivo local que desaparecio. Tratar uno de ellos como
+     * temporal es reintentar en cada sincronizacion, para siempre, una foto que
+     * nunca va a entrar.
+     *
+     * Se conserva `foto_uri` en vez de borrarla: es la unica pista de que hubo
+     * una foto que no llego, y el motivo queda en `foto_error` para la pantalla.
+     */
+    descartarFoto(id: string, motivo: string): void {
+      bd.runSync(
+        `update prospecto set foto_descartada = 1, foto_error = $motivo where id = $id`,
         { $motivo: motivo, $id: id },
       );
     },
