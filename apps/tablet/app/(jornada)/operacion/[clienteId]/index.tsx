@@ -109,7 +109,7 @@ export default function OperacionCliente() {
         />
         <BotonMenu
           titulo="Cobranza / abono"
-          descripcion="Seleccionar las notas pendientes que paga o abona"
+          descripcion="Cobrar o abonar una nota pendiente; lo que sobre va a sus otras notas"
           destino={{ pathname: '/(jornada)/operacion/[clienteId]/cobranza', params }}
         />
         <BotonMenu
@@ -123,6 +123,14 @@ export default function OperacionCliente() {
           destino={{ pathname: '/(jornada)/operacion/[clienteId]/registros', params }}
         />
       </View>
+
+      {/* T-20 (D5): se crea al cobrar de mas; usarlo es del portal. */}
+      {cliente.saldo_favor_centavos > 0 ? (
+        <Tarjeta estado="listo" etiqueta="Saldo a favor">
+          <Cifra valor={pesos(cliente.saldo_favor_centavos)} tamano="destacado" tono="exito" />
+          <Text style={estilos.textoSuave}>Lo aplica la oficina desde el portal.</Text>
+        </Tarjeta>
+      ) : null}
 
       <Tarjeta estado={estadoVentas} etiqueta="Ventas de hoy">
         {ventasDeHoy.length === 0 ? (
