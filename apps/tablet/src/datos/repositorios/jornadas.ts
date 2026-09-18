@@ -92,9 +92,23 @@ export function crearRepositorioJornadas({ bd, reloj, generarId }: DepsRepositor
      * captura, y dejarlo pasar produciria kilometraje negativo en el reporte
      * del portal.
      *
-     * TODO: T-33 — el corte del dia (cobranza, gastos, comision, efectividad)
-     *       se calcula y se imprime en su propio ticket; aqui solo se cierra la
-     *       jornada.
+     * > [!important] T-38: esta funcion ES el candado del km final
+     * > "Km final obligatorio antes de enviar el corte" ([[App Tablet]], §5) se
+     * > cumple porque `km_final` **solo** se puede escribir por aqui, y aqui no
+     * > hay forma de cerrar sin darlo: un `kmFinal` ausente o ilegible es `NaN`,
+     * > que `Number.isFinite` rechaza. No hay una segunda ruta de escritura.
+     * >
+     * > TODO: T-33 — el corte del dia (ventas por presentacion, cobranza,
+     * >       gastos, tesoreria, comision, efectividad e impresion) se calcula
+     * >       en su propio ticket; aqui solo se cierra la jornada. Lo que T-33
+     * >       tiene que **conectar** es una sola condicion: la accion de enviar
+     * >       el corte exige `jornada.estado === 'cerrada'`. No hace falta que
+     * >       revalide el kilometraje —si esta cerrada, paso por aqui— pero si
+     * >       que no ofrezca el envio sobre una jornada abierta, porque hoy
+     * >       nada mas lo impide: el guardia de `(jornada)/_layout.tsx` exige
+     * >       jornada, no jornada cerrada. Mientras T-33 no exista, el unico
+     * >       camino al corte es la tarjeta de `cerrar-dia.tsx`, que se pinta
+     * >       solo en la rama de `estado === 'cerrada'`.
      */
     cerrar(jornadaId: string, kmFinal: number): Jornada {
       const jornada = repo.porId(jornadaId);

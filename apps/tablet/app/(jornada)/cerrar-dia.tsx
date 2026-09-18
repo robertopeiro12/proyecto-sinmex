@@ -18,6 +18,24 @@ import { espacio } from '@/ui/tokens';
  * jornada (la misma entidad que abre el dia) y alimenta el reporte de
  * Kilometraje del portal. El **corte** —ventas por presentacion, cobranza,
  * gastos, tesoreria, comision, efectividad de ruta e impresion— es T-33.
+ *
+ * > [!important] T-38: como queda el candado del km final, y que le toca a T-33
+ * > "Km final obligatorio antes de enviar el corte" ([[App Tablet]], §5) no se
+ * > puede cablear contra la pantalla del corte porque esa pantalla **no existe
+ * > todavia**. Lo que si queda montado hoy, y es donde T-33 se apoya:
+ * >
+ * > 1. `jornadas.cerrar()` es la unica escritura de `km_final` y no admite
+ * >    cerrar sin el (ni con uno menor al inicial). Ver su comentario.
+ * > 2. Esta pantalla solo pinta la tarjeta del corte en la rama de
+ * >    `estado === 'cerrada'`, de modo que el corte es inalcanzable mientras el
+ * >    km final falte.
+ * >
+ * > **Lo que T-33 tiene que conectar:** su accion de *enviar* el corte exige
+ * > `jornada.estado === 'cerrada'`. Si T-33 lleva el corte a su propia ruta, que
+ * > repita la condicion alli —el guardia de `(jornada)/_layout.tsx` exige
+ * > jornada, **no** jornada cerrada, asi que no la cubre— o que la suba al
+ * > guardia. Lo que no puede es dar el candado por hecho: hoy lo sostiene el
+ * > `if` de abajo, que vive en esta pantalla y no en la navegacion.
  */
 export default function CerrarDia() {
   const { datos, jornada, refrescarJornada } = useJawa();
