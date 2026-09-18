@@ -37,9 +37,10 @@ export default function MenuJornada() {
   const { estilos } = useTema();
   const [sincronizando, setSincronizando] = useState(false);
 
-  // Suma ventas: si quedan sin subir, la jornada no puede decir "listo" aunque
-  // ella misma ya este sincronizada, o el vendedor cierra el dia sin WiFi
-  // creyendo que ya subio todo.
+  // Suma ventas y cobros (T-20): si quedan sin subir, la jornada no puede decir
+  // "listo" aunque ella misma ya este sincronizada, o el vendedor cierra el dia
+  // sin WiFi creyendo que ya subio todo. Al integrar T-40 esto pasa a
+  // contarPendientesDeSubir(datos).
   //
   // Se relee al volver a esta pantalla (`useFocusEffect`): grabar una venta no
   // mueve `datos`, y esta pantalla sigue montada mientras el vendedor captura en
@@ -56,7 +57,9 @@ export default function MenuJornada() {
     void vueltas;
     void ultimaSincronizacion;
     return (
-      datos.jornadas.pendientesDeSincronizar().length + datos.ventas.pendientesDeSincronizar().length
+      datos.jornadas.pendientesDeSincronizar().length +
+      datos.ventas.pendientesDeSincronizar().length +
+      datos.cobranzas.pendientesDeSincronizar().length
     );
   }, [datos, vueltas, ultimaSincronizacion]);
   const falloUltima = ultimaSincronizacion !== null && !ultimaSincronizacion.ok;
