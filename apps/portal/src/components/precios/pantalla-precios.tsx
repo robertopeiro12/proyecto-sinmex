@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { listarProductos, type Producto } from "@/lib/productos";
 import { listarSucursales, type Sucursal } from "@/lib/sucursales";
@@ -162,6 +168,7 @@ function MatrizPrecios({
       <Card>
         <CardHeader>
           <CardTitle>Listas de Precios</CardTitle>
+          <CardDescription>Precios en pesos mexicanos (MXN)</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground">Cargando…</p>
@@ -174,6 +181,7 @@ function MatrizPrecios({
     <Card>
       <CardHeader>
         <CardTitle>Listas de Precios</CardTitle>
+        <CardDescription>Precios en pesos mexicanos (MXN)</CardDescription>
       </CardHeader>
       <CardContent>
         {error && (
