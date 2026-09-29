@@ -192,7 +192,8 @@ nadie relacionaría con nada.
     "clientes":       [{ "id": "…", "nombre": "…", "domicilio": "…", "telefono": "…",
                          "encargado": null, "tipo": "cliente", "pct_comision": 3.5,
                          "promocion": "10+1", "plazo_credito_dias": 7,
-                         "lat": 32.5149, "lng": -117.0382, "sucursal_id": "…", "activo": 1 }],
+                         "lat": 32.5149, "lng": -117.0382, "sucursal_id": "…",
+                         "saldo_favor_centavos": 0, "activo": 1 }],
     "tipos_negocio":  [{ "id": "…", "nombre": "Abarrotes", "activo": 1 }],
     "precios":        [{ "id": "<clienteId>:<presentacionId>", "cliente_id": "…",
                          "presentacion_id": "…", "precio_centavos": 800,
@@ -201,6 +202,8 @@ nadie relacionaría con nada.
   "notas_pendientes": [{ "id": "…", "folio": "TJ260801AP01", "num_nota": "1234",
                           "fecha": "2026-08-01", "cliente_id": "…", "status": "abonado",
                           "monto_total_centavos": 25000, "saldo_centavos": 15000,
+                          "abonos": [{ "fecha_pago": "2026-08-03", "monto_centavos": 10000,
+                                       "metodo_pago": "efectivo" }],
                           "activo": 1 }]
 }
 ```
@@ -289,12 +292,21 @@ listas en campo.
   perdería cambios. Se manda todo si alguna de las tres se movió desde `desde`,
   y nada si ninguna lo hizo.
 
-### `saldo_centavos` — pendiente de confirmar
+### Notas pendientes: saldo derivado, abonos y notas cerradas (T-20)
 
-Sale del `saldo_pendiente` del **último abono** de la nota (y del monto total si
-aún no tiene ninguno). `10-Dominio/Entidades/Cobranza-Abono.md` deja abierto si
-ese saldo debería ser almacenado o derivado (`monto − Σ abonos`); **T-20 lo
-cerrará**. Aquí se lee lo que hay, no se inventa un cálculo.
+- **`saldo_centavos` es derivado:** `monto_total − Σ abonos vivos`, nunca negativo. La columna
+  `cobranza_abono.saldo_pendiente` es una foto del saldo tras cada fila y no se lee como fuente.
+- **`abonos`** trae los abonos vivos de la nota (`fecha_pago`, `monto_centavos`, `metodo_pago`),
+  por fecha de pago, para mostrar los pagos previos al cobrar.
+- **Con `desde`, bajan también las notas a crédito que dejaron de estar pendientes** (pagadas,
+  de cuenta perdida, borradas) con `activo: 0`. Así la tablet deja de ofrecer una nota que liquidó otro
+  dispositivo o el portal. Una nota cerrada viaja con `status` `abonado` si tiene abonos y
+  `pendiente` si no: una tablet anterior a T-20 guarda esta tabla con un CHECK de esos dos valores
+  y, con otro, perdería el pull entero.
+- **`saldo_favor_centavos`** de cada cliente es la suma de sus movimientos vivos de saldo a favor.
+  Un cobro que deja saldo a favor le toca `updated_at` al cliente, así que vuelve a bajar en el
+  pull incremental (y con él, la colección de precios completa: es su regla de siempre).
+- Los tres campos son **aditivos**: una tablet vieja los ignora.
 
 ---
 
@@ -351,9 +363,9 @@ saldría como **500 para todo el lote** — el todo-o-nada que este contrato pro
 no hacer.
 
 `datos` lo fija el ticket de cada módulo, y fijarlo es un cambio **aditivo** que
-no sube la versión del contrato. Hoy tienen forma fija **`venta`** (T-16) y
-**`prospecto`** (T-40), los dos abajo; cobranza, gastos, merma y ruta siguen
-libres hasta T-20/T-27/T-33/T-39, y el servidor las guarda tal cual.
+no sube la versión del contrato. Hoy tienen forma fija **`venta`** (T-16),
+**`prospecto`** (T-40) y **`cobranza`** (T-20), los tres abajo; gastos, merma y
+ruta siguen libres hasta T-27/T-33/T-39, y el servidor las guarda tal cual.
 
 ### `datos` de una venta (T-16)
 
@@ -461,6 +473,40 @@ permiso o no haber señal, y eso no le impide registrar al prospecto.
 > sincroniza el lunes tendría `created_at` del lunes — justo el caso del fin de
 > semana que esa notificación describe. T-56 no se construye aquí.
 
+### `datos` de una cobranza (T-20)
+
+```jsonc
+{
+  "clave": "uuid del cobro local",
+  "tipo": "cobranza",
+  "fecha_operacion": "2026-09-14",
+  "ocurrido_en": "2026-09-14T12:10:00.000-07:00",
+  "cliente_id": "uuid",              // obligatorio en cobranza
+  "folio": "TJ260914AP04",           // obligatorio en cobranza; mismo contador del día que la venta
+  "datos": {
+    "venta_nota_id": "uuid",         // la nota que eligió el vendedor (id del pull)
+    "monto_centavos": 15000,         // entero, 1..999999999999; puede pasar del saldo
+    "metodo_pago": "efectivo",       // efectivo | transferencia | cheque
+    "fecha_pago": "2026-09-12"       // AAAA-MM-DD, no posterior a fecha_operacion
+  }
+}
+```
+
+- `cliente_id` y `folio` viajan **en el sobre** y son **obligatorios**: sin cualquiera de los dos →
+  `datos-invalidos`.
+- **El servidor reparte el pago**, en este orden: la nota elegida hasta su saldo; si sobra, las
+  **otras notas pendientes/abonadas del mismo cliente, de la más vieja a la más nueva** (`fecha` y
+  luego `folio`); lo que aún sobre queda como **saldo a favor** del cliente. Cada nota que recibe
+  dinero gana una fila en `cobranza_abono` con el mismo folio; queda `pagada` si su saldo llega a 0
+  y `abonado` si no.
+- **El saldo es derivado**: `monto_total − Σ abonos vivos`, calculado por el servidor al proyectar.
+- **Una nota ya pagada, de cuenta perdida o borrada no rechaza el cobro**: su saldo aplicable es 0 y todo el
+  monto pasa a las otras notas y al saldo a favor. El dinero sí se cobró.
+- El único rechazo del dominio es **`nota-no-encontrada`**: la nota no existe, su cliente no es de
+  la sucursal del vendedor, o no es del `cliente_id` del sobre.
+- `fecha_pago` es informativa: el corte cuenta el cobro en `fecha_operacion`.
+- Cada cobranza se aplica en **su propia transacción** junto con su fila del buzón (§7).
+
 ### Respuesta `200` — parcial y honesta
 
 ```jsonc
@@ -505,6 +551,7 @@ texto en español** si reintenta o si avisa al vendedor.
 | `presentacion-inactiva` | Una línea de venta nombra una presentación que no existe, está dada de baja o cuyo producto está inactivo. Se reintenta en la siguiente sincronización (T-16) |
 | `precio-no-asignado` | Una línea con cantidad > 0 y el cliente no tiene **ningún** precio para esa presentación vigente a `fecha_operacion` ni asignado después, hasta hoy. Comprueba existencia, nunca valor. Se recupera cuando el portal asigna el precio y la tablet vuelve a sincronizar (T-16) |
 | `tipo-negocio-inexistente` | El `tipo_negocio_id` de un alta de `prospecto` no existe o está dado de baja (T-40). **No es un bug de la tablet**: su catálogo se quedó viejo. Se reintenta solo en la siguiente sincronización, que además le baja el catálogo nuevo |
+| `nota-no-encontrada` | La nota que se cobra no existe, su cliente no es de la sucursal del vendedor, o no es del `cliente_id` del sobre. Una nota que ya está pagada, de cuenta perdida, de promoción o borrada **no** cae aquí: el cobro se acepta y va a otras notas o a saldo a favor. La tablet la reenvía en cada sincronización (T-20) |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo
@@ -546,17 +593,24 @@ El rechazo se recalcula en cada intento: es determinista y no necesita memoria.
 
 ### Una transacción por operación (T-16, ADR-0009)
 
-Cuando un `tipo` tiene un módulo de dominio que lo proyecta (hoy solo `venta`),
-cada operación del lote se aplica **en su propia transacción**:
+Cuando un `tipo` tiene un módulo de dominio que lo proyecta (hoy `venta` y
+`cobranza`), cada operación del lote se aplica **en su propia transacción**:
 
 1. `INSERT` en `sync_operacion` con `on conflict (vendedor_id, clave_idempotencia) do nothing`.
    Si no insertó, es `duplicada` y **no se vuelve a proyectar**.
-2. El módulo dueño escribe sus tablas (`VentasService.registrarVenta` → `venta_nota` +
-   `venta_nota_detalle`) y el buzón anota `entidad_tabla` / `entidad_id`.
+2. El módulo dueño escribe sus tablas y el buzón anota `entidad_tabla` / `entidad_id`:
+   - `VentasService.registrarVenta` → `venta_nota` + `venta_nota_detalle` (y, si es de contado
+     con monto > 0, su fila `cobranza_abono` de origen `venta_contado`); la entidad es la
+     `venta_nota`.
+   - `CobranzasService.registrarCobranza` → bloquea `for update`, en orden de `id`, las notas
+     cobrables del cliente y la elegida; reparte; escribe una fila `cobranza_abono` por nota que
+     recibe dinero (mismo folio), su `status` y, si sobra, un `saldo_favor_movimiento`. La entidad
+     es la primera fila `cobranza_abono` o, si todo quedó a favor, el movimiento.
 3. `commit` → `aplicada`. Si el dominio rechaza (`presentacion-inactiva`,
-   `precio-no-asignado`), `rollback`: no queda **ni** la venta **ni** la fila del buzón.
+   `precio-no-asignado`, `nota-no-encontrada`), `rollback`: no queda **ni** la fila de negocio
+   **ni** la del buzón.
 
-Los tipos sin módulo todavía (`jornada`, `cobranza`, `gasto`, `merma`, `ruta`) se
+Los tipos sin módulo todavía (`jornada`, `gasto`, `merma`, `ruta`) se
 guardan en el buzón y quedan `aplicada` con `entidad_id` nulo, como hasta ahora.
 Las operaciones se aplican **en el orden del lote**, y un error inesperado a mitad
 de lote deja comprometidas las anteriores (cada una tuvo su `commit`): el reintento
@@ -598,8 +652,9 @@ reintentos simultáneos del mismo lote ya ve la fila confirmada y cae en
    - **Colisión** — un `unique` **global** sobre `sync_operacion.folio`. Si otra
      operación ya lo usó → `folio-duplicado`, rechazo **por operación**.
 4. Al proyectar, el folio se **copia** a `venta_nota.folio` (que ya nació
-   `unique` en T-05). **No se re-emite.** Implementado en T-16 para `venta`
-   (T-20 hará lo mismo con `cobranza`): un reenvío no vuelve a proyectar y
+   `unique` en T-05). **No se re-emite.** Implementado en T-16 para `venta`; en
+   `cobranza` (T-20) se copia a cada fila `cobranza_abono` del cobro, donde **no** es
+   `unique` (la unicidad vive en el buzón). Un reenvío no vuelve a proyectar y
    devuelve el mismo `id_servidor`, y el buzón guarda en `entidad_tabla` /
    `entidad_id` a qué fila de negocio se convirtió la operación.
 
@@ -689,8 +744,9 @@ sincronizar.
 |---|---|
 | Resolución de conflictos (portal y tablet tocan lo mismo) | **T-43** |
 | Sincronización automática 11:00/14:00 | **T-44** |
-| Forma de `datos` para cobranza / gasto / merma / ruta (la de venta ya está, §6) | **T-20 / T-27 / T-33 / T-39** |
-| Proyección de `cobranza`, `gasto`, `merma`, `ruta` y `jornada` a sus tablas de negocio (la de `venta` ya existe, §7) | Los mismos, y **T-38** para `jornada` |
+| Forma de `datos` para gasto / merma / ruta (las de venta y cobranza ya están, §6) | **T-27 / T-33 / T-39** |
+| Proyección de `gasto`, `merma`, `ruta` y `jornada` a sus tablas de negocio (las de `venta` y `cobranza` ya existen, §7) | Los mismos, y **T-38** para `jornada` |
+| Usar el saldo a favor, eliminar una cobranza con autorización, cobranza desde el portal | **T-21 / T-34** |
 | Permisos granulares en estos endpoints | **T-8** |
 
 El envelope está diseñado para que todo eso **quepa encima sin romper la
