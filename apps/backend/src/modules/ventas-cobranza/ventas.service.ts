@@ -3,6 +3,7 @@ import type { Transaction } from 'kysely';
 import type { DB } from '../../database/schema';
 import { PreciosRepository } from '../cartera-clientes/precios.repository';
 import { aPesos } from '../sincronizacion/dinero';
+import { CobranzasRepository } from './cobranzas.repository';
 import type { VentaNormalizada } from './datos-venta';
 import {
   mesDe,
@@ -44,6 +45,8 @@ export class VentasService {
   constructor(
     private readonly repo: VentasRepository,
     private readonly precios: PreciosRepository,
+    // T-20 (D2): la venta de contado deja su cobro en la misma transaccion.
+    private readonly cobranzas: CobranzasRepository,
   ) {}
 
   /**
@@ -128,6 +131,28 @@ export class VentasService {
       })),
       trx,
     );
+
+    // T-20 (D2): una venta de contado ya se cobro. Deja su fila en
+    // `cobranza_abono` para que corte y tesoreria sumen una sola tabla, marcada
+    // `venta_contado` para poder desglosarla. Una promocion ($0) no se cobra.
+    // La venta no captura fecha de pago: es la de la operacion.
+    if (venta.contadoCredito === 'contado' && monto > 0) {
+      await this.cobranzas.insertarAbono(
+        {
+          ventaNotaId: id,
+          vendedorId: contexto.vendedorId,
+          fechaPago: contexto.fechaOperacion,
+          fechaOperacion: contexto.fechaOperacion,
+          monto: aPesos(monto),
+          tipo: 'cobranza',
+          saldoPendiente: aPesos(0),
+          metodoPago: 'efectivo',
+          folio: contexto.folio,
+          origen: 'venta_contado',
+        },
+        trx,
+      );
+    }
 
     return { id };
   }

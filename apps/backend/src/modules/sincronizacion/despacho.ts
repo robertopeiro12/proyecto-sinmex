@@ -4,8 +4,10 @@ import {
   normalizarDatosVenta,
   type VentaNormalizada,
 } from '../ventas-cobranza/datos-venta';
+import type { CobranzaNormalizada } from '../ventas-cobranza/datos-cobranza';
 import type { RazonRechazoVenta } from '../ventas-cobranza/venta-rechazada';
 import type { CodigoRechazo } from './contrato';
+import { prepararCobranza } from './despacho-cobranza';
 import { prepararProspecto } from './despacho-prospecto';
 import type { OperacionNormalizada, Rechazo } from './operaciones';
 
@@ -19,15 +21,16 @@ import type { OperacionNormalizada, Rechazo } from './operaciones';
 /**
  * Lo que un modulo de dominio tiene que proyectar para una operacion.
  *
- * Un `tipo` sin modulo todavia (`jornada`, `cobranza`, `gasto`, `merma`, `ruta`)
- * no tiene proyeccion: se guarda en el buzon y queda `aplicada`, como desde
- * T-07. T-20 agregara aqui `{ tipo: 'cobranza'; ... }`.
+ * Un `tipo` sin modulo todavia (`jornada`, `gasto`, `merma`, `ruta`) no tiene
+ * proyeccion: se guarda en el buzon y queda `aplicada`, como desde T-07.
+ * Orden acordado entre tickets: `venta`, `prospecto` (T-40), `cobranza` (T-20).
  */
 export type Proyeccion =
   | { tipo: 'venta'; venta: VentaNormalizada }
   // T-40. El unico tipo que crea una fila de CATALOGO (`cliente` con
   // `tipo = 'prospecto'`) en vez de una de operacion.
-  | { tipo: 'prospecto'; prospecto: ProspectoNormalizado };
+  | { tipo: 'prospecto'; prospecto: ProspectoNormalizado }
+  | { tipo: 'cobranza'; cobranza: CobranzaNormalizada };
 
 export type ResultadoPreparacion =
   { ok: true; proyeccion: Proyeccion | null } | ({ ok: false } & Rechazo);
@@ -71,8 +74,15 @@ export function prepararProyeccion(
         proyeccion: { tipo: 'prospecto', prospecto: r.prospecto },
       };
     }
+    case 'cobranza': {
+      const r = prepararCobranza(op);
+      if (!r.ok) return r;
+      return {
+        ok: true,
+        proyeccion: { tipo: 'cobranza', cobranza: r.cobranza },
+      };
+    }
     case 'jornada':
-    case 'cobranza':
     case 'gasto':
     case 'merma':
     case 'ruta':

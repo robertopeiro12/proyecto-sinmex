@@ -154,7 +154,7 @@ describe('repositorio de catalogos', () => {
       expect(notas[0]!.status).toBe('abonado');
     });
 
-    it('una nota cancelada en el portal deja de poder cobrarse', () => {
+    it('una nota cerrada en el portal deja de poder cobrarse', () => {
       const { catalogos } = conCatalogos();
 
       catalogos.guardarSnapshot({
@@ -167,6 +167,34 @@ describe('repositorio de catalogos', () => {
     it('un cliente sin notas devuelve lista vacia, no null', () => {
       const { catalogos } = conCatalogos();
       expect(catalogos.notasPendientesDe('cli-2')).toEqual([]);
+    });
+
+    it('publicarCambio sube la version y avisa, para quien escribe fuera del snapshot (T-20)', () => {
+      const { catalogos } = conCatalogos();
+      const antes = catalogos.version();
+      let avisos = 0;
+      const dejar = catalogos.suscribir(() => {
+        avisos += 1;
+      });
+
+      catalogos.publicarCambio();
+
+      expect(catalogos.version()).toBe(antes + 1);
+      expect(avisos).toBe(1);
+      dejar();
+    });
+
+    it('guarda los abonos de cada nota y el saldo a favor del cliente (T-20)', () => {
+      const { catalogos } = conCatalogos();
+      expect(JSON.parse(catalogos.notasPendientesDe('cli-1')[0]!.abonos_json)).toEqual([
+        { fecha_pago: '2026-08-03', monto_centavos: 10000, metodo_pago: 'efectivo' },
+      ]);
+      expect(catalogos.obtenerCliente('cli-1')?.saldo_favor_centavos).toBe(0);
+
+      catalogos.guardarSnapshot({
+        clientes: [{ ...snapshotDePrueba().clientes![0]!, saldo_favor_centavos: 4550 }],
+      });
+      expect(catalogos.obtenerCliente('cli-1')?.saldo_favor_centavos).toBe(4550);
     });
   });
 

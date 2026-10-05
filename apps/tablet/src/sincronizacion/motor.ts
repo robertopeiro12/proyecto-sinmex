@@ -68,8 +68,8 @@ import { trocearLotes } from './lotes';
  * De donde salen las operaciones que se suben.
  *
  * Cada modulo de negocio registra la suya sin tocar el motor: hoy jornada
- * (T-04), venta (T-16) y prospecto (T-40), en `proveedor-sesion.tsx`.
- * Faltan cobranza (T-20), gasto, merma y ruta (T-27/T-33/T-39).
+ * (T-04), venta (T-16), prospecto (T-40) y cobranza (T-20), en
+ * `proveedor-sesion.tsx`. Faltan gasto, merma y ruta (T-27/T-33/T-39).
  */
 export interface FuenteOperaciones {
   tipo: TipoOperacion;
@@ -412,14 +412,22 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
     vehiculos: c.vehiculos,
     productos: c.productos,
     presentaciones: c.presentaciones,
-    clientes: c.clientes,
+    // T-20: un servidor anterior a T-20 no manda estos campos; con `?? 0` y
+    // `?? []` la tablet nueva no revienta el NOT NULL de su esquema.
+    clientes: c.clientes.map((cliente) => ({
+      ...cliente,
+      saldo_favor_centavos: cliente.saldo_favor_centavos ?? 0,
+    })),
     // T-40: un servidor anterior a este ticket no manda la coleccion. Se pasa
     // `undefined` y `guardarSnapshot` simplemente no escribe nada de esa tabla;
     // la pantalla de prospectos se queda sin desplegable y lo dice. Es lo que el
     // contrato §3 pide de un cambio aditivo: ignorar lo que no se conoce.
     tiposNegocio: c.tipos_negocio,
     precios: c.precios,
-    notas: respuesta.notas_pendientes,
+    notas: respuesta.notas_pendientes.map(({ abonos, ...nota }) => ({
+      ...nota,
+      abonos_json: JSON.stringify(abonos ?? []),
+    })),
   };
 }
 
