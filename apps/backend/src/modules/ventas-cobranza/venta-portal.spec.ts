@@ -174,6 +174,14 @@ describe('revisarFechaVenta (T-17, §3)', () => {
     },
   );
 
+  it('antes de 2000-01-01 se rechaza: el folio solo lleva AAMMDD', () => {
+    expect(revisarFechaVenta('1999-12-31', '2026-10-06')).toBe(
+      'La fecha de la venta no puede ser anterior al 2000-01-01.',
+    );
+    expect(revisarFechaVenta('1926-10-06', '2026-10-06')).not.toBeNull();
+    expect(revisarFechaVenta('2000-01-01', '2026-10-06')).toBeNull();
+  });
+
   it('una fecha que no existe se rechaza', () => {
     expect(revisarFechaVenta('2026-02-30', '2026-10-06')).toBe(
       'Esa fecha no existe.',

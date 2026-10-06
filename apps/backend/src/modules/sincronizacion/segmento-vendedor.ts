@@ -46,6 +46,8 @@ import { SEGMENTO_OFICINA } from './folio';
 
 /** Acentos y enes que el folio no puede llevar: el segmento es A-Z. */
 const ACENTOS = 'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ';
+const SIN_ACENTOS = 'aaaaaeeeeiiiiooooouuuuncAAAAAEEEEIIIIOOOOOUUUUNC';
+
 /**
  * Lo que lee quien da de alta un vendedor cuyas iniciales dan `OF` (T-17). Se
  * rechaza en vez de ceder a la siguiente combinacion, igual que unas iniciales
@@ -53,8 +55,6 @@ const ACENTOS = 'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈ�
  */
 export const MOTIVO_SEGMENTO_RESERVADO =
   'Esas iniciales están reservadas para ventas de oficina; ajusta el nombre.';
-
-const SIN_ACENTOS = 'aaaaaeeeeiiiiooooouuuuncAAAAAEEEEIIIIOOOOOUUUUNC';
 
 /** El nombre reducido a palabras de A-Z, sin acentos ni signos. */
 export function palabrasDelNombre(nombre: string): string[] {

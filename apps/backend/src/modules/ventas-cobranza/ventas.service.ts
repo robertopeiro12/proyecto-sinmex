@@ -133,7 +133,9 @@ export class VentasService {
         semana: semanaISO(contexto.fechaOperacion),
         mes: mesDe(contexto.fechaOperacion),
         status,
-        pctComision: cliente.pctComision,
+        // Una venta de Oficina (sin vendedor) no genera comision: no se
+        // congela el % del cliente.
+        pctComision: contexto.vendedorId === null ? null : cliente.pctComision,
         origen: contexto.origen,
         capturoUsuarioId: contexto.usuarioId,
       },

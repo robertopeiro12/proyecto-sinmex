@@ -107,7 +107,9 @@ export function PantallaRegistrarVenta({ sucursal }: { sucursal: string | null }
     let vigente = true;
     obtenerCatalogoVenta(cliente.id, fecha)
       .then((lista) => {
-        if (vigente) setCatalogo(lista);
+        if (!vigente) return;
+        setCatalogo(lista);
+        setErrorCarga(null);
       })
       .catch((err: unknown) => {
         if (!vigente) return;

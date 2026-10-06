@@ -389,6 +389,11 @@ describe('VentasService.registrarVenta', () => {
         expect.objectContaining({ vendedorId: null, status: 'pagada' }),
         trx,
       );
+      // Oficina no genera comision: no se congela el % del cliente (3.50).
+      expect(repo.insertarVenta).toHaveBeenCalledWith(
+        expect.objectContaining({ pctComision: null }),
+        trx,
+      );
       expect(cobranzas.insertarAbono).toHaveBeenCalledWith(
         expect.objectContaining({
           vendedorId: null,

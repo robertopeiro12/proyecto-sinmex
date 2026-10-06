@@ -92,6 +92,8 @@ export function armarVentaPortal(
 
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
+const FECHA_MINIMA = '2000-01-01';
+
 /**
  * La fecha de la venta: hoy o un dia pasado, nunca futura (§3).
  *
@@ -110,6 +112,11 @@ export function revisarFechaVenta(fecha: string, hoy: string): string | null {
     comprobacion.toISOString().slice(0, 10) !== fecha
   ) {
     return 'Esa fecha no existe.';
+  }
+  // El folio solo lleva AAMMDD: 1926 y 2026 darian el mismo y el unique
+  // global lo convertiria en un 500.
+  if (fecha < FECHA_MINIMA) {
+    return 'La fecha de la venta no puede ser anterior al 2000-01-01.';
   }
   if (fecha > hoy) return 'La fecha de la venta no puede ser futura.';
   return null;

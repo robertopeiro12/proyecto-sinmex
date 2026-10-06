@@ -87,7 +87,7 @@ export class VentasPortalService {
         .sort(
           (a, b) =>
             a.producto.localeCompare(b.producto, 'es') ||
-            a.volumen.localeCompare(b.volumen, 'es'),
+            a.volumen.localeCompare(b.volumen, 'es', { numeric: true }),
         );
     });
   }

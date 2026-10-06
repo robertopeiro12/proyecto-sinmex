@@ -240,4 +240,20 @@ describe("PantallaRegistrarVenta", () => {
       }),
     );
   });
+
+  it("el error de carga del catálogo desaparece al corregir la fecha", async () => {
+    await prepararPantalla();
+    obtenerCatalogoVenta.mockRejectedValueOnce(new Error("falla"));
+    fireEvent.change(screen.getByLabelText("Fecha"), { target: { value: "2026-01-15" } });
+    expect(
+      await screen.findByText("No se pudieron cargar los productos del cliente."),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Fecha"), { target: { value: "2026-01-16" } });
+    await waitFor(() =>
+      expect(
+        screen.queryByText("No se pudieron cargar los productos del cliente."),
+      ).not.toBeInTheDocument(),
+    );
+  });
 });

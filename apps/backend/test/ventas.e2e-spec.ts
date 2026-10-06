@@ -492,6 +492,7 @@ describe('Ventas desde el portal (e2e)', () => {
         vendedor_id: null,
         origen: 'portal',
         monto_total: '270.00',
+        pct_comision: null,
       });
     });
 
