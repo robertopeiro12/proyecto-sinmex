@@ -135,9 +135,18 @@ describe('Sincronizacion pull/push (e2e)', () => {
   let ultimoConsecutivo = 0;
   const siguienteConsecutivo = () => ++ultimoConsecutivo;
 
+  /**
+   * Un # de nota distinto en cada llamada. Desde T-17 (#95) el # de nota no se
+   * repite en la sucursal (`uq_venta_nota_num_nota_sucursal`), y las ventas de
+   * este archivo comparten sucursal; el SUFIJO evita chocar con restos de una
+   * corrida anterior que no limpio.
+   */
+  let ultimaNota = 0;
+  const siguienteNota = () => `e2e-${SUFIJO}-${++ultimaNota}`;
+
   /** `datos` validos de una venta (contrato §6), con lo que se quiera cambiar encima. */
   const datosVenta = (extra: Record<string, unknown> = {}) => ({
-    num_nota: '2346',
+    num_nota: siguienteNota(),
     contado_credito: 'credito',
     factura: 'N/A',
     comentarios: null,
@@ -270,7 +279,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
             cliente_id: cliente,
             vendedor_id: vendedorId,
             monto_total: n.monto,
-            num_nota: '900',
+            num_nota: siguienteNota(),
             contado_credito: 'credito',
             semana: 32,
             mes: 8,
@@ -642,7 +651,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
           cliente_id: clienteId,
           vendedor_id: vendedorId,
           monto_total: '250.00',
-          num_nota: '1234',
+          num_nota: siguienteNota(),
           contado_credito: 'credito',
           semana: 31,
           mes: 8,
@@ -1608,7 +1617,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
 
   describe('ventas (T-16)', () => {
     it('una venta valida entra a venta_nota con su detalle, y el buzon dice a que fila se convirtio', async () => {
-      const op = ventaValida();
+      const nota = siguienteNota();
+      const op = ventaValida({ datos: datosVenta({ num_nota: nota }) });
       const res = (await push({ operaciones: [op] }).expect(200))
         .body as RespuestaPush;
       expect(res.resultados[0].estado).toBe('aplicada');
@@ -1619,7 +1629,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
         vendedor_id: vendedorId,
         sucursal_id: sucursalId,
         monto_total: '192.00',
-        num_nota: '2346',
+        num_nota: nota,
         contado_credito: 'credito',
         factura: 'N/A',
         comentarios: null,
@@ -2041,7 +2051,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
             cliente_id: clienteId,
             vendedor_id: vendedorId,
             monto_total: '50.00',
-            num_nota: '9999',
+            num_nota: siguienteNota(),
             contado_credito: 'contado',
             semana: 32,
             mes: 8,
@@ -2592,7 +2602,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
               cliente_id: clienteAjenoId,
               vendedor_id: vendedorAjenoId,
               monto_total: '90.00',
-              num_nota: '901',
+              num_nota: siguienteNota(),
               contado_credito: 'credito',
               semana: 32,
               mes: 8,
