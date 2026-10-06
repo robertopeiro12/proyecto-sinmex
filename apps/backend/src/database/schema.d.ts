@@ -288,12 +288,14 @@ export interface Vendedor {
 }
 
 export interface VentaNota {
+  actualizado_por_usuario_id: string | null;
   capturo_usuario_id: string | null;
   cliente_id: string;
   comentarios: string | null;
   contado_credito: string;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
+  eliminado_por_usuario_id: string | null;
   factura: string | null;
   fecha: Timestamp;
   folio: string;

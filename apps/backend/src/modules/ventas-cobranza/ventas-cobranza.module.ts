@@ -3,6 +3,10 @@ import { CarteraClientesModule } from '../cartera-clientes/cartera-clientes.modu
 import { CobranzasRepository } from './cobranzas.repository';
 import { CobranzasService } from './cobranzas.service';
 import { FoliosOficinaRepository } from './folios-oficina.repository';
+import { VentasConsultaRepository } from './ventas-consulta.repository';
+import { VentasConsultaService } from './ventas-consulta.service';
+import { VentasEdicionRepository } from './ventas-edicion.repository';
+import { VentasEdicionService } from './ventas-edicion.service';
 import { VentasController } from './ventas.controller';
 import { VentasPortalRepository } from './ventas-portal.repository';
 import { VentasPortalService } from './ventas-portal.service';
@@ -27,6 +31,10 @@ import { VentasService } from './ventas.service';
     FoliosOficinaRepository,
     VentasPortalService,
     VentasPortalRepository,
+    VentasConsultaService,
+    VentasConsultaRepository,
+    VentasEdicionService,
+    VentasEdicionRepository,
   ],
   exports: [VentasService, CobranzasService],
 })

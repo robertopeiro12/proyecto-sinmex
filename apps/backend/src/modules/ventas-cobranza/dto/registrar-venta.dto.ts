@@ -22,7 +22,7 @@ import {
   MAX_LINEAS_VENTA,
 } from '../datos-venta';
 
-const recortar = ({ value }: { value: unknown }): unknown =>
+export const recortar = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
 
 /** `integer` de Postgres. */
@@ -45,22 +45,15 @@ export class LineaVentaDto {
 }
 
 /**
- * `POST /ventas` (T-17, §4.2). Las reglas de fondo (presentacion repetida,
- * linea en 0, precio a la fecha, fecha no futura) las decide el servicio con
- * las mismas funciones que la tablet; aqui solo la forma.
+ * Lo que se captura de una venta en el portal, al registrarla y al editarla
+ * (T-17). Las reglas de fondo (presentacion repetida, linea en 0, precio a la
+ * fecha) las decide el servicio con las mismas funciones que la tablet; aqui
+ * solo la forma.
  */
-export class RegistrarVentaDto {
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
-    message: 'La fecha debe tener el formato AAAA-MM-DD.',
-  })
-  fecha!: string;
-
-  @IsUUID(undefined, { message: 'Elige el cliente.' })
-  clienteId!: string;
-
+export class CamposVentaDto {
   // Obligatorio, pero puede ser `null`: null es "Oficina" (venta de
   // mostrador). Ausente no es lo mismo que Oficina, y se rechaza.
-  @ValidateIf((o: RegistrarVentaDto) => o.vendedorId !== null)
+  @ValidateIf((o: CamposVentaDto) => o.vendedorId !== null)
   @IsUUID(undefined, {
     message: 'Elige el repartidor: un vendedor, u Oficina.',
   })
@@ -108,4 +101,15 @@ export class RegistrarVentaDto {
   @ValidateNested({ each: true })
   @Type(() => LineaVentaDto)
   lineas!: LineaVentaDto[];
+}
+
+/** `POST /ventas` (T-17, §4.2): los campos de la venta mas su fecha y su cliente. */
+export class RegistrarVentaDto extends CamposVentaDto {
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'La fecha debe tener el formato AAAA-MM-DD.',
+  })
+  fecha!: string;
+
+  @IsUUID(undefined, { message: 'Elige el cliente.' })
+  clienteId!: string;
 }

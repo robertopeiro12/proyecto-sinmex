@@ -1,4 +1,8 @@
-import { armarVentaPortal, revisarFechaVenta } from './venta-portal';
+import {
+  armarVentaPortal,
+  esFechaReal,
+  revisarFechaVenta,
+} from './venta-portal';
 
 const CLIENTE = '0b7f5e2a-3c1d-4e8f-9a6b-1c2d3e4f5a6b';
 const PRE_A = '5f3c1a2b-7d8e-4f90-a1b2-c3d4e5f60718';
@@ -187,4 +191,17 @@ describe('revisarFechaVenta (T-17, §3)', () => {
       'Esa fecha no existe.',
     );
   });
+});
+
+describe('esFechaReal (T-17 parte 2)', () => {
+  it.each(['2024-03-04', '2024-02-29'])('%s es un dia que existe', (fecha) => {
+    expect(esFechaReal(fecha)).toBe(true);
+  });
+
+  it.each(['2024-02-30', '2023-02-29', '2024-13-01', '24-03-04', ''])(
+    '%j no existe o no tiene el formato',
+    (fecha) => {
+      expect(esFechaReal(fecha)).toBe(false);
+    },
+  );
 });
