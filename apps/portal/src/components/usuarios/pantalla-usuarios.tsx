@@ -97,7 +97,8 @@ function Tabla({ sucursal }: { sucursal: string | null }) {
       await eliminarUsuario(item.id);
       void catalogo.recargar();
     } catch (err) {
-      // A diferencia de PantallaClientes: aqui SI vale la pena mostrar el
+      // A diferencia de la mayoria de las pantallas (PantallaClientes solo lo
+      // hace al convertir un prospecto): aqui SI vale la pena mostrar el
       // mensaje exacto del servidor (ErrorApi.mensajeApi) -- las dos
       // protecciones de D7 ("no puedes dar de baja tu propio usuario",
       // "debe quedar al menos un Administrador General activo") son

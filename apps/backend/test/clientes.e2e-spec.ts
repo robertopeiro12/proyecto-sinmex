@@ -119,6 +119,9 @@ describe('Clientes (e2e)', () => {
       .values({
         nombre,
         domicilio: comoDeLaApp ? null : 'Domicilio de prueba',
+        // Un prospecto de la app ya trae encargado desde T-69 (y T-70 lo exige
+        // para convertir); los escenarios que lo necesitan ausente lo anulan.
+        encargado: 'Encargado de prueba',
         telefono: '000',
         factura: false,
         tipo,
@@ -892,6 +895,13 @@ describe('Clientes (e2e)', () => {
         'prospecto',
         true,
       );
+      // T-70: sembrarCliente ya siembra encargado; aqui se anula para que
+      // falten los TRES campos y se ejerza el mensaje "A, B y C".
+      await db
+        .updateTable('cliente')
+        .set({ encargado: null })
+        .where('id', '=', id)
+        .execute();
 
       const res = await request(app.getHttpServer())
         .post(`/clientes/${id}/convertir-a-cliente`)
@@ -903,6 +913,10 @@ describe('Clientes (e2e)', () => {
       const mensaje = (res.body as { message: string }).message;
       expect(mensaje).toMatch(/domicilio/i);
       expect(mensaje).toMatch(/lista de precios/i);
+      expect(mensaje).toMatch(/encargado/i);
+      expect(mensaje).toContain(
+        'el domicilio, la lista de precios y el encargado',
+      );
 
       // Y sigue siendo prospecto: el 409 no dejo la fila a medias.
       const despues = await db
@@ -935,6 +949,44 @@ describe('Clientes (e2e)', () => {
         .expect(201);
 
       expect((res.body as ClienteDetalleRespuesta).tipo).toBe('cliente');
+    });
+
+    // T-70: el encargado no tiene check en la base, lo exige el servicio.
+    it('responde 409 al convertir un prospecto completo salvo el encargado, y lo convierte al capturarlo', async () => {
+      const id = await sembrarCliente(
+        `${PREFIJO} Sin Encargado`,
+        idTijuana,
+        'prospecto',
+      );
+      await db
+        .updateTable('cliente')
+        .set({ encargado: null })
+        .where('id', '=', id)
+        .execute();
+
+      const res = await request(app.getHttpServer())
+        .post(`/clientes/${id}/convertir-a-cliente`)
+        .set('Cookie', cookieTijuana)
+        .expect(409);
+      expect((res.body as { message: string }).message).toMatch(/encargado/i);
+
+      const despues = await db
+        .selectFrom('cliente')
+        .select('tipo')
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow();
+      expect(despues.tipo).toBe('prospecto');
+
+      await db
+        .updateTable('cliente')
+        .set({ encargado: 'Maria' })
+        .where('id', '=', id)
+        .execute();
+      const ok = await request(app.getHttpServer())
+        .post(`/clientes/${id}/convertir-a-cliente`)
+        .set('Cookie', cookieTijuana)
+        .expect(201);
+      expect((ok.body as ClienteDetalleRespuesta).tipo).toBe('cliente');
     });
 
     it('GET /clientes/:id devuelve domicilio y listaPrecioId nulos en un prospecto de la app', async () => {
