@@ -894,6 +894,13 @@ describe('Clientes (e2e)', () => {
         'prospecto',
         true,
       );
+      // T-70: sembrarCliente ya siembra encargado; aqui se anula para que
+      // falten los TRES campos y se ejerza el mensaje "A, B y C".
+      await db
+        .updateTable('cliente')
+        .set({ encargado: null })
+        .where('id', '=', id)
+        .execute();
 
       const res = await request(app.getHttpServer())
         .post(`/clientes/${id}/convertir-a-cliente`)
@@ -905,6 +912,10 @@ describe('Clientes (e2e)', () => {
       const mensaje = (res.body as { message: string }).message;
       expect(mensaje).toMatch(/domicilio/i);
       expect(mensaje).toMatch(/lista de precios/i);
+      expect(mensaje).toMatch(/encargado/i);
+      expect(mensaje).toContain(
+        'el domicilio, la lista de precios y el encargado',
+      );
 
       // Y sigue siendo prospecto: el 409 no dejo la fila a medias.
       const despues = await db
