@@ -22,8 +22,20 @@ const contexto = (extra: Partial<ContextoVenta> = {}): ContextoVenta => ({
   vendedorId: 'vendedor-1',
   folio: 'TJ260914AP03',
   usuarioId: null,
+  origen: 'app',
+  metodoPagoContado: 'efectivo',
   ...extra,
 });
+
+/** Lo que manda el portal (T-17): a la fecha, con quien capturo y el cobro por transferencia. */
+const contextoPortal = (extra: Partial<ContextoVenta> = {}): ContextoVenta =>
+  contexto({
+    folio: 'TJ260914OF01',
+    usuarioId: 'usuario-oficina',
+    origen: 'portal',
+    metodoPagoContado: 'transferencia',
+    ...extra,
+  });
 
 const venta = (extra: Partial<VentaNormalizada> = {}): VentaNormalizada => ({
   clienteId: CLIENTE,
@@ -87,7 +99,11 @@ describe('VentasService.registrarVenta', () => {
 
     await expect(
       servicio.registrarVenta(venta(), contexto(), trx),
-    ).resolves.toEqual({ id: 'venta-1' });
+    ).resolves.toEqual({
+      id: 'venta-1',
+      montoCentavos: 32400,
+      status: 'pendiente',
+    });
 
     // La existencia de precio se mide desde la FECHA DE OPERACION y cuenta los
     // precios asignados despues, hasta hoy (enmienda de D12): asi se recupera
@@ -114,6 +130,8 @@ describe('VentasService.registrarVenta', () => {
         mes: 9,
         status: 'pendiente',
         pctComision: '3.50',
+        origen: 'app',
+        capturoUsuarioId: null,
       },
       trx,
     );
@@ -327,13 +345,60 @@ describe('VentasService.registrarVenta', () => {
     expect(repo.insertarVenta).not.toHaveBeenCalled();
   });
 
-  it('sin folio es un error de programacion, no un rechazo de negocio (lo decide T-17)', async () => {
-    const { servicio, repo } = montar();
-    const error: unknown = await servicio
-      .registrarVenta(venta(), contexto({ folio: null }), trx)
-      .catch((e: unknown) => e);
-    expect(error).toBeInstanceOf(Error);
-    expect(error).not.toBeInstanceOf(VentaRechazada);
-    expect(repo.clienteParaVenta).not.toHaveBeenCalled();
+  describe('desde el portal (T-17)', () => {
+    it('mide el precio exactamente a la fecha de la venta, no hasta hoy', async () => {
+      const { servicio, precios } = montar();
+      await servicio.registrarVenta(venta(), contextoPortal(), trx);
+      expect(precios.presentacionesConPrecio).toHaveBeenCalledWith(
+        CLIENTE,
+        '2026-09-14',
+        trx,
+        { vigenteHastaHoy: false },
+      );
+    });
+
+    it('guarda origen portal y quien la capturo', async () => {
+      const { servicio, repo } = montar();
+      await servicio.registrarVenta(venta(), contextoPortal(), trx);
+      expect(repo.insertarVenta).toHaveBeenCalledWith(
+        expect.objectContaining({
+          folio: 'TJ260914OF01',
+          vendedorId: 'vendedor-1',
+          origen: 'portal',
+          capturoUsuarioId: 'usuario-oficina',
+        }),
+        trx,
+      );
+    });
+
+    it('una venta de Oficina va sin vendedor, y su cobro de contado tambien, con el metodo elegido', async () => {
+      const { servicio, repo, cobranzas } = montar();
+      await expect(
+        servicio.registrarVenta(
+          venta({ contadoCredito: 'contado' }),
+          contextoPortal({ vendedorId: null }),
+          trx,
+        ),
+      ).resolves.toEqual({
+        id: 'venta-1',
+        montoCentavos: 32400,
+        status: 'pagada',
+      });
+
+      expect(repo.insertarVenta).toHaveBeenCalledWith(
+        expect.objectContaining({ vendedorId: null, status: 'pagada' }),
+        trx,
+      );
+      expect(cobranzas.insertarAbono).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vendedorId: null,
+          metodoPago: 'transferencia',
+          monto: '324.00',
+          folio: 'TJ260914OF01',
+          origen: 'venta_contado',
+        }),
+        trx,
+      );
+    });
   });
 });

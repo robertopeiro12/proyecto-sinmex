@@ -79,6 +79,8 @@ describe('prepararProyeccion', () => {
       ok: true,
       proyeccion: {
         tipo: 'venta',
+        // T-17: el folio viaja con la proyeccion; `ContextoVenta.folio` ya no admite null.
+        folio: 'TJ260914AP03',
         venta: {
           clienteId: CLIENTE,
           numNota: '2346',

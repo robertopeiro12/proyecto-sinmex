@@ -27,7 +27,8 @@ export interface NotaBloqueada {
 /** Una fila de `cobranza_abono` lista para escribir. El dinero ya viene como texto (`aPesos`). */
 export interface NuevoAbono {
   ventaNotaId: string;
-  vendedorId: string;
+  /** `null` en el cobro de contado de una venta de Oficina (T-17). */
+  vendedorId: string | null;
   fechaPago: string;
   fechaOperacion: string;
   monto: string;

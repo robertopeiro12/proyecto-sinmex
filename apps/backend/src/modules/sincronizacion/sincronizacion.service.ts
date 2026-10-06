@@ -414,8 +414,12 @@ export class SincronizacionService {
             // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
             fechaOperacion: op.fechaOperacion,
             vendedorId: vendedor.id,
-            folio: op.folio,
+            folio: proyeccion.folio,
             usuarioId: null,
+            // T-17: la tablet no cambia. Su venta de contado se sigue cobrando
+            // en efectivo y su precio se mide hasta hoy, como desde T-16/T-20.
+            origen: 'app',
+            metodoPagoContado: 'efectivo',
           },
           trx,
         );

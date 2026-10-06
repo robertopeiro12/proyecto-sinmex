@@ -3,6 +3,7 @@ import type { Transaction } from 'kysely';
 import type { DB } from '../../database/schema';
 import type { FacturaVenta } from './datos-venta';
 import type { ContadoCredito, StatusInicial } from './reglas-venta';
+import type { OrigenVenta } from './ventas.service';
 
 /** Cabecera lista para escribir. El dinero ya viene como texto `numeric` (`aPesos`). */
 export interface NuevaVentaNota {
@@ -10,7 +11,8 @@ export interface NuevaVentaNota {
   /** `fecha_operacion` tal cual llego. */
   fecha: string;
   clienteId: string;
-  vendedorId: string;
+  /** `null` en una venta de Oficina (T-17). */
+  vendedorId: string | null;
   sucursalId: string;
   montoTotal: string;
   numNota: string;
@@ -22,6 +24,10 @@ export interface NuevaVentaNota {
   status: StatusInicial;
   /** Texto `numeric(5,2)` tal cual lo devolvio `pg`, o `null`. */
   pctComision: string | null;
+  /** T-17: `app` o `portal`. */
+  origen: OrigenVenta;
+  /** T-17: quien la capturo en el portal; `null` desde la tablet. */
+  capturoUsuarioId: string | null;
 }
 
 export interface NuevoDetalleVenta {
@@ -85,6 +91,8 @@ export class VentasRepository {
         mes: venta.mes,
         status: venta.status,
         pct_comision: venta.pctComision,
+        origen: venta.origen,
+        capturo_usuario_id: venta.capturoUsuarioId,
       })
       .returning('id')
       .executeTakeFirstOrThrow();
