@@ -219,6 +219,17 @@ usuario con sesion pasa.
 - **Una venta de mostrador no tiene vendedor** (`venta_nota.vendedor_id` null, "Oficina" en la
   pantalla). La base solo lo permite con `origen = 'portal'`, y entonces exige `capturo_usuario_id`
   (`ck_venta_nota_origen_actores`). Toda venta de la tablet sigue llevando vendedor.
+- **Toda corrección de una venta va por el portal (T-17, parte 2)**, venga de la tablet o del
+  portal: `PATCH`/`DELETE /ventas/:id` y `POST /ventas/:id/cuenta-perdida`
+  (`ventas-cobranza/ventas-edicion.service.ts`), con el permiso `venta.editar_eliminar`.
+  - Bloquean la venta con `for update of vn` y **nunca** cambian folio, cliente, fecha, sucursal ni
+    origen. Un folio eliminado no se reutiliza.
+  - Una venta con abonos vivos de `origen = 'cobro'`, o en cuenta perdida, no se edita ni se elimina.
+    Quitar cobros es T-34.
+  - Las líneas existentes conservan su precio guardado; las nuevas toman el de la lista **a la fecha
+    de la venta**.
+  - `uq_venta_detalle_presentacion` es un índice **parcial** (`where deleted_at is null`), para poder
+    volver a agregar una presentación que se quitó.
 
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
 `--`: sin él, npm se come los argumentos).
