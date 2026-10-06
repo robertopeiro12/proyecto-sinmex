@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { CarteraClientesModule } from '../cartera-clientes/cartera-clientes.module';
 import { CobranzasRepository } from './cobranzas.repository';
 import { CobranzasService } from './cobranzas.service';
+import { FoliosOficinaRepository } from './folios-oficina.repository';
 import { VentasRepository } from './ventas.repository';
 import { VentasService } from './ventas.service';
 
@@ -16,6 +17,7 @@ import { VentasService } from './ventas.service';
     VentasRepository,
     CobranzasService,
     CobranzasRepository,
+    FoliosOficinaRepository,
   ],
   exports: [VentasService, CobranzasService],
 })
