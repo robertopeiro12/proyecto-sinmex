@@ -430,7 +430,7 @@ describe('Foto del prospecto (e2e)', () => {
       datos: {
         nombre: `${PREFIJO} Rechazada Y Corregida`,
         telefono: '6641112233',
-        encargado: null,
+        encargado: 'Don Aaron',
         tipo_negocio_id: tipoNegocioId,
         comentarios: null,
         lat: null,
