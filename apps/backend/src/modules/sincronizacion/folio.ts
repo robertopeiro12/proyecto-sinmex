@@ -45,6 +45,14 @@ export const LARGO_FOLIO = 12;
  */
 export const MAX_OPERACIONES_POR_DIA = 99;
 
+/**
+ * El 5o segmento de los folios que emite el SERVIDOR para las ventas del
+ * portal (T-17, §4.4 del spec): `TJ261006OF01`. Ningun vendedor puede tenerlo
+ * (`ck_vendedor_folio_segmento_no_oficina`), asi que un folio de oficina nunca
+ * choca con uno de tablet.
+ */
+export const SEGMENTO_OFICINA = 'OF';
+
 export interface FolioPartido {
   sucursal: string;
   /** Ano de 2 digitos, tal como viaja en el folio. */

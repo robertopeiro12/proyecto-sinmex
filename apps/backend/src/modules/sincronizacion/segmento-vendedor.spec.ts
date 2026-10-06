@@ -110,3 +110,13 @@ describe('segmento de vendedor del folio', () => {
     expect(candidatos[0]).toBe('AP');
   });
 });
+
+describe('el segmento OF es de la oficina (T-17)', () => {
+  it('candidatosDeSegmento no lo esconde: el alta tiene que poder rechazarlo', () => {
+    expect(candidatosDeSegmento('Oscar Flores')[0]).toBe('OF');
+  });
+
+  it('asignarSegmento nunca lo entrega, aunque este libre', () => {
+    expect(asignarSegmento('Oscar Flores', new Set())).toBe('OL');
+  });
+});
