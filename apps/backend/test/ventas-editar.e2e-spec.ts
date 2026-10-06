@@ -311,6 +311,41 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
       .execute();
   };
 
+  /** Todas las lineas de la venta, vivas y borradas, en orden de alta. */
+  const lineasDe = (id: string) =>
+    db
+      .selectFrom('venta_nota_detalle')
+      .select([
+        'presentacion_id',
+        'cantidad',
+        'cantidad_promocion',
+        'precio',
+        'deleted_at',
+      ])
+      .where('venta_nota_id', '=', id)
+      .orderBy('created_at')
+      .execute();
+
+  /** Todos los abonos de la venta, vivos y borrados, en orden de alta. */
+  const cobrosDe = (id: string) =>
+    db
+      .selectFrom('cobranza_abono')
+      .select([
+        'monto',
+        'metodo_pago',
+        'vendedor_id',
+        'origen',
+        'folio',
+        'deleted_at',
+        sql<string>`to_char(fecha_pago, 'YYYY-MM-DD')`.as('fecha_pago'),
+      ])
+      .where('venta_nota_id', '=', id)
+      .orderBy('created_at')
+      .execute();
+
+  const vivas = <T extends { deleted_at: Date | null }>(filas: T[]) =>
+    filas.filter((f) => f.deleted_at === null);
+
   let consecutivoTablet = 0;
   /**
    * Una venta capturada en la TABLET y subida por el push (T-16): 10 de 1 L a
@@ -900,6 +935,515 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
     it('basta la sesión', async () => {
       const v = await registrar();
       await detalle(cookieSinPermiso, v.id).expect(200);
+    });
+  });
+
+  describe('PATCH /ventas/:id (editar, §4.2)', () => {
+    const editar = (
+      id: string,
+      cuerpo: Record<string, unknown>,
+      cookie = cookieGeneral,
+    ) =>
+      request(app.getHttpServer())
+        .patch(`/ventas/${id}`)
+        .set('Cookie', cookie)
+        .send(cuerpo);
+
+    /** El estado completo de lo editable, como lo manda la pantalla. */
+    const cambios = (numNota: string, extra: Record<string, unknown> = {}) => ({
+      vendedorId: vendedorTj,
+      numNota,
+      contadoCredito: 'credito',
+      factura: 'N/A',
+      lineas: [
+        { presentacionId: pre1, cantidad: 24, cantidadPromocion: 2 },
+        { presentacionId: pre2, cantidad: 5, cantidadPromocion: 0 },
+      ],
+      ...extra,
+    });
+
+    const pctDelCliente = (pct: string) =>
+      db
+        .updateTable('cliente')
+        .set({ pct_comision: pct })
+        .where('id', '=', clienteTj)
+        .execute();
+
+    it('cambia cantidades: recalcula monto y status, conserva lo fijo y deja quién editó', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      const res = await editar(
+        v.id,
+        cambios(v.numNota, {
+          lineas: [
+            { presentacionId: pre1, cantidad: 10, cantidadPromocion: 0 },
+          ],
+        }),
+      ).expect(200);
+      const venta = res.body as VentaDetalle;
+      expect(venta).toMatchObject({
+        id: v.id,
+        folio: v.folio,
+        fecha: FECHA_EDICION,
+        clienteId: clienteTj,
+        montoCentavos: 10000,
+        status: 'pendiente',
+        editable: true,
+      });
+      expect(venta.lineas).toEqual([
+        expect.objectContaining({
+          presentacionId: pre1,
+          cantidad: 10,
+          cantidadPromocion: 0,
+          precioCentavos: 1000,
+        }),
+      ]);
+
+      const fila = await ventaPorId(v.id);
+      expect(fila).toMatchObject({
+        folio: v.folio,
+        cliente_id: clienteTj,
+        sucursal_id: tjId,
+        origen: 'portal',
+        capturo_usuario_id: usuarioGeneralId,
+        actualizado_por_usuario_id: usuarioGeneralId,
+        monto_total: '100.00',
+        status: 'pendiente',
+      });
+      // La linea que ya no viene queda borrada, no desaparece.
+      const lineas = await lineasDe(v.id);
+      expect(lineas).toHaveLength(2);
+      expect(vivas(lineas).map((l) => l.presentacion_id)).toEqual([pre1]);
+    });
+
+    it('solo piezas de promoción: monto 0 y status promoción', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      const venta = (
+        await editar(
+          v.id,
+          cambios(v.numNota, {
+            lineas: [
+              { presentacionId: pre1, cantidad: 0, cantidadPromocion: 3 },
+            ],
+          }),
+        ).expect(200)
+      ).body as VentaDetalle;
+      expect(venta).toMatchObject({ montoCentavos: 0, status: 'promocion' });
+    });
+
+    it('conserva el precio de una línea aunque la lista cambie; una nueva toma la lista a la fecha', async () => {
+      const v = await registrar({
+        fecha: FECHA_CAMBIO_LISTA,
+        lineas: [{ presentacionId: pre1, cantidad: 2, cantidadPromocion: 0 }],
+      });
+      // La lista del 1 L sube ESE MISMO dia, despues de grabada la venta.
+      const subida = await sembrarPrecio(
+        pre1,
+        tjId,
+        '11.00',
+        FECHA_CAMBIO_LISTA,
+      );
+      try {
+        const venta = (
+          await editar(
+            v.id,
+            cambios(v.numNota, {
+              lineas: [
+                { presentacionId: pre1, cantidad: 3, cantidadPromocion: 0 },
+                { presentacionId: pre2, cantidad: 4, cantidadPromocion: 0 },
+              ],
+            }),
+          ).expect(200)
+        ).body as VentaDetalle;
+        // 3 × 10.00 (guardado) + 4 × 6.00 (precio especial del cliente a la fecha).
+        expect(venta.montoCentavos).toBe(5400);
+        expect(
+          venta.lineas.map((l) => [l.presentacionId, l.precioCentavos]),
+        ).toEqual([
+          [pre1, 1000],
+          [pre2, 600],
+        ]);
+      } finally {
+        await db.deleteFrom('precio').where('id', '=', subida).execute();
+      }
+    });
+
+    it('una presentación nueva sin precio A LA FECHA de la venta es 409 aunque hoy sí tenga', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      const res = await editar(
+        v.id,
+        cambios(v.numNota, {
+          lineas: [{ presentacionId: pre3, cantidad: 1, cantidadPromocion: 0 }],
+        }),
+      ).expect(409);
+      expect((res.body as { message: string }).message).toContain(
+        FECHA_EDICION,
+      );
+      expect((await ventaPorId(v.id)).monto_total).toBe('270.00');
+    });
+
+    it('una presentación nueva de pura promoción entra aunque no tenga precio', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      const venta = (
+        await editar(
+          v.id,
+          cambios(v.numNota, {
+            lineas: [
+              { presentacionId: pre1, cantidad: 24, cantidadPromocion: 2 },
+              {
+                presentacionId: preSinPrecio,
+                cantidad: 0,
+                cantidadPromocion: 2,
+              },
+            ],
+          }),
+        ).expect(200)
+      ).body as VentaDetalle;
+      expect(
+        venta.lineas.find((l) => l.presentacionId === preSinPrecio),
+      ).toMatchObject({ precioCentavos: 0, cantidadPromocion: 2 });
+    });
+
+    it('quitar una presentación y volver a agregarla', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      await editar(
+        v.id,
+        cambios(v.numNota, {
+          lineas: [
+            { presentacionId: pre1, cantidad: 24, cantidadPromocion: 2 },
+          ],
+        }),
+      ).expect(200);
+      await editar(
+        v.id,
+        cambios(v.numNota, {
+          lineas: [
+            { presentacionId: pre1, cantidad: 24, cantidadPromocion: 2 },
+            { presentacionId: pre2, cantidad: 7, cantidadPromocion: 0 },
+          ],
+        }),
+      ).expect(200);
+
+      const lineas = await lineasDe(v.id);
+      expect(lineas.filter((l) => l.presentacion_id === pre2)).toHaveLength(2);
+      expect(
+        vivas(lineas).find((l) => l.presentacion_id === pre2),
+      ).toMatchObject({
+        cantidad: 7,
+        precio: '6.00',
+      });
+    });
+
+    it('un precio en el cuerpo se ignora: el servidor pone el suyo', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      const venta = (
+        await editar(
+          v.id,
+          cambios(v.numNota, {
+            lineas: [
+              {
+                presentacionId: pre1,
+                cantidad: 1,
+                cantidadPromocion: 0,
+                precioCentavos: 1,
+              },
+            ],
+          }),
+        ).expect(200)
+      ).body as VentaDetalle;
+      expect(venta.lineas[0].precioCentavos).toBe(1000);
+    });
+
+    it('contado → crédito quita el cobro de contado', async () => {
+      const v = await registrar({
+        fecha: FECHA_EDICION,
+        contadoCredito: 'contado',
+        metodoPago: 'efectivo',
+      });
+      const venta = (await editar(v.id, cambios(v.numNota)).expect(200))
+        .body as VentaDetalle;
+      expect(venta).toMatchObject({
+        status: 'pendiente',
+        saldoCentavos: 27000,
+        cobros: [],
+      });
+      const cobros = await cobrosDe(v.id);
+      expect(cobros).toHaveLength(1);
+      expect(vivas(cobros)).toEqual([]);
+    });
+
+    it('crédito → contado lo crea con el método elegido, la fecha de la venta y el repartidor', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      const venta = (
+        await editar(
+          v.id,
+          cambios(v.numNota, {
+            contadoCredito: 'contado',
+            metodoPago: 'efectivo',
+          }),
+        ).expect(200)
+      ).body as VentaDetalle;
+      expect(venta).toMatchObject({ status: 'pagada', saldoCentavos: 0 });
+      expect(vivas(await cobrosDe(v.id))).toEqual([
+        {
+          monto: '270.00',
+          metodo_pago: 'efectivo',
+          vendedor_id: vendedorTj,
+          origen: 'venta_contado',
+          folio: v.folio,
+          deleted_at: null,
+          fecha_pago: FECHA_EDICION,
+        },
+      ]);
+    });
+
+    it('contado → contado reescribe el cobro con el monto nuevo y, sin método, conserva el anterior', async () => {
+      const v = await registrar({
+        fecha: FECHA_EDICION,
+        contadoCredito: 'contado',
+        metodoPago: 'efectivo',
+      });
+      await editar(
+        v.id,
+        cambios(v.numNota, {
+          contadoCredito: 'contado',
+          lineas: [{ presentacionId: pre1, cantidad: 3, cantidadPromocion: 0 }],
+        }),
+      ).expect(200);
+      const cobros = await cobrosDe(v.id);
+      expect(cobros).toHaveLength(2);
+      expect(vivas(cobros)).toEqual([
+        expect.objectContaining({ monto: '30.00', metodo_pago: 'efectivo' }),
+      ]);
+    });
+
+    it('una venta de contado que queda en $0 no deja cobro', async () => {
+      const v = await registrar({
+        fecha: FECHA_EDICION,
+        contadoCredito: 'contado',
+      });
+      const venta = (
+        await editar(
+          v.id,
+          cambios(v.numNota, {
+            contadoCredito: 'contado',
+            lineas: [
+              { presentacionId: pre1, cantidad: 0, cantidadPromocion: 4 },
+            ],
+          }),
+        ).expect(200)
+      ).body as VentaDetalle;
+      expect(venta.status).toBe('promocion');
+      expect(vivas(await cobrosDe(v.id))).toEqual([]);
+    });
+
+    it('Oficina → vendedor congela el % ACTUAL del cliente', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION, vendedorId: null });
+      expect((await ventaPorId(v.id)).pct_comision).toBeNull();
+      await pctDelCliente('4.25');
+      try {
+        await editar(v.id, cambios(v.numNota)).expect(200);
+        expect((await ventaPorId(v.id)).pct_comision).toBe('4.25');
+      } finally {
+        await pctDelCliente('3.50');
+      }
+    });
+
+    it('mismo vendedor conserva el % congelado aunque el cliente haya cambiado', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      await pctDelCliente('4.25');
+      try {
+        await editar(v.id, cambios(v.numNota)).expect(200);
+        expect((await ventaPorId(v.id)).pct_comision).toBe('3.50');
+      } finally {
+        await pctDelCliente('3.50');
+      }
+    });
+
+    it('de un vendedor a otro congela el % actual del cliente', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      await pctDelCliente('4.25');
+      try {
+        await editar(
+          v.id,
+          cambios(v.numNota, { vendedorId: vendedorTj2 }),
+        ).expect(200);
+        expect(await ventaPorId(v.id)).toMatchObject({
+          vendedor_id: vendedorTj2,
+          pct_comision: '4.25',
+        });
+      } finally {
+        await pctDelCliente('3.50');
+      }
+    });
+
+    it('vendedor → Oficina: % en null y el cobro de contado sin cobrador', async () => {
+      const v = await registrar({
+        fecha: FECHA_EDICION,
+        contadoCredito: 'contado',
+      });
+      await editar(
+        v.id,
+        cambios(v.numNota, { vendedorId: null, contadoCredito: 'contado' }),
+      ).expect(200);
+      expect(await ventaPorId(v.id)).toMatchObject({
+        vendedor_id: null,
+        pct_comision: null,
+      });
+      expect(vivas(await cobrosDe(v.id))).toEqual([
+        expect.objectContaining({
+          vendedor_id: null,
+          metodo_pago: 'transferencia',
+        }),
+      ]);
+    });
+
+    it('un repartidor inactivo o de otra sucursal es 400', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      await editar(
+        v.id,
+        cambios(v.numNota, { vendedorId: vendedorTjInactivo }),
+      ).expect(400);
+      await editar(v.id, cambios(v.numNota, { vendedorId: vendedorMx })).expect(
+        400,
+      );
+    });
+
+    // Review Focus 2
+    it('si el repartidor no cambia no se vuelve a validar, aunque ya esté inactivo', async () => {
+      const v = await registrar({
+        fecha: FECHA_EDICION,
+        vendedorId: vendedorTj2,
+      });
+      await db
+        .updateTable('vendedor')
+        .set({ activo: false })
+        .where('id', '=', vendedorTj2)
+        .execute();
+      try {
+        await editar(
+          v.id,
+          cambios(v.numNota, { vendedorId: vendedorTj2 }),
+        ).expect(200);
+      } finally {
+        await db
+          .updateTable('vendedor')
+          .set({ activo: true })
+          .where('id', '=', vendedorTj2)
+          .execute();
+      }
+    });
+
+    it('el # de nota repetido en la sucursal es 409', async () => {
+      const otra = await registrar({
+        fecha: FECHA_EDICION,
+        numNota: `NR${SUFIJO}`,
+      });
+      const v = await registrar({ fecha: FECHA_EDICION });
+      const res = await editar(v.id, cambios(` nr${SUFIJO} `)).expect(409);
+      expect((res.body as { message: string }).message).toBe(
+        `Ya existe la nota nr${SUFIJO} en esta sucursal.`,
+      );
+      expect(otra.id).not.toBe(v.id);
+    });
+
+    // Review Focus 4
+    it('conservar el propio # de nota (con otras mayúsculas o espacios) no es duplicado', async () => {
+      const v = await registrar({
+        fecha: FECHA_EDICION,
+        numNota: `PN${SUFIJO}`,
+      });
+      await editar(v.id, cambios(`  pn${SUFIJO}  `)).expect(200);
+      expect((await ventaPorId(v.id)).num_nota).toBe(`pn${SUFIJO}`);
+    });
+
+    it('con abonos de cobranza es 409 y no cambia nada', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      await abonar(v.id, '50.00');
+      const res = await editar(
+        v.id,
+        cambios(v.numNota, {
+          lineas: [{ presentacionId: pre1, cantidad: 1, cantidadPromocion: 0 }],
+        }),
+      ).expect(409);
+      expect((res.body as { message: string }).message).toBe(
+        'Tiene cobros registrados: no se puede editar.',
+      );
+      expect((await ventaPorId(v.id)).monto_total).toBe('270.00');
+    });
+
+    it('una venta marcada como cuenta perdida no se edita', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      await db
+        .updateTable('venta_nota')
+        .set({ status: 'cuenta_perdida' })
+        .where('id', '=', v.id)
+        .execute();
+      await editar(v.id, cambios(v.numNota)).expect(409);
+    });
+
+    it('sin permiso 403; otra sucursal 403; inexistente o eliminada 404', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      await editar(v.id, cambios(v.numNota), cookieSinPermiso).expect(403);
+
+      const mx = await registrar({
+        fecha: FECHA_EDICION,
+        clienteId: clienteMx,
+        vendedorId: vendedorMx,
+        lineas: [{ presentacionId: pre1, cantidad: 1, cantidadPromocion: 0 }],
+      });
+      await editar(
+        mx.id,
+        cambios(mx.numNota, {
+          vendedorId: vendedorMx,
+          lineas: [{ presentacionId: pre1, cantidad: 2, cantidadPromocion: 0 }],
+        }),
+        cookieTijuana,
+      ).expect(403);
+
+      await editar(randomUUID(), cambios(nota())).expect(404);
+      await db
+        .updateTable('venta_nota')
+        .set({ deleted_at: sql`now()` })
+        .where('id', '=', v.id)
+        .execute();
+      await editar(v.id, cambios(v.numNota)).expect(404);
+    });
+
+    it('una venta de la tablet: conserva su precio, no acepta Oficina y sigue siendo de la tablet', async () => {
+      const t = await ventaDeTablet();
+      const res = await editar(
+        t.id,
+        cambios(t.numNota, {
+          vendedorId: null,
+          lineas: [
+            { presentacionId: pre1, cantidad: 12, cantidadPromocion: 0 },
+          ],
+        }),
+      ).expect(400);
+      expect((res.body as { message: string }).message).toBe(
+        'Una venta de tablet debe tener vendedor.',
+      );
+
+      const venta = (
+        await editar(
+          t.id,
+          cambios(t.numNota, {
+            vendedorId: vendedorApp,
+            lineas: [
+              { presentacionId: pre1, cantidad: 12, cantidadPromocion: 0 },
+            ],
+          }),
+        ).expect(200)
+      ).body as VentaDetalle;
+      // 12 × 9.00: el precio de la nota firmada, no el 10.00 de la lista.
+      expect(venta).toMatchObject({ montoCentavos: 10800, origen: 'app' });
+      expect(await ventaPorId(t.id)).toMatchObject({
+        origen: 'app',
+        vendedor_id: vendedorApp,
+        capturo_usuario_id: null,
+        actualizado_por_usuario_id: usuarioGeneralId,
+        folio: t.folio,
+      });
     });
   });
 });

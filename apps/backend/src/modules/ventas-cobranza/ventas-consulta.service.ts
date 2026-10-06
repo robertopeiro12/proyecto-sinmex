@@ -100,6 +100,16 @@ export class VentasConsultaService {
     return this.completar(cabecera);
   }
 
+  /**
+   * El detalle SIN comprobar alcance: para la edicion, que ya lo comprobo
+   * dentro de su transaccion. 404 si la venta ya no existe.
+   */
+  async leerDetalle(id: string): Promise<VentaDetalle> {
+    const cabecera = await this.repo.cabecera(id);
+    if (!cabecera) throw new NotFoundException('No existe esa venta.');
+    return this.completar(cabecera);
+  }
+
   /** Lineas, cobros, saldo y banderas: lo mismo para el detalle y tras una escritura. */
   private async completar(cabecera: CabeceraVenta): Promise<VentaDetalle> {
     const [lineas, cobros] = await Promise.all([
