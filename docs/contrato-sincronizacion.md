@@ -230,7 +230,8 @@ viaja en el `pull`: el precio es del administrador a propósito.
 > subieron.
 >
 > **Al publicar la primera tablet hay que revisarlo.** Donde toca resolverlo de
-> verdad es en **T-43** (versión por fila).
+> verdad es en **T-43** (versión por fila). Y revisar también el `encargado`
+> obligatorio del prospecto (T-69, §6): tampoco subió la versión.
 
 La base local de la tablet relajó la misma columna (migración local
 `005-prospecto-campos-opcionales`). Sin eso, el `insert` del snapshot fallaría
@@ -434,6 +435,16 @@ Es el **único** tipo que crea una fila de *catálogo* (`cliente` con
   }
 }
 ```
+
+> [!note] T-69 volvió obligatorio `encargado` y NO subió la versión
+> Pasar un campo de nullable a obligatorio es el mismo tipo de cambio que el §3
+> manda versionar, y aun así no se subió, por el mismo motivo que la advertencia
+> del §5 (domicilio): subir solo `CONTRATO_ACTUAL` no protege a nadie
+> (`CONTRATO_MINIMO` sigue en 1) y subir `CONTRATO_MINIMO` dejaría sin servicio a
+> tablets por una rotura que hoy no puede ocurrir, porque la app no se ha
+> publicado nunca. Un build viejo que mande `encargado: null` recibe un rechazo
+> **por operación** (`datos-invalidos`), no un lote fallido. Revisarlo al
+> publicar la primera tablet.
 
 Los campos son los que **dictó el cliente** en agosto de 2026 (ver
 `10-Dominio/Entidades/Cliente.md` en el vault). Lo que **no** viaja:

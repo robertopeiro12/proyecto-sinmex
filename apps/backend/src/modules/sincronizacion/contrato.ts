@@ -246,7 +246,8 @@ export type DatosProspecto = {
   /**
    * Nombre del encargado: quien atiende el negocio. Obligatorio junto con
    * `nombre` y `telefono` (confirmado por el cliente en junta, 2026-09-29 —
-   * antes era opcional).
+   * antes era opcional). No subió la versión del contrato: ver
+   * `docs/contrato-sincronizacion.md` §6 (nota de T-69).
    */
   encargado: string;
   /** Del catalogo `tipos_negocio` que baja en el `pull`. */
