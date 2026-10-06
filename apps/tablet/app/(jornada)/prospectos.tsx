@@ -102,7 +102,8 @@ export default function Prospectos() {
     vendedor !== null &&
     sucursalId !== null &&
     nombre.trim() !== '' &&
-    telefono.trim() !== '';
+    telefono.trim() !== '' &&
+    encargado.trim() !== '';
 
   async function ubicar() {
     setAvisoUbicacion(null);
@@ -170,7 +171,7 @@ export default function Prospectos() {
         sucursalId,
         nombre,
         telefono,
-        encargado: encargado.trim() === '' ? null : encargado,
+        encargado: encargado.trim(),
         tipoNegocioId,
         comentarios: comentarios.trim() === '' ? null : comentarios,
         lat: ubicacion?.lat ?? null,
@@ -229,7 +230,7 @@ export default function Prospectos() {
         etiqueta="Encargado"
         value={encargado}
         onChangeText={setEncargado}
-        placeholder="Quién atiende (opcional)"
+        placeholder="Quién atiende"
         autoCapitalize="words"
       />
 
