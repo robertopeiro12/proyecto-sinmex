@@ -13,6 +13,7 @@ import { PasswordService } from './../src/modules/auth/password.service';
 interface VehiculoRespuesta {
   id: string;
   nombre: string;
+  placas: string | null;
   kmInicial: number | null;
   sucursalId: string;
   sucursalCodigo: string;
@@ -32,6 +33,11 @@ const PASSWORD = 'contrasena-de-prueba';
 // Prefijo reservado: la limpieza de afterAll borra por `nombre like`. Sin el,
 // una corrida que deje basura envenena la siguiente con 409 inesperados.
 const PREFIJO = `ZZ-e2e-${SUFIJO}`;
+
+// `placas` admite 20 caracteres como maximo, y PREFIJO ya los rebasa solo. Este
+// prefijo corto (timestamp y PID en base 36) sigue siendo unico por proceso; el
+// indice de placas es global, asi que no puede repetirse entre suites.
+const PLACA = `${(Date.now() % 36 ** 6).toString(36)}${process.pid.toString(36)}`;
 
 describe('Vehiculos (e2e)', () => {
   let app: INestApplication<App>;
@@ -85,13 +91,21 @@ describe('Vehiculos (e2e)', () => {
   };
 
   /** Inserta un vehiculo por debajo de la API, para preparar escenarios. */
+  /** Un vehiculo con `placas: undefined` se siembra SIN placa — asi se prueban
+   * los vehiculos "viejos" que ya existian antes de T-68. */
   const sembrarVehiculo = async (
     nombre: string,
     sucursalId: string,
+    placas?: string,
   ): Promise<string> => {
     const { id } = await db
       .insertInto('vehiculo')
-      .values({ nombre, sucursal_id: sucursalId, km_inicial: 1000 })
+      .values({
+        nombre,
+        sucursal_id: sucursalId,
+        km_inicial: 1000,
+        ...(placas !== undefined ? { placas } : {}),
+      })
       .returning('id')
       .executeTakeFirstOrThrow();
     return id;
@@ -228,11 +242,16 @@ describe('Vehiculos (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/vehiculos')
         .set('Cookie', cookieTijuana)
-        .send({ nombre: `${PREFIJO} Nissan TJ`, kmInicial: 145230.5 })
+        .send({
+          nombre: `${PREFIJO} Nissan TJ`,
+          placas: `${PLACA}-001`,
+          kmInicial: 145230.5,
+        })
         .expect(201);
 
       const vehiculo = res.body as VehiculoRespuesta;
       expect(vehiculo.sucursalCodigo).toBe('TJ');
+      expect(vehiculo.placas).toBe(`${PLACA}-001`);
       expect(vehiculo.kmInicial).toBe(145230.5);
       expect(vehiculo.activo).toBe(true);
     });
@@ -246,6 +265,7 @@ describe('Vehiculos (e2e)', () => {
         .set('Cookie', cookieTijuana)
         .send({
           nombre: `${PREFIJO} Colado`,
+          placas: `${PLACA}-002`,
           kmInicial: 100,
           sucursalId: idMexicali,
         })
@@ -260,6 +280,7 @@ describe('Vehiculos (e2e)', () => {
         .set('Cookie', cookieGeneral)
         .send({
           nombre: `${PREFIJO} Nissan MX`,
+          placas: `${PLACA}-003`,
           kmInicial: 200,
           sucursalId: idMexicali,
         })
@@ -272,22 +293,32 @@ describe('Vehiculos (e2e)', () => {
       await request(app.getHttpServer())
         .post('/vehiculos')
         .set('Cookie', cookieGeneral)
-        .send({ nombre: `${PREFIJO} Sin sucursal`, kmInicial: 300 })
+        .send({
+          nombre: `${PREFIJO} Sin sucursal`,
+          placas: `${PLACA}-004`,
+          kmInicial: 300,
+        })
         .expect(400);
     });
 
     it('rechaza un nombre repetido en la misma sucursal con 409', async () => {
-      const cuerpo = { nombre: `${PREFIJO} Repetido`, kmInicial: 400 };
+      const cuerpo = {
+        nombre: `${PREFIJO} Repetido`,
+        placas: `${PLACA}-005`,
+        kmInicial: 400,
+      };
       await request(app.getHttpServer())
         .post('/vehiculos')
         .set('Cookie', cookieTijuana)
         .send(cuerpo)
         .expect(201);
 
+      // Mismo nombre, placa DISTINTA: lo que se prueba aqui es el unique de
+      // nombre, no el de placas (Task 1 ya lo cubre por separado).
       await request(app.getHttpServer())
         .post('/vehiculos')
         .set('Cookie', cookieTijuana)
-        .send(cuerpo)
+        .send({ ...cuerpo, placas: `${PLACA}-005b` })
         .expect(409);
     });
 
@@ -295,20 +326,32 @@ describe('Vehiculos (e2e)', () => {
       await request(app.getHttpServer())
         .post('/vehiculos')
         .set('Cookie', cookieTijuana)
-        .send({ nombre: `${PREFIJO} Mayusculas`, kmInicial: 500 })
+        .send({
+          nombre: `${PREFIJO} Mayusculas`,
+          placas: `${PLACA}-006`,
+          kmInicial: 500,
+        })
         .expect(201);
 
       await request(app.getHttpServer())
         .post('/vehiculos')
         .set('Cookie', cookieTijuana)
-        .send({ nombre: `${PREFIJO} MAYUSCULAS`, kmInicial: 500 })
+        .send({
+          nombre: `${PREFIJO} MAYUSCULAS`,
+          placas: `${PLACA}-006b`,
+          kmInicial: 500,
+        })
         .expect(409);
     });
 
     // D4: el indice no filtra por `activo`, asi que desactivar no libera el
     // nombre. Lo que se quiere en ese caso es reactivar, no duplicar.
     it('un vehiculo desactivado sigue reservando su nombre', async () => {
-      const id = await sembrarVehiculo(`${PREFIJO} Dormido`, idTijuana);
+      const id = await sembrarVehiculo(
+        `${PREFIJO} Dormido`,
+        idTijuana,
+        `${PLACA}-007`,
+      );
       await db
         .updateTable('vehiculo')
         .set({ activo: false })
@@ -318,7 +361,11 @@ describe('Vehiculos (e2e)', () => {
       await request(app.getHttpServer())
         .post('/vehiculos')
         .set('Cookie', cookieTijuana)
-        .send({ nombre: `${PREFIJO} Dormido`, kmInicial: 600 })
+        .send({
+          nombre: `${PREFIJO} Dormido`,
+          placas: `${PLACA}-007b`,
+          kmInicial: 600,
+        })
         .expect(409);
     });
 
@@ -328,6 +375,7 @@ describe('Vehiculos (e2e)', () => {
         .set('Cookie', cookieGeneral)
         .send({
           nombre: `${PREFIJO} Compartido`,
+          placas: `${PLACA}-008a`,
           kmInicial: 700,
           sucursalId: idTijuana,
         })
@@ -338,6 +386,7 @@ describe('Vehiculos (e2e)', () => {
         .set('Cookie', cookieGeneral)
         .send({
           nombre: `${PREFIJO} Compartido`,
+          placas: `${PLACA}-008b`,
           kmInicial: 700,
           sucursalId: idMexicali,
         })
@@ -348,7 +397,11 @@ describe('Vehiculos (e2e)', () => {
       await request(app.getHttpServer())
         .post('/vehiculos')
         .set('Cookie', cookieSinPermiso)
-        .send({ nombre: `${PREFIJO} Prohibido`, kmInicial: 800 })
+        .send({
+          nombre: `${PREFIJO} Prohibido`,
+          placas: `${PLACA}-009`,
+          kmInicial: 800,
+        })
         .expect(403);
     });
 
@@ -356,7 +409,11 @@ describe('Vehiculos (e2e)', () => {
       await request(app.getHttpServer())
         .post('/vehiculos')
         .set('Cookie', cookieTijuana)
-        .send({ nombre: `${PREFIJO} Negativo`, kmInicial: -1 })
+        .send({
+          nombre: `${PREFIJO} Negativo`,
+          placas: `${PLACA}-010`,
+          kmInicial: -1,
+        })
         .expect(400);
     });
 
@@ -364,7 +421,11 @@ describe('Vehiculos (e2e)', () => {
       await request(app.getHttpServer())
         .post('/vehiculos')
         .set('Cookie', cookieTijuana)
-        .send({ nombre: `${PREFIJO} Excedido`, kmInicial: 100000000 })
+        .send({
+          nombre: `${PREFIJO} Excedido`,
+          placas: `${PLACA}-011`,
+          kmInicial: 100000000,
+        })
         .expect(400);
     });
 
@@ -372,8 +433,52 @@ describe('Vehiculos (e2e)', () => {
       await request(app.getHttpServer())
         .post('/vehiculos')
         .set('Cookie', cookieTijuana)
-        .send({ nombre: '   ', kmInicial: 900 })
+        .send({ nombre: '   ', placas: `${PLACA}-012`, kmInicial: 900 })
         .expect(400);
+    });
+
+    it('rechaza un alta sin placas con 400', async () => {
+      await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieTijuana)
+        .send({ nombre: `${PREFIJO} Sin placas`, kmInicial: 950 })
+        .expect(400);
+    });
+
+    it('rechaza placas vacias con 400', async () => {
+      await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieTijuana)
+        .send({
+          nombre: `${PREFIJO} Placas vacias`,
+          placas: '   ',
+          kmInicial: 960,
+        })
+        .expect(400);
+    });
+
+    it('rechaza placas repetidas, incluso en otra sucursal, con 409', async () => {
+      await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieTijuana)
+        .send({
+          nombre: `${PREFIJO} Placa TJ`,
+          placas: `${PLACA}-DUP`,
+          kmInicial: 100,
+        })
+        .expect(201);
+
+      // Nombre DISTINTO y sucursal DISTINTA: lo unico que choca es la placa.
+      await request(app.getHttpServer())
+        .post('/vehiculos')
+        .set('Cookie', cookieGeneral)
+        .send({
+          nombre: `${PREFIJO} Placa MX`,
+          placas: `${PLACA}-DUP`,
+          kmInicial: 200,
+          sucursalId: idMexicali,
+        })
+        .expect(409);
     });
   });
 
@@ -393,6 +498,57 @@ describe('Vehiculos (e2e)', () => {
       // sucursal ni el folio, que quedan escritos en documentos que no se pueden
       // corregir hacia atras.
       expect(vehiculo.kmInicial).toBe(99999.99);
+    });
+
+    it('edita las placas', async () => {
+      const id = await sembrarVehiculo(
+        `${PREFIJO} Con placas`,
+        idTijuana,
+        `${PLACA}-OLD`,
+      );
+
+      const res = await request(app.getHttpServer())
+        .patch(`/vehiculos/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send({ placas: `${PLACA}-NEW` })
+        .expect(200);
+
+      expect((res.body as VehiculoRespuesta).placas).toBe(`${PLACA}-NEW`);
+    });
+
+    it('cambiar a unas placas ya tomadas responde 409', async () => {
+      await sembrarVehiculo(
+        `${PREFIJO} Placas ocupadas`,
+        idTijuana,
+        `${PLACA}-OCUPADA`,
+      );
+      const id = await sembrarVehiculo(
+        `${PREFIJO} Aspirante placas`,
+        idMexicali,
+        `${PLACA}-LIBRE`,
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/vehiculos/${id}`)
+        .set('Cookie', cookieGeneral)
+        .send({ placas: `${PLACA}-OCUPADA` })
+        .expect(409);
+    });
+
+    // Un vehiculo sembrado SIN placas (como los que ya existian antes de
+    // T-68) sigue editable en cualquier otro campo, sin que la falta de
+    // placas bloquee nada — es el punto central del diseno (Review Focus).
+    it('un vehiculo sin placas se puede editar en otro campo sin problema', async () => {
+      const id = await sembrarVehiculo(`${PREFIJO} Vehiculo viejo`, idTijuana);
+
+      const res = await request(app.getHttpServer())
+        .patch(`/vehiculos/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send({ activo: false })
+        .expect(200);
+
+      expect((res.body as VehiculoRespuesta).placas).toBeNull();
+      expect((res.body as VehiculoRespuesta).activo).toBe(false);
     });
 
     it('da de baja y vuelve a activar', async () => {
