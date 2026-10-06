@@ -393,9 +393,15 @@ export class SincronizacionRepository {
          and ${
            desde
              ? // Incremental: lo que cambio, incluidas las notas a credito que
-               // se cerraron (D12). Una de contado nunca fue cobrable.
+               // se cerraron (D12). Una de contado nunca fue cobrable, salvo
+               // que el portal la edite o elimine (T-17 parte 2: contado_credito
+               // ya puede cambiar tras la creacion), asi que esas tambien viajan
+               // para que la tablet las marque activo: 0.
                sql`vn.updated_at > ${desde}
-                   and (vn.status in ('pendiente', 'abonado') or vn.contado_credito = 'credito')`
+                   and (vn.status in ('pendiente', 'abonado')
+                        or vn.contado_credito = 'credito'
+                        or vn.actualizado_por_usuario_id is not null
+                        or vn.eliminado_por_usuario_id is not null)`
              : sql`vn.status in ('pendiente', 'abonado')`
          }
        order by vn.fecha, vn.folio

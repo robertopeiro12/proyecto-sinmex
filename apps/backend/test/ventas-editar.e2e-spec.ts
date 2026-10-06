@@ -1646,4 +1646,52 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
       });
     });
   });
+
+  describe('pull incremental tras pasar a contado desde el portal (T-17)', () => {
+    const aContado = (v: VentaCreada) =>
+      request(app.getHttpServer())
+        .patch(`/ventas/${v.id}`)
+        .set('Cookie', cookieGeneral)
+        .send({
+          vendedorId: vendedorTj,
+          numNota: v.numNota,
+          contadoCredito: 'contado',
+          factura: 'N/A',
+          lineas: [
+            { presentacionId: pre1, cantidad: 24, cantidadPromocion: 2 },
+            { presentacionId: pre2, cantidad: 5, cantidadPromocion: 0 },
+          ],
+        })
+        .expect(200);
+
+    it('editar de credito a contado baja la nota con activo 0', async () => {
+      const v = await registrar({ fecha: FECHA_PERDIDA });
+      const antes = await notasDeLaTablet();
+      expect(porCobrar(antes, v.id)).toBe(true);
+
+      await aContado(v);
+
+      const incremental = await notasDeLaTablet(antes.cursor);
+      expect(
+        incremental.notas_pendientes.find((n) => n.id === v.id),
+      ).toMatchObject({ activo: 0 });
+    });
+
+    it('credito -> contado -> eliminar baja la nota con activo 0', async () => {
+      const v = await registrar({ fecha: FECHA_PERDIDA });
+      const antes = await notasDeLaTablet();
+      expect(porCobrar(antes, v.id)).toBe(true);
+
+      await aContado(v);
+      await request(app.getHttpServer())
+        .delete(`/ventas/${v.id}`)
+        .set('Cookie', cookieGeneral)
+        .expect(200);
+
+      const incremental = await notasDeLaTablet(antes.cursor);
+      expect(
+        incremental.notas_pendientes.find((n) => n.id === v.id),
+      ).toMatchObject({ activo: 0 });
+    });
+  });
 });
