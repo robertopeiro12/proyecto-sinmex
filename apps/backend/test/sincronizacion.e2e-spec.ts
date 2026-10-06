@@ -136,10 +136,9 @@ describe('Sincronizacion pull/push (e2e)', () => {
   const siguienteConsecutivo = () => ++ultimoConsecutivo;
 
   /**
-   * Un # de nota distinto en cada llamada. Desde T-17 (#95) el # de nota no se
-   * repite en la sucursal (`uq_venta_nota_num_nota_sucursal`), y las ventas de
-   * este archivo comparten sucursal; el SUFIJO evita chocar con restos de una
-   * corrida anterior que no limpio.
+   * Un # de nota distinto en cada llamada. Ya no hace falta para evitar choques
+   * (desde 2026-10-06 el # de nota se puede repetir), pero deja reconocer cada
+   * venta de prueba en la base.
    */
   let ultimaNota = 0;
   const siguienteNota = () => `e2e-${SUFIJO}-${++ultimaNota}`;
@@ -1689,7 +1688,9 @@ describe('Sincronizacion pull/push (e2e)', () => {
     });
 
     it('una venta con datos invalidos es datos-invalidos, nombra el campo y no deja fila', async () => {
-      const op = ventaValida({ datos: datosVenta({ num_nota: '   ' }) });
+      const op = ventaValida({
+        datos: datosVenta({ num_nota: '1'.repeat(31) }),
+      });
       const res = (await push({ operaciones: [op] }).expect(200))
         .body as RespuestaPush;
 
@@ -1730,48 +1731,38 @@ describe('Sincronizacion pull/push (e2e)', () => {
     });
   });
 
-  describe('# de nota unico por sucursal (T-17, #95)', () => {
-    it('una venta con un # de nota que ya existe en la sucursal es num-nota-duplicada y no deja fila', async () => {
-      const nota = siguienteNota();
-      const primera = ventaValida({ datos: datosVenta({ num_nota: nota }) });
-      // Mismo numero tecleado distinto: mayusculas y espacios no lo hacen otro.
-      const segunda = ventaValida({
-        datos: datosVenta({ num_nota: `  ${nota.toUpperCase()} ` }),
+  describe('# de nota opcional y repetible (cliente, 2026-10-06)', () => {
+    it('una venta sin # de nota se aplica y la nota queda en null', async () => {
+      const sinNota = ventaValida({
+        datos: datosVenta({ num_nota: undefined }),
       });
-      const despues = operacion();
+      const enBlanco = ventaValida({ datos: datosVenta({ num_nota: '   ' }) });
 
-      const res = (
-        await push({ operaciones: [primera, segunda, despues] }).expect(200)
-      ).body as RespuestaPush;
+      const res = (await push({ operaciones: [sinNota, enBlanco] }).expect(200))
+        .body as RespuestaPush;
 
       expect(res.resultados.map((r) => r.estado)).toEqual([
         'aplicada',
-        'rechazada',
         'aplicada',
       ]);
-      expect(res.resultados[1]).toMatchObject({
-        codigo: 'num-nota-duplicada',
-        motivo: `Ya existe la nota ${nota.toUpperCase()} en esta sucursal.`,
-      });
-      // Contrato §7: rechazada no deja fila, para corregir el # y reenviar.
-      expect(await buzonDe(segunda.clave)).toBeUndefined();
-      expect(await ventasConFolio(segunda.folio as string)).toHaveLength(0);
+      for (const op of [sinNota, enBlanco]) {
+        const [venta] = await ventasConFolio(op.folio as string);
+        expect(venta.num_nota).toBeNull();
+      }
     });
 
-    it('reenviar la MISMA venta (misma clave) sigue siendo duplicada, no num-nota-duplicada', async () => {
-      const op = ventaValida();
+    it('un # de nota que ya existe en la sucursal se acepta: lo que identifica la venta es el folio', async () => {
+      const nota = siguienteNota();
+      const primera = ventaValida({ datos: datosVenta({ num_nota: nota }) });
+      const segunda = ventaValida({ datos: datosVenta({ num_nota: nota }) });
 
-      const primera = (await push({ operaciones: [op] }).expect(200))
-        .body as RespuestaPush;
-      const segunda = (await push({ operaciones: [op] }).expect(200))
+      const res = (await push({ operaciones: [primera, segunda] }).expect(200))
         .body as RespuestaPush;
 
-      expect(primera.resultados[0].estado).toBe('aplicada');
-      expect(segunda.resultados[0]).toMatchObject({
-        estado: 'duplicada',
-        id_servidor: primera.resultados[0].id_servidor,
-      });
-      expect(segunda.resultados[0].codigo).toBeUndefined();
+      expect(res.resultados.map((r) => r.estado)).toEqual([
+        'aplicada',
+        'aplicada',
+      ]);
     });
   });
 

@@ -104,10 +104,10 @@ describe('prepararProyeccion', () => {
     ['una venta sin folio', { folio: null }, 'folio: '],
     ['una venta sin cliente', { clienteId: null }, 'cliente_id: '],
     [
-      'una venta con num_nota en blanco',
+      'una venta con num_nota de 31 caracteres',
       {
         datos: {
-          num_nota: '   ',
+          num_nota: '1'.repeat(31),
           contado_credito: 'credito',
           lineas: [
             {

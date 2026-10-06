@@ -12,7 +12,6 @@ import {
   Max,
   MaxLength,
   Min,
-  MinLength,
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
@@ -59,13 +58,15 @@ export class CamposVentaDto {
   })
   vendedorId!: string | null;
 
+  // Opcional: solo se captura si hubo nota de papel (cliente, 2026-10-06).
+  // En blanco es lo mismo que sin nota; `normalizarDatosVenta` lo deja en null.
+  @IsOptional()
   @Transform(recortar)
   @IsString()
-  @MinLength(1, { message: 'El número de nota es obligatorio.' })
   @MaxLength(LARGO_MAX_NUM_NOTA, {
     message: `El número de nota no puede pasar de ${LARGO_MAX_NUM_NOTA} caracteres.`,
   })
-  numNota!: string;
+  numNota?: string | null;
 
   @IsIn(['contado', 'credito'], {
     message: 'La venta debe ser de contado o de crédito.',

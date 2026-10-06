@@ -1,5 +1,5 @@
 import { Test, type TestingModule } from '@nestjs/testing';
-import type { INestApplication } from '@nestjs/common';
+import { ConflictException, type INestApplication } from '@nestjs/common';
 import { sql } from 'kysely';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -11,6 +11,7 @@ import {
   type Database,
 } from './../src/database/database.tokens';
 import { PasswordService } from './../src/modules/auth/password.service';
+import { VentasService } from './../src/modules/ventas-cobranza/ventas.service';
 import { hoyEnTijuana } from './../src/modules/sincronizacion/operaciones';
 
 /**
@@ -102,7 +103,7 @@ describe('Ventas desde el portal (e2e)', () => {
   let vendedorMx: string;
 
   let notas = 0;
-  /** Un # de nota unico por llamada (≤ 30): el indice de #95 no deja repetirlo. */
+  /** Un # de nota distinto por llamada (≤ 30), para encontrar la venta por el. */
   const nota = () => `e2e${SUFIJO}-${++notas}`;
 
   const iniciarSesion = async (login: string): Promise<string> => {
@@ -630,27 +631,27 @@ describe('Ventas desde el portal (e2e)', () => {
       ]);
     });
 
-    it('un # de nota repetido en la sucursal es 409; en otra sucursal si entra', async () => {
+    it('el # de nota es opcional y se puede repetir en la sucursal', async () => {
+      const sinNota = (
+        await registrar(cookieGeneral, cuerpo({ numNota: undefined })).expect(
+          201,
+        )
+      ).body as VentaRegistrada;
+      const enBlanco = (
+        await registrar(cookieGeneral, cuerpo({ numNota: '   ' })).expect(201)
+      ).body as VentaRegistrada;
+      for (const v of [sinNota, enBlanco]) {
+        const fila = await db
+          .selectFrom('venta_nota')
+          .select('num_nota')
+          .where('id', '=', v.id)
+          .executeTakeFirstOrThrow();
+        expect(fila.num_nota).toBeNull();
+      }
+
       const numNota = nota();
       await registrar(cookieGeneral, cuerpo({ numNota })).expect(201);
-
-      const repetida = await registrar(
-        cookieGeneral,
-        cuerpo({ numNota: `  ${numNota.toUpperCase()} ` }),
-      ).expect(409);
-      expect((repetida.body as { message: string }).message).toBe(
-        `Ya existe la nota ${numNota.toUpperCase()} en esta sucursal.`,
-      );
-
-      await registrar(
-        cookieGeneral,
-        cuerpo({
-          clienteId: clienteMx,
-          vendedorId: null,
-          numNota,
-          lineas: [{ presentacionId: pre1, cantidad: 1, cantidadPromocion: 0 }],
-        }),
-      ).expect(201);
+      await registrar(cookieGeneral, cuerpo({ numNota })).expect(201);
     });
 
     it('los folios OF son consecutivos por dia y por sucursal', async () => {
@@ -735,11 +736,18 @@ describe('Ventas desde el portal (e2e)', () => {
           cuerpo({ fecha: FECHA_SIN_QUEMA, numNota }),
         ).expect(201)
       ).body as VentaRegistrada;
-      // El # de nota repetido truena DESPUES de emitir el folio: el rollback lo devuelve.
+      // Una falla DESPUES de emitir el folio: el rollback lo devuelve. Se
+      // provoca a mano porque ya no hay rechazo de negocio en ese punto (el
+      // # de nota repetido lo era hasta 2026-10-06).
+      const falla = jest
+        .spyOn(app.get(VentasService), 'registrarVenta')
+        .mockRejectedValueOnce(new ConflictException('falla de prueba'));
       await registrar(
         cookieGeneral,
         cuerpo({ fecha: FECHA_SIN_QUEMA, numNota }),
       ).expect(409);
+      expect(falla).toHaveBeenCalledTimes(1);
+      falla.mockRestore();
       const tercera = (
         await registrar(
           cookieGeneral,

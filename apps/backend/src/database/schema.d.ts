@@ -302,7 +302,7 @@ export interface VentaNota {
   id: Generated<string>;
   mes: number;
   monto_total: Generated<Numeric>;
-  num_nota: string;
+  num_nota: string | null;
   origen: Generated<string>;
   pct_comision: Numeric | null;
   semana: number;

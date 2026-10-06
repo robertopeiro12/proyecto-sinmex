@@ -15,7 +15,7 @@ export interface NuevaVentaNota {
   vendedorId: string | null;
   sucursalId: string;
   montoTotal: string;
-  numNota: string;
+  numNota: string | null;
   contadoCredito: ContadoCredito;
   factura: FacturaVenta;
   comentarios: string | null;

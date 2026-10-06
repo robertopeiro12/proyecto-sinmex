@@ -10,7 +10,6 @@ import { exigirAlcanceSobre } from './alcance-venta';
 import type { RegistrarVentaDto } from './dto/registrar-venta.dto';
 import { FoliosOficinaAgotados } from './folio-oficina';
 import { FoliosOficinaRepository } from './folios-oficina.repository';
-import { esNotaDuplicada, motivoNotaDuplicada } from './nota-duplicada';
 import { armarVentaPortal, revisarFechaVenta } from './venta-portal';
 import { VentaRechazada } from './venta-rechazada';
 import {
@@ -137,7 +136,7 @@ export class VentasPortalService {
         const armada = armarVentaPortal(
           {
             clienteId: dto.clienteId,
-            numNota: dto.numNota,
+            numNota: dto.numNota ?? null,
             contadoCredito: dto.contadoCredito,
             factura: dto.factura,
             comentarios: dto.comentarios ?? null,
@@ -186,10 +185,6 @@ export class VentasPortalService {
         throw new ConflictException(error.message);
       if (error instanceof FoliosOficinaAgotados)
         throw new ConflictException(error.message);
-      if (esNotaDuplicada(error)) {
-        // El DTO ya recorto el # de nota: es el mismo texto que choco.
-        throw new ConflictException(motivoNotaDuplicada(dto.numNota));
-      }
       throw error;
     }
   }
