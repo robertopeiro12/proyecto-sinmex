@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
+import { ErrorApi } from "@/lib/api";
 import * as clientesLib from "@/lib/clientes";
 import type { ClienteDetalle, ClienteResumen } from "@/lib/clientes";
 import * as tiposNegocioLib from "@/lib/tipos-negocio";
@@ -294,6 +295,28 @@ describe("PantallaClientes", () => {
     expect(
       screen.queryByRole("button", { name: "Convertir a Cliente" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("muestra el mensaje del servidor cuando no se puede convertir (T-70: falta el encargado)", async () => {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    listarClientes.mockResolvedValue([PROSPECTO]);
+    convertirACliente.mockRejectedValue(
+      new ErrorApi(
+        "fallo",
+        409,
+        "Antes de convertir este prospecto en cliente hay que capturarle el encargado.",
+      ),
+    );
+
+    render(<PantallaClientes sucursal={null} tipo="todos" />);
+    await screen.findByText("Tienda El Prospecto");
+    await usuario.click(screen.getByRole("button", { name: "Convertir a Cliente" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "hay que capturarle el encargado",
+    );
   });
 
   it("no llama a convertirACliente si el usuario cancela la confirmacion", async () => {

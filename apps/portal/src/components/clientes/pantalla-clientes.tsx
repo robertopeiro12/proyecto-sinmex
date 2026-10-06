@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ErrorApi } from "@/lib/api";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useCatalogo } from "@/components/catalogo/use-catalogo";
 import { TablaCatalogo } from "@/components/catalogo/tabla-catalogo";
@@ -97,8 +98,15 @@ export function PantallaClientes({
     try {
       await convertirACliente(item.id);
       void catalogo.recargar();
-    } catch {
-      setErrorDetalle("No se pudo convertir ese prospecto en cliente.");
+    } catch (err) {
+      // Aqui SI se muestra el mensaje exacto del servidor (ErrorApi.mensajeApi):
+      // el 409 de la conversion dice QUE le falta al prospecto (domicilio,
+      // lista de precios, encargado) y solo el servidor lo sabe (T-70).
+      setErrorDetalle(
+        err instanceof ErrorApi && err.mensajeApi
+          ? err.mensajeApi
+          : "No se pudo convertir ese prospecto en cliente.",
+      );
     } finally {
       setConvirtiendoId(null);
     }
