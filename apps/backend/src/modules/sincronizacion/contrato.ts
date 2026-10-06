@@ -179,9 +179,11 @@ export const CODIGOS_RECHAZO = [
    * en el portal— ya tiene ese `num_nota`, sin distinguir mayusculas ni
    * espacios. T-17 (#95).
    *
-   * No se reintenta sola: el vendedor corrige el # de nota y la reenvia. Un
-   * reenvio con la misma `clave` sigue siendo `duplicada`, no esto. Una tablet
-   * que no conozca el codigo muestra el `motivo` igual.
+   * La tablet la reenvia en cada sincronizacion y se seguira rechazando: hoy
+   * no hay forma de corregir el # de nota ni de descartar la venta en la
+   * tablet. Pendiente: flujo de correccion en la tablet (issue de seguimiento
+   * de #95). Un reenvio con la misma `clave` sigue siendo `duplicada`, no
+   * esto. Una tablet que no conozca el codigo muestra el `motivo` igual.
    */
   'num-nota-duplicada',
 ] as const;
