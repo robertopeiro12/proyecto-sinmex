@@ -32,7 +32,8 @@ export interface NuevaVenta {
   clienteId: string;
   /** `null` = Oficina (venta de mostrador). */
   vendedorId: string | null;
-  numNota: string;
+  /** `null` = sin nota de papel (lo normal: el block solo se usa si falla el sistema). */
+  numNota: string | null;
   contadoCredito: ContadoCredito;
   /** Solo en contado. */
   metodoPago?: MetodoPagoContado;
@@ -127,7 +128,8 @@ export interface VentaEncontrada {
   clienteId: string;
   cliente: string;
   repartidor: string | null;
-  numNota: string;
+  /** `null` = sin nota de papel. */
+  numNota: string | null;
   montoCentavos: number;
   status: StatusVenta;
   origen: OrigenVenta;
@@ -177,7 +179,8 @@ export interface VentaDetalle {
   sucursalCodigo: string;
   vendedorId: string | null;
   repartidor: string | null;
-  numNota: string;
+  /** `null` = sin nota de papel. */
+  numNota: string | null;
   contadoCredito: ContadoCredito;
   factura: string;
   comentarios: string | null;
@@ -364,7 +367,7 @@ export function camposDeCondiciones(
 ): Pick<NuevaVenta, "numNota" | "contadoCredito" | "metodoPago" | "factura" | "comentarios"> {
   const comentario = c.comentarios.trim();
   return {
-    numNota: c.numNota.trim(),
+    numNota: c.numNota.trim() || null,
     contadoCredito: c.contadoCredito,
     ...(c.contadoCredito === "contado" ? { metodoPago: c.metodoPago } : {}),
     factura: c.factura,
@@ -376,7 +379,7 @@ export function camposDeCondiciones(
 export function condicionesDeVenta(venta: VentaDetalle): CondicionesVenta {
   const cobro = venta.cobros.find((c) => c.origen === "venta_contado");
   return {
-    numNota: venta.numNota,
+    numNota: venta.numNota ?? "",
     contadoCredito: venta.contadoCredito,
     metodoPago: cobro?.metodoPago === "efectivo" ? "efectivo" : "transferencia",
     factura: venta.factura === "pendiente" ? "pendiente" : "N/A",

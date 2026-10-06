@@ -91,7 +91,7 @@ describe("PantallaRegistrarVenta", () => {
     await usuario.type(screen.getByLabelText("Cantidad de Horchata 1 L"), "24");
     await usuario.type(screen.getByLabelText("Promoción de Horchata 1 L"), "2");
     await usuario.type(screen.getByLabelText("Cantidad de Jamaica 500 ml"), "5");
-    await usuario.type(screen.getByLabelText("Número de nota"), "1234");
+    await usuario.type(screen.getByLabelText("Número de nota (opcional)"), "1234");
 
     expect(screen.getByText("Total: $270.00")).toBeInTheDocument();
 
@@ -122,7 +122,7 @@ describe("PantallaRegistrarVenta", () => {
     await usuario.selectOptions(screen.getByLabelText("Repartidor"), "oficina");
     await usuario.selectOptions(screen.getByLabelText("Contado o crédito"), "credito");
     await usuario.type(screen.getByLabelText("Cantidad de Horchata 1 L"), "1");
-    await usuario.type(screen.getByLabelText("Número de nota"), "77");
+    await usuario.type(screen.getByLabelText("Número de nota (opcional)"), "77");
     await usuario.click(screen.getByRole("button", { name: "Grabar" }));
 
     expect(registrarVenta).toHaveBeenCalledTimes(1);
@@ -146,7 +146,7 @@ describe("PantallaRegistrarVenta", () => {
     const usuario = await prepararPantalla();
     await usuario.selectOptions(screen.getByLabelText("Repartidor"), "oficina");
     await usuario.type(screen.getByLabelText("Cantidad de Horchata 1 L"), "1");
-    await usuario.type(screen.getByLabelText("Número de nota"), "1234");
+    await usuario.type(screen.getByLabelText("Número de nota (opcional)"), "1234");
     await usuario.click(screen.getByRole("button", { name: "Grabar" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -165,7 +165,7 @@ describe("PantallaRegistrarVenta", () => {
   it("no manda nada sin productos", async () => {
     const usuario = await prepararPantalla();
     await usuario.selectOptions(screen.getByLabelText("Repartidor"), "oficina");
-    await usuario.type(screen.getByLabelText("Número de nota"), "1");
+    await usuario.type(screen.getByLabelText("Número de nota (opcional)"), "1");
     await usuario.click(screen.getByRole("button", { name: "Grabar" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Captura al menos un producto.");
@@ -180,7 +180,7 @@ describe("PantallaRegistrarVenta", () => {
     fireEvent.change(screen.getByLabelText("Cantidad de Horchata 1 L"), {
       target: { value: "2.5" },
     });
-    await usuario.type(screen.getByLabelText("Número de nota"), "1");
+    await usuario.type(screen.getByLabelText("Número de nota (opcional)"), "1");
     await usuario.click(screen.getByRole("button", { name: "Grabar" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -200,7 +200,7 @@ describe("PantallaRegistrarVenta", () => {
     const usuario = await prepararPantalla();
     await usuario.selectOptions(screen.getByLabelText("Repartidor"), "oficina");
     await usuario.type(screen.getByLabelText("Cantidad de Horchata 1 L"), "1");
-    await usuario.type(screen.getByLabelText("Número de nota"), "1");
+    await usuario.type(screen.getByLabelText("Número de nota (opcional)"), "1");
 
     const grabar = screen.getByRole("button", { name: "Grabar" });
     await usuario.click(grabar);
@@ -217,7 +217,7 @@ describe("PantallaRegistrarVenta", () => {
     await usuario.selectOptions(screen.getByLabelText("Repartidor"), "oficina");
     await usuario.type(screen.getByLabelText("Cantidad de Horchata 1 L"), "3");
     await usuario.type(screen.getByLabelText("Cantidad de Jamaica 500 ml"), "2");
-    await usuario.type(screen.getByLabelText("Número de nota"), "9");
+    await usuario.type(screen.getByLabelText("Número de nota (opcional)"), "9");
 
     // A esa fecha la Horchata todavia no tenia precio.
     obtenerCatalogoVenta.mockResolvedValue([

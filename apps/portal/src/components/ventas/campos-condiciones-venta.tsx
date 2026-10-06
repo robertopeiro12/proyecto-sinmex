@@ -22,12 +22,12 @@ export function CamposCondicionesVenta({
       <div className="flex flex-wrap gap-4">
         <div className="flex flex-col gap-1.5">
           <label htmlFor="num-nota" className="text-sm font-medium">
-            Número de nota
+            Número de nota (opcional)
           </label>
           <input
             id="num-nota"
-            required
             maxLength={30}
+            placeholder="Solo si hubo nota de papel"
             disabled={disabled}
             value={valores.numNota}
             onChange={(e) => onCambio({ numNota: e.target.value })}
