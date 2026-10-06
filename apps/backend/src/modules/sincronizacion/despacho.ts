@@ -26,7 +26,9 @@ import type { OperacionNormalizada, Rechazo } from './operaciones';
  * Orden acordado entre tickets: `venta`, `prospecto` (T-40), `cobranza` (T-20).
  */
 export type Proyeccion =
-  | { tipo: 'venta'; venta: VentaNormalizada }
+  // T-17: el folio viaja con la proyeccion. Aqui ya se comprobo que no es null,
+  // y asi `ContextoVenta.folio` puede ser `string`.
+  | { tipo: 'venta'; venta: VentaNormalizada; folio: string }
   // T-40. El unico tipo que crea una fila de CATALOGO (`cliente` con
   // `tipo = 'prospecto'`) en vez de una de operacion.
   | { tipo: 'prospecto'; prospecto: ProspectoNormalizado }
@@ -61,7 +63,10 @@ export function prepararProyeccion(
       if (!r.ok) {
         return { ok: false, codigo: 'datos-invalidos', motivo: r.motivo };
       }
-      return { ok: true, proyeccion: { tipo: 'venta', venta: r.venta } };
+      return {
+        ok: true,
+        proyeccion: { tipo: 'venta', venta: r.venta, folio: op.folio },
+      };
     }
     case 'prospecto': {
       // El folio, el `cliente_id` y la forma de `datos` los revisa

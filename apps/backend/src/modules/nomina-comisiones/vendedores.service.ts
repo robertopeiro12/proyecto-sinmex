@@ -13,7 +13,11 @@ import {
   esViolacionUnicidad,
 } from '../../database/errores-postgres';
 import { PasswordService } from '../auth/password.service';
-import { candidatosDeSegmento } from '../sincronizacion/segmento-vendedor';
+import { SEGMENTO_OFICINA } from '../sincronizacion/folio';
+import {
+  MOTIVO_SEGMENTO_RESERVADO,
+  candidatosDeSegmento,
+} from '../sincronizacion/segmento-vendedor';
 import type { CrearVendedorDto } from './dto/crear-vendedor.dto';
 import type { EditarVendedorDto } from './dto/editar-vendedor.dto';
 
@@ -72,6 +76,12 @@ export class VendedoresService {
     }
 
     const segmento = candidatosDeSegmento(dto.nombre)[0];
+    // T-17: `OF` es el segmento de los folios de oficina. Se rechaza antes de
+    // hashear: la base tambien lo impide (`ck_vendedor_folio_segmento_no_oficina`),
+    // pero su error seria un 500 sin explicacion.
+    if (segmento === SEGMENTO_OFICINA) {
+      throw new ConflictException(MOTIVO_SEGMENTO_RESERVADO);
+    }
     const passwordHash = await this.password.hashear(dto.contrasena);
 
     try {

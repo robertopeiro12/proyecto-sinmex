@@ -72,7 +72,7 @@ function unirEnEspanol(items: string[]): string {
  * 2026-09-13: sin `syncOperacionId`; la trazabilidad va en
  * `sync_operacion.entidad_tabla` / `entidad_id`).
  *
- * Es la **misma forma** que `ContextoVenta` de T-16 a proposito, aunque un
+ * Es la **misma forma** que `ContextoCobranza` (T-16) a proposito, aunque un
  * prospecto no use los cinco campos: que todos los servicios de dominio reciban
  * el mismo contexto es lo que permite que el despachador del `push` sea un
  * `switch` y no cinco casos especiales.

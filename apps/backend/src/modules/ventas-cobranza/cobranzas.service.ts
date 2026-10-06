@@ -10,14 +10,22 @@ import {
   repartirPago,
   saldoDerivadoCentavos,
 } from './reglas-cobranza';
-import type { ContextoVenta } from './ventas.service';
 
 /**
- * Quien y cuando: el mismo contexto que la venta (D13). Desde la tablet
- * `folio` viene emitido y `usuarioId` es null; el portal (T-21) los llenara al
- * reves.
+ * Quien y cuando (D13). Desde la tablet `folio` viene emitido y `usuarioId` es
+ * null; el portal (T-21) los llenara al reves.
+ *
+ * Era un alias de `ContextoVenta` hasta T-17, que le agrego a la venta `origen`
+ * y `metodoPagoContado` y le quito el null al folio. La cobranza no usa nada de
+ * eso, asi que conserva su forma y la tablet no cambia.
  */
-export type ContextoCobranza = ContextoVenta;
+export interface ContextoCobranza {
+  sucursalId: string;
+  fechaOperacion: string;
+  vendedorId: string;
+  folio: string | null;
+  usuarioId: string | null;
+}
 
 /** La fila a la que apunta el buzon (`sync_operacion.entidad_*`). */
 export interface EntidadCobranza {

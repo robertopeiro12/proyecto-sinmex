@@ -418,6 +418,24 @@ describe('Vendedores (e2e)', () => {
         .expect(409);
     });
 
+    // T-17: OF es el segmento de los folios de oficina (TJ261006OF01). Se
+    // rechaza igual que unas iniciales tomadas: no se cede a otra combinacion.
+    it('rechaza un nombre cuyas iniciales dan OF, reservadas para la oficina', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/vendedores')
+        .set('Cookie', cookieTijuana)
+        .send({
+          nombre: `${PREFIJO} Oscar Flores`,
+          login: `e2e-oficina-${SUFIJO}`,
+          contrasena: 'x',
+        })
+        .expect(409);
+
+      expect((res.body as { message: string }).message).toContain(
+        'reservadas para ventas de oficina',
+      );
+    });
+
     it('rechaza crear sin el permiso vendedor.gestionar', async () => {
       await request(app.getHttpServer())
         .post('/vendedores')

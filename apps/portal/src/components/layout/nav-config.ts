@@ -6,6 +6,7 @@ export const navSections: NavSection[] = [
     label: "Operación",
     items: [
       { label: "Dashboard", href: "/operacion" },
+      { label: "Registrar venta", href: "/operacion/registrar-venta" },
       { label: "Reporte de Ventas", href: "/operacion/reporte-de-ventas" },
       { label: "Procesos", href: "/operacion/procesos" },
       { label: "Peticiones", href: "/operacion/peticiones" },

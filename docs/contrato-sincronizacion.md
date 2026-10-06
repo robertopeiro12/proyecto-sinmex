@@ -379,7 +379,7 @@ ruta siguen libres hasta T-27/T-33/T-39, y el servidor las guarda tal cual.
   "cliente_id": "uuid",              // obligatorio en venta
   "folio": "TJ260914AP03",           // obligatorio en venta
   "datos": {
-    "num_nota": "2346",              // obligatorio, ≤ 30, se recorta
+    "num_nota": "2346",              // obligatorio, ≤ 30, se recorta; único por sucursal (T-17)
     "contado_credito": "credito",    // contado | credito
     "factura": "N/A",                // N/A | pendiente; la tablet siempre lo manda
     "comentarios": null,             // null si no hay; ≤ 500
@@ -410,6 +410,11 @@ ruta siguen libres hasta T-27/T-33/T-39, y el servidor las guarda tal cual.
   su `semana`, su `mes` y su folio no cambian.
 - Cada venta se aplica en **su propia transacción** junto con su fila del buzón: si se rechaza,
   no queda ni la venta ni la operación (§7).
+- **El # de nota no se repite en la sucursal** (T-17, #95). Lo garantiza el índice
+  `uq_venta_nota_num_nota_sucursal` sobre `(sucursal_id, lower(btrim(num_nota)))` de las ventas
+  vivas: `AB-1`, `ab-1` y ` AB-1 ` son la misma nota. Cuenta también las ventas que la oficina
+  registra en el portal. Una venta con un # ya usado se rechaza **por operación** con
+  `num-nota-duplicada`; un reenvío con la misma `clave` sigue siendo `duplicada`.
 
 ### `tipo: "prospecto"` — el alta de un prospecto (T-40)
 
@@ -563,6 +568,7 @@ texto en español** si reintenta o si avisa al vendedor.
 | `precio-no-asignado` | Una línea con cantidad > 0 y el cliente no tiene **ningún** precio para esa presentación vigente a `fecha_operacion` ni asignado después, hasta hoy. Comprueba existencia, nunca valor. Se recupera cuando el portal asigna el precio y la tablet vuelve a sincronizar (T-16) |
 | `tipo-negocio-inexistente` | El `tipo_negocio_id` de un alta de `prospecto` no existe o está dado de baja (T-40). **No es un bug de la tablet**: su catálogo se quedó viejo. Se reintenta solo en la siguiente sincronización, que además le baja el catálogo nuevo |
 | `nota-no-encontrada` | La nota que se cobra no existe, su cliente no es de la sucursal del vendedor, o no es del `cliente_id` del sobre. Una nota que ya está pagada, de cuenta perdida, de promoción o borrada **no** cae aquí: el cobro se acepta y va a otras notas o a saldo a favor. La tablet la reenvía en cada sincronización (T-20) |
+| `num-nota-duplicada` | Otra venta viva de la misma sucursal —de esta tablet, de otra o capturada en el portal— ya tiene ese `num_nota` (sin distinguir mayúsculas ni espacios). **La tablet la reenvía en cada sincronización y se seguirá rechazando**: hoy no hay forma de corregir el # de nota ni de descartar la venta en la tablet. Pendiente: flujo de corrección en la tablet (issue de seguimiento de #95). Una tablet que no conozca el código muestra el `motivo` igual (T-17) |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo
@@ -639,6 +645,9 @@ reintentos simultáneos del mismo lote ya ve la fila confirmada y cae en
 > posterior con esa misma transacción falla. Por eso el desempate (¿ya existe esa
 > `clave` para el vendedor? → `duplicada`; si no → `folio-duplicado`) corre **fuera**
 > de la transacción, con la conexión normal.
+>
+> El `23505` del # de nota (`uq_venta_nota_num_nota_sucursal`, T-17) se desempata igual:
+> primero la `clave` (→ `duplicada`); si no → `num-nota-duplicada`.
 
 ### Cómo convive con el folio (T-14, implementado)
 

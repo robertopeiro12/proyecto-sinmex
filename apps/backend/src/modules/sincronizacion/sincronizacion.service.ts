@@ -16,6 +16,10 @@ import {
 } from '../sucursales/alcance-sucursal';
 import { CobranzaRechazada } from '../ventas-cobranza/cobranza-rechazada';
 import { CobranzasService } from '../ventas-cobranza/cobranzas.service';
+import {
+  esNotaDuplicada,
+  motivoNotaDuplicada,
+} from '../ventas-cobranza/nota-duplicada';
 import { VentaRechazada } from '../ventas-cobranza/venta-rechazada';
 import { VentasService } from '../ventas-cobranza/ventas.service';
 import {
@@ -386,6 +390,15 @@ export class SincronizacionService {
           motivo: error.message,
         };
       }
+      // T-17 (#95): el `23505` del # de nota, clasificado igual que el folio:
+      // despues del rollback y mirando primero la clave.
+      if (esNotaDuplicada(error) && proyeccion?.tipo === 'venta') {
+        return this.clasificarNotaDuplicada(
+          vendedor,
+          op,
+          proyeccion.venta.numNota,
+        );
+      }
       if (esColisionDeFolio(error)) {
         return this.clasificarColision(vendedor, op);
       }
@@ -414,8 +427,12 @@ export class SincronizacionService {
             // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
             fechaOperacion: op.fechaOperacion,
             vendedorId: vendedor.id,
-            folio: op.folio,
+            folio: proyeccion.folio,
             usuarioId: null,
+            // T-17: la tablet no cambia. Su venta de contado se sigue cobrando
+            // en efectivo y su precio se mide hasta hoy, como desde T-16/T-20.
+            origen: 'app',
+            metodoPagoContado: 'efectivo',
           },
           trx,
         );
@@ -499,6 +516,37 @@ export class SincronizacionService {
         dueno && dueno.vendedorId !== vendedor.id
           ? `El folio ${op.folio} ya lo uso otro vendedor. Hay que reasignarle un folio a esta operacion.`
           : `El folio ${op.folio} ya esta usado por otra operacion.`,
+    };
+  }
+
+  /**
+   * **# de nota repetido en la sucursal** (T-17, #95), clasificado despues del
+   * rollback por lo mismo que `clasificarColision`.
+   *
+   * > [!danger] Primero la clave
+   * > Un reenvio legitimo trae la misma clave y el mismo # de nota. Si esa
+   * > clave ya existe para el vendedor, era un reenvio: `duplicada`.
+   */
+  private async clasificarNotaDuplicada(
+    vendedor: VendedorConSucursal,
+    op: OperacionNormalizada,
+    numNota: string,
+  ): Promise<ResultadoOperacion> {
+    const propia = await this.repo.buscarPorClave(vendedor.id, op.clave);
+    if (propia) {
+      return {
+        clave: op.clave,
+        tipo: op.tipo,
+        estado: 'duplicada',
+        id_servidor: propia.id,
+      };
+    }
+    return {
+      clave: op.clave,
+      tipo: op.tipo,
+      estado: 'rechazada',
+      codigo: 'num-nota-duplicada',
+      motivo: motivoNotaDuplicada(numNota),
     };
   }
 

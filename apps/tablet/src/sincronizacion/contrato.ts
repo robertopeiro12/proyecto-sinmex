@@ -88,6 +88,14 @@ export const CODIGOS_RECHAZO = [
    * de este cliente. Se reenvia.
    */
   'nota-no-encontrada',
+  /**
+   * T-17: otra venta de la misma sucursal (de otra tablet o del portal) ya
+   * tiene ese # de nota. La tablet la reenvia en cada sincronizacion y se
+   * seguira rechazando: hoy no hay forma de corregir el # de nota ni de
+   * descartar la venta en la tablet. Pendiente: flujo de correccion en la
+   * tablet (issue de seguimiento de #95).
+   */
+  'num-nota-duplicada',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
