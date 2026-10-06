@@ -426,7 +426,7 @@ Es el **único** tipo que crea una fila de *catálogo* (`cliente` con
   "datos": {
     "nombre": "Tacos Aarón",          // nombre del negocio. Obligatorio
     "telefono": "6641112233",          // obligatorio
-    "encargado": "Don Aarón",          // o null
+    "encargado": "Don Aarón",          // obligatorio
     "tipo_negocio_id": "…",            // del catálogo `tipos_negocio`, o null
     "comentarios": "Quiere probar jamaica",  // o null
     "lat": 32.514900, "lng": -117.038200,    // las dos o las dos null
