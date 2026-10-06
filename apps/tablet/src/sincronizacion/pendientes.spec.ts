@@ -51,7 +51,7 @@ describe('contarPendientesDeSubir', () => {
       sucursalId: 'suc-tj',
       nombre: 'Tacos Aaron',
       telefono: '6641112233',
-      encargado: null,
+      encargado: 'Don Aaron',
       tipoNegocioId: null,
       comentarios: null,
       lat: null,

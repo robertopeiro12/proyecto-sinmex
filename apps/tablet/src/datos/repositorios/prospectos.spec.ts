@@ -113,7 +113,7 @@ describe('repositorio de prospectos', () => {
       expect(deps.bd.getAllSync('select * from folio_contador')).toEqual([]);
     });
 
-    it('el nombre del negocio y el telefono son obligatorios', () => {
+    it('el nombre del negocio, el telefono y el encargado son obligatorios', () => {
       const { prospectos } = montar();
 
       expect(() => prospectos.registrar(captura({ nombre: '   ' }))).toThrow(
@@ -121,6 +121,9 @@ describe('repositorio de prospectos', () => {
       );
       expect(() => prospectos.registrar(captura({ telefono: '' }))).toThrow(
         /teléfono/i,
+      );
+      expect(() => prospectos.registrar(captura({ encargado: '   ' }))).toThrow(
+        /encargado/i,
       );
     });
 
@@ -131,7 +134,7 @@ describe('repositorio de prospectos', () => {
         captura({
           nombre: '  Tacos Aaron  ',
           telefono: ' 664 ',
-          encargado: '   ',
+          encargado: '  Don Aaron  ',
           comentarios: '',
         }),
       );
@@ -139,7 +142,7 @@ describe('repositorio de prospectos', () => {
       expect(p).toMatchObject({
         nombre: 'Tacos Aaron',
         telefono: '664',
-        encargado: null,
+        encargado: 'Don Aaron',
         comentarios: null,
       });
     });
