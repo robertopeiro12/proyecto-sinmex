@@ -137,10 +137,9 @@ export function problemasDeCaptura(captura: CapturaVenta): string[] {
     problemas.push('El total de la venta es demasiado grande.');
   }
 
-  const numNota = captura.numNota.trim();
-  if (numNota === '') {
-    problemas.push('Falta el número de la nota física.');
-  } else if (numNota.length > LARGO_MAX_NUM_NOTA) {
+  // Opcional: solo si hubo nota de papel, porque fallo el sistema (cliente,
+  // 2026-10-06). Lo que identifica la venta es el folio.
+  if (captura.numNota.trim().length > LARGO_MAX_NUM_NOTA) {
     problemas.push(`El número de nota lleva hasta ${LARGO_MAX_NUM_NOTA} caracteres.`);
   }
 

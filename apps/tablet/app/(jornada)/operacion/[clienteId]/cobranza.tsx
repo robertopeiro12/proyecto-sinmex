@@ -81,7 +81,7 @@ function NotaSeleccionable({
     <Pressable
       accessibilityRole="radio"
       accessibilityState={{ selected: seleccionada }}
-      accessibilityLabel={`Nota ${nota.num_nota}, folio ${nota.folio}`}
+      accessibilityLabel={nota.num_nota ? `Nota ${nota.num_nota}, folio ${nota.folio}` : `Folio ${nota.folio}`}
       onPress={onPress}
       style={({ pressed }) => [
         estilos.tarjeta,
@@ -95,7 +95,14 @@ function NotaSeleccionable({
       ]}
     >
       <Text style={estilos.textoTarjeta}>
-        <Cifra valor={nota.folio} /> · nota <Cifra valor={nota.num_nota} /> · {nota.fecha}
+        <Cifra valor={nota.folio} />
+        {nota.num_nota ? (
+          <>
+            {' '}
+            · nota <Cifra valor={nota.num_nota} />
+          </>
+        ) : null}{' '}
+        · {nota.fecha}
       </Text>
       <Text style={estilos.textoSuave}>
         Total <Cifra valor={pesos(nota.monto_total_centavos)} tono="suave" /> · saldo{' '}
@@ -303,8 +310,8 @@ export default function PantallaCobranza() {
         <Tarjeta estado="accion" etiqueta="Cobro">
           <Cifra valor={pesos(montoCentavos)} tamano="grande" />
           <Text style={estilos.textoSuave}>
-            En {NOMBRE_METODO[metodo]} · pagado el {fechaPago.trim()} · nota{' '}
-            <Cifra valor={nota.num_nota} tono="suave" />
+            En {NOMBRE_METODO[metodo]} · pagado el {fechaPago.trim()} · folio{' '}
+            <Cifra valor={nota.folio} tono="suave" />
           </Text>
         </Tarjeta>
 
