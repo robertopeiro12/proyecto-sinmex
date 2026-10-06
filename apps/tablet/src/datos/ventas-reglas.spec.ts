@@ -110,10 +110,8 @@ describe('problemasDeCaptura', () => {
     ).toEqual([]);
   });
 
-  it('falta el numero de nota', () => {
-    expect(problemasDeCaptura(captura({ numNota: '   ' }))).toEqual([
-      'Falta el número de la nota física.',
-    ]);
+  it('el numero de nota es opcional: solo si hubo nota de papel', () => {
+    expect(problemasDeCaptura(captura({ numNota: '   ' }))).toEqual([]);
   });
 
   it('el numero de nota lleva hasta 30 caracteres', () => {

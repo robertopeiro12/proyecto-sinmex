@@ -242,7 +242,7 @@ export function PantallaVentas({ sucursal }: { sucursal: string | null }) {
                   <td className="py-1.5">{v.fecha}</td>
                   <td className="py-1.5">{v.cliente}</td>
                   <td className="py-1.5">{v.repartidor ?? "Oficina"}</td>
-                  <td className="py-1.5">{v.numNota}</td>
+                  <td className="py-1.5">{v.numNota ?? "—"}</td>
                   <td className="py-1.5 text-right">{formatearPesos(v.montoCentavos)}</td>
                   <td className="py-1.5">{ETIQUETA_STATUS[v.status]}</td>
                   <td className="py-1.5">{ETIQUETA_ORIGEN[v.origen]}</td>

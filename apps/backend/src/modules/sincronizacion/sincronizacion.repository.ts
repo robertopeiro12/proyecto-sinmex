@@ -359,7 +359,7 @@ export class SincronizacionRepository {
     const filas = await sql<{
       id: string;
       folio: string;
-      num_nota: string;
+      num_nota: string | null;
       fecha: string;
       cliente_id: string;
       status: string;

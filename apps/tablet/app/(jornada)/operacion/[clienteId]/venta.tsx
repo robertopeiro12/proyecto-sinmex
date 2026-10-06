@@ -181,8 +181,12 @@ export default function PantallaVenta() {
         <Tarjeta estado="listo" etiqueta="Folio">
           <Cifra valor={grabada.folio} tamano="grande" />
           <Text style={estilos.textoSuave}>
-            Total <Cifra valor={pesos(grabada.monto_total_centavos)} tono="suave" /> · nota{' '}
-            <Cifra valor={grabada.num_nota} tono="suave" /> ·{' '}
+            Total <Cifra valor={pesos(grabada.monto_total_centavos)} tono="suave" /> ·{' '}
+            {grabada.num_nota ? (
+              <>
+                nota <Cifra valor={grabada.num_nota} tono="suave" /> ·{' '}
+              </>
+            ) : null}
             {grabada.contado_credito === 'contado' ? 'de contado' : 'a crédito'}
           </Text>
           <Text style={estilos.textoSuave}>
@@ -265,8 +269,13 @@ export default function PantallaVenta() {
         <Tarjeta estado="accion" etiqueta="Total">
           <Cifra valor={pesos(resumen.totalCentavos)} tamano="grande" />
           <Text style={estilos.textoSuave}>
-            {contadoCredito === 'contado' ? 'De contado' : 'A crédito'} · nota{' '}
-            <Cifra valor={numNota.trim()} tono="suave" /> · factura {factura}
+            {contadoCredito === 'contado' ? 'De contado' : 'A crédito'} ·{' '}
+            {numNota.trim() !== '' ? (
+              <>
+                nota <Cifra valor={numNota.trim()} tono="suave" /> ·{' '}
+              </>
+            ) : null}
+            factura {factura}
           </Text>
           {comentarios.trim() !== '' ? (
             <Text style={estilos.textoSuave}>{comentarios.trim()}</Text>
@@ -305,7 +314,12 @@ export default function PantallaVenta() {
         <Tarjeta estado="pendiente" etiqueta="Notas pendientes (solo lectura)">
           {notas.map((n) => (
             <Text key={n.id} style={estilos.textoSuave}>
-              <Cifra valor={n.folio} tono="suave" /> · nota <Cifra valor={n.num_nota} tono="suave" /> ·{' '}
+              <Cifra valor={n.folio} tono="suave" /> ·{' '}
+              {n.num_nota ? (
+                <>
+                  nota <Cifra valor={n.num_nota} tono="suave" /> ·{' '}
+                </>
+              ) : null}
               {n.fecha} · saldo <Cifra valor={pesos(n.saldo_centavos)} tono="aviso" />
             </Text>
           ))}
@@ -393,11 +407,11 @@ export default function PantallaVenta() {
 
       <View style={{ marginTop: espacio.lg }}>
         <Campo
-          etiqueta="Número de nota"
+          etiqueta="Número de nota (opcional)"
           value={numNota}
           onChangeText={setNumNota}
           maxLength={LARGO_MAX_NUM_NOTA}
-          placeholder="El de la nota física"
+          placeholder="Solo si usaste el block de papel"
         />
         <Campo
           etiqueta="Comentarios (opcional)"

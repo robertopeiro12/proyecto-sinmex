@@ -144,7 +144,8 @@ export interface NotaPendiente {
   id: string;
   cliente_id: string;
   folio: string;
-  num_nota: string;
+  /** `null` si no hubo nota de papel (lo normal; ver migracion 009). */
+  num_nota: string | null;
   fecha: FechaISO;
   status: StatusNotaPendiente;
   monto_total_centavos: number;
@@ -232,7 +233,8 @@ export interface Venta {
   vendedor_id: string;
   sucursal_id: string;
   folio: string;
-  num_nota: string;
+  /** `null` si no hubo nota de papel (lo normal; ver migracion 009). */
+  num_nota: string | null;
   contado_credito: ContadoCredito;
   factura: FacturaVenta;
   comentarios: string | null;

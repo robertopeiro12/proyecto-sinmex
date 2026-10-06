@@ -48,7 +48,7 @@ export function DetalleVenta({
   const { enviando, error, enviar } = useEnvioFormulario("No se pudo completar la acción.");
 
   async function eliminar() {
-    if (!window.confirm(`¿Eliminar la venta ${venta.folio} (nota ${venta.numNota})? No se puede deshacer.`)) {
+    if (!window.confirm(`¿Eliminar la venta ${venta.folio}${venta.numNota ? ` (nota ${venta.numNota})` : ""}? No se puede deshacer.`)) {
       return;
     }
     await enviar(() => eliminarVenta(venta.id), onEliminada);
@@ -74,7 +74,7 @@ export function DetalleVenta({
           <Dato etiqueta="Fecha" valor={venta.fecha} />
           <Dato etiqueta="Cliente" valor={`${venta.cliente} · ${venta.sucursalCodigo}`} />
           <Dato etiqueta="Repartidor" valor={venta.repartidor ?? "Oficina"} />
-          <Dato etiqueta="# de nota" valor={venta.numNota} />
+          <Dato etiqueta="# de nota" valor={venta.numNota ?? "Sin nota"} />
           <Dato etiqueta="Contado o crédito" valor={venta.contadoCredito === "contado" ? "Contado" : "Crédito"} />
           <Dato etiqueta="Factura" valor={venta.factura} />
           <Dato etiqueta="Status" valor={ETIQUETA_STATUS[venta.status]} />

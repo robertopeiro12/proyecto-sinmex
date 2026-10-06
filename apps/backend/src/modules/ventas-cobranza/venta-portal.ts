@@ -16,7 +16,8 @@ import type { RechazoVenta } from './venta-rechazada';
 /** Lo que manda el portal, ya validado por el DTO. **No trae precios** (§4.2). */
 export interface EntradaVentaPortal {
   clienteId: string;
-  numNota: string;
+  /** `null` si no hubo nota de papel. */
+  numNota: string | null;
   contadoCredito: ContadoCredito;
   factura: FacturaVenta;
   comentarios: string | null;

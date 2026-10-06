@@ -25,7 +25,7 @@ export interface VentaBloqueada {
 
 export interface CambiosCabecera {
   vendedorId: string | null;
-  numNota: string;
+  numNota: string | null;
   contadoCredito: ContadoCredito;
   factura: FacturaVenta;
   comentarios: string | null;

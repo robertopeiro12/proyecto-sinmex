@@ -68,6 +68,11 @@ describe("DetalleVenta", () => {
     mockAuth(() => true);
   });
 
+  it("una venta sin nota de papel dice Sin nota", () => {
+    renderizar({ ...VENTA, numNota: null });
+    expect(screen.getByText("Sin nota")).toBeInTheDocument();
+  });
+
   it("muestra cabecera, líneas y cobros; sin vendedor es Oficina", () => {
     renderizar();
     expect(screen.getByText("Venta TJ240304OF01")).toBeInTheDocument();

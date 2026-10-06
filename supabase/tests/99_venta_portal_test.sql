@@ -1,12 +1,12 @@
 begin;
 select plan(18);
 
--- Venta registrada desde el portal (T-17, parte 1) y # de nota unico por
--- sucursal (#95).
+-- Venta registrada desde el portal (T-17, parte 1) y # de nota opcional y
+-- repetible (respuesta del cliente del 2026-10-06, que deshizo #95).
 --
 -- Lo que se prueba es lo que la BASE garantiza aunque un script o una carga
 -- futura entren por debajo del servicio: quien puede faltar en una venta, que
--- el # de nota no se repita en la sucursal, que nadie use el segmento de folio
+-- el # de nota sea opcional y se pueda repetir, que nadie use el segmento de folio
 -- de la oficina, y el contador del folio OF.
 --
 -- Nombres con prefijo `zz-pgtap`/`ZZ-pgtap`; fechas del contador en 2001 para
@@ -114,42 +114,34 @@ select throws_ok(
 );
 
 ------------------------------------------------------------------
--- # de nota unico por sucursal (#95)
+-- # de nota opcional y repetible (cliente, 2026-10-06)
 ------------------------------------------------------------------
-
-select throws_ok(
-  $$insert into venta_nota
-      (folio, fecha, cliente_id, vendedor_id, monto_total, num_nota,
-       contado_credito, semana, mes, status, sucursal_id)
-    select 'ZZPGTAPT1706', '2026-10-06', cliente_tj, vendedor, 0, '  AB-17 ',
-           'credito', 41, 10, 'pendiente', tj
-      from _t17$$,
-  '23505',
-  null,
-  'el # de nota no se repite en la sucursal, sin importar mayusculas ni espacios'
-);
-
-select lives_ok(
-  $$insert into venta_nota
-      (folio, fecha, cliente_id, vendedor_id, monto_total, num_nota,
-       contado_credito, semana, mes, status, sucursal_id, origen, capturo_usuario_id)
-    select 'ZZPGTAPT1707', '2026-10-06', cliente_mx, null, 0, 'ab-17',
-           'credito', 41, 10, 'pendiente', mx, 'portal', usuario
-      from _t17$$,
-  'el mismo # de nota si se permite en otra sucursal'
-);
-
--- Parte 2 de T-17 eliminara ventas: una nota borrada libera su numero.
-update venta_nota set deleted_at = now() where folio = 'ZZPGTAPT1701';
+-- El block de papel solo se usa cuando falla el sistema; lo que identifica la
+-- venta es el folio. #95 lo habia hecho unico por sucursal: ya no.
 
 select lives_ok(
   $$insert into venta_nota
       (folio, fecha, cliente_id, vendedor_id, monto_total, num_nota,
        contado_credito, semana, mes, status, sucursal_id)
-    select 'ZZPGTAPT1708', '2026-10-06', cliente_tj, vendedor, 0, 'ab-17',
+    select 'ZZPGTAPT1706', '2026-10-06', cliente_tj, vendedor, 0, 'ab-17',
            'credito', 41, 10, 'pendiente', tj
       from _t17$$,
-  'una nota borrada libera su numero en la sucursal'
+  'el mismo # de nota se puede repetir en la sucursal'
+);
+
+select lives_ok(
+  $$insert into venta_nota
+      (folio, fecha, cliente_id, vendedor_id, monto_total, num_nota,
+       contado_credito, semana, mes, status, sucursal_id)
+    select 'ZZPGTAPT1707', '2026-10-06', cliente_tj, vendedor, 0, null,
+           'credito', 41, 10, 'pendiente', tj
+      from _t17$$,
+  'una venta sin nota de papel lleva num_nota null'
+);
+
+select hasnt_index(
+  'public', 'venta_nota', 'uq_venta_nota_num_nota_sucursal',
+  'ya no existe el indice unico del # de nota por sucursal'
 );
 
 ------------------------------------------------------------------

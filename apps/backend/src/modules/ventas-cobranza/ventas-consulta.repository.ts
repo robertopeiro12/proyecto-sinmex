@@ -26,7 +26,8 @@ export interface VentaEncontrada {
   cliente: string;
   /** Nombre del vendedor; `null` = Oficina. */
   repartidor: string | null;
-  numNota: string;
+  /** `null` si no hubo nota de papel. */
+  numNota: string | null;
   montoCentavos: number;
   status: string;
   origen: OrigenVenta;
@@ -44,7 +45,7 @@ export interface CabeceraVenta {
   sucursalCodigo: string;
   vendedorId: string | null;
   repartidor: string | null;
-  numNota: string;
+  numNota: string | null;
   contadoCredito: ContadoCredito;
   factura: string;
   comentarios: string | null;
@@ -114,7 +115,7 @@ export class VentasConsultaRepository {
       cliente_id: string;
       cliente: string;
       repartidor: string | null;
-      num_nota: string;
+      num_nota: string | null;
       monto_total: string;
       status: string;
       origen: string;
@@ -169,7 +170,7 @@ export class VentasConsultaRepository {
       sucursal_codigo: string;
       vendedor_id: string | null;
       repartidor: string | null;
-      num_nota: string;
+      num_nota: string | null;
       contado_credito: string;
       factura: string | null;
       comentarios: string | null;

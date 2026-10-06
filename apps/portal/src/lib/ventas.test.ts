@@ -185,6 +185,10 @@ describe("condiciones de la venta", () => {
     expect(
       camposDeCondiciones({ numNota: "77", contadoCredito: "contado", metodoPago: "efectivo", factura: "pendiente", comentarios: " ok " }),
     ).toEqual({ numNota: "77", contadoCredito: "contado", metodoPago: "efectivo", factura: "pendiente", comentarios: "ok" });
+    // Sin nota de papel (lo normal): viaja null, no una cadena vacía.
+    expect(
+      camposDeCondiciones({ numNota: "   ", contadoCredito: "credito", metodoPago: "efectivo", factura: "N/A", comentarios: "" }),
+    ).toEqual({ numNota: null, contadoCredito: "credito", factura: "N/A" });
   });
 
   it("condicionesDeVenta precarga la venta y el método de su cobro de contado", () => {

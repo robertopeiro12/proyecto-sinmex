@@ -88,14 +88,6 @@ export const CODIGOS_RECHAZO = [
    * de este cliente. Se reenvia.
    */
   'nota-no-encontrada',
-  /**
-   * T-17: otra venta de la misma sucursal (de otra tablet o del portal) ya
-   * tiene ese # de nota. La tablet la reenvia en cada sincronizacion y se
-   * seguira rechazando: hoy no hay forma de corregir el # de nota ni de
-   * descartar la venta en la tablet. Pendiente: flujo de correccion en la
-   * tablet (issue de seguimiento de #95).
-   */
-  'num-nota-duplicada',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -224,7 +216,8 @@ export interface AbonoPull {
  */
 export interface NotaPendientePull extends FilaSincronizable {
   folio: string;
-  num_nota: string;
+  /** `null` si la venta no tuvo nota de papel (lo normal). */
+  num_nota: string | null;
   fecha: string;
   cliente_id: string;
   status: 'pendiente' | 'abonado';
@@ -337,7 +330,12 @@ export type LineaVenta = {
  * tiene la firma de indice implicita que eso exige.
  */
 export type DatosVenta = {
-  num_nota: string;
+  /**
+   * El # del block de papel, **opcional**: el block solo se usa cuando falla
+   * el sistema (cliente, 2026-10-06). `null` es "sin nota". No es unico: lo
+   * que identifica la venta es el folio.
+   */
+  num_nota?: string | null;
   contado_credito: 'contado' | 'credito';
   factura: 'N/A' | 'pendiente';
   comentarios: string | null;

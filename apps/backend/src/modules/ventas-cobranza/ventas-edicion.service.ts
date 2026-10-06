@@ -21,7 +21,6 @@ import {
   pctComisionTrasEdicion,
   planDetalle,
 } from './edicion-venta';
-import { esNotaDuplicada, motivoNotaDuplicada } from './nota-duplicada';
 import { montoTotalCentavos, statusInicial } from './reglas-venta';
 import { VentaRechazada } from './venta-rechazada';
 import {
@@ -104,7 +103,7 @@ export class VentasEdicionService {
         const armada = armarVentaEditada(
           {
             clienteId: venta.clienteId,
-            numNota: dto.numNota,
+            numNota: dto.numNota ?? null,
             contadoCredito: dto.contadoCredito,
             factura: dto.factura,
             comentarios: dto.comentarios ?? null,
@@ -194,10 +193,6 @@ export class VentasEdicionService {
       // Kysely ya hizo rollback: aqui solo se traduce a HTTP.
       if (error instanceof VentaRechazada)
         throw new ConflictException(error.message);
-      if (esNotaDuplicada(error)) {
-        // El DTO ya recorto el # de nota: es el mismo texto que choco.
-        throw new ConflictException(motivoNotaDuplicada(dto.numNota));
-      }
       throw error;
     }
     return this.consulta.leerDetalle(id);

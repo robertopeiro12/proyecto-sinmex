@@ -103,7 +103,7 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
   let bearerApp: string;
 
   let notas = 0;
-  /** Un # de nota unico por llamada (≤ 30): el indice de #95 no deja repetirlo. */
+  /** Un # de nota distinto por llamada (≤ 30), para encontrar la venta por el. */
   const nota = () => `ved${SUFIJO}-${++notas}`;
 
   const iniciarSesion = async (login: string): Promise<string> => {
@@ -1334,21 +1334,15 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
       }
     });
 
-    it('el # de nota repetido en la sucursal es 409', async () => {
-      const otra = await registrar({
-        fecha: FECHA_EDICION,
-        numNota: `NR${SUFIJO}`,
-      });
+    it('el # de nota se puede repetir y se puede quitar al editar', async () => {
+      await registrar({ fecha: FECHA_EDICION, numNota: `NR${SUFIJO}` });
       const v = await registrar({ fecha: FECHA_EDICION });
-      const res = await editar(v.id, cambios(` nr${SUFIJO} `)).expect(409);
-      expect((res.body as { message: string }).message).toBe(
-        `Ya existe la nota nr${SUFIJO} en esta sucursal.`,
-      );
-      expect(otra.id).not.toBe(v.id);
+      await editar(v.id, cambios(` nr${SUFIJO} `)).expect(200);
+      await editar(v.id, cambios('   ')).expect(200);
+      expect((await ventaPorId(v.id)).num_nota).toBeNull();
     });
 
-    // Review Focus 4
-    it('conservar el propio # de nota (con otras mayúsculas o espacios) no es duplicado', async () => {
+    it('el # de nota se recorta al editar', async () => {
       const v = await registrar({
         fecha: FECHA_EDICION,
         numNota: `PN${SUFIJO}`,

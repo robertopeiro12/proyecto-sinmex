@@ -6,7 +6,7 @@ import { ErrorApi } from "@/lib/api";
 import * as clientesLib from "@/lib/clientes";
 import type { ClienteDetalle, ClienteResumen } from "@/lib/clientes";
 import * as ventasLib from "@/lib/ventas";
-import type { PresentacionDeCatalogo, VentaRegistrada } from "@/lib/ventas";
+import type { PresentacionDeCatalogo, VentaEncontrada, VentaRegistrada } from "@/lib/ventas";
 import { PantallaRegistrarVenta } from "./pantalla-registrar-venta";
 
 // Mismo limite que pantalla-clientes.test.tsx: se mockea la capa de red
@@ -19,6 +19,7 @@ vi.mock("@/lib/ventas", async (importOriginal) => {
     obtenerCatalogoVenta: vi.fn(),
     listarRepartidores: vi.fn(),
     registrarVenta: vi.fn(),
+    buscarVentas: vi.fn(),
   };
 });
 vi.mock("@/components/auth/auth-provider");
@@ -28,6 +29,7 @@ const obtenerCliente = vi.mocked(clientesLib.obtenerCliente);
 const obtenerCatalogoVenta = vi.mocked(ventasLib.obtenerCatalogoVenta);
 const listarRepartidores = vi.mocked(ventasLib.listarRepartidores);
 const registrarVenta = vi.mocked(ventasLib.registrarVenta);
+const buscarVentas = vi.mocked(ventasLib.buscarVentas);
 
 function mockAuth(puede: (clave: string) => boolean) {
   vi.mocked(useAuth).mockReturnValue({
@@ -60,6 +62,20 @@ const REGISTRADA: VentaRegistrada = {
   status: "pagada",
 };
 
+const YA_REGISTRADA: VentaEncontrada = {
+  id: "v0",
+  folio: "TJ261006AP03",
+  fecha: "2026-10-06",
+  clienteId: "c1",
+  cliente: "Abarrotes Lupita",
+  repartidor: "Ana Pérez",
+  numNota: null,
+  montoCentavos: 27000,
+  status: "pendiente",
+  origen: "app",
+  saldoCentavos: 27000,
+};
+
 /** Renderiza, elige el cliente y espera a que carguen productos y repartidores. */
 async function prepararPantalla() {
   const usuario = userEvent.setup();
@@ -80,6 +96,43 @@ describe("PantallaRegistrarVenta", () => {
     listarRepartidores.mockResolvedValue([{ id: "v-ana", nombre: "Ana Pérez" }]);
     obtenerCatalogoVenta.mockResolvedValue(CATALOGO);
     registrarVenta.mockResolvedValue(REGISTRADA);
+    buscarVentas.mockResolvedValue({ ventas: [], hayMas: false });
+  });
+
+  describe("aviso de posible venta duplicada", () => {
+    it("avisa si el cliente ya tiene ventas en esa fecha, con folio, repartidor y monto", async () => {
+      buscarVentas.mockResolvedValue({ ventas: [YA_REGISTRADA], hayMas: false });
+      await prepararPantalla();
+
+      const hoy = ventasLib.hoyEnTijuana();
+      expect(buscarVentas).toHaveBeenCalledWith({
+        desde: hoy,
+        hasta: hoy,
+        sucursal: null,
+        clienteId: "c1",
+        numNota: "",
+      });
+      const aviso = await screen.findByRole("note");
+      expect(aviso).toHaveTextContent(`Este cliente ya tiene 1 venta el ${hoy}`);
+      expect(aviso).toHaveTextContent("TJ261006AP03");
+      expect(aviso).toHaveTextContent("Ana Pérez");
+      expect(aviso).toHaveTextContent("$270.00");
+      expect(aviso).toHaveTextContent("Tablet");
+    });
+
+    it("sin ventas ese día no hay aviso", async () => {
+      await prepararPantalla();
+      await waitFor(() => expect(buscarVentas).toHaveBeenCalled());
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    });
+
+    it("si la búsqueda falla no hay aviso y se puede seguir capturando", async () => {
+      buscarVentas.mockRejectedValue(new Error("red"));
+      await prepararPantalla();
+      await waitFor(() => expect(buscarVentas).toHaveBeenCalled());
+      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
   });
 
   it("arma el payload sin precios, con el repartidor elegido, y muestra la venta creada", async () => {
@@ -91,7 +144,7 @@ describe("PantallaRegistrarVenta", () => {
     await usuario.type(screen.getByLabelText("Cantidad de Horchata 1 L"), "24");
     await usuario.type(screen.getByLabelText("Promoción de Horchata 1 L"), "2");
     await usuario.type(screen.getByLabelText("Cantidad de Jamaica 500 ml"), "5");
-    await usuario.type(screen.getByLabelText("Número de nota"), "1234");
+    await usuario.type(screen.getByLabelText("Número de nota (opcional)"), "1234");
 
     expect(screen.getByText("Total: $270.00")).toBeInTheDocument();
 
@@ -122,7 +175,7 @@ describe("PantallaRegistrarVenta", () => {
     await usuario.selectOptions(screen.getByLabelText("Repartidor"), "oficina");
     await usuario.selectOptions(screen.getByLabelText("Contado o crédito"), "credito");
     await usuario.type(screen.getByLabelText("Cantidad de Horchata 1 L"), "1");
-    await usuario.type(screen.getByLabelText("Número de nota"), "77");
+    await usuario.type(screen.getByLabelText("Número de nota (opcional)"), "77");
     await usuario.click(screen.getByRole("button", { name: "Grabar" }));
 
     expect(registrarVenta).toHaveBeenCalledTimes(1);
@@ -146,7 +199,7 @@ describe("PantallaRegistrarVenta", () => {
     const usuario = await prepararPantalla();
     await usuario.selectOptions(screen.getByLabelText("Repartidor"), "oficina");
     await usuario.type(screen.getByLabelText("Cantidad de Horchata 1 L"), "1");
-    await usuario.type(screen.getByLabelText("Número de nota"), "1234");
+    await usuario.type(screen.getByLabelText("Número de nota (opcional)"), "1234");
     await usuario.click(screen.getByRole("button", { name: "Grabar" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -165,7 +218,7 @@ describe("PantallaRegistrarVenta", () => {
   it("no manda nada sin productos", async () => {
     const usuario = await prepararPantalla();
     await usuario.selectOptions(screen.getByLabelText("Repartidor"), "oficina");
-    await usuario.type(screen.getByLabelText("Número de nota"), "1");
+    await usuario.type(screen.getByLabelText("Número de nota (opcional)"), "1");
     await usuario.click(screen.getByRole("button", { name: "Grabar" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Captura al menos un producto.");
@@ -180,7 +233,7 @@ describe("PantallaRegistrarVenta", () => {
     fireEvent.change(screen.getByLabelText("Cantidad de Horchata 1 L"), {
       target: { value: "2.5" },
     });
-    await usuario.type(screen.getByLabelText("Número de nota"), "1");
+    await usuario.type(screen.getByLabelText("Número de nota (opcional)"), "1");
     await usuario.click(screen.getByRole("button", { name: "Grabar" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -200,7 +253,7 @@ describe("PantallaRegistrarVenta", () => {
     const usuario = await prepararPantalla();
     await usuario.selectOptions(screen.getByLabelText("Repartidor"), "oficina");
     await usuario.type(screen.getByLabelText("Cantidad de Horchata 1 L"), "1");
-    await usuario.type(screen.getByLabelText("Número de nota"), "1");
+    await usuario.type(screen.getByLabelText("Número de nota (opcional)"), "1");
 
     const grabar = screen.getByRole("button", { name: "Grabar" });
     await usuario.click(grabar);
@@ -217,7 +270,7 @@ describe("PantallaRegistrarVenta", () => {
     await usuario.selectOptions(screen.getByLabelText("Repartidor"), "oficina");
     await usuario.type(screen.getByLabelText("Cantidad de Horchata 1 L"), "3");
     await usuario.type(screen.getByLabelText("Cantidad de Jamaica 500 ml"), "2");
-    await usuario.type(screen.getByLabelText("Número de nota"), "9");
+    await usuario.type(screen.getByLabelText("Número de nota (opcional)"), "9");
 
     // A esa fecha la Horchata todavia no tenia precio.
     obtenerCatalogoVenta.mockResolvedValue([

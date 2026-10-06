@@ -183,7 +183,7 @@ describe("PantallaVentas", () => {
     await screen.findByRole("option", { name: "Ana Pérez" });
     expect(screen.queryByRole("option", { name: "Oficina" })).not.toBeInTheDocument();
 
-    const nota = screen.getByLabelText("Número de nota");
+    const nota = screen.getByLabelText("Número de nota (opcional)");
     await usuario.clear(nota);
     await usuario.type(nota, "1235");
     await usuario.click(screen.getByRole("button", { name: "Guardar" }));

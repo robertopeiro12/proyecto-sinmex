@@ -9,8 +9,10 @@ import { ErrorApi } from "@/lib/api";
 import { listarClientes, obtenerCliente, type ClienteResumen } from "@/lib/clientes";
 import {
   CONDICIONES_INICIALES,
+  ETIQUETA_ORIGEN,
   ETIQUETA_STATUS,
   REPARTIDOR_OFICINA,
+  buscarVentas,
   camposDeCondiciones,
   conCaptura,
   filasDeCatalogo,
@@ -26,6 +28,7 @@ import {
   type NuevaVenta,
   type PresentacionDeCatalogo,
   type Repartidor,
+  type VentaEncontrada,
   type VentaRegistrada,
 } from "@/lib/ventas";
 import { BuscadorCliente } from "./buscador-cliente";
@@ -53,6 +56,7 @@ export function PantallaRegistrarVenta({ sucursal }: { sucursal: string | null }
   const [repartidor, setRepartidor] = useState("");
   const [catalogo, setCatalogo] = useState<PresentacionDeCatalogo[]>([]);
   const [captura, setCaptura] = useState<Captura>({});
+  const [ventasDelDia, setVentasDelDia] = useState<VentaEncontrada[]>([]);
   const [condiciones, setCondiciones] = useState<CondicionesVenta>(CONDICIONES_INICIALES);
   const [errorLocal, setErrorLocal] = useState<string | null>(null);
   const [resultado, setResultado] = useState<VentaRegistrada | null>(null);
@@ -109,6 +113,29 @@ export function PantallaRegistrarVenta({ sucursal }: { sucursal: string | null }
             ? err.mensajeApi
             : "No se pudieron cargar los productos del cliente.",
         );
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [cliente, fecha]);
+
+  // Aviso de posible duplicado: las ventas vivas de ese cliente en esa fecha.
+  // Desde 2026-10-06 el # de nota ya no es unico, asi que nada impide capturar
+  // dos veces la misma venta (la tablet la subio y la oficina la vuelve a
+  // capturar porque "fallo el sistema"). Solo avisa; si la busqueda falla, se
+  // sigue sin aviso: no debe estorbar a la captura.
+  useEffect(() => {
+    if (!cliente || !fecha) {
+      setVentasDelDia([]);
+      return;
+    }
+    let vigente = true;
+    buscarVentas({ desde: fecha, hasta: fecha, sucursal: null, clienteId: cliente.id, numNota: "" })
+      .then((r) => {
+        if (vigente) setVentasDelDia(r.ventas);
+      })
+      .catch(() => {
+        if (vigente) setVentasDelDia([]);
       });
     return () => {
       vigente = false;
@@ -249,6 +276,23 @@ export function PantallaRegistrarVenta({ sucursal }: { sucursal: string | null }
               conOficina
             />
           </div>
+
+          {cliente && ventasDelDia.length > 0 && (
+            <div role="note" className="rounded-md border border-amber-400 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/50 dark:bg-amber-950/40 dark:text-amber-200">
+              <p className="font-semibold">
+                Este cliente ya tiene {ventasDelDia.length}{" "}
+                {ventasDelDia.length === 1 ? "venta" : "ventas"} el {fecha}. Revisa que no sea la misma.
+              </p>
+              <ul className="mt-1 list-disc pl-5">
+                {ventasDelDia.map((v) => (
+                  <li key={v.id}>
+                    <span className="font-mono">{v.folio}</span> · {v.repartidor ?? "Oficina"} ·{" "}
+                    {formatearPesos(v.montoCentavos)} · {ETIQUETA_ORIGEN[v.origen]}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {cliente && (
             <TablaProductosVenta

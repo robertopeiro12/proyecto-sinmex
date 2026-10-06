@@ -66,6 +66,17 @@ describe('normalizarDatosVenta (D12)', () => {
     ).toMatchObject({ ok: true, venta: { comentarios: null } });
   });
 
+  // El block de papel solo se usa cuando falla el sistema (cliente, 2026-10-06).
+  it.each([
+    ['ausente', undefined],
+    ['null', null],
+    ['en blanco', '   '],
+  ])('sin # de nota (%s) es una venta valida con numNota null', (_, valor) => {
+    expect(
+      normalizarDatosVenta(CLIENTE, datos({ num_nota: valor })),
+    ).toMatchObject({ ok: true, venta: { numNota: null } });
+  });
+
   it('sin factura, es N/A (D9)', () => {
     expect(
       normalizarDatosVenta(CLIENTE, datos({ factura: undefined })),
@@ -112,8 +123,6 @@ describe('normalizarDatosVenta (D12)', () => {
   describe('rechaza, y el motivo empieza por el campo que fallo', () => {
     it.each<[string, string | null, Record<string, unknown>, string]>([
       ['sin cliente_id', null, datos(), 'cliente_id'],
-      ['num_nota ausente', CLIENTE, datos({ num_nota: undefined }), 'num_nota'],
-      ['num_nota en blanco', CLIENTE, datos({ num_nota: '   ' }), 'num_nota'],
       [
         'num_nota de 31 caracteres',
         CLIENTE,
