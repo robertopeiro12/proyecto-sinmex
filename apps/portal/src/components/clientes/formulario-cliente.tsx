@@ -149,6 +149,7 @@ export function FormularioCliente({ cliente, alGuardar, alCancelar }: Props) {
       nombre,
       domicilio,
       telefono,
+      // En edicion, omitir el encargado conserva el actual (el backend no lo borra).
       encargado: encargado.trim() === "" ? undefined : encargado,
       factura,
       tipoNegocioId: tipoNegocioId === "" ? undefined : tipoNegocioId,
@@ -238,6 +239,7 @@ export function FormularioCliente({ cliente, alGuardar, alCancelar }: Props) {
             </label>
             <input
               id="encargado"
+              required={esAlta || cliente.encargado !== null}
               maxLength={120}
               disabled={enviando}
               value={encargado}

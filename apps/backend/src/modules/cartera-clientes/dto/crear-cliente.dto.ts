@@ -39,13 +39,13 @@ export class CrearClienteDto {
   @MaxLength(30, { message: 'El teléfono no puede pasar de 30 caracteres.' })
   telefono!: string;
 
-  @IsOptional()
   @Transform(recortar)
   @IsString()
+  @MinLength(1, { message: 'El nombre del encargado es obligatorio.' })
   @MaxLength(120, {
     message: 'El nombre del encargado no puede pasar de 120 caracteres.',
   })
-  encargado?: string;
+  encargado!: string;
 
   @IsBoolean()
   factura!: boolean;

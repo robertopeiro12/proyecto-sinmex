@@ -360,11 +360,16 @@ export type DatosVenta = {
  * la firma de indice implicita que eso exige.
  */
 export type DatosProspecto = {
-  /** Nombre del negocio. Lo unico obligatorio junto al telefono. */
+  /** Nombre del negocio. */
   nombre: string;
   telefono: string;
-  /** Nombre del encargado. */
-  encargado: string | null;
+  /**
+   * Nombre del encargado: quien atiende el negocio. Obligatorio junto con
+   * `nombre` y `telefono` (confirmado por el cliente en junta, 2026-09-29 —
+   * antes era opcional). No subió la versión del contrato: ver
+   * `docs/contrato-sincronizacion.md` §6 (nota de T-69).
+   */
+  encargado: string;
   /** Del catalogo `tipos_negocio` que baja en el `pull`. */
   tipo_negocio_id: string | null;
   comentarios: string | null;

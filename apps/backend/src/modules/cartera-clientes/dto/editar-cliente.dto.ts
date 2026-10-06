@@ -48,9 +48,12 @@ export class EditarClienteDto {
   @MaxLength(30, { message: 'El teléfono no puede pasar de 30 caracteres.' })
   telefono!: string;
 
+  // Opcional a proposito (T-69): un Cliente viejo sin encargado no se bloquea
+  // al editar otro campo. Omitirlo conserva el valor actual; no se puede borrar.
   @IsOptional()
   @Transform(recortar)
   @IsString()
+  @MinLength(1, { message: 'El nombre del encargado es obligatorio.' })
   @MaxLength(120, {
     message: 'El nombre del encargado no puede pasar de 120 caracteres.',
   })

@@ -161,7 +161,7 @@ export class ClientesService {
           nombre: dto.nombre,
           domicilio: dto.domicilio,
           telefono: dto.telefono,
-          encargado: dto.encargado ?? null,
+          encargado: dto.encargado,
           factura: dto.factura,
           tipo: dto.tipo,
           tipo_negocio_id: dto.tipoNegocioId ?? null,
@@ -220,7 +220,8 @@ export class ClientesService {
           nombre: dto.nombre,
           domicilio: dto.domicilio,
           telefono: dto.telefono,
-          encargado: dto.encargado ?? null,
+          // Omitirlo conserva el actual (T-69): no se borra ni bloquea clientes viejos.
+          encargado: dto.encargado ?? cliente.encargado,
           factura: dto.factura,
           tipo_negocio_id: dto.tipoNegocioId ?? null,
           lista_precio_id: dto.listaPrecioId,

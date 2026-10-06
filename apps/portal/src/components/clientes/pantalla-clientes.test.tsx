@@ -150,6 +150,7 @@ describe("PantallaClientes", () => {
     await usuario.type(screen.getByLabelText("Nombre"), "Abarrotes Lupita");
     await usuario.type(screen.getByLabelText("Domicilio / referencia"), "Calle Falsa 123");
     await usuario.type(screen.getByLabelText("Teléfono"), "664-000-0000");
+    await usuario.type(screen.getByLabelText("Encargado"), "Lupita");
     await usuario.selectOptions(screen.getByLabelText("Lista de precios"), "lista-1");
     await usuario.click(screen.getByRole("button", { name: "Guardar" }));
 
@@ -162,6 +163,18 @@ describe("PantallaClientes", () => {
 
     expect(await screen.findByText("Abarrotes Lupita")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Nuevo cliente" })).not.toBeInTheDocument();
+  });
+
+  it("alta: el campo Encargado es obligatorio", async () => {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    listarClientes.mockResolvedValueOnce([]);
+
+    render(<PantallaClientes sucursal={null} tipo="todos" />);
+    await screen.findByText("No hay clientes que mostrar.");
+
+    await usuario.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    expect(screen.getByLabelText("Encargado")).toBeRequired();
   });
 
   it("edita un cliente existente precargando su detalle completo", async () => {
@@ -189,6 +202,34 @@ describe("PantallaClientes", () => {
 
     await waitFor(() => expect(editarCliente).toHaveBeenCalledWith("1", expect.anything()));
     expect(await screen.findByText("Abarrotes Lupita 2")).toBeInTheDocument();
+  });
+
+  it("edicion: Encargado es obligatorio si el cliente ya lo tiene", async () => {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    listarClientes.mockResolvedValueOnce([RESUMEN]);
+    obtenerCliente.mockResolvedValue({ ...DETALLE, encargado: "Lupita" });
+
+    render(<PantallaClientes sucursal={null} tipo="todos" />);
+    await screen.findByText("Abarrotes Lupita");
+
+    await usuario.click(screen.getByRole("button", { name: "Editar" }));
+    await waitFor(() => expect(obtenerCliente).toHaveBeenCalledWith("1"));
+    expect(await screen.findByLabelText("Encargado")).toBeRequired();
+  });
+
+  it("edicion: Encargado no es obligatorio en un cliente heredado sin encargado", async () => {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    listarClientes.mockResolvedValueOnce([RESUMEN]);
+    obtenerCliente.mockResolvedValue({ ...DETALLE, encargado: null });
+
+    render(<PantallaClientes sucursal={null} tipo="todos" />);
+    await screen.findByText("Abarrotes Lupita");
+
+    await usuario.click(screen.getByRole("button", { name: "Editar" }));
+    await waitFor(() => expect(obtenerCliente).toHaveBeenCalledWith("1"));
+    expect(await screen.findByLabelText("Encargado")).not.toBeRequired();
   });
 
   it("da de baja un cliente tras confirmar, y recarga la lista", async () => {

@@ -20,7 +20,7 @@ export interface DatosRegistroProspecto {
   /** Nombre del negocio. */
   nombre: string;
   telefono: string;
-  encargado: string | null;
+  encargado: string;
   tipoNegocioId: string | null;
   comentarios: string | null;
   /**
@@ -102,7 +102,10 @@ export function crearRepositorioProspectos(
       }
 
       const encargado = recortar(datos.encargado);
-      if (encargado !== null && encargado.length > LARGO_MAX_ENCARGADO) {
+      if (encargado === null) {
+        throw new ErrorProspecto('Captura el nombre del encargado.');
+      }
+      if (encargado.length > LARGO_MAX_ENCARGADO) {
         throw new ErrorProspecto(
           `El nombre del encargado no puede pasar de ${LARGO_MAX_ENCARGADO} caracteres.`,
         );

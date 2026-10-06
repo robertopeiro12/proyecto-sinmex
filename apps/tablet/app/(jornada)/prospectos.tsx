@@ -96,13 +96,14 @@ export default function Prospectos() {
   }, [datos, vendedor, refrescos, versionCatalogos, ultimaSincronizacion]);
 
   // La foto **no** aparece aqui a proposito, ni siquiera mientras la camara esta
-  // abierta: lo que habilita el boton son los dos campos que dicto el cliente.
+  // abierta: lo que habilita el boton son los tres campos obligatorios que dicto el cliente (nombre, telefono y encargado).
   // Un prospecto sin foto es un prospecto completo.
   const puedeGuardar =
     vendedor !== null &&
     sucursalId !== null &&
     nombre.trim() !== '' &&
-    telefono.trim() !== '';
+    telefono.trim() !== '' &&
+    encargado.trim() !== '';
 
   async function ubicar() {
     setAvisoUbicacion(null);
@@ -170,7 +171,7 @@ export default function Prospectos() {
         sucursalId,
         nombre,
         telefono,
-        encargado: encargado.trim() === '' ? null : encargado,
+        encargado: encargado.trim(),
         tipoNegocioId,
         comentarios: comentarios.trim() === '' ? null : comentarios,
         lat: ubicacion?.lat ?? null,
@@ -229,7 +230,7 @@ export default function Prospectos() {
         etiqueta="Encargado"
         value={encargado}
         onChangeText={setEncargado}
-        placeholder="Quién atiende (opcional)"
+        placeholder="Quién atiende"
         autoCapitalize="words"
       />
 

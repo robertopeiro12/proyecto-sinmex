@@ -1,7 +1,11 @@
 import { normalizarDatosProspecto } from './datos-prospecto';
 
 /** Lo minimo que el contrato manda para un prospecto. */
-const minimo = { nombre: 'Tacos Aaron', telefono: '6641112233' };
+const minimo = {
+  nombre: 'Tacos Aaron',
+  telefono: '6641112233',
+  encargado: 'Don Aaron',
+};
 
 function bueno(datos: Record<string, unknown>) {
   const r = normalizarDatosProspecto(datos);
@@ -20,11 +24,11 @@ function malo(datos: Record<string, unknown>, campo: string) {
 }
 
 describe('normalizarDatosProspecto', () => {
-  it('lo minimo: nombre del negocio y telefono', () => {
+  it('lo minimo: nombre, telefono y encargado', () => {
     expect(bueno(minimo)).toEqual({
       nombre: 'Tacos Aaron',
       telefono: '6641112233',
-      encargado: null,
+      encargado: 'Don Aaron',
       tipoNegocioId: null,
       comentarios: null,
       lat: null,
@@ -66,46 +70,80 @@ describe('normalizarDatosProspecto', () => {
 
   describe('nombre del negocio', () => {
     it('es obligatorio', () => {
-      malo({ telefono: '664' }, 'nombre');
-      malo({ nombre: '   ', telefono: '664' }, 'nombre');
-      malo({ nombre: 42, telefono: '664' }, 'nombre');
+      malo({ telefono: '664', encargado: 'Don Aaron' }, 'nombre');
+      malo(
+        { nombre: '   ', telefono: '664', encargado: 'Don Aaron' },
+        'nombre',
+      );
+      malo({ nombre: 42, telefono: '664', encargado: 'Don Aaron' }, 'nombre');
     });
 
     it('tiene tope de largo', () => {
-      malo({ nombre: 'x'.repeat(201), telefono: '664' }, 'nombre');
+      malo(
+        { nombre: 'x'.repeat(201), telefono: '664', encargado: 'Don Aaron' },
+        'nombre',
+      );
       expect(
-        bueno({ nombre: 'x'.repeat(200), telefono: '664' }).nombre,
+        bueno({
+          nombre: 'x'.repeat(200),
+          telefono: '664',
+          encargado: 'Don Aaron',
+        }).nombre,
       ).toHaveLength(200);
     });
   });
 
   describe('telefono', () => {
     it('es obligatorio: `cliente.telefono` sigue siendo not null', () => {
-      malo({ nombre: 'Tacos' }, 'telefono');
-      malo({ nombre: 'Tacos', telefono: '  ' }, 'telefono');
+      malo({ nombre: 'Tacos', encargado: 'Don Aaron' }, 'telefono');
+      malo(
+        { nombre: 'Tacos', telefono: '  ', encargado: 'Don Aaron' },
+        'telefono',
+      );
     });
 
     it('tiene tope de largo', () => {
-      malo({ nombre: 'Tacos', telefono: '6'.repeat(31) }, 'telefono');
+      malo(
+        { nombre: 'Tacos', telefono: '6'.repeat(31), encargado: 'Don Aaron' },
+        'telefono',
+      );
+    });
+  });
+
+  describe('encargado', () => {
+    // Obligatorio desde el 2026-09-29 (T-69, confirmado por el cliente en
+    // junta): antes vivia en "campos opcionales de texto", junto a
+    // `comentarios`. Mismas pruebas que `telefono` de arriba, adaptadas.
+    it('es obligatorio', () => {
+      malo({ nombre: 'Tacos', telefono: '664' }, 'encargado');
+      malo({ nombre: 'Tacos', telefono: '664', encargado: '  ' }, 'encargado');
+    });
+
+    it('un tipo que no es texto se rechaza en vez de convertirse', () => {
+      malo({ ...minimo, encargado: 7 }, 'encargado');
+    });
+
+    it('tiene tope de largo', () => {
+      malo({ ...minimo, encargado: 'x'.repeat(121) }, 'encargado');
+      expect(
+        bueno({ ...minimo, encargado: 'x'.repeat(120) }).encargado,
+      ).toHaveLength(120);
     });
   });
 
   describe('campos opcionales de texto', () => {
     it('ausente, null y vacio se guardan como null', () => {
       for (const valor of [undefined, null, '', '   ']) {
-        const p = bueno({ ...minimo, encargado: valor, comentarios: valor });
-        expect(p.encargado).toBeNull();
+        const p = bueno({ ...minimo, comentarios: valor });
         expect(p.comentarios).toBeNull();
       }
     });
 
     it('un tipo que no es texto se rechaza en vez de convertirse', () => {
-      malo({ ...minimo, encargado: 7 }, 'encargado');
       malo({ ...minimo, comentarios: { a: 1 } }, 'comentarios');
     });
 
     it('tienen tope de largo', () => {
-      malo({ ...minimo, encargado: 'x'.repeat(121) }, 'encargado');
       malo({ ...minimo, comentarios: 'x'.repeat(501) }, 'comentarios');
     });
   });

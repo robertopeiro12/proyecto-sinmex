@@ -21,11 +21,11 @@
  */
 
 export interface ProspectoNormalizado {
-  /** Nombre del negocio. Es lo unico obligatorio. */
+  /** Nombre del negocio. Obligatorio, junto con telefono y encargado. */
   nombre: string;
   telefono: string;
-  /** Nombre del encargado. */
-  encargado: string | null;
+  /** Nombre del encargado: quien atiende el negocio. Obligatorio. */
+  encargado: string;
   tipoNegocioId: string | null;
   comentarios: string | null;
   /**
@@ -133,8 +133,19 @@ export function normalizarDatosProspecto(
     );
   }
 
-  const encargado = opcional('encargado', datos.encargado, LARGO_MAX_ENCARGADO);
-  if (!encargado.ok) return encargado.error;
+  // Obligatorio desde el 2026-09-29 (confirmado por el cliente en junta con
+  // Roberto): antes era opcional aqui y en el alta de Cliente del Portal
+  // (T-12). Ver el `[!warning]` en `Cliente.md` del vault.
+  const encargado = texto(datos.encargado);
+  if (encargado === null) {
+    return invalido('encargado', 'es obligatorio: quien atiende el negocio.');
+  }
+  if (encargado.length > LARGO_MAX_ENCARGADO) {
+    return invalido(
+      'encargado',
+      `no puede pasar de ${LARGO_MAX_ENCARGADO} caracteres.`,
+    );
+  }
 
   const comentarios = opcional(
     'comentarios',
@@ -181,7 +192,7 @@ export function normalizarDatosProspecto(
     prospecto: {
       nombre,
       telefono,
-      encargado: encargado.valor,
+      encargado,
       tipoNegocioId,
       comentarios: comentarios.valor,
       lat: ubicacion.lat,

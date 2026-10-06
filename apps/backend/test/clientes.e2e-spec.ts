@@ -337,6 +337,7 @@ describe('Clientes (e2e)', () => {
       nombre: `${PREFIJO} Alta`,
       domicilio: 'Domicilio',
       telefono: '000',
+      encargado: 'Encargado de prueba',
       factura: false,
       tipo: 'cliente',
       listaPrecioId: listaId,
@@ -445,6 +446,16 @@ describe('Clientes (e2e)', () => {
         .expect(400);
     });
 
+    it('responde 400 si falta el encargado', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { encargado: _encargado, ...sinEncargado } = datosMinimos();
+      await request(app.getHttpServer())
+        .post('/clientes')
+        .set('Cookie', cookieTijuana)
+        .send(sinEncargado)
+        .expect(400);
+    });
+
     it('rechaza sin cliente.gestionar con 403', async () => {
       await request(app.getHttpServer())
         .post('/clientes')
@@ -459,6 +470,7 @@ describe('Clientes (e2e)', () => {
       nombre: `${PREFIJO} Editado`,
       domicilio: 'Domicilio editado',
       telefono: '111',
+      encargado: 'Encargado editado',
       factura: true,
       listaPrecioId: listaId,
       promocion: 'ninguna',
@@ -482,6 +494,56 @@ describe('Clientes (e2e)', () => {
       expect(cliente.telefono).toBe('111');
       expect(cliente.factura).toBe(true);
       expect(cliente.sucursalCodigo).toBe('TJ');
+    });
+
+    it('un cliente sin encargado en la BD se edita sin mandarlo y sigue en null (#99)', async () => {
+      const id = await sembrarCliente(`${PREFIJO} Sin Encargado`, idTijuana);
+      await db
+        .updateTable('cliente')
+        .set({ encargado: null })
+        .where('id', '=', id)
+        .execute();
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { encargado: _encargado, ...sinEncargado } = cambios();
+
+      const res = await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(sinEncargado)
+        .expect(200);
+
+      expect((res.body as ClienteDetalleRespuesta).encargado).toBeNull();
+    });
+
+    it('un cliente con encargado conserva el actual si el PATCH lo omite', async () => {
+      const id = await sembrarCliente(
+        `${PREFIJO} Conserva Encargado`,
+        idTijuana,
+      );
+      await db
+        .updateTable('cliente')
+        .set({ encargado: 'Don Aaron' })
+        .where('id', '=', id)
+        .execute();
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { encargado: _encargado, ...sinEncargado } = cambios();
+
+      const res = await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(sinEncargado)
+        .expect(200);
+
+      expect((res.body as ClienteDetalleRespuesta).encargado).toBe('Don Aaron');
+    });
+
+    it('responde 400 si el PATCH manda un encargado en blanco', async () => {
+      const id = await sembrarCliente(`${PREFIJO} Encargado Blanco`, idTijuana);
+      await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(cambios({ encargado: '   ' }))
+        .expect(400);
     });
 
     it('corrige el mismo override el mismo dia en vez de duplicarlo', async () => {
