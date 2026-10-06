@@ -273,6 +273,11 @@ export interface Prospecto {
   sucursal_id: string;
   nombre: string;
   telefono: string;
+  /**
+   * Obligatorio desde T-69, pero la columna local sigue siendo nullable
+   * (migracion 006): una fila capturada antes de T-69 puede traer `null`, y el
+   * servidor la rechazaria por operacion (`datos-invalidos`).
+   */
   encargado: string;
   tipo_negocio_id: string | null;
   comentarios: string | null;

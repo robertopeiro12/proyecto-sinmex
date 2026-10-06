@@ -204,6 +204,34 @@ describe("PantallaClientes", () => {
     expect(await screen.findByText("Abarrotes Lupita 2")).toBeInTheDocument();
   });
 
+  it("edicion: Encargado es obligatorio si el cliente ya lo tiene", async () => {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    listarClientes.mockResolvedValueOnce([RESUMEN]);
+    obtenerCliente.mockResolvedValue({ ...DETALLE, encargado: "Lupita" });
+
+    render(<PantallaClientes sucursal={null} tipo="todos" />);
+    await screen.findByText("Abarrotes Lupita");
+
+    await usuario.click(screen.getByRole("button", { name: "Editar" }));
+    await waitFor(() => expect(obtenerCliente).toHaveBeenCalledWith("1"));
+    expect(await screen.findByLabelText("Encargado")).toBeRequired();
+  });
+
+  it("edicion: Encargado no es obligatorio en un cliente heredado sin encargado", async () => {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    listarClientes.mockResolvedValueOnce([RESUMEN]);
+    obtenerCliente.mockResolvedValue({ ...DETALLE, encargado: null });
+
+    render(<PantallaClientes sucursal={null} tipo="todos" />);
+    await screen.findByText("Abarrotes Lupita");
+
+    await usuario.click(screen.getByRole("button", { name: "Editar" }));
+    await waitFor(() => expect(obtenerCliente).toHaveBeenCalledWith("1"));
+    expect(await screen.findByLabelText("Encargado")).not.toBeRequired();
+  });
+
   it("da de baja un cliente tras confirmar, y recarga la lista", async () => {
     const usuario = userEvent.setup();
     mockAuth(() => true);

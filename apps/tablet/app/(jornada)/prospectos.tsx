@@ -96,7 +96,7 @@ export default function Prospectos() {
   }, [datos, vendedor, refrescos, versionCatalogos, ultimaSincronizacion]);
 
   // La foto **no** aparece aqui a proposito, ni siquiera mientras la camara esta
-  // abierta: lo que habilita el boton son los dos campos que dicto el cliente.
+  // abierta: lo que habilita el boton son los tres campos obligatorios que dicto el cliente (nombre, telefono y encargado).
   // Un prospecto sin foto es un prospecto completo.
   const puedeGuardar =
     vendedor !== null &&

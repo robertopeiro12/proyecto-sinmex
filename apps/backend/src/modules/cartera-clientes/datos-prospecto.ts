@@ -21,7 +21,7 @@
  */
 
 export interface ProspectoNormalizado {
-  /** Nombre del negocio. Es lo unico obligatorio. */
+  /** Nombre del negocio. Obligatorio, junto con telefono y encargado. */
   nombre: string;
   telefono: string;
   /** Nombre del encargado: quien atiende el negocio. Obligatorio. */
