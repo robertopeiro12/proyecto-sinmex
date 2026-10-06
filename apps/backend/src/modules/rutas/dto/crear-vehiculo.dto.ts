@@ -24,6 +24,14 @@ export class CrearVehiculoDto {
   @MaxLength(80, { message: 'El nombre no puede pasar de 80 caracteres.' })
   nombre!: string;
 
+  @Transform(recortar)
+  @IsString()
+  @MinLength(1, { message: 'Las placas son obligatorias.' })
+  // Sin formato confirmado por el cliente (junta 2026-09-29): texto libre, sin
+  // inventar una validacion de patron de placa mexicana.
+  @MaxLength(20, { message: 'Las placas no pueden pasar de 20 caracteres.' })
+  placas!: string;
+
   // La columna es `numeric(10,2)` y NULLABLE en la base, pero el alta lo exige:
   // un vehiculo sin km de partida deja el reporte de kilometraje sin origen. No
   // se cambia la columna a `not null` por un campo que la API ya obliga (ver el

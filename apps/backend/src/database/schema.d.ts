@@ -263,6 +263,7 @@ export interface Vehiculo {
   id: Generated<string>;
   km_inicial: Numeric | null;
   nombre: string;
+  placas: string | null;
   sucursal_id: string;
   updated_at: Generated<Timestamp>;
 }
