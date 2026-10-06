@@ -29,7 +29,8 @@ select throws_ok(
   'la placa es unica GLOBAL, no por sucursal'
 );
 
--- lower()/btrim() en el indice: mismo criterio que uq_vehiculo_nombre_sucursal.
+-- lower()/btrim() en el indice: lower es el criterio de uq_vehiculo_nombre_sucursal;
+-- btrim es adicional (placas tecleadas a mano con espacios sobrantes).
 select throws_ok(
   $$insert into vehiculo (nombre, sucursal_id, km_inicial, placas)
     select 'Mayusculas', tj, 2000, ' abc-123 ' from ref$$,

@@ -90,9 +90,11 @@ describe('Vehiculos (e2e)', () => {
     usuarioIds.push(id);
   };
 
-  /** Inserta un vehiculo por debajo de la API, para preparar escenarios. */
-  /** Un vehiculo con `placas: undefined` se siembra SIN placa — asi se prueban
-   * los vehiculos "viejos" que ya existian antes de T-68. */
+  /**
+   * Inserta un vehiculo por debajo de la API, para preparar escenarios. Con
+   * `placas: undefined` se siembra SIN placa — asi se prueban los vehiculos
+   * "viejos" que ya existian antes de T-68.
+   */
   const sembrarVehiculo = async (
     nombre: string,
     sucursalId: string,
@@ -315,11 +317,14 @@ describe('Vehiculos (e2e)', () => {
 
       // Mismo nombre, placa DISTINTA: lo que se prueba aqui es el unique de
       // nombre, no el de placas (Task 1 ya lo cubre por separado).
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .post('/vehiculos')
         .set('Cookie', cookieTijuana)
         .send({ ...cuerpo, placas: `${PLACA}-005b` })
         .expect(409);
+      const mensaje = (res.body as { message: string }).message;
+      expect(mensaje).toMatch(/llamado/);
+      expect(mensaje).not.toMatch(/placas/);
     });
 
     it('rechaza un nombre repetido que solo cambia en mayusculas', async () => {
@@ -469,7 +474,7 @@ describe('Vehiculos (e2e)', () => {
         .expect(201);
 
       // Nombre DISTINTO y sucursal DISTINTA: lo unico que choca es la placa.
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .post('/vehiculos')
         .set('Cookie', cookieGeneral)
         .send({
@@ -479,6 +484,7 @@ describe('Vehiculos (e2e)', () => {
           sucursalId: idMexicali,
         })
         .expect(409);
+      expect((res.body as { message: string }).message).toMatch(/placas/);
     });
   });
 
@@ -528,11 +534,12 @@ describe('Vehiculos (e2e)', () => {
         `${PLACA}-LIBRE`,
       );
 
-      await request(app.getHttpServer())
+      const res = await request(app.getHttpServer())
         .patch(`/vehiculos/${id}`)
         .set('Cookie', cookieGeneral)
         .send({ placas: `${PLACA}-OCUPADA` })
         .expect(409);
+      expect((res.body as { message: string }).message).toMatch(/placas/);
     });
 
     // Un vehiculo sembrado SIN placas (como los que ya existian antes de
