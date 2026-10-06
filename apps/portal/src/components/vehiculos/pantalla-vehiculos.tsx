@@ -19,6 +19,11 @@ export function PantallaVehiculos({ sucursal }: { sucursal: string | null }) {
       columnas={[
         { encabezado: "Nombre", celda: (v) => v.nombre },
         {
+          encabezado: "Placas",
+          celda: (v) => v.placas ?? "—",
+          className: "font-mono",
+        },
+        {
           encabezado: "Sucursal",
           celda: (v) => v.sucursalCodigo,
           className: "font-mono",
