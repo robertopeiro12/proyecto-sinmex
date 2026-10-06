@@ -203,7 +203,6 @@ export class VentasEdicionService {
     return this.consulta.leerDetalle(id);
   }
 
-  /** 404 si no existe o esta eliminada; 403 si su sucursal es ajena. */
   /** §4.3. Mismas condiciones que editar: viva y sin abonos de cobranza. */
   async eliminar(usuarioId: string, id: string): Promise<void> {
     await this.portal.enTransaccion(async (trx) => {
@@ -236,6 +235,7 @@ export class VentasEdicionService {
     return this.consulta.leerDetalle(id);
   }
 
+  /** 404 si no existe o esta eliminada; 403 si su sucursal es ajena. */
   private async bloquearConAlcance(
     usuarioId: string,
     id: string,

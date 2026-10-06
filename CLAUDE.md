@@ -230,6 +230,9 @@ usuario con sesion pasa.
     de la venta**.
   - `uq_venta_detalle_presentacion` es un índice **parcial** (`where deleted_at is null`), para poder
     volver a agregar una presentación que se quitó.
+  - Una venta viva ya puede tener líneas borradas en `venta_nota_detalle` (y cobros de
+    `venta_contado` borrados): todo lector (reportes, comisiones, corte) debe filtrar
+    `deleted_at is null` también en líneas y cobros.
 
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
 `--`: sin él, npm se come los argumentos).
