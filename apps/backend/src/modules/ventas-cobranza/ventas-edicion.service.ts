@@ -8,7 +8,11 @@ import type { Transaction } from 'kysely';
 import type { DB } from '../../database/schema';
 import { PreciosRepository } from '../cartera-clientes/precios.repository';
 import { aPesos } from '../sincronizacion/dinero';
-import { bloqueoDeEdicion } from './acciones-venta';
+import {
+  MOTIVO_NO_PERDIBLE,
+  bloqueoDeEdicion,
+  sePuedeMarcarPerdida,
+} from './acciones-venta';
 import { exigirAlcanceSobre } from './alcance-venta';
 import { CobranzasRepository } from './cobranzas.repository';
 import type { EditarVentaDto } from './dto/editar-venta.dto';
@@ -200,6 +204,38 @@ export class VentasEdicionService {
   }
 
   /** 404 si no existe o esta eliminada; 403 si su sucursal es ajena. */
+  /** §4.3. Mismas condiciones que editar: viva y sin abonos de cobranza. */
+  async eliminar(usuarioId: string, id: string): Promise<void> {
+    await this.portal.enTransaccion(async (trx) => {
+      const venta = await this.bloquearConAlcance(usuarioId, id, trx);
+      const bloqueo = bloqueoDeEdicion(
+        venta.status,
+        await this.repo.abonosDeCobroVivos(id, trx),
+        'eliminar',
+      );
+      if (bloqueo) throw new ConflictException(bloqueo);
+      await this.repo.eliminarVenta(id, usuarioId, trx);
+    });
+  }
+
+  /**
+   * §4.4: aunque tenga abonos; deja de cobrarse el resto. Las reglas de
+   * cobranza ya la tratan como no cobrable (`esCobrable`) y el pull de la
+   * tablet solo baja `pendiente`/`abonado`. No hay deshacer en esta version.
+   */
+  async marcarCuentaPerdida(
+    usuarioId: string,
+    id: string,
+  ): Promise<VentaDetalle> {
+    await this.portal.enTransaccion(async (trx) => {
+      const venta = await this.bloquearConAlcance(usuarioId, id, trx);
+      if (!sePuedeMarcarPerdida(venta.status))
+        throw new ConflictException(MOTIVO_NO_PERDIBLE);
+      await this.repo.marcarCuentaPerdida(id, usuarioId, trx);
+    });
+    return this.consulta.leerDetalle(id);
+  }
+
   private async bloquearConAlcance(
     usuarioId: string,
     id: string,

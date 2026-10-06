@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
@@ -90,5 +91,25 @@ export class VentasController {
     @Body() dto: EditarVentaDto,
   ): Promise<VentaDetalle> {
     return this.edicion.editar(usuarioId, id, dto);
+  }
+
+  @Delete(':id')
+  @RequierePermiso('venta.editar_eliminar')
+  async eliminar(
+    @UsuarioActual() usuarioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ id: string }> {
+    await this.edicion.eliminar(usuarioId, id);
+    return { id };
+  }
+
+  // Sin cuerpo: la accion es fija (como `convertir-a-cliente`).
+  @Post(':id/cuenta-perdida')
+  @RequierePermiso('venta.editar_eliminar')
+  async marcarCuentaPerdida(
+    @UsuarioActual() usuarioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<VentaDetalle> {
+    return this.edicion.marcarCuentaPerdida(usuarioId, id);
   }
 }

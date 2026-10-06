@@ -14,6 +14,7 @@ import {
 import { PasswordService } from './../src/modules/auth/password.service';
 import {
   CONTRATO_ACTUAL,
+  type RespuestaPull,
   type RespuestaPush,
 } from './../src/modules/sincronizacion/contrato';
 import { formarFolio } from './../src/modules/sincronizacion/folio';
@@ -1443,6 +1444,205 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
         capturo_usuario_id: null,
         actualizado_por_usuario_id: usuarioGeneralId,
         folio: t.folio,
+      });
+    });
+  });
+
+  /**
+   * Las notas por cobrar que baja la tablet de Tijuana (§4.5). Una nota sale de
+   * su lista cuando ya no viaja con `activo: 1`: en el vuelco completo no
+   * aparece o aparece con `activo: 0`, y en el incremental viaja con `activo: 0`.
+   */
+  const notasDeLaTablet = async (desde?: string) => {
+    const params = new URLSearchParams({ contrato: String(CONTRATO_ACTUAL) });
+    if (desde) params.set('desde', desde);
+    const res = await request(app.getHttpServer())
+      .get(`/sync/pull?${params.toString()}`)
+      .set('Authorization', `Bearer ${bearerApp}`)
+      .expect(200);
+    return res.body as RespuestaPull;
+  };
+  const porCobrar = (pull: RespuestaPull, id: string) =>
+    pull.notas_pendientes.some((n) => n.id === id && n.activo === 1);
+
+  describe('DELETE /ventas/:id (eliminar, §4.3)', () => {
+    const eliminar = (id: string, cookie = cookieGeneral) =>
+      request(app.getHttpServer())
+        .delete(`/ventas/${id}`)
+        .set('Cookie', cookie);
+
+    it('borra la venta, sus líneas y su cobro de contado, y deja quién la eliminó', async () => {
+      const v = await registrar({
+        fecha: FECHA_BORRADO,
+        contadoCredito: 'contado',
+      });
+      const res = await eliminar(v.id).expect(200);
+      expect(res.body).toEqual({ id: v.id });
+
+      const fila = await ventaPorId(v.id);
+      expect(fila.deleted_at).not.toBeNull();
+      expect(fila.eliminado_por_usuario_id).toBe(usuarioGeneralId);
+      expect(vivas(await lineasDe(v.id))).toEqual([]);
+      expect(await lineasDe(v.id)).toHaveLength(2);
+      expect(vivas(await cobrosDe(v.id))).toEqual([]);
+      expect(await cobrosDe(v.id)).toHaveLength(1);
+
+      await detalle(cookieGeneral, v.id).expect(404);
+      const busqueda = (
+        await buscar(cookieGeneral, {
+          desde: FECHA_BORRADO,
+          hasta: FECHA_BORRADO,
+          clienteId: clienteTj,
+        }).expect(200)
+      ).body as ResultadoBusquedaVentas;
+      expect(busqueda.ventas.map((f) => f.id)).not.toContain(v.id);
+    });
+
+    it('libera el # de nota y no reutiliza el folio', async () => {
+      const v = await registrar({ fecha: FECHA_BORRADO });
+      await eliminar(v.id).expect(200);
+      const otra = await registrar({
+        fecha: FECHA_BORRADO,
+        numNota: v.numNota,
+      });
+      expect(otra.folio).not.toBe(v.folio);
+    });
+
+    it('con abonos de cobranza es 409 y la venta sigue viva', async () => {
+      const v = await registrar({ fecha: FECHA_BORRADO });
+      await abonar(v.id, '20.00');
+      const res = await eliminar(v.id).expect(409);
+      expect((res.body as { message: string }).message).toBe(
+        'Tiene cobros registrados: no se puede eliminar.',
+      );
+      expect((await ventaPorId(v.id)).deleted_at).toBeNull();
+    });
+
+    it('sin permiso 403; otra sucursal 403; dos veces 404', async () => {
+      const v = await registrar({ fecha: FECHA_BORRADO });
+      await eliminar(v.id, cookieSinPermiso).expect(403);
+      const mx = await registrar({
+        fecha: FECHA_BORRADO,
+        clienteId: clienteMx,
+        vendedorId: vendedorMx,
+        lineas: [{ presentacionId: pre1, cantidad: 1, cantidadPromocion: 0 }],
+      });
+      await eliminar(mx.id, cookieTijuana).expect(403);
+      await eliminar(v.id).expect(200);
+      await eliminar(v.id).expect(404);
+    });
+
+    it('una venta de la tablet se elimina desde el portal', async () => {
+      const t = await ventaDeTablet();
+      await eliminar(t.id).expect(200);
+      expect(await ventaPorId(t.id)).toMatchObject({
+        origen: 'app',
+        eliminado_por_usuario_id: usuarioGeneralId,
+      });
+      expect((await ventaPorId(t.id)).deleted_at).not.toBeNull();
+    });
+
+    it('una venta a crédito eliminada deja de estar por cobrar en la tablet', async () => {
+      const v = await registrar({ fecha: FECHA_BORRADO });
+      expect(porCobrar(await notasDeLaTablet(), v.id)).toBe(true);
+      await eliminar(v.id).expect(200);
+      expect(porCobrar(await notasDeLaTablet(), v.id)).toBe(false);
+    });
+  });
+
+  describe('POST /ventas/:id/cuenta-perdida (§4.4)', () => {
+    const perdida = (id: string, cookie = cookieGeneral) =>
+      request(app.getHttpServer())
+        .post(`/ventas/${id}/cuenta-perdida`)
+        .set('Cookie', cookie);
+
+    it('desde pendiente: cuenta perdida sin tocar líneas ni monto, y deja quién', async () => {
+      const v = await registrar({ fecha: FECHA_PERDIDA });
+      const venta = (await perdida(v.id).expect(201)).body as VentaDetalle;
+      expect(venta).toMatchObject({
+        id: v.id,
+        status: 'cuenta_perdida',
+        montoCentavos: 27000,
+        editable: false,
+        puedeMarcarPerdida: false,
+      });
+      expect(venta.lineas).toHaveLength(2);
+      expect(await ventaPorId(v.id)).toMatchObject({
+        status: 'cuenta_perdida',
+        monto_total: '270.00',
+        actualizado_por_usuario_id: usuarioGeneralId,
+      });
+    });
+
+    it('desde abonado, con abonos: los abonos siguen vivos', async () => {
+      const v = await registrar({ fecha: FECHA_PERDIDA });
+      await abonar(v.id, '70.00');
+      await perdida(v.id).expect(201);
+      expect(vivas(await cobrosDe(v.id))).toEqual([
+        expect.objectContaining({ monto: '70.00', origen: 'cobro' }),
+      ]);
+    });
+
+    it('desde pagada es 409, y marcarla dos veces también', async () => {
+      const pagada = await registrar({
+        fecha: FECHA_PERDIDA,
+        contadoCredito: 'contado',
+      });
+      const res = await perdida(pagada.id).expect(409);
+      expect((res.body as { message: string }).message).toBe(
+        'Solo una venta pendiente o abonada se puede marcar como cuenta perdida.',
+      );
+      const v = await registrar({ fecha: FECHA_PERDIDA });
+      await perdida(v.id).expect(201);
+      await perdida(v.id).expect(409);
+    });
+
+    it('después ya no se edita ni se elimina', async () => {
+      const v = await registrar({ fecha: FECHA_PERDIDA });
+      await perdida(v.id).expect(201);
+      await request(app.getHttpServer())
+        .patch(`/ventas/${v.id}`)
+        .set('Cookie', cookieGeneral)
+        .send({
+          vendedorId: vendedorTj,
+          numNota: v.numNota,
+          contadoCredito: 'credito',
+          factura: 'N/A',
+          lineas: [{ presentacionId: pre1, cantidad: 1, cantidadPromocion: 0 }],
+        })
+        .expect(409);
+      await request(app.getHttpServer())
+        .delete(`/ventas/${v.id}`)
+        .set('Cookie', cookieGeneral)
+        .expect(409);
+    });
+
+    it('sin permiso 403; otra sucursal 403; inexistente 404', async () => {
+      const v = await registrar({ fecha: FECHA_PERDIDA });
+      await perdida(v.id, cookieSinPermiso).expect(403);
+      const mx = await registrar({
+        fecha: FECHA_PERDIDA,
+        clienteId: clienteMx,
+        vendedorId: vendedorMx,
+        lineas: [{ presentacionId: pre1, cantidad: 1, cantidadPromocion: 0 }],
+      });
+      await perdida(mx.id, cookieTijuana).expect(403);
+      await perdida(randomUUID()).expect(404);
+    });
+
+    it('la nota deja de salir por cobrar en la tablet (vuelco completo e incremental)', async () => {
+      const v = await registrar({ fecha: FECHA_PERDIDA });
+      const antes = await notasDeLaTablet();
+      expect(porCobrar(antes, v.id)).toBe(true);
+
+      await perdida(v.id).expect(201);
+
+      expect(porCobrar(await notasDeLaTablet(), v.id)).toBe(false);
+      const incremental = await notasDeLaTablet(antes.cursor);
+      expect(
+        incremental.notas_pendientes.find((n) => n.id === v.id),
+      ).toMatchObject({
+        activo: 0,
       });
     });
   });

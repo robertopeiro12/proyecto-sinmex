@@ -220,4 +220,42 @@ export class VentasEdicionRepository {
       .where('deleted_at', 'is', null)
       .execute();
   }
+
+  /**
+   * Borrado logico (§4.3): la venta, sus lineas vivas y su cobro de contado.
+   * El # de nota queda libre (el indice de #95 es parcial) y el folio queda
+   * usado para siempre (ADR-0007). `updated_at` lo pone el trigger: asi la
+   * tablet saca la nota de su lista en el siguiente pull.
+   */
+  async eliminarVenta(
+    id: string,
+    usuarioId: string,
+    trx: Transaction<DB>,
+  ): Promise<void> {
+    await trx
+      .updateTable('venta_nota_detalle')
+      .set({ deleted_at: sql`now()` })
+      .where('venta_nota_id', '=', id)
+      .where('deleted_at', 'is', null)
+      .execute();
+    await this.borrarCobroContado(id, trx);
+    await trx
+      .updateTable('venta_nota')
+      .set({ deleted_at: sql`now()`, eliminado_por_usuario_id: usuarioId })
+      .where('id', '=', id)
+      .execute();
+  }
+
+  /** §4.4: solo el status y quien. No toca lineas, montos ni abonos. */
+  async marcarCuentaPerdida(
+    id: string,
+    usuarioId: string,
+    trx: Transaction<DB>,
+  ): Promise<void> {
+    await trx
+      .updateTable('venta_nota')
+      .set({ status: 'cuenta_perdida', actualizado_por_usuario_id: usuarioId })
+      .where('id', '=', id)
+      .execute();
+  }
 }
