@@ -1,14 +1,12 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { PreciosRepository } from '../cartera-clientes/precios.repository';
 import { hoyEnTijuana } from '../sincronizacion/operaciones';
-import { resolverAlcance } from '../sucursales/alcance-sucursal';
+import { exigirAlcanceSobre } from './alcance-venta';
 import type { RegistrarVentaDto } from './dto/registrar-venta.dto';
 import { FoliosOficinaAgotados } from './folio-oficina';
 import { FoliosOficinaRepository } from './folios-oficina.repository';
@@ -201,11 +199,9 @@ export class VentasPortalService {
     usuarioId: string,
     codigoSucursal: string,
   ): Promise<void> {
-    const fila = await this.repo.buscarSucursalUsuario(usuarioId);
-    if (!fila) throw new UnauthorizedException('Sesion invalida.');
-    const alcance = resolverAlcance(fila.codigo, null);
-    if (alcance.tipo === 'una' && alcance.codigo !== codigoSucursal) {
-      throw new ForbiddenException('No tienes acceso a esa sucursal.');
-    }
+    exigirAlcanceSobre(
+      await this.repo.buscarSucursalUsuario(usuarioId),
+      codigoSucursal,
+    );
   }
 }

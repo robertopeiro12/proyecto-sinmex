@@ -22,7 +22,7 @@ import {
   MAX_LINEAS_VENTA,
 } from '../datos-venta';
 
-const recortar = ({ value }: { value: unknown }): unknown =>
+export const recortar = ({ value }: { value: unknown }): unknown =>
   typeof value === 'string' ? value.trim() : value;
 
 /** `integer` de Postgres. */

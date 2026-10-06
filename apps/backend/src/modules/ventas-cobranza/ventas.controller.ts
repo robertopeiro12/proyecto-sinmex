@@ -2,13 +2,20 @@ import {
   Body,
   Controller,
   Get,
+  Param,
   ParseUUIDPipe,
   Post,
   Query,
 } from '@nestjs/common';
 import { RequierePermiso } from '../auth/requiere-permiso.decorator';
 import { UsuarioActual } from '../auth/usuario-actual.decorator';
+import { BuscarVentasDto } from './dto/buscar-ventas.dto';
 import { RegistrarVentaDto } from './dto/registrar-venta.dto';
+import {
+  VentasConsultaService,
+  type ResultadoBusquedaVentas,
+  type VentaDetalle,
+} from './ventas-consulta.service';
 import type { Repartidor } from './ventas-portal.repository';
 import {
   VentasPortalService,
@@ -21,7 +28,11 @@ import {
 // `venta.registrar` va en la escritura, como en los catalogos.
 @Controller('ventas')
 export class VentasController {
-  constructor(private readonly ventas: VentasPortalService) {}
+  constructor(
+    private readonly ventas: VentasPortalService,
+    // T-17 parte 2: busqueda y detalle.
+    private readonly consulta: VentasConsultaService,
+  ) {}
 
   @Get('catalogo')
   async catalogo(
@@ -47,5 +58,22 @@ export class VentasController {
     @Body() dto: RegistrarVentaDto,
   ): Promise<VentaRegistradaPortal> {
     return this.ventas.registrar(usuarioId, dto);
+  }
+
+  /** §3.1: basta la sesion; el alcance lo aplica el servicio. */
+  @Get()
+  async buscar(
+    @UsuarioActual() usuarioId: string,
+    @Query() consulta: BuscarVentasDto,
+  ): Promise<ResultadoBusquedaVentas> {
+    return this.consulta.buscar(usuarioId, consulta);
+  }
+
+  @Get(':id')
+  async detalle(
+    @UsuarioActual() usuarioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<VentaDetalle> {
+    return this.consulta.detalle(usuarioId, id);
   }
 }

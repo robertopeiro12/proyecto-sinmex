@@ -95,6 +95,19 @@ const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const FECHA_MINIMA = '2000-01-01';
 
 /**
+ * `AAAA-MM-DD` y un dia que existe en el calendario (no `2025-02-30`). Postgres
+ * revienta con un 22008 ante un dia imposible: esto lo convierte en un 400.
+ */
+export function esFechaReal(fecha: string): boolean {
+  if (!RE_FECHA.test(fecha)) return false;
+  const comprobacion = new Date(`${fecha}T00:00:00Z`);
+  return (
+    !Number.isNaN(comprobacion.getTime()) &&
+    comprobacion.toISOString().slice(0, 10) === fecha
+  );
+}
+
+/**
  * La fecha de la venta: hoy o un dia pasado, nunca futura (§3).
  *
  * `hoy` es `hoyEnTijuana()`: a las 23:30 de Tijuana en UTC ya es manana, y
@@ -106,13 +119,7 @@ const FECHA_MINIMA = '2000-01-01';
 export function revisarFechaVenta(fecha: string, hoy: string): string | null {
   if (!RE_FECHA.test(fecha))
     return 'La fecha debe tener el formato AAAA-MM-DD.';
-  const comprobacion = new Date(`${fecha}T00:00:00Z`);
-  if (
-    Number.isNaN(comprobacion.getTime()) ||
-    comprobacion.toISOString().slice(0, 10) !== fecha
-  ) {
-    return 'Esa fecha no existe.';
-  }
+  if (!esFechaReal(fecha)) return 'Esa fecha no existe.';
   // El folio solo lleva AAMMDD: 1926 y 2026 darian el mismo y el unique
   // global lo convertiria en un 500.
   if (fecha < FECHA_MINIMA) {
