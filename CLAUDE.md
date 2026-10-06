@@ -213,9 +213,13 @@ usuario con sesion pasa.
 - **Excepción: la venta del portal (T-17).** La oficina registra ventas desde el portal, y su folio
   lo emite el **servidor** con el segmento reservado **`OF`** (`TJ261006OF01`). Se emite dentro de la
   transacción de la venta (`folio_oficina_contador`, `ventas-cobranza/folios-oficina.repository.ts`).
-  Ningún vendedor puede tener `OF`: lo impiden un check en la base y el rechazo en el alta. Además, el **# de
-  nota no se repite por sucursal** (`uq_venta_nota_num_nota_sucursal`, #95). El push lo rechaza con
-  `num-nota-duplicada`, desempatando primero por clave, igual que con el folio. Ver `ADR-0011` en el vault.
+  Ningún vendedor puede tener `OF`: lo impiden un check en la base y el rechazo en el alta. Ver `ADR-0011`
+  en el vault.
+- **El # de nota (`num_nota`) es OPCIONAL y se puede repetir** — el cliente lo aclaró el 2026-10-06. Es el
+  número del block de papel, que solo se usa cuando falla el sistema; lo que identifica la venta es el
+  **folio**. `null` = sin nota (nunca `''`), en Postgres y en el SQLite de la tablet (migración local 009).
+  T-16 lo había hecho obligatorio y #95 único por sucursal (con el rechazo `num-nota-duplicada`): las dos
+  reglas se quitaron. No las vuelvas a poner sin preguntar al cliente.
 - **Una venta de mostrador no tiene vendedor** (`venta_nota.vendedor_id` null, "Oficina" en la
   pantalla). La base solo lo permite con `origen = 'portal'`, y entonces exige `capturo_usuario_id`
   (`ck_venta_nota_origen_actores`). Toda venta de la tablet sigue llevando vendedor.
