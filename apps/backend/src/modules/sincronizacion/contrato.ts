@@ -174,6 +174,16 @@ export const CODIGOS_RECHAZO = [
    * la tablet la reenvia en cada sincronizacion.
    */
   'nota-no-encontrada',
+  /**
+   * Otra venta viva de la misma sucursal —de esta tablet, de otra o capturada
+   * en el portal— ya tiene ese `num_nota`, sin distinguir mayusculas ni
+   * espacios. T-17 (#95).
+   *
+   * No se reintenta sola: el vendedor corrige el # de nota y la reenvia. Un
+   * reenvio con la misma `clave` sigue siendo `duplicada`, no esto. Una tablet
+   * que no conozca el codigo muestra el `motivo` igual.
+   */
+  'num-nota-duplicada',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];

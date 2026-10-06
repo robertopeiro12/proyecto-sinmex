@@ -1730,6 +1730,51 @@ describe('Sincronizacion pull/push (e2e)', () => {
     });
   });
 
+  describe('# de nota unico por sucursal (T-17, #95)', () => {
+    it('una venta con un # de nota que ya existe en la sucursal es num-nota-duplicada y no deja fila', async () => {
+      const nota = siguienteNota();
+      const primera = ventaValida({ datos: datosVenta({ num_nota: nota }) });
+      // Mismo numero tecleado distinto: mayusculas y espacios no lo hacen otro.
+      const segunda = ventaValida({
+        datos: datosVenta({ num_nota: `  ${nota.toUpperCase()} ` }),
+      });
+      const despues = operacion();
+
+      const res = (
+        await push({ operaciones: [primera, segunda, despues] }).expect(200)
+      ).body as RespuestaPush;
+
+      expect(res.resultados.map((r) => r.estado)).toEqual([
+        'aplicada',
+        'rechazada',
+        'aplicada',
+      ]);
+      expect(res.resultados[1]).toMatchObject({
+        codigo: 'num-nota-duplicada',
+        motivo: `Ya existe la nota ${nota.toUpperCase()} en esta sucursal.`,
+      });
+      // Contrato §7: rechazada no deja fila, para corregir el # y reenviar.
+      expect(await buzonDe(segunda.clave)).toBeUndefined();
+      expect(await ventasConFolio(segunda.folio as string)).toHaveLength(0);
+    });
+
+    it('reenviar la MISMA venta (misma clave) sigue siendo duplicada, no num-nota-duplicada', async () => {
+      const op = ventaValida();
+
+      const primera = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      const segunda = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(primera.resultados[0].estado).toBe('aplicada');
+      expect(segunda.resultados[0]).toMatchObject({
+        estado: 'duplicada',
+        id_servidor: primera.resultados[0].id_servidor,
+      });
+      expect(segunda.resultados[0].codigo).toBeUndefined();
+    });
+  });
+
   describe('ventas (T-16): reglas del dominio de punta a punta', () => {
     let prospectoId: string;
     // T-16: segunda presentacion vendible, con su propio precio de lista, para

@@ -88,6 +88,11 @@ export const CODIGOS_RECHAZO = [
    * de este cliente. Se reenvia.
    */
   'nota-no-encontrada',
+  /**
+   * T-17: otra venta de la misma sucursal (de otra tablet o del portal) ya
+   * tiene ese # de nota. No se reintenta sola: se corrige el # y se reenvia.
+   */
+  'num-nota-duplicada',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
