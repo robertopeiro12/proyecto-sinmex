@@ -173,6 +173,16 @@ describe("DetalleVenta", () => {
     await vi.waitFor(() => expect(onCambiada).toHaveBeenCalledWith(actualizada));
   });
 
+  it("un abono de saldo a favor (T-21) se ve como Saldo a favor, en método y en origen", () => {
+    renderizar({
+      ...VENTA,
+      cobros: [
+        { id: "a2", fechaPago: "2024-03-06", metodoPago: "saldo_favor", montoCentavos: 5000, origen: "saldo_favor" },
+      ],
+    });
+    expect(screen.getAllByText("Saldo a favor")).toHaveLength(2);
+  });
+
   it("muestra el mensaje del servidor", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     eliminarVenta.mockRejectedValue(new ErrorApi("fallo", 409, "Tiene cobros registrados: no se puede eliminar."));
