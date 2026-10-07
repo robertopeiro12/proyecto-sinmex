@@ -32,7 +32,7 @@ deseable en la app queda como **nota para Mario** (§7).
 | Quién cobró | Se elige al momento: **"Oficina"** (default) o un **repartidor** activo de la sucursal del cliente. En la app es siempre el vendedor de la sesión (ya es así) |
 | Saldo a favor | Se puede **aplicar** desde esta pantalla a las notas palomeadas, con las mismas reglas de reparto. No cuenta como dinero nuevo |
 | Regla de cobro | **Una sola regla** para tablet y portal (opción A): se amplía a "una o varias notas"; la tablet sigue mandando una |
-| Folio | Cada cobro del portal lleva **folio de oficina `OF`** del contador de ventas de oficina. **Pendiente de confirmar con el cliente** (Roberto lo propone en la junta) |
+| Folio | **Los cobros no llevan folio.** Respuesta del cliente (2026-10-07), textual: *"Un solo folio"*, *"Porque la cobranza no lleva folio"*. Solo las ventas se numeran. Un cobro del portal se identifica por fecha, cliente, monto y las notas que pagó (`cobranza_abono.folio` queda null) |
 | Tablet | **Sin cambios** en `apps/tablet` (la app es de Mario) |
 
 ## 3. Pantalla
@@ -66,7 +66,7 @@ cobranza".
 - **Vista previa** antes de grabar, calculada en el servidor con la misma regla
   (`POST /cobranzas/vista-previa`): por nota, cuánto recibe y cómo queda ("B pagada", "C abono $200,
   debe $500"), más lo que iría a otras notas y a saldo a favor.
-- **Grabar** → mensaje "Cobro TJ261007OF03 registrado: $1,500.00" y la tabla se recarga.
+- **Grabar** → mensaje "Cobro registrado: $1,500.00 a Cobach XXI" y la tabla se recarga.
 
 ### 3.4 Aplicar saldo a favor
 
@@ -100,9 +100,9 @@ cobranza".
   movimiento **negativo** en `saldo_favor_movimiento` con `origen = 'aplicacion'`. Toca `updated_at` del
   cliente (para el pull, como T-20).
 - **Servicio del portal** nuevo (`cobranzas-portal.service.ts`) para los endpoints: lee el cliente,
-  exige alcance de sucursal, valida el cobrador (repartidor activo de la sucursal del cliente, o null),
-  emite el **folio `OF`** (`FoliosOficinaRepository.emitir`, por la sucursal del cliente y la **fecha
-  del pago**) y llama a `CobranzasService` dentro de **una transacción**.
+  exige alcance de sucursal, valida el cobrador (repartidor activo de la sucursal del cliente, o null)
+  y llama a `CobranzasService` dentro de **una transacción**. **No emite folio** (`folio` null): el
+  cliente dijo que la cobranza no lleva folio.
 
 ### 4.3 Endpoints (`cobranzas.controller.ts`, todos con `@RequierePermiso('cobranza.registrar')`)
 
@@ -121,7 +121,6 @@ Errores → **409/400 con mensaje, nunca 500**:
   pantalla abierta: `La nota TJ… ya no tiene saldo; vuelve a cargar.`;
 - nota de otro cliente o de otra sucursal; cobrador que no es repartidor activo de esa sucursal;
 - aplicar más saldo a favor del que hay, o más de lo que deben las palomeadas;
-- contador `OF` agotado (99 por sucursal y día, compartido con ventas de oficina): el mensaje de T-17;
 - interbloqueo (`40P01`/`40001`): "Otro usuario estaba modificando… vuelve a intentar" (como facturas).
 
 ### 4.4 Base de datos (una migración)
@@ -183,7 +182,7 @@ alter table saldo_favor_movimiento add constraint ck_saldo_favor_origen
   sin cambiar**; validaciones del servicio del portal (fechas, monto, cobrador).
 - **pgTAP:** los checks nuevos (métodos, orígenes, `saldo_favor` ⇔ `saldo_favor`).
 - **e2e:** cobrar varias notas (status y saldos), pago parcial, excedente a otras notas y a saldo a
-  favor, folio `OF` compartido por las filas del cobro, cobrador Oficina y repartidor, aplicar saldo a
+  favor, que el cobro **no lleve folio** ni consuma el contador `OF`, cobrador Oficina y repartidor, aplicar saldo a
   favor (y sus rechazos), búsquedas por cliente/fecha/# de nota, permiso y alcance por sucursal, nota que
   dejó de ser cobrable, que una venta pagada con saldo a favor no se edite, y que el **pull de la tablet**
   baje la nota cobrada desde el portal con su saldo y el saldo a favor nuevo. Las e2e de cobranza de la
@@ -193,10 +192,15 @@ alter table saldo_favor_movimiento add constraint ck_saldo_favor_origen
 
 ## 7. Notas para Mario (app de tablet)
 
-No bloquean T-21; son mejoras opcionales en la app:
+No bloquean T-21; T-21 no toca `apps/tablet`.
+
+- **El cobro no lleva folio (cliente, 2026-10-07).** Hoy la tablet emite un folio a cada cobro y gasta un
+  número de la serie del vendedor (venta AP01, cobro AP02, venta AP03). Según el cliente, solo las
+  ventas se numeran. Cambiarlo es de la app (dejar de emitir folio al cobrar) y del contrato de
+  sincronización (`folio` opcional en `tipo: "cobranza"`; la idempotencia ya vive en la `clave`, no en el
+  folio). Lo decide y lo hace Mario; el servidor puede aceptar ambos mientras tanto.
 - En la lista de abonos de una nota, un pago con saldo a favor se verá como `saldo_favor`. Agregar
-  `saldo_favor: 'Saldo a favor'` a `NOMBRE_METODO` (pantalla de cobranza) lo muestra bonito. Es solo
-  visual.
+  `saldo_favor: 'Saldo a favor'` a `NOMBRE_METODO` (pantalla de cobranza) lo muestra bonito. Solo visual.
 - El tipo `MetodoPago` de `apps/tablet/src/sincronizacion/contrato.ts` podría sumar `'saldo_favor'` en
   `AbonoPull`, para reflejar lo que manda el servidor.
 - `repartirPagoEnNotas` existe solo en el servidor; la copia de `repartirPago` de la tablet sigue
@@ -204,8 +208,7 @@ No bloquean T-21; son mejoras opcionales en la app:
 
 ## 8. Riesgos y notas
 
-- **Folio `OF` en cobros: pendiente de confirmar con el cliente.** Si dice que no, se quita la emisión
-  (los cobros del portal quedan con `folio` null, que la base ya admite).
-- El contador `OF` (99 por sucursal y día) se comparte entre ventas y cobros de oficina. Si en la
-  práctica se llena, hay que ampliar el formato (ADR-0001) — anotarlo para la junta.
 - Un cobro del portal no se puede deshacer hasta T-34.
+- Hasta que Mario cambie la app, los cobros de la tablet seguirán llevando folio y los del portal no. No
+  rompe nada (el folio de un cobro solo identifica la operación), pero los reportes futuros no deben
+  depender del folio de un cobro.
