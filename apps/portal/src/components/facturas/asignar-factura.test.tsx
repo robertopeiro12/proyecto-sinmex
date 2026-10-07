@@ -117,4 +117,73 @@ describe("AsignarFactura", () => {
     render(<AsignarFactura sucursal={null} />);
     expect(screen.getByText("No tienes permiso para asignar facturas.")).toBeInTheDocument();
   });
+
+  it("sin el permiso no pide la lista de clientes", () => {
+    vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: false, cerrarSesion: vi.fn(), puede: () => false });
+    render(<AsignarFactura sucursal={null} />);
+    expect(listarClientes).not.toHaveBeenCalled();
+  });
+
+  it("mientras recarga no deja marcar filas viejas", async () => {
+    const usuario = await elegirCliente();
+    let resolver: (v: VentaPorFacturar[]) => void = () => {};
+    listarPorFacturar.mockReturnValue(new Promise((r) => (resolver = r)));
+    await usuario.click(screen.getByLabelText("Mostrar también las N/A"));
+    await waitFor(() => expect(screen.getByLabelText("Marcar TJ240401OF01")).toBeDisabled());
+    expect(screen.getByLabelText("Seleccionar todas")).toBeDisabled();
+    resolver(VENTAS);
+    await waitFor(() => expect(screen.getByLabelText("Marcar TJ240401OF01")).toBeEnabled());
+    expect(screen.getByLabelText("Seleccionar todas")).toBeEnabled();
+  });
+
+  it("al marcar las N/A se reinicia la seleccion", async () => {
+    const usuario = await elegirCliente();
+    await usuario.click(screen.getByLabelText("Marcar TJ240401OF01"));
+    expect(screen.getByText("Total marcado: $100.00")).toBeInTheDocument();
+    await usuario.click(screen.getByLabelText("Mostrar también las N/A"));
+    await waitFor(() => expect(listarPorFacturar).toHaveBeenCalledWith("c1", true));
+    await waitFor(() => expect(screen.getByLabelText("Marcar TJ240401OF01")).toBeEnabled());
+    expect(screen.getByLabelText("Marcar TJ240401OF01")).not.toBeChecked();
+    expect(screen.getByText("Total marcado: $0.00")).toBeInTheDocument();
+  });
+
+  it("el campo de número limita el largo", async () => {
+    await elegirCliente();
+    expect(screen.getByLabelText("Número de factura")).toHaveAttribute("maxlength", "30");
+  });
+
+  it("si falla la carga con mensaje del servidor lo muestra, y desaparece tras una carga buena", async () => {
+    listarPorFacturar.mockRejectedValueOnce(new ErrorApi("x", 403, "Sin acceso a esa sucursal."));
+    const usuario = userEvent.setup();
+    render(<AsignarFactura sucursal={null} />);
+    await usuario.type(screen.getByLabelText("Cliente"), "coba");
+    await usuario.click(await screen.findByRole("button", { name: /Cobach XXI/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Sin acceso a esa sucursal.");
+    await usuario.click(screen.getByLabelText("Mostrar también las N/A"));
+    expect(await screen.findByText("TJ240401OF01")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("el aviso verde se limpia al enviar de nuevo y al quitar el cliente", async () => {
+    const usuario = await elegirCliente();
+    await usuario.click(screen.getByLabelText("Marcar TJ240401OF01"));
+    await usuario.type(screen.getByLabelText("Número de factura"), "A780");
+    await usuario.click(screen.getByRole("button", { name: "Asignar" }));
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Marcar TJ240401OF01")).toBeEnabled());
+
+    // Nuevo envío que falla: el aviso viejo ya no debe seguir.
+    asignarFactura.mockRejectedValueOnce(new ErrorApi("x", 409, "Ya existe."));
+    await usuario.click(screen.getByLabelText("Marcar TJ240401OF01"));
+    await usuario.type(screen.getByLabelText("Número de factura"), "A781");
+    await usuario.click(screen.getByRole("button", { name: "Asignar" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Ya existe.");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+    // Aviso de nuevo y se quita el cliente.
+    await usuario.click(screen.getByRole("button", { name: "Asignar" }));
+    expect(await screen.findByRole("status")).toBeInTheDocument();
+    await usuario.click(screen.getByRole("button", { name: /Quitar|Cambiar/ }));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
 });

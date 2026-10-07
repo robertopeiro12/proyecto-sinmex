@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { ErrorApi } from "@/lib/api";
+import { mensajeDe } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
@@ -35,7 +35,10 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const { enviando, error, enviar } = useEnvioFormulario("No se pudo asignar la factura.");
 
+  const permitido = puede("venta.asignar_factura");
+
   useEffect(() => {
+    if (!permitido) return;
     let vigente = true;
     listarClientes(sucursal, "todos")
       .then((lista) => vigente && setClientes(lista))
@@ -43,7 +46,7 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
     return () => {
       vigente = false;
     };
-  }, [sucursal]);
+  }, [sucursal, permitido]);
 
   useEffect(() => {
     if (!cliente) return;
@@ -62,11 +65,7 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
         // Un fallo de carga no es "sin ventas": se limpia la lista y se avisa.
         setVentas([]);
         setSeleccion(new Set());
-        setErrorCarga(
-          err instanceof ErrorApi && err.mensajeApi
-            ? err.mensajeApi
-            : "No se pudo cargar la lista de ventas por facturar.",
-        );
+        setErrorCarga(mensajeDe(err, "No se pudo cargar la lista de ventas por facturar."));
         setCargada(true);
       });
     return () => {
@@ -74,11 +73,13 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
     };
   }, [cliente, incluirNA, recarga]);
 
-  if (!puede("venta.asignar_factura")) {
+  if (!permitido) {
     return <p className="text-sm text-muted-foreground">No tienes permiso para asignar facturas.</p>;
   }
 
   const total = totalSeleccionado(ventas, seleccion);
+  // Mientras recarga la lista es la anterior: no se deja marcar filas viejas.
+  const bloqueada = enviando || !cargada;
   const todas = ventas.length > 0 && seleccion.size === ventas.length;
 
   function alternar(id: string) {
@@ -96,6 +97,7 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
     const ids = ventas.filter((v) => seleccion.has(v.id)).map((v) => v.id);
     await enviar(
       async () => {
+        setAviso(null);
         const factura = await asignarFactura(cliente.id, numero.trim(), ids);
         setAviso(
           `Factura ${factura.numero} asignada a ${ids.length} ${ids.length === 1 ? "venta" : "ventas"} (${formatearPesos(total)})`,
@@ -118,6 +120,7 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
         }}
         onQuitar={() => {
           setCliente(null);
+          setAviso(null);
           setVentas([]);
           setSeleccion(new Set());
         }}
@@ -158,7 +161,7 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
                       aria-label="Seleccionar todas"
                       checked={todas}
                       onChange={() => setSeleccion(todas ? new Set() : new Set(ventas.map((v) => v.id)))}
-                      disabled={enviando}
+                      disabled={bloqueada}
                     />
                   </th>
                   <th className="py-1.5">Fecha</th>
@@ -178,7 +181,7 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
                         aria-label={`Marcar ${v.folio}`}
                         checked={seleccion.has(v.id)}
                         onChange={() => alternar(v.id)}
-                        disabled={enviando}
+                        disabled={bloqueada}
                       />
                     </td>
                     <td className="py-1.5">{v.fecha}</td>

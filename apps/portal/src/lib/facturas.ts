@@ -61,7 +61,8 @@ export function buscarFacturas(filtro: {
   if (numero) params.set("numero", numero);
   if (filtro.clienteId) params.set("clienteId", filtro.clienteId);
   if (filtro.sucursal) params.set("sucursal", filtro.sucursal);
-  return apiFetch<FacturaConVentas[]>(`/facturas?${params.toString()}`);
+  const consulta = params.toString();
+  return apiFetch<FacturaConVentas[]>(consulta ? `/facturas?${consulta}` : "/facturas");
 }
 
 export function renombrarFactura(id: string, numero: string): Promise<FacturaConVentas> {

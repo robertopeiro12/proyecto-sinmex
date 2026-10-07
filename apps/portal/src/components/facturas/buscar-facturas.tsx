@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth/auth-provider";
 import { BuscadorCliente } from "@/components/ventas/buscador-cliente";
-import { ErrorApi } from "@/lib/api";
+import { mensajeDe } from "@/lib/api";
 import { listarClientes, type ClienteResumen } from "@/lib/clientes";
 import {
   LARGO_MAX_NUMERO_FACTURA,
@@ -15,9 +15,6 @@ import {
 } from "@/lib/facturas";
 import { formatearPesos } from "@/lib/ventas";
 
-const mensajeDe = (err: unknown, porDefecto: string) =>
-  err instanceof ErrorApi && err.mensajeApi ? err.mensajeApi : porDefecto;
-
 /** Buscar facturas por número o cliente, cambiar su número o quitarle ventas (T-19, §5.2). */
 export function BuscarFacturas({ sucursal }: { sucursal: string | null }) {
   const { puede } = useAuth();
@@ -27,8 +24,14 @@ export function BuscarFacturas({ sucursal }: { sucursal: string | null }) {
   const [facturas, setFacturas] = useState<FacturaConVentas[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  // Cada búsqueda lleva un número: si responde una vieja después de una nueva, se ignora.
+  const busqueda = useRef(0);
+  // Cambia con cada resultado nuevo: las tarjetas se remontan y no arrastran errores ni marcas viejas.
+  const [generacion, setGeneracion] = useState(0);
+  const permitido = puede("venta.asignar_factura");
 
   useEffect(() => {
+    if (!permitido) return;
     let vigente = true;
     listarClientes(sucursal, "todos")
       .then((lista) => vigente && setClientes(lista))
@@ -36,9 +39,9 @@ export function BuscarFacturas({ sucursal }: { sucursal: string | null }) {
     return () => {
       vigente = false;
     };
-  }, [sucursal]);
+  }, [sucursal, permitido]);
 
-  if (!puede("venta.asignar_factura")) {
+  if (!permitido) {
     return <p className="text-sm text-muted-foreground">No tienes permiso para asignar facturas.</p>;
   }
 
@@ -50,16 +53,19 @@ export function BuscarFacturas({ sucursal }: { sucursal: string | null }) {
       setError("Escribe un número de factura o elige un cliente.");
       return;
     }
+    const mia = ++busqueda.current;
     try {
-      setFacturas(
-        await buscarFacturas({
-          numero: numero.trim() || undefined,
-          clienteId: cliente?.id,
-          sucursal,
-        }),
-      );
+      const encontradas = await buscarFacturas({
+        numero: numero.trim() || undefined,
+        clienteId: cliente?.id,
+        sucursal,
+      });
+      if (mia === busqueda.current) {
+        setFacturas(encontradas);
+        setGeneracion((n) => n + 1);
+      }
     } catch (err) {
-      setError(mensajeDe(err, "No se pudieron buscar las facturas."));
+      if (mia === busqueda.current) setError(mensajeDe(err, "No se pudieron buscar las facturas."));
     }
   }
 
@@ -112,14 +118,14 @@ export function BuscarFacturas({ sucursal }: { sucursal: string | null }) {
 
       {(facturas ?? []).map((f) => (
         <TarjetaFactura
-          key={f.id}
+          key={`${generacion}-${f.id}`}
+          alActuar={() => setAviso(null)}
           factura={f}
           onCambiada={(nueva) => reemplazar(f.id, nueva)}
           onBorrada={() => {
             reemplazar(f.id, null);
             setAviso(`La factura ${f.numero} se borró: ya no tenía ventas.`);
           }}
-          onError={setError}
         />
       ))}
     </div>
@@ -130,26 +136,29 @@ function TarjetaFactura({
   factura,
   onCambiada,
   onBorrada,
-  onError,
+  alActuar,
 }: {
   factura: FacturaConVentas;
   onCambiada: (f: FacturaConVentas) => void;
   onBorrada: () => void;
-  onError: (mensaje: string | null) => void;
+  /** Avisa al padre que se hizo algo en esta tarjeta (limpia el aviso de arriba). */
+  alActuar: () => void;
 }) {
+  const [error, setError] = useState<string | null>(null);
   const [nuevoNumero, setNuevoNumero] = useState(factura.numero);
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
   const [enviando, setEnviando] = useState(false);
   const titulo = `Factura ${factura.numero}`;
 
   async function guardarNumero() {
-    onError(null);
+    setError(null);
+    alActuar();
     setEnviando(true);
     try {
       const nueva = await renombrarFactura(factura.id, nuevoNumero.trim());
       onCambiada(nueva);
     } catch (err) {
-      onError(mensajeDe(err, "No se pudo cambiar el número."));
+      setError(mensajeDe(err, "No se pudo cambiar el número."));
     } finally {
       setEnviando(false);
     }
@@ -161,7 +170,8 @@ function TarjetaFactura({
       ? `¿Quitar todas las ventas? Regresan a "pendiente" y la factura ${factura.numero} desaparece.`
       : `¿Quitar ${marcadas.size} ${marcadas.size === 1 ? "venta" : "ventas"} de la factura ${factura.numero}? Regresan a "pendiente".`;
     if (!window.confirm(pregunta)) return;
-    onError(null);
+    setError(null);
+    alActuar();
     setEnviando(true);
     try {
       const { factura: nueva } = await quitarDeFactura(factura.id, [...marcadas]);
@@ -169,7 +179,7 @@ function TarjetaFactura({
       if (nueva) onCambiada(nueva);
       else onBorrada();
     } catch (err) {
-      onError(mensajeDe(err, "No se pudieron quitar las ventas."));
+      setError(mensajeDe(err, "No se pudieron quitar las ventas."));
     } finally {
       setEnviando(false);
     }
@@ -244,6 +254,12 @@ function TarjetaFactura({
           ))}
         </tbody>
       </table>
+
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="font-semibold">Total: {formatearPesos(factura.totalCentavos)}</p>
