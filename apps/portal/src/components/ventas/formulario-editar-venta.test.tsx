@@ -39,6 +39,7 @@ const VENTA: VentaDetalle = {
   numNota: "1234",
   contadoCredito: "credito",
   factura: "N/A",
+  facturaNumero: null,
   comentarios: null,
   montoCentavos: 21600,
   status: "pendiente",

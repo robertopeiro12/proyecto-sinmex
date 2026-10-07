@@ -67,6 +67,7 @@ const VENTA: VentaDetalle = {
   numNota: "1234",
   contadoCredito: "contado",
   factura: "pendiente",
+  facturaNumero: null,
   comentarios: null,
   montoCentavos: 21600,
   status: "pagada",
@@ -199,6 +200,10 @@ describe("condiciones de la venta", () => {
       factura: "pendiente",
       comentarios: "",
     });
+  });
+
+  it("condicionesDeVenta conserva la factura pendiente", () => {
+    expect(condicionesDeVenta({ ...VENTA, factura: "pendiente" }).factura).toBe("pendiente");
   });
 
   it("sin cobro de contado, el método propuesto es transferencia", () => {

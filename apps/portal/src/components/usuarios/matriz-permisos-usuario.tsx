@@ -38,6 +38,8 @@ const EXPLICACION_PERMISO: Record<string, string> = {
   "vendedor.gestionar":
     "Puede dar de alta, editar o dar de baja a los vendedores/repartidores y sus credenciales de la app.",
   "venta.editar_eliminar": "Puede corregir o eliminar una venta ya registrada.",
+  "venta.asignar_factura":
+    "Puede anotar el número de factura del SAT en las ventas, corregirlo o quitarlo.",
   "venta.registrar": "Puede registrar una venta nueva.",
   "almacen_general.gestionar":
     "Puede registrar entradas y salidas de mercancía en el almacén general (planta).",
