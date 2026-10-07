@@ -22,7 +22,12 @@ export interface VentaParaFacturar {
   folio: string;
   clienteId: string;
   status: string;
+  /** De la fila bloqueada: fresco tras esperar el bloqueo. Es lo que DECIDE. */
   facturaId: string | null;
+  /**
+   * Solo para el texto del mensaje: se lee en otra sentencia DESPUES del
+   * bloqueo. `null` si no esta facturada o si no se pudo leer.
+   */
   facturaNumero: string | null;
 }
 
@@ -57,8 +62,12 @@ export function motivoAlAsignar(
       return `La venta ${v.folio} no es de este cliente.`;
     if (v.status === 'promocion')
       return `La venta ${v.folio} es de promoción ($0): no se factura.`;
-    if (v.facturaNumero !== null)
-      return `La venta ${v.folio} ya está en la factura ${v.facturaNumero}.`;
+    // Se decide por `facturaId`, no por el numero: tras esperar el bloqueo,
+    // Postgres solo relee la fila bloqueada, no lo que se le haya unido.
+    if (v.facturaId !== null)
+      return v.facturaNumero !== null
+        ? `La venta ${v.folio} ya está en la factura ${v.facturaNumero}.`
+        : `La venta ${v.folio} ya está en otra factura.`;
   }
   return null;
 }

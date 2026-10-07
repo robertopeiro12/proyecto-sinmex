@@ -68,7 +68,7 @@ export class VentasEdicionService {
           venta.status,
           await this.repo.abonosDeCobroVivos(id, trx),
           'editar',
-          venta.facturaNumero,
+          { id: venta.facturaId, numero: venta.facturaNumero },
         );
         if (bloqueo) throw new ConflictException(bloqueo);
 
@@ -207,7 +207,7 @@ export class VentasEdicionService {
         venta.status,
         await this.repo.abonosDeCobroVivos(id, trx),
         'eliminar',
-        venta.facturaNumero,
+        { id: venta.facturaId, numero: venta.facturaNumero },
       );
       if (bloqueo) throw new ConflictException(bloqueo);
       await this.repo.eliminarVenta(id, usuarioId, trx);

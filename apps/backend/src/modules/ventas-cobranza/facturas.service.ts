@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import type { Transaction } from 'kysely';
 import {
@@ -172,9 +173,9 @@ export class FacturasService {
         'Busca por número de factura o por cliente.',
       );
     const usuario = await this.portal.buscarSucursalUsuario(usuarioId);
-    exigirAlcanceSobre(usuario, usuario?.codigo ?? '');
+    if (!usuario) throw new UnauthorizedException('Sesion invalida.');
     const alcance = resolverAlcance(
-      usuario?.codigo ?? null,
+      usuario.codigo,
       dto.sucursal?.trim() || null,
     );
     return this.repo.buscar({

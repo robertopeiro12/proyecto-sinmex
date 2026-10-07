@@ -66,15 +66,19 @@ export function bloqueoDeEdicion(
   status: string,
   abonosDeCobroVivos: number,
   accion: 'editar' | 'eliminar',
-  facturaNumero: string | null,
+  factura: { id: string | null; numero: string | null },
 ): string | null {
   if (abonosDeCobroVivos > 0)
     return `Tiene cobros registrados: no se puede ${accion}.`;
   if (status === 'cuenta_perdida')
     return `Está marcada como cuenta perdida: no se puede ${accion}.`;
-  if (facturaNumero !== null)
+  // Decide el id (de la fila bloqueada); el numero es solo texto.
+  if (factura.id !== null) {
+    const cual =
+      factura.numero !== null ? `la factura ${factura.numero}` : 'una factura';
     return accion === 'editar'
-      ? `Está en la factura ${facturaNumero}: quítala primero de la factura para editarla.`
-      : `Está en la factura ${facturaNumero}: quítala primero de la factura.`;
+      ? `Está en ${cual}: quítala primero de la factura para editarla.`
+      : `Está en ${cual}: quítala primero de la factura.`;
+  }
   return null;
 }

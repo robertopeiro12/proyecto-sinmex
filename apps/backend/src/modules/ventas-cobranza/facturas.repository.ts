@@ -91,7 +91,15 @@ export class FacturasRepository {
     }));
   }
 
-  /** Bloquea las ventas VIVAS de esa lista. Las eliminadas o inexistentes no vuelven. */
+  /**
+   * Bloquea las ventas VIVAS de esa lista. Las eliminadas o inexistentes no vuelven.
+   *
+   * Sin `join` a `factura` en la sentencia del bloqueo: en READ COMMITTED, si
+   * hay que esperar el bloqueo, Postgres relee solo la fila bloqueada y el lado
+   * unido se queda como estaba (una venta recien facturada volveria con numero
+   * `null`). Por eso decide `vn.factura_id`, y el numero, que solo es texto
+   * para el mensaje, se lee despues en otra sentencia, ya con el bloqueo.
+   */
   async bloquearVentas(
     ids: string[],
     trx: Transaction<DB>,
@@ -102,24 +110,35 @@ export class FacturasRepository {
       cliente_id: string;
       status: string;
       factura_id: string | null;
-      factura_numero: string | null;
     }>`
-      select vn.id, vn.folio, vn.cliente_id, vn.status, vn.factura_id,
-             f.numero as factura_numero
+      select vn.id, vn.folio, vn.cliente_id, vn.status, vn.factura_id
         from venta_nota vn
-        left join factura f on f.id = vn.factura_id
        where vn.id = any(${ids}::uuid[])
          and vn.deleted_at is null
        order by vn.id
          for update of vn
     `.execute(trx);
+
+    const facturaIds = [
+      ...new Set(
+        filas.rows.flatMap((f) => (f.factura_id ? [f.factura_id] : [])),
+      ),
+    ];
+    const numeros = new Map<string, string>();
+    if (facturaIds.length > 0) {
+      const facturas = await sql<{ id: string; numero: string }>`
+        select f.id, f.numero from factura f where f.id = any(${facturaIds}::uuid[])
+      `.execute(trx);
+      for (const f of facturas.rows) numeros.set(f.id, f.numero);
+    }
+
     return filas.rows.map((f) => ({
       id: f.id,
       folio: f.folio,
       clienteId: f.cliente_id,
       status: f.status,
       facturaId: f.factura_id,
-      facturaNumero: f.factura_numero,
+      facturaNumero: f.factura_id ? (numeros.get(f.factura_id) ?? null) : null,
     }));
   }
 
@@ -263,7 +282,13 @@ export class FacturasRepository {
     `.execute(trx);
   }
 
-  /** Borra la factura si ya no le queda ninguna venta. Devuelve si la borro. */
+  /**
+   * Borra la factura si ya no le queda ninguna venta. Devuelve si la borro.
+   *
+   * Cuenta tambien las eliminadas A PROPOSITO: `fk_venta_nota_factura` no tiene
+   * `on delete`, asi que una eliminada que aun la apunte haria fallar el
+   * `delete` con 23503. Mejor que la factura se quede a que truene.
+   */
   async borrarSiVacia(
     facturaId: string,
     trx: Transaction<DB>,
@@ -330,6 +355,7 @@ export class FacturasRepository {
              vn.num_nota, vn.monto_total, vn.status
         from venta_nota vn
        where vn.factura_id = any(${ids}::uuid[])
+         and vn.deleted_at is null
        order by vn.fecha, vn.folio
     `.execute(this.db);
 

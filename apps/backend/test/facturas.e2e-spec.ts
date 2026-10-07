@@ -1,5 +1,6 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
+import { sql } from 'kysely';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
@@ -401,6 +402,100 @@ describe('Facturas (e2e)', () => {
         numero: numero(),
         ventaIds: [v.id],
       }).expect(403);
+    });
+  });
+
+  /**
+   * Hallazgo de la revision final: tras ESPERAR el bloqueo, Postgres relee solo
+   * la fila bloqueada, no un `join` a `factura`. Se decide por `vn.factura_id`.
+   *
+   * Sincronizacion por bloqueos, no por tiempos: la transaccion A factura la
+   * venta y NO confirma; la peticion arranca y se espera hasta que
+   * `pg_blocking_pids` diga que esta bloqueada por A; entonces A confirma.
+   */
+  describe('carreras con una asignacion en vuelo', () => {
+    const facturarSinConfirmarYCorrer = async (
+      ventaId: string,
+      peticion: () => Promise<request.Response>,
+    ): Promise<{ res: request.Response; numeroA: string }> => {
+      const numeroA = numero();
+      let pendiente: Promise<request.Response> | undefined;
+      await db.transaction().execute(async (trx) => {
+        const { id: facturaA } = await trx
+          .insertInto('factura')
+          .values({
+            numero: numeroA,
+            cliente_id: clienteA,
+            creado_por_usuario_id: usuarioGeneralId,
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow();
+        await trx
+          .updateTable('venta_nota')
+          .set({
+            factura: 'facturada',
+            factura_id: facturaA,
+            factura_asignada_por_usuario_id: usuarioGeneralId,
+          })
+          .where('id', '=', ventaId)
+          .execute();
+        const pidA = (
+          await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(
+            trx,
+          )
+        ).rows[0].pid;
+
+        // `.then` dispara la peticion de supertest.
+        pendiente = peticion().then((r) => r);
+        for (let i = 0; ; i++) {
+          const { rows } = await sql<{ n: number }>`
+            select count(*)::int as n from pg_stat_activity
+             where ${pidA}::int = any(pg_blocking_pids(pid))
+          `.execute(db);
+          if (rows[0].n > 0) break;
+          if (i > 400)
+            throw new Error('La peticion nunca espero el bloqueo de A.');
+          await new Promise((r) => setTimeout(r, 25));
+        }
+      });
+      return { res: await pendiente!, numeroA };
+    };
+
+    it('asignar contra asignar: la segunda ve la factura de la primera (409)', async () => {
+      const v = await sembrarVenta(clienteA);
+      const nB = numero();
+      const { res, numeroA } = await facturarSinConfirmarYCorrer(v.id, () =>
+        asignar(cookieGeneral, {
+          clienteId: clienteA,
+          numero: nB,
+          ventaIds: [v.id],
+        }),
+      );
+      expect(res.status).toBe(409);
+      expect((res.body as { message: string }).message).toBe(
+        `La venta ${v.folio} ya está en la factura ${numeroA}.`,
+      );
+      expect(
+        await db
+          .selectFrom('factura')
+          .select('id')
+          .where('numero', '=', nB)
+          .executeTakeFirst(),
+      ).toBeUndefined();
+    });
+
+    it('eliminar contra asignar: no borra una venta recien facturada (409)', async () => {
+      const v = await sembrarVenta(clienteA);
+      const { res, numeroA } = await facturarSinConfirmarYCorrer(v.id, () =>
+        request(app.getHttpServer())
+          .delete(`/ventas/${v.id}`)
+          .set('Cookie', cookieGeneral),
+      );
+      expect(res.status).toBe(409);
+      expect((res.body as { message: string }).message).toBe(
+        `Está en la factura ${numeroA}: quítala primero de la factura.`,
+      );
+      expect((await ventaPorId(v.id)).deleted_at).toBeNull();
     });
   });
 

@@ -56,6 +56,15 @@ describe('motivoAlAsignar', () => {
       ),
     ).toBe('La venta TJ261007AP01 ya está en la factura A780.');
   });
+  it('ya facturada aunque no llegue el numero: decide la fila bloqueada', () => {
+    expect(
+      motivoAlAsignar(
+        ['v1'],
+        [venta({ facturaId: 'f1', facturaNumero: null })],
+        CLIENTE,
+      ),
+    ).toBe('La venta TJ261007AP01 ya está en otra factura.');
+  });
 });
 
 describe('motivoAlQuitar', () => {
