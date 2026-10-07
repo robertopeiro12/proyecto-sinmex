@@ -4,11 +4,13 @@ import { Pressable, Text, View } from 'react-native';
 
 import {
   ErrorCobranza,
-  ErrorFolio,
   leerAbonos,
   leerMontoCentavos,
+  lineasDelCobro,
+  NOMBRE_METODO,
   problemasDeCobro,
   type Cobranza,
+  type LineaDeCobro,
   type MetodoPago,
   type NotaPendiente,
   type SyncEstado,
@@ -25,7 +27,8 @@ import { colores, espacio, grosor } from '@/ui/tokens';
 
 /**
  * Los tres pasos del cobro (D16). Un cobro grabado no se edita en la tablet:
- * la revision es obligatoria y el folio se ensena en grande al final.
+ * la revision es obligatoria y al final se muestra el monto y como quedaron las
+ * notas (T-21: la cobranza no lleva folio).
  */
 type Paso = 'captura' | 'revision' | 'grabada';
 
@@ -34,12 +37,6 @@ const METODOS: { valor: MetodoPago; etiqueta: string }[] = [
   { valor: 'transferencia', etiqueta: 'Transferencia' },
   { valor: 'cheque', etiqueta: 'Cheque' },
 ];
-
-const NOMBRE_METODO: Record<MetodoPago, string> = {
-  efectivo: 'efectivo',
-  transferencia: 'transferencia',
-  cheque: 'cheque',
-};
 
 /** Como se le dice al vendedor en que va cada cobro. */
 const ETIQUETA_SYNC: Record<SyncEstado, string> = {
@@ -121,7 +118,7 @@ function NotaSeleccionable({
 
 /**
  * Cobranza / abono de un cliente (T-20): elegir la nota, capturar el pago,
- * revisar el reparto y grabar con folio.
+ * revisar el reparto y grabar. Sin folio desde T-21.
  *
  * El reparto (nota elegida → otras notas → saldo a favor) lo calcula el
  * repositorio con la misma funcion que el servidor; esta pantalla solo lo
@@ -133,7 +130,7 @@ export default function PantallaCobranza() {
   const { ultimaSincronizacion } = useSesion();
   const { estilos } = useTema();
 
-  // El dia de trabajo del reloj de la tablet: el mismo con el que se emite el folio.
+  // El dia de trabajo del reloj de la tablet: el de `fecha_operacion`.
   const hoy = datos.deps.reloj.hoy();
 
   // `versionCatalogos` en las lecturas: grabar un cobro descuenta saldos y el
@@ -170,7 +167,11 @@ export default function PantallaCobranza() {
   const [metodo, setMetodo] = useState<MetodoPago>('efectivo');
   const [fechaPago, setFechaPago] = useState(hoy);
   const [problemas, setProblemas] = useState<string[]>([]);
-  const [grabado, setGrabado] = useState<Cobranza | null>(null);
+  const [grabado, setGrabado] = useState<{
+    cobro: Cobranza;
+    lineas: LineaDeCobro[];
+    saldoFavorCentavos: number;
+  } | null>(null);
   const [grabando, setGrabando] = useState(false);
 
   const nota: NotaPendiente | null = notas.find((n) => n.id === notaId) ?? null;
@@ -236,10 +237,14 @@ export default function PantallaCobranza() {
   function grabar() {
     // `revisar` no deja llegar aqui sin nota ni monto; la comprobacion es para el tipo.
     if (nota === null || montoCentavos === null) return;
-    // Guardia contra doble toque: `registrar()` emite folio, y un segundo toque
-    // mientras el primero corre no debe emitir un segundo.
+    // Guardia contra doble toque: un segundo toque mientras el primero corre
+    // grabaria el cobro dos veces.
     if (grabando) return;
     setGrabando(true);
+    // Antes de grabar: una nota que queda en 0 sale de `notas` y ya no se
+    // encontraria su folio.
+    const lineas = reparto ? lineasDelCobro(reparto, notas) : [];
+    const saldoFavorCentavos = reparto?.saldoFavorCentavos ?? 0;
     try {
       const cobro = datos.cobranzas.registrar({
         vendedorId,
@@ -250,13 +255,13 @@ export default function PantallaCobranza() {
         fechaPago,
       });
       setProblemas([]);
-      setGrabado(cobro);
+      setGrabado({ cobro, lineas, saldoFavorCentavos });
       setPaso('grabada');
     } catch (e) {
       setProblemas([
-        e instanceof ErrorCobranza || e instanceof ErrorFolio
+        e instanceof ErrorCobranza
           ? e.message
-          : 'No se pudo grabar el cobro. No se consumió ningún folio; intenta de nuevo.',
+          : 'No se pudo grabar el cobro. No se guardó nada; intenta de nuevo.',
       ]);
     } finally {
       setGrabando(false);
@@ -264,21 +269,35 @@ export default function PantallaCobranza() {
   }
 
   /* ---------------------------------------------------------------- */
-  /* 3. Grabada: el folio en grande                                    */
+  /* 3. Grabada: el monto y como quedaron las notas (T-21)             */
   /* ---------------------------------------------------------------- */
 
   if (paso === 'grabada' && grabado) {
+    const { cobro, lineas, saldoFavorCentavos } = grabado;
     return (
-      <Pantalla
-        titulo="Cobro grabado"
-        subtitulo={`${nombreCliente} · anota este folio en el recibo del cliente.`}
-      >
-        <Tarjeta estado="listo" etiqueta="Folio">
-          <Cifra valor={grabado.folio} tamano="grande" />
+      <Pantalla titulo="Cobro grabado" subtitulo={`${nombreCliente} · así quedaron sus notas.`}>
+        <Tarjeta estado="listo" etiqueta="Cobro">
+          <Cifra valor={pesos(cobro.monto_centavos)} tamano="grande" />
           <Text style={estilos.textoSuave}>
-            <Cifra valor={pesos(grabado.monto_centavos)} tono="suave" /> en{' '}
-            {NOMBRE_METODO[grabado.metodo_pago]} · pagado el {grabado.fecha_pago}
+            En {NOMBRE_METODO[cobro.metodo_pago]} · pagado el {cobro.fecha_pago}
           </Text>
+          {lineas.map((l) => (
+            <Text key={l.notaId} style={estilos.textoTarjeta}>
+              <Cifra valor={pesos(l.montoCentavos)} /> · nota <Cifra valor={l.folio} />{' '}
+              {l.saldoDespuesCentavos === 0 ? (
+                'pagada'
+              ) : (
+                <>
+                  queda debiendo <Cifra valor={pesos(l.saldoDespuesCentavos)} tono="aviso" />
+                </>
+              )}
+            </Text>
+          ))}
+          {saldoFavorCentavos > 0 ? (
+            <Text style={estilos.textoTarjeta}>
+              Saldo a favor del cliente: <Cifra valor={pesos(saldoFavorCentavos)} tono="exito" />
+            </Text>
+          ) : null}
           <Text style={estilos.textoSuave}>
             Quedó guardado en la tablet y sube solo al sincronizar. Si otra tablet o la oficina ya
             cobró esa nota, el servidor pasa el dinero a las otras notas o al saldo a favor.
@@ -301,7 +320,6 @@ export default function PantallaCobranza() {
   /* ---------------------------------------------------------------- */
 
   if (paso === 'revision' && reparto && nota && montoCentavos !== null) {
-    const folioDe = (id: string) => notas.find((n) => n.id === id)?.folio ?? id;
     return (
       <Pantalla
         titulo="Revisa el cobro"
@@ -310,20 +328,20 @@ export default function PantallaCobranza() {
         <Tarjeta estado="accion" etiqueta="Cobro">
           <Cifra valor={pesos(montoCentavos)} tamano="grande" />
           <Text style={estilos.textoSuave}>
-            En {NOMBRE_METODO[metodo]} · pagado el {fechaPago.trim()} · folio{' '}
+            En {NOMBRE_METODO[metodo]} · pagado el {fechaPago.trim()} · nota{' '}
             <Cifra valor={nota.folio} tono="suave" />
           </Text>
         </Tarjeta>
 
         <Tarjeta etiqueta="Cómo se reparte">
-          {reparto.aplicaciones.map((a) => (
-            <Text key={a.notaId} style={estilos.textoTarjeta}>
-              <Cifra valor={folioDe(a.notaId)} /> · <Cifra valor={pesos(a.montoCentavos)} /> ·{' '}
-              {a.saldoDespuesCentavos === 0 ? (
+          {lineasDelCobro(reparto, notas).map((l) => (
+            <Text key={l.notaId} style={estilos.textoTarjeta}>
+              <Cifra valor={l.folio} /> · <Cifra valor={pesos(l.montoCentavos)} /> ·{' '}
+              {l.saldoDespuesCentavos === 0 ? (
                 'queda pagada'
               ) : (
                 <>
-                  queda debiendo <Cifra valor={pesos(a.saldoDespuesCentavos)} tono="aviso" />
+                  queda debiendo <Cifra valor={pesos(l.saldoDespuesCentavos)} tono="aviso" />
                 </>
               )}
             </Text>
@@ -470,8 +488,8 @@ export default function PantallaCobranza() {
           cobrosDeHoy.map((c) => (
             <View key={c.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
               <Text style={estilos.textoTarjeta}>
-                <Cifra valor={c.folio} /> · <Cifra valor={pesos(c.monto_centavos)} /> ·{' '}
-                {NOMBRE_METODO[c.metodo_pago]}
+                <Cifra valor={pesos(c.monto_centavos)} /> · {NOMBRE_METODO[c.metodo_pago]} · pagado el{' '}
+                {c.fecha_pago}
               </Text>
               <Pastilla texto={ETIQUETA_SYNC[c.sync_estado]} estado={ESTADO_SYNC[c.sync_estado]} />
               {c.sync_estado === 'error' && c.sync_error ? (

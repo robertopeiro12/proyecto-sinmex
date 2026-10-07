@@ -17,7 +17,7 @@ function montar() {
     jornadas: crearRepositorioJornadas(deps),
     ventas: crearRepositorioVentas(deps, { catalogos, folios }),
     prospectos: crearRepositorioProspectos(deps, { catalogos }),
-    cobranzas: crearRepositorioCobranzas(deps, { catalogos, folios }),
+    cobranzas: crearRepositorioCobranzas(deps, { catalogos }),
   };
 }
 

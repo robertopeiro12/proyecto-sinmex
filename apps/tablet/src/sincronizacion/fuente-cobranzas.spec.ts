@@ -1,7 +1,6 @@
 import { depsDePrueba, snapshotDePrueba } from '@/datos/pruebas-apoyo';
 import { crearRepositorioCatalogos } from '@/datos/repositorios/catalogos';
 import { crearRepositorioCobranzas } from '@/datos/repositorios/cobranzas';
-import { crearRepositorioFolios } from '@/datos/repositorios/folios';
 
 import { fuenteCobranzas } from './fuente-cobranzas';
 
@@ -9,10 +8,7 @@ function montar() {
   const deps = depsDePrueba();
   const catalogos = crearRepositorioCatalogos(deps);
   catalogos.guardarSnapshot(snapshotDePrueba());
-  const cobranzas = crearRepositorioCobranzas(deps, {
-    catalogos,
-    folios: crearRepositorioFolios(deps),
-  });
+  const cobranzas = crearRepositorioCobranzas(deps, { catalogos });
   return { cobranzas, fuente: fuenteCobranzas(cobranzas) };
 }
 
@@ -32,27 +28,26 @@ describe('fuente de cobranzas (T-20)', () => {
     expect(fuente.pendientes()).toEqual([]);
   });
 
-  it('arma el sobre exacto del contrato: cliente y folio en el sobre, el pago en datos', () => {
+  it('arma el sobre exacto del contrato: cliente en el sobre, el pago en datos y SIN folio (T-21)', () => {
     const { cobranzas, fuente } = montar();
     const c = cobranzas.registrar(cobro);
 
-    expect(fuente.pendientes()).toEqual([
-      {
-        // La clave es el id de la fila: no cambia entre reintentos.
-        clave: c.id,
-        tipo: 'cobranza',
-        fecha_operacion: '2026-08-07',
-        ocurrido_en: '2026-08-07T15:00:00.000Z',
-        cliente_id: 'cli-1',
-        folio: 'TJ260807AP01',
-        datos: {
-          venta_nota_id: 'nota-1',
-          monto_centavos: 5000,
-          metodo_pago: 'cheque',
-          fecha_pago: '2026-08-06',
-        },
+    const [op] = fuente.pendientes();
+    expect(op).toEqual({
+      // La clave es el id de la fila: no cambia entre reintentos.
+      clave: c.id,
+      tipo: 'cobranza',
+      fecha_operacion: '2026-08-07',
+      ocurrido_en: '2026-08-07T15:00:00.000Z',
+      cliente_id: 'cli-1',
+      datos: {
+        venta_nota_id: 'nota-1',
+        monto_centavos: 5000,
+        metodo_pago: 'cheque',
+        fecha_pago: '2026-08-06',
       },
-    ]);
+    });
+    expect(op).not.toHaveProperty('folio');
   });
 
   it('un cobro aceptado sale de la cola', () => {
