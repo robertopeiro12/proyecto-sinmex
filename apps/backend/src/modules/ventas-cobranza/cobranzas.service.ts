@@ -100,6 +100,15 @@ interface FormaDelAbono {
 }
 
 /**
+ * Los ids de las notas elegidas, en minusculas y sin repetir. Un id repetido
+ * contaria dos veces lo que deben las notas; uno en mayusculas se tomaria por
+ * ajeno (Postgres devuelve los uuid en minusculas).
+ */
+const sinRepetir = (ids: readonly string[]): string[] => [
+  ...new Set(ids.map((id) => id.toLowerCase())),
+];
+
+/**
  * La cobranza: **una regla, un sitio** (ADR-0009). La tablet entra por el
  * `push` con una nota (`registrarCobranza`); el portal (T-21) entra por
  * `CobranzasPortalService` con una o varias (`registrarPago`,
@@ -176,9 +185,10 @@ export class CobranzasService {
    * @throws {PagoRechazado} `nota-ajena` o `nota-sin-saldo`.
    */
   async planearPago(
-    pago: NotasAPagar,
+    pedido: NotasAPagar,
     trx: Transaction<DB>,
   ): Promise<PlanDeCobro> {
+    const pago = { ...pedido, notaIds: sinRepetir(pedido.notaIds) };
     const notas = await this.bloquear(pago.clienteId, pago.notaIds, trx);
     this.exigirPalomeadas(pago.notaIds, notas);
     return this.plan(
@@ -198,10 +208,11 @@ export class CobranzasService {
    * No escribe nada antes de lanzar.
    */
   async registrarPago(
-    pago: PagoEnNotas,
+    pedido: PagoEnNotas,
     contexto: ContextoCobranza,
     trx: Transaction<DB>,
   ): Promise<PlanDeCobro> {
+    const pago = { ...pedido, notaIds: sinRepetir(pedido.notaIds) };
     const notas = await this.bloquear(pago.clienteId, pago.notaIds, trx);
     const palomeadas = this.exigirPalomeadas(pago.notaIds, notas);
 
@@ -237,9 +248,10 @@ export class CobranzasService {
    * `saldo-favor-insuficiente` o `excede-lo-que-deben`.
    */
   async planearSaldoFavor(
-    pago: NotasAPagar,
+    pedido: NotasAPagar,
     trx: Transaction<DB>,
   ): Promise<PlanDeCobro> {
+    const pago = { ...pedido, notaIds: sinRepetir(pedido.notaIds) };
     const { reparto, bloqueadas } = await this.repartirSaldoFavor(pago, trx);
     return this.plan(reparto, bloqueadas, pago.notaIds);
   }
@@ -253,10 +265,11 @@ export class CobranzasService {
    * @throws {PagoRechazado} como `planearSaldoFavor`. No escribe nada antes de lanzar.
    */
   async aplicarSaldoFavor(
-    pago: NotasAPagar,
+    pedido: NotasAPagar,
     contexto: ContextoCobranza,
     trx: Transaction<DB>,
   ): Promise<PlanDeCobro> {
+    const pago = { ...pedido, notaIds: sinRepetir(pedido.notaIds) };
     const { reparto, bloqueadas } = await this.repartirSaldoFavor(pago, trx);
     await this.escribir(
       reparto,
@@ -266,7 +279,9 @@ export class CobranzasService {
         metodoPago: 'saldo_favor',
         origen: 'saldo_favor',
       },
-      contexto,
+      // Sin cobrador siempre: no entra dinero, y un vendedor en el contexto no
+      // debe colarse en las filas.
+      { ...contexto, vendedorId: null },
       trx,
     );
     await this.repo.insertarSaldoFavor(

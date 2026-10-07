@@ -651,6 +651,57 @@ describe('CobranzasService.aplicarSaldoFavor (T-21)', () => {
     expect(repo.insertarAbono).not.toHaveBeenCalled();
   });
 
+  it('un id repetido no duplica lo que deben las notas: un monto por encima de la deuda real se rechaza', async () => {
+    const { servicio, repo } = tresNotas(['500.00']);
+    await expect(
+      servicio.aplicarSaldoFavor(
+        { clienteId: CLIENTE, notaIds: [A, A], montoCentavos: 15000 },
+        contextoPortal,
+        trx,
+      ),
+    ).rejects.toMatchObject({
+      razon: 'excede-lo-que-deben',
+      message:
+        'Las notas marcadas solo deben $100.00: no se puede aplicar más saldo a favor que eso.',
+    });
+    expect(repo.insertarAbono).not.toHaveBeenCalled();
+  });
+
+  it('un id en mayusculas se reconoce como el de la nota, no como ajeno', async () => {
+    const { servicio, repo } = tresNotas(['500.00']);
+    const plan = await servicio.planearPago(
+      {
+        clienteId: CLIENTE,
+        notaIds: [A.toUpperCase(), A],
+        montoCentavos: 5000,
+      },
+      trx,
+    );
+    expect(plan.aplicaciones.map((a) => a.notaId)).toEqual([A]);
+    expect(repo.bloquearNotasDelCliente).toHaveBeenCalledWith(
+      CLIENTE,
+      [A],
+      trx,
+    );
+  });
+
+  it('las filas escritas llevan vendedor null aunque el contexto traiga uno', async () => {
+    const { servicio, repo } = tresNotas(['150.00']);
+    await servicio.aplicarSaldoFavor(
+      { clienteId: CLIENTE, notaIds: [A], montoCentavos: 1000 },
+      { ...contextoPortal, vendedorId: 'vendedor-1' },
+      trx,
+    );
+    expect(repo.insertarAbono).toHaveBeenCalledWith(
+      expect.objectContaining({ vendedorId: null }),
+      trx,
+    );
+    expect(repo.insertarSaldoFavor).toHaveBeenCalledWith(
+      expect.objectContaining({ vendedorId: null, origen: 'aplicacion' }),
+      trx,
+    );
+  });
+
   it('planearSaldoFavor da el mismo plan sin escribir', async () => {
     const { servicio, repo } = tresNotas(['150.00']);
     const plan = await servicio.planearSaldoFavor(
