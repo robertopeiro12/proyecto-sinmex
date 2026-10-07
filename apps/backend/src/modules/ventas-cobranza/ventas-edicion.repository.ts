@@ -21,6 +21,8 @@ export interface VentaBloqueada {
   origen: OrigenVenta;
   /** Texto `numeric(5,2)` tal cual lo manda `pg`, o `null`. */
   pctComision: string | null;
+  /** El numero de su factura (T-19), o `null` si no esta facturada. */
+  facturaNumero: string | null;
 }
 
 export interface CambiosCabecera {
@@ -64,12 +66,14 @@ export class VentasEdicionRepository {
       status: string;
       origen: string;
       pct_comision: string | null;
+      factura_numero: string | null;
     }>`
       select vn.id, vn.folio, to_char(vn.fecha, 'YYYY-MM-DD') as fecha,
              vn.cliente_id, vn.vendedor_id, vn.sucursal_id, s.codigo,
-             vn.status, vn.origen, vn.pct_comision
+             vn.status, vn.origen, vn.pct_comision, f.numero as factura_numero
         from venta_nota vn
         join sucursal s on s.id = vn.sucursal_id
+        left join factura f on f.id = vn.factura_id
        where vn.id = ${id}
          and vn.deleted_at is null
          for update of vn
@@ -87,6 +91,7 @@ export class VentasEdicionRepository {
       status: f.status,
       origen: f.origen as OrigenVenta,
       pctComision: f.pct_comision,
+      facturaNumero: f.factura_numero,
     };
   }
 

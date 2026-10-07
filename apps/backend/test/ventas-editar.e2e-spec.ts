@@ -223,6 +223,11 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
       .where('origen', '=', 'portal')
       .where(fechaComoTexto, 'in', FECHAS);
     await db
+      .updateTable('venta_nota')
+      .set({ factura: 'N/A', factura_id: null })
+      .where('id', 'in', ventas)
+      .execute();
+    await db
       .deleteFrom('cobranza_abono')
       .where('venta_nota_id', 'in', ventas)
       .execute();
@@ -287,6 +292,26 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
       .selectAll()
       .where('id', '=', id)
       .executeTakeFirstOrThrow();
+
+  /** Factura la venta directo en la base (T-19); el endpoint es de facturas.e2e-spec.ts. */
+  const facturar = async (ventaId: string, numero: string) => {
+    const venta = await ventaPorId(ventaId);
+    const { id } = await db
+      .insertInto('factura')
+      .values({
+        numero,
+        cliente_id: venta.cliente_id,
+        creado_por_usuario_id: usuarioGeneralId,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    await db
+      .updateTable('venta_nota')
+      .set({ factura: 'facturada', factura_id: id })
+      .where('id', '=', ventaId)
+      .execute();
+    return id;
+  };
 
   /** Un abono de COBRANZA (como el que deja un cobro de la tablet, T-20) y el status que le toca. */
   const abonar = async (ventaId: string, monto: string) => {
@@ -528,6 +553,16 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
       .selectFrom('venta_nota')
       .select('id')
       .where('cliente_id', 'in', clientes);
+    // T-19: soltar las facturas antes de borrar las ventas, y luego borrarlas.
+    await db
+      .updateTable('venta_nota')
+      .set({ factura: 'N/A', factura_id: null })
+      .where('cliente_id', 'in', clientes)
+      .execute();
+    await db
+      .deleteFrom('factura')
+      .where('cliente_id', 'in', clientes)
+      .execute();
     await db
       .deleteFrom('cobranza_abono')
       .where('venta_nota_id', 'in', ventas)
@@ -838,6 +873,7 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
         numNota: v.numNota,
         contadoCredito: 'contado',
         factura: 'N/A',
+        facturaNumero: null,
         comentarios: 'Entregar temprano',
         montoCentavos: 27000,
         status: 'pagada',
@@ -1541,6 +1577,67 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
       expect(porCobrar(await notasDeLaTablet(), v.id)).toBe(true);
       await eliminar(v.id).expect(200);
       expect(porCobrar(await notasDeLaTablet(), v.id)).toBe(false);
+    });
+  });
+
+  describe('venta facturada (T-19)', () => {
+    it('el detalle trae el numero y la marca no editable', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      await facturar(v.id, `F1-${SUFIJO}`.slice(0, 30));
+      const res = await detalle(cookieGeneral, v.id).expect(200);
+      expect(res.body).toMatchObject({
+        factura: 'facturada',
+        facturaNumero: `F1-${SUFIJO}`.slice(0, 30),
+        editable: false,
+        puedeMarcarPerdida: true,
+      });
+    });
+
+    it('editarla es 409 y no cambia nada', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      const numero = `F2-${SUFIJO}`.slice(0, 30);
+      await facturar(v.id, numero);
+      const res = await request(app.getHttpServer())
+        .patch(`/ventas/${v.id}`)
+        .set('Cookie', cookieGeneral)
+        .send({
+          vendedorId: vendedorTj,
+          numNota: v.numNota,
+          contadoCredito: 'credito',
+          factura: 'N/A',
+          lineas: [{ presentacionId: pre1, cantidad: 1, cantidadPromocion: 0 }],
+        })
+        .expect(409);
+      expect((res.body as { message: string }).message).toBe(
+        `Está en la factura ${numero}: quítala primero de la factura para editarla.`,
+      );
+      const fila = await ventaPorId(v.id);
+      expect(fila.monto_total).toBe('270.00');
+      expect(fila.factura).toBe('facturada');
+    });
+
+    it('eliminarla es 409', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      const numero = `F3-${SUFIJO}`.slice(0, 30);
+      await facturar(v.id, numero);
+      const res = await request(app.getHttpServer())
+        .delete(`/ventas/${v.id}`)
+        .set('Cookie', cookieGeneral)
+        .expect(409);
+      expect((res.body as { message: string }).message).toBe(
+        `Está en la factura ${numero}: quítala primero de la factura.`,
+      );
+      expect((await ventaPorId(v.id)).deleted_at).toBeNull();
+    });
+
+    it('marcar cuenta perdida si entra', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      await facturar(v.id, `F4-${SUFIJO}`.slice(0, 30));
+      await request(app.getHttpServer())
+        .post(`/ventas/${v.id}/cuenta-perdida`)
+        .set('Cookie', cookieGeneral)
+        .expect(201);
+      expect((await ventaPorId(v.id)).status).toBe('cuenta_perdida');
     });
   });
 

@@ -21,6 +21,10 @@ export const MOTIVO_CON_COBROS =
 export const MOTIVO_CUENTA_PERDIDA =
   'Esta venta está marcada como cuenta perdida: no se puede editar ni eliminar.';
 
+/** T-19: una venta facturada no cambia sin que alguien la quite de su factura a proposito. */
+export const motivoFacturada = (numero: string): string =>
+  `Esta venta está en la factura ${numero}: quítala primero de la factura para editarla o eliminarla.`;
+
 export const MOTIVO_NO_PERDIBLE =
   'Solo una venta pendiente o abonada se puede marcar como cuenta perdida.';
 
@@ -32,10 +36,12 @@ export function sePuedeMarcarPerdida(status: string): boolean {
 /**
  * @param abonosDeCobroVivos abonos vivos con `origen = 'cobro'`. El cobro
  * automatico de contado (`venta_contado`) NO cuenta: la edicion lo reescribe.
+ * @param facturaNumero el numero de su factura, o `null` si no esta facturada (T-19).
  */
 export function accionesDeVenta(
   status: string,
   abonosDeCobroVivos: number,
+  facturaNumero: string | null,
 ): AccionesVenta {
   // Una cuenta perdida no se edita: recalcular el status la devolveria a
   // `pendiente`, y deshacer una cuenta perdida no entra en esta version (§6).
@@ -44,10 +50,13 @@ export function accionesDeVenta(
       ? MOTIVO_CON_COBROS
       : status === 'cuenta_perdida'
         ? MOTIVO_CUENTA_PERDIDA
-        : null;
+        : facturaNumero !== null
+          ? motivoFacturada(facturaNumero)
+          : null;
   return {
     editable: motivo === null,
     motivoNoEditable: motivo,
+    // La cuenta perdida no toca montos ni productos: se permite aunque este facturada.
     puedeMarcarPerdida: sePuedeMarcarPerdida(status),
   };
 }
@@ -57,10 +66,15 @@ export function bloqueoDeEdicion(
   status: string,
   abonosDeCobroVivos: number,
   accion: 'editar' | 'eliminar',
+  facturaNumero: string | null,
 ): string | null {
   if (abonosDeCobroVivos > 0)
     return `Tiene cobros registrados: no se puede ${accion}.`;
   if (status === 'cuenta_perdida')
     return `Está marcada como cuenta perdida: no se puede ${accion}.`;
+  if (facturaNumero !== null)
+    return accion === 'editar'
+      ? `Está en la factura ${facturaNumero}: quítala primero de la factura para editarla.`
+      : `Está en la factura ${facturaNumero}: quítala primero de la factura.`;
   return null;
 }

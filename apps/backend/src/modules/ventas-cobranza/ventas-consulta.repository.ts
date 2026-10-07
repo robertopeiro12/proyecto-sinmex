@@ -48,6 +48,8 @@ export interface CabeceraVenta {
   numNota: string | null;
   contadoCredito: ContadoCredito;
   factura: string;
+  /** El numero cuando `factura = 'facturada'` (T-19). */
+  facturaNumero: string | null;
   comentarios: string | null;
   montoCentavos: number;
   status: string;
@@ -172,7 +174,8 @@ export class VentasConsultaRepository {
       repartidor: string | null;
       num_nota: string | null;
       contado_credito: string;
-      factura: string | null;
+      factura: string;
+      factura_numero: string | null;
       comentarios: string | null;
       monto_total: string;
       status: string;
@@ -182,11 +185,13 @@ export class VentasConsultaRepository {
              vn.cliente_id, c.nombre as cliente, vn.sucursal_id,
              s.codigo as sucursal_codigo, vn.vendedor_id,
              v.nombre as repartidor, vn.num_nota, vn.contado_credito,
-             vn.factura, vn.comentarios, vn.monto_total, vn.status, vn.origen
+             vn.factura, f.numero as factura_numero, vn.comentarios,
+             vn.monto_total, vn.status, vn.origen
         from venta_nota vn
         join cliente c on c.id = vn.cliente_id
         join sucursal s on s.id = vn.sucursal_id
         left join vendedor v on v.id = vn.vendedor_id
+        left join factura f on f.id = vn.factura_id
        where vn.id = ${id}
          and vn.deleted_at is null
     `.execute(this.db);
@@ -205,7 +210,8 @@ export class VentasConsultaRepository {
       repartidor: f.repartidor,
       numNota: f.num_nota,
       contadoCredito: f.contado_credito as ContadoCredito,
-      factura: f.factura ?? 'N/A',
+      factura: f.factura,
+      facturaNumero: f.factura_numero,
       comentarios: f.comentarios,
       montoCentavos: aCentavos(f.monto_total),
       status: f.status,
