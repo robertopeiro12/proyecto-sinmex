@@ -7,8 +7,9 @@ import type { FuenteOperaciones } from './motor';
  * Los cobros capturados en ruta, como operaciones del push (T-20).
  *
  * - **`clave`** es el `id` de la fila: no cambia, y reenviar no duplica.
- * - **`fecha_operacion`** es la fecha con la que se emitio el folio.
- * - **`cliente_id` y `folio`** van en el sobre, no en `datos` (contrato §6).
+ * - **`fecha_operacion`** es el dia de trabajo en que se grabo.
+ * - **`cliente_id`** va en el sobre, no en `datos` (contrato §6). **Sin folio**:
+ *   la cobranza no lleva folio (T-21).
  * - **`datos`** es el pago tal cual; el reparto lo hace el servidor.
  *
  * Se registra DESPUES de la fuente de ventas: el motor sube por fuente y en
@@ -34,7 +35,6 @@ export function fuenteCobranzas(cobranzas: RepositorioCobranzas): FuenteOperacio
           fecha_operacion: c.fecha,
           ocurrido_en: c.grabada_en,
           cliente_id: c.cliente_id,
-          folio: c.folio,
           datos,
         };
       });

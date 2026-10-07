@@ -3,7 +3,6 @@ import type { AbonoNota, Cobranza, FechaISO, MetodoPago } from '../tipos';
 import type { RepositorioCatalogos } from './catalogos';
 import type { DepsRepositorio } from './deps';
 import { enTransaccion } from './deps';
-import type { RepositorioFolios } from './folios';
 
 /** Error de regla de negocio del cobro (no un fallo tecnico de SQLite). */
 export class ErrorCobranza extends Error {
@@ -28,16 +27,19 @@ export interface DatosRegistroCobranza {
 export type RepositorioCobranzas = ReturnType<typeof crearRepositorioCobranzas>;
 
 /**
- * La cobranza en ruta (T-20): grabar con folio y reparto local, consultar y la
- * cola del push.
+ * La cobranza en ruta (T-20): grabar con reparto local, consultar y la cola
+ * del push.
  *
- * Recibe `catalogos` y `folios` ya creados, como las ventas: `folios` es la
- * misma instancia de toda la capa (el contador del dia es compartido) y
- * `catalogos` es quien publica la version que observan las pantallas.
+ * **Sin folio** (T-21): el cliente aclaro que la cobranza no lleva folio ("Un
+ * solo folio"); solo las ventas se numeran. Cobrar ya no gasta un numero de la
+ * serie del vendedor.
+ *
+ * Recibe `catalogos` ya creado, como las ventas: es quien publica la version
+ * que observan las pantallas.
  */
 export function crearRepositorioCobranzas(
   { bd, reloj, generarId }: DepsRepositorio,
-  { catalogos, folios }: { catalogos: RepositorioCatalogos; folios: RepositorioFolios },
+  { catalogos }: { catalogos: RepositorioCatalogos },
 ) {
   /** Las notas activas del cliente, como las ve el reparto: todas cobrables. */
   function notasParaReparto(clienteId: string) {
@@ -60,15 +62,13 @@ export function crearRepositorioCobranzas(
     },
 
     /**
-     * Graba un cobro, le emite su folio y aplica el reparto local, en **una
-     * sola transaccion** (D15).
+     * Graba un cobro y aplica el reparto local, en **una sola transaccion**
+     * (D15). Sin folio (T-21).
      *
      * Todo lo que puede fallar por una regla se comprueba ANTES de abrir la
-     * transaccion. Lo que falla dentro (sin segmento, 99 operaciones del dia,
-     * SQLite) hace `rollback` de todo, incluido el contador de folios.
+     * transaccion. Lo que falla dentro (SQLite) hace `rollback` de todo.
      *
      * @throws {ErrorCobranza} si la captura no se puede grabar.
-     * @throws {ErrorFolio} si el vendedor no tiene segmento o llego al tope del dia.
      */
     registrar(datos: DatosRegistroCobranza): Cobranza {
       const hoy = reloj.hoy();
@@ -78,6 +78,16 @@ export function crearRepositorioCobranzas(
         throw new ErrorCobranza(
           'Este cliente ya no está en el catálogo de la tablet. Sincroniza antes de cobrarle.',
         );
+      }
+
+      // La sucursal del cobro es la del vendedor, como la de la venta (antes
+      // salia del folio emitido).
+      const vendedor = bd.getFirstSync<{ sucursal_id: string }>(
+        'select sucursal_id from vendedor where id = $id',
+        { $id: datos.vendedorId },
+      );
+      if (!vendedor) {
+        throw new ErrorCobranza('Este vendedor no está en la tablet. Sincroniza antes de cobrar.');
       }
 
       const nota = catalogos
@@ -106,25 +116,21 @@ export function crearRepositorioCobranzas(
       const ahora = reloj.ahora();
 
       enTransaccion(bd, () => {
-        const emitido = folios.emitir({ vendedorId: datos.vendedorId, claveOperacion: id });
-
         bd.runSync(
           `insert into cobranza (
-             id, fecha, cliente_id, vendedor_id, sucursal_id, folio, venta_nota_id,
+             id, fecha, cliente_id, vendedor_id, sucursal_id, venta_nota_id,
              monto_centavos, metodo_pago, fecha_pago, grabada_en, sync_estado
            ) values (
-             $id, $fecha, $cliente_id, $vendedor_id, $sucursal_id, $folio, $venta_nota_id,
+             $id, $fecha, $cliente_id, $vendedor_id, $sucursal_id, $venta_nota_id,
              $monto_centavos, $metodo_pago, $fecha_pago, $grabada_en, 'pendiente'
            )`,
           {
             $id: id,
-            // La fecha del folio: el servidor rechaza un folio cuya fecha no
-            // coincide con `fecha_operacion`.
-            $fecha: emitido.fecha,
+            // El dia de trabajo: viaja como `fecha_operacion`.
+            $fecha: hoy,
             $cliente_id: datos.clienteId,
             $vendedor_id: datos.vendedorId,
-            $sucursal_id: emitido.sucursal_id,
-            $folio: emitido.folio,
+            $sucursal_id: vendedor.sucursal_id,
             $venta_nota_id: datos.ventaNotaId,
             $monto_centavos: datos.montoCentavos,
             $metodo_pago: datos.metodoPago,
@@ -170,9 +176,9 @@ export function crearRepositorioCobranzas(
       });
 
       // Despues del commit: la ficha y la venta releen notas y saldo a favor.
-      // Si un oyente truena, el cobro ya esta grabado y su folio consumido: no
-      // puede propagarse como si la grabacion hubiera fallado (la pantalla diria
-      // "no se consumio ningun folio" e invitaria a cobrar dos veces).
+      // Si un oyente truena, el cobro ya esta grabado: no puede propagarse como
+      // si la grabacion hubiera fallado (la pantalla diria "no se guardo nada"
+      // e invitaria a cobrar dos veces).
       try {
         catalogos.publicarCambio();
       } catch {

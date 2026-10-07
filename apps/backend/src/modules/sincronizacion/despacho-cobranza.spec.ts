@@ -16,7 +16,7 @@ const op = (
   fechaOperacion: '2026-09-14',
   ocurridoEn: '2026-09-14T19:10:00.000Z',
   clienteId: CLIENTE,
-  folio: 'TJ260914AP04',
+  folio: null,
   datos: {
     venta_nota_id: NOTA,
     monto_centavos: 15000,
@@ -40,8 +40,11 @@ describe('prepararCobranza', () => {
     });
   });
 
+  it('una cobranza sin folio se prepara: la cobranza no lleva folio (T-21)', () => {
+    expect(prepararCobranza(op({ folio: null }))).toMatchObject({ ok: true });
+  });
+
   it.each<[string, Partial<OperacionNormalizada>, string]>([
-    ['una cobranza sin folio', { folio: null }, 'folio: '],
     ['una cobranza sin cliente', { clienteId: null }, 'cliente_id: '],
     [
       'una cobranza de $0',

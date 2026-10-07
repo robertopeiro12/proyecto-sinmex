@@ -118,7 +118,8 @@ export class VentasEdicionRepository {
       .selectFrom('cobranza_abono')
       .select((eb) => eb.fn.countAll<string>().as('n'))
       .where('venta_nota_id', '=', id)
-      .where('origen', '=', 'cobro')
+      // T-21: un abono de saldo a favor tambien es un cobro: la venta no se edita.
+      .where('origen', 'in', ['cobro', 'saldo_favor'])
       .where('deleted_at', 'is', null)
       .executeTakeFirstOrThrow();
     return Number(fila.n);

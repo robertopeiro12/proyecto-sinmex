@@ -285,13 +285,27 @@ export type DatosProspecto = {
 export type MetodoPago = 'efectivo' | 'transferencia' | 'cheque';
 
 /**
+ * Metodo de un abono que BAJA en el pull (T-21): el de los cobros mas
+ * `saldo_favor`, que es la oficina aplicando saldo a favor (no entro dinero).
+ * La tablet nunca lo manda en un push: `DatosCobranza.metodo_pago` sigue siendo
+ * {@link MetodoPago}. Aditivo: una tablet vieja guarda los abonos como JSON sin
+ * validar el metodo y lo muestra tal cual.
+ */
+export type MetodoPagoAbono = MetodoPago | 'saldo_favor';
+
+/**
  * `datos` de una operacion `tipo: "cobranza"` (T-20).
  *
- * Un pago del cliente sobre UNA nota que eligio el vendedor. `cliente_id` y
- * `folio` viajan en el **sobre** y en una cobranza son obligatorios. El
- * servidor reparte el monto: primero la nota elegida hasta su saldo, despues
- * las otras notas pendientes del cliente de la mas vieja a la mas nueva, y lo
- * que sobre queda como saldo a favor. Un monto mayor al saldo se acepta.
+ * Un pago del cliente sobre UNA nota que eligio el vendedor. `cliente_id`
+ * viaja en el **sobre** y es obligatorio. **No lleva folio** (T-21, cliente
+ * 2026-10-07: "la cobranza no lleva folio"): si llega uno —una tablet sin
+ * actualizar— se ignora sin validarlo y no se guarda. No subio la version:
+ * ver `docs/contrato-sincronizacion.md` §6.
+ *
+ * El servidor reparte el monto: primero la nota elegida hasta su saldo,
+ * despues las otras notas pendientes del cliente de la mas vieja a la mas
+ * nueva, y lo que sobre queda como saldo a favor. Un monto mayor al saldo se
+ * acepta.
  *
  * Es `type` y no `interface` por la misma razon que {@link DatosVenta}.
  */
@@ -487,7 +501,7 @@ export interface PrecioPull extends FilaSincronizable {
 export interface AbonoPull {
   fecha_pago: string;
   monto_centavos: number;
-  metodo_pago: MetodoPago;
+  metodo_pago: MetodoPagoAbono;
 }
 
 /**

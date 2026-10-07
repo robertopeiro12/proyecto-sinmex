@@ -6,7 +6,7 @@ import {
   type DatosRegistroCobranza,
 } from './cobranzas';
 import type { DepsRepositorio } from './deps';
-import { crearRepositorioFolios, ErrorFolio } from './folios';
+import { crearRepositorioFolios } from './folios';
 import { crearRepositorioVentas } from './ventas';
 
 /**
@@ -32,7 +32,7 @@ function montar(opciones: { sinSegmento?: boolean } = {}) {
     deps,
     catalogos,
     folios,
-    cobranzas: crearRepositorioCobranzas(deps, { catalogos, folios }),
+    cobranzas: crearRepositorioCobranzas(deps, { catalogos }),
     ventas: crearRepositorioVentas(deps, { catalogos, folios }),
   };
 }
@@ -56,8 +56,8 @@ const nota = (deps: DepsRepositorio, id: string) =>
     { $id: id },
   );
 
-describe('repositorio de cobranzas (T-20)', () => {
-  it('graba el cobro con el folio del dia y lo deja pendiente de subir', () => {
+describe('repositorio de cobranzas (T-20; sin folio desde T-21)', () => {
+  it('graba el cobro SIN folio y lo deja pendiente de subir (T-21)', () => {
     const { deps, cobranzas } = montar();
     const c = cobranzas.registrar(cobro({ metodoPago: 'transferencia', fechaPago: '2026-08-05' }));
 
@@ -67,7 +67,6 @@ describe('repositorio de cobranzas (T-20)', () => {
       cliente_id: 'cli-1',
       vendedor_id: 'ven-1',
       sucursal_id: 'suc-tj',
-      folio: 'TJ260807AP01',
       venta_nota_id: 'nota-1',
       monto_centavos: 5000,
       metodo_pago: 'transferencia',
@@ -77,7 +76,7 @@ describe('repositorio de cobranzas (T-20)', () => {
       sync_error: null,
       sincronizado_en: null,
     });
-    expect(cuantas(deps, 'folio_emitido')).toBe(1);
+    expect(cuantas(deps, 'folio_emitido')).toBe(0);
   });
 
   it('un abono parcial descuenta el saldo local y agrega el abono a la nota', () => {
@@ -122,24 +121,34 @@ describe('repositorio de cobranzas (T-20)', () => {
     expect(nota(deps, 'nota-2')?.saldo_centavos).toBe(10000);
   });
 
-  it('si el folio no se puede emitir no queda ni cobro ni saldo descontado', () => {
+  it('un vendedor sin segmento de folio tambien puede cobrar: la cobranza no lleva folio', () => {
     const { deps, cobranzas } = montar({ sinSegmento: true });
-    expect(() => cobranzas.registrar(cobro())).toThrow(ErrorFolio);
-    expect(cuantas(deps, 'cobranza')).toBe(0);
-    expect(cuantas(deps, 'folio_emitido')).toBe(0);
-    expect(nota(deps, 'nota-1')?.saldo_centavos).toBe(15000);
+    expect(() => cobranzas.registrar(cobro())).not.toThrow();
+    expect(cuantas(deps, 'cobranza')).toBe(1);
   });
 
-  it('un fallo DESPUES de emitir el folio tambien lo deshace: no se quema un numero (D16)', () => {
-    const { deps, folios, cobranzas } = montar();
+  it('cobrar no consume numero de la serie: la venta despues de un cobro sigue el consecutivo de ventas', () => {
+    const { folios, ventas, cobranzas } = montar();
+    cobranzas.registrar(cobro());
+    expect(folios.consecutivoDe('ven-1')).toBe(0);
+    const v = ventas.registrar({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      numNota: '2346',
+      contadoCredito: 'credito',
+      factura: 'N/A',
+      comentarios: null,
+      lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
+    });
+    expect(v.folio).toBe('TJ260807AP01');
+  });
+
+  it('un fallo a media grabacion no deja ni cobro ni saldo descontado (D15)', () => {
+    const { deps, cobranzas } = montar();
     // Se rompe a proposito la siguiente escritura de la transaccion (el
-    // reparto local): para entonces el folio ya se emitio y la cabecera del
-    // cobro ya se inserto. No se puede usar un `drop table` como en
-    // ventas.spec.ts:116-124 porque `registrar` lee `nota_pendiente`
-    // (notasPendientesDe) ANTES de abrir la transaccion, para validar la nota
-    // y calcular el reparto; soltar la tabla ahi impediria que el folio
-    // llegara a emitirse. Un trigger que aborta el UPDATE logra el mismo
-    // fallo tardio sin tocar esa lectura previa.
+    // reparto local), cuando la cabecera del cobro ya se inserto. Un trigger
+    // que aborta el UPDATE logra el fallo tardio sin tocar la lectura previa
+    // de `nota_pendiente`.
     deps.bd.execSync(`
       create trigger t20_bloquea_reparto
       before update on nota_pendiente
@@ -148,16 +157,21 @@ describe('repositorio de cobranzas (T-20)', () => {
       end;
     `);
     expect(() => cobranzas.registrar(cobro())).toThrow();
-    expect(folios.consecutivoDe('ven-1')).toBe(0);
-    expect(cuantas(deps, 'folio_emitido')).toBe(0);
     expect(cuantas(deps, 'cobranza')).toBe(0);
     expect(nota(deps, 'nota-1')?.saldo_centavos).toBe(15000);
   });
 
-  it('un monto de $0 se rechaza antes de emitir folio', () => {
+  it('un monto de $0 se rechaza y no graba nada', () => {
     const { deps, cobranzas } = montar();
     expect(() => cobranzas.registrar(cobro({ montoCentavos: 0 }))).toThrow(ErrorCobranza);
-    expect(cuantas(deps, 'folio_emitido')).toBe(0);
+    expect(cuantas(deps, 'cobranza')).toBe(0);
+  });
+
+  it('un vendedor que no esta en la tablet se rechaza', () => {
+    const { cobranzas } = montar();
+    expect(() => cobranzas.registrar(cobro({ vendedorId: 'ven-x' }))).toThrow(
+      'Este vendedor no está en la tablet. Sincroniza antes de cobrar.',
+    );
   });
 
   it('una fecha de pago anterior a la nota se rechaza', () => {
@@ -213,22 +227,6 @@ describe('repositorio de cobranzas (T-20)', () => {
     });
   });
 
-  it('ventas y cobros comparten el contador de folios del dia', () => {
-    const { ventas, cobranzas } = montar();
-    const v = ventas.registrar({
-      vendedorId: 'ven-1',
-      clienteId: 'cli-1',
-      numNota: '2346',
-      contadoCredito: 'credito',
-      factura: 'N/A',
-      comentarios: null,
-      lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
-    });
-    const c = cobranzas.registrar(cobro());
-    expect(v.folio).toBe('TJ260807AP01');
-    expect(c.folio).toBe('TJ260807AP02');
-  });
-
   it('si un oyente del refresco truena, el cobro ya grabado no se reporta como fallido', () => {
     const { catalogos, cobranzas, deps } = montar();
     catalogos.suscribir(() => {
@@ -237,9 +235,9 @@ describe('repositorio de cobranzas (T-20)', () => {
 
     const grabada = cobranzas.registrar(cobro());
 
-    // El cobro esta firme y su folio consumido: propagar el error haria que la
-    // pantalla dijera "no se consumio ningun folio" e invitara a cobrar dos veces.
-    expect(grabada.folio).toBe('TJ260807AP01');
+    // El cobro esta firme: propagar el error haria que la pantalla dijera "no
+    // se guardo nada" e invitara a cobrar dos veces.
+    expect(grabada.id).toBe('id-1');
     expect(cuantas(deps, 'cobranza')).toBe(1);
     expect(nota(deps, 'nota-1')?.saldo_centavos).toBe(10000);
   });

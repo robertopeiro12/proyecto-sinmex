@@ -449,14 +449,13 @@ export class SincronizacionService {
       }
       case 'cobranza':
         // Devuelve la primera fila de cobranza_abono, o el movimiento de saldo
-        // a favor si todo el pago quedo a favor.
+        // a favor si todo el pago quedo a favor. Sin folio (T-21).
         return this.cobranzas.registrarCobranza(
           proyeccion.cobranza,
           {
             sucursalId: vendedor.sucursal_id,
             fechaOperacion: op.fechaOperacion,
             vendedorId: vendedor.id,
-            folio: op.folio,
             usuarioId: null,
           },
           trx,

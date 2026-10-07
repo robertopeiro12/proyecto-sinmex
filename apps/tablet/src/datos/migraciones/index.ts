@@ -7,6 +7,7 @@ import { prospectos } from './006-prospectos';
 import { fotoProspecto } from './007-foto-prospecto';
 import { cobranzas } from './008-cobranzas';
 import { numNotaOpcional } from './009-num-nota-opcional';
+import { cobranzaSinFolio } from './010-cobranza-sin-folio';
 import type { Migracion } from './motor';
 
 /**
@@ -28,6 +29,7 @@ export const migraciones: readonly Migracion[] = [
   fotoProspecto,
   cobranzas,
   numNotaOpcional,
+  cobranzaSinFolio,
 ];
 
 export { ejecutarMigraciones, versionEsquema } from './motor';

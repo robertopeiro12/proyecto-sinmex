@@ -169,7 +169,6 @@ export class VentasService {
           tipo: 'cobranza',
           saldoPendiente: aPesos(0),
           metodoPago: contexto.metodoPagoContado,
-          folio: contexto.folio,
           origen: 'venta_contado',
         },
         trx,

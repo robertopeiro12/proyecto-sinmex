@@ -4,7 +4,7 @@ import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import type { DB } from '../../database/schema';
 import type {
   ClientePull,
-  MetodoPago,
+  MetodoPagoAbono,
   NotaPendientePull,
   PrecioPull,
   PresentacionPull,
@@ -431,7 +431,7 @@ export class SincronizacionRepository {
         abonos: f.abonos.map((a) => ({
           fecha_pago: a.fecha_pago,
           monto_centavos: aCentavos(a.monto),
-          metodo_pago: a.metodo_pago as MetodoPago,
+          metodo_pago: a.metodo_pago as MetodoPagoAbono,
         })),
         activo: abierta && f.borrada === null ? 1 : 0,
       };

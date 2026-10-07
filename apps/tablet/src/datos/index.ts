@@ -83,4 +83,6 @@ export type {
   Reparto,
   TipoAbono,
 } from './cobranzas-reglas';
+export { lineasDelCobro, NOMBRE_METODO } from './cobranzas-textos';
+export type { LineaDeCobro } from './cobranzas-textos';
 export * from './tipos';

@@ -23,8 +23,8 @@ export interface CapaDatos {
   /** Cursor del pull incremental (T-07). */
   sync: RepositorioSync;
   /**
-   * Emision offline de folios (T-14). La usan `ventas` (T-16) y `cobranzas`
-   * (T-20) dentro de su propia transaccion, con el mismo contador del dia.
+   * Emision offline de folios (T-14). La usa `ventas` (T-16) dentro de su
+   * propia transaccion. La cobranza ya no emite folio (T-21).
    */
   folios: RepositorioFolios;
   /** Ventas capturadas en ruta (T-16). */
@@ -69,7 +69,7 @@ export function inicializarCapaDatos(): CapaDatos {
     // la version que observan las pantallas y quien sabe si el tipo de negocio
     // elegido sigue vivo en el catalogo local.
     prospectos: crearRepositorioProspectos(deps, { catalogos }),
-    cobranzas: crearRepositorioCobranzas(deps, { catalogos, folios }),
+    cobranzas: crearRepositorioCobranzas(deps, { catalogos }),
     versionEsquema: versionFinal,
   };
 }

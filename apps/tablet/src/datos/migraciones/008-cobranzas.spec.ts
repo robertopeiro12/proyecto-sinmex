@@ -10,14 +10,13 @@ function montar() {
 }
 
 const INSERTAR_COBRANZA = `insert into cobranza
-  (id, fecha, cliente_id, vendedor_id, sucursal_id, folio, venta_nota_id,
+  (id, fecha, cliente_id, vendedor_id, sucursal_id, venta_nota_id,
    monto_centavos, metodo_pago, fecha_pago, grabada_en)
-  values ($id, '2026-08-07', 'cli-1', 'ven-1', 'suc-tj', $folio, 'nota-1',
+  values ($id, '2026-08-07', 'cli-1', 'ven-1', 'suc-tj', 'nota-1',
           $monto_centavos, $metodo_pago, '2026-08-07', '2026-08-07T15:00:00.000Z')`;
 
 const cobro = (extra: Record<string, string | number> = {}) => ({
   $id: 'cob-1',
-  $folio: 'TJ260807AP01',
   $monto_centavos: 5000,
   $metodo_pago: 'efectivo',
   ...extra,
@@ -72,11 +71,5 @@ describe('migracion 008: cobranzas (T-20)', () => {
   it('no acepta un metodo de pago fuera del catalogo', () => {
     const bd = montar();
     expect(() => bd.runSync(INSERTAR_COBRANZA, cobro({ $metodo_pago: 'tarjeta' }))).toThrow();
-  });
-
-  it('el folio es unico', () => {
-    const bd = montar();
-    bd.runSync(INSERTAR_COBRANZA, cobro());
-    expect(() => bd.runSync(INSERTAR_COBRANZA, cobro({ $id: 'cob-2' }))).toThrow();
   });
 });

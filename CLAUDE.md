@@ -200,8 +200,8 @@ usuario con sesion pasa.
   primaria `(vendedor, sucursal, fecha)` en el SQLite de la tablet. No hay ninguna
   comprobación de "¿cambió el día?" que se pueda olvidar: un día nuevo es una fila nueva.
 - **Emite dentro de la transacción que guarda la operación.** `folios.emitir()` usa
-  `savepoint`, no `begin`, para poder anidarse. T-16/T-20 **deben** llamarlo dentro de su
-  propia transacción, o un fallo a media captura quema un número.
+  `savepoint`, no `begin`, para poder anidarse. La venta (T-16) **debe** llamarlo dentro de su
+  propia transacción, o un fallo a media captura quema un número. La cobranza ya no lo llama (T-21).
 - **Folio ≠ clave de idempotencia** y hay que mantenerlos separados: la clave identifica el
   transporte, el folio el hecho de negocio.
 - **La colisión se detecta con un `unique` global** en `sync_operacion.folio` (rechazo por
@@ -228,7 +228,7 @@ usuario con sesion pasa.
   (`ventas-cobranza/ventas-edicion.service.ts`), con el permiso `venta.editar_eliminar`.
   - Bloquean la venta con `for update of vn` y **nunca** cambian folio, cliente, fecha, sucursal ni
     origen. Un folio eliminado no se reutiliza.
-  - Una venta con abonos vivos de `origen = 'cobro'`, o en cuenta perdida, no se edita ni se elimina.
+  - Una venta con abonos vivos de `origen` `cobro` o `saldo_favor` (T-21), o en cuenta perdida, no se edita ni se elimina.
     Quitar cobros es T-34.
   - Las líneas existentes conservan su precio guardado; las nuevas toman el de la lista **a la fecha
     de la venta**.
@@ -244,6 +244,22 @@ usuario con sesion pasa.
   `ventas-cobranza/facturas.*` con el permiso `venta.asignar_factura`. Una venta **facturada no se edita
   ni se elimina** (`bloqueoDeEdicion`): primero se quita de la factura. Quitar la última venta borra la
   factura. La tablet solo manda `N/A`/`pendiente` y no recibe nada de esto.
+- **Cobranza desde el portal (T-21) — y la cobranza NO lleva folio.** El cliente lo dijo el 2026-10-07
+  (*"Un solo folio"*, *"Porque la cobranza no lleva folio"*): solo las ventas se numeran. No hay
+  `cobranza_abono.folio` ni `saldo_favor_movimiento.folio`, la tablet ya no emite folio al cobrar (migración
+  local 010) y una tablet sin actualizar que todavía lo mande se registra igual: `normalizarOperacion` lo
+  **ignora sin validarlo** y no llega a `sync_operacion.folio`. No subió `CONTRATO_ACTUAL` (revisar al publicar).
+  - **Una regla para los dos**: `repartirPagoEnNotas` (palomeadas por fecha y folio → demás notas → saldo a
+    favor) vive solo en el servidor; `repartirPago` es esa misma con una nota y su copia de la tablet no cambió.
+  - Endpoints `/cobranzas` (`ventas-cobranza/cobranzas-portal.*`, `cobranzas.controller.ts`) con el permiso
+    `cobranza.registrar`. Cobrador `null` = Oficina o un vendedor activo de la sucursal del cliente;
+    `capturo_usuario_id` = quien capturó; `fecha_operacion` = hoy en Tijuana.
+  - **El portal SÍ rechaza** una nota marcada que ya no tiene saldo (409) — la tablet no (D9). La decisión se
+    toma sobre las notas bloqueadas `for update` (`bloquearNotasDelCliente`), nunca sobre lo que leyó la pantalla.
+  - **Aplicar saldo a favor** no es dinero nuevo: abono con `metodo_pago = origen = 'saldo_favor'` (un check
+    exige los dos o ninguno) y un movimiento **negativo** `aplicacion` en `saldo_favor_movimiento`. Flujo de
+    Efectivo y Tesorería **no** deben contarlo como ingreso.
+  - Un cobro del portal **no se deshace** todavía: eso es T-34. Por eso la vista previa.
 
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
 `--`: sin él, npm se come los argumentos).

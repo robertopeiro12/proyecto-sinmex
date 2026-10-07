@@ -326,7 +326,6 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
         tipo: 'abono',
         saldo_pendiente: '0.00',
         metodo_pago: 'efectivo',
-        folio: null,
         origen: 'cobro',
       })
       .execute();
@@ -361,7 +360,6 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
         'metodo_pago',
         'vendedor_id',
         'origen',
-        'folio',
         'deleted_at',
         sql<string>`to_char(fecha_pago, 'YYYY-MM-DD')`.as('fecha_pago'),
       ])
@@ -1226,7 +1224,6 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
           metodo_pago: 'efectivo',
           vendedor_id: vendedorTj,
           origen: 'venta_contado',
-          folio: v.folio,
           deleted_at: null,
           fecha_pago: FECHA_EDICION,
         },
@@ -1783,6 +1780,46 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
       expect(
         incremental.notas_pendientes.find((n) => n.id === v.id),
       ).toMatchObject({ activo: 0 });
+    });
+  });
+
+  describe('abono de saldo a favor (T-21)', () => {
+    it('una venta con un abono de saldo a favor no se edita ni se elimina, como con cualquier cobro', async () => {
+      const v = await registrar({ fecha: FECHA_EDICION });
+      await db
+        .insertInto('cobranza_abono')
+        .values({
+          venta_nota_id: v.id,
+          vendedor_id: null,
+          fecha_pago: FECHA_EDICION,
+          fecha_operacion: FECHA_EDICION,
+          monto: '70.00',
+          tipo: 'abono',
+          saldo_pendiente: '200.00',
+          metodo_pago: 'saldo_favor',
+          origen: 'saldo_favor',
+          capturo_usuario_id: usuarioGeneralId,
+        })
+        .execute();
+      await db
+        .updateTable('venta_nota')
+        .set({ status: 'abonado' })
+        .where('id', '=', v.id)
+        .execute();
+
+      const venta = (await detalle(cookieGeneral, v.id).expect(200))
+        .body as VentaDetalle;
+      expect(venta).toMatchObject({
+        editable: false,
+        motivoNoEditable: MOTIVO_CON_COBROS,
+      });
+      const res = await request(app.getHttpServer())
+        .delete(`/ventas/${v.id}`)
+        .set('Cookie', cookieGeneral)
+        .expect(409);
+      expect((res.body as { message: string }).message).toBe(
+        'Tiene cobros registrados: no se puede eliminar.',
+      );
     });
   });
 });

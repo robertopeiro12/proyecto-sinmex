@@ -71,7 +71,7 @@ export interface CobroDeVenta {
   fechaPago: string;
   metodoPago: string;
   montoCentavos: number;
-  origen: 'cobro' | 'venta_contado';
+  origen: 'cobro' | 'venta_contado' | 'saldo_favor';
 }
 
 /**

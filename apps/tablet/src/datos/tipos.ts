@@ -161,27 +161,34 @@ export interface NotaPendiente {
 
 export type MetodoPago = 'efectivo' | 'transferencia' | 'cheque';
 
+/**
+ * Metodo de un abono que baja del servidor (T-21): ademas de los del cobro,
+ * `saldo_favor` cuando la oficina aplico saldo a favor a la nota. La tablet no
+ * cobra con saldo a favor; solo lo muestra.
+ */
+export type MetodoPagoAbono = MetodoPago | 'saldo_favor';
+
 /** Un abono de una nota, para mostrar los pagos previos (T-20). */
 export interface AbonoNota {
   fecha_pago: FechaISO;
   monto_centavos: number;
-  metodo_pago: MetodoPago;
+  metodo_pago: MetodoPagoAbono;
 }
 
 /**
- * Un cobro grabado en la tablet (T-20). Ver la migracion `008-cobranzas.ts`.
+ * Un cobro grabado en la tablet (T-20). Ver las migraciones `008-cobranzas.ts`
+ * y `010-cobranza-sin-folio.ts`: **sin folio** desde T-21.
  *
  * No guarda el reparto: lo recalcula el servidor. No se edita.
  */
 export interface Cobranza {
   /** uuid v4 generado al grabar. Es la clave de idempotencia del push. */
   id: string;
-  /** Dia de trabajo, el del folio y de `fecha_operacion`. */
+  /** Dia de trabajo (`reloj.hoy()`), el de `fecha_operacion`. */
   fecha: FechaISO;
   cliente_id: string;
   vendedor_id: string;
   sucursal_id: string;
-  folio: string;
   /** La nota que eligio el vendedor (id del servidor, bajado en el pull). */
   venta_nota_id: string;
   monto_centavos: number;

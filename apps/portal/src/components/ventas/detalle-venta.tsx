@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
+import { ETIQUETA_METODO_PAGO } from "@/lib/cobranzas";
 import {
   ETIQUETA_ORIGEN,
   ETIQUETA_STATUS,
@@ -16,12 +17,7 @@ import {
 const ETIQUETA_COBRO: Record<VentaDetalle["cobros"][number]["origen"], string> = {
   venta_contado: "Cobro de contado",
   cobro: "Cobranza",
-};
-
-const ETIQUETA_METODO: Record<string, string> = {
-  efectivo: "Efectivo",
-  transferencia: "Transferencia",
-  cheque: "Cheque",
+  saldo_favor: "Saldo a favor",
 };
 
 /**
@@ -128,7 +124,7 @@ export function DetalleVenta({
                 {venta.cobros.map((c) => (
                   <tr key={c.id} className="border-t">
                     <td className="py-1.5">{c.fechaPago}</td>
-                    <td className="py-1.5">{ETIQUETA_METODO[c.metodoPago] ?? c.metodoPago}</td>
+                    <td className="py-1.5">{ETIQUETA_METODO_PAGO[c.metodoPago] ?? c.metodoPago}</td>
                     <td className="py-1.5">{ETIQUETA_COBRO[c.origen]}</td>
                     <td className="py-1.5 text-right">{formatearPesos(c.montoCentavos)}</td>
                   </tr>

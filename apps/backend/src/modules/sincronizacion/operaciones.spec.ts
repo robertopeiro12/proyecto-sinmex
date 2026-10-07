@@ -271,6 +271,42 @@ describe('normalizarOperacion', () => {
       ).toBe(false);
     });
   });
+
+  describe('folio de la cobranza (T-21)', () => {
+    it('una cobranza con folio (tablet sin actualizar) entra y el folio se ignora', () => {
+      const r = normalizarOperacion(
+        valida({ tipo: 'cobranza', folio: 'TJ260807AP04' }),
+        VENDEDOR,
+        HOY,
+        CTX,
+      );
+      expect(r.ok).toBe(true);
+      if (r.ok !== true) return;
+      expect(r.operacion.folio).toBeNull();
+    });
+
+    it('ni siquiera se valida: un folio mal formado no rechaza la cobranza', () => {
+      const r = normalizarOperacion(
+        valida({ tipo: 'cobranza', folio: 'NO-ES-UN-FOLIO' }),
+        VENDEDOR,
+        HOY,
+        CTX,
+      );
+      expect(r.ok).toBe(true);
+      if (r.ok !== true) return;
+      expect(r.operacion.folio).toBeNull();
+    });
+
+    it('a una venta se le sigue revisando el folio', () => {
+      const r = normalizarOperacion(
+        valida({ tipo: 'venta', folio: 'NO-ES-UN-FOLIO' }),
+        VENDEDOR,
+        HOY,
+        CTX,
+      );
+      expect(r).toMatchObject({ ok: false, codigo: 'folio-invalido' });
+    });
+  });
 });
 
 describe('hoyEnTijuana', () => {

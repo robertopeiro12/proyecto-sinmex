@@ -48,7 +48,7 @@ export function sePuedeMarcarPerdida(status: string): boolean {
 }
 
 /**
- * @param abonosDeCobroVivos abonos vivos con `origen = 'cobro'`. El cobro
+ * @param abonosDeCobroVivos abonos vivos con `origen` `cobro` o `saldo_favor` (T-21). El cobro
  * automatico de contado (`venta_contado`) NO cuenta: la edicion lo reescribe.
  * @param facturaNumero el numero de su factura, o `null` si no esta facturada (T-19).
  */

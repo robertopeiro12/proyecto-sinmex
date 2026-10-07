@@ -9,6 +9,11 @@
  * > proyectar; si divergen, el saldo de la tablet parpadea hasta el pull. La
  * > tablet no puede importar del backend (Metro): si cambias uno, cambia el
  * > otro en el mismo commit.
+ *
+ * `repartirPagoEnNotas` (varias notas elegidas, T-21) existe SOLO aqui: el
+ * portal no reparte localmente (pide la vista previa al servidor) y la tablet
+ * sigue cobrando una nota a la vez. `repartirPago` es `repartirPagoEnNotas` con
+ * una sola nota y da exactamente lo mismo que la copia de la tablet.
  */
 
 export type TipoAbono = 'cobranza' | 'abono';
@@ -37,7 +42,7 @@ export interface Aplicacion {
 }
 
 export interface Reparto {
-  /** En orden: la elegida primero y despues las demas por fecha y folio. */
+  /** En orden: las elegidas primero (por fecha y folio) y despues las demas por fecha y folio. */
   aplicaciones: Aplicacion[];
   /** Lo que no cupo en ninguna nota (D1 paso 3). */
   saldoFavorCentavos: number;
@@ -70,32 +75,34 @@ function porFechaYFolio(a: NotaParaReparto, b: NotaParaReparto): number {
 }
 
 /**
- * Reparte un pago (D1): primero la nota elegida hasta su saldo, despues las
- * otras notas cobrables del cliente de la mas vieja a la mas nueva (`fecha`,
- * luego `folio`), y lo que sobre queda como saldo a favor.
+ * Reparte un pago entre una o varias notas elegidas (D1, T-21): primero las
+ * elegidas de la mas vieja a la mas nueva (`fecha`, luego `folio`), despues
+ * las otras notas cobrables del cliente en el mismo orden, y lo que sobre
+ * queda como saldo a favor.
  *
- * Un pago mayor al saldo **se acepta** (Mario). Una nota elegida que ya no es
- * cobrable (D9) no recibe nada y todo el monto pasa a las demas.
+ * Un pago mayor al saldo **se acepta** (Mario). Una elegida que ya no es
+ * cobrable (D9) no recibe nada y su parte sigue el orden; rechazarla o no es
+ * decision de quien llama (la tablet no rechaza; el portal si, antes).
  *
  * @throws {Error} si `montoCentavos` no es un entero positivo: la forma del
  * pago ya la valido quien llama, asi que llegar aqui con eso es un bug.
  */
-export function repartirPago(
+export function repartirPagoEnNotas(
   montoCentavos: number,
-  notaElegidaId: string,
+  notasElegidasIds: readonly string[],
   notas: readonly NotaParaReparto[],
 ): Reparto {
   if (!Number.isSafeInteger(montoCentavos) || montoCentavos <= 0) {
     throw new Error(
-      `repartirPago necesita un entero positivo de centavos, no ${montoCentavos}.`,
+      `repartirPagoEnNotas necesita un entero positivo de centavos, no ${montoCentavos}.`,
     );
   }
 
-  const elegida = notas.find((n) => n.id === notaElegidaId);
-  const otras = notas
-    .filter((n) => n.id !== notaElegidaId)
-    .sort(porFechaYFolio);
-  const orden = elegida ? [elegida, ...otras] : otras;
+  const elegidas = new Set(notasElegidasIds);
+  const orden = [
+    ...notas.filter((n) => elegidas.has(n.id)).sort(porFechaYFolio),
+    ...notas.filter((n) => !elegidas.has(n.id)).sort(porFechaYFolio),
+  ];
 
   const aplicaciones: Aplicacion[] = [];
   let restante = montoCentavos;
@@ -118,4 +125,19 @@ export function repartirPago(
   }
 
   return { aplicaciones, saldoFavorCentavos: restante };
+}
+
+/**
+ * Reparte un pago sobre UNA nota elegida (D1): la de la tablet. Es
+ * `repartirPagoEnNotas` con una sola nota; su copia en la tablet
+ * (`apps/tablet/src/datos/cobranzas-reglas.ts`) da lo mismo.
+ *
+ * @throws {Error} si `montoCentavos` no es un entero positivo.
+ */
+export function repartirPago(
+  montoCentavos: number,
+  notaElegidaId: string,
+  notas: readonly NotaParaReparto[],
+): Reparto {
+  return repartirPagoEnNotas(montoCentavos, [notaElegidaId], notas);
 }
