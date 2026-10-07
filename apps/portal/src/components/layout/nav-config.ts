@@ -9,6 +9,7 @@ export const navSections: NavSection[] = [
       { label: "Registrar venta", href: "/operacion/registrar-venta" },
       { label: "Ventas", href: "/operacion/ventas" },
       { label: "Facturas", href: "/operacion/facturas" },
+      { label: "Cobranza", href: "/operacion/cobranza" },
       { label: "Reporte de Ventas", href: "/operacion/reporte-de-ventas" },
       { label: "Procesos", href: "/operacion/procesos" },
       { label: "Peticiones", href: "/operacion/peticiones" },
