@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AsignarFactura } from "./asignar-factura";
+import { BuscarFacturas } from "./buscar-facturas";
 
 /** Operación → Facturas (T-19): asignar, y buscar y corregir. */
 export function PantallaFacturas({ sucursal }: { sucursal: string | null }) {
@@ -34,7 +35,7 @@ export function PantallaFacturas({ sucursal }: { sucursal: string | null }) {
         {pestana === "asignar" ? (
           <AsignarFactura sucursal={sucursal} />
         ) : (
-          <p className="text-sm text-muted-foreground">Próximamente.</p>
+          <BuscarFacturas sucursal={sucursal} />
         )}
       </CardContent>
     </Card>
