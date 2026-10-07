@@ -126,7 +126,7 @@ export class VentasConsultaService {
         subtotalCentavos: l.cantidad * l.precioCentavos,
       })),
       cobros,
-      ...accionesDeVenta(cabecera.status, deCobranza),
+      ...accionesDeVenta(cabecera.status, deCobranza, cabecera.facturaNumero),
     };
   }
 }

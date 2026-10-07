@@ -183,6 +183,8 @@ export interface VentaDetalle {
   numNota: string | null;
   contadoCredito: ContadoCredito;
   factura: string;
+  /** El número cuando `factura === "facturada"` (T-19). */
+  facturaNumero: string | null;
   comentarios: string | null;
   montoCentavos: number;
   status: StatusVenta;
@@ -382,6 +384,7 @@ export function condicionesDeVenta(venta: VentaDetalle): CondicionesVenta {
     numNota: venta.numNota ?? "",
     contadoCredito: venta.contadoCredito,
     metodoPago: cobro?.metodoPago === "efectivo" ? "efectivo" : "transferencia",
+    // "facturada" nunca llega aquí: el servidor no deja editarla (T-19).
     factura: venta.factura === "pendiente" ? "pendiente" : "N/A",
     comentarios: venta.comentarios ?? "",
   };

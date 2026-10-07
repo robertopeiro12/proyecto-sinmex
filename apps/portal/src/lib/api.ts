@@ -24,6 +24,11 @@ export class ErrorApi extends Error {
   }
 }
 
+/** Texto para mostrar de un error: el mensaje del servidor si lo trae, si no el de respaldo. */
+export function mensajeDe(err: unknown, porDefecto: string): string {
+  return err instanceof ErrorApi && err.mensajeApi ? err.mensajeApi : porDefecto;
+}
+
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
 // Rutas publicas de autenticacion: un 401 aqui no significa "sesion vencida",

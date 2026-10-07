@@ -33,6 +33,7 @@ const VENTA: VentaDetalle = {
   numNota: "1234",
   contadoCredito: "credito",
   factura: "N/A",
+  facturaNumero: null,
   comentarios: "Entregar temprano",
   montoCentavos: 27000,
   status: "abonado",
@@ -66,6 +67,20 @@ describe("DetalleVenta", () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
     mockAuth(() => true);
+  });
+
+  it("una venta facturada muestra su número", () => {
+    renderizar({
+      ...VENTA,
+      factura: "facturada",
+      facturaNumero: "A780",
+      editable: false,
+      motivoNoEditable:
+        "Esta venta está en la factura A780: quítala primero de la factura para editarla o eliminarla.",
+    });
+    expect(screen.getByText("Facturada · A780")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Editar" })).not.toBeInTheDocument();
+    expect(screen.getByText(/quítala primero de la factura/)).toBeInTheDocument();
   });
 
   it("una venta sin nota de papel dice Sin nota", () => {

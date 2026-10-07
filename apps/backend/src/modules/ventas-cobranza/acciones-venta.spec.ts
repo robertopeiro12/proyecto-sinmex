@@ -7,6 +7,9 @@ import {
   type AccionesVenta,
 } from './acciones-venta';
 
+const SIN_FACTURA = { id: null, numero: null };
+const A780 = { id: 'f1', numero: 'A780' };
+
 describe('accionesDeVenta: lo que se puede hacer con una venta viva (T-17 parte 2, §3.2)', () => {
   const casos: [string, number, AccionesVenta][] = [
     [
@@ -64,7 +67,7 @@ describe('accionesDeVenta: lo que se puede hacer con una venta viva (T-17 parte 
   ];
 
   it.each(casos)('%s con %i abonos de cobranza', (status, abonos, esperado) => {
-    expect(accionesDeVenta(status, abonos)).toEqual(esperado);
+    expect(accionesDeVenta(status, abonos, null)).toEqual(esperado);
   });
 
   it('el motivo con cobros es el texto que pide el spec', () => {
@@ -76,23 +79,61 @@ describe('accionesDeVenta: lo que se puede hacer con una venta viva (T-17 parte 
 
 describe('bloqueoDeEdicion: el 409 de PATCH y DELETE', () => {
   it('viva y sin abonos de cobranza: se puede', () => {
-    expect(bloqueoDeEdicion('pagada', 0, 'editar')).toBeNull();
-    expect(bloqueoDeEdicion('pendiente', 0, 'eliminar')).toBeNull();
+    expect(bloqueoDeEdicion('pagada', 0, 'editar', SIN_FACTURA)).toBeNull();
+    expect(
+      bloqueoDeEdicion('pendiente', 0, 'eliminar', SIN_FACTURA),
+    ).toBeNull();
   });
 
   it('con abonos de cobranza: dice que accion no se puede', () => {
-    expect(bloqueoDeEdicion('abonado', 1, 'editar')).toBe(
+    expect(bloqueoDeEdicion('abonado', 1, 'editar', SIN_FACTURA)).toBe(
       'Tiene cobros registrados: no se puede editar.',
     );
-    expect(bloqueoDeEdicion('abonado', 1, 'eliminar')).toBe(
+    expect(bloqueoDeEdicion('abonado', 1, 'eliminar', SIN_FACTURA)).toBe(
       'Tiene cobros registrados: no se puede eliminar.',
     );
   });
 
   it('una cuenta perdida no se edita ni se elimina (no hay deshacer, §6)', () => {
-    expect(bloqueoDeEdicion('cuenta_perdida', 0, 'editar')).toBe(
+    expect(bloqueoDeEdicion('cuenta_perdida', 0, 'editar', SIN_FACTURA)).toBe(
       'Está marcada como cuenta perdida: no se puede editar.',
     );
+  });
+});
+
+describe('venta facturada (T-19)', () => {
+  it('no se edita ni se elimina, y el motivo nombra la factura', () => {
+    expect(accionesDeVenta('pendiente', 0, 'A780')).toEqual({
+      editable: false,
+      motivoNoEditable:
+        'Esta venta está en la factura A780: quítala primero de la factura para editarla o eliminarla.',
+      puedeMarcarPerdida: true,
+    });
+    expect(bloqueoDeEdicion('pendiente', 0, 'editar', A780)).toBe(
+      'Está en la factura A780: quítala primero de la factura para editarla.',
+    );
+    expect(bloqueoDeEdicion('pagada', 0, 'eliminar', A780)).toBe(
+      'Está en la factura A780: quítala primero de la factura.',
+    );
+  });
+
+  it('los cobros mandan sobre la factura en el mensaje', () => {
+    expect(bloqueoDeEdicion('abonado', 1, 'editar', A780)).toBe(
+      'Tiene cobros registrados: no se puede editar.',
+    );
+  });
+
+  it('decide el id de la fila bloqueada aunque no llegue el numero', () => {
+    expect(
+      bloqueoDeEdicion('pendiente', 0, 'editar', { id: 'f1', numero: null }),
+    ).toBe('Está en una factura: quítala primero de la factura para editarla.');
+    expect(
+      bloqueoDeEdicion('pagada', 0, 'eliminar', { id: 'f1', numero: null }),
+    ).toBe('Está en una factura: quítala primero de la factura.');
+  });
+
+  it('sin factura, todo sigue igual', () => {
+    expect(bloqueoDeEdicion('pendiente', 0, 'editar', SIN_FACTURA)).toBeNull();
   });
 });
 

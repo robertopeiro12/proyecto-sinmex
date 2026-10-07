@@ -237,6 +237,13 @@ usuario con sesion pasa.
   - Una venta viva ya puede tener líneas borradas en `venta_nota_detalle` (y cobros de
     `venta_contado` borrados): todo lector (reportes, comisiones, corte) debe filtrar
     `deleted_at is null` también en líneas y cobros.
+- **Facturas (T-19).** La factura se hace en el programa del SAT, **fuera** de JAWA; aquí solo se anota su
+  número. Tabla `factura` (número único sin mayúsculas/espacios, de **un** cliente) y
+  `venta_nota.factura` en `N/A` / `pendiente` / `facturada`; `facturada` ⇔ `factura_id` (check), y la
+  llave compuesta `(factura_id, cliente_id)` impide apuntar a la factura de otro cliente. Endpoints en
+  `ventas-cobranza/facturas.*` con el permiso `venta.asignar_factura`. Una venta **facturada no se edita
+  ni se elimina** (`bloqueoDeEdicion`): primero se quita de la factura. Quitar la última venta borra la
+  factura. La tablet solo manda `N/A`/`pendiente` y no recibe nada de esto.
 
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
 `--`: sin él, npm se come los argumentos).

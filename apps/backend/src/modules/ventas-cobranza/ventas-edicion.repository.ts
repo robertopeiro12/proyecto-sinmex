@@ -21,6 +21,13 @@ export interface VentaBloqueada {
   origen: OrigenVenta;
   /** Texto `numeric(5,2)` tal cual lo manda `pg`, o `null`. */
   pctComision: string | null;
+  /** Su factura (T-19), de la fila bloqueada: fresco tras esperar el bloqueo. Decide. */
+  facturaId: string | null;
+  /**
+   * El numero de esa factura, solo para el mensaje: leido en otra sentencia
+   * DESPUES del bloqueo. `null` si no esta facturada o si no se pudo leer.
+   */
+  facturaNumero: string | null;
 }
 
 export interface CambiosCabecera {
@@ -48,6 +55,11 @@ export class VentasEdicionRepository {
    * `for update OF vn`: bloquea solo la venta, no la sucursal del join. Es lo
    * que serializa la edicion contra un cobro de la tablet en vuelo, que
    * bloquea las notas del cliente con `for update` (`CobranzasRepository`).
+   *
+   * Sin `join` a `factura` (T-19): si hay que esperar el bloqueo, Postgres
+   * relee solo la fila bloqueada y el lado unido se queda viejo (una venta
+   * recien facturada volveria con numero `null`). Decide `vn.factura_id`; el
+   * numero se lee despues, en otra sentencia.
    */
   async bloquearVenta(
     id: string,
@@ -64,10 +76,11 @@ export class VentasEdicionRepository {
       status: string;
       origen: string;
       pct_comision: string | null;
+      factura_id: string | null;
     }>`
       select vn.id, vn.folio, to_char(vn.fecha, 'YYYY-MM-DD') as fecha,
              vn.cliente_id, vn.vendedor_id, vn.sucursal_id, s.codigo,
-             vn.status, vn.origen, vn.pct_comision
+             vn.status, vn.origen, vn.pct_comision, vn.factura_id
         from venta_nota vn
         join sucursal s on s.id = vn.sucursal_id
        where vn.id = ${id}
@@ -76,6 +89,13 @@ export class VentasEdicionRepository {
     `.execute(trx);
     const f = filas.rows[0];
     if (!f) return undefined;
+    const factura = f.factura_id
+      ? (
+          await sql<{
+            numero: string;
+          }>`select numero from factura where id = ${f.factura_id}`.execute(trx)
+        ).rows[0]
+      : undefined;
     return {
       id: f.id,
       folio: f.folio,
@@ -87,6 +107,8 @@ export class VentasEdicionRepository {
       status: f.status,
       origen: f.origen as OrigenVenta,
       pctComision: f.pct_comision,
+      facturaId: f.factura_id,
+      facturaNumero: factura?.numero ?? null,
     };
   }
 

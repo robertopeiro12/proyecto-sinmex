@@ -76,7 +76,10 @@ export function DetalleVenta({
           <Dato etiqueta="Repartidor" valor={venta.repartidor ?? "Oficina"} />
           <Dato etiqueta="# de nota" valor={venta.numNota ?? "Sin nota"} />
           <Dato etiqueta="Contado o crédito" valor={venta.contadoCredito === "contado" ? "Contado" : "Crédito"} />
-          <Dato etiqueta="Factura" valor={venta.factura} />
+          <Dato
+            etiqueta="Factura"
+            valor={venta.facturaNumero ? `Facturada · ${venta.facturaNumero}` : venta.factura}
+          />
           <Dato etiqueta="Status" valor={ETIQUETA_STATUS[venta.status]} />
           <Dato etiqueta="Origen" valor={ETIQUETA_ORIGEN[venta.origen]} />
           <Dato etiqueta="Monto" valor={formatearPesos(venta.montoCentavos)} />
