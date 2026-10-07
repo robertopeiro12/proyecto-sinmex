@@ -49,11 +49,12 @@ export function BuscarFacturas({ sucursal }: { sucursal: string | null }) {
     evento.preventDefault();
     setError(null);
     setAviso(null);
+    // Se avanza el contador antes de validar: una búsqueda en vuelo no debe pisar este error.
+    const mia = ++busqueda.current;
     if (numero.trim() === "" && !cliente) {
       setError("Escribe un número de factura o elige un cliente.");
       return;
     }
-    const mia = ++busqueda.current;
     try {
       const encontradas = await buscarFacturas({
         numero: numero.trim() || undefined,

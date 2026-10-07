@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorApi } from "@/lib/api";
@@ -221,9 +221,28 @@ describe("BuscarFacturas", () => {
     // La segunda responde primero; la primera llega tarde y se ignora.
     resolvers[1]([{ ...FACTURA, id: "f2", numero: "AB" }]);
     expect(await screen.findByText("Factura AB")).toBeInTheDocument();
-    resolvers[0]([FACTURA]);
-    await Promise.resolve();
-    expect(screen.queryByText("Factura A708")).not.toBeInTheDocument();
+    await act(async () => {
+      resolvers[0]([FACTURA]);
+    });
     expect(screen.getByText("Factura AB")).toBeInTheDocument();
+    expect(screen.queryByText("Factura A708")).not.toBeInTheDocument();
+  });
+
+  it("una búsqueda en vuelo no pisa el error de validación posterior", async () => {
+    let resolver: (f: FacturaConVentas[]) => void = () => {};
+    buscarFacturas.mockImplementation(() => new Promise((r) => (resolver = r)));
+    const usuario = userEvent.setup();
+    render(<BuscarFacturas sucursal={null} />);
+    const campo = screen.getByLabelText("Número de factura a buscar");
+    await usuario.type(campo, "A");
+    await usuario.click(screen.getByRole("button", { name: "Buscar" }));
+    await usuario.clear(campo);
+    await usuario.click(screen.getByRole("button", { name: "Buscar" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Escribe un número de factura");
+    await act(async () => {
+      resolver([FACTURA]);
+    });
+    expect(screen.queryByText("Factura A708")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
   });
 });

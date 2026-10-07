@@ -3,7 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ErrorApi } from "@/lib/api";
+import { mensajeDe } from "@/lib/api";
 import { listarClientes, type ClienteResumen } from "@/lib/clientes";
 import {
   ETIQUETA_ORIGEN,
@@ -34,10 +34,6 @@ type Vista =
 function filtroDeHoy(): Filtro {
   const hoy = hoyEnTijuana();
   return { desde: hoy, hasta: hoy, cliente: null, numNota: "" };
-}
-
-function mensajeDe(err: unknown, porDefecto: string): string {
-  return err instanceof ErrorApi && err.mensajeApi ? err.mensajeApi : porDefecto;
 }
 
 /**
