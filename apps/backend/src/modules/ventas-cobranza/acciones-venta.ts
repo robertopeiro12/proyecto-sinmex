@@ -21,9 +21,23 @@ export const MOTIVO_CON_COBROS =
 export const MOTIVO_CUENTA_PERDIDA =
   'Esta venta está marcada como cuenta perdida: no se puede editar ni eliminar.';
 
-/** T-19: una venta facturada no cambia sin que alguien la quite de su factura a proposito. */
-export const motivoFacturada = (numero: string): string =>
-  `Esta venta está en la factura ${numero}: quítala primero de la factura para editarla o eliminarla.`;
+/**
+ * T-19: una venta facturada no cambia sin que alguien la quite de su factura a
+ * proposito. Los tres textos (detalle, editar, eliminar) se arman AQUI y en
+ * ningun otro sitio. `numero` `null` = esta facturada pero no se pudo leer cual.
+ */
+export function textosDeFacturada(numero: string | null): {
+  detalle: string;
+  editar: string;
+  eliminar: string;
+} {
+  const cual = numero !== null ? `la factura ${numero}` : 'una factura';
+  return {
+    detalle: `Esta venta está en ${cual}: quítala primero de la factura para editarla o eliminarla.`,
+    editar: `Está en ${cual}: quítala primero de la factura para editarla.`,
+    eliminar: `Está en ${cual}: quítala primero de la factura.`,
+  };
+}
 
 export const MOTIVO_NO_PERDIBLE =
   'Solo una venta pendiente o abonada se puede marcar como cuenta perdida.';
@@ -51,7 +65,7 @@ export function accionesDeVenta(
       : status === 'cuenta_perdida'
         ? MOTIVO_CUENTA_PERDIDA
         : facturaNumero !== null
-          ? motivoFacturada(facturaNumero)
+          ? textosDeFacturada(facturaNumero).detalle
           : null;
   return {
     editable: motivo === null,
@@ -74,11 +88,8 @@ export function bloqueoDeEdicion(
     return `Está marcada como cuenta perdida: no se puede ${accion}.`;
   // Decide el id (de la fila bloqueada); el numero es solo texto.
   if (factura.id !== null) {
-    const cual =
-      factura.numero !== null ? `la factura ${factura.numero}` : 'una factura';
-    return accion === 'editar'
-      ? `Está en ${cual}: quítala primero de la factura para editarla.`
-      : `Está en ${cual}: quítala primero de la factura.`;
+    const textos = textosDeFacturada(factura.numero);
+    return accion === 'editar' ? textos.editar : textos.eliminar;
   }
   return null;
 }

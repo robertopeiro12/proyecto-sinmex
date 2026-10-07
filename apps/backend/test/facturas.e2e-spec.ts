@@ -20,6 +20,8 @@ const LOGIN_GENERAL = `e2e-fac-gen-${SUFIJO}`;
 const LOGIN_TIJUANA = `e2e-fac-tj-${SUFIJO}`;
 const LOGIN_SIN_PERMISO = `e2e-fac-sin-${SUFIJO}`;
 
+const ESPERA_MAX_BLOQUEO_MS = 3000;
+
 describe('Facturas (e2e)', () => {
   let app: INestApplication<App>;
   let db: Database;
@@ -106,7 +108,6 @@ describe('Facturas (e2e)', () => {
       monto?: string;
       status?: string;
       factura?: string;
-      fecha?: string;
     } = {},
   ) => {
     const cliente = await db
@@ -118,7 +119,7 @@ describe('Facturas (e2e)', () => {
       .insertInto('venta_nota')
       .values({
         folio: `ZZF${String(++folios).padStart(3, '0')}${SUFIJO}`.slice(0, 30),
-        fecha: extra.fecha ?? '2024-04-01',
+        fecha: '2024-04-01',
         cliente_id: clienteId,
         vendedor_id: null,
         monto_total: extra.monto ?? '100.00',
@@ -248,7 +249,35 @@ describe('Facturas (e2e)', () => {
     });
   });
 
+  describe('por facturar: alcance y permiso', () => {
+    it('un usuario de TJ no lista las ventas de un cliente de MX (403)', async () => {
+      await request(app.getHttpServer())
+        .get(`/facturas/por-facturar?clienteId=${clienteMx}`)
+        .set('Cookie', cookieTijuana)
+        .expect(403);
+    });
+
+    it('sin el permiso es 403', async () => {
+      await request(app.getHttpServer())
+        .get(`/facturas/por-facturar?clienteId=${clienteA}`)
+        .set('Cookie', cookieSinPermiso)
+        .expect(403);
+    });
+  });
+
   describe('asignar', () => {
+    it('mas de 200 ventas es 400 (tope)', async () => {
+      const ids = Array.from(
+        { length: 201 },
+        (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+      );
+      await asignar(cookieGeneral, {
+        clienteId: clienteA,
+        numero: numero(),
+        ventaIds: ids,
+      }).expect(400);
+    });
+
     it('asigna varias de un jalon y devuelve la factura con su total', async () => {
       const v1 = await sembrarVenta(clienteA, { monto: '100.00' });
       const v2 = await sembrarVenta(clienteA, { monto: '50.50' });
@@ -420,44 +449,54 @@ describe('Facturas (e2e)', () => {
     ): Promise<{ res: request.Response; numeroA: string }> => {
       const numeroA = numero();
       let pendiente: Promise<request.Response> | undefined;
-      await db.transaction().execute(async (trx) => {
-        const { id: facturaA } = await trx
-          .insertInto('factura')
-          .values({
-            numero: numeroA,
-            cliente_id: clienteA,
-            creado_por_usuario_id: usuarioGeneralId,
-          })
-          .returning('id')
-          .executeTakeFirstOrThrow();
-        await trx
-          .updateTable('venta_nota')
-          .set({
-            factura: 'facturada',
-            factura_id: facturaA,
-            factura_asignada_por_usuario_id: usuarioGeneralId,
-          })
-          .where('id', '=', ventaId)
-          .execute();
-        const pidA = (
-          await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(
-            trx,
-          )
-        ).rows[0].pid;
+      await db
+        .transaction()
+        .execute(async (trx) => {
+          const { id: facturaA } = await trx
+            .insertInto('factura')
+            .values({
+              numero: numeroA,
+              cliente_id: clienteA,
+              creado_por_usuario_id: usuarioGeneralId,
+            })
+            .returning('id')
+            .executeTakeFirstOrThrow();
+          await trx
+            .updateTable('venta_nota')
+            .set({
+              factura: 'facturada',
+              factura_id: facturaA,
+              factura_asignada_por_usuario_id: usuarioGeneralId,
+            })
+            .where('id', '=', ventaId)
+            .execute();
+          const pidA = (
+            await sql<{ pid: number }>`select pg_backend_pid() as pid`.execute(
+              trx,
+            )
+          ).rows[0].pid;
 
-        // `.then` dispara la peticion de supertest.
-        pendiente = peticion().then((r) => r);
-        for (let i = 0; ; i++) {
-          const { rows } = await sql<{ n: number }>`
+          // `.then` dispara la peticion de supertest.
+          pendiente = peticion().then((r) => r);
+          // Tope menor que el timeout de Jest (5 s): si la peticion nunca se
+          // bloquea, el error claro sale antes y el rollback libera a A.
+          const limite = Date.now() + ESPERA_MAX_BLOQUEO_MS;
+          for (;;) {
+            const { rows } = await sql<{ n: number }>`
             select count(*)::int as n from pg_stat_activity
              where ${pidA}::int = any(pg_blocking_pids(pid))
           `.execute(db);
-          if (rows[0].n > 0) break;
-          if (i > 400)
-            throw new Error('La peticion nunca espero el bloqueo de A.');
-          await new Promise((r) => setTimeout(r, 25));
-        }
-      });
+            if (rows[0].n > 0) break;
+            if (Date.now() > limite)
+              throw new Error('la peticion nunca se bloqueo');
+            await new Promise((r) => setTimeout(r, 25));
+          }
+        })
+        .catch(async (error: unknown) => {
+          // El rollback ya soltó la peticion: se espera para no dejarla colgada.
+          await pendiente?.catch(() => undefined);
+          throw error;
+        });
       return { res: await pendiente!, numeroA };
     };
 
@@ -591,6 +630,19 @@ describe('Facturas (e2e)', () => {
       });
     });
 
+    it('ids repetidos cuentan una vez: 200 y la venta queda pendiente', async () => {
+      const v = await sembrarVenta(clienteA);
+      const f = (
+        await asignar(cookieGeneral, {
+          clienteId: clienteA,
+          numero: numero(),
+          ventaIds: [v.id],
+        }).expect(201)
+      ).body as FacturaConVentas;
+      await quitar(cookieGeneral, f.id, [v.id, v.id]).expect(200);
+      expect((await ventaPorId(v.id)).factura).toBe('pendiente');
+    });
+
     it('quitar todas borra la factura', async () => {
       const v = await sembrarVenta(clienteA);
       const f = (
@@ -666,6 +718,45 @@ describe('Facturas (e2e)', () => {
       expect(
         (porCliente.body as FacturaConVentas[]).map((x) => x.id),
       ).toContain(f.id);
+    });
+
+    describe('sucursal pedida', () => {
+      const buscarPor = (cookie: string, n: string, sucursal: string) =>
+        request(app.getHttpServer())
+          .get(`/facturas?numero=${encodeURIComponent(n)}&sucursal=${sucursal}`)
+          .set('Cookie', cookie);
+
+      it('tj se comporta como TJ; Todas/todas como todas', async () => {
+        const vTj = await sembrarVenta(clienteB);
+        const vMx = await sembrarVenta(clienteMx);
+        const nTj = numero();
+        const nMx = numero();
+        await asignar(cookieGeneral, {
+          clienteId: clienteB,
+          numero: nTj,
+          ventaIds: [vTj.id],
+        }).expect(201);
+        await asignar(cookieGeneral, {
+          clienteId: clienteMx,
+          numero: nMx,
+          ventaIds: [vMx.id],
+        }).expect(201);
+
+        const tjMinuscula = await buscarPor(cookieGeneral, nTj, 'tj').expect(
+          200,
+        );
+        expect(tjMinuscula.body as FacturaConVentas[]).toHaveLength(1);
+        const mxConTj = await buscarPor(cookieGeneral, nMx, 'tj').expect(200);
+        expect(mxConTj.body).toEqual([]);
+        for (const todas of ['Todas', 'todas']) {
+          const res = await buscarPor(cookieGeneral, nMx, todas).expect(200);
+          expect(res.body as FacturaConVentas[]).toHaveLength(1);
+        }
+      });
+
+      it('un usuario de TJ con sucursal=tj no recibe 403', async () => {
+        await buscarPor(cookieTijuana, numero(), 'tj').expect(200);
+      });
     });
 
     it('sin numero ni cliente es 400', async () => {

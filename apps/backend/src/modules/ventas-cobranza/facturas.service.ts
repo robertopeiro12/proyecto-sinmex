@@ -7,16 +7,21 @@ import {
 } from '@nestjs/common';
 import type { Transaction } from 'kysely';
 import {
+  esConflictoDeConcurrencia,
   esViolacionFk,
   esViolacionUnicidad,
   restriccionDelError,
 } from '../../database/errores-postgres';
 import type { DB } from '../../database/schema';
-import { resolverAlcance } from '../sucursales/alcance-sucursal';
+import {
+  normalizarSucursalPedida,
+  resolverAlcance,
+} from '../sucursales/alcance-sucursal';
 import { exigirAlcanceSobre } from './alcance-venta';
 import type { AsignarFacturaDto, BuscarFacturasDto } from './dto/facturas.dto';
 import {
   MOTIVO_CARRERA,
+  MOTIVO_INTERBLOQUEO,
   MOTIVO_NUMERO_INVALIDO,
   motivoAlAsignar,
   motivoAlQuitar,
@@ -31,6 +36,11 @@ import {
   type VentaPorFacturar,
 } from './facturas.repository';
 import { VentasPortalRepository } from './ventas-portal.repository';
+
+/** Solo el unique del numero es un choque de numero; otro `23505` es un bug. */
+const esChoqueDeNumero = (error: unknown): boolean =>
+  esViolacionUnicidad(error) &&
+  restriccionDelError(error) === 'uq_factura_numero';
 
 /**
  * Asignar factura a notas de ventas (T-19). Cada escritura es UNA transaccion
@@ -70,15 +80,14 @@ export class FacturasService {
     const ventaIds = [...new Set(dto.ventaIds.map((id) => id.toLowerCase()))];
     const clienteId = dto.clienteId.toLowerCase();
 
+    // Fuera de la transaccion: dentro seria una segunda conexion abierta a la vez.
+    const usuario = await this.portal.buscarSucursalUsuario(usuarioId);
     let facturaId: string;
     try {
       facturaId = await this.portal.enTransaccion(async (trx) => {
         const cliente = await this.portal.clienteDeVenta(clienteId, trx);
         if (!cliente) throw new NotFoundException('No existe ese cliente.');
-        exigirAlcanceSobre(
-          await this.portal.buscarSucursalUsuario(usuarioId),
-          cliente.sucursalCodigo,
-        );
+        exigirAlcanceSobre(usuario, cliente.sucursalCodigo);
 
         const ventas = await this.repo.bloquearVentas(ventaIds, trx);
         const motivo = motivoAlAsignar(ventaIds, ventas, cliente.id);
@@ -96,7 +105,9 @@ export class FacturasService {
         return id;
       });
     } catch (error) {
-      if (esViolacionUnicidad(error))
+      if (esConflictoDeConcurrencia(error))
+        throw new ConflictException(MOTIVO_INTERBLOQUEO);
+      if (esChoqueDeNumero(error))
         throw await this.conflictoDeNumero(numero, clienteId);
       // Defensa en profundidad: la factura desaparecio (quitaron su ultima
       // venta) entre leerla y asignarle. Con el bloqueo no deberia pasar.
@@ -117,10 +128,11 @@ export class FacturasService {
   ): Promise<FacturaConVentas> {
     const numero = normalizarNumeroFactura(crudo);
     if (numero === null) throw new BadRequestException(MOTIVO_NUMERO_INVALIDO);
+    const usuario = await this.portal.buscarSucursalUsuario(usuarioId);
     let clienteId: string | null = null;
     try {
       await this.portal.enTransaccion(async (trx) => {
-        const factura = await this.bloquearConAlcance(usuarioId, id, trx);
+        const factura = await this.bloquearConAlcance(usuario, id, trx);
         clienteId = factura.clienteId;
         const otra = await this.repo.bloquearFacturaPorNumero(numero, trx);
         // La misma factura con otra capitalizacion NO es "otra".
@@ -133,7 +145,9 @@ export class FacturasService {
         await this.repo.renombrar(id, numero, usuarioId, trx);
       });
     } catch (error) {
-      if (esViolacionUnicidad(error))
+      if (esConflictoDeConcurrencia(error))
+        throw new ConflictException(MOTIVO_INTERBLOQUEO);
+      if (esChoqueDeNumero(error))
         throw await this.conflictoDeNumero(numero, clienteId);
       throw error;
     }
@@ -146,19 +160,27 @@ export class FacturasService {
     ventaIdsCrudos: string[],
   ): Promise<{ factura: FacturaConVentas | null }> {
     const ventaIds = [...new Set(ventaIdsCrudos.map((v) => v.toLowerCase()))];
-    const borrada = await this.portal.enTransaccion(async (trx) => {
-      const factura = await this.bloquearConAlcance(usuarioId, id, trx);
-      const ventas = await this.repo.bloquearVentas(ventaIds, trx);
-      const motivo = motivoAlQuitar(
-        ventaIds,
-        ventas,
-        factura.id,
-        factura.numero,
-      );
-      if (motivo) throw new ConflictException(motivo);
-      await this.repo.quitarVentas(factura.id, ventaIds, trx);
-      return this.repo.borrarSiVacia(factura.id, trx);
-    });
+    const usuario = await this.portal.buscarSucursalUsuario(usuarioId);
+    let borrada: boolean;
+    try {
+      borrada = await this.portal.enTransaccion(async (trx) => {
+        const factura = await this.bloquearConAlcance(usuario, id, trx);
+        const ventas = await this.repo.bloquearVentas(ventaIds, trx);
+        const motivo = motivoAlQuitar(
+          ventaIds,
+          ventas,
+          factura.id,
+          factura.numero,
+        );
+        if (motivo) throw new ConflictException(motivo);
+        await this.repo.quitarVentas(factura.id, ventaIds, trx);
+        return this.repo.borrarSiVacia(factura.id, trx);
+      });
+    } catch (error) {
+      if (esConflictoDeConcurrencia(error))
+        throw new ConflictException(MOTIVO_INTERBLOQUEO);
+      throw error;
+    }
     return { factura: borrada ? null : await this.leer(id) };
   }
 
@@ -176,7 +198,7 @@ export class FacturasService {
     if (!usuario) throw new UnauthorizedException('Sesion invalida.');
     const alcance = resolverAlcance(
       usuario.codigo,
-      dto.sucursal?.trim() || null,
+      normalizarSucursalPedida(dto.sucursal),
     );
     return this.repo.buscar({
       numero,
@@ -186,16 +208,13 @@ export class FacturasService {
   }
 
   private async bloquearConAlcance(
-    usuarioId: string,
+    usuario: Parameters<typeof exigirAlcanceSobre>[0],
     id: string,
     trx: Transaction<DB>,
   ): Promise<FacturaBloqueada> {
     const factura = await this.repo.bloquearFactura(id, trx);
     if (!factura) throw new NotFoundException('No existe esa factura.');
-    exigirAlcanceSobre(
-      await this.portal.buscarSucursalUsuario(usuarioId),
-      factura.sucursalCodigo,
-    );
+    exigirAlcanceSobre(usuario, factura.sucursalCodigo);
     return factura;
   }
 

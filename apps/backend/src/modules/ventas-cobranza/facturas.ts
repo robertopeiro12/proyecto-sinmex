@@ -16,6 +16,9 @@ export const MOTIVO_VENTA_INEXISTENTE =
 export const MOTIVO_CARRERA =
   'Otro usuario acaba de registrar esa factura; vuelve a intentar.';
 
+export const MOTIVO_INTERBLOQUEO =
+  'Otro usuario estaba modificando estas ventas al mismo tiempo; vuelve a intentar.';
+
 /** Una venta viva, bloqueada, con lo que hace falta para decidir. */
 export interface VentaParaFacturar {
   id: string;
