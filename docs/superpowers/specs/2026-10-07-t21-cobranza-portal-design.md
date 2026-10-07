@@ -20,9 +20,10 @@ cheque o un cliente que llega a pagar. T-21 es esa pantalla.
 
 ### Reparto de responsabilidades
 
-**El Portal es de Roberto y la App de tablet es de Mario.** T-21 **no modifica `apps/tablet`**. Todo
-lo que la tablet necesita saber le llega por la sincronización que ya existe (§4.5), y lo que sería
-deseable en la app queda como **nota para Mario** (§7).
+**El Portal es de Roberto y la App de tablet es de Mario.** Para T-21, Mario dio permiso a Roberto de
+modificar la app: *"cualquier cosa que tenga que ver con este T-21 hay que modificar portal y app (si es
+necesario), si no no"*, y **sin tocar código nativo** (Kotlin/Java; en el repo no hay: la app es
+React Native/Expo en TypeScript). Los cambios en la app están en §4.6.
 
 ## 2. Decisiones de producto (Roberto, 2026-10-07)
 
@@ -33,7 +34,7 @@ deseable en la app queda como **nota para Mario** (§7).
 | Saldo a favor | Se puede **aplicar** desde esta pantalla a las notas palomeadas, con las mismas reglas de reparto. No cuenta como dinero nuevo |
 | Regla de cobro | **Una sola regla** para tablet y portal (opción A): se amplía a "una o varias notas"; la tablet sigue mandando una |
 | Folio | **Los cobros no llevan folio.** Respuesta del cliente (2026-10-07), textual: *"Un solo folio"*, *"Porque la cobranza no lleva folio"*. Solo las ventas se numeran. Un cobro del portal se identifica por fecha, cliente, monto y las notas que pagó (`cobranza_abono.folio` queda null) |
-| Tablet | **Sin cambios** en `apps/tablet` (la app es de Mario) |
+| Tablet | Se modifica **solo lo necesario para T-21** (§4.6), en TypeScript: el cobro deja de llevar folio y el método `saldo_favor` se muestra como "Saldo a favor" |
 
 ## 3. Pantalla
 
@@ -140,6 +141,11 @@ alter table cobranza_abono add constraint ck_cobranza_abono_saldo_favor
 
 alter table saldo_favor_movimiento
   add column capturo_usuario_id uuid references usuario(id);
+
+-- La cobranza no lleva folio (cliente, 2026-10-07). En sinmex dev no hay cobros todavía.
+drop index if exists idx_cobranza_abono_folio;
+alter table cobranza_abono drop column folio;
+alter table saldo_favor_movimiento drop column folio;
 alter table saldo_favor_movimiento drop constraint saldo_favor_movimiento_origen_check;
 alter table saldo_favor_movimiento add constraint ck_saldo_favor_origen
   check (origen in ('excedente_cobro', 'aplicacion'));
@@ -147,7 +153,9 @@ alter table saldo_favor_movimiento add constraint ck_saldo_favor_origen
 
 - Los tres checks viejos se declararon en línea (T-05 y T-20), así que llevan el nombre que Postgres les puso
   (`<tabla>_<columna>_check`). Confirmar con `\d cobranza_abono` en la base local antes de escribir la migración.
-- **Pre-flight para `sinmex dev`:** los checks nuevos solo **amplían** valores; el de
+- **Pre-flight para `sinmex dev`:** contar filas de `cobranza_abono` y `saldo_favor_movimiento` con
+  `folio is not null` (se va a borrar la columna): debe dar 0 (hoy la nube no tiene ventas ni cobros).
+  Los checks nuevos solo **amplían** valores; el de
   `origen = 'saldo_favor' ⇔ metodo_pago = 'saldo_favor'` se cumple en filas viejas (ninguna tiene
   ninguno de los dos). Contar filas que lo violarían → debe dar 0.
 
@@ -166,6 +174,38 @@ alter table saldo_favor_movimiento add constraint ck_saldo_favor_origen
   actualizados. Las decisiones se toman sobre las filas **bloqueadas**, no sobre datos de un join (la
   lección de T-19).
 
+### 4.6 La cobranza no lleva folio — servidor, contrato y app
+
+Respuesta del cliente (2026-10-07): *"Un solo folio"*, *"Porque la cobranza no lleva folio"*. Solo las
+ventas se numeran. **No es un folio opcional: el cobro no tiene folio en ningún lado.**
+
+- **Servidor:**
+  - `despacho-cobranza.ts` deja de exigir el folio. Si una operación `cobranza` llega **con** folio (una
+    tablet sin actualizar), **se ignora el folio y el cobro se registra**: no se rechaza para no perder un
+    cobro real, y el folio no se guarda en ningún lado (ni en `cobranza_abono`, ni en
+    `saldo_favor_movimiento`, ni en `sync_operacion.folio`).
+  - `CobranzasService`, `ContextoCobranza` y `CobranzasRepository` dejan de recibir y escribir `folio`.
+  - Toda lectura que hoy devuelva el folio de un cobro (detalle de venta, pull) deja de hacerlo.
+- **Contrato de sincronización** (`contrato.ts` del backend **y** de la tablet, y
+  `docs/contrato-sincronizacion.md`, en el mismo commit): la operación `cobranza` ya no lleva `folio`.
+  Como el # de nota opcional, **sin subir la versión** (la app no está publicada; la única tablet es la de
+  prueba de Mario) y anotado en la lista de "revisar al publicar".
+- **App** (`apps/tablet`, solo TypeScript):
+  - Al grabar un cobro **no se emite folio** (`folios.emitir` deja de llamarse desde
+    `repositorios/cobranzas.ts`). La serie del vendedor queda solo para ventas.
+  - Migración local nueva: la tabla `cobranza` **pierde la columna `folio`** (se rehace la tabla, como la
+    009; los cobros pendientes de subir se conservan).
+  - `fuente-cobranzas.ts` deja de mandar `folio` en el sobre.
+  - Pantalla de cobranza: la vista final deja de mostrar "anota este folio en el recibo" y muestra el
+    **monto y cómo quedaron las notas** ("$500 · nota TJ261001AP03 pagada"). Los textos que mencionan
+    "no se consumió ningún folio" se ajustan.
+  - `NOMBRE_METODO` agrega `saldo_favor: 'Saldo a favor'`, y el tipo `MetodoPago` de los abonos que bajan
+    en el pull acepta `'saldo_favor'` (lo introduce T-21).
+  - La copia de `repartirPago` en la app **no cambia** (§4.1).
+- **Orden de despliegue:** el servidor se actualiza primero (acepta cobros sin folio e ignora los que
+  traen); después Mario instala la app nueva. Antes de instalarla, **sincronizar** la tablet para subir
+  los cobros pendientes.
+
 ## 5. Lo que NO entra
 
 - **Corregir o eliminar un cobro** (T-34, con autorización). Un cobro del portal no se deshace en esta
@@ -173,7 +213,7 @@ alter table saldo_favor_movimiento add constraint ck_saldo_favor_origen
 - Efecto en **Flujo de Efectivo y Tesorería** (T-32 y tickets de Tesorería): el método `saldo_favor`
   queda listo para que esos módulos no lo cuenten como ingreso.
 - Cuentas por Cobrar como reporte (T-22).
-- Cambios en `apps/tablet` (§7).
+- En `apps/tablet`, todo lo que no sea §4.6.
 
 ## 6. Pruebas
 
@@ -186,29 +226,23 @@ alter table saldo_favor_movimiento add constraint ck_saldo_favor_origen
   favor (y sus rechazos), búsquedas por cliente/fecha/# de nota, permiso y alcance por sucursal, nota que
   dejó de ser cobrable, que una venta pagada con saldo a favor no se edite, y que el **pull de la tablet**
   baje la nota cobrada desde el portal con su saldo y el saldo a favor nuevo. Las e2e de cobranza de la
-  tablet (T-20) deben pasar sin cambios.
+  tablet (T-20) se ajustan solo en lo del folio, y se agregan: un cobro de la tablet **sin folio** se
+  registra; uno **con folio** (tablet sin actualizar) también se registra y el folio no queda guardado.
+- **App:** cobrar no consume número de la serie del vendedor (una venta después de un cobro sigue el
+  consecutivo de ventas); la migración local quita la columna y conserva los cobros pendientes; el sobre
+  de cobranza no lleva folio; la pantalla final muestra monto y notas; "Saldo a favor" en abonos.
 - **Portal:** búsqueda, palomear, vista previa, grabar, aplicar saldo a favor, cuenta perdida, permisos.
 - **Manual:** en el navegador contra el Postgres **local**.
 
 ## 7. Notas para Mario (app de tablet)
 
-No bloquean T-21; T-21 no toca `apps/tablet`.
-
-- **El cobro no lleva folio (cliente, 2026-10-07).** Hoy la tablet emite un folio a cada cobro y gasta un
-  número de la serie del vendedor (venta AP01, cobro AP02, venta AP03). Según el cliente, solo las
-  ventas se numeran. Cambiarlo es de la app (dejar de emitir folio al cobrar) y del contrato de
-  sincronización (`folio` opcional en `tipo: "cobranza"`; la idempotencia ya vive en la `clave`, no en el
-  folio). Lo decide y lo hace Mario; el servidor puede aceptar ambos mientras tanto.
-- En la lista de abonos de una nota, un pago con saldo a favor se verá como `saldo_favor`. Agregar
-  `saldo_favor: 'Saldo a favor'` a `NOMBRE_METODO` (pantalla de cobranza) lo muestra bonito. Solo visual.
-- El tipo `MetodoPago` de `apps/tablet/src/sincronizacion/contrato.ts` podría sumar `'saldo_favor'` en
-  `AbonoPull`, para reflejar lo que manda el servidor.
-- `repartirPagoEnNotas` existe solo en el servidor; la copia de `repartirPago` de la tablet sigue
-  idéntica y no necesita cambios.
+- Los cambios de la app de T-21 están en §4.6 (con su permiso). Para probarlos: **sincronizar antes** de
+  instalar la versión nueva, para subir cobros pendientes.
+- La copia de `repartirPago` sigue idéntica a la del servidor; `repartirPagoEnNotas` es solo del
+  servidor.
 
 ## 8. Riesgos y notas
 
 - Un cobro del portal no se puede deshacer hasta T-34.
-- Hasta que Mario cambie la app, los cobros de la tablet seguirán llevando folio y los del portal no. No
-  rompe nada (el folio de un cobro solo identifica la operación), pero los reportes futuros no deben
-  depender del folio de un cobro.
+- Una tablet sin actualizar sigue gastando un número de su serie al cobrar (el servidor ignora ese
+  folio). Solo pasa con la tablet de prueba hasta que instale la versión nueva.
