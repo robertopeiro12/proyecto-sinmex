@@ -18,32 +18,41 @@ export interface NotaBloqueada {
   /** `AAAA-MM-DD` con `to_char`: un `date` leido como `Date` se corre un dia. */
   fecha: string;
   folio: string;
+  /** `null` si no hubo nota de papel. Solo para pintar la vista previa (T-21). */
+  numNota: string | null;
   status: string;
   borrada: boolean;
   /** Texto `numeric` tal cual lo manda `pg`. */
   montoTotal: string;
 }
 
+/** Como se pago un abono: un metodo del catalogo o, al aplicar saldo a favor, `saldo_favor` (T-21). */
+export type MetodoAbono = MetodoPago | 'saldo_favor';
+
 /** Una fila de `cobranza_abono` lista para escribir. El dinero ya viene como texto (`aPesos`). */
 export interface NuevoAbono {
   ventaNotaId: string;
-  /** `null` en el cobro de contado de una venta de Oficina (T-17). */
+  /** `null` = Oficina: el cobro de contado de una venta de Oficina (T-17) o un cobro del portal (T-21). */
   vendedorId: string | null;
   fechaPago: string;
   fechaOperacion: string;
   monto: string;
   tipo: TipoAbono;
   saldoPendiente: string;
-  metodoPago: MetodoPago;
-  origen: 'cobro' | 'venta_contado';
+  metodoPago: MetodoAbono;
+  origen: 'cobro' | 'venta_contado' | 'saldo_favor';
+  /** Quien lo capturo en el portal (T-21). La tablet y la venta no lo ponen (queda null). */
+  capturoUsuarioId?: string | null;
 }
 
 export interface NuevoSaldoFavor {
   clienteId: string;
   vendedorId: string | null;
-  /** Texto `numeric`, positivo. */
+  /** Texto `numeric`: positivo si es excedente, negativo si es aplicacion (T-21). */
   monto: string;
+  origen: 'excedente_cobro' | 'aplicacion';
   fechaOperacion: string;
+  capturoUsuarioId: string | null;
 }
 
 /**
@@ -79,32 +88,35 @@ export class CobranzasRepository {
 
   /**
    * Bloquea `for update`, en orden de `id`, las notas que pueden recibir dinero
-   * y la elegida (D13).
+   * y las elegidas (D13; T-21: una o varias).
    *
    * El orden fijo es lo que evita el deadlock entre dos cobros del mismo
    * cliente; si aun asi Postgres elige victima, `reintentarAnteConflicto`
-   * repite la operacion entera. Con READ COMMITTED, las consultas que siguen al
-   * candado ya ven los abonos que el otro cobro confirmo.
+   * repite la operacion entera (tablet) o el portal responde 409. Con READ
+   * COMMITTED, las consultas que siguen al candado ya ven los abonos que el
+   * otro cobro confirmo. Una elegida de OTRO cliente no sale (filtro por
+   * cliente): quien llama lo detecta.
    */
   async bloquearNotasDelCliente(
     clienteId: string,
-    notaElegidaId: string,
+    notaElegidaIds: readonly string[],
     trx: Transaction<DB>,
   ): Promise<NotaBloqueada[]> {
     const filas = await sql<{
       id: string;
       fecha: string;
       folio: string;
+      num_nota: string | null;
       status: string;
       borrada: boolean;
       monto_total: string;
     }>`
-      select id, to_char(fecha, 'YYYY-MM-DD') as fecha, folio, status,
+      select id, to_char(fecha, 'YYYY-MM-DD') as fecha, folio, num_nota, status,
              deleted_at is not null as borrada, monto_total
         from venta_nota
        where cliente_id = ${clienteId}
          and ((status in ('pendiente', 'abonado') and deleted_at is null)
-              or id = ${notaElegidaId})
+              or id = any(${[...notaElegidaIds]}::uuid[]))
        order by id
          for update
     `.execute(trx);
@@ -113,6 +125,7 @@ export class CobranzasRepository {
       id: f.id,
       fecha: f.fecha,
       folio: f.folio,
+      numNota: f.num_nota,
       status: f.status,
       borrada: f.borrada,
       montoTotal: f.monto_total,
@@ -151,6 +164,7 @@ export class CobranzasRepository {
         saldo_pendiente: abono.saldoPendiente,
         metodo_pago: abono.metodoPago,
         origen: abono.origen,
+        capturo_usuario_id: abono.capturoUsuarioId ?? null,
       })
       .returning('id')
       .executeTakeFirstOrThrow();
@@ -173,10 +187,7 @@ export class CobranzasRepository {
       .execute();
   }
 
-  /**
-   * Movimiento de saldo a favor (D5) y `updated_at` del cliente, para que el
-   * pull incremental le baje el saldo nuevo a la tablet (D12).
-   */
+  /** Movimiento de saldo a favor (D5; T-21: tambien la aplicacion, negativa) y `updated_at` del cliente, para que el pull incremental le baje el saldo nuevo a la tablet (D12). */
   async insertarSaldoFavor(
     movimiento: NuevoSaldoFavor,
     trx: Transaction<DB>,
@@ -187,8 +198,9 @@ export class CobranzasRepository {
         cliente_id: movimiento.clienteId,
         vendedor_id: movimiento.vendedorId,
         monto: movimiento.monto,
-        origen: 'excedente_cobro',
+        origen: movimiento.origen,
         fecha_operacion: movimiento.fechaOperacion,
+        capturo_usuario_id: movimiento.capturoUsuarioId,
       })
       .returning('id')
       .executeTakeFirstOrThrow();
@@ -200,5 +212,26 @@ export class CobranzasRepository {
       .execute();
 
     return fila.id;
+  }
+
+  /**
+   * Bloquea `for update` los movimientos vivos de saldo a favor del cliente y
+   * devuelve sus montos (texto `numeric`). Se llama DESPUES de bloquear sus
+   * notas, como el cobro: mismo orden de candados, sin abrazo mortal (T-21).
+   * Un excedente que entre a la vez solo SUBE el saldo: no hace falta frenarlo.
+   */
+  async bloquearSaldoFavor(
+    clienteId: string,
+    trx: Transaction<DB>,
+  ): Promise<string[]> {
+    const filas = await sql<{ monto: string }>`
+      select monto
+        from saldo_favor_movimiento
+       where cliente_id = ${clienteId}
+         and deleted_at is null
+       order by id
+         for update
+    `.execute(trx);
+    return filas.rows.map((f) => f.monto);
   }
 }

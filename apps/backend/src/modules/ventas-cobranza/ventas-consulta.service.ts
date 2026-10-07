@@ -117,7 +117,10 @@ export class VentasConsultaService {
       this.repo.cobros(cabecera.id),
     ]);
     const abonado = cobros.reduce((t, c) => t + c.montoCentavos, 0);
-    const deCobranza = cobros.filter((c) => c.origen === 'cobro').length;
+    // El de contado lo reescribe la edicion; cobro y saldo a favor (T-21) no.
+    const deCobranza = cobros.filter(
+      (c) => c.origen !== 'venta_contado',
+    ).length;
     return {
       ...cabecera,
       saldoCentavos: saldoDerivadoCentavos(cabecera.montoCentavos, abonado),

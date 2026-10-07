@@ -9,6 +9,10 @@ import type { AbonoNota, FechaISO, MetodoPago } from './tipos';
  * > casos de prueba. La tablet reparte al grabar para descontar el saldo sin
  * > red; el servidor vuelve a repartir al proyectar. Si divergen, el saldo local
  * > parpadea hasta el pull. Si cambias una, cambia la otra en el mismo commit.
+ * >
+ * > `repartirPagoEnNotas` (varias notas, T-21) existe solo en el servidor: el
+ * > portal no reparte localmente y la tablet sigue cobrando una nota a la vez.
+ * > Para una nota da exactamente lo mismo que esta copia.
  *
  * `problemasDeCobro` la usan la pantalla (avisos antes de revisar) y el
  * repositorio (que vuelve a validar antes de grabar).
