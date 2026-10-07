@@ -70,11 +70,11 @@ export interface ClientePromocionProducto {
 }
 
 export interface CobranzaAbono {
+  capturo_usuario_id: string | null;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
   fecha_operacion: Timestamp;
   fecha_pago: Timestamp;
-  folio: string | null;
   id: Generated<string>;
   metodo_pago: string;
   monto: Numeric;
@@ -180,11 +180,11 @@ export interface Ruta {
 }
 
 export interface SaldoFavorMovimiento {
+  capturo_usuario_id: string | null;
   cliente_id: string;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
   fecha_operacion: Timestamp;
-  folio: string | null;
   id: Generated<string>;
   monto: Numeric;
   origen: string;
