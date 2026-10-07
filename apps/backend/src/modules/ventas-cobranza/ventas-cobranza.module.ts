@@ -2,6 +2,9 @@ import { Module } from '@nestjs/common';
 import { CarteraClientesModule } from '../cartera-clientes/cartera-clientes.module';
 import { CobranzasRepository } from './cobranzas.repository';
 import { CobranzasService } from './cobranzas.service';
+import { FacturasController } from './facturas.controller';
+import { FacturasRepository } from './facturas.repository';
+import { FacturasService } from './facturas.service';
 import { FoliosOficinaRepository } from './folios-oficina.repository';
 import { VentasConsultaRepository } from './ventas-consulta.repository';
 import { VentasConsultaService } from './ventas-consulta.service';
@@ -22,7 +25,7 @@ import { VentasService } from './ventas.service';
 // mismo `VentasService` que la tablet.
 @Module({
   imports: [CarteraClientesModule],
-  controllers: [VentasController],
+  controllers: [VentasController, FacturasController],
   providers: [
     VentasService,
     VentasRepository,
@@ -35,6 +38,9 @@ import { VentasService } from './ventas.service';
     VentasConsultaRepository,
     VentasEdicionService,
     VentasEdicionRepository,
+    // T-19: asignar factura
+    FacturasService,
+    FacturasRepository,
   ],
   exports: [VentasService, CobranzasService],
 })
