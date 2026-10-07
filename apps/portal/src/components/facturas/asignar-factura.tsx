@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { ErrorApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
@@ -31,6 +32,7 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
   const [numero, setNumero] = useState("");
   const [aviso, setAviso] = useState<string | null>(null);
   const [recarga, setRecarga] = useState(0);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const { enviando, error, enviar } = useEnvioFormulario("No se pudo asignar la factura.");
 
   useEffect(() => {
@@ -47,6 +49,7 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
     if (!cliente) return;
     let vigente = true;
     setCargada(false);
+    setErrorCarga(null);
     listarPorFacturar(cliente.id, incluirNA)
       .then((lista) => {
         if (!vigente) return;
@@ -54,7 +57,18 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
         setSeleccion(new Set());
         setCargada(true);
       })
-      .catch(() => vigente && setCargada(true));
+      .catch((err) => {
+        if (!vigente) return;
+        // Un fallo de carga no es "sin ventas": se limpia la lista y se avisa.
+        setVentas([]);
+        setSeleccion(new Set());
+        setErrorCarga(
+          err instanceof ErrorApi && err.mensajeApi
+            ? err.mensajeApi
+            : "No se pudo cargar la lista de ventas por facturar.",
+        );
+        setCargada(true);
+      });
     return () => {
       vigente = false;
     };
@@ -128,7 +142,11 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
             Mostrar también las N/A
           </label>
 
-          {cargada && ventas.length === 0 ? (
+          {errorCarga ? (
+            <p role="alert" className="text-sm text-destructive">
+              {errorCarga}
+            </p>
+          ) : cargada && ventas.length === 0 ? (
             <p className="text-sm text-muted-foreground">Este cliente no tiene ventas por facturar.</p>
           ) : (
             <table className="w-full text-sm">

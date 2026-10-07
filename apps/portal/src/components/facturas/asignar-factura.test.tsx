@@ -86,6 +86,32 @@ describe("AsignarFactura", () => {
     expect(await screen.findByText("Este cliente no tiene ventas por facturar.")).toBeInTheDocument();
   });
 
+  it("tras asignar recarga la lista y reinicia la seleccion", async () => {
+    const usuario = await elegirCliente();
+    listarPorFacturar.mockResolvedValue([VENTAS[1]]);
+    await usuario.click(screen.getByLabelText("Marcar TJ240401OF01"));
+    await usuario.type(screen.getByLabelText("Número de factura"), "A780");
+    const grabar = screen.getByRole("button", { name: "Asignar" });
+    await usuario.click(grabar);
+    await screen.findByRole("status");
+    await waitFor(() => expect(listarPorFacturar).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByText("TJ240401OF01")).not.toBeInTheDocument());
+    expect(screen.getByText("TJ240402OF01")).toBeInTheDocument();
+    expect(screen.getByText("Total marcado: $0.00")).toBeInTheDocument();
+    await usuario.type(screen.getByLabelText("Número de factura"), "B1");
+    expect(screen.getByRole("button", { name: "Asignar" })).toBeDisabled();
+  });
+
+  it("si falla la carga lo dice y no afirma que no hay ventas", async () => {
+    listarPorFacturar.mockRejectedValue(new Error("red"));
+    const usuario = userEvent.setup();
+    render(<AsignarFactura sucursal={null} />);
+    await usuario.type(screen.getByLabelText("Cliente"), "coba");
+    await usuario.click(await screen.findByRole("button", { name: /Cobach XXI/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo cargar la lista de ventas por facturar.");
+    expect(screen.queryByText("Este cliente no tiene ventas por facturar.")).not.toBeInTheDocument();
+  });
+
   it("sin el permiso no se puede asignar", async () => {
     vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: false, cerrarSesion: vi.fn(), puede: () => false });
     render(<AsignarFactura sucursal={null} />);
