@@ -42,7 +42,7 @@ export function AplicarSaldoFavor({
 
   const notaIds = palomeadas.map((n) => n.id);
   const monto = leerMontoCentavos(montoTexto);
-  const clave = [notaIds.join(","), monto].join("|");
+  const clave = [palomeadas.map((n) => `${n.id}:${n.saldoCentavos}`).join(","), cliente.saldoFavorCentavos, monto].join("|");
   const plan = vista?.clave === clave ? vista.plan : null;
 
   async function revisar() {

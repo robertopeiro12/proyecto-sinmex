@@ -59,7 +59,7 @@ export function RegistrarPago({
 
   const notaIds = palomeadas.map((n) => n.id);
   const monto = leerMontoCentavos(montoTexto);
-  const clave = [notaIds.join(","), monto, fechaPago, metodo, cobrador].join("|");
+  const clave = [palomeadas.map((n) => `${n.id}:${n.saldoCentavos}`).join(","), cliente.saldoFavorCentavos, monto, fechaPago, metodo, cobrador].join("|");
   const plan = vista?.clave === clave ? vista.plan : null;
 
   /** Lo mismo que rechazaría el servidor, dicho antes de pedir nada. */

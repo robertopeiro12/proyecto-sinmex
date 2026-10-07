@@ -169,4 +169,47 @@ describe("CobranzaCliente", () => {
     expect(screen.queryByText("TJ240401OF01")).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Registrar pago" })).not.toBeInTheDocument();
   });
+
+  it("una recarga con la misma selección y otro saldo quita la vista previa del pago", async () => {
+    vi.mocked(cobranzasLib.vistaPreviaCobro).mockResolvedValue({ aplicaciones: [], saldoFavorCentavos: 0 });
+    const { usuario } = renderizar("n1");
+    const panel = await screen.findByRole("region", { name: "Registrar pago" });
+    await usuario.type(within(panel).getByLabelText("Monto"), "100");
+    await usuario.click(within(panel).getByRole("button", { name: "Vista previa" }));
+    await within(panel).findByRole("button", { name: "Grabar cobro" });
+    // Alguien más cobró parte de n1: misma selección, otro saldo.
+    porCobrarDeCliente.mockResolvedValue({ ...DATOS, notas: [{ ...N1, saldoCentavos: 4000 }, N2] });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    marcarCuentaPerdida.mockResolvedValue({} as VentaDetalle);
+    await usuario.click(screen.getByRole("button", { name: "Marcar TJ240402OF01 como cuenta perdida" }));
+    await waitFor(() => expect(porCobrarDeCliente).toHaveBeenCalledTimes(2));
+    await screen.findByText("$40.00");
+    expect(screen.queryByRole("button", { name: "Grabar cobro" })).not.toBeInTheDocument();
+  });
+
+  it("tras un pago que no cambia el saldo a favor, el panel de saldo a favor pierde su vista previa y recalcula", async () => {
+    porCobrarDeCliente.mockResolvedValue({ ...DATOS, saldoFavorCentavos: 20000 });
+    vi.mocked(cobranzasLib.vistaPreviaCobro).mockResolvedValue({ aplicaciones: [], saldoFavorCentavos: 0 });
+    vi.mocked(cobranzasLib.registrarCobro).mockResolvedValue({
+      aplicaciones: [], saldoFavorCentavos: 0, cliente: "Cobach XXI", montoCentavos: 5000,
+    });
+    const { usuario } = renderizar("n1");
+    const saldo = await screen.findByRole("region", { name: "Aplicar saldo a favor" });
+    expect(within(saldo).getByLabelText("Monto a aplicar")).toHaveValue("100.00");
+    await usuario.click(within(saldo).getByRole("button", { name: "Vista previa" }));
+    await within(saldo).findByRole("button", { name: "Aplicar saldo a favor" });
+    // El pago baja lo que debe n1 a $50; el saldo a favor y la selección siguen igual.
+    porCobrarDeCliente.mockResolvedValue({
+      ...DATOS, saldoFavorCentavos: 20000, notas: [{ ...N1, saldoCentavos: 5000 }, N2],
+    });
+    const pago = screen.getByRole("region", { name: "Registrar pago" });
+    await usuario.type(within(pago).getByLabelText("Monto"), "50");
+    await usuario.click(within(pago).getByRole("button", { name: "Vista previa" }));
+    await usuario.click(await within(pago).findByRole("button", { name: "Grabar cobro" }));
+    await waitFor(() => expect(porCobrarDeCliente).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Aplicar saldo a favor" })).not.toBeInTheDocument(),
+    );
+    expect(within(screen.getByRole("region", { name: "Aplicar saldo a favor" })).getByLabelText("Monto a aplicar")).toHaveValue("50.00");
+  });
 });

@@ -32,6 +32,8 @@ export function CobranzaCliente({
   const [aviso, setAviso] = useState<string | null>(null);
   const [recarga, setRecarga] = useState(0);
   const [marcando, setMarcando] = useState(false);
+  // Sube con cada carga buena: los paneles de pago se remontan y sus vistas previas viejas desaparecen.
+  const [version, setVersion] = useState(0);
 
   useEffect(() => {
     let vigente = true;
@@ -39,6 +41,7 @@ export function CobranzaCliente({
       .then((d) => {
         if (!vigente) return;
         setDatos(d);
+        setVersion((v) => v + 1);
         setError(null);
         // Una nota que ya no está por cobrar (la pagó alguien) se desmarca sola.
         setSeleccion((actual) => new Set([...actual].filter((id) => d.notas.some((n) => n.id === id))));
@@ -190,12 +193,12 @@ export function CobranzaCliente({
           ))}
 
         {datos && palomeadas.length > 0 && (
-          <RegistrarPago cliente={datos} palomeadas={palomeadas} onRegistrado={recargar} />
+          <RegistrarPago key={version} cliente={datos} palomeadas={palomeadas} onRegistrado={recargar} />
         )}
 
         {datos && datos.saldoFavorCentavos > 0 && palomeadas.length > 0 && (
           <AplicarSaldoFavor
-            key={`${palomeadas.map((n) => n.id).join(",")}|${datos.saldoFavorCentavos}`}
+            key={`${version}|${palomeadas.map((n) => n.id).join(",")}|${datos.saldoFavorCentavos}`}
             cliente={datos}
             palomeadas={palomeadas}
             onAplicado={recargar}
