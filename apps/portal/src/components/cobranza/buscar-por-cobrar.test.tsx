@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ErrorApi } from "@/lib/api";
 import * as clientesLib from "@/lib/clientes";
@@ -75,5 +75,33 @@ describe("BuscarPorCobrar", () => {
     const { usuario } = renderizar();
     await usuario.click(screen.getByRole("button", { name: "Buscar por fecha" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Esa fecha no existe.");
+  });
+
+  it("al cambiar de sucursal se limpian los resultados de la anterior", async () => {
+    const onElegir = vi.fn();
+    const usuario = userEvent.setup();
+    const { rerender } = render(<BuscarPorCobrar sucursal="TJ" onElegir={onElegir} />);
+    await usuario.click(screen.getByRole("button", { name: "Buscar por fecha" }));
+    expect(await screen.findByText("TJ240401OF01")).toBeInTheDocument();
+    rerender(<BuscarPorCobrar sucursal="MX" onElegir={onElegir} />);
+    expect(screen.queryByText("TJ240401OF01")).not.toBeInTheDocument();
+    expect(screen.queryByText("No hay notas por cobrar con esa búsqueda.")).not.toBeInTheDocument();
+  });
+
+  it("una respuesta vieja no pisa a una búsqueda más nueva", async () => {
+    let resolverVieja!: (n: NotaPorCobrar[]) => void;
+    buscarPorCobrar.mockReturnValueOnce(new Promise((r) => (resolverVieja = r)));
+    buscarPorCobrar.mockResolvedValueOnce([{ ...NOTA, id: "n9", folio: "TJ240409OF01" }]);
+    const onElegir = vi.fn();
+    const usuario = userEvent.setup();
+    const { rerender } = render(<BuscarPorCobrar sucursal="TJ" onElegir={onElegir} />);
+    await usuario.click(screen.getByRole("button", { name: "Buscar por fecha" }));
+    // Cambia de sucursal con la primera búsqueda en el aire y busca de nuevo.
+    rerender(<BuscarPorCobrar sucursal="MX" onElegir={onElegir} />);
+    await usuario.click(screen.getByRole("button", { name: "Buscar por fecha" }));
+    expect(await screen.findByText("TJ240409OF01")).toBeInTheDocument();
+    await act(async () => resolverVieja([NOTA]));
+    expect(screen.getByText("TJ240409OF01")).toBeInTheDocument();
+    expect(screen.queryByText("TJ240401OF01")).not.toBeInTheDocument();
   });
 });

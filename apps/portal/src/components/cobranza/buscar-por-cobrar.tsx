@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { BuscadorCliente } from "@/components/ventas/buscador-cliente";
 import { mensajeDe } from "@/lib/api";
@@ -27,7 +27,15 @@ export function BuscarPorCobrar({
   const [buscando, setBuscando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Cuenta las búsquedas: solo la última puede escribir el resultado.
+  const busqueda = useRef(0);
+
   useEffect(() => {
+    // Otra sucursal = otro alcance: los resultados de la anterior ya no valen.
+    busqueda.current += 1;
+    setNotas(null);
+    setError(null);
+    setBuscando(false);
     let vigente = true;
     listarClientes(sucursal, "todos")
       .then((lista) => {
@@ -42,15 +50,18 @@ export function BuscarPorCobrar({
   }, [sucursal]);
 
   async function buscar(filtro: { fecha: string } | { numNota: string }) {
+    const mia = ++busqueda.current;
     setBuscando(true);
     setError(null);
     try {
-      setNotas(await buscarPorCobrar(filtro, sucursal));
+      const lista = await buscarPorCobrar(filtro, sucursal);
+      if (mia === busqueda.current) setNotas(lista);
     } catch (err) {
+      if (mia !== busqueda.current) return;
       setNotas(null);
       setError(mensajeDe(err, "No se pudieron buscar las notas por cobrar."));
     } finally {
-      setBuscando(false);
+      if (mia === busqueda.current) setBuscando(false);
     }
   }
 

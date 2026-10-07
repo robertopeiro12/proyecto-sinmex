@@ -7,6 +7,8 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { mensajeDe } from "@/lib/api";
 import { ETIQUETA_METODO_PAGO, porCobrarDeCliente, type ClientePorCobrar } from "@/lib/cobranzas";
 import { ETIQUETA_STATUS, formatearPesos, marcarCuentaPerdida } from "@/lib/ventas";
+import { AplicarSaldoFavor } from "./aplicar-saldo-favor";
+import { RegistrarPago } from "./registrar-pago";
 
 /**
  * §3.2: las notas por cobrar de un cliente, de la más vieja a la más nueva,
@@ -42,7 +44,11 @@ export function CobranzaCliente({
         setSeleccion((actual) => new Set([...actual].filter((id) => d.notas.some((n) => n.id === id))));
       })
       .catch((err) => {
-        if (vigente) setError(mensajeDe(err, "No se pudo cargar la cobranza del cliente."));
+        if (!vigente) return;
+        // Sin datos frescos no se muestra la tabla vieja ni el formulario de pago:
+        // nadie debe cobrar sobre saldos que quizá ya cambiaron.
+        setDatos(null);
+        setError(mensajeDe(err, "No se pudo cargar la cobranza del cliente."));
       });
     return () => {
       vigente = false;
@@ -183,10 +189,17 @@ export function CobranzaCliente({
             </table>
           ))}
 
-        {palomeadas.length > 0 && (
-          <p className="text-sm text-muted-foreground">
-            {palomeadas.length} {palomeadas.length === 1 ? "nota marcada" : "notas marcadas"}
-          </p>
+        {datos && palomeadas.length > 0 && (
+          <RegistrarPago cliente={datos} palomeadas={palomeadas} onRegistrado={recargar} />
+        )}
+
+        {datos && datos.saldoFavorCentavos > 0 && palomeadas.length > 0 && (
+          <AplicarSaldoFavor
+            key={`${palomeadas.map((n) => n.id).join(",")}|${datos.saldoFavorCentavos}`}
+            cliente={datos}
+            palomeadas={palomeadas}
+            onAplicado={recargar}
+          />
         )}
       </CardContent>
     </Card>

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import * as cobranzasLib from "@/lib/cobranzas";
@@ -124,5 +124,49 @@ describe("CobranzaCliente", () => {
     porCobrarDeCliente.mockRejectedValue(new Error("red"));
     renderizar();
     expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo cargar la cobranza del cliente.");
+  });
+  it("con notas marcadas aparece Registrar pago; sin marcar, no", async () => {
+    const { usuario } = renderizar();
+    await screen.findByText("Cobranza · Cobach XXI");
+    expect(screen.queryByRole("region", { name: "Registrar pago" })).not.toBeInTheDocument();
+    await usuario.click(screen.getByLabelText("Marcar TJ240401OF01"));
+    expect(screen.getByRole("region", { name: "Registrar pago" })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Aplicar saldo a favor" })).not.toBeInTheDocument();
+  });
+
+  it("Aplicar saldo a favor aparece solo con saldo a favor y notas marcadas", async () => {
+    porCobrarDeCliente.mockResolvedValue({ ...DATOS, saldoFavorCentavos: 2000 });
+    renderizar("n1");
+    expect(await screen.findByRole("region", { name: "Aplicar saldo a favor" })).toBeInTheDocument();
+  });
+
+  it("tras registrar el pago avisa y recarga la lista", async () => {
+    vi.mocked(cobranzasLib.vistaPreviaCobro).mockResolvedValue({ aplicaciones: [], saldoFavorCentavos: 0 });
+    vi.mocked(cobranzasLib.registrarCobro).mockResolvedValue({
+      aplicaciones: [], saldoFavorCentavos: 0, cliente: "Cobach XXI", montoCentavos: 10000,
+    });
+    const { usuario } = renderizar("n1");
+    const panel = await screen.findByRole("region", { name: "Registrar pago" });
+    await usuario.type(within(panel).getByLabelText("Monto"), "100");
+    await usuario.click(within(panel).getByRole("button", { name: "Vista previa" }));
+    await usuario.click(await within(panel).findByRole("button", { name: "Grabar cobro" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Cobro registrado: $100.00 a Cobach XXI");
+    await waitFor(() => expect(porCobrarDeCliente).toHaveBeenCalledTimes(2));
+  });
+
+  it("si la recarga falla se quita la tabla vieja y el formulario: nadie cobra sobre datos viejos", async () => {
+    vi.mocked(cobranzasLib.vistaPreviaCobro).mockResolvedValue({ aplicaciones: [], saldoFavorCentavos: 0 });
+    vi.mocked(cobranzasLib.registrarCobro).mockResolvedValue({
+      aplicaciones: [], saldoFavorCentavos: 0, cliente: "Cobach XXI", montoCentavos: 10000,
+    });
+    const { usuario } = renderizar("n1");
+    const panel = await screen.findByRole("region", { name: "Registrar pago" });
+    porCobrarDeCliente.mockRejectedValue(new Error("red"));
+    await usuario.type(within(panel).getByLabelText("Monto"), "100");
+    await usuario.click(within(panel).getByRole("button", { name: "Vista previa" }));
+    await usuario.click(await within(panel).findByRole("button", { name: "Grabar cobro" }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByText("TJ240401OF01")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Registrar pago" })).not.toBeInTheDocument();
   });
 });
