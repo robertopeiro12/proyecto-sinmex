@@ -40,6 +40,7 @@ El issue pide además "los 5 status y su efecto" y "Promoción → venta y comis
 | Qué ventas | Primero las `pendiente`; con "Mostrar también las N/A" se incluyen las `N/A`. **Promoción nunca** |
 | Número repetido | Un número es de **un solo cliente**: usar `A780` en otro cliente **se rechaza**. Al mismo cliente sí se le pueden sumar ventas después |
 | Modelo | **Tabla `factura`** a la que apuntan las ventas (opción B) |
+| Editar una facturada | **No se edita**: hay que quitarla primero de la factura (como con los abonos). Así el monto de algo ya facturado nunca cambia sin que alguien lo decida a propósito |
 
 ## 3. Base de datos (una migración)
 
@@ -151,9 +152,12 @@ ventas, la borra.
 
 - **Detalle de venta** (`GET /ventas/:id`): `factura` sigue siendo `N/A`/`pendiente`/`facturada` y se
   agrega `facturaNumero: string | null` (join a `factura`).
-- **Editar** (`PATCH /ventas/:id`): el DTO sigue aceptando solo `N/A`/`pendiente`. **Si la venta está
-  `facturada`, el servicio conserva `factura`, `factura_id` y `factura_asignada_*`** e ignora el valor del
-  DTO. Es el pendiente que T-17 dejó en el issue #19.
+- **Editar** (`PATCH /ventas/:id`): una venta `facturada` **no se edita**. `bloqueoDeEdicion` la rechaza
+  con 409 *"Está en la factura A780: quítala primero de la factura para editarla."*, igual que con los
+  abonos, y el detalle la marca `editable: false` con ese motivo. El DTO sigue aceptando solo
+  `N/A`/`pendiente`, así que la edición nunca puede borrar un número. Esto resuelve el pendiente que T-17
+  dejó en el issue #19.
+- **Cuenta perdida** sí se permite en una venta facturada: no cambia montos ni productos.
 - **Eliminar** (`DELETE /ventas/:id`): una venta `facturada` → 409 *"Está en la factura A780: quítala
   primero de la factura."* Así ninguna factura apunta a una venta borrada.
 - **Push de la tablet:** sin cambios. Un reenvío nunca toca una venta ya proyectada.
@@ -183,8 +187,9 @@ Ruta nueva **`/operacion/facturas`**, entrada **"Facturas"** en Operación de `n
 ### 5.3 Cambios en pantallas existentes
 
 - **Detalle de venta:** "Factura: A780" cuando está facturada.
-- **Editar venta:** si está facturada, el campo factura se muestra fijo ("Facturada: A780") y no viaja en el
-  payload el valor de las opciones. `condicionesDeVenta` deja de convertir valores desconocidos a `N/A`.
+- **Editar venta:** una venta facturada no muestra el botón Editar; en su lugar, el motivo que manda el
+  servidor (mismo mecanismo que `motivoNoEditable` de T-17). `condicionesDeVenta` deja de convertir
+  valores desconocidos a `N/A`.
 - **Eliminar** recibe el 409 del servidor y lo muestra como cualquier otro.
 
 ## 6. Lo que NO entra
@@ -206,18 +211,16 @@ Ruta nueva **`/operacion/facturas`**, entrada **"Facturas"** en Operación de `n
   número de otro cliente; rechazar si una de las ventas ya tiene factura / es promoción / es de otro
   cliente / está eliminada (y que **ninguna** quede asignada); `incluirNA`; cambiar número (y sus dos
   rechazos); quitar algunas y quitar todas (la factura se borra); sin permiso → 403; alcance por sucursal.
-  En `ventas-editar.e2e-spec.ts`: editar una facturada conserva su factura; eliminar una facturada → 409;
-  el detalle trae `facturaNumero`.
+  En `ventas-editar.e2e-spec.ts`: editar una facturada → 409 y no cambia nada; eliminar una facturada →
+  409; marcar cuenta perdida en una facturada sí entra; el detalle trae `facturaNumero` y `editable: false`.
 - **Portal** (vitest): pantalla de asignar (payload, seleccionar todas, N/A, total, mensaje), buscar y
   corregir, y detalle/edición de una venta facturada.
 - **Manual:** en el navegador contra el Postgres **local** (no `sinmex dev`).
 
 ## 8. Riesgos y notas
 
-- **Editar productos de una venta ya facturada** cambia su monto, y la factura del SAT ya salió con el
-  monto viejo. Lo aprobado es que la edición conserve el número; el diseño no lo bloquea. Si se prefiere
-  bloquear la edición de productos en una venta facturada (como con los abonos), es un cambio pequeño en
-  `bloqueoDeEdicion`. **Pendiente de decidir por Roberto al revisar este spec.**
+- **Editar una venta facturada está bloqueado** (decisión de Roberto al revisar, 2026-10-07). Si en la
+  práctica estorba, se relaja en `bloqueoDeEdicion` sin tocar la base.
 - El permiso nace sin perfil, como todos: solo lo tiene el Administrador General hasta que se configure la
   matriz (T-08b).
 - La migración agrega checks y un `not null`: el protocolo de `CLAUDE.md` pide pre-flight en la nube (§3).
