@@ -86,6 +86,16 @@ export interface CobranzaAbono {
   venta_nota_id: string;
 }
 
+export interface Factura {
+  actualizado_en: Timestamp | null;
+  actualizado_por_usuario_id: string | null;
+  cliente_id: string;
+  creado_en: Generated<Timestamp>;
+  creado_por_usuario_id: string;
+  id: Generated<string>;
+  numero: string;
+}
+
 export interface FolioOficinaContador {
   fecha: Timestamp;
   sucursal_id: string;
@@ -296,7 +306,10 @@ export interface VentaNota {
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
   eliminado_por_usuario_id: string | null;
-  factura: string | null;
+  factura: Generated<string>;
+  factura_asignada_en: Timestamp | null;
+  factura_asignada_por_usuario_id: string | null;
+  factura_id: string | null;
   fecha: Timestamp;
   folio: string;
   id: Generated<string>;
@@ -329,6 +342,7 @@ export interface DB {
   cliente_precio: ClientePrecio;
   cliente_promocion_producto: ClientePromocionProducto;
   cobranza_abono: CobranzaAbono;
+  factura: Factura;
   folio_oficina_contador: FolioOficinaContador;
   lista_precio: ListaPrecio;
   perfil: Perfil;
