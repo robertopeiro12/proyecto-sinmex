@@ -5,7 +5,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Transaction } from 'kysely';
-import { esViolacionUnicidad } from '../../database/errores-postgres';
+import {
+  esViolacionFk,
+  esViolacionUnicidad,
+  restriccionDelError,
+} from '../../database/errores-postgres';
 import type { DB } from '../../database/schema';
 import { resolverAlcance } from '../sucursales/alcance-sucursal';
 import { exigirAlcanceSobre } from './alcance-venta';
@@ -79,7 +83,7 @@ export class FacturasService {
         const motivo = motivoAlAsignar(ventaIds, ventas, cliente.id);
         if (motivo) throw new ConflictException(motivo);
 
-        const existente = await this.repo.facturaPorNumero(numero, trx);
+        const existente = await this.repo.bloquearFacturaPorNumero(numero, trx);
         if (existente && existente.clienteId !== cliente.id)
           throw new ConflictException(
             motivoDeOtroCliente(existente.numero, existente.cliente),
@@ -93,6 +97,13 @@ export class FacturasService {
     } catch (error) {
       if (esViolacionUnicidad(error))
         throw await this.conflictoDeNumero(numero, clienteId);
+      // Defensa en profundidad: la factura desaparecio (quitaron su ultima
+      // venta) entre leerla y asignarle. Con el bloqueo no deberia pasar.
+      if (
+        esViolacionFk(error) &&
+        restriccionDelError(error) === 'fk_venta_nota_factura'
+      )
+        throw new ConflictException(MOTIVO_CARRERA);
       throw error;
     }
     return this.leer(facturaId);
@@ -110,7 +121,7 @@ export class FacturasService {
       await this.portal.enTransaccion(async (trx) => {
         const factura = await this.bloquearConAlcance(usuarioId, id, trx);
         clienteId = factura.clienteId;
-        const otra = await this.repo.facturaPorNumero(numero, trx);
+        const otra = await this.repo.bloquearFacturaPorNumero(numero, trx);
         // La misma factura con otra capitalizacion NO es "otra".
         if (otra && otra.id !== factura.id)
           throw new ConflictException(

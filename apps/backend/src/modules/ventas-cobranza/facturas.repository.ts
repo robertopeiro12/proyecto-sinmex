@@ -123,10 +123,25 @@ export class FacturasRepository {
     }));
   }
 
-  /** Por numero como lo compara `uq_factura_numero`. */
-  async facturaPorNumero(
+  /** Por numero como lo compara `uq_factura_numero`. Sin bloqueo: para releer tras un rollback. */
+  facturaPorNumero(numero: string) {
+    return this.leerPorNumero(numero, this.db, false);
+  }
+
+  /**
+   * Igual, pero bloqueando la fila (`for update`). Dentro de la transaccion de
+   * asignar/renombrar: si otra transaccion borra o renombra la factura mientras
+   * esperamos, la lectura vuelve vacia (READ COMMITTED) y no asignamos a una
+   * factura que ya no es la que leimos.
+   */
+  bloquearFacturaPorNumero(numero: string, trx: Transaction<DB>) {
+    return this.leerPorNumero(numero, trx, true);
+  }
+
+  private async leerPorNumero(
     numero: string,
-    conexion: Database | Transaction<DB> = this.db,
+    conexion: Database | Transaction<DB>,
+    bloquear: boolean,
   ): Promise<
     | { id: string; numero: string; clienteId: string; cliente: string }
     | undefined
@@ -141,6 +156,7 @@ export class FacturasRepository {
         from factura f
         join cliente c on c.id = f.cliente_id
        where lower(btrim(f.numero)) = lower(btrim(${numero}))
+      ${bloquear ? sql`for update of f` : sql``}
     `.execute(conexion);
     const f = filas.rows[0];
     return f
