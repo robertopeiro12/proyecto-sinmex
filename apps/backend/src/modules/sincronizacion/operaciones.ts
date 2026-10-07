@@ -32,9 +32,9 @@ export interface OperacionNormalizada {
    * El [[Folios|folio]] que la tablet emitio **offline** para esta operacion,
    * o `null` si su tipo no lleva folio.
    *
-   * Hoy la `jornada` (vehiculo + kilometraje) no lo lleva: no es una nota que
-   * nadie firme. Venta y cobranza si lo llevaran (T-16/T-20). Por eso es
-   * opcional en el contrato y no obligatorio.
+   * Hoy solo la `venta` lo lleva (T-16). La `jornada` no es una nota que nadie
+   * firme, y la `cobranza` **no lleva folio** (T-21, cliente 2026-10-07): el que
+   * mande una tablet sin actualizar se descarta aqui y llega como `null`.
    */
   folio: string | null;
   datos: Record<string, unknown>;
@@ -231,10 +231,16 @@ export function normalizarOperacion(
     };
   }
 
-  // El folio es OPCIONAL: hoy la `jornada` no lo lleva (no es una nota que
-  // nadie firme) y venta/cobranza lo llevaran con T-16/T-20. Cuando viene, se
-  // comprueba a fondo — un folio emitido no se corrige hacia atras.
-  const folio = texto(op.folio);
+  // El folio es OPCIONAL: la `jornada` no lo lleva (no es una nota que nadie
+  // firme). Cuando viene, se comprueba a fondo — un folio emitido no se corrige
+  // hacia atras.
+  //
+  // T-21: la cobranza NO lleva folio (cliente, 2026-10-07: "Un solo folio",
+  // "Porque la cobranza no lleva folio"). Una tablet sin actualizar todavia lo
+  // manda: se IGNORA sin validarlo, para no perder un cobro real por un dato
+  // que ya no significa nada, y no se guarda en ningun lado (en
+  // `sync_operacion.folio` ocuparia un numero de la serie de ventas).
+  const folio = tipo === 'cobranza' ? null : texto(op.folio);
   if (folio !== null) {
     const motivo = revisarFolio(folio, {
       sucursal: vendedor.sucursal,

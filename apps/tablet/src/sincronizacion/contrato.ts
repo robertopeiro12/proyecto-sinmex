@@ -206,7 +206,7 @@ export interface PrecioPull extends FilaSincronizable {
 export interface AbonoPull {
   fecha_pago: string;
   monto_centavos: number;
-  metodo_pago: MetodoPago;
+  metodo_pago: MetodoPagoAbono;
 }
 
 /**
@@ -285,8 +285,9 @@ export interface OperacionSaliente {
    * El [[Folios|folio]] que la tablet emitio **offline** para esta operacion
    * (T-14), o ausente si su tipo no lleva folio.
    *
-   * Hoy la `jornada` no lo lleva: no es una nota que nadie firme. Venta y
-   * cobranza si lo llevan, y en ellas es obligatorio (T-16/T-20).
+   * Hoy solo la venta lo lleva, y en ella es obligatorio (T-16). La `jornada`
+   * no es una nota que nadie firme, y la cobranza no lleva folio (T-21): el
+   * servidor ignora el que llegue.
    *
    * > [!danger] El folio NO es la clave de idempotencia
    * > Son capas distintas y hay que mantenerlas separadas (ADR-0006). `clave`
@@ -406,11 +407,17 @@ export type DatosProspecto = {
 export type MetodoPago = 'efectivo' | 'transferencia' | 'cheque';
 
 /**
+ * Metodo de un abono que baja en el pull (T-21): los de cobro mas `saldo_favor`
+ * (la oficina aplico saldo a favor). La tablet nunca lo manda en un push.
+ */
+export type MetodoPagoAbono = MetodoPago | 'saldo_favor';
+
+/**
  * `datos` de una operacion `tipo: "cobranza"` (T-20).
  *
  * Un pago sobre UNA nota; el servidor reparte el excedente a las otras notas
- * del cliente y al saldo a favor. `cliente_id` y `folio` van en el sobre y son
- * obligatorios.
+ * del cliente y al saldo a favor. `cliente_id` va en el sobre y es
+ * obligatorio. **Sin folio** (T-21): la cobranza no lleva folio.
  */
 export type DatosCobranza = {
   venta_nota_id: string;

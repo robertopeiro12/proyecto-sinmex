@@ -35,7 +35,6 @@ export interface NuevoAbono {
   tipo: TipoAbono;
   saldoPendiente: string;
   metodoPago: MetodoPago;
-  folio: string | null;
   origen: 'cobro' | 'venta_contado';
 }
 
@@ -44,7 +43,6 @@ export interface NuevoSaldoFavor {
   vendedorId: string | null;
   /** Texto `numeric`, positivo. */
   monto: string;
-  folio: string | null;
   fechaOperacion: string;
 }
 
@@ -152,7 +150,6 @@ export class CobranzasRepository {
         tipo: abono.tipo,
         saldo_pendiente: abono.saldoPendiente,
         metodo_pago: abono.metodoPago,
-        folio: abono.folio,
         origen: abono.origen,
       })
       .returning('id')
@@ -191,7 +188,6 @@ export class CobranzasRepository {
         vendedor_id: movimiento.vendedorId,
         monto: movimiento.monto,
         origen: 'excedente_cobro',
-        folio: movimiento.folio,
         fecha_operacion: movimiento.fechaOperacion,
       })
       .returning('id')

@@ -326,7 +326,6 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
         tipo: 'abono',
         saldo_pendiente: '0.00',
         metodo_pago: 'efectivo',
-        folio: null,
         origen: 'cobro',
       })
       .execute();
@@ -361,7 +360,6 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
         'metodo_pago',
         'vendedor_id',
         'origen',
-        'folio',
         'deleted_at',
         sql<string>`to_char(fecha_pago, 'YYYY-MM-DD')`.as('fecha_pago'),
       ])
@@ -1226,7 +1224,6 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
           metodo_pago: 'efectivo',
           vendedor_id: vendedorTj,
           origen: 'venta_contado',
-          folio: v.folio,
           deleted_at: null,
           fecha_pago: FECHA_EDICION,
         },

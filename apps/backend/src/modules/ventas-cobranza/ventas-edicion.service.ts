@@ -183,7 +183,6 @@ export class VentasEdicionService {
               tipo: 'cobranza',
               saldoPendiente: aPesos(0),
               metodoPago: metodo,
-              folio: venta.folio,
               origen: 'venta_contado',
             },
             trx,

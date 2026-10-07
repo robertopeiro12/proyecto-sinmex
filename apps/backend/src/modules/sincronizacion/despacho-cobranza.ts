@@ -22,16 +22,8 @@ export type PreparacionCobranza =
 export function prepararCobranza(
   op: OperacionNormalizada,
 ): PreparacionCobranza {
-  // El folio es opcional en el sobre (la jornada no lo lleva), pero un cobro
-  // sin folio no se puede cotejar contra el recibo del cliente (D11).
-  if (op.folio === null) {
-    return {
-      ok: false,
-      codigo: 'datos-invalidos',
-      motivo:
-        'folio: una cobranza necesita el folio que la tablet emitio para su recibo.',
-    };
-  }
+  // T-21: sin comprobacion de folio. La cobranza no lleva folio, y el que
+  // mande una tablet sin actualizar ya lo descarto `normalizarOperacion`.
   const r = normalizarDatosCobranza(op.clienteId, op.fechaOperacion, op.datos);
   if (!r.ok) {
     return { ok: false, codigo: 'datos-invalidos', motivo: r.motivo };

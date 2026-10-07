@@ -279,7 +279,7 @@ describe('Ventas desde el portal (e2e)', () => {
   const abonosDe = (id: string) =>
     db
       .selectFrom('cobranza_abono')
-      .select(['monto', 'metodo_pago', 'vendedor_id', 'origen', 'folio'])
+      .select(['monto', 'metodo_pago', 'vendedor_id', 'origen'])
       .where('venta_nota_id', '=', id)
       .execute();
 
@@ -610,7 +610,6 @@ describe('Ventas desde el portal (e2e)', () => {
           metodo_pago: 'transferencia',
           vendedor_id: null,
           origen: 'venta_contado',
-          folio: venta.folio,
         },
       ]);
     });

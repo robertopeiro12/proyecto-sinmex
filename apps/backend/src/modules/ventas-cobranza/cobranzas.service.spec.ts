@@ -18,7 +18,6 @@ const contexto: ContextoCobranza = {
   sucursalId: SUCURSAL,
   fechaOperacion: '2026-09-14',
   vendedorId: 'vendedor-1',
-  folio: 'TJ260914AP04',
   usuarioId: null,
 };
 
@@ -104,7 +103,6 @@ describe('CobranzasService.registrarCobranza', () => {
         tipo: 'abono',
         saldoPendiente: '100.00',
         metodoPago: 'efectivo',
-        folio: 'TJ260914AP04',
         origen: 'cobro',
       },
       trx,
@@ -132,7 +130,7 @@ describe('CobranzasService.registrarCobranza', () => {
     expect(repo.actualizarStatusNota).toHaveBeenCalledWith(A, 'pagada', trx);
   });
 
-  it('el excedente va a las otras notas por fecha y el resto a saldo a favor, con el mismo folio', async () => {
+  it('el excedente va a las otras notas por fecha y el resto a saldo a favor', async () => {
     const { servicio, repo } = montar({
       bloqueadas: [
         bloqueada(A, '2026-08-05', '100.00'),
@@ -157,7 +155,6 @@ describe('CobranzasService.registrarCobranza', () => {
       expect.objectContaining({
         ventaNotaId: A,
         monto: '100.00',
-        folio: 'TJ260914AP04',
       }),
       trx,
     );
@@ -166,7 +163,6 @@ describe('CobranzasService.registrarCobranza', () => {
       expect.objectContaining({
         ventaNotaId: C,
         monto: '30.00',
-        folio: 'TJ260914AP04',
       }),
       trx,
     );
@@ -175,7 +171,6 @@ describe('CobranzasService.registrarCobranza', () => {
       expect.objectContaining({
         ventaNotaId: B,
         monto: '80.00',
-        folio: 'TJ260914AP04',
       }),
       trx,
     );
@@ -184,7 +179,6 @@ describe('CobranzasService.registrarCobranza', () => {
         clienteId: CLIENTE,
         vendedorId: 'vendedor-1',
         monto: '40.00',
-        folio: 'TJ260914AP04',
         fechaOperacion: '2026-09-14',
       },
       trx,

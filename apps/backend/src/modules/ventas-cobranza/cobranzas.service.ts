@@ -12,18 +12,18 @@ import {
 } from './reglas-cobranza';
 
 /**
- * Quien y cuando (D13). Desde la tablet `folio` viene emitido y `usuarioId` es
- * null; el portal (T-21) los llenara al reves.
+ * Quien y cuando (D13). Desde la tablet `usuarioId` es null; el portal (T-21)
+ * lo llena. **Sin folio**: la cobranza no lleva folio (cliente, 2026-10-07);
+ * solo las ventas se numeran.
  *
  * Era un alias de `ContextoVenta` hasta T-17, que le agrego a la venta `origen`
  * y `metodoPagoContado` y le quito el null al folio. La cobranza no usa nada de
- * eso, asi que conserva su forma y la tablet no cambia.
+ * eso.
  */
 export interface ContextoCobranza {
   sucursalId: string;
   fechaOperacion: string;
   vendedorId: string;
-  folio: string | null;
   usuarioId: string | null;
 }
 
@@ -110,7 +110,6 @@ export class CobranzasService {
           // La foto del saldo tras esta fila (D7); nunca se lee como fuente.
           saldoPendiente: aPesos(a.saldoDespuesCentavos),
           metodoPago: cobranza.metodoPago,
-          folio: contexto.folio,
           origen: 'cobro',
         },
         trx,
@@ -126,7 +125,6 @@ export class CobranzasService {
           clienteId: cobranza.clienteId,
           vendedorId: contexto.vendedorId,
           monto: aPesos(reparto.saldoFavorCentavos),
-          folio: contexto.folio,
           fechaOperacion: contexto.fechaOperacion,
         },
         trx,
