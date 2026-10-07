@@ -68,6 +68,8 @@ cobranza".
   (`POST /cobranzas/vista-previa`): por nota, cuánto recibe y cómo queda ("B pagada", "C abono $200,
   debe $500"), más lo que iría a otras notas y a saldo a favor.
 - **Grabar** → mensaje "Cobro registrado: $1,500.00 a Cobach XXI" y la tabla se recarga.
+- **Aceptado:** un pago con fecha pasada cuyo excedente fluye a notas más nuevas no marcadas puede crear
+  abonos con `fecha_pago` anterior a la fecha de esa nota (solo la nota **marcada** más vieja acota la fecha).
 
 ### 3.4 Aplicar saldo a favor
 
@@ -154,7 +156,13 @@ alter table saldo_favor_movimiento add constraint ck_saldo_favor_origen
 - Los tres checks viejos se declararon en línea (T-05 y T-20), así que llevan el nombre que Postgres les puso
   (`<tabla>_<columna>_check`). Confirmar con `\d cobranza_abono` en la base local antes de escribir la migración.
 - **Pre-flight para `sinmex dev`:** contar filas de `cobranza_abono` y `saldo_favor_movimiento` con
-  `folio is not null` (se va a borrar la columna): debe dar 0 (hoy la nube no tiene ventas ni cobros).
+  `folio is not null` (se va a borrar la columna). Dos consultas: (a) folios reales de cobro de la tablet,
+  `... where folio is not null and origen <> 'venta_contado'` → si no da 0, PARAR y preguntar a Roberto
+  (el cliente dijo que la cobranza no lleva folio; borrarlos es una decisión); (b) copias, filas
+  `venta_contado` con `folio is distinct from venta_nota.folio` → debe dar 0 (T-17/T-20 guardaron una copia
+  del folio de la venta en cada una, así que cualquier venta de contado en la nube hace distinta de 0 a la
+  consulta ingenua). Si la nube tiene ventas o cobros: verificar con el pre-flight, no se asume. Más:
+  `saldo_favor_movimiento` con signo que no corresponda al origen (`ck_saldo_favor_signo`) → debe dar 0.
   Los checks nuevos solo **amplían** valores; el de
   `origen = 'saldo_favor' ⇔ metodo_pago = 'saldo_favor'` se cumple en filas viejas (ninguna tiene
   ninguno de los dos). Contar filas que lo violarían → debe dar 0.

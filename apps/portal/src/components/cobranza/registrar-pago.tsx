@@ -15,22 +15,34 @@ import {
   type PlanDeCobro,
 } from "@/lib/cobranzas";
 import { REPARTIDOR_OFICINA, formatearPesos, hoyEnTijuana, listarRepartidores, type Repartidor } from "@/lib/ventas";
+import { ErrorApi } from "@/lib/api";
 import { VistaPreviaCobro } from "./vista-previa-cobro";
+
+/** El 409 de "la nota ya no tiene saldo": lo que se ve en pantalla quedó viejo. */
+export function esNotaSinSaldo(err: unknown): err is ErrorApi {
+  return err instanceof ErrorApi && err.status === 409 && (err.mensajeApi ?? "").includes("ya no tiene saldo");
+}
 
 /**
  * §3.3: monto, fecha, método y cobrador → vista previa calculada en el servidor
  * → grabar. Cualquier cambio deja vieja la vista previa (y desaparece "Grabar
- * cobro"): lo que se graba es lo que se vio. Al grabar, el servidor vuelve a
- * decidir con las notas bloqueadas; si algo cambió, lo dice con un 409.
+ * cobro"), y toda recarga del cliente la invalida. Al grabar, el servidor vuelve
+ * a repartir con los saldos del momento y las notas bloqueadas: si un cobro de
+ * la tablet entró entre la vista previa y el grabado, el excedente puede ir a
+ * otro lado que el que se vio. Si una nota ya no tiene saldo (409), se recarga
+ * el cliente y el mensaje del servidor queda visible.
  */
 export function RegistrarPago({
   cliente,
   palomeadas,
   onRegistrado,
+  onDesactualizado,
 }: {
   cliente: ClientePorCobrar;
   palomeadas: NotaPorCobrar[];
   onRegistrado: (mensaje: string) => void;
+  /** Recarga el cliente conservando este mensaje (el 409 "ya no tiene saldo"). */
+  onDesactualizado: (mensaje: string) => void;
 }) {
   const hoy = hoyEnTijuana();
   const masVieja = palomeadas.map((n) => n.fecha).sort()[0] ?? hoy;
@@ -65,6 +77,7 @@ export function RegistrarPago({
   /** Lo mismo que rechazaría el servidor, dicho antes de pedir nada. */
   function problema(): string | null {
     if (monto === null) return MENSAJE_MONTO;
+    if (fechaPago === "") return "Elige la fecha del pago.";
     if (fechaPago > hoy) return "La fecha del pago no puede ser futura.";
     if (fechaPago < masVieja)
       return `La fecha del pago no puede ser anterior a la nota más vieja que marcaste (${masVieja}).`;
@@ -88,17 +101,26 @@ export function RegistrarPago({
     if (plan === null || monto === null) return;
     await enviar(
       async () => {
-        const cobro = await registrarCobro({
-          clienteId: cliente.id,
-          notaIds,
-          montoCentavos: monto,
-          fechaPago,
-          metodoPago: metodo,
-          vendedorId: cobrador === REPARTIDOR_OFICINA ? null : cobrador,
-        });
-        setVista(null);
-        setMontoTexto("");
-        onRegistrado(`Cobro registrado: ${formatearPesos(cobro.montoCentavos)} a ${cobro.cliente}`);
+        try {
+          const cobro = await registrarCobro({
+            clienteId: cliente.id,
+            notaIds,
+            montoCentavos: monto,
+            fechaPago,
+            metodoPago: metodo,
+            vendedorId: cobrador === REPARTIDOR_OFICINA ? null : cobrador,
+          });
+          setVista(null);
+          setMontoTexto("");
+          onRegistrado(`Cobro registrado: ${formatearPesos(cobro.montoCentavos)} a ${cobro.cliente}`);
+        } catch (err) {
+          if (esNotaSinSaldo(err)) {
+            setVista(null);
+            onDesactualizado(err.mensajeApi ?? "Una nota ya no tiene saldo; vuelve a cargar.");
+            return;
+          }
+          throw err;
+        }
       },
       () => {},
     );

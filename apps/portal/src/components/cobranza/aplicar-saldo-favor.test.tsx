@@ -32,8 +32,9 @@ const PLAN: PlanDeCobro = {
 
 function renderizar() {
   const onAplicado = vi.fn();
-  render(<AplicarSaldoFavor cliente={CLIENTE} palomeadas={[N1, N2]} onAplicado={onAplicado} />);
-  return { usuario: userEvent.setup(), onAplicado };
+  const onDesactualizado = vi.fn();
+  render(<AplicarSaldoFavor cliente={CLIENTE} palomeadas={[N1, N2]} onAplicado={onAplicado} onDesactualizado={onDesactualizado} />);
+  return { usuario: userEvent.setup(), onAplicado, onDesactualizado };
 }
 
 describe("AplicarSaldoFavor", () => {
@@ -78,5 +79,15 @@ describe("AplicarSaldoFavor", () => {
     const { usuario } = renderizar();
     await usuario.click(screen.getByRole("button", { name: "Vista previa" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Las notas marcadas solo deben $160.00");
+  });
+
+  it("un 409 'ya no tiene saldo' al aplicar pide recargar el cliente con el mensaje del servidor", async () => {
+    const mensaje = "La nota TJ240401OF01 ya no tiene saldo; vuelve a cargar.";
+    aplicarSaldoFavor.mockRejectedValue(new ErrorApi("x", 409, mensaje));
+    const { usuario, onAplicado, onDesactualizado } = renderizar();
+    await usuario.click(screen.getByRole("button", { name: "Vista previa" }));
+    await usuario.click(await screen.findByRole("button", { name: "Aplicar saldo a favor" }));
+    expect(onDesactualizado).toHaveBeenCalledWith(mensaje);
+    expect(onAplicado).not.toHaveBeenCalled();
   });
 });

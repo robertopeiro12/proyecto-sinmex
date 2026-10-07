@@ -14,6 +14,7 @@ import {
   type PlanDeCobro,
 } from "@/lib/cobranzas";
 import { formatearPesos } from "@/lib/ventas";
+import { esNotaSinSaldo } from "./registrar-pago";
 import { VistaPreviaCobro } from "./vista-previa-cobro";
 
 /**
@@ -29,10 +30,13 @@ export function AplicarSaldoFavor({
   cliente,
   palomeadas,
   onAplicado,
+  onDesactualizado,
 }: {
   cliente: ClientePorCobrar;
   palomeadas: NotaPorCobrar[];
   onAplicado: (mensaje: string) => void;
+  /** Recarga el cliente conservando este mensaje (el 409 "ya no tiene saldo"). */
+  onDesactualizado: (mensaje: string) => void;
 }) {
   const deben = palomeadas.reduce((t, n) => t + n.saldoCentavos, 0);
   const [montoTexto, setMontoTexto] = useState(() => textoMonto(Math.min(cliente.saldoFavorCentavos, deben)));
@@ -72,9 +76,18 @@ export function AplicarSaldoFavor({
     if (plan === null || monto === null) return;
     await enviar(
       async () => {
-        const r = await aplicarSaldoFavor({ clienteId: cliente.id, notaIds, montoCentavos: monto });
-        setVista(null);
-        onAplicado(`Saldo a favor aplicado: ${formatearPesos(r.montoCentavos)} a ${r.cliente}`);
+        try {
+          const r = await aplicarSaldoFavor({ clienteId: cliente.id, notaIds, montoCentavos: monto });
+          setVista(null);
+          onAplicado(`Saldo a favor aplicado: ${formatearPesos(r.montoCentavos)} a ${r.cliente}`);
+        } catch (err) {
+          if (esNotaSinSaldo(err)) {
+            setVista(null);
+            onDesactualizado(err.mensajeApi ?? "Una nota ya no tiene saldo; vuelve a cargar.");
+            return;
+          }
+          throw err;
+        }
       },
       () => {},
     );

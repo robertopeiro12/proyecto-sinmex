@@ -1,5 +1,5 @@
 begin;
-select plan(12);
+select plan(14);
 
 -- T-21: cobranza desde el portal. Lo que la BASE garantiza aunque alguien
 -- escriba por debajo del servicio. Prefijo `zz-pgtap-t21`.
@@ -94,6 +94,22 @@ select throws_ok(
     select cliente, null, 10.00, 'ajuste', '2026-10-07' from _t21$$,
   '23514', null,
   'otro origen de saldo a favor no entra'
+);
+
+select throws_ok(
+  $$insert into saldo_favor_movimiento
+      (cliente_id, vendedor_id, monto, origen, fecha_operacion, capturo_usuario_id)
+    select cliente, null, 50.00, 'aplicacion', '2026-10-07', usuario from _t21$$,
+  '23514', null,
+  'una aplicacion con monto positivo no entra (ck_saldo_favor_signo)'
+);
+
+select throws_ok(
+  $$insert into saldo_favor_movimiento
+      (cliente_id, vendedor_id, monto, origen, fecha_operacion)
+    select cliente, null, -50.00, 'excedente_cobro', '2026-10-07' from _t21$$,
+  '23514', null,
+  'un excedente con monto negativo no entra (ck_saldo_favor_signo)'
 );
 
 select * from finish();

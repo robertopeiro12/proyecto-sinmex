@@ -193,7 +193,7 @@ export function CobranzaCliente({
           ))}
 
         {datos && palomeadas.length > 0 && (
-          <RegistrarPago key={version} cliente={datos} palomeadas={palomeadas} onRegistrado={recargar} />
+          <RegistrarPago key={version} cliente={datos} palomeadas={palomeadas} onRegistrado={recargar} onDesactualizado={recargar} />
         )}
 
         {datos && datos.saldoFavorCentavos > 0 && palomeadas.length > 0 && (
@@ -202,6 +202,7 @@ export function CobranzaCliente({
             cliente={datos}
             palomeadas={palomeadas}
             onAplicado={recargar}
+            onDesactualizado={recargar}
           />
         )}
       </CardContent>

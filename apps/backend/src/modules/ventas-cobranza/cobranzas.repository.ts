@@ -219,6 +219,12 @@ export class CobranzasRepository {
    * devuelve sus montos (texto `numeric`). Se llama DESPUES de bloquear sus
    * notas, como el cobro: mismo orden de candados, sin abrazo mortal (T-21).
    * Un excedente que entre a la vez solo SUBE el saldo: no hace falta frenarlo.
+   *
+   * OJO: la protección real contra dos aplicaciones de saldo a favor a la vez es
+   * el candado anterior sobre las notas del cliente (las dos comparten siempre
+   * al menos una nota bloqueada, así que se serializan). El `for update` de
+   * este método, solo, NO alcanza: bajo READ COMMITTED no ve las filas que otra
+   * transacción inserta al mismo tiempo. Nadie debe quitar el candado de notas.
    */
   async bloquearSaldoFavor(
     clienteId: string,

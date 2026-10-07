@@ -1115,7 +1115,12 @@ No ejecutes nada contra `sinmex dev`. Estas consultas van en el PR (Tarea 9) par
 antes de `db push`; cada una debe dar **0**:
 
 ```sql
-select count(*) from cobranza_abono where folio is not null;
+-- Folios reales de cobro de la tablet (no copias): si no da 0, PARAR y preguntar a Roberto
+-- (el cliente dijo que la cobranza no lleva folio; borrarlos es una decision).
+select count(*) from cobranza_abono where folio is not null and origen <> 'venta_contado';
+-- Solo copias del folio de la venta (T-17/T-20): debe dar 0.
+select count(*) from cobranza_abono ca join venta_nota vn on vn.id = ca.venta_nota_id
+ where ca.origen = 'venta_contado' and ca.folio is distinct from vn.folio;
 select count(*) from saldo_favor_movimiento where folio is not null;
 select count(*) from cobranza_abono
  where metodo_pago not in ('efectivo', 'transferencia', 'cheque', 'saldo_favor');
@@ -1125,10 +1130,12 @@ select count(*) from cobranza_abono
  where (origen = 'saldo_favor') <> (metodo_pago = 'saldo_favor');
 select count(*) from saldo_favor_movimiento
  where origen not in ('excedente_cobro', 'aplicacion');
+select count(*) from saldo_favor_movimiento
+ where not ((origen = 'aplicacion' and monto < 0) or (origen = 'excedente_cobro' and monto > 0));
 ```
 
-Si la primera no da 0 (hay cobros o ventas de contado en la nube), **no se empuja**: se le avisa a Roberto,
-porque borrar la columna perdería ese dato.
+Si la primera (folios reales de cobro) no da 0, **no se empuja**: se le avisa a Roberto, porque borrar la columna
+perdería ese dato. La segunda debe dar 0: prueba que lo que queda en `venta_contado` son solo copias del folio de la venta.
 
 - [ ] **Paso 9: Commit**
 
@@ -7904,12 +7911,19 @@ ningún lado (respuesta del cliente, 2026-10-07).
 ### Migración `20261007160000_cobranza_portal` — pre-flight en `sinmex dev` (todas deben dar 0)
 
 ```sql
-select count(*) from cobranza_abono where folio is not null;
+-- Folios reales de cobro de la tablet (no copias): si no da 0, PARAR y preguntar a Roberto
+-- (el cliente dijo que la cobranza no lleva folio; borrarlos es una decision).
+select count(*) from cobranza_abono where folio is not null and origen <> 'venta_contado';
+-- Solo copias del folio de la venta (T-17/T-20): debe dar 0.
+select count(*) from cobranza_abono ca join venta_nota vn on vn.id = ca.venta_nota_id
+ where ca.origen = 'venta_contado' and ca.folio is distinct from vn.folio;
 select count(*) from saldo_favor_movimiento where folio is not null;
 select count(*) from cobranza_abono where metodo_pago not in ('efectivo','transferencia','cheque','saldo_favor');
 select count(*) from cobranza_abono where origen not in ('venta_contado','cobro','saldo_favor');
 select count(*) from cobranza_abono where (origen = 'saldo_favor') <> (metodo_pago = 'saldo_favor');
 select count(*) from saldo_favor_movimiento where origen not in ('excedente_cobro','aplicacion');
+select count(*) from saldo_favor_movimiento
+ where not ((origen = 'aplicacion' and monto < 0) or (origen = 'excedente_cobro' and monto > 0));
 ```
 
 Si la primera no da 0, no empujar: borrar la columna perdería ese dato. Si `main` ya tiene una migración con

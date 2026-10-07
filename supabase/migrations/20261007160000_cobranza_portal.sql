@@ -34,6 +34,10 @@ alter table saldo_favor_movimiento drop constraint saldo_favor_movimiento_origen
 alter table saldo_favor_movimiento add constraint ck_saldo_favor_origen
   check (origen in ('excedente_cobro', 'aplicacion'));
 
+-- Defensa en profundidad: el excedente suma al saldo a favor y la aplicación resta.
+alter table saldo_favor_movimiento add constraint ck_saldo_favor_signo
+  check ((origen = 'aplicacion' and monto < 0) or (origen = 'excedente_cobro' and monto > 0));
+
 drop index if exists idx_cobranza_abono_folio;
 alter table cobranza_abono drop column folio;
 alter table saldo_favor_movimiento drop column folio;

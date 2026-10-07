@@ -40,8 +40,11 @@ const PLAN: PlanDeCobro = {
 
 function renderizar() {
   const onRegistrado = vi.fn();
-  render(<RegistrarPago cliente={CLIENTE} palomeadas={[N2, N1]} onRegistrado={onRegistrado} />);
-  return { usuario: userEvent.setup(), onRegistrado };
+  const onDesactualizado = vi.fn();
+  render(
+    <RegistrarPago cliente={CLIENTE} palomeadas={[N2, N1]} onRegistrado={onRegistrado} onDesactualizado={onDesactualizado} />,
+  );
+  return { usuario: userEvent.setup(), onRegistrado, onDesactualizado };
 }
 
 describe("RegistrarPago", () => {
@@ -128,17 +131,34 @@ describe("RegistrarPago", () => {
     expect(screen.queryByRole("button", { name: "Grabar cobro" })).not.toBeInTheDocument();
   });
 
-  it("muestra el mensaje del servidor", async () => {
-    registrarCobro.mockRejectedValue(
-      new ErrorApi("x", 409, "La nota TJ240401OF01 ya no tiene saldo; vuelve a cargar."),
-    );
-    const { usuario, onRegistrado } = renderizar();
+  it("muestra el mensaje del servidor cuando el 409 no es de saldo", async () => {
+    registrarCobro.mockRejectedValue(new ErrorApi("x", 409, "Otro conflicto del servidor."));
+    const { usuario, onRegistrado, onDesactualizado } = renderizar();
     await usuario.type(screen.getByLabelText("Monto"), "150");
     await usuario.click(screen.getByRole("button", { name: "Vista previa" }));
     await usuario.click(await screen.findByRole("button", { name: "Grabar cobro" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "La nota TJ240401OF01 ya no tiene saldo; vuelve a cargar.",
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("Otro conflicto del servidor.");
     expect(onRegistrado).not.toHaveBeenCalled();
+    expect(onDesactualizado).not.toHaveBeenCalled();
+  });
+
+  it("un 409 'ya no tiene saldo' pide recargar el cliente con el mensaje del servidor", async () => {
+    const mensaje = "La nota TJ240401OF01 ya no tiene saldo; vuelve a cargar.";
+    registrarCobro.mockRejectedValue(new ErrorApi("x", 409, mensaje));
+    const { usuario, onRegistrado, onDesactualizado } = renderizar();
+    await usuario.type(screen.getByLabelText("Monto"), "150");
+    await usuario.click(screen.getByRole("button", { name: "Vista previa" }));
+    await usuario.click(await screen.findByRole("button", { name: "Grabar cobro" }));
+    expect(onDesactualizado).toHaveBeenCalledWith(mensaje);
+    expect(onRegistrado).not.toHaveBeenCalled();
+  });
+
+  it("una fecha de pago vacía dice 'Elige la fecha del pago.' antes que lo de la nota más vieja", async () => {
+    const { usuario } = renderizar();
+    await usuario.type(screen.getByLabelText("Monto"), "150");
+    fireEvent.change(screen.getByLabelText("Fecha del pago"), { target: { value: "" } });
+    await usuario.click(screen.getByRole("button", { name: "Vista previa" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Elige la fecha del pago.");
+    expect(vistaPreviaCobro).not.toHaveBeenCalled();
   });
 });
