@@ -85,6 +85,7 @@ describe("BuscarFacturas", () => {
     expect(confirmar).toHaveBeenCalledWith(expect.stringContaining("la factura A708 desaparece"));
     expect(await screen.findByRole("status")).toHaveTextContent("La factura A708 se borró: ya no tenía ventas.");
     expect(screen.queryByText("Factura A708")).not.toBeInTheDocument();
+    expect(screen.queryByText("No se encontraron facturas.")).not.toBeInTheDocument();
   });
 
   it("muestra el mensaje del servidor al renombrar", async () => {

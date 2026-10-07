@@ -105,7 +105,8 @@ export function BuscarFacturas({ sucursal }: { sucursal: string | null }) {
         </p>
       )}
 
-      {facturas !== null && facturas.length === 0 && (
+      {/* Tras borrar la ultima, el aviso ya explica por que no hay ninguna. */}
+      {facturas !== null && facturas.length === 0 && !aviso && (
         <p className="text-sm text-muted-foreground">No se encontraron facturas.</p>
       )}
 
