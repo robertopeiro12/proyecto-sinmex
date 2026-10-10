@@ -33,6 +33,7 @@ export function FormularioVehiculo({
   const eligeSucursal = esAlta && usuario !== null && usuario.sucursal === null;
 
   const [nombre, setNombre] = useState(vehiculo?.nombre ?? "");
+  const [placas, setPlacas] = useState(vehiculo?.placas ?? "");
   const [km, setKm] = useState(vehiculo?.kmInicial?.toString() ?? "");
   const [activo, setActivo] = useState(vehiculo?.activo ?? true);
   const [sucursalId, setSucursalId] = useState("");
@@ -69,11 +70,16 @@ export function FormularioVehiculo({
         vehiculo
           ? editarVehiculo(vehiculo.id, {
               nombre,
+              // Un vehiculo anterior a T-68 puede no tener placas: si se deja
+              // vacio no se manda, para que editarlo no truene (el backend
+              // rechaza "" con 400). Uno que ya las tiene no puede borrarlas.
+              ...(placas.trim() !== "" ? { placas } : {}),
               kmInicial: kmNumero,
               activo,
             })
           : crearVehiculo({
               nombre,
+              placas,
               kmInicial: kmNumero,
               // Solo va cuando el usuario de verdad eligio una. A un usuario
               // atado el backend se lo ignoraria igual, pero mandarlo seria
@@ -108,6 +114,23 @@ export function FormularioVehiculo({
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
             className="rounded-md border px-3 py-2 text-sm"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="placas" className="text-sm font-medium">
+            Placas
+          </label>
+          <input
+            id="placas"
+            name="placas"
+            required={esAlta || vehiculo.placas !== null}
+            maxLength={20}
+            disabled={enviando}
+            placeholder="ABC-123"
+            value={placas}
+            onChange={(e) => setPlacas(e.target.value)}
+            className="w-40 rounded-md border px-3 py-2 text-sm"
           />
         </div>
 

@@ -112,6 +112,11 @@ export interface Cliente {
    * siempre. Ver la migracion `002-sincronizacion.ts`.
    */
   activo: Booleano;
+  /**
+   * Saldo a favor en centavos (T-20, D5): el que manda el pull mas el excedente
+   * de los cobros locales. Solo se muestra; usarlo es del portal.
+   */
+  saldo_favor_centavos: number;
   sincronizado_en: MomentoISO;
 }
 
@@ -139,13 +144,61 @@ export interface NotaPendiente {
   id: string;
   cliente_id: string;
   folio: string;
-  num_nota: string;
+  /** `null` si no hubo nota de papel (lo normal; ver migracion 009). */
+  num_nota: string | null;
   fecha: FechaISO;
   status: StatusNotaPendiente;
   monto_total_centavos: number;
   saldo_centavos: number;
+  /**
+   * `AbonoNota[]` en JSON (T-20): los del pull mas los cobrados sin red. Se lee
+   * con `leerAbonos`, que tolera un texto corrupto.
+   */
+  abonos_json: string;
   activo: Booleano;
   sincronizado_en: MomentoISO;
+}
+
+export type MetodoPago = 'efectivo' | 'transferencia' | 'cheque';
+
+/**
+ * Metodo de un abono que baja del servidor (T-21): ademas de los del cobro,
+ * `saldo_favor` cuando la oficina aplico saldo a favor a la nota. La tablet no
+ * cobra con saldo a favor; solo lo muestra.
+ */
+export type MetodoPagoAbono = MetodoPago | 'saldo_favor';
+
+/** Un abono de una nota, para mostrar los pagos previos (T-20). */
+export interface AbonoNota {
+  fecha_pago: FechaISO;
+  monto_centavos: number;
+  metodo_pago: MetodoPagoAbono;
+}
+
+/**
+ * Un cobro grabado en la tablet (T-20). Ver las migraciones `008-cobranzas.ts`
+ * y `010-cobranza-sin-folio.ts`: **sin folio** desde T-21.
+ *
+ * No guarda el reparto: lo recalcula el servidor. No se edita.
+ */
+export interface Cobranza {
+  /** uuid v4 generado al grabar. Es la clave de idempotencia del push. */
+  id: string;
+  /** Dia de trabajo (`reloj.hoy()`), el de `fecha_operacion`. */
+  fecha: FechaISO;
+  cliente_id: string;
+  vendedor_id: string;
+  sucursal_id: string;
+  /** La nota que eligio el vendedor (id del servidor, bajado en el pull). */
+  venta_nota_id: string;
+  monto_centavos: number;
+  metodo_pago: MetodoPago;
+  fecha_pago: FechaISO;
+  grabada_en: MomentoISO;
+  sync_estado: SyncEstado;
+  /** Motivo con el que el servidor lo rechazo, si `sync_estado = 'error'`. */
+  sync_error: string | null;
+  sincronizado_en: MomentoISO | null;
 }
 
 export type EstadoJornada = 'abierta' | 'cerrada';
@@ -187,7 +240,8 @@ export interface Venta {
   vendedor_id: string;
   sucursal_id: string;
   folio: string;
-  num_nota: string;
+  /** `null` si no hubo nota de papel (lo normal; ver migracion 009). */
+  num_nota: string | null;
   contado_credito: ContadoCredito;
   factura: FacturaVenta;
   comentarios: string | null;
@@ -228,18 +282,46 @@ export interface Prospecto {
   sucursal_id: string;
   nombre: string;
   telefono: string;
-  encargado: string | null;
+  /**
+   * Obligatorio desde T-69, pero la columna local sigue siendo nullable
+   * (migracion 006): una fila capturada antes de T-69 puede traer `null`, y el
+   * servidor la rechazaria por operacion (`datos-invalidos`).
+   */
+  encargado: string;
   tipo_negocio_id: string | null;
   comentarios: string | null;
   /** Las dos o ninguna. `null` si el vendedor nego el permiso o no hubo GPS. */
   lat: number | null;
   lng: number | null;
   /**
-   * Ruta local de la foto del lugar. **Previsto y sin usar todavia**: falta
-   * decidir donde se guarda el archivo (candidato Supabase Storage, alcance que
-   * ADR-0002 dejo abierto). La captura es un ticket aparte.
+   * Ruta local de la foto del lugar, ya comprimida. `null` si el vendedor no
+   * tomo foto — que es un prospecto **completo**, no uno a medias.
+   *
+   * El archivo vive en la cache del equipo y sube por un canal aparte del push,
+   * despues de que el prospecto fue aceptado. Ver `src/fotos/`.
    */
   foto_uri: string | null;
+  /**
+   * Cuando la recibio el SERVIDOR, tal como lo devolvio. `null` = todavia no
+   * esta arriba.
+   *
+   * Es el reloj de alla y no el de la tablet a proposito: es el unico dato que
+   * confirma que la foto llego al otro lado.
+   */
+  foto_subida_en: MomentoISO | null;
+  /** Ultimo motivo por el que la foto no subio. Se limpia al subir. */
+  foto_error: string | null;
+  /**
+   * `1` = no recuperable, se deja de reintentar.
+   *
+   * Son los tres fallos que **no se arreglan reintentando**: el servidor
+   * responde 413 si la foto pasa de 2 MB, 415 si el contenido no es un JPEG de
+   * verdad, y el archivo local pudo desaparecer con una limpieza de cache.
+   * Mandar los mismos bytes otra vez da la misma respuesta, asi que sin esta
+   * bandera la tablet reintentaria para siempre. Un fallo de red **si** se
+   * reintenta.
+   */
+  foto_descartada: Booleano;
   grabado_en: MomentoISO;
   sync_estado: SyncEstado;
   /** Motivo por el que el servidor lo rechazo, si `sync_estado = 'error'`. */

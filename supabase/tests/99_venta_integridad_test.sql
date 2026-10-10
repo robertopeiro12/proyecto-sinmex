@@ -55,8 +55,8 @@ select lives_ok(
   'acepta una venta con comentarios de 500 caracteres y el % de comision congelado'
 );
 
--- `num_nota` es el numero de la nota fisica: obligatorio (D7). Uno en blanco
--- no se puede cotejar contra ningun papel.
+-- `num_nota` es el numero de la nota fisica. Desde 2026-10-06 es opcional
+-- (null = no hubo papel), pero uno en blanco no es "sin nota": es basura.
 select throws_ok(
   $$insert into venta_nota
       (folio, fecha, cliente_id, vendedor_id, monto_total, num_nota,

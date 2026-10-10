@@ -4,6 +4,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { OPCIONES_NEST, configurarApp } from './../src/configurar-app';
+import { iniciarEnLocal } from './apoyo-servidor';
 import {
   DB_CONNECTION,
   type Database,
@@ -119,7 +120,7 @@ describe('Usuarios (e2e)', () => {
 
     app = moduleFixture.createNestApplication(OPCIONES_NEST);
     configurarApp(app);
-    await app.init();
+    await iniciarEnLocal(app);
     db = app.get<Database>(DB_CONNECTION);
 
     const tj = await db

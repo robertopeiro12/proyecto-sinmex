@@ -6,6 +6,7 @@ import { buscarSucursalUsuario as buscarSucursalUsuarioCompartido } from '../suc
 export interface Vehiculo {
   id: string;
   nombre: string;
+  placas: string | null;
   kmInicial: number | null;
   sucursalId: string;
   sucursalCodigo: string;
@@ -24,6 +25,7 @@ export interface Vehiculo {
 function aVehiculo(fila: {
   id: string;
   nombre: string;
+  placas: string | null;
   km_inicial: string | null;
   sucursal_id: string;
   codigo: string;
@@ -32,6 +34,7 @@ function aVehiculo(fila: {
   return {
     id: fila.id,
     nombre: fila.nombre,
+    placas: fila.placas,
     kmInicial: aNumero(fila.km_inicial),
     sucursalId: fila.sucursal_id,
     sucursalCodigo: fila.codigo,
@@ -59,6 +62,7 @@ export class VehiculosRepository {
       .select([
         'vehiculo.id',
         'vehiculo.nombre',
+        'vehiculo.placas',
         'vehiculo.km_inicial',
         'vehiculo.sucursal_id',
         'sucursal.codigo',
@@ -79,6 +83,7 @@ export class VehiculosRepository {
       .select([
         'vehiculo.id',
         'vehiculo.nombre',
+        'vehiculo.placas',
         'vehiculo.km_inicial',
         'vehiculo.sucursal_id',
         'sucursal.codigo',
@@ -98,13 +103,26 @@ export class VehiculosRepository {
    */
   async crear(
     nombre: string,
+    placas: string,
     kmInicial: number,
     sucursalId: string,
   ): Promise<Vehiculo> {
     const fila = await this.db
       .insertInto('vehiculo')
-      .values({ nombre, km_inicial: kmInicial, sucursal_id: sucursalId })
-      .returning(['id', 'nombre', 'km_inicial', 'sucursal_id', 'activo'])
+      .values({
+        nombre,
+        placas,
+        km_inicial: kmInicial,
+        sucursal_id: sucursalId,
+      })
+      .returning([
+        'id',
+        'nombre',
+        'placas',
+        'km_inicial',
+        'sucursal_id',
+        'activo',
+      ])
       .executeTakeFirstOrThrow();
 
     const sucursal = await this.db
@@ -123,6 +141,7 @@ export class VehiculosRepository {
       .select([
         'vehiculo.id',
         'vehiculo.nombre',
+        'vehiculo.placas',
         'vehiculo.km_inicial',
         'vehiculo.sucursal_id',
         'sucursal.codigo',
@@ -144,13 +163,25 @@ export class VehiculosRepository {
    */
   async actualizar(
     id: string,
-    cambios: { nombre?: string; km_inicial?: number; activo?: boolean },
+    cambios: {
+      nombre?: string;
+      placas?: string;
+      km_inicial?: number;
+      activo?: boolean;
+    },
   ): Promise<Vehiculo> {
     const fila = await this.db
       .updateTable('vehiculo')
       .set(cambios)
       .where('id', '=', id)
-      .returning(['id', 'nombre', 'km_inicial', 'sucursal_id', 'activo'])
+      .returning([
+        'id',
+        'nombre',
+        'placas',
+        'km_inicial',
+        'sucursal_id',
+        'activo',
+      ])
       .executeTakeFirstOrThrow();
 
     const sucursal = await this.db

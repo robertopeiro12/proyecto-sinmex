@@ -3,6 +3,7 @@ import { apiFetch } from "./api";
 export interface Vehiculo {
   id: string;
   nombre: string;
+  placas: string | null;
   kmInicial: number | null;
   sucursalId: string;
   sucursalCodigo: string;
@@ -23,6 +24,7 @@ export function listarVehiculos(
 
 export function crearVehiculo(datos: {
   nombre: string;
+  placas: string;
   kmInicial: number;
   /** Solo lo manda un usuario General: al resto se le ignora (D3). */
   sucursalId?: string;
@@ -35,7 +37,12 @@ export function crearVehiculo(datos: {
 
 export function editarVehiculo(
   id: string,
-  cambios: { nombre?: string; kmInicial?: number; activo?: boolean },
+  cambios: {
+    nombre?: string;
+    placas?: string;
+    kmInicial?: number;
+    activo?: boolean;
+  },
 ): Promise<Vehiculo> {
   return apiFetch<Vehiculo>(`/vehiculos/${id}`, {
     method: "PATCH",

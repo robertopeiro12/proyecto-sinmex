@@ -83,27 +83,32 @@ export function CeldaPrecio({
 
   if (!editable) {
     return (
-      <span>{precioInicial === null ? "—" : precioInicial.toFixed(2)}</span>
+      <span>
+        {precioInicial === null ? "—" : `$${precioInicial.toFixed(2)}`}
+      </span>
     );
   }
 
   return (
     <div className="flex flex-col gap-0.5">
-      <input
-        type="number"
-        min={0.01}
-        step="0.01"
-        placeholder="Sin precio"
-        aria-label="Precio"
-        disabled={enviando}
-        value={valor}
-        onChange={(e) => setValor(e.target.value)}
-        onBlur={() => void guardar()}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") e.currentTarget.blur();
-        }}
-        className="w-24 rounded-md border px-2 py-1 text-sm"
-      />
+      <div className="flex w-24 items-center rounded-md border pl-2 has-[input:disabled]:opacity-50">
+        <span className="text-sm text-muted-foreground">$</span>
+        <input
+          type="number"
+          min={0.01}
+          step="0.01"
+          placeholder="Sin precio"
+          aria-label="Precio"
+          disabled={enviando}
+          value={valor}
+          onChange={(e) => setValor(e.target.value)}
+          onBlur={() => void guardar()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.currentTarget.blur();
+          }}
+          className="w-full min-w-0 border-0 px-1.5 py-1 text-sm focus-visible:outline-none"
+        />
+      </div>
       {error && <span className="text-xs text-destructive">{error}</span>}
     </div>
   );

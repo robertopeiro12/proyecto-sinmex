@@ -63,7 +63,7 @@ export const MAX_BYTES_POR_LOTE = 1_000_000;
  * `datos` y lo proyecta a sus tablas (ADR-0009).
  *
  * Hecho: T-16 — `venta` (cabecera + lineas, ver {@link DatosVenta} y [[Venta-Nota]]).
- * TODO: T-20 — `cobranza` (abono/liquidacion sobre una nota, ver [[Cobranza-Abono]]).
+ * Hecho: T-20 — `cobranza` (abono/liquidacion sobre una nota, ver {@link DatosCobranza} y [[Cobranza-Abono]]).
  * TODO: T-27 — `gasto` (hielo, gasolina, reparacion, adelanto).
  * TODO: T-33 — `merma` (los 3 tipos de merma del documento de julio 2026).
  * TODO: T-39 — `ruta` (visitas, orden real, tiempos y GPS).
@@ -163,6 +163,17 @@ export const CODIGOS_RECHAZO = [
    * ademas le baja el catalogo nuevo — igual que `presentacion-inactiva`.
    */
   'tipo-negocio-inexistente',
+  /**
+   * La nota que se cobra no existe, su cliente no es de la sucursal del
+   * vendedor, o no es del `cliente_id` del sobre. T-20.
+   *
+   * Una nota que en el servidor ya esta pagada, de cuenta perdida, de promocion o
+   * borrada **no** cae aqui: el cobro se
+   * acepta y el monto va a las otras notas y al saldo a favor (el dinero si se
+   * cobro). Una cobranza sobre una venta que aun no se proyecto si cae aqui, y
+   * la tablet la reenvia en cada sincronizacion.
+   */
+  'nota-no-encontrada',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -198,7 +209,12 @@ export type LineaVenta = {
  * tiene la firma de indice implicita que eso exige.
  */
 export type DatosVenta = {
-  num_nota: string;
+  /**
+   * El # del block de papel, **opcional**: el block solo se usa cuando falla
+   * el sistema (cliente, 2026-10-06). Ausente, `null` o en blanco es "sin
+   * nota". No es unico: lo que identifica la venta es el folio.
+   */
+  num_nota?: string | null;
   contado_credito: 'contado' | 'credito';
   factura: 'N/A' | 'pendiente';
   comentarios: string | null;
@@ -229,11 +245,16 @@ export type DatosVenta = {
  * la firma de indice implicita que eso exige.
  */
 export type DatosProspecto = {
-  /** Nombre del negocio. Lo unico obligatorio junto al telefono. */
+  /** Nombre del negocio. */
   nombre: string;
   telefono: string;
-  /** Nombre del encargado. */
-  encargado: string | null;
+  /**
+   * Nombre del encargado: quien atiende el negocio. Obligatorio junto con
+   * `nombre` y `telefono` (confirmado por el cliente en junta, 2026-09-29 —
+   * antes era opcional). No subió la versión del contrato: ver
+   * `docs/contrato-sincronizacion.md` §6 (nota de T-69).
+   */
+  encargado: string;
   /** Del catalogo `tipos_negocio` que baja en el `pull`. */
   tipo_negocio_id: string | null;
   comentarios: string | null;
@@ -258,6 +279,44 @@ export type DatosProspecto = {
    * servidor lo ignora. **La captura es un ticket aparte.**
    */
   foto: null;
+};
+
+/** Catalogo de metodos de pago ([[Cobranza-Abono]]). En la app el default es `efectivo`. */
+export type MetodoPago = 'efectivo' | 'transferencia' | 'cheque';
+
+/**
+ * Metodo de un abono que BAJA en el pull (T-21): el de los cobros mas
+ * `saldo_favor`, que es la oficina aplicando saldo a favor (no entro dinero).
+ * La tablet nunca lo manda en un push: `DatosCobranza.metodo_pago` sigue siendo
+ * {@link MetodoPago}. Aditivo: una tablet vieja guarda los abonos como JSON sin
+ * validar el metodo y lo muestra tal cual.
+ */
+export type MetodoPagoAbono = MetodoPago | 'saldo_favor';
+
+/**
+ * `datos` de una operacion `tipo: "cobranza"` (T-20).
+ *
+ * Un pago del cliente sobre UNA nota que eligio el vendedor. `cliente_id`
+ * viaja en el **sobre** y es obligatorio. **No lleva folio** (T-21, cliente
+ * 2026-10-07: "la cobranza no lleva folio"): si llega uno —una tablet sin
+ * actualizar— se ignora sin validarlo y no se guarda. No subio la version:
+ * ver `docs/contrato-sincronizacion.md` §6.
+ *
+ * El servidor reparte el monto: primero la nota elegida hasta su saldo,
+ * despues las otras notas pendientes del cliente de la mas vieja a la mas
+ * nueva, y lo que sobre queda como saldo a favor. Un monto mayor al saldo se
+ * acepta.
+ *
+ * Es `type` y no `interface` por la misma razon que {@link DatosVenta}.
+ */
+export type DatosCobranza = {
+  /** uuid de la `venta_nota` (el `id` de una nota pendiente del pull). */
+  venta_nota_id: string;
+  /** Entero, de 1 a 999_999_999_999. */
+  monto_centavos: number;
+  metodo_pago: MetodoPago;
+  /** `AAAA-MM-DD`, no posterior a `fecha_operacion`. Informativa: el corte cuenta por `fecha_operacion`. */
+  fecha_pago: string;
 };
 
 export interface ResultadoOperacion {
@@ -413,6 +472,12 @@ export interface ClientePull extends FilaSincronizable {
   lat: number | null;
   lng: number | null;
   sucursal_id: string;
+  /**
+   * Saldo a favor del cliente, en centavos: la suma de sus movimientos vivos de
+   * `saldo_favor_movimiento` (T-20, D5). La tablet solo lo muestra; usarlo es del
+   * portal. Aditivo: una tablet vieja lo ignora.
+   */
+  saldo_favor_centavos: number;
 }
 
 /**
@@ -432,24 +497,36 @@ export interface PrecioPull extends FilaSincronizable {
   vigente_desde: string;
 }
 
+/** Un abono vivo de una nota, para mostrar los pagos previos al cobrar (T-20). */
+export interface AbonoPull {
+  fecha_pago: string;
+  monto_centavos: number;
+  metodo_pago: MetodoPagoAbono;
+}
+
 /**
- * Nota pendiente por cobrar, para poder seleccionarla al cobrar/abonar sin red.
+ * Nota por cobrar, para poder seleccionarla al cobrar/abonar sin red.
  *
- * > [!warning] `saldo_centavos` viene de un campo almacenado
- * > Sale del `saldo_pendiente` del ultimo [[Cobranza-Abono|abono]] de la nota, y
- * > del monto total si aun no tiene ninguno. [[Cobranza-Abono]] deja
- * > **pendiente de confirmar** si el saldo debe ser almacenado o derivado
- * > (monto − Σ abonos); T-20 lo cerrara. Aqui se lee lo que hay, no se inventa
- * > un calculo.
+ * - `saldo_centavos` es **derivado** (T-20, D7): `monto_total − Σ abonos vivos`,
+ *   nunca negativo. `cobranza_abono.saldo_pendiente` es solo una foto.
+ * - Con `desde`, tambien bajan las notas a credito que dejaron de estar
+ *   pendientes (pagadas, de cuenta perdida, borradas) con `activo: 0`, para que la
+ *   tablet deje de ofrecerlas.
+ * - `status` **no se ensancha**: una nota cerrada viaja como `abonado` si tiene
+ *   abonos y como `pendiente` si no. Una tablet vieja guarda esta tabla con un
+ *   CHECK de esos dos valores y perderia el pull entero con otro.
  */
 export interface NotaPendientePull extends FilaSincronizable {
   folio: string;
-  num_nota: string;
+  /** `null` si la venta no tuvo nota de papel (lo normal). */
+  num_nota: string | null;
   fecha: string;
   cliente_id: string;
   status: 'pendiente' | 'abonado';
   monto_total_centavos: number;
   saldo_centavos: number;
+  /** Vivos, por fecha de pago. Aditivo: una tablet vieja lo ignora. */
+  abonos: AbonoPull[];
 }
 
 export interface RespuestaPull {

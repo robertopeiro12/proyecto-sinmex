@@ -136,6 +136,22 @@ apuntarlo a la IP del servidor en la red del negocio.
 > el hosting, que sigue pendiente en `ADR-0002`. Sin dispositivo tampoco se
 > puede comprobar. Hay que resolverlo antes de entregar tablets.
 
+> [!success] `minSdkVersion = 28` (Android 9) — decidido el 2026-09-18
+> Los equipos son celulares **personales** del vendedor (de fabricantes
+> distintos), no un modelo que la empresa compra y controla. Android 9 es el
+> corte porque ahi el sistema **empieza a bloquear trafico sin cifrar por
+> defecto** (ver el callout de arriba) y porque por debajo de Android 8 el
+> Keystore —donde viven el token de sesion y el verificador del PIN, ver
+> `src/sesion/almacen-secure-store.ts`— no cumple las suposiciones de
+> `ADR-0010` sobre PIN de arranque. Sin este piso, un equipo con Android 7 u 8
+> instala la app y queda fuera de todo lo que ese ADR decidio.
+>
+> Expo SDK 57 hereda un default de `minSdkVersion = 24` (Android 7.0) del
+> plugin de Gradle `expo-root-project` (`expo-modules-autolinking`), que es
+> menor que el piso decidido. `app.json` lo fija explicitamente con
+> `expo-build-properties`. Ver `30-Decisiones/ADR-0010 Equipos personales del
+> vendedor y PIN de arranque` en el vault.
+
 Alta de credenciales: `npm run crear-vendedor --workspace=apps/backend` (el CRUD
 de vendedores es **T-62**).
 

@@ -32,6 +32,8 @@ export interface Cliente {
   domicilio: string | null;
   encargado: string | null;
   factura: Generated<boolean>;
+  foto_archivo: string | null;
+  foto_subida_en: Timestamp | null;
   id: Generated<string>;
   lat: Numeric | null;
   lista_precio_id: string | null;
@@ -68,17 +70,36 @@ export interface ClientePromocionProducto {
 }
 
 export interface CobranzaAbono {
+  capturo_usuario_id: string | null;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
+  fecha_operacion: Timestamp;
   fecha_pago: Timestamp;
   id: Generated<string>;
   metodo_pago: string;
   monto: Numeric;
+  origen: Generated<string>;
   saldo_pendiente: Numeric;
   tipo: string;
   updated_at: Generated<Timestamp>;
-  vendedor_id: string;
+  vendedor_id: string | null;
   venta_nota_id: string;
+}
+
+export interface Factura {
+  actualizado_en: Timestamp | null;
+  actualizado_por_usuario_id: string | null;
+  cliente_id: string;
+  creado_en: Generated<Timestamp>;
+  creado_por_usuario_id: string;
+  id: Generated<string>;
+  numero: string;
+}
+
+export interface FolioOficinaContador {
+  fecha: Timestamp;
+  sucursal_id: string;
+  ultimo: number;
 }
 
 export interface ListaPrecio {
@@ -156,6 +177,19 @@ export interface Ruta {
   tipo: string;
   updated_at: Generated<Timestamp>;
   vendedor_id: string;
+}
+
+export interface SaldoFavorMovimiento {
+  capturo_usuario_id: string | null;
+  cliente_id: string;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  fecha_operacion: Timestamp;
+  id: Generated<string>;
+  monto: Numeric;
+  origen: string;
+  updated_at: Generated<Timestamp>;
+  vendedor_id: string | null;
 }
 
 export interface SesionRefresh {
@@ -245,6 +279,7 @@ export interface Vehiculo {
   id: Generated<string>;
   km_inicial: Numeric | null;
   nombre: string;
+  placas: string | null;
   sucursal_id: string;
   updated_at: Generated<Timestamp>;
 }
@@ -263,24 +298,31 @@ export interface Vendedor {
 }
 
 export interface VentaNota {
+  actualizado_por_usuario_id: string | null;
+  capturo_usuario_id: string | null;
   cliente_id: string;
   comentarios: string | null;
   contado_credito: string;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
-  factura: string | null;
+  eliminado_por_usuario_id: string | null;
+  factura: Generated<string>;
+  factura_asignada_en: Timestamp | null;
+  factura_asignada_por_usuario_id: string | null;
+  factura_id: string | null;
   fecha: Timestamp;
   folio: string;
   id: Generated<string>;
   mes: number;
   monto_total: Generated<Numeric>;
-  num_nota: string;
+  num_nota: string | null;
+  origen: Generated<string>;
   pct_comision: Numeric | null;
   semana: number;
   status: string;
   sucursal_id: string;
   updated_at: Generated<Timestamp>;
-  vendedor_id: string;
+  vendedor_id: string | null;
 }
 
 export interface VentaNotaDetalle {
@@ -300,6 +342,8 @@ export interface DB {
   cliente_precio: ClientePrecio;
   cliente_promocion_producto: ClientePromocionProducto;
   cobranza_abono: CobranzaAbono;
+  factura: Factura;
+  folio_oficina_contador: FolioOficinaContador;
   lista_precio: ListaPrecio;
   perfil: Perfil;
   perfil_permiso: PerfilPermiso;
@@ -308,6 +352,7 @@ export interface DB {
   presentacion: Presentacion;
   producto: Producto;
   ruta: Ruta;
+  saldo_favor_movimiento: SaldoFavorMovimiento;
   sesion_refresh: SesionRefresh;
   sesion_vendedor: SesionVendedor;
   sucursal: Sucursal;

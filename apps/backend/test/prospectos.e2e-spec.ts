@@ -4,6 +4,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { OPCIONES_NEST, configurarApp } from './../src/configurar-app';
+import { iniciarEnLocal } from './apoyo-servidor';
 import {
   DB_CONNECTION,
   type Database,
@@ -133,7 +134,7 @@ describe('Prospectos desde la app (e2e)', () => {
 
     app = moduleFixture.createNestApplication(OPCIONES_NEST);
     configurarApp(app);
-    await app.init();
+    await iniciarEnLocal(app);
     db = app.get<Database>(DB_CONNECTION);
 
     const sucursales = await db
@@ -319,7 +320,7 @@ describe('Prospectos desde la app (e2e)', () => {
       datos: {
         nombre: `${PREFIJO} Sin Ubicacion`,
         telefono: '6649998877',
-        encargado: null,
+        encargado: 'Encargado de prueba',
         tipo_negocio_id: null,
         comentarios: null,
         lat: null,
@@ -489,6 +490,24 @@ describe('Prospectos desde la app (e2e)', () => {
       codigo: 'datos-invalidos',
     });
     expect(cuerpo.resultados[0].motivo).toMatch(/^nombre:/);
+  });
+
+  it('un alta sin encargado se rechaza nombrando el campo', async () => {
+    const op = alta({
+      datos: {
+        nombre: `${PREFIJO} Sin Encargado`,
+        telefono: '6641112233',
+        foto: null,
+      },
+    });
+
+    const cuerpo = (await push({ operaciones: [op] }).expect(200))
+      .body as RespuestaPush;
+    expect(cuerpo.resultados[0]).toMatchObject({
+      estado: 'rechazada',
+      codigo: 'datos-invalidos',
+    });
+    expect(cuerpo.resultados[0].motivo).toMatch(/^encargado:/);
   });
 
   it('una coordenada que no cabe en numeric(9,6) se rechaza y NO revienta el lote', async () => {

@@ -33,6 +33,7 @@ export interface LineaRegistroVenta {
 export interface DatosRegistroVenta {
   vendedorId: string;
   clienteId: string;
+  /** El # del block de papel; en blanco = sin nota (se graba null). */
   numNota: string;
   contadoCredito: ContadoCredito;
   factura: FacturaVenta;
@@ -150,7 +151,7 @@ export function crearRepositorioVentas(
             $vendedor_id: datos.vendedorId,
             $sucursal_id: emitido.sucursal_id,
             $folio: emitido.folio,
-            $num_nota: datos.numNota.trim(),
+            $num_nota: datos.numNota.trim() || null,
             $contado_credito: datos.contadoCredito,
             $factura: datos.factura,
             $comentarios: comentarios,

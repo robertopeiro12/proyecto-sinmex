@@ -13,7 +13,11 @@ const operacion = (
   ocurridoEn: '2026-09-14T18:03:22.000Z',
   clienteId: null,
   folio: null,
-  datos: { nombre: 'Tacos Aaron', telefono: '6641112233' },
+  datos: {
+    nombre: 'Tacos Aaron',
+    telefono: '6641112233',
+    encargado: 'Don Aaron',
+  },
   ...extra,
 });
 
@@ -26,6 +30,7 @@ describe('prepararProspecto', () => {
     expect(r.prospecto).toMatchObject({
       nombre: 'Tacos Aaron',
       telefono: '6641112233',
+      encargado: 'Don Aaron',
       lat: null,
       lng: null,
     });

@@ -1,3 +1,5 @@
+import { SEGMENTO_OFICINA } from './folio';
+
 /**
  * El 5o segmento del [[Folios|folio]]: las 2 letras que identifican al
  * [[Vendedor]] (T-14).
@@ -45,6 +47,14 @@
 /** Acentos y enes que el folio no puede llevar: el segmento es A-Z. */
 const ACENTOS = 'áàäâãéèëêíìïîóòöôõúùüûñçÁÀÄÂÃÉÈËÊÍÌÏÎÓÒÖÔÕÚÙÜÛÑÇ';
 const SIN_ACENTOS = 'aaaaaeeeeiiiiooooouuuuncAAAAAEEEEIIIIOOOOOUUUUNC';
+
+/**
+ * Lo que lee quien da de alta un vendedor cuyas iniciales dan `OF` (T-17). Se
+ * rechaza en vez de ceder a la siguiente combinacion, igual que unas iniciales
+ * tomadas (ADR-0007).
+ */
+export const MOTIVO_SEGMENTO_RESERVADO =
+  'Esas iniciales están reservadas para ventas de oficina; ajusta el nombre.';
 
 /** El nombre reducido a palabras de A-Z, sin acentos ni signos. */
 export function palabrasDelNombre(nombre: string): string[] {
@@ -112,5 +122,10 @@ export function asignarSegmento(
   nombre: string,
   ocupados: ReadonlySet<string>,
 ): string | null {
-  return candidatosDeSegmento(nombre).find((c) => !ocupados.has(c)) ?? null;
+  // `OF` es de la oficina (T-17): este camino si cede, asi que lo salta.
+  return (
+    candidatosDeSegmento(nombre).find(
+      (c) => c !== SEGMENTO_OFICINA && !ocupados.has(c),
+    ) ?? null
+  );
 }

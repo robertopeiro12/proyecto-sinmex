@@ -16,10 +16,6 @@ import type { EditarVehiculoDto } from './dto/editar-vehiculo.dto';
  * antes si el nombre existe: una consulta previa deja una ventana entre el
  * SELECT y el INSERT en la que otra peticion puede meter el mismo nombre, y el
  * unique de la base es quien de verdad decide. Mismo criterio que T-09 y T-10.
- *
- * Aqui no hace falta distinguir POR indice (como si hizo T-10 con
- * `nombreDelIndice`): `vehiculo` tiene un solo unique, asi que cualquier 23505
- * de esta tabla es el nombre repetido.
  */
 function esDuplicado(error: unknown): boolean {
   return (
@@ -28,6 +24,22 @@ function esDuplicado(error: unknown): boolean {
     'code' in error &&
     error.code === '23505'
   );
+}
+
+/**
+ * El driver `pg` expone en `error.constraint` el nombre del indice que violo
+ * el unique. Antes de T-68 `vehiculo` tenia un solo unique
+ * (`uq_vehiculo_nombre_sucursal`); ahora tambien puede chocar
+ * `uq_vehiculo_placas`, y sin distinguirlos el administrador veria "ya existe
+ * un vehiculo llamado X" cuando el problema real son las placas repetidas.
+ * Mismo patron que `nombreDelIndice` en `productos.service.ts` (T-10).
+ */
+function nombreDelIndice(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null || !('constraint' in error)) {
+    return undefined;
+  }
+  const valor = (error as { constraint?: unknown }).constraint;
+  return typeof valor === 'string' ? valor : undefined;
 }
 
 @Injectable()
@@ -64,9 +76,19 @@ export class VehiculosService {
     }
 
     try {
-      return await this.repo.crear(dto.nombre, dto.kmInicial, sucursalId);
+      return await this.repo.crear(
+        dto.nombre,
+        dto.placas,
+        dto.kmInicial,
+        sucursalId,
+      );
     } catch (error) {
       if (esDuplicado(error)) {
+        if (nombreDelIndice(error) === 'uq_vehiculo_placas') {
+          throw new ConflictException(
+            `Ya existe un vehículo con las placas "${dto.placas}".`,
+          );
+        }
         throw new ConflictException(
           `Ya existe un vehículo llamado "${dto.nombre}" en esa sucursal.`,
         );
@@ -84,6 +106,7 @@ export class VehiculosService {
     // servidor ni justifica una consulta, es un cuerpo mal armado.
     if (
       dto.nombre === undefined &&
+      dto.placas === undefined &&
       dto.kmInicial === undefined &&
       dto.activo === undefined
     ) {
@@ -103,10 +126,17 @@ export class VehiculosService {
       throw new ForbiddenException('No tienes acceso a esa sucursal.');
     }
 
-    const cambios: { nombre?: string; km_inicial?: number; activo?: boolean } =
-      {};
+    const cambios: {
+      nombre?: string;
+      placas?: string;
+      km_inicial?: number;
+      activo?: boolean;
+    } = {};
     if (dto.nombre !== undefined) {
       cambios.nombre = dto.nombre;
+    }
+    if (dto.placas !== undefined) {
+      cambios.placas = dto.placas;
     }
     if (dto.kmInicial !== undefined) {
       cambios.km_inicial = dto.kmInicial;
@@ -119,6 +149,11 @@ export class VehiculosService {
       return await this.repo.actualizar(id, cambios);
     } catch (error) {
       if (esDuplicado(error)) {
+        if (nombreDelIndice(error) === 'uq_vehiculo_placas') {
+          throw new ConflictException(
+            `Ya existe un vehículo con las placas "${dto.placas ?? vehiculo.placas}".`,
+          );
+        }
         throw new ConflictException(
           `Ya existe un vehículo llamado "${dto.nombre ?? vehiculo.nombre}" en esa sucursal.`,
         );

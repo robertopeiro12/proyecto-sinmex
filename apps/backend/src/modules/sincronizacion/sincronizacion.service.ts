@@ -14,6 +14,8 @@ import {
   normalizarSucursalPedida,
   resolverAlcance,
 } from '../sucursales/alcance-sucursal';
+import { CobranzaRechazada } from '../ventas-cobranza/cobranza-rechazada';
+import { CobranzasService } from '../ventas-cobranza/cobranzas.service';
 import { VentaRechazada } from '../ventas-cobranza/venta-rechazada';
 import { VentasService } from '../ventas-cobranza/ventas.service';
 import {
@@ -29,6 +31,7 @@ import {
   prepararProyeccion,
   type Proyeccion,
 } from './despacho';
+import { CODIGO_POR_RAZON_COBRANZA } from './despacho-cobranza';
 import { CODIGO_POR_RAZON_PROSPECTO } from './despacho-prospecto';
 import type { PullDto, PushDto } from './dto/sincronizacion.dto';
 import { INTENTOS_ANTE_CONFLICTO, reintentarAnteConflicto } from './reintento';
@@ -70,6 +73,7 @@ export class SincronizacionService {
     // T-40: Cartera de Clientes es la duena de `cliente`, y por tanto del alta
     // de prospectos que sube la tablet.
     private readonly clientes: ClientesService,
+    private readonly cobranzas: CobranzasService,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -372,6 +376,16 @@ export class SincronizacionService {
           motivo: error.message,
         };
       }
+      // T-20: el rollback ya dejo sin fila tanto el buzon como los cobros.
+      if (error instanceof CobranzaRechazada) {
+        return {
+          clave: op.clave,
+          tipo: op.tipo,
+          estado: 'rechazada',
+          codigo: CODIGO_POR_RAZON_COBRANZA[error.razon],
+          motivo: error.message,
+        };
+      }
       if (esColisionDeFolio(error)) {
         return this.clasificarColision(vendedor, op);
       }
@@ -400,8 +414,12 @@ export class SincronizacionService {
             // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
             fechaOperacion: op.fechaOperacion,
             vendedorId: vendedor.id,
-            folio: op.folio,
+            folio: proyeccion.folio,
             usuarioId: null,
+            // T-17: la tablet no cambia. Su venta de contado se sigue cobrando
+            // en efectivo y su precio se mide hasta hoy, como desde T-16/T-20.
+            origen: 'app',
+            metodoPagoContado: 'efectivo',
           },
           trx,
         );
@@ -429,6 +447,19 @@ export class SincronizacionService {
         // `vendedor_id` (ADR-0009 §2.4, enmendado).
         return { tabla: 'cliente', id };
       }
+      case 'cobranza':
+        // Devuelve la primera fila de cobranza_abono, o el movimiento de saldo
+        // a favor si todo el pago quedo a favor. Sin folio (T-21).
+        return this.cobranzas.registrarCobranza(
+          proyeccion.cobranza,
+          {
+            sucursalId: vendedor.sucursal_id,
+            fechaOperacion: op.fechaOperacion,
+            vendedorId: vendedor.id,
+            usuarioId: null,
+          },
+          trx,
+        );
     }
   }
 

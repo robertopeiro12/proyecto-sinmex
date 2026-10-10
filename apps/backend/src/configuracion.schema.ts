@@ -86,4 +86,23 @@ export const configuracionSchema = Joi.object({
     .integer()
     .min(10_000)
     .default(60_000),
+
+  // --- Archivos en disco (T-40, foto del prospecto) ----------------------
+  //
+  // Donde se guardan las fotos de los prospectos. Es configuracion y no una
+  // constante porque la ruta depende del despliegue: en desarrollo es una
+  // carpeta del repo, y en el servidor tiene que ser el **volumen persistente**
+  // que `Despliegue y topologia` exige (un disco de contenedor efimero borraria
+  // las fotos en el primer redespliegue, sin error y sin que nadie lo note
+  // hasta que alguien abra un prospecto viejo).
+  //
+  // El default es RELATIVO al cwd del proceso, que en los scripts del workspace
+  // es `apps/backend`. Sirve para desarrollo y para las pruebas; en produccion
+  // se pone una ruta absoluta. No se valida que sea absoluta a proposito: un
+  // requisito asi rompe `npm run backend` sin dar nada a cambio.
+  //
+  // Vive aqui, con el resto, para que un valor en blanco (`FOTOS_DIR=` en un
+  // .env copiado) sea un fallo de arranque y no una carpeta llamada "" creada
+  // en la raiz del disco.
+  FOTOS_DIR: Joi.string().min(1).default('var/fotos'),
 });

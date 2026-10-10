@@ -159,8 +159,8 @@ describe("PantallaUsuarios", () => {
 
     // El perfil Auxiliar solo da cliente.gestionar (CATALOGO): esa casilla
     // nace marcada, vendedor.gestionar no.
-    expect(screen.getByRole("checkbox", { name: /cliente\.gestionar/ })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: /vendedor\.gestionar/ })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /Registrar\/editar\/eliminar clientes/ })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /Registrar\/editar\/eliminar vendedores/ })).not.toBeChecked();
 
     await usuario.click(screen.getByRole("button", { name: "Guardar" }));
 
@@ -185,8 +185,8 @@ describe("PantallaUsuarios", () => {
 
     await usuario.selectOptions(screen.getByLabelText("Perfil"), MAESTRO_ID);
 
-    const casillaCliente = screen.getByRole("checkbox", { name: /cliente\.gestionar/ });
-    const casillaVendedor = screen.getByRole("checkbox", { name: /vendedor\.gestionar/ });
+    const casillaCliente = screen.getByRole("checkbox", { name: /Registrar\/editar\/eliminar clientes/ });
+    const casillaVendedor = screen.getByRole("checkbox", { name: /Registrar\/editar\/eliminar vendedores/ });
     expect(casillaCliente).toBeChecked();
     expect(casillaVendedor).toBeChecked();
     expect(casillaCliente).toBeDisabled();
@@ -212,8 +212,8 @@ describe("PantallaUsuarios", () => {
     // (CATALOGO: solo cliente.gestionar). Que vendedor.gestionar tambien
     // aparezca marcado solo se explica si la matriz se precarga desde
     // permisosEfectivos y no desde los defaults del perfil.
-    expect(await screen.findByRole("checkbox", { name: /cliente\.gestionar/ })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: /vendedor\.gestionar/ })).toBeChecked();
+    expect(await screen.findByRole("checkbox", { name: /Registrar\/editar\/eliminar clientes/ })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /Registrar\/editar\/eliminar vendedores/ })).toBeChecked();
 
     // El campo de contrasena existe pero se deja vacio -- no debe viajar.
     const campoContrasena = screen.getByLabelText(
@@ -244,8 +244,8 @@ describe("PantallaUsuarios", () => {
     await usuario.click(screen.getByRole("button", { name: "Editar" }));
     await waitFor(() => expect(obtenerUsuario).toHaveBeenCalledWith("2"));
 
-    const casillaCliente = await screen.findByRole("checkbox", { name: /cliente\.gestionar/ });
-    const casillaVendedor = screen.getByRole("checkbox", { name: /vendedor\.gestionar/ });
+    const casillaCliente = await screen.findByRole("checkbox", { name: /Registrar\/editar\/eliminar clientes/ });
+    const casillaVendedor = screen.getByRole("checkbox", { name: /Registrar\/editar\/eliminar vendedores/ });
     expect(casillaCliente).toBeChecked();
     expect(casillaVendedor).toBeChecked();
     expect(casillaCliente).toBeDisabled();

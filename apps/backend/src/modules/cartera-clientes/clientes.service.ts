@@ -35,14 +35,18 @@ export function normalizarTipoPedido(crudo: string | undefined): TipoFiltro {
  * Lo que a un prospecto le falta para poder ser cliente, en el espanol que lee
  * el administrador.
  *
- * Es el reflejo exacto de `ck_cliente_domicilio_obligatorio` y
- * `ck_cliente_lista_precio_obligatoria` (T-40). Pura y exportada para poder
- * probarse sin Postgres, y **la base sigue siendo la que manda**: esto solo
- * existe para dar un mensaje completo en vez del primer check que salte.
+ * Refleja `ck_cliente_domicilio_obligatorio` y
+ * `ck_cliente_lista_precio_obligatoria` (T-40) y **ademas** exige el encargado
+ * (T-70), que la base NO comprueba (`cliente.encargado` sigue siendo nullable):
+ * es mas estricta que la base, igual que con el domicilio en blanco. Pura y
+ * exportada para poder probarse sin Postgres; para los dos checks **la base
+ * sigue siendo la que manda**: esto solo existe para dar un mensaje completo en
+ * vez del primer check que salte.
  */
 export function camposQueFaltanParaSerCliente(cliente: {
   domicilio: string | null;
   listaPrecioId: string | null;
+  encargado: string | null;
 }): string[] {
   const faltan: string[] = [];
   if (cliente.domicilio === null || cliente.domicilio.trim() === '') {
@@ -51,7 +55,16 @@ export function camposQueFaltanParaSerCliente(cliente: {
   if (cliente.listaPrecioId === null) {
     faltan.push('la lista de precios');
   }
+  if (cliente.encargado === null || cliente.encargado.trim() === '') {
+    faltan.push('el encargado');
+  }
   return faltan;
+}
+
+/** "A", "A y B", "A, B y C": la lista como la escribiria una persona. */
+function unirEnEspanol(items: string[]): string {
+  if (items.length <= 1) return items.join('');
+  return `${items.slice(0, -1).join(', ')} y ${items[items.length - 1]}`;
 }
 
 /**
@@ -59,7 +72,7 @@ export function camposQueFaltanParaSerCliente(cliente: {
  * 2026-09-13: sin `syncOperacionId`; la trazabilidad va en
  * `sync_operacion.entidad_tabla` / `entidad_id`).
  *
- * Es la **misma forma** que `ContextoVenta` de T-16 a proposito, aunque un
+ * Es la **misma forma** que `ContextoCobranza` (T-16) a proposito, aunque un
  * prospecto no use los cinco campos: que todos los servicios de dominio reciban
  * el mismo contexto es lo que permite que el despachador del `push` sea un
  * `switch` y no cinco casos especiales.
@@ -161,7 +174,7 @@ export class ClientesService {
           nombre: dto.nombre,
           domicilio: dto.domicilio,
           telefono: dto.telefono,
-          encargado: dto.encargado ?? null,
+          encargado: dto.encargado,
           factura: dto.factura,
           tipo: dto.tipo,
           tipo_negocio_id: dto.tipoNegocioId ?? null,
@@ -220,7 +233,8 @@ export class ClientesService {
           nombre: dto.nombre,
           domicilio: dto.domicilio,
           telefono: dto.telefono,
-          encargado: dto.encargado ?? null,
+          // Omitirlo conserva el actual (T-69): no se borra ni bloquea clientes viejos.
+          encargado: dto.encargado ?? cliente.encargado,
           factura: dto.factura,
           tipo_negocio_id: dto.tipoNegocioId ?? null,
           lista_precio_id: dto.listaPrecioId,
@@ -353,12 +367,13 @@ export class ClientesService {
     }
 
     // Se comprueba ANTES de intentar el update, y no solo se atrapa el 23514
-    // despues, porque asi el mensaje puede nombrar **los dos** campos que
-    // faltan en una sola respuesta: el check de la base solo delata el primero.
+    // despues, porque asi el mensaje puede nombrar **todos** los campos que
+    // faltan en una sola respuesta: el check de la base solo delata el primero,
+    // y el encargado (T-70) ni siquiera tiene check en la base.
     const faltan = camposQueFaltanParaSerCliente(cliente);
     if (faltan.length > 0) {
       throw new ConflictException(
-        `Antes de convertir este prospecto en cliente hay que capturarle ${faltan.join(' y ')}.`,
+        `Antes de convertir este prospecto en cliente hay que capturarle ${unirEnEspanol(faltan)}.`,
       );
     }
 

@@ -21,11 +21,11 @@
  */
 
 export interface ProspectoNormalizado {
-  /** Nombre del negocio. Es lo unico obligatorio. */
+  /** Nombre del negocio. Obligatorio, junto con telefono y encargado. */
   nombre: string;
   telefono: string;
-  /** Nombre del encargado. */
-  encargado: string | null;
+  /** Nombre del encargado: quien atiende el negocio. Obligatorio. */
+  encargado: string;
   tipoNegocioId: string | null;
   comentarios: string | null;
   /**
@@ -133,8 +133,19 @@ export function normalizarDatosProspecto(
     );
   }
 
-  const encargado = opcional('encargado', datos.encargado, LARGO_MAX_ENCARGADO);
-  if (!encargado.ok) return encargado.error;
+  // Obligatorio desde el 2026-09-29 (confirmado por el cliente en junta con
+  // Roberto): antes era opcional aqui y en el alta de Cliente del Portal
+  // (T-12). Ver el `[!warning]` en `Cliente.md` del vault.
+  const encargado = texto(datos.encargado);
+  if (encargado === null) {
+    return invalido('encargado', 'es obligatorio: quien atiende el negocio.');
+  }
+  if (encargado.length > LARGO_MAX_ENCARGADO) {
+    return invalido(
+      'encargado',
+      `no puede pasar de ${LARGO_MAX_ENCARGADO} caracteres.`,
+    );
+  }
 
   const comentarios = opcional(
     'comentarios',
@@ -165,18 +176,23 @@ export function normalizarDatosProspecto(
   const ubicacion = normalizarUbicacion(datos.lat, datos.lng);
   if (!ubicacion.ok) return ubicacion.error;
 
-  // La FOTO no se valida porque todavia no se guarda en ningun lado: falta
-  // decidir donde vive el archivo (candidato Supabase Storage; el alcance de
-  // Supabase es lo que ADR-0002 dejo abierto). El contrato reserva el campo
-  // `foto: null` para que la tablet ya lo mande y el dia que se decida no haya
-  // que cambiar el sobre. Ver la nota `T-40 Registro de Prospectos` del vault.
+  // La FOTO no se valida aqui, y ya no es porque falte decidir donde vive: se
+  // decidio (disco del backend, 2026-09-18). Es que **la foto no viaja en el
+  // lote**. Va por `POST /sync/foto/:clave`, un request aparte que la tablet
+  // manda solo cuando el prospecto ya fue aceptado.
+  //
+  // > [!danger] Por que no viaja aqui
+  // > El contrato de ADR-0006 acepta o rechaza **cada operacion entera**. Una
+  // > imagen pesada o una subida a medias rechazaria el alta completa, o sea se
+  // > perderia un cliente potencial por no poder subir algo que es OPCIONAL. El
+  // > campo `foto: null` del sobre se ignora a proposito.
 
   return {
     ok: true,
     prospecto: {
       nombre,
       telefono,
-      encargado: encargado.valor,
+      encargado,
       tipoNegocioId,
       comentarios: comentarios.valor,
       lat: ubicacion.lat,

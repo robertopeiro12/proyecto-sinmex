@@ -31,6 +31,13 @@ export class EditarVehiculoDto {
   nombre?: string;
 
   @IsOptional()
+  @Transform(recortar)
+  @IsString()
+  @MinLength(1, { message: 'Las placas son obligatorias.' })
+  @MaxLength(20, { message: 'Las placas no pueden pasar de 20 caracteres.' })
+  placas?: string;
+
+  @IsOptional()
   @IsNumber(
     { maxDecimalPlaces: 2 },
     { message: 'El kilometraje debe ser un número con hasta 2 decimales.' },

@@ -1,4 +1,4 @@
-import { apiFetch } from "./api";
+import { apiFetch, apiFetchBlob } from "./api";
 
 // Copia normativa de las formas que devuelve
 // apps/backend/src/modules/cartera-clientes/clientes.repository.ts
@@ -48,6 +48,17 @@ export interface ClienteDetalle {
   comentarios: string | null;
   sucursalId: string;
   sucursalCodigo: string;
+  /**
+   * ¿Tiene foto del lugar? (T-40)
+   *
+   * Es lo que decide si se dibuja la miniatura. Cuando es `false` **no se dibuja
+   * nada** — ni marco, ni "sin foto", ni un hueco: la foto es opcional y la
+   * mayoría de los prospectos no la tiene, así que un hueco por cada uno sería
+   * ruido permanente en la pantalla.
+   */
+  tieneFoto: boolean;
+  /** Cuándo la recibió el servidor, en ISO. `null` si no hay foto. */
+  fotoSubidaEn: string | null;
   overridesPrecio: OverridePrecio[];
   productosPromocion: string[];
 }
@@ -130,4 +141,16 @@ export function convertirACliente(id: string): Promise<ClienteDetalle> {
   return apiFetch<ClienteDetalle>(`/clientes/${id}/convertir-a-cliente`, {
     method: "POST",
   });
+}
+
+/**
+ * Los bytes de la foto de un prospecto (T-40).
+ *
+ * Pasa por `apiFetchBlob` y no por un `<img src>` directo a la API a propósito:
+ * un `<img>` no sabe refrescar la sesión, así que pasados los 15 minutos del
+ * access token la miniatura saldría rota sin ningún error visible. Quien llama
+ * convierte el Blob en una URL de objeto y la revoca al desmontar.
+ */
+export function descargarFotoCliente(id: string): Promise<Blob> {
+  return apiFetchBlob(`/clientes/${id}/foto`);
 }

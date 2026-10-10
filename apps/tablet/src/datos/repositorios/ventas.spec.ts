@@ -139,12 +139,10 @@ describe('repositorio de ventas (T-16)', () => {
       expect(() => ventas.registrar(venta({ clienteId: 'cli-fantasma' }))).toThrow(ErrorVenta);
     });
 
-    it('sin numero de nota no graba ni consume folio', () => {
-      const { folios, ventas } = montar();
-      expect(() => ventas.registrar(venta({ numNota: '  ' }))).toThrow(
-        'Falta el número de la nota física.',
-      );
-      expect(folios.consecutivoDe('ven-1')).toBe(0);
+    it('sin numero de nota graba la venta con num_nota null', () => {
+      const { ventas } = montar();
+      const grabada = ventas.registrar(venta({ numNota: '  ' }));
+      expect(grabada.num_nota).toBeNull();
     });
 
     it('la misma presentacion repetida en dos lineas no graba ni consume folio', () => {

@@ -4,6 +4,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { OPCIONES_NEST, configurarApp } from './../src/configurar-app';
+import { iniciarEnLocal } from './apoyo-servidor';
 import { COOKIE_ACCESO } from './../src/modules/auth/cookies';
 
 interface RespuestaError {
@@ -23,7 +24,7 @@ describe('Health y guard global de sesion (e2e)', () => {
     // basura no podria ejercer la rama de verificarAcceso() del guard.
     app = moduleFixture.createNestApplication(OPCIONES_NEST);
     configurarApp(app);
-    await app.init();
+    await iniciarEnLocal(app);
   });
 
   afterAll(async () => {

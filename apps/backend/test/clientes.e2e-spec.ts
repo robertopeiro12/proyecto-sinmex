@@ -4,6 +4,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { OPCIONES_NEST, configurarApp } from './../src/configurar-app';
+import { iniciarEnLocal } from './apoyo-servidor';
 import {
   DB_CONNECTION,
   type Database,
@@ -118,6 +119,9 @@ describe('Clientes (e2e)', () => {
       .values({
         nombre,
         domicilio: comoDeLaApp ? null : 'Domicilio de prueba',
+        // Un prospecto de la app ya trae encargado desde T-69 (y T-70 lo exige
+        // para convertir); los escenarios que lo necesitan ausente lo anulan.
+        encargado: 'Encargado de prueba',
         telefono: '000',
         factura: false,
         tipo,
@@ -154,7 +158,7 @@ describe('Clientes (e2e)', () => {
 
     app = moduleFixture.createNestApplication(OPCIONES_NEST);
     configurarApp(app);
-    await app.init();
+    await iniciarEnLocal(app);
     db = app.get<Database>(DB_CONNECTION);
 
     const tj = await db
@@ -337,6 +341,7 @@ describe('Clientes (e2e)', () => {
       nombre: `${PREFIJO} Alta`,
       domicilio: 'Domicilio',
       telefono: '000',
+      encargado: 'Encargado de prueba',
       factura: false,
       tipo: 'cliente',
       listaPrecioId: listaId,
@@ -445,6 +450,16 @@ describe('Clientes (e2e)', () => {
         .expect(400);
     });
 
+    it('responde 400 si falta el encargado', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { encargado: _encargado, ...sinEncargado } = datosMinimos();
+      await request(app.getHttpServer())
+        .post('/clientes')
+        .set('Cookie', cookieTijuana)
+        .send(sinEncargado)
+        .expect(400);
+    });
+
     it('rechaza sin cliente.gestionar con 403', async () => {
       await request(app.getHttpServer())
         .post('/clientes')
@@ -459,6 +474,7 @@ describe('Clientes (e2e)', () => {
       nombre: `${PREFIJO} Editado`,
       domicilio: 'Domicilio editado',
       telefono: '111',
+      encargado: 'Encargado editado',
       factura: true,
       listaPrecioId: listaId,
       promocion: 'ninguna',
@@ -482,6 +498,56 @@ describe('Clientes (e2e)', () => {
       expect(cliente.telefono).toBe('111');
       expect(cliente.factura).toBe(true);
       expect(cliente.sucursalCodigo).toBe('TJ');
+    });
+
+    it('un cliente sin encargado en la BD se edita sin mandarlo y sigue en null (#99)', async () => {
+      const id = await sembrarCliente(`${PREFIJO} Sin Encargado`, idTijuana);
+      await db
+        .updateTable('cliente')
+        .set({ encargado: null })
+        .where('id', '=', id)
+        .execute();
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { encargado: _encargado, ...sinEncargado } = cambios();
+
+      const res = await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(sinEncargado)
+        .expect(200);
+
+      expect((res.body as ClienteDetalleRespuesta).encargado).toBeNull();
+    });
+
+    it('un cliente con encargado conserva el actual si el PATCH lo omite', async () => {
+      const id = await sembrarCliente(
+        `${PREFIJO} Conserva Encargado`,
+        idTijuana,
+      );
+      await db
+        .updateTable('cliente')
+        .set({ encargado: 'Don Aaron' })
+        .where('id', '=', id)
+        .execute();
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { encargado: _encargado, ...sinEncargado } = cambios();
+
+      const res = await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(sinEncargado)
+        .expect(200);
+
+      expect((res.body as ClienteDetalleRespuesta).encargado).toBe('Don Aaron');
+    });
+
+    it('responde 400 si el PATCH manda un encargado en blanco', async () => {
+      const id = await sembrarCliente(`${PREFIJO} Encargado Blanco`, idTijuana);
+      await request(app.getHttpServer())
+        .patch(`/clientes/${id}`)
+        .set('Cookie', cookieTijuana)
+        .send(cambios({ encargado: '   ' }))
+        .expect(400);
     });
 
     it('corrige el mismo override el mismo dia en vez de duplicarlo', async () => {
@@ -829,6 +895,13 @@ describe('Clientes (e2e)', () => {
         'prospecto',
         true,
       );
+      // T-70: sembrarCliente ya siembra encargado; aqui se anula para que
+      // falten los TRES campos y se ejerza el mensaje "A, B y C".
+      await db
+        .updateTable('cliente')
+        .set({ encargado: null })
+        .where('id', '=', id)
+        .execute();
 
       const res = await request(app.getHttpServer())
         .post(`/clientes/${id}/convertir-a-cliente`)
@@ -840,6 +913,10 @@ describe('Clientes (e2e)', () => {
       const mensaje = (res.body as { message: string }).message;
       expect(mensaje).toMatch(/domicilio/i);
       expect(mensaje).toMatch(/lista de precios/i);
+      expect(mensaje).toMatch(/encargado/i);
+      expect(mensaje).toContain(
+        'el domicilio, la lista de precios y el encargado',
+      );
 
       // Y sigue siendo prospecto: el 409 no dejo la fila a medias.
       const despues = await db
@@ -872,6 +949,44 @@ describe('Clientes (e2e)', () => {
         .expect(201);
 
       expect((res.body as ClienteDetalleRespuesta).tipo).toBe('cliente');
+    });
+
+    // T-70: el encargado no tiene check en la base, lo exige el servicio.
+    it('responde 409 al convertir un prospecto completo salvo el encargado, y lo convierte al capturarlo', async () => {
+      const id = await sembrarCliente(
+        `${PREFIJO} Sin Encargado`,
+        idTijuana,
+        'prospecto',
+      );
+      await db
+        .updateTable('cliente')
+        .set({ encargado: null })
+        .where('id', '=', id)
+        .execute();
+
+      const res = await request(app.getHttpServer())
+        .post(`/clientes/${id}/convertir-a-cliente`)
+        .set('Cookie', cookieTijuana)
+        .expect(409);
+      expect((res.body as { message: string }).message).toMatch(/encargado/i);
+
+      const despues = await db
+        .selectFrom('cliente')
+        .select('tipo')
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow();
+      expect(despues.tipo).toBe('prospecto');
+
+      await db
+        .updateTable('cliente')
+        .set({ encargado: 'Maria' })
+        .where('id', '=', id)
+        .execute();
+      const ok = await request(app.getHttpServer())
+        .post(`/clientes/${id}/convertir-a-cliente`)
+        .set('Cookie', cookieTijuana)
+        .expect(201);
+      expect((ok.body as ClienteDetalleRespuesta).tipo).toBe('cliente');
     });
 
     it('GET /clientes/:id devuelve domicilio y listaPrecioId nulos en un prospecto de la app', async () => {

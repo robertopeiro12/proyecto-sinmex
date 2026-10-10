@@ -20,7 +20,11 @@ import { config as cargarEnv } from 'dotenv';
 import { Kysely, PostgresDialect } from 'kysely';
 import { Pool } from 'pg';
 import { PasswordService } from '../modules/auth/password.service';
-import { candidatosDeSegmento } from '../modules/sincronizacion/segmento-vendedor';
+import { SEGMENTO_OFICINA } from '../modules/sincronizacion/folio';
+import {
+  MOTIVO_SEGMENTO_RESERVADO,
+  candidatosDeSegmento,
+} from '../modules/sincronizacion/segmento-vendedor';
 import type { DB } from '../database/schema';
 
 cargarEnv({
@@ -180,6 +184,10 @@ async function main(): Promise<void> {
     // criterio, sin consulta previa: se intenta el insert con el primer
     // candidato y se distingue el error por su `constraint`.
     const segmento = candidatosDeSegmento(nombre)[0];
+    // T-17: misma regla que el portal; OF es de los folios de oficina.
+    if (segmento === SEGMENTO_OFICINA) {
+      throw new Error(MOTIVO_SEGMENTO_RESERVADO);
+    }
 
     try {
       const creado = await db

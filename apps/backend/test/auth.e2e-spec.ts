@@ -6,6 +6,7 @@ import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { OPCIONES_NEST, configurarApp } from './../src/configurar-app';
+import { iniciarEnLocal } from './apoyo-servidor';
 import { DatabaseModule } from './../src/database/database.module';
 import {
   DB_CONNECTION,
@@ -50,7 +51,7 @@ describe('Auth (e2e)', () => {
     // CSRF de login.
     app = moduleFixture.createNestApplication(OPCIONES_NEST);
     configurarApp(app);
-    await app.init();
+    await iniciarEnLocal(app);
 
     db = app.get<Database>(DB_CONNECTION);
 

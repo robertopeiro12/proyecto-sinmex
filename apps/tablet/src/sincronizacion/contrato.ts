@@ -83,6 +83,11 @@ export const CODIGOS_RECHAZO = [
    * catalogo nuevo — el repositorio deja la fila en la cola, no la descarta.
    */
   'tipo-negocio-inexistente',
+  /**
+   * T-20: la nota cobrada no existe en el servidor, es de otra sucursal o no es
+   * de este cliente. Se reenvia.
+   */
+  'nota-no-encontrada',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -186,6 +191,8 @@ export interface ClientePull extends FilaSincronizable {
   lat: number | null;
   lng: number | null;
   sucursal_id: string;
+  /** T-20: suma de los movimientos vivos de saldo a favor, en centavos. Solo se muestra. */
+  saldo_favor_centavos: number;
 }
 
 export interface PrecioPull extends FilaSincronizable {
@@ -195,14 +202,28 @@ export interface PrecioPull extends FilaSincronizable {
   vigente_desde: string;
 }
 
+/** Un abono vivo de una nota (T-20). */
+export interface AbonoPull {
+  fecha_pago: string;
+  monto_centavos: number;
+  metodo_pago: MetodoPagoAbono;
+}
+
+/**
+ * Nota por cobrar. T-20: `saldo_centavos` es derivado (monto − Σ abonos vivos);
+ * con `desde` bajan tambien las notas cerradas con `activo: 0`, y su `status`
+ * sigue siendo `pendiente`/`abonado` para no romper el CHECK local.
+ */
 export interface NotaPendientePull extends FilaSincronizable {
   folio: string;
-  num_nota: string;
+  /** `null` si la venta no tuvo nota de papel (lo normal). */
+  num_nota: string | null;
   fecha: string;
   cliente_id: string;
   status: 'pendiente' | 'abonado';
   monto_total_centavos: number;
   saldo_centavos: number;
+  abonos: AbonoPull[];
 }
 
 export interface RespuestaPull {
@@ -264,8 +285,9 @@ export interface OperacionSaliente {
    * El [[Folios|folio]] que la tablet emitio **offline** para esta operacion
    * (T-14), o ausente si su tipo no lleva folio.
    *
-   * Hoy la `jornada` no lo lleva: no es una nota que nadie firme. Venta y
-   * cobranza si lo llevaran (T-16/T-20).
+   * Hoy solo la venta lo lleva, y en ella es obligatorio (T-16). La `jornada`
+   * no es una nota que nadie firme, y la cobranza no lleva folio (T-21): el
+   * servidor ignora el que llegue.
    *
    * > [!danger] El folio NO es la clave de idempotencia
    * > Son capas distintas y hay que mantenerlas separadas (ADR-0006). `clave`
@@ -309,7 +331,12 @@ export type LineaVenta = {
  * tiene la firma de indice implicita que eso exige.
  */
 export type DatosVenta = {
-  num_nota: string;
+  /**
+   * El # del block de papel, **opcional**: el block solo se usa cuando falla
+   * el sistema (cliente, 2026-10-06). `null` es "sin nota". No es unico: lo
+   * que identifica la venta es el folio.
+   */
+  num_nota?: string | null;
   contado_credito: 'contado' | 'credito';
   factura: 'N/A' | 'pendiente';
   comentarios: string | null;
@@ -340,11 +367,16 @@ export type DatosVenta = {
  * la firma de indice implicita que eso exige.
  */
 export type DatosProspecto = {
-  /** Nombre del negocio. Lo unico obligatorio junto al telefono. */
+  /** Nombre del negocio. */
   nombre: string;
   telefono: string;
-  /** Nombre del encargado. */
-  encargado: string | null;
+  /**
+   * Nombre del encargado: quien atiende el negocio. Obligatorio junto con
+   * `nombre` y `telefono` (confirmado por el cliente en junta, 2026-09-29 —
+   * antes era opcional). No subió la versión del contrato: ver
+   * `docs/contrato-sincronizacion.md` §6 (nota de T-69).
+   */
+  encargado: string;
   /** Del catalogo `tipos_negocio` que baja en el `pull`. */
   tipo_negocio_id: string | null;
   comentarios: string | null;
@@ -369,6 +401,31 @@ export type DatosProspecto = {
    * servidor lo ignora. **La captura es un ticket aparte.**
    */
   foto: null;
+};
+
+/** Catalogo de metodos de pago. En la app el default es `efectivo`. */
+export type MetodoPago = 'efectivo' | 'transferencia' | 'cheque';
+
+/**
+ * Metodo de un abono que baja en el pull (T-21): los de cobro mas `saldo_favor`
+ * (la oficina aplico saldo a favor). La tablet nunca lo manda en un push.
+ */
+export type MetodoPagoAbono = MetodoPago | 'saldo_favor';
+
+/**
+ * `datos` de una operacion `tipo: "cobranza"` (T-20).
+ *
+ * Un pago sobre UNA nota; el servidor reparte el excedente a las otras notas
+ * del cliente y al saldo a favor. `cliente_id` va en el sobre y es
+ * obligatorio. **Sin folio** (T-21): la cobranza no lleva folio.
+ */
+export type DatosCobranza = {
+  venta_nota_id: string;
+  /** Entero, de 1 a 999_999_999_999. */
+  monto_centavos: number;
+  metodo_pago: MetodoPago;
+  /** `AAAA-MM-DD`, no posterior a `fecha_operacion`. */
+  fecha_pago: string;
 };
 
 export interface ResultadoOperacion {

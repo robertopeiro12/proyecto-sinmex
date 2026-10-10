@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 
 import {
   ErrorFolio,
@@ -19,9 +19,10 @@ import { useJawa } from '@/estado/proveedor-jawa';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
 import { Cifra, pesos } from '@/ui/cifra';
+import { Opcion } from '@/ui/opcion';
 import { Pantalla, Tarjeta } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
-import { colores, espacio, grosor } from '@/ui/tokens';
+import { espacio } from '@/ui/tokens';
 
 /**
  * Los tres pasos de la venta (D17).
@@ -36,46 +37,6 @@ type Paso = 'captura' | 'revision' | 'grabada';
 interface CapturaTexto {
   cantidad: string;
   promocion: string;
-}
-
-/**
- * Una opcion de un grupo (contado/credito, factura).
- *
- * No es un `<Boton>`: elegir no hace nada todavia, solo marca. La seleccion se
- * distingue por tres canales a la vez (borde, fondo y la palabra
- * "Seleccionado"), igual que el vehiculo en `abrir-dia.tsx`.
- */
-function Opcion({
-  etiqueta,
-  seleccionada,
-  onPress,
-}: {
-  etiqueta: string;
-  seleccionada: boolean;
-  onPress: () => void;
-}) {
-  const { estilos } = useTema();
-  return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ selected: seleccionada }}
-      accessibilityLabel={etiqueta}
-      onPress={onPress}
-      style={({ pressed }) => [
-        estilos.tarjeta,
-        estilos.celdaRejilla,
-        {
-          borderWidth: grosor.fuerte,
-          borderColor: seleccionada ? colores.primario : colores.borde,
-        },
-        seleccionada && { backgroundColor: colores.primarioTenue },
-        pressed && { transform: [{ translateY: grosor.fuerte }], opacity: 0.9 },
-      ]}
-    >
-      <Text style={estilos.textoTarjeta}>{etiqueta}</Text>
-      {seleccionada ? <Text style={estilos.textoSuave}>Seleccionado</Text> : null}
-    </Pressable>
-  );
 }
 
 /**
@@ -220,8 +181,12 @@ export default function PantallaVenta() {
         <Tarjeta estado="listo" etiqueta="Folio">
           <Cifra valor={grabada.folio} tamano="grande" />
           <Text style={estilos.textoSuave}>
-            Total <Cifra valor={pesos(grabada.monto_total_centavos)} tono="suave" /> · nota{' '}
-            <Cifra valor={grabada.num_nota} tono="suave" /> ·{' '}
+            Total <Cifra valor={pesos(grabada.monto_total_centavos)} tono="suave" /> ·{' '}
+            {grabada.num_nota ? (
+              <>
+                nota <Cifra valor={grabada.num_nota} tono="suave" /> ·{' '}
+              </>
+            ) : null}
             {grabada.contado_credito === 'contado' ? 'de contado' : 'a crédito'}
           </Text>
           <Text style={estilos.textoSuave}>
@@ -230,13 +195,36 @@ export default function PantallaVenta() {
           </Text>
         </Tarjeta>
 
-        {/* Unica accion de este paso. */}
-        <Boton
-          etiqueta="Volver al cliente"
-          glifo="←"
-          onPress={() => router.back()}
-          estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
-        />
+        {/*
+          D6 (T-20): consignacion. Si el cliente tiene notas pendientes, se
+          ofrece cobrarlas en un paso aparte. Es neutra (contorno, $) para que
+          la primaria siga siendo volver (relleno, ←). `replace` y no `push`:
+          al terminar el cobro, "Volver al cliente" regresa a la ficha y no a
+          esta venta ya grabada.
+        */}
+        {notas.length > 0 ? (
+          <View style={[estilos.filaAcciones, { marginTop: espacio.lg, marginBottom: espacio.xl }]}>
+            <Boton
+              etiqueta={`Cobrar notas pendientes (${notas.length})`}
+              tono="neutra"
+              glifo="$"
+              onPress={() =>
+                router.replace({
+                  pathname: '/(jornada)/operacion/[clienteId]/cobranza',
+                  params: { clienteId },
+                })
+              }
+            />
+            <Boton etiqueta="Volver al cliente" glifo="←" onPress={() => router.back()} />
+          </View>
+        ) : (
+          <Boton
+            etiqueta="Volver al cliente"
+            glifo="←"
+            onPress={() => router.back()}
+            estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
+          />
+        )}
       </Pantalla>
     );
   }
@@ -281,8 +269,13 @@ export default function PantallaVenta() {
         <Tarjeta estado="accion" etiqueta="Total">
           <Cifra valor={pesos(resumen.totalCentavos)} tamano="grande" />
           <Text style={estilos.textoSuave}>
-            {contadoCredito === 'contado' ? 'De contado' : 'A crédito'} · nota{' '}
-            <Cifra valor={numNota.trim()} tono="suave" /> · factura {factura}
+            {contadoCredito === 'contado' ? 'De contado' : 'A crédito'} ·{' '}
+            {numNota.trim() !== '' ? (
+              <>
+                nota <Cifra valor={numNota.trim()} tono="suave" /> ·{' '}
+              </>
+            ) : null}
+            factura {factura}
           </Text>
           {comentarios.trim() !== '' ? (
             <Text style={estilos.textoSuave}>{comentarios.trim()}</Text>
@@ -321,11 +314,18 @@ export default function PantallaVenta() {
         <Tarjeta estado="pendiente" etiqueta="Notas pendientes (solo lectura)">
           {notas.map((n) => (
             <Text key={n.id} style={estilos.textoSuave}>
-              <Cifra valor={n.folio} tono="suave" /> · nota <Cifra valor={n.num_nota} tono="suave" /> ·{' '}
+              <Cifra valor={n.folio} tono="suave" /> ·{' '}
+              {n.num_nota ? (
+                <>
+                  nota <Cifra valor={n.num_nota} tono="suave" /> ·{' '}
+                </>
+              ) : null}
               {n.fecha} · saldo <Cifra valor={pesos(n.saldo_centavos)} tono="aviso" />
             </Text>
           ))}
-          <Text style={estilos.textoSuave}>Se cobran desde «Cobranza / abono».</Text>
+          <Text style={estilos.textoSuave}>
+            Se cobran desde «Cobranza / abono», también al terminar esta venta.
+          </Text>
         </Tarjeta>
       ) : null}
 
@@ -407,11 +407,11 @@ export default function PantallaVenta() {
 
       <View style={{ marginTop: espacio.lg }}>
         <Campo
-          etiqueta="Número de nota"
+          etiqueta="Número de nota (opcional)"
           value={numNota}
           onChangeText={setNumNota}
           maxLength={LARGO_MAX_NUM_NOTA}
-          placeholder="El de la nota física"
+          placeholder="Solo si usaste el block de papel"
         />
         <Campo
           etiqueta="Comentarios (opcional)"

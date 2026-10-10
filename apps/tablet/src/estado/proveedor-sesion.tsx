@@ -14,7 +14,10 @@ import { crearClienteAuthApp } from '@/sesion/api';
 import { almacenSecureStore } from '@/sesion/almacen-secure-store';
 import { crearGestorSesion, type GestorSesion, type ResultadoEntrada } from '@/sesion/gestor';
 import type { EstadoSesion, VendedorSesion } from '@/sesion/politica';
+import { crearClienteFotosExpo } from '@/fotos/expo';
 import { crearClienteSync } from '@/sincronizacion/api';
+import { fuenteCobranzas } from '@/sincronizacion/fuente-cobranzas';
+import { fuenteFotosProspectos } from '@/sincronizacion/fuente-fotos';
 import { fuenteJornadas } from '@/sincronizacion/fuente-jornadas';
 import { fuenteProspectos } from '@/sincronizacion/fuente-prospectos';
 import { fuenteVentas } from '@/sincronizacion/fuente-ventas';
@@ -87,13 +90,22 @@ export function ProveedorSesion({
       api: crearClienteSync(),
       catalogos: datos.catalogos,
       sync: datos.sync,
-      // T-16: las ventas del dia suben despues de la jornada. T-40 suma los
-      // prospectos; el orden entre fuentes no importa (cada una es su lote).
+      // T-16: las ventas del dia suben despues de la jornada; T-40 suma los
+      // prospectos. Los cobros (T-20) van **al final**, para no llegar nunca
+      // antes que una venta del mismo dia.
       fuentes: [
         fuenteJornadas(datos.jornadas),
         fuenteVentas(datos.ventas),
         fuenteProspectos(datos.prospectos),
+        fuenteCobranzas(datos.cobranzas),
       ],
+      // T-40: el canal de la foto, aparte del lote del push. Corre despues, y
+      // solo para prospectos que el servidor ya acepto — antes no existe la fila
+      // `cliente` a la que la foto pertenece.
+      fotos: {
+        fuente: fuenteFotosProspectos(datos.prospectos),
+        api: crearClienteFotosExpo(),
+      },
       sesion: {
         renovar: () => gestor.renovar(),
         tokenAcceso: () => gestor.sesionGuardada()?.tokenAcceso ?? null,

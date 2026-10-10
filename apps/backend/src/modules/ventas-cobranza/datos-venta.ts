@@ -30,7 +30,8 @@ export interface LineaVentaNormalizada {
 /** La venta ya validada. El folio no va aqui: viaja en el `contexto` de `registrarVenta`. */
 export interface VentaNormalizada {
   clienteId: string;
-  numNota: string;
+  /** `null` si no hubo nota de papel: es lo normal (ver `normalizarDatosVenta`). */
+  numNota: string | null;
   contadoCredito: ContadoCredito;
   factura: FacturaVenta;
   comentarios: string | null;
@@ -95,19 +96,23 @@ export function normalizarDatosVenta(
     );
   }
 
+  // Opcional: el block de papel solo se usa cuando falla el sistema, y lo que
+  // identifica la venta es el folio (respuesta del cliente, 2026-10-06).
+  // Ausente, null o en blanco es "sin nota".
   const numNotaCruda = datos.num_nota;
-  const numNota = typeof numNotaCruda === 'string' ? numNotaCruda.trim() : '';
-  if (numNota === '') {
-    return invalido(
-      'num_nota',
-      'es obligatorio: es el numero de la nota fisica.',
-    );
-  }
-  if (numNota.length > LARGO_MAX_NUM_NOTA) {
-    return invalido(
-      'num_nota',
-      `no puede pasar de ${LARGO_MAX_NUM_NOTA} caracteres.`,
-    );
+  let numNota: string | null = null;
+  if (numNotaCruda !== undefined && numNotaCruda !== null) {
+    if (typeof numNotaCruda !== 'string') {
+      return invalido('num_nota', 'debe ser texto.');
+    }
+    const recortada = numNotaCruda.trim();
+    if (recortada.length > LARGO_MAX_NUM_NOTA) {
+      return invalido(
+        'num_nota',
+        `no puede pasar de ${LARGO_MAX_NUM_NOTA} caracteres.`,
+      );
+    }
+    numNota = recortada === '' ? null : recortada;
   }
 
   const contadoCredito = datos.contado_credito;
