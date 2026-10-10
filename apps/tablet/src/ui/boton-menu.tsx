@@ -21,6 +21,7 @@ export function BotonMenu({
   destino,
   nota,
   destacada = false,
+  deshabilitado = false,
 }: {
   titulo: string;
   descripcion: string;
@@ -29,15 +30,24 @@ export function BotonMenu({
   nota?: string;
   /** La accion que la jornada espera ahora mismo. */
   destacada?: boolean;
+  /**
+   * La seccion no esta disponible ahora (T-38: el dia ya se cerro). No navega y
+   * se atenua igual que un `Boton` inactivo (opacidad 0.35).
+   */
+  deshabilitado?: boolean;
 }) {
   const { estilos, dispositivo, t } = useTema();
   const router = useRouter();
 
   return (
     <Pressable
-      onPress={() => router.push(destino)}
+      onPress={() => {
+        if (!deshabilitado) router.push(destino);
+      }}
+      disabled={deshabilitado}
       accessibilityRole="link"
       accessibilityLabel={`${titulo}. ${descripcion}`}
+      accessibilityState={{ disabled: deshabilitado }}
       style={({ pressed }) => [
         estilos.tarjeta,
         estilos.celdaRejilla,
@@ -47,7 +57,9 @@ export function BotonMenu({
           minHeight: Math.max(dispositivo.tactil + espacio.xl, 104),
         },
         destacada && { backgroundColor: colores.primarioTenue },
-        pressed && { transform: [{ translateY: grosor.fuerte }], opacity: 0.9 },
+        pressed && !deshabilitado && { transform: [{ translateY: grosor.fuerte }], opacity: 0.9 },
+        // Mismo valor que `Boton` inactivo: al sol, menos que esto no se nota.
+        deshabilitado && { opacity: 0.35 },
       ]}
     >
       <View style={{ gap: espacio.xs }}>

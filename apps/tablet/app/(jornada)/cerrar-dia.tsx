@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Text } from 'react-native';
+import { Alert, Text } from 'react-native';
 
 import { ErrorJornada } from '@/datos';
 import { useJawa } from '@/estado/proveedor-jawa';
+import { textoConfirmarCierre } from '@/estado/menu-jornada';
 import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
@@ -81,6 +82,21 @@ export default function CerrarDia() {
     refrescarJornada();
   }
 
+  /**
+   * T-38 (D6 capa 1): cerrar el dia cierra las operaciones de esta tablet y no
+   * hay reabrir, asi que se confirma antes, como `confirmarSalida` en el menu.
+   * El kilometraje lo sigue validando `jornadas.cerrar()`: si es menor al
+   * inicial, el error aparece despues de confirmar, igual que antes.
+   */
+  function confirmarCierre() {
+    setError(null);
+    if (!jornada) return;
+    Alert.alert('Cerrar el día', textoConfirmarCierre(kmNumero), [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Cerrar el día', style: 'destructive', onPress: cerrar },
+    ]);
+  }
+
   if (jornada?.estado === 'cerrada') {
     return (
       <Pantalla
@@ -145,7 +161,7 @@ export default function CerrarDia() {
 
       <Boton
         etiqueta="Cerrar el día"
-        onPress={cerrar}
+        onPress={confirmarCierre}
         deshabilitado={!puedeCerrar}
         estilo={{ marginTop: espacio.lg }}
       />

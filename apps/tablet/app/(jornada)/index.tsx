@@ -4,6 +4,7 @@ import { Alert, Text, View } from 'react-native';
 
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
+import { estadoMenuJornada } from '@/estado/menu-jornada';
 import type { MotivoAbandono } from '@/sincronizacion/motor';
 import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 import { Boton } from '@/ui/boton';
@@ -69,6 +70,11 @@ export default function MenuJornada() {
    */
   const estadoSync = falloUltima ? 'error' : pendientes > 0 ? 'pendiente' : 'listo';
 
+  // T-38 (D6 capa 2): con el dia cerrado, lo que captura queda deshabilitado.
+  // La capa de datos lo rechazaria igual (`exigirJornadaAbierta`); esto evita
+  // que el vendedor entre a capturar para enterarse al final.
+  const menu = estadoMenuJornada(jornada);
+
   /**
    * Sincronizacion manual.
    *
@@ -126,16 +132,19 @@ export default function MenuJornada() {
           titulo="Operación por cliente"
           descripcion="Venta, cobranza, visita sin venta y registros de campo"
           destino="/(jornada)/operacion"
+          deshabilitado={!menu.operacionesHabilitadas}
         />
         <BotonMenu
           titulo="Prospectos"
           descripcion="Alta de prospectos (el vendedor ya no da de alta clientes)"
           destino="/(jornada)/prospectos"
+          deshabilitado={!menu.operacionesHabilitadas}
         />
         <BotonMenu
           titulo="Ruta y GPS"
           descripcion="Mapa de clientes del día y orden real de la ruta"
           destino="/(jornada)/ruta"
+          deshabilitado={!menu.operacionesHabilitadas}
         />
         <BotonMenu
           titulo="Cerrar el día"
@@ -143,6 +152,12 @@ export default function MenuJornada() {
           destino="/(jornada)/cerrar-dia"
         />
       </View>
+
+      {menu.avisoDiaCerrado ? (
+        <Tarjeta estado="listo" etiqueta="Día cerrado">
+          <Text style={estilos.textoTarjeta}>{menu.avisoDiaCerrado}</Text>
+        </Tarjeta>
+      ) : null}
 
       <Tarjeta estado={estadoSync} etiqueta="Sincronización">
         <Pastilla
