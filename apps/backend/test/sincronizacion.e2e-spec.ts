@@ -108,15 +108,70 @@ describe('Sincronizacion pull/push (e2e)', () => {
       .set('Authorization', `Bearer ${bearer}`)
       .send({ contrato: CONTRATO_ACTUAL, ...cuerpo });
 
-  /** Una operacion valida de jornada, con clave unica por defecto. */
+  /**
+   * Una operacion valida SIN modulo de dominio, con clave unica por defecto: el
+   * sobre generico de las pruebas del buzon (idempotencia, push parcial,
+   * alcance). Es un `gasto` porque sigue sin proyeccion y sin forma fija de
+   * `datos` hasta T-27.
+   *
+   * Hasta T-38 era una `jornada`. Ya no puede serlo: la jornada se proyecta a su
+   * tabla, que admite UNA por vendedor y dia, y estas pruebas mandan varias en el
+   * mismo lote (hasta 47). Las pruebas de la jornada usan `jornadaValida()`.
+   * Cuando T-27 proyecte el gasto, este sobre tendra que mudarse otra vez.
+   */
   const operacion = (extra: Record<string, unknown> = {}) => ({
     clave: `op-${SUFIJO}-${Math.random().toString(36).slice(2)}`,
-    tipo: 'jornada',
+    tipo: 'gasto',
     fecha_operacion: new Date().toISOString().slice(0, 10),
     ocurrido_en: new Date().toISOString(),
-    datos: { km_inicial: 120345 },
+    datos: { concepto: 'hielo', monto_centavos: 5000 },
     ...extra,
   });
+
+  /* ---------------------------------------------------------------- */
+  /* Jornadas (T-38)                                                   */
+  /* ---------------------------------------------------------------- */
+
+  const ABIERTA_EN = '2025-01-01T15:03:53.458Z';
+  const CERRADA_EN = '2025-01-02T01:19:55.706Z';
+
+  /** `datos` de una jornada cerrada (contrato §6), con lo que se quiera cambiar encima. */
+  const datosJornada = (extra: Record<string, unknown> = {}) => ({
+    vehiculo_id: vehiculoId,
+    km_inicial: 128450,
+    km_final: 128512,
+    abierta_en: ABIERTA_EN,
+    cerrada_en: CERRADA_EN,
+    ...extra,
+  });
+
+  /**
+   * Un dia distinto en cada llamada, desde 2025-01-01. `jornada` admite UNA viva
+   * por vendedor y dia (`uq_jornada_vendedor_fecha`), asi que cada jornada de
+   * prueba necesita el suyo. Ninguna otra prueba usa 2025, y entre corridas no
+   * chocan porque el vendedor es nuevo en cada una (`SUFIJO`).
+   */
+  let ultimaFechaJornada = 0;
+  const siguienteFechaJornada = () =>
+    new Date(Date.UTC(2025, 0, 1) + ultimaFechaJornada++ * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+
+  /** Una jornada cerrada que el servidor acepta, en su propio dia salvo que se pida otro. */
+  const jornadaValida = (
+    extra: Record<string, unknown> = {},
+    fecha = siguienteFechaJornada(),
+  ) =>
+    operacion({
+      tipo: 'jornada',
+      fecha_operacion: fecha,
+      ocurrido_en: `${fecha}T18:19:55.706-07:00`,
+      datos: datosJornada(),
+      ...extra,
+    });
+
+  /** Vehiculos que crean las pruebas de T-38; los borra el `afterAll`. */
+  const vehiculosT38: string[] = [];
 
   /* ---------------------------------------------------------------- */
   /* Ventas (T-16)                                                     */
@@ -671,6 +726,11 @@ describe('Sincronizacion pull/push (e2e)', () => {
       .deleteFrom('sync_operacion')
       .where('vendedor_id', 'in', [vendedorId, vendedorAjenoId])
       .execute();
+    // T-38: las jornadas proyectadas apuntan a vendedor y vehiculo.
+    await db
+      .deleteFrom('jornada')
+      .where('vendedor_id', 'in', [vendedorId, vendedorAjenoId])
+      .execute();
     // T-20: los cobros de TODAS las notas de las pruebas (una venta de contado
     // deja el suyo), antes que las notas.
     await db
@@ -733,6 +793,9 @@ describe('Sincronizacion pull/push (e2e)', () => {
       .deleteFrom('producto')
       .where('id', 'in', [productoId, productoInactivoId])
       .execute();
+    if (vehiculosT38.length > 0) {
+      await db.deleteFrom('vehiculo').where('id', 'in', vehiculosT38).execute();
+    }
     await db.deleteFrom('vehiculo').where('id', '=', vehiculoId).execute();
     await db
       .deleteFrom('sesion_vendedor')
@@ -1227,9 +1290,9 @@ describe('Sincronizacion pull/push (e2e)', () => {
         { monto: '300.00', fecha: '2026-08-02' },
       ]);
       const ops = [
-        operacion({
-          tipo: 'jornada',
-          datos: { km_inicial: 100, km_final: 240 },
+        // T-38: la jornada ya se proyecta a `jornada`: necesita datos completos.
+        jornadaValida({
+          datos: datosJornada({ km_inicial: 100, km_final: 240 }),
         }),
         // T-16: una venta ya no es un sobre generico; necesita datos validos.
         ventaValida(),
@@ -2190,7 +2253,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
     });
 
     it('un lote mixto entra parcial y en orden: jornada, venta buena, venta rechazada, jornada', async () => {
-      const jornada1 = operacion();
+      const jornada1 = jornadaValida();
       const buena = ventaValida();
       const mala = ventaValida({
         datos: datosVenta({
@@ -2204,7 +2267,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
           ],
         }),
       });
-      const jornada2 = operacion();
+      const jornada2 = jornadaValida();
 
       const res = (
         await push({ operaciones: [jornada1, buena, mala, jornada2] }).expect(
@@ -2227,18 +2290,6 @@ describe('Sincronizacion pull/push (e2e)', () => {
       expect(res.resultados[2].codigo).toBe('precio-no-asignado');
       expect(await ventasConFolio(buena.folio as string)).toHaveLength(1);
       expect(await ventasConFolio(mala.folio as string)).toHaveLength(0);
-    });
-
-    it('la jornada sigue entrando solo al buzon, sin entidad proyectada', async () => {
-      const op = operacion();
-      const res = (await push({ operaciones: [op] }).expect(200))
-        .body as RespuestaPush;
-
-      expect(res.resultados[0].estado).toBe('aplicada');
-      expect(await buzonDe(op.clave)).toMatchObject({
-        entidad_tabla: null,
-        entidad_id: null,
-      });
     });
 
     it('semana y mes salen de fecha_operacion tal cual llego, no de ocurrido_en en UTC', async () => {
@@ -2967,7 +3018,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
     it('la jornada sigue subiendo SIN folio', async () => {
       // No es una nota que nadie firme: no lleva folio, y el indice unico es
       // parcial justo para que varias operaciones sin folio convivan.
-      await push({ operaciones: [operacion(), operacion()] })
+      await push({ operaciones: [jornadaValida(), jornadaValida()] })
         .expect(200)
         .expect((r) => {
           expect((r.body as RespuestaPush).resumen.aplicadas).toBe(2);
@@ -3217,6 +3268,231 @@ describe('Sincronizacion pull/push (e2e)', () => {
           'aplicada',
         ]);
       });
+    });
+  });
+
+  /* ================================================================ */
+  /* Jornada (T-38): el kilometraje del dia llega a su tabla          */
+  /* ================================================================ */
+
+  describe('jornada (T-38)', () => {
+    /** Las filas de `jornada` del vendedor de la prueba en ese dia. */
+    const jornadasDel = async (fecha: string) =>
+      (
+        await db
+          .selectFrom('jornada')
+          .selectAll()
+          .where('vendedor_id', '=', vendedorId)
+          .execute()
+      ).filter((j) => fechaTexto(j.fecha) === fecha);
+
+    /** Un vehiculo de prueba de T-38 (lo borra el `afterAll`). */
+    const crearVehiculo = async (valores: {
+      nombre: string;
+      sucursal_id: string;
+      activo?: boolean;
+      deleted_at?: Date;
+    }) => {
+      const id = (
+        await db
+          .insertInto('vehiculo')
+          .values(valores)
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+      vehiculosT38.push(id);
+      return id;
+    };
+
+    it('una jornada cerrada entra a `jornada` y el buzon dice a que fila se convirtio', async () => {
+      const fecha = siguienteFechaJornada();
+      const op = jornadaValida({}, fecha);
+
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(res.resultados[0].estado).toBe('aplicada');
+
+      const filas = await jornadasDel(fecha);
+      expect(filas).toHaveLength(1);
+      const [jornada] = filas;
+      expect(jornada).toMatchObject({
+        vendedor_id: vendedorId,
+        vehiculo_id: vehiculoId,
+        sucursal_id: sucursalId,
+        km_inicial: '128450.0',
+        km_final: '128512.0',
+        deleted_at: null,
+      });
+      expect(new Date(jornada.abierta_en).toISOString()).toBe(ABIERTA_EN);
+      expect(new Date(jornada.cerrada_en).toISOString()).toBe(CERRADA_EN);
+
+      // Trazabilidad (ADR-0009 §2.4, enmendado): el buzon apunta a la jornada.
+      expect(await buzonDe(op.clave)).toEqual({
+        id: res.resultados[0].id_servidor,
+        entidad_tabla: 'jornada',
+        entidad_id: jornada.id,
+      });
+    });
+
+    it('km final menor al inicial es jornada-km-invalido y no deja fila', async () => {
+      const fecha = siguienteFechaJornada();
+      const op = jornadaValida(
+        { datos: datosJornada({ km_inicial: 128512, km_final: 128450 }) },
+        fecha,
+      );
+
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'jornada-km-invalido',
+      });
+      expect(res.resultados[0].motivo).toContain('km_final');
+      expect(await buzonDe(op.clave)).toBeUndefined();
+      expect(await jornadasDel(fecha)).toHaveLength(0);
+    });
+
+    it('datos sin vehiculo_id es jornada-datos-invalidos, antes de la transaccion', async () => {
+      const fecha = siguienteFechaJornada();
+      const op = jornadaValida(
+        { datos: datosJornada({ vehiculo_id: undefined }) },
+        fecha,
+      );
+
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'jornada-datos-invalidos',
+      });
+      expect(res.resultados[0].motivo).toContain('vehiculo_id');
+      expect(await buzonDe(op.clave)).toBeUndefined();
+      expect(await jornadasDel(fecha)).toHaveLength(0);
+    });
+
+    it('un vehiculo de otra sucursal es vehiculo-inexistente; corregido, la misma clave entra', async () => {
+      const ajeno = await crearVehiculo({
+        nombre: `Camioneta ajena T-38 ${SUFIJO}`,
+        sucursal_id: sucursalAjenaId,
+      });
+      const fecha = siguienteFechaJornada();
+      const op = jornadaValida(
+        { datos: datosJornada({ vehiculo_id: ajeno }) },
+        fecha,
+      );
+
+      const primero = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(primero.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'vehiculo-inexistente',
+      });
+      // Rechazada no deja fila (contrato §7): ni buzon ni jornada.
+      expect(await buzonDe(op.clave)).toBeUndefined();
+      expect(await jornadasDel(fecha)).toHaveLength(0);
+
+      // La tablet la reenvia con la MISMA clave (su fila local no cambia) cuando
+      // el dato ya esta bien: entra, porque el rechazo no consumio la clave.
+      const segundo = (
+        await push({
+          operaciones: [{ ...op, datos: datosJornada() }],
+        }).expect(200)
+      ).body as RespuestaPush;
+      expect(segundo.resultados[0].estado).toBe('aplicada');
+      expect(await jornadasDel(fecha)).toHaveLength(1);
+    });
+
+    it('un vehiculo dado de baja es vehiculo-inexistente', async () => {
+      const deBaja = await crearVehiculo({
+        nombre: `Camioneta de baja T-38 ${SUFIJO}`,
+        sucursal_id: sucursalId,
+        deleted_at: new Date(),
+      });
+      const op = jornadaValida({
+        datos: datosJornada({ vehiculo_id: deBaja }),
+      });
+
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'vehiculo-inexistente',
+      });
+    });
+
+    it('un vehiculo que no existe es vehiculo-inexistente', async () => {
+      const op = jornadaValida({
+        datos: datosJornada({ vehiculo_id: randomUUID() }),
+      });
+
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'vehiculo-inexistente',
+      });
+    });
+
+    it('un vehiculo desactivado SI entra: el kilometraje se recorrio igual', async () => {
+      const inactivo = await crearVehiculo({
+        nombre: `Camioneta inactiva T-38 ${SUFIJO}`,
+        sucursal_id: sucursalId,
+        activo: false,
+      });
+      const fecha = siguienteFechaJornada();
+      const op = jornadaValida(
+        { datos: datosJornada({ vehiculo_id: inactivo }) },
+        fecha,
+      );
+
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(res.resultados[0].estado).toBe('aplicada');
+      expect(await jornadasDel(fecha)).toMatchObject([
+        { vehiculo_id: inactivo },
+      ]);
+    });
+
+    it('una segunda jornada del mismo dia con OTRA clave es jornada-duplicada', async () => {
+      const fecha = siguienteFechaJornada();
+      const primera = jornadaValida({}, fecha);
+      // Otra tablet (o una fila local rehecha): otra clave, mismo vendedor y dia.
+      const segunda = jornadaValida(
+        { datos: datosJornada({ km_inicial: 200000, km_final: 200100 }) },
+        fecha,
+      );
+
+      const res = (await push({ operaciones: [primera, segunda] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados.map((r) => r.estado)).toEqual([
+        'aplicada',
+        'rechazada',
+      ]);
+      expect(res.resultados[1].codigo).toBe('jornada-duplicada');
+      expect(await buzonDe(segunda.clave)).toBeUndefined();
+      expect(await jornadasDel(fecha)).toMatchObject([
+        { km_inicial: '128450.0' },
+      ]);
+    });
+
+    it('la MISMA clave reenviada es duplicada, con el mismo id y una sola fila', async () => {
+      const fecha = siguienteFechaJornada();
+      const op = jornadaValida({}, fecha);
+
+      const primero = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      const segundo = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(primero.resultados[0].estado).toBe('aplicada');
+      expect(segundo.resultados[0]).toMatchObject({
+        estado: 'duplicada',
+        id_servidor: primero.resultados[0].id_servidor,
+      });
+      expect(await jornadasDel(fecha)).toHaveLength(1);
     });
   });
 });
