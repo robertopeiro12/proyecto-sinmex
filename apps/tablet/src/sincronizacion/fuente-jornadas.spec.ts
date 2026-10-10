@@ -137,7 +137,8 @@ describe('fuenteJornadas', () => {
 
     // Sigue en la cola del repositorio (es un dato sin subir, y lo estara toda
     // la jornada), pero la fuente no lo ofrece al push.
-    expect(jornadas.pendientesDeSincronizar()).toHaveLength(1);
+    // T-38 D7: una jornada abierta no viaja y por eso ya no cuenta como pendiente.
+    expect(jornadas.pendientesDeSincronizar()).toHaveLength(0);
     expect(fuente.pendientes()).toEqual([]);
 
     // Y en cuanto se cierra, aparece. Es el mismo `id`: la jornada no se sube

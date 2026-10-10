@@ -145,7 +145,12 @@ export function crearRepositorioJornadas({ bd, reloj, generarId }: DepsRepositor
     },
 
     /**
-     * Jornadas que faltan por subir al portal.
+     * Jornadas que faltan por subir al portal: solo las **cerradas**.
+     *
+     * T-38 (D7): la abierta no viaja (`fuente-jornadas.ts`; el buzon es de solo
+     * escritura hasta T-43), y contarla dejaba el menu en "1 registro por subir"
+     * todo el dia y la alerta en "se subieron 0". Esta es la consulta que suma
+     * `contarPendientesDeSubir`, asi que el filtro va aqui y no en la pantalla.
      *
      * Incluye las que quedaron en `error`: un rechazo puede deberse a un dato
      * que el portal corrigio despues (un vehiculo que estaba de baja, por
@@ -155,7 +160,8 @@ export function crearRepositorioJornadas({ bd, reloj, generarId }: DepsRepositor
     pendientesDeSincronizar(): Jornada[] {
       return bd.getAllSync<Jornada>(
         `select * from jornada
-         where sync_estado in ('pendiente', 'error')
+         where estado = 'cerrada'
+           and sync_estado in ('pendiente', 'error')
          order by fecha, abierta_en`,
       );
     },
