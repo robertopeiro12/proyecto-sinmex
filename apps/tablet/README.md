@@ -155,6 +155,19 @@ apuntarlo a la IP del servidor en la red del negocio.
 Alta de credenciales: `npm run crear-vendedor --workspace=apps/backend` (el CRUD
 de vendedores es **T-62**).
 
+## Jornada: cerrar el día cierra las operaciones (T-38)
+
+- **Cerrar el día no tiene vuelta atrás.** `cerrar-dia.tsx` pide confirmación; con la jornada de hoy `cerrada`,
+  el menú deshabilita *Operación por cliente*, *Prospectos* y *Ruta y GPS* (`src/estado/menu-jornada.ts`) y
+  `ventas`/`cobranzas`/`prospectos.registrar` lanzan `ErrorJornada` (`exigirJornadaAbierta` en
+  `src/datos/repositorios/jornadas.ts`). El candado de datos es el que vale: las pantallas se pueden saltar.
+- **El contador de "registros por subir" cuenta solo lo que viaja.** La jornada abierta no se sube (el buzón
+  del servidor es de solo escritura hasta T-43), así que `jornadas.pendientesDeSincronizar()` solo devuelve
+  cerradas.
+- En el servidor la jornada cerrada se guarda en la tabla `jornada` (`rutas/jornadas.service.ts`). Si el
+  servidor la rechaza (`vehiculo-inexistente`, `jornada-duplicada`, …), la fila queda en `error` con el motivo
+  y se reintenta en cada sincronización.
+
 ## Pruebas
 
 `npm test --workspace=apps/tablet` corre Jest con `ts-jest` en Node puro y prueba

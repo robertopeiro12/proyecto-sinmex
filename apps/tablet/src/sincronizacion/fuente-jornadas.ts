@@ -35,6 +35,9 @@ export function fuenteJornadas(jornadas: RepositorioJornadas): FuenteOperaciones
     pendientes(): OperacionSaliente[] {
       return jornadas
         .pendientesDeSincronizar()
+        // Redundante desde T-38: `pendientesDeSincronizar()` ya solo devuelve
+        // cerradas. Se queda como segunda llave: subir una abierta congelaria su
+        // km inicial en el buzon y el final no llegaria nunca.
         .filter((j) => j.estado === 'cerrada')
         .map((j) => ({
           clave: j.id,

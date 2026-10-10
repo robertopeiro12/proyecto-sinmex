@@ -389,8 +389,9 @@ describe('motor de sincronizacion', () => {
 
       expect(escenario.pushes).toHaveLength(0);
       expect(r.push?.enviadas).toBe(0);
-      // Y sigue contando como pendiente: la pantalla lo muestra honestamente.
-      expect(jornadas.pendientesDeSincronizar()).toHaveLength(1);
+      // Y NO cuenta como pendiente (T-38, D7): lo que no viaja no puede decir
+      // "1 registro por subir". Contarla era el bug de "se subieron 0".
+      expect(jornadas.pendientesDeSincronizar()).toHaveLength(0);
     });
 
     it('`duplicada` cuenta como exito: es el punto de la idempotencia', async () => {

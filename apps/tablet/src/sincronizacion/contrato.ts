@@ -88,6 +88,20 @@ export const CODIGOS_RECHAZO = [
    * de este cliente. Se reenvia.
    */
   'nota-no-encontrada',
+  /** T-38: `datos` de la jornada no tiene la forma de {@link DatosJornada}. Bug de la tablet. */
+  'jornada-datos-invalidos',
+  /** T-38: `km_final` menor que `km_inicial`. */
+  'jornada-km-invalido',
+  /**
+   * T-38: el vehiculo no existe en el servidor, esta dado de baja o es de otra
+   * sucursal. Se reenvia en cada sincronizacion: el portal puede corregirlo.
+   */
+  'vehiculo-inexistente',
+  /**
+   * T-38: el servidor ya tiene una jornada de este vendedor ese dia, con otra
+   * clave. Se queda en `error` con el motivo; no se resuelve sola.
+   */
+  'jornada-duplicada',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -426,6 +440,20 @@ export type DatosCobranza = {
   metodo_pago: MetodoPago;
   /** `AAAA-MM-DD`, no posterior a `fecha_operacion`. */
   fecha_pago: string;
+};
+
+/**
+ * `datos` de una operacion `tipo: "jornada"` (T-38): el dia ya cerrado. Copia
+ * del tipo del backend. Solo se suben jornadas cerradas, asi que van los cinco.
+ */
+export type DatosJornada = {
+  vehiculo_id: string;
+  km_inicial: number;
+  km_final: number;
+  /** ISO-8601 con zona. */
+  abierta_en: string;
+  /** ISO-8601 con zona. */
+  cerrada_en: string;
 };
 
 export interface ResultadoOperacion {
