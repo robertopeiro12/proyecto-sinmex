@@ -100,7 +100,11 @@ export default function CerrarDia() {
         keyboardType="numeric"
         inputMode="decimal"
         value={km}
-        onChangeText={setKm}
+        // Ver la nota gemela en `abrir-dia.tsx`: el error se borra al corregir.
+        onChangeText={(texto) => {
+          setKm(texto);
+          setError(null);
+        }}
         placeholder={`Mayor o igual a ${jornada?.km_inicial ?? 0}`}
       />
 

@@ -148,7 +148,12 @@ export default function AbrirDia() {
           keyboardType="numeric"
           inputMode="decimal"
           value={km}
-          onChangeText={setKm}
+          // El error se borra al corregir: dejar "debe ser un numero..." bajo un
+          // valor ya valido se lee como que la tablet no acepto la correccion.
+          onChangeText={(texto) => {
+            setKm(texto);
+            setError(null);
+          }}
           placeholder="Ej. 128450"
         />
       </View>

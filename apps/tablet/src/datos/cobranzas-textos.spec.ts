@@ -1,5 +1,5 @@
 import type { Reparto } from './cobranzas-reglas';
-import { lineasDelCobro, NOMBRE_METODO } from './cobranzas-textos';
+import { ayudaRangoFecha, lineasDelCobro, NOMBRE_METODO } from './cobranzas-textos';
 
 describe('textos de la cobranza (T-21)', () => {
   it('el abono que aplico la oficina con saldo a favor se nombra "Saldo a favor"', () => {
@@ -34,5 +34,15 @@ describe('textos de la cobranza (T-21)', () => {
       saldoFavorCentavos: 0,
     };
     expect(lineasDelCobro(reparto, [])[0]?.folio).toBe('nota-x');
+  });
+});
+
+describe('ayudaRangoFecha (2026-10-10)', () => {
+  it('con una nota de hoy dice "Solo hoy", no "Entre X y X"', () => {
+    expect(ayudaRangoFecha('2026-10-10', '2026-10-10')).toBe('Solo hoy (2026-10-10).');
+  });
+
+  it('con una nota de otro dia da el rango, de la nota a hoy', () => {
+    expect(ayudaRangoFecha('2026-10-01', '2026-10-10')).toBe('Entre 2026-10-01 y 2026-10-10.');
   });
 });
