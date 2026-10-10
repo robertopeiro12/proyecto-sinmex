@@ -135,8 +135,6 @@ describe('fuenteJornadas', () => {
     const { jornadas, fuente } = montar();
     const abierta = jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 100 });
 
-    // Sigue en la cola del repositorio (es un dato sin subir, y lo estara toda
-    // la jornada), pero la fuente no lo ofrece al push.
     // T-38 D7: una jornada abierta no viaja y por eso ya no cuenta como pendiente.
     expect(jornadas.pendientesDeSincronizar()).toHaveLength(0);
     expect(fuente.pendientes()).toEqual([]);

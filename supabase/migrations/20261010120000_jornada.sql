@@ -12,8 +12,8 @@
 -- Sin `sync_operacion_id`: la trazabilidad va por sync_operacion.entidad_tabla /
 -- entidad_id (ADR-0009, enmienda §2.4).
 --
--- Sin grants ni RLS: ninguna tabla de este esquema los tiene (el backend entra
--- con su propia conexion y la Data API no expone tablas nuevas). Se copia lo que
+-- Sin grants ni RLS: ninguna tabla de este esquema los tiene (como el resto del
+-- esquema: solo el backend se conecta a la base; ningun cliente usa la anon key). Se copia lo que
 -- si es patron: columnas de auditoria, trigger set_updated_at, checks con nombre
 -- e indices parciales por `deleted_at is null`.
 

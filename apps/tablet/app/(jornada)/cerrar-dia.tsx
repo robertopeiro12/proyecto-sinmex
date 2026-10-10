@@ -86,11 +86,20 @@ export default function CerrarDia() {
    * T-38 (D6 capa 1): cerrar el dia cierra las operaciones de esta tablet y no
    * hay reabrir, asi que se confirma antes, como `confirmarSalida` en el menu.
    * El kilometraje lo sigue validando `jornadas.cerrar()`: si es menor al
-   * inicial, el error aparece despues de confirmar, igual que antes.
+   * inicial se avisa ANTES del dialogo (con el mismo texto que `cerrar()`): si no,
+   * el vendedor leeria "no tiene vuelta atras", confirmaria y solo entonces veria
+   * el error. `jornadas.cerrar()` conserva su comprobacion como defensa en
+   * profundidad.
    */
   function confirmarCierre() {
     setError(null);
     if (!jornada) return;
+    if (kmNumero < jornada.km_inicial) {
+      setError(
+        `El kilometraje final (${kmNumero}) no puede ser menor al inicial (${jornada.km_inicial}).`,
+      );
+      return;
+    }
     Alert.alert('Cerrar el día', textoConfirmarCierre(kmNumero), [
       { text: 'Cancelar', style: 'cancel' },
       { text: 'Cerrar el día', style: 'destructive', onPress: cerrar },

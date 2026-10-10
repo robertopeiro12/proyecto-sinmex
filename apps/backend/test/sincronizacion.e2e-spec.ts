@@ -2290,6 +2290,12 @@ describe('Sincronizacion pull/push (e2e)', () => {
       expect(res.resultados[2].codigo).toBe('precio-no-asignado');
       expect(await ventasConFolio(buena.folio as string)).toHaveLength(1);
       expect(await ventasConFolio(mala.folio as string)).toHaveLength(0);
+      expect(await buzonDe(jornada1.clave)).toMatchObject({
+        entidad_tabla: 'jornada',
+      });
+      expect(await buzonDe(jornada2.clave)).toMatchObject({
+        entidad_tabla: 'jornada',
+      });
     });
 
     it('semana y mes salen de fecha_operacion tal cual llego, no de ocurrido_en en UTC', async () => {
@@ -3420,6 +3426,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
         estado: 'rechazada',
         codigo: 'vehiculo-inexistente',
       });
+      // Rechazada no deja fila (contrato §7).
+      expect(await buzonDe(op.clave)).toBeUndefined();
     });
 
     it('un vehiculo que no existe es vehiculo-inexistente', async () => {
@@ -3433,6 +3441,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
         estado: 'rechazada',
         codigo: 'vehiculo-inexistente',
       });
+      // Rechazada no deja fila (contrato §7).
+      expect(await buzonDe(op.clave)).toBeUndefined();
     });
 
     it('un vehiculo desactivado SI entra: el kilometraje se recorrio igual', async () => {
