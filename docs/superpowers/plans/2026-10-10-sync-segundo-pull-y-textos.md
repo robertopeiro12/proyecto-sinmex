@@ -26,7 +26,7 @@ Del proceso (roadmap §4 y `CLAUDE.md` de la carpeta):
 - **Los conteos de pruebas se miden contra la línea base al inicio, no se escriben aquí.** Cada tarea dice qué pruebas agrega; el implementador comprueba que el total subió exactamente en ese número.
 - **Sin pruebas de pantalla:** `jest.config.js` corre Node puro con ts-jest (`roots: ['<rootDir>/src']`, `testMatch: ['**/*.spec.ts']`, transform solo `^.+\.ts$`), no hay `*.spec.tsx` en el repo ni `@testing-library/react-native` en `package.json`. Las pantallas (`app/**/*.tsx`) se verifican con `typecheck` + `lint`; no se inventa infraestructura.
 - **Commits:** mensaje que empieza con `Tablet:` y termina exactamente con la línea
-  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
+  `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`
 - Al terminar cada tarea, `git status --short` sale vacío (todo commiteado, nada extra).
 
 ## Review Focus
@@ -507,7 +507,7 @@ hasta la segunda sincronizacion. Ahora, si el push aplico algo o subio una
 foto, se baja otra vez (incremental) al final; las filas se suman y un fallo
 de campo no cambia ok, solo se anota en pullPosterior.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 EOF
 )"
 git status --short   # vacío
@@ -697,7 +697,7 @@ Tablet: "Catalogos bajados" en fecha y hora local legibles
 Las dos pantallas pintaban el ISO crudo en UTC (18:02Z eran las 11:02 en
 Tijuana). formatearMomento devuelve AAAA-MM-DD HH:mm local, sin Intl.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 EOF
 )"
 git status --short   # vacío
@@ -905,7 +905,7 @@ En Abrir y Cerrar el dia el error de kilometraje se quedaba en pantalla con
 el valor ya corregido. En Cobranza, una nota de hoy decia "Entre X y X";
 ayudaRangoFecha dice "Solo hoy (X)." en ese caso.
 
-Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 EOF
 )"
 git status --short   # vacío
