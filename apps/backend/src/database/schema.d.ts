@@ -102,6 +102,21 @@ export interface FolioOficinaContador {
   ultimo: number;
 }
 
+export interface Jornada {
+  abierta_en: Timestamp;
+  cerrada_en: Timestamp;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  fecha: Timestamp;
+  id: Generated<string>;
+  km_final: Numeric;
+  km_inicial: Numeric;
+  sucursal_id: string;
+  updated_at: Generated<Timestamp>;
+  vehiculo_id: string;
+  vendedor_id: string;
+}
+
 export interface ListaPrecio {
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -344,6 +359,7 @@ export interface DB {
   cobranza_abono: CobranzaAbono;
   factura: Factura;
   folio_oficina_contador: FolioOficinaContador;
+  jornada: Jornada;
   lista_precio: ListaPrecio;
   perfil: Perfil;
   perfil_permiso: PerfilPermiso;
