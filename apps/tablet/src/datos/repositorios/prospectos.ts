@@ -1,6 +1,7 @@
 import type { FechaISO, MomentoISO, Prospecto } from '../tipos';
 import type { RepositorioCatalogos } from './catalogos';
 import type { DepsRepositorio } from './deps';
+import { exigirJornadaAbierta } from './jornadas';
 
 /**
  * Error de regla de negocio del alta de prospecto (no un fallo tecnico de
@@ -79,8 +80,12 @@ export function crearRepositorioProspectos(
      * despues al sincronizar.
      *
      * @throws {ErrorProspecto} si la captura no se puede grabar.
+     * @throws {ErrorJornada} si el dia de hoy ya esta cerrado (T-38, D6).
      */
     registrar(datos: DatosRegistroProspecto): Prospecto {
+      // T-38 (D6): primero el candado, antes de validar nada.
+      exigirJornadaAbierta({ bd, reloj }, datos.vendedorId);
+
       const nombre = recortar(datos.nombre);
       if (nombre === null) {
         throw new ErrorProspecto('Captura el nombre del negocio.');

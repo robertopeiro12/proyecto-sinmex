@@ -14,6 +14,8 @@ import {
   normalizarSucursalPedida,
   resolverAlcance,
 } from '../sucursales/alcance-sucursal';
+import { JornadaRechazada } from '../rutas/jornada-rechazada';
+import { JornadasService } from '../rutas/jornadas.service';
 import { CobranzaRechazada } from '../ventas-cobranza/cobranza-rechazada';
 import { CobranzasService } from '../ventas-cobranza/cobranzas.service';
 import { VentaRechazada } from '../ventas-cobranza/venta-rechazada';
@@ -32,6 +34,7 @@ import {
   type Proyeccion,
 } from './despacho';
 import { CODIGO_POR_RAZON_COBRANZA } from './despacho-cobranza';
+import { CODIGO_POR_RAZON_JORNADA } from './despacho-jornada';
 import { CODIGO_POR_RAZON_PROSPECTO } from './despacho-prospecto';
 import type { PullDto, PushDto } from './dto/sincronizacion.dto';
 import { INTENTOS_ANTE_CONFLICTO, reintentarAnteConflicto } from './reintento';
@@ -74,6 +77,8 @@ export class SincronizacionService {
     // de prospectos que sube la tablet.
     private readonly clientes: ClientesService,
     private readonly cobranzas: CobranzasService,
+    // T-38: Rutas es la duena de la jornada (vehiculo + kilometraje del dia).
+    private readonly jornadas: JornadasService,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -386,6 +391,17 @@ export class SincronizacionService {
           motivo: error.message,
         };
       }
+      // T-38: el rollback ya dejo sin fila tanto el buzon como la jornada, asi
+      // que un reenvio corregido (el portal reactivo el vehiculo) vuelve a entrar.
+      if (error instanceof JornadaRechazada) {
+        return {
+          clave: op.clave,
+          tipo: op.tipo,
+          estado: 'rechazada',
+          codigo: CODIGO_POR_RAZON_JORNADA[error.razon],
+          motivo: error.message,
+        };
+      }
       if (esColisionDeFolio(error)) {
         return this.clasificarColision(vendedor, op);
       }
@@ -457,6 +473,20 @@ export class SincronizacionService {
             fechaOperacion: op.fechaOperacion,
             vendedorId: vendedor.id,
             usuarioId: null,
+          },
+          trx,
+        );
+      case 'jornada':
+        // La entidad del buzon es la fila de `jornada` (ADR-0009 §2.4,
+        // enmendado): sin columna `sync_operacion_id`.
+        return this.jornadas.cerrarJornada(
+          proyeccion.jornada,
+          {
+            // Del token, nunca del cuerpo: el vehiculo se coteja contra ella.
+            sucursalId: vendedor.sucursal_id,
+            vendedorId: vendedor.id,
+            // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
+            fechaOperacion: op.fechaOperacion,
           },
           trx,
         );

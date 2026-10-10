@@ -347,7 +347,9 @@ listas en campo.
       "cliente_id": "…",                  // opcional; se valida el alcance
       "vendedor_id": "…",                 // opcional; si no es el del token → 403
       "folio": "TJ260807AP01",           // opcional; T-14. La jornada no lleva
-      "datos": { "km_inicial": 120345, "km_final": 120589 }
+      "datos": { "vehiculo_id": "uuid", "km_inicial": 120345, "km_final": 120589,
+                 "abierta_en": "2026-08-07T07:58:10.000-07:00",
+                 "cerrada_en": "2026-08-07T18:40:02.000-07:00" }
     }
   ]
 }
@@ -383,8 +385,9 @@ no hacer.
 
 `datos` lo fija el ticket de cada módulo, y fijarlo es un cambio **aditivo** que
 no sube la versión del contrato. Hoy tienen forma fija **`venta`** (T-16),
-**`prospecto`** (T-40) y **`cobranza`** (T-20), los tres abajo; gastos, merma y
-ruta siguen libres hasta T-27/T-33/T-39, y el servidor las guarda tal cual.
+**`prospecto`** (T-40), **`cobranza`** (T-20) y **`jornada`** (T-38), los cuatro
+abajo; gastos, merma y ruta siguen libres hasta T-27/T-33/T-39, y el servidor las
+guarda tal cual.
 
 ### `datos` de una venta (T-16)
 
@@ -550,6 +553,37 @@ permiso o no haber señal, y eso no le impide registrar al prospecto.
 > despliegue: primero el servidor; después la app nueva, y **antes de instalarla, sincronizar** la tablet
 > para subir los cobros pendientes.
 
+### `datos` de una jornada (T-38)
+
+```jsonc
+{
+  "clave": "uuid de la jornada local",
+  "tipo": "jornada",
+  "fecha_operacion": "2026-10-10",   // el día de la jornada en la tablet; se guarda tal cual
+  "ocurrido_en": "2026-10-10T18:19:55.706Z",   // = cerrada_en
+  // SIN "cliente_id" ni "folio": no se refiere a un cliente ni es una nota que nadie firme.
+  "datos": {
+    "vehiculo_id": "uuid",           // de la sucursal del vendedor, no dado de baja
+    "km_inicial": 128450,            // número finito, 0..999999999.9
+    "km_final": 128512,              // igual, y no menor que km_inicial
+    "abierta_en": "2026-10-10T18:03:53.458Z",    // ISO-8601 CON zona
+    "cerrada_en": "2026-10-10T18:19:55.706Z"     // ISO-8601 CON zona
+  }
+}
+```
+
+- Solo viajan jornadas **cerradas** (el buzón es de solo escritura hasta T-43, §7). Cualquier otro campo
+  dentro de `datos` se ignora.
+- La forma se valida **antes** de abrir la transacción: un campo que falta o con el tipo equivocado es
+  `jornada-datos-invalidos` (el `motivo` nombra el campo); `km_final < km_inicial` es `jornada-km-invalido`.
+- Dentro de la transacción: un vehículo que no existe, está dado de baja o es de otra sucursal es
+  `vehiculo-inexistente` (uno **desactivado** sí entra: el kilometraje se recorrió); una segunda jornada viva
+  del mismo vendedor en la misma `fecha_operacion` con **otra** clave es `jornada-duplicada`. La misma clave
+  reenviada es `duplicada`, como cualquier operación.
+- Se guarda en la tabla `jornada` (`fecha` = `fecha_operacion`, km con una décima) y el buzón apunta a esa fila
+  (`entidad_tabla = 'jornada'`).
+- Las jornadas que ya estaban en el buzón antes de T-38 **no** se reprocesan (sin backfill).
+
 ### Respuesta `200` — parcial y honesta
 
 ```jsonc
@@ -595,6 +629,10 @@ texto en español** si reintenta o si avisa al vendedor.
 | `precio-no-asignado` | Una línea con cantidad > 0 y el cliente no tiene **ningún** precio para esa presentación vigente a `fecha_operacion` ni asignado después, hasta hoy. Comprueba existencia, nunca valor. Se recupera cuando el portal asigna el precio y la tablet vuelve a sincronizar (T-16) |
 | `tipo-negocio-inexistente` | El `tipo_negocio_id` de un alta de `prospecto` no existe o está dado de baja (T-40). **No es un bug de la tablet**: su catálogo se quedó viejo. Se reintenta solo en la siguiente sincronización, que además le baja el catálogo nuevo |
 | `nota-no-encontrada` | La nota que se cobra no existe, su cliente no es de la sucursal del vendedor, o no es del `cliente_id` del sobre. Una nota que ya está pagada, de cuenta perdida, de promoción o borrada **no** cae aquí: el cobro se acepta y va a otras notas o a saldo a favor. La tablet la reenvía en cada sincronización (T-20) |
+| `jornada-datos-invalidos` | `datos` de una jornada no tiene la forma del §6 (falta un campo, un km fuera de 0..999999999.9, un instante sin zona). El `motivo` nombra el campo. Bug de la tablet (T-38) |
+| `jornada-km-invalido` | `km_final` menor que `km_inicial`: el odómetro no retrocede (T-38) |
+| `vehiculo-inexistente` | El vehículo de la jornada no existe, está dado de baja o es de otra sucursal que la del vendedor. Uno desactivado sí entra. Se reintenta en la siguiente sincronización (T-38) |
+| `jornada-duplicada` | Ya hay una jornada viva de ese vendedor en esa fecha subida con **otra** clave. La misma clave es `duplicada`, no esto (T-38) |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo
@@ -636,8 +674,9 @@ El rechazo se recalcula en cada intento: es determinista y no necesita memoria.
 
 ### Una transacción por operación (T-16, ADR-0009)
 
-Cuando un `tipo` tiene un módulo de dominio que lo proyecta (hoy `venta` y
-`cobranza`), cada operación del lote se aplica **en su propia transacción**:
+Cuando un `tipo` tiene un módulo de dominio que lo proyecta (hoy `venta`,
+`cobranza`, `prospecto` y `jornada`), cada operación del lote se aplica **en su
+propia transacción**:
 
 1. `INSERT` en `sync_operacion` con `on conflict (vendedor_id, clave_idempotencia) do nothing`.
    Si no insertó, es `duplicada` y **no se vuelve a proyectar**.
@@ -649,12 +688,15 @@ Cuando un `tipo` tiene un módulo de dominio que lo proyecta (hoy `venta` y
      cobrables del cliente y la elegida; reparte; escribe una fila `cobranza_abono` por nota que
      recibe dinero, su `status` y, si sobra, un `saldo_favor_movimiento`. La entidad
      es la primera fila `cobranza_abono` o, si todo quedó a favor, el movimiento.
+   - `JornadasService.cerrarJornada` (T-38) → comprueba que el vehículo sea de la sucursal del vendedor y no
+     esté dado de baja, e inserta en `jornada` con `on conflict (vendedor_id, fecha) where deleted_at is null
+     do nothing`; si no insertó, `jornada-duplicada`. La entidad es la fila de `jornada`.
 3. `commit` → `aplicada`. Si el dominio rechaza (`presentacion-inactiva`,
-   `precio-no-asignado`, `nota-no-encontrada`), `rollback`: no queda **ni** la fila de negocio
-   **ni** la del buzón.
+   `precio-no-asignado`, `nota-no-encontrada`, `vehiculo-inexistente`, `jornada-duplicada`),
+   `rollback`: no queda **ni** la fila de negocio **ni** la del buzón.
 
-Los tipos sin módulo todavía (`jornada`, `gasto`, `merma`, `ruta`) se
-guardan en el buzón y quedan `aplicada` con `entidad_id` nulo, como hasta ahora.
+Los tipos sin módulo todavía (`gasto`, `merma`, `ruta`) se guardan en el buzón y
+quedan `aplicada` con `entidad_id` nulo, como hasta ahora.
 Las operaciones se aplican **en el orden del lote**, y un error inesperado a mitad
 de lote deja comprometidas las anteriores (cada una tuvo su `commit`): el reintento
 de la tablet las recibe como `duplicada`.
@@ -786,8 +828,9 @@ sincronizar.
 |---|---|
 | Resolución de conflictos (portal y tablet tocan lo mismo) | **T-43** |
 | Sincronización automática 11:00/14:00 | **T-44** |
-| Forma de `datos` para gasto / merma / ruta (las de venta y cobranza ya están, §6) | **T-27 / T-33 / T-39** |
-| Proyección de `gasto`, `merma`, `ruta` y `jornada` a sus tablas de negocio (las de `venta` y `cobranza` ya existen, §7) | Los mismos, y **T-38** para `jornada` |
+| Forma de `datos` para gasto / merma / ruta (las de venta, cobranza y jornada ya están, §6) | **T-27 / T-33 / T-39** |
+| Proyección de `gasto`, `merma` y `ruta` a sus tablas de negocio (las de `venta`, `cobranza` y `jornada` ya existen, §7) | Los mismos |
+| Reporte de Kilometraje del portal (lee `jornada`) y reproceso de las jornadas que llegaron antes de T-38 | Portal (siguiente paso de T-38) |
 | Eliminar una cobranza con autorización (el saldo a favor y la cobranza desde el portal ya están: T-21) | **T-34** |
 | Permisos granulares en estos endpoints | **T-8** |
 

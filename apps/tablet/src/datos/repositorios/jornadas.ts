@@ -9,6 +9,37 @@ export class ErrorJornada extends Error {
   }
 }
 
+/** El mensaje del candado del dia cerrado (T-38, D6). Lo comparten los tres repositorios y sus pruebas. */
+export const MENSAJE_DIA_CERRADO =
+  'El día ya está cerrado. No se pueden registrar operaciones hasta la siguiente jornada.';
+
+/**
+ * Candado de la capa de datos (T-38, D6 capa 3): con la jornada de HOY del
+ * vendedor cerrada no se registra venta, cobranza ni prospecto. No hay reabrir.
+ *
+ * Es una funcion libre y no un metodo del repositorio a proposito: los tres
+ * repositorios ya reciben `bd` y `reloj`, y pedirles el repositorio de jornadas
+ * cambiaria sus firmas, `inicializar.ts` y todas sus pruebas por una consulta.
+ * Lee lo mismo que `deHoy()`: vendedor y `reloj.hoy()` (fecha local).
+ *
+ * Sin jornada **no** lanza: el spec pide el candado con el dia cerrado, y sin
+ * jornada el guardia de `(jornada)/_layout.tsx` ya no deja entrar a capturar.
+ *
+ * @throws {ErrorJornada} si la jornada de hoy existe y esta cerrada.
+ */
+export function exigirJornadaAbierta(
+  { bd, reloj }: Pick<DepsRepositorio, 'bd' | 'reloj'>,
+  vendedorId: string,
+): void {
+  const jornada = bd.getFirstSync<{ estado: string }>(
+    'select estado from jornada where vendedor_id = $vendedor_id and fecha = $fecha',
+    { $vendedor_id: vendedorId, $fecha: reloj.hoy() },
+  );
+  if (jornada?.estado === 'cerrada') {
+    throw new ErrorJornada(MENSAJE_DIA_CERRADO);
+  }
+}
+
 export interface DatosAperturaJornada {
   vendedorId: string;
   vehiculoId: string;
@@ -92,9 +123,23 @@ export function crearRepositorioJornadas({ bd, reloj, generarId }: DepsRepositor
      * captura, y dejarlo pasar produciria kilometraje negativo en el reporte
      * del portal.
      *
-     * TODO: T-33 — el corte del dia (cobranza, gastos, comision, efectividad)
-     *       se calcula y se imprime en su propio ticket; aqui solo se cierra la
-     *       jornada.
+     * > [!important] T-38: esta funcion ES el candado del km final
+     * > "Km final obligatorio antes de enviar el corte" ([[App Tablet]], §5) se
+     * > cumple porque `km_final` **solo** se puede escribir por aqui, y aqui no
+     * > hay forma de cerrar sin darlo: un `kmFinal` ausente o ilegible es `NaN`,
+     * > que `Number.isFinite` rechaza. No hay una segunda ruta de escritura.
+     * >
+     * > TODO: T-33 — el corte del dia (ventas por presentacion, cobranza,
+     * >       gastos, tesoreria, comision, efectividad e impresion) se calcula
+     * >       en su propio ticket; aqui solo se cierra la jornada. Lo que T-33
+     * >       tiene que **conectar** es una sola condicion: la accion de enviar
+     * >       el corte exige `jornada.estado === 'cerrada'`. No hace falta que
+     * >       revalide el kilometraje —si esta cerrada, paso por aqui— pero si
+     * >       que no ofrezca el envio sobre una jornada abierta, porque hoy
+     * >       nada mas lo impide: el guardia de `(jornada)/_layout.tsx` exige
+     * >       jornada, no jornada cerrada. Mientras T-33 no exista, el unico
+     * >       camino al corte es la tarjeta de `cerrar-dia.tsx`, que se pinta
+     * >       solo en la rama de `estado === 'cerrada'`.
      */
     cerrar(jornadaId: string, kmFinal: number): Jornada {
       const jornada = repo.porId(jornadaId);
@@ -131,7 +176,12 @@ export function crearRepositorioJornadas({ bd, reloj, generarId }: DepsRepositor
     },
 
     /**
-     * Jornadas que faltan por subir al portal.
+     * Jornadas que faltan por subir al portal: solo las **cerradas**.
+     *
+     * T-38 (D7): la abierta no viaja (`fuente-jornadas.ts`; el buzon es de solo
+     * escritura hasta T-43), y contarla dejaba el menu en "1 registro por subir"
+     * todo el dia y la alerta en "se subieron 0". Esta es la consulta que suma
+     * `contarPendientesDeSubir`, asi que el filtro va aqui y no en la pantalla.
      *
      * Incluye las que quedaron en `error`: un rechazo puede deberse a un dato
      * que el portal corrigio despues (un vehiculo que estaba de baja, por
@@ -141,7 +191,8 @@ export function crearRepositorioJornadas({ bd, reloj, generarId }: DepsRepositor
     pendientesDeSincronizar(): Jornada[] {
       return bd.getAllSync<Jornada>(
         `select * from jornada
-         where sync_estado in ('pendiente', 'error')
+         where estado = 'cerrada'
+           and sync_estado in ('pendiente', 'error')
          order by fecha, abierta_en`,
       );
     },

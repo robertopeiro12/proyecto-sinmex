@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { Text } from 'react-native';
+import { Alert, Text } from 'react-native';
 
 import { ErrorJornada } from '@/datos';
 import { useJawa } from '@/estado/proveedor-jawa';
+import { textoConfirmarCierre } from '@/estado/menu-jornada';
 import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
@@ -18,6 +19,24 @@ import { espacio } from '@/ui/tokens';
  * jornada (la misma entidad que abre el dia) y alimenta el reporte de
  * Kilometraje del portal. El **corte** —ventas por presentacion, cobranza,
  * gastos, tesoreria, comision, efectividad de ruta e impresion— es T-33.
+ *
+ * > [!important] T-38: como queda el candado del km final, y que le toca a T-33
+ * > "Km final obligatorio antes de enviar el corte" ([[App Tablet]], §5) no se
+ * > puede cablear contra la pantalla del corte porque esa pantalla **no existe
+ * > todavia**. Lo que si queda montado hoy, y es donde T-33 se apoya:
+ * >
+ * > 1. `jornadas.cerrar()` es la unica escritura de `km_final` y no admite
+ * >    cerrar sin el (ni con uno menor al inicial). Ver su comentario.
+ * > 2. Esta pantalla solo pinta la tarjeta del corte en la rama de
+ * >    `estado === 'cerrada'`, de modo que el corte es inalcanzable mientras el
+ * >    km final falte.
+ * >
+ * > **Lo que T-33 tiene que conectar:** su accion de *enviar* el corte exige
+ * > `jornada.estado === 'cerrada'`. Si T-33 lleva el corte a su propia ruta, que
+ * > repita la condicion alli —el guardia de `(jornada)/_layout.tsx` exige
+ * > jornada, **no** jornada cerrada, asi que no la cubre— o que la suba al
+ * > guardia. Lo que no puede es dar el candado por hecho: hoy lo sostiene el
+ * > `if` de abajo, que vive en esta pantalla y no en la navegacion.
  */
 export default function CerrarDia() {
   const { datos, jornada, refrescarJornada } = useJawa();
@@ -36,12 +55,55 @@ export default function CerrarDia() {
   function cerrar() {
     setError(null);
     if (!jornada) return;
+
+    // El cierre y el refresco van en try separados **a proposito**. Si los dos
+    // comparten uno, un fallo al refrescar la pantalla hace decir "No se pudo
+    // cerrar el dia" con el dia YA cerrado en SQLite: el kilometraje quedo
+    // escrito y el vendedor lee que no. Al reintentar, `cerrar()` le responde
+    // "La jornada ya esta cerrada" y se queda sin saber cual de los dos
+    // mensajes es cierto, al final de una jornada de 12 h y sin nadie a quien
+    // preguntar.
+    //
+    // La escritura es la que puede fallar por una razon que el vendedor
+    // entiende y puede corregir (kilometraje menor al inicial); el refresco no.
+    // Que el refresco truene es un problema de la pantalla, no del cierre, y no
+    // debe desmentir un dato que ya esta guardado.
+    //
+    // Patron detectado en la revision de T-20, donde la misma forma era peor:
+    // ahi invitaba a cobrar dos veces. Aqui no llega a eso porque `cerrar()`
+    // rechaza una jornada ya cerrada, pero el mensaje sigue siendo falso.
     try {
       datos.jornadas.cerrar(jornada.id, kmNumero);
-      refrescarJornada();
     } catch (e) {
       setError(e instanceof ErrorJornada ? e.message : 'No se pudo cerrar el día.');
+      return;
     }
+
+    refrescarJornada();
+  }
+
+  /**
+   * T-38 (D6 capa 1): cerrar el dia cierra las operaciones de esta tablet y no
+   * hay reabrir, asi que se confirma antes, como `confirmarSalida` en el menu.
+   * El kilometraje lo sigue validando `jornadas.cerrar()`: si es menor al
+   * inicial se avisa ANTES del dialogo (con el mismo texto que `cerrar()`): si no,
+   * el vendedor leeria "no tiene vuelta atras", confirmaria y solo entonces veria
+   * el error. `jornadas.cerrar()` conserva su comprobacion como defensa en
+   * profundidad.
+   */
+  function confirmarCierre() {
+    setError(null);
+    if (!jornada) return;
+    if (kmNumero < jornada.km_inicial) {
+      setError(
+        `El kilometraje final (${kmNumero}) no puede ser menor al inicial (${jornada.km_inicial}).`,
+      );
+      return;
+    }
+    Alert.alert('Cerrar el día', textoConfirmarCierre(kmNumero), [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Cerrar el día', style: 'destructive', onPress: cerrar },
+    ]);
   }
 
   if (jornada?.estado === 'cerrada') {
@@ -108,7 +170,7 @@ export default function CerrarDia() {
 
       <Boton
         etiqueta="Cerrar el día"
-        onPress={cerrar}
+        onPress={confirmarCierre}
         deshabilitado={!puedeCerrar}
         estilo={{ marginTop: espacio.lg }}
       />

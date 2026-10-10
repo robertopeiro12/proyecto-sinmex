@@ -3,6 +3,7 @@ import type { AbonoNota, Cobranza, FechaISO, MetodoPago } from '../tipos';
 import type { RepositorioCatalogos } from './catalogos';
 import type { DepsRepositorio } from './deps';
 import { enTransaccion } from './deps';
+import { exigirJornadaAbierta } from './jornadas';
 
 /** Error de regla de negocio del cobro (no un fallo tecnico de SQLite). */
 export class ErrorCobranza extends Error {
@@ -69,8 +70,12 @@ export function crearRepositorioCobranzas(
      * transaccion. Lo que falla dentro (SQLite) hace `rollback` de todo.
      *
      * @throws {ErrorCobranza} si la captura no se puede grabar.
+     * @throws {ErrorJornada} si el dia de hoy ya esta cerrado (T-38, D6).
      */
     registrar(datos: DatosRegistroCobranza): Cobranza {
+      // T-38 (D6): primero el candado, antes de validar nada.
+      exigirJornadaAbierta({ bd, reloj }, datos.vendedorId);
+
       const hoy = reloj.hoy();
 
       const cliente = catalogos.obtenerCliente(datos.clienteId);

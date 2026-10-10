@@ -130,9 +130,21 @@ describe('repositorio de jornadas', () => {
   });
 
   describe('cola de sincronizacion', () => {
-    it('lo capturado nace pendiente de subir', () => {
+    it('una jornada abierta NO esta en la cola: todavia no viaja (T-38, D7)', () => {
+      // `fuente-jornadas.ts` solo sube las cerradas (el buzon es de solo
+      // escritura hasta T-43). Contarla como pendiente dejaba la pantalla en
+      // "1 registro por subir" todo el dia y "se subieron 0" al sincronizar.
+      const { jornadas } = conJornadas();
+      jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
+
+      expect(jornadas.pendientesDeSincronizar()).toEqual([]);
+    });
+
+    it('al cerrarla entra a la cola de subida', () => {
       const { jornadas } = conJornadas();
       const abierta = jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
+
+      jornadas.cerrar(abierta.id, 80);
 
       expect(jornadas.pendientesDeSincronizar().map((j) => j.id)).toEqual([abierta.id]);
     });
@@ -140,6 +152,7 @@ describe('repositorio de jornadas', () => {
     it('marcarSincronizada la saca de la cola y sella el momento', () => {
       const { jornadas } = conJornadas();
       const abierta = jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
+      jornadas.cerrar(abierta.id, 80);
 
       jornadas.marcarSincronizada(abierta.id);
 
@@ -166,6 +179,8 @@ describe('repositorio de jornadas', () => {
       // porque reintentar es seguro: el push es idempotente.
       const { jornadas } = conJornadas();
       const abierta = jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
+      // Solo una cerrada viaja, asi que solo una cerrada puede volver rechazada.
+      jornadas.cerrar(abierta.id, 80);
 
       jornadas.marcarError(abierta.id, 'fecha-futura: revisa el reloj de la tablet.');
 

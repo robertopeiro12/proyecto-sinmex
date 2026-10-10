@@ -10,6 +10,7 @@ import type { RepositorioCatalogos } from './catalogos';
 import type { DepsRepositorio } from './deps';
 import { enTransaccion } from './deps';
 import type { RepositorioFolios } from './folios';
+import { exigirJornadaAbierta } from './jornadas';
 
 /** Error de regla de negocio de la venta (no un fallo tecnico de SQLite). */
 export class ErrorVenta extends Error {
@@ -68,8 +69,12 @@ export function crearRepositorioVentas(
      *
      * @throws {ErrorVenta} si la captura no se puede grabar.
      * @throws {ErrorFolio} si el vendedor no tiene segmento o llego al tope del dia.
+     * @throws {ErrorJornada} si el dia de hoy ya esta cerrado (T-38, D6).
      */
     registrar(datos: DatosRegistroVenta): Venta {
+      // T-38 (D6): primero el candado, antes de validar nada o emitir folio.
+      exigirJornadaAbierta({ bd, reloj }, datos.vendedorId);
+
       const fecha = reloj.hoy();
 
       const cliente = catalogos.obtenerCliente(datos.clienteId);
