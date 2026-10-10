@@ -67,8 +67,8 @@ export const MAX_BYTES_POR_LOTE = 1_000_000;
  * TODO: T-27 — `gasto` (hielo, gasolina, reparacion, adelanto).
  * TODO: T-33 — `merma` (los 3 tipos de merma del documento de julio 2026).
  * TODO: T-39 — `ruta` (visitas, orden real, tiempos y GPS).
- * TODO: T-XX — la jornada (vehiculo + kilometraje inicial/final) no tiene tabla
- *       propia en Postgres todavia; hoy solo se recibe y se guarda.
+ * Hecho: T-38 — `jornada` (vehiculo + kilometraje inicial/final del dia ya
+ *        cerrado, ver {@link DatosJornada}); se proyecta a la tabla `jornada`.
  *
  * Hecho: T-40 — `prospecto`, el unico tipo que **crea** una fila de catalogo
  *        (`cliente` con `tipo = 'prospecto'`) en vez de una de operacion. Es un
@@ -174,6 +174,34 @@ export const CODIGOS_RECHAZO = [
    * la tablet la reenvia en cada sincronizacion.
    */
   'nota-no-encontrada',
+  /**
+   * `datos` de una jornada no tiene la forma de {@link DatosJornada}: falta un
+   * campo, un km no es un numero entre 0 y 999 999 999.9, o un instante no es
+   * ISO-8601 con zona. T-38. Es un bug de la tablet; el `motivo` nombra el campo.
+   * Se rechaza antes de abrir la transaccion.
+   */
+  'jornada-datos-invalidos',
+  /**
+   * `km_final` es menor que `km_inicial`: el odometro no retrocede. T-38. La
+   * tablet ya lo impide al cerrar el dia; si llega aqui, el dato se corrompio.
+   */
+  'jornada-km-invalido',
+  /**
+   * El vehiculo de la jornada no existe, esta dado de baja (`deleted_at`) o es
+   * de otra sucursal que la del vendedor del token. T-38. Uno **desactivado**
+   * (`activo = false`) si entra: el kilometraje se recorrio igual.
+   *
+   * No es un bug de la tablet: su catalogo pudo quedarse viejo. Se reintenta en
+   * la siguiente sincronizacion, como `presentacion-inactiva`.
+   */
+  'vehiculo-inexistente',
+  /**
+   * Ya hay una jornada viva de ese vendedor en esa fecha, subida con **otra**
+   * clave de idempotencia (otra tablet, o una fila local rehecha). T-38. Un
+   * reenvio con la MISMA clave no cae aqui: el buzon lo resuelve antes como
+   * `duplicada`.
+   */
+  'jornada-duplicada',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -317,6 +345,30 @@ export type DatosCobranza = {
   metodo_pago: MetodoPago;
   /** `AAAA-MM-DD`, no posterior a `fecha_operacion`. Informativa: el corte cuenta por `fecha_operacion`. */
   fecha_pago: string;
+};
+
+/**
+ * `datos` de una operacion `tipo: "jornada"` (T-38): el dia ya CERRADO.
+ *
+ * Es el sobre que la tablet ya mandaba desde T-07 (`fuente-jornadas.ts`); T-38
+ * solo lo fija y lo proyecta a la tabla `jornada`. La tablet solo sube jornadas
+ * cerradas (el buzon es de solo escritura hasta T-43), asi que los cinco campos
+ * van siempre. El sobre no lleva `folio` (no es una nota que nadie firme) ni
+ * `cliente_id`. Cualquier otro campo dentro de `datos` se ignora.
+ *
+ * Es `type` y no `interface` por la misma razon que {@link DatosVenta}.
+ */
+export type DatosJornada = {
+  /** uuid del vehiculo que eligio al abrir el dia; de la sucursal del vendedor. */
+  vehiculo_id: string;
+  /** Numero finito entre 0 y 999 999 999.9. Se guarda con una decima. */
+  km_inicial: number;
+  /** Igual que `km_inicial`, y no menor que el: el odometro no retrocede. */
+  km_final: number;
+  /** Instante ISO-8601 **con zona** en que abrio el dia. */
+  abierta_en: string;
+  /** Instante ISO-8601 **con zona** en que lo cerro. */
+  cerrada_en: string;
 };
 
 export interface ResultadoOperacion {
