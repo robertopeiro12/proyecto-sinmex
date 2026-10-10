@@ -4,6 +4,7 @@ import { Text, View } from 'react-native';
 
 import {
   ErrorFolio,
+  ErrorJornada,
   ErrorVenta,
   LARGO_MAX_COMENTARIOS,
   LARGO_MAX_NUM_NOTA,
@@ -159,7 +160,7 @@ export default function PantallaVenta() {
       setPaso('grabada');
     } catch (e) {
       setProblemas([
-        e instanceof ErrorVenta || e instanceof ErrorFolio
+        e instanceof ErrorVenta || e instanceof ErrorFolio || e instanceof ErrorJornada
           ? e.message
           : 'No se pudo grabar la venta. No se consumió ningún folio; intenta de nuevo.',
       ]);

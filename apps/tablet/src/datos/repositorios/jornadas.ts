@@ -9,6 +9,37 @@ export class ErrorJornada extends Error {
   }
 }
 
+/** El mensaje del candado del dia cerrado (T-38, D6). Lo comparten los tres repositorios y sus pruebas. */
+export const MENSAJE_DIA_CERRADO =
+  'El día ya está cerrado. No se pueden registrar operaciones hasta la siguiente jornada.';
+
+/**
+ * Candado de la capa de datos (T-38, D6 capa 3): con la jornada de HOY del
+ * vendedor cerrada no se registra venta, cobranza ni prospecto. No hay reabrir.
+ *
+ * Es una funcion libre y no un metodo del repositorio a proposito: los tres
+ * repositorios ya reciben `bd` y `reloj`, y pedirles el repositorio de jornadas
+ * cambiaria sus firmas, `inicializar.ts` y todas sus pruebas por una consulta.
+ * Lee lo mismo que `deHoy()`: vendedor y `reloj.hoy()` (fecha local).
+ *
+ * Sin jornada **no** lanza: el spec pide el candado con el dia cerrado, y sin
+ * jornada el guardia de `(jornada)/_layout.tsx` ya no deja entrar a capturar.
+ *
+ * @throws {ErrorJornada} si la jornada de hoy existe y esta cerrada.
+ */
+export function exigirJornadaAbierta(
+  { bd, reloj }: Pick<DepsRepositorio, 'bd' | 'reloj'>,
+  vendedorId: string,
+): void {
+  const jornada = bd.getFirstSync<{ estado: string }>(
+    'select estado from jornada where vendedor_id = $vendedor_id and fecha = $fecha',
+    { $vendedor_id: vendedorId, $fecha: reloj.hoy() },
+  );
+  if (jornada?.estado === 'cerrada') {
+    throw new ErrorJornada(MENSAJE_DIA_CERRADO);
+  }
+}
+
 export interface DatosAperturaJornada {
   vendedorId: string;
   vehiculoId: string;
