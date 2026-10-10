@@ -108,8 +108,17 @@ describe('Sincronizacion pull/push (e2e)', () => {
       .set('Authorization', `Bearer ${bearer}`)
       .send({ contrato: CONTRATO_ACTUAL, ...cuerpo });
 
-  /** Una operacion valida de jornada, con clave unica por defecto. */
-  const operacion = (extra: Record<string, unknown> = {}) => ({
+  /**
+   * Una operacion valida de jornada, con clave unica por defecto.
+   *
+   * Generico a proposito: lo que trae `extra` (un `folio`, un `cliente_id`)
+   * forma parte del tipo de retorno. Con `Record<string, unknown>` el objeto
+   * real si llevaba el folio pero el tipo no, y cada `op.folio` era un error
+   * de tipos que Jest no ve porque `isolatedModules` transpila sin comprobar.
+   */
+  const operacion = <E extends Record<string, unknown>>(
+    extra: E = {} as E,
+  ) => ({
     clave: `op-${SUFIJO}-${Math.random().toString(36).slice(2)}`,
     tipo: 'jornada',
     fecha_operacion: new Date().toISOString().slice(0, 10),
