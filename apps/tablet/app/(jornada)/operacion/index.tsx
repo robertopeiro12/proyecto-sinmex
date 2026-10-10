@@ -5,6 +5,7 @@ import type { Cliente } from '@/datos/tipos';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { BotonMenu } from '@/ui/boton-menu';
 import { Cifra } from '@/ui/cifra';
+import { formatearMomento } from '@/ui/momento';
 import { Pantalla, Tarjeta } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
 
@@ -39,7 +40,7 @@ export default function ListaClientes() {
       subtitulo={
         <Text style={estilos.subtitulo}>
           <Cifra valor={clientes.length} tono="suave" /> cliente(s) en el catálogo local. Catálogos
-          bajados: {datos.catalogos.frescuraCatalogos() ?? 'nunca'}
+          bajados: {formatearMomento(datos.catalogos.frescuraCatalogos())}
         </Text>
       }
     >

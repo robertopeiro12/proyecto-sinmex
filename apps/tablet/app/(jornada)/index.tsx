@@ -9,6 +9,7 @@ import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 import { Boton } from '@/ui/boton';
 import { BotonMenu } from '@/ui/boton-menu';
 import { Cifra } from '@/ui/cifra';
+import { formatearMomento } from '@/ui/momento';
 import { Pantalla, Pastilla, Tarjeta } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
 import { espacio } from '@/ui/tokens';
@@ -151,7 +152,7 @@ export default function MenuJornada() {
           estado={pendientes > 0 ? 'pendiente' : 'listo'}
         />
         <Text style={estilos.textoSuave}>
-          Catálogos bajados: {datos.catalogos.frescuraCatalogos() ?? 'nunca'}
+          Catálogos bajados: {formatearMomento(datos.catalogos.frescuraCatalogos())}
         </Text>
         {ultimaSincronizacion ? (
           ultimaSincronizacion.ok ? (
