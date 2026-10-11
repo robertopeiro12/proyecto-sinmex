@@ -260,6 +260,7 @@ describe('normalizarOperacion', () => {
           valida({ fecha_operacion: '2026-09-01' }),
           VENDEDOR,
           '2026-08-31',
+          CTX,
         ).ok,
       ).toBe(true);
       expect(
@@ -267,6 +268,7 @@ describe('normalizarOperacion', () => {
           valida({ fecha_operacion: '2026-09-02' }),
           VENDEDOR,
           '2026-08-31',
+          CTX,
         ).ok,
       ).toBe(false);
     });

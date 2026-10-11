@@ -118,8 +118,15 @@ describe('Sincronizacion pull/push (e2e)', () => {
    * tabla, que admite UNA por vendedor y dia, y estas pruebas mandan varias en el
    * mismo lote (hasta 47). Las pruebas de la jornada usan `jornadaValida()`.
    * Cuando T-27 proyecte el gasto, este sobre tendra que mudarse otra vez.
+   *
+   * Generico a proposito: lo que trae `extra` (un `folio`, un `cliente_id`)
+   * forma parte del tipo de retorno. Con `Record<string, unknown>` el objeto
+   * real si llevaba el folio pero el tipo no, y cada `op.folio` era un error
+   * de tipos que Jest no ve porque `isolatedModules` transpila sin comprobar.
    */
-  const operacion = (extra: Record<string, unknown> = {}) => ({
+  const operacion = <E extends Record<string, unknown>>(
+    extra: E = {} as E,
+  ) => ({
     clave: `op-${SUFIJO}-${Math.random().toString(36).slice(2)}`,
     tipo: 'gasto',
     fecha_operacion: new Date().toISOString().slice(0, 10),
