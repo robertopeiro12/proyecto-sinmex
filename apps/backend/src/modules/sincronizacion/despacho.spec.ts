@@ -36,7 +36,7 @@ const op = (
 });
 
 describe('prepararProyeccion', () => {
-  it.each(['jornada', 'gasto', 'merma', 'ruta'] as const)(
+  it.each(['gasto', 'merma', 'ruta'] as const)(
     '%s no tiene modulo que la proyecte todavia: va al buzon sin mirar datos',
     (tipo) => {
       expect(
@@ -46,6 +46,50 @@ describe('prepararProyeccion', () => {
       ).toEqual({ ok: true, proyeccion: null });
     },
   );
+
+  it('una jornada pasa por prepararJornada y sale como proyeccion de jornada (T-38)', () => {
+    const VEHICULO = '106c93f1-0c9a-4efc-b167-8c73eea9b023';
+    const r = prepararProyeccion(
+      op({
+        tipo: 'jornada',
+        folio: null,
+        clienteId: null,
+        datos: {
+          vehiculo_id: VEHICULO,
+          km_inicial: 128450,
+          km_final: 128512,
+          abierta_en: '2026-10-10T08:03:53.458-07:00',
+          cerrada_en: '2026-10-10T18:19:55.706-07:00',
+        },
+      }),
+    );
+    expect(r).toEqual({
+      ok: true,
+      proyeccion: {
+        tipo: 'jornada',
+        jornada: {
+          vehiculoId: VEHICULO,
+          kmInicial: 128450,
+          kmFinal: 128512,
+          abiertaEn: '2026-10-10T15:03:53.458Z',
+          cerradaEn: '2026-10-11T01:19:55.706Z',
+        },
+      },
+    });
+  });
+
+  it('una jornada con datos de T-07 (sin vehiculo ni instantes) ya no va al buzon: jornada-datos-invalidos (T-38)', () => {
+    expect(
+      prepararProyeccion(
+        op({
+          tipo: 'jornada',
+          folio: null,
+          clienteId: null,
+          datos: { km_inicial: 120345 },
+        }),
+      ),
+    ).toMatchObject({ ok: false, codigo: 'jornada-datos-invalidos' });
+  });
 
   it('una cobranza pasa por prepararCobranza y sale como proyeccion de cobranza (T-20)', () => {
     const r = prepararProyeccion(

@@ -3,7 +3,9 @@ import { useCallback, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import {
+  ayudaRangoFecha,
   ErrorCobranza,
+  ErrorJornada,
   leerAbonos,
   leerMontoCentavos,
   lineasDelCobro,
@@ -259,7 +261,7 @@ export default function PantallaCobranza() {
       setPaso('grabada');
     } catch (e) {
       setProblemas([
-        e instanceof ErrorCobranza
+        e instanceof ErrorCobranza || e instanceof ErrorJornada
           ? e.message
           : 'No se pudo grabar el cobro. No se guardó nada; intenta de nuevo.',
       ]);
@@ -460,7 +462,7 @@ export default function PantallaCobranza() {
               onChangeText={setFechaPago}
               maxLength={10}
               placeholder="AAAA-MM-DD"
-              ayuda={`Entre ${nota.fecha} y ${hoy}.`}
+              ayuda={ayudaRangoFecha(nota.fecha, hoy)}
             />
           </View>
         </>

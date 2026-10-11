@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
-import { ErrorProspecto } from '@/datos';
+import { ErrorJornada, ErrorProspecto } from '@/datos';
 import type { Prospecto, TipoNegocio } from '@/datos/tipos';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
@@ -200,7 +200,9 @@ export default function Prospectos() {
       setRefrescos((n) => n + 1);
     } catch (e) {
       setError(
-        e instanceof ErrorProspecto ? e.message : 'No se pudo guardar el prospecto.',
+        e instanceof ErrorProspecto || e instanceof ErrorJornada
+          ? e.message
+          : 'No se pudo guardar el prospecto.',
       );
     }
   }

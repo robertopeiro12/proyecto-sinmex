@@ -260,6 +260,19 @@ usuario con sesion pasa.
     exige los dos o ninguno) y un movimiento **negativo** `aplicacion` en `saldo_favor_movimiento`. Flujo de
     Efectivo y Tesorería **no** deben contarlo como ingreso.
   - Un cobro del portal **no se deshace** todavía: eso es T-34. Por eso la vista previa.
+- **Jornada y kilometraje (T-38).** La jornada cerrada que sube la tablet (`tipo: 'jornada'`) se proyecta a la
+  tabla `jornada` con `rutas/jornadas.service.ts` (`cerrarJornada`), dentro de la transacción de la operación.
+  - Una **viva** por vendedor y día (`uq_jornada_vendedor_fecha`, parcial); el insert usa `on conflict … where
+    deleted_at is null do nothing` y, si no insertó, rechaza `jornada-duplicada` (la misma clave es `duplicada`
+    antes de llegar ahí).
+  - El vehículo tiene que ser de la sucursal del vendedor del token y no estar dado de baja (`deleted_at`). Uno
+    **desactivado** (`activo = false`) sí entra: el kilometraje se recorrió.
+  - Forma y `km_final >= km_inicial` se validan **antes** de la transacción (`rutas/datos-jornada.ts`,
+    `sincronizacion/despacho-jornada.ts`): `jornada-datos-invalidos`, `jornada-km-invalido`.
+  - Solo jornadas **cerradas** hasta T-43. Las que llegaron antes de T-38 siguen en el buzón sin proyectar (sin
+    backfill). El reporte de Kilometraje del portal todavía no existe.
+  - En la tablet, con la jornada de hoy cerrada **no se registra** venta, cobranza ni prospecto
+    (`exigirJornadaAbierta`); no hay reabrir.
 
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
 `--`: sin él, npm se come los argumentos).

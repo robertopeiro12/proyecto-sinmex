@@ -36,7 +36,7 @@ describe('contarPendientesDeSubir', () => {
     const fuentes = montar();
     const { jornadas, ventas, prospectos, cobranzas } = fuentes;
 
-    jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
+    const jornada = jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
     ventas.registrar({
       vendedorId: 'ven-1',
       clienteId: 'cli-1',
@@ -67,6 +67,25 @@ describe('contarPendientesDeSubir', () => {
       fechaPago: '2026-08-07',
     });
 
+    // La jornada cuenta solo cerrada (D7). Se cierra al final: con el dia
+    // cerrado ya no se puede registrar nada (D6).
+    jornadas.cerrar(jornada.id, 20);
+
     expect(contarPendientesDeSubir(fuentes)).toBe(4);
+  });
+
+  it('una jornada abierta no cuenta; al cerrarla, si (T-38, D7)', () => {
+    const fuentes = montar();
+    const jornada = fuentes.jornadas.abrir({
+      vendedorId: 'ven-1',
+      vehiculoId: 'veh-1',
+      kmInicial: 10,
+    });
+
+    expect(contarPendientesDeSubir(fuentes)).toBe(0);
+
+    fuentes.jornadas.cerrar(jornada.id, 20);
+
+    expect(contarPendientesDeSubir(fuentes)).toBe(1);
   });
 });

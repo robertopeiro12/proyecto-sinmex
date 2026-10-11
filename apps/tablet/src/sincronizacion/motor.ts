@@ -1,7 +1,7 @@
 /**
  * Motor de sincronizacion de la tablet (T-07).
  *
- * Tres pasos, **en este orden**:
+ * Cinco pasos, **en este orden**:
  *
  * 1. **Renovar la sesion.** No es un detalle de implementacion, es un requisito
  *    escrito: desde T-06 la tablet solo opera 72 h sin hablar con el servidor,
@@ -15,6 +15,8 @@
  *    si ya hay cursor guardado.
  * 3. **Push.** La operacion capturada offline, por lotes idempotentes.
  * 4. **Fotos de prospectos** (T-40). Un `POST` por foto, fuera del lote.
+ * 5. **Pull posterior** (2026-10-10). Solo si el push aplico algo o subio
+ *    alguna foto: otro pull incremental, por cursor.
  *
  * El pull va **antes** del push a proposito: si la conexion se corta a la
  * mitad, es preferible haber refrescado los catalogos (el vendedor puede seguir
@@ -33,6 +35,18 @@
  * > pone `ok: false`** — el negocio del dia ya subio, y decirle al vendedor que
  * > la sincronizacion fallo por una foto opcional seria mentirle. Lo que si hace
  * > es reportarlo en `fotos`. Ver `subirFotos` y `api-foto.ts`.
+ *
+ * El paso 5 existe porque el pull del paso 2, por ir antes, **no puede traer lo
+ * que el servidor deriva de lo que se acaba de subir**. Medido en el emulador el
+ * 2026-10-10: una venta a credito (`TJ261010DM01`) grabada y sincronizada dio
+ * "se bajaron 0 y se subieron 1", y la pantalla de Cobranza decia que el
+ * cliente no tenia notas pendientes; la nota (saldo $280.00) aparecio hasta la
+ * SEGUNDA sincronizacion. Lo mismo con el saldo nuevo tras un cobro. El orden
+ * pull → push → fotos se conserva (la razon de arriba sigue valiendo); lo que
+ * faltaba era bajar otra vez al final. Va despues de las fotos para traer
+ * tambien lo que cambio al subirlas. Si falla por red o sesion, **no pone
+ * `ok: false`**: lo subido ya esta a salvo y el siguiente pull lo trae; se
+ * anota en `pullPosterior`.
  *
  * Todo esto es probable en Node: recibe la API, la capa de datos, la sesion y
  * el reloj por inyeccion. Ver `motor.spec.ts`.
@@ -164,6 +178,15 @@ export interface ResultadoSincronizacion {
    * foto es un prospecto completo.
    */
   fotos?: ResumenFotos;
+  /**
+   * El paso 5. Presente solo si el pull posterior se intento y fallo por una
+   * condicion de campo (sin red, sesion, contrato, alcance).
+   *
+   * Informativo: nunca cambia `ok`. Lo subido ya esta en el servidor y el
+   * siguiente pull lo trae; la tarjeta puede decirlo algun dia, pero hoy ningun
+   * texto lo lee. `pull` sigue siendo el resumen del primer pull.
+   */
+  pullPosterior?: 'fallo';
 }
 
 export type MotorSincronizacion = ReturnType<typeof crearMotorSincronizacion>;
@@ -229,6 +252,37 @@ export function crearMotorSincronizacion({
       // Llegados aqui el push ya esta confirmado en SQLite, asi que ni una
       // excepcion puede perder el dia del vendedor.
       resultado.fotos = await subirFotos(token);
+
+      // --- 5. Pull posterior, solo si esta pasada subio algo.
+      //
+      // El pull del paso 2 corrio antes de subir, asi que no trae lo que el
+      // servidor derivo de lo subido: la nota a credito de una venta, el saldo
+      // tras un cobro. Sin esto el vendedor tenia que sincronizar dos veces
+      // para poder cobrar la venta que acababa de hacer (ver la cabecera). Si no
+      // se aplico nada (todo `duplicada` o `rechazada`) el servidor no cambio
+      // por esta pasada, y el pull del paso 2 ya trajo lo que habia.
+      if (resultado.push.aplicadas > 0 || resultado.fotos.subidas > 0) {
+        const primerPull = resultado.pull;
+        try {
+          const posterior = await bajar(token);
+          resultado.pull = {
+            // El del primer pull: el posterior es incremental y siempre diria
+            // `false`, que se leeria como que falto algo.
+            completo: primerPull.completo,
+            // El mas nuevo, que es el que `bajar` dejo guardado.
+            cursor: posterior.cursor,
+            filas: primerPull.filas + posterior.filas,
+            notas: primerPull.notas + posterior.notas,
+          };
+        } catch (error) {
+          // `traducir` relanza lo que no reconoce: un bug se propaga igual que
+          // en los pasos 2 a 4. Una condicion de campo NO pone `ok: false` —
+          // lo subido ya esta a salvo y el siguiente pull lo trae —, solo se
+          // anota. El cursor y el snapshot del primer pull quedan como estaban.
+          traducir(error);
+          resultado.pullPosterior = 'fallo';
+        }
+      }
 
       return resultado;
     },
