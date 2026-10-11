@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
 
 import {
+  ayudaRangoFecha,
   ErrorCobranza,
   ErrorJornada,
   leerAbonos,
@@ -461,7 +462,7 @@ export default function PantallaCobranza() {
               onChangeText={setFechaPago}
               maxLength={10}
               placeholder="AAAA-MM-DD"
-              ayuda={`Entre ${nota.fecha} y ${hoy}.`}
+              ayuda={ayudaRangoFecha(nota.fecha, hoy)}
             />
           </View>
         </>

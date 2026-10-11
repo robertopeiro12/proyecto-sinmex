@@ -42,3 +42,15 @@ export function lineasDelCobro(
     saldoDespuesCentavos: a.saldoDespuesCentavos,
   }));
 }
+
+/**
+ * La ayuda bajo *Fecha de pago* en la cobranza (2026-10-10).
+ *
+ * `desde` es la fecha de la nota y `hasta` es hoy: la fecha de pago no puede
+ * ser anterior a la venta ni futura (eso lo valida `problemasDeCobro`). Con una
+ * nota de hoy el rango tiene un solo dia, y "Entre 2026-10-10 y 2026-10-10." se
+ * leia como un error de la pantalla; ahi se dice directamente.
+ */
+export function ayudaRangoFecha(desde: string, hasta: string): string {
+  return desde === hasta ? `Solo hoy (${hasta}).` : `Entre ${desde} y ${hasta}.`;
+}

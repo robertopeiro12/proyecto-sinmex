@@ -235,7 +235,9 @@ describe('motor de sincronizacion', () => {
       expect(r.ok).toBe(true);
       expect(r.sesionRenovada).toBe(true);
       expect(escenario.orden[0]).toBe('renovar');
-      expect(escenario.orden).toEqual(['renovar', 'pull', 'push']);
+      // El ultimo `pull` es el paso 5: el push aplico la jornada, asi que se
+      // vuelve a bajar para traer lo que el servidor derivo de ella.
+      expect(escenario.orden).toEqual(['renovar', 'pull', 'push', 'pull']);
     });
 
     it('si no hay sesion guardada, no se toca la red', async () => {
@@ -594,6 +596,187 @@ describe('motor de sincronizacion', () => {
       await expect(motor.sincronizar()).rejects.toThrow(TypeError);
     });
   });
+
+  /**
+   * El paso 5 (2026-10-10): el pull posterior.
+   *
+   * El pull del paso 2 corre ANTES de subir, asi que no puede traer lo que el
+   * servidor deriva de lo subido. Medido en el emulador: una venta a credito
+   * recien subida no aparecia para cobrar hasta la SEGUNDA sincronizacion.
+   */
+  describe('pull posterior (paso 5)', () => {
+    /** El cursor que devuelve el pull incremental de la segunda vuelta. */
+    const CURSOR_POSTERIOR = '2026-08-07T15:00:10.000Z';
+
+    /**
+     * Lo que trae un pull incremental justo despues de subir: solo lo que
+     * cambio. Aqui, las dos notas pendientes y ningun catalogo.
+     */
+    function pullIncremental(): RespuestaPull {
+      const base = respuestaPullDePrueba();
+      return {
+        ...base,
+        desde: base.cursor,
+        completo: false,
+        cursor: CURSOR_POSTERIOR,
+        catalogos: {
+          sucursales: [],
+          vendedores: [],
+          vehiculos: [],
+          productos: [],
+          presentaciones: [],
+          clientes: [],
+          tipos_negocio: [],
+          precios: [],
+        },
+      };
+    }
+
+    /** Las filas que el motor cuenta para una respuesta (igual que `contarFilas`). */
+    function filasDe(respuesta: RespuestaPull): number {
+      return Object.values(aSnapshot(respuesta)).reduce(
+        (total, filas) => total + (filas?.length ?? 0),
+        0,
+      );
+    }
+
+    it('con algo aplicado en el push, vuelve a bajar y SUMA las filas', async () => {
+      let vuelta = 0;
+      const { motor, escenario, jornadas, catalogos, sync } = montar({
+        pull: () => {
+          vuelta += 1;
+          return vuelta === 1 ? respuestaPullDePrueba() : pullIncremental();
+        },
+      });
+      conJornadaCerrada(jornadas, catalogos);
+
+      const r = await motor.sincronizar();
+
+      expect(r.ok).toBe(true);
+      expect(escenario.orden).toEqual(['renovar', 'pull', 'push', 'pull']);
+      // Incremental: el segundo pide desde el cursor que dejo el primero, no
+      // desde cero. Por eso es barato.
+      expect(escenario.pulls.map((p) => p.desde)).toEqual([null, '2026-08-07T14:59:55.000Z']);
+      expect(r.pull).toEqual({
+        // El del primer pull: el incremental siempre diria `false` y se leeria
+        // como que falto algo.
+        completo: true,
+        cursor: CURSOR_POSTERIOR,
+        filas: filasDe(respuestaPullDePrueba()) + filasDe(pullIncremental()),
+        notas: 4,
+      });
+      expect(sync.leerCursor()).toBe(CURSOR_POSTERIOR);
+      expect(r.pullPosterior).toBeUndefined();
+    });
+
+    it('sin nada que subir, baja UNA sola vez', async () => {
+      const { motor, escenario } = montar({});
+
+      const r = await motor.sincronizar();
+
+      expect(r.ok).toBe(true);
+      expect(escenario.pulls).toHaveLength(1);
+      expect(escenario.orden).toEqual(['renovar', 'pull']);
+      expect(r.pullPosterior).toBeUndefined();
+    });
+
+    it('si el push no aplico nada (solo duplicadas), tampoco vuelve a bajar', async () => {
+      // `duplicada` quiere decir que el servidor ya lo tenia desde antes, asi
+      // que el pull del paso 2 ya trajo lo que derivo de ello.
+      const { motor, escenario, jornadas, catalogos } = montar({
+        push: (ops) => ({
+          contrato: 1,
+          recibido_en: '2026-08-07T15:00:00.000Z',
+          resumen: { recibidas: ops.length, aplicadas: 0, duplicadas: ops.length, rechazadas: 0 },
+          resultados: ops.map((o) => ({
+            clave: o.clave,
+            tipo: o.tipo,
+            estado: 'duplicada' as const,
+            id_servidor: `srv-${o.clave}`,
+          })),
+        }),
+      });
+      conJornadaCerrada(jornadas, catalogos);
+
+      const r = await motor.sincronizar();
+
+      expect(r.ok).toBe(true);
+      expect(r.push?.duplicadas).toBe(1);
+      expect(escenario.pulls).toHaveLength(1);
+    });
+
+    it('una foto subida sin nada en el push tambien dispara el pull posterior', async () => {
+      let intentos = 0;
+      const { motor, prospectos, escenario } = montarConFotos({
+        subirFoto: async () => {
+          intentos += 1;
+          if (intentos === 1) throw new SinRedError();
+          return FOTO_SUBIDA_EN;
+        },
+      });
+      conProspectoConFoto(prospectos);
+
+      // 1a pasada: el push aplica el prospecto (pull posterior) y la foto falla.
+      await motor.sincronizar();
+      expect(escenario.pulls).toHaveLength(2);
+
+      // 2a pasada: push vacio, pero la foto sube: tambien hay pull posterior.
+      const r = await motor.sincronizar();
+
+      expect(r.push?.aplicadas).toBe(0);
+      expect(r.fotos?.subidas).toBe(1);
+      expect(escenario.pulls).toHaveLength(4);
+    });
+
+    it('si el pull posterior falla por red, la sincronizacion sigue ok y lo anota', async () => {
+      let vuelta = 0;
+      const { motor, jornadas, catalogos, sync } = montar({
+        pull: () => {
+          vuelta += 1;
+          return vuelta === 1 ? respuestaPullDePrueba() : Promise.reject(new SinRedError());
+        },
+      });
+      const jornada = conJornadaCerrada(jornadas, catalogos);
+
+      const r = await motor.sincronizar();
+
+      // Lo subido ya esta a salvo y el siguiente pull lo trae: decirle al
+      // vendedor que la sincronizacion fallo seria mentirle.
+      expect(r.ok).toBe(true);
+      expect(r.motivo).toBeUndefined();
+      expect(r.pullPosterior).toBe('fallo');
+      expect(r.push?.aplicadas).toBe(1);
+      expect(jornadas.porId(jornada.id)?.sync_estado).toBe('sincronizado');
+      // El resumen y el cursor son los del primer pull, intactos.
+      expect(r.pull).toEqual({
+        completo: true,
+        cursor: '2026-08-07T14:59:55.000Z',
+        filas: filasDe(respuestaPullDePrueba()),
+        notas: 2,
+      });
+      expect(sync.leerCursor()).toBe('2026-08-07T14:59:55.000Z');
+    });
+
+    it('un error que no reconoce en el pull posterior se deja propagar', async () => {
+      // La doctrina del motor: tragarse un bug lo convierte en "no se sabe por
+      // que". El push ya esta confirmado en SQLite, asi que no se pierde nada.
+      let vuelta = 0;
+      const { motor, jornadas, catalogos } = montar({
+        pull: () => {
+          vuelta += 1;
+          return vuelta === 1
+            ? respuestaPullDePrueba()
+            : Promise.reject(new TypeError('undefined is not a function'));
+        },
+      });
+      const jornada = conJornadaCerrada(jornadas, catalogos);
+
+      await expect(motor.sincronizar()).rejects.toThrow(TypeError);
+
+      expect(jornadas.porId(jornada.id)?.sync_estado).toBe('sincronizado');
+    });
+  });
+
   /**
    * El paso 4: las fotos de los prospectos (T-40).
    *
@@ -611,7 +794,9 @@ describe('motor de sincronizacion', () => {
 
       await motor.sincronizar();
 
-      expect(escenario.orden).toEqual(['renovar', 'pull', 'push', 'foto']);
+      // El pull posterior (paso 5) va despues de las fotos, no entre el push y
+      // ellas: asi tambien trae lo que cambio al subir la foto.
+      expect(escenario.orden).toEqual(['renovar', 'pull', 'push', 'foto', 'pull']);
     });
 
     it('un prospecto capturado hoy sube su foto en la MISMA pasada', async () => {
