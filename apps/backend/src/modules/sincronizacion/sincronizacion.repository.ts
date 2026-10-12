@@ -9,6 +9,7 @@ import type {
   PrecioPull,
   PresentacionPull,
   ProductoPull,
+  RutaPull,
   SucursalPull,
   TipoNegocioPull,
   VehiculoPull,
@@ -436,6 +437,53 @@ export class SincronizacionRepository {
         activo: abierta && f.borrada === null ? 1 : 0,
       };
     });
+  }
+
+  /**
+   * La ruta diaria del vendedor del token (T-37, D12).
+   *
+   * - **Solo la suya**: el alcance de T-09 dice que un vendedor jala lo suyo.
+   * - Solo `tipo = 'diaria'`: la semanal (T-36) no viaja.
+   * - **Ventana por el reloj de Postgres**: de ayer a dentro de 7 dias. La base
+   *   corre en UTC; el `- 1` es lo que mantiene "hoy en Tijuana" dentro de la
+   *   ventana despues de las 17:00 locales, cuando en UTC ya es manana. La
+   *   tablet decide que dia muestra con su reloj local; el `+ 7` es para que una
+   *   ruta asignada el viernes para el lunes baje el viernes. No lo "corrijas" a
+   *   la zona de Tijuana: el spec la fija asi.
+   * - Sin `desde`, solo las vivas. Con `desde`, todo lo que cambio: una fila que
+   *   la oficina quito viaja con `activo: 0` (baja como bandera, nunca como
+   *   ausencia; `ruta` no tiene columna `activo`).
+   */
+  async rutas(vendedorId: string, desde: Date | null): Promise<RutaPull[]> {
+    let q = this.db
+      .selectFrom('ruta')
+      .select([
+        'id',
+        'cliente_id',
+        // `date` -> texto en Postgres: el driver lo convertiria a Date en la
+        // hora local del proceso.
+        sql<string>`to_char(fecha, 'YYYY-MM-DD')`.as('fecha'),
+        'orden',
+        'origen',
+        'deleted_at',
+      ])
+      .where('vendedor_id', '=', vendedorId)
+      .where('tipo', '=', 'diaria')
+      .where(sql<boolean>`fecha between current_date - 1 and current_date + 7`);
+    if (desde) {
+      q = q.where('updated_at', '>', desde);
+    } else {
+      q = q.where('deleted_at', 'is', null);
+    }
+
+    return (await q.orderBy('fecha').orderBy('orden').execute()).map((f) => ({
+      id: f.id,
+      cliente_id: f.cliente_id,
+      fecha: f.fecha,
+      orden: f.orden,
+      origen: f.origen as 'oficina' | 'vendedor',
+      activo: bandera(true, f.deleted_at),
+    }));
   }
 
   /* ---------------------------------------------------------------- */

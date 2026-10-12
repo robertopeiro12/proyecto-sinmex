@@ -104,6 +104,7 @@ export class SincronizacionService {
       clientes,
       tiposNegocio,
       notasPendientes,
+      rutas,
     ] = await Promise.all([
       this.repo.sucursales(vendedor.sucursal_id, desde),
       this.repo.vendedores(vendedor.id, desde),
@@ -114,6 +115,8 @@ export class SincronizacionService {
       // T-40: el desplegable de la pantalla de prospectos. No lleva sucursal.
       this.repo.tiposNegocio(desde),
       this.repo.notasPendientes(vendedor.sucursal_id, desde),
+      // T-37: la ruta diaria. Por VENDEDOR, no por sucursal.
+      this.repo.rutas(vendedor.id, desde),
     ]);
 
     // Los precios van completos o no van: ver `RespuestaPull.catalogos.precios`.
@@ -155,8 +158,7 @@ export class SincronizacionService {
         precios,
       },
       notas_pendientes: notasPendientes,
-      // T-37: la Tarea 3 la llena con `this.repo.rutas(...)`.
-      rutas: [],
+      rutas,
     };
   }
 
