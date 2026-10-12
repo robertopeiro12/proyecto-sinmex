@@ -155,6 +155,8 @@ export class SincronizacionService {
         precios,
       },
       notas_pendientes: notasPendientes,
+      // T-37: la Tarea 3 la llena con `this.repo.rutas(...)`.
+      rutas: [],
     };
   }
 

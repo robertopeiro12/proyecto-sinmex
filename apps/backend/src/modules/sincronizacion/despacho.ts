@@ -106,6 +106,9 @@ export function prepararProyeccion(
     case 'merma':
     case 'ruta':
       return { ok: true, proyeccion: null };
+    // T-37: buzon solo mientras la Tarea 4 no traiga su proyeccion.
+    case 'ruta-alta':
+      return { ok: true, proyeccion: null };
   }
 }
 
