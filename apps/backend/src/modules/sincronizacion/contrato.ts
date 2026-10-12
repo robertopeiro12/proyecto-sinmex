@@ -630,9 +630,11 @@ export interface NotaPendientePull extends FilaSincronizable {
  * Una fila de la ruta diaria del vendedor del token (T-37, D12).
  *
  * - Solo `tipo = 'diaria'` y solo del vendedor del token.
- * - Ventana de fechas por el reloj del servidor: de ayer a dentro de 7 dias.
- *   La tablet decide que dia mostrar con su reloj local (Tijuana); la ventana
- *   existe para que una ruta asignada el viernes para el lunes baje el viernes.
+ * - Ventana de fechas por el reloj del servidor: desde ayer en adelante, sin
+ *   tope: una ruta futura debe bajar en el pull siguiente a su creacion (con
+ *   tope y el cursor por `updated_at`, una ruta asignada a 8+ dias nunca
+ *   entraba al pull incremental). La tablet decide que dia mostrar con su reloj
+ *   local (Tijuana).
  * - Incremental por `updated_at` como las demas colecciones. Una fila que la
  *   oficina quito viaja con `activo: 0` (baja como bandera, nunca como
  *   ausencia); sin `desde` bajan solo las vivas.

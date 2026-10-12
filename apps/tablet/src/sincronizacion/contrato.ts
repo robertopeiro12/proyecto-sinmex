@@ -260,7 +260,13 @@ export interface NotaPendientePull extends FilaSincronizable {
   abonos: AbonoPull[];
 }
 
-/** Una fila de la ruta diaria del vendedor (T-37). Copia de la del backend. */
+/**
+ * Una fila de la ruta diaria del vendedor (T-37). Copia de la del backend.
+ *
+ * Ventana por el reloj del servidor: desde ayer en adelante, sin tope: una ruta
+ * futura debe bajar en el pull siguiente a su creacion. La tablet decide que
+ * dia mostrar con su reloj local.
+ */
 export interface RutaPull extends FilaSincronizable {
   cliente_id: string;
   /** `AAAA-MM-DD`. */
