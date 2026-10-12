@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { JornadasRepository } from './jornadas.repository';
 import { JornadasService } from './jornadas.service';
+import { RutasDiariasController } from './rutas-diarias.controller';
 import { RutasDiariasRepository } from './rutas-diarias.repository';
 import { RutasDiariasService } from './rutas-diarias.service';
 import { VehiculosController } from './vehiculos.controller';
@@ -16,7 +17,7 @@ import { VehiculosService } from './vehiculos.service';
 // aqui, nunca al reves. T-37 hace lo mismo con `RutasDiariasService` y el
 // `ruta-alta`.
 @Module({
-  controllers: [VehiculosController],
+  controllers: [VehiculosController, RutasDiariasController],
   providers: [
     VehiculosService,
     VehiculosRepository,
