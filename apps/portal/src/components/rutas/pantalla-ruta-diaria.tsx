@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,6 +46,7 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
   const [cargando, setCargando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copiando, setCopiando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
 
   const vendedor = vendedores.find((v) => v.id === vendedorId) ?? null;
@@ -53,6 +54,18 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
   const sucursalVendedor = vendedor?.sucursalCodigo ?? null;
   const sucio = hayCambios(original, filas);
   const enRuta = useMemo(() => new Set(filas.map((f) => f.clienteId)), [filas]);
+  const ocupado = guardando || copiando;
+
+  // Lo vigente al momento de resolver una promesa: una respuesta de otro vendedor o de otra
+  // fecha no debe pisar la pantalla actual (y menos acabar guardándose con el vendedor equivocado).
+  const vendedoresRef = useRef(vendedores);
+  useEffect(() => {
+    vendedoresRef.current = vendedores;
+  });
+  const vigenteRef = useRef({ vendedorId, fecha, sucio });
+  useEffect(() => {
+    vigenteRef.current = { vendedorId, fecha, sucio };
+  });
 
   useEffect(() => {
     if (!permitido) return;
@@ -62,8 +75,17 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
         if (!vigente) return;
         // Un vendedor desactivado no sale a repartir: no se le arma ruta.
         const activos = lista.filter((v) => v.activo);
+        const { vendedorId: elegido, sucio: conCambios } = vigenteRef.current;
+        const desaparece = elegido !== "" && !activos.some((v) => v.id === elegido);
+        if (desaparece && conCambios && !window.confirm(AVISO_CAMBIOS)) {
+          // Cambió la sucursal del selector global pero el usuario no quiere perder la ruta:
+          // el vendedor se queda en la lista (aunque sea de otra sucursal) hasta guardar o descartar.
+          const elQueSeQueda = vendedoresRef.current.find((v) => v.id === elegido);
+          setVendedores(elQueSeQueda ? [...activos, elQueSeQueda] : activos);
+          return;
+        }
         setVendedores(activos);
-        // Si cambió la sucursal del selector global y el elegido ya no está, se suelta.
+        // Si el elegido ya no está, se suelta.
         setVendedorId((actual) => (activos.some((v) => v.id === actual) ? actual : ""));
       })
       .catch(() => {
@@ -111,6 +133,7 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
     if (!sucio) return;
     const avisar = (e: BeforeUnloadEvent) => {
       e.preventDefault();
+      e.returnValue = ""; // algunos navegadores solo preguntan con esto
     };
     window.addEventListener("beforeunload", avisar);
     return () => window.removeEventListener("beforeunload", avisar);
@@ -121,26 +144,31 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
   }
 
   function cambiarVendedor(id: string) {
-    if (id === vendedorId || !puedeDescartar()) return;
+    if (ocupado || id === vendedorId || !puedeDescartar()) return;
     setVendedorId(id);
   }
 
   function cambiarFecha(valor: string) {
-    if (valor === "" || valor === fecha || !puedeDescartar()) return;
+    if (ocupado || valor === "" || valor === fecha || !puedeDescartar()) return;
     setFecha(valor);
   }
 
   async function guardar() {
     if (!vendedor) return;
+    const { id: paraVendedor } = vendedor;
+    const paraFecha = fecha;
+    const sigueVigente = () =>
+      vigenteRef.current.vendedorId === paraVendedor && vigenteRef.current.fecha === paraFecha;
     setGuardando(true);
     setError(null);
     setAviso(null);
     try {
       const ruta = await guardarRutaDiaria({
-        vendedorId: vendedor.id,
-        fecha,
+        vendedorId: paraVendedor,
+        fecha: paraFecha,
         clientes: filas.map((f) => f.clienteId),
       });
+      if (!sigueVigente()) return;
       const editables = aEditables(ruta);
       setOriginal(editables);
       setFilas(editables);
@@ -148,7 +176,9 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
     } catch (err) {
       // El PUT es una transacción: si falló, la ruta del servidor no cambió. Las
       // ediciones locales se quedan para quitar la fila problemática y reintentar.
-      setError(mensajeDe(err, "No se pudo guardar la ruta. No se cambió nada; vuelve a intentar."));
+      if (sigueVigente()) {
+        setError(mensajeDe(err, "No se pudo guardar la ruta. No se cambió nada; vuelve a intentar."));
+      }
     } finally {
       setGuardando(false);
     }
@@ -156,10 +186,14 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
 
   async function copiarDeAyer() {
     if (!vendedor) return;
+    const { id: paraVendedor } = vendedor;
+    const paraFecha = fecha;
+    setCopiando(true);
     setError(null);
     setAviso(null);
     try {
-      const anterior = await obtenerRutaAnterior(vendedor.id, fecha);
+      const anterior = await obtenerRutaAnterior(paraVendedor, paraFecha);
+      if (vigenteRef.current.vendedorId !== paraVendedor || vigenteRef.current.fecha !== paraFecha) return;
       if (anterior.fecha === null) {
         setAviso("Este vendedor no tiene una ruta anterior.");
         return;
@@ -167,7 +201,11 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
       setFilas((actuales) => cargarAnterior(actuales, anterior.clientes, cartera));
       setAviso(`Se cargó la ruta del ${anterior.fecha}. Revísala y guarda.`);
     } catch (err) {
-      setError(mensajeDe(err, "No se pudo leer la ruta anterior."));
+      if (vigenteRef.current.vendedorId === paraVendedor && vigenteRef.current.fecha === paraFecha) {
+        setError(mensajeDe(err, "No se pudo leer la ruta anterior."));
+      }
+    } finally {
+      setCopiando(false);
     }
   }
 
@@ -198,6 +236,7 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
             <select
               id="ruta-vendedor"
               value={vendedorId}
+              disabled={ocupado}
               onChange={(e) => cambiarVendedor(e.target.value)}
               className="rounded-md border px-3 py-2 text-sm"
             >
@@ -217,6 +256,7 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
               id="ruta-fecha"
               type="date"
               value={fecha}
+              disabled={ocupado}
               onChange={(e) => cambiarFecha(e.target.value)}
               className="rounded-md border px-3 py-2 text-sm"
             />
@@ -225,12 +265,12 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
             <Button
               type="button"
               variant="outline"
-              disabled={!vendedor || cargando || guardando}
+              disabled={!vendedor || cargando || ocupado}
               onClick={() => void copiarDeAyer()}
             >
               Copiar de ayer
             </Button>
-            <Button type="button" disabled={!vendedor || !sucio || guardando} onClick={() => void guardar()}>
+            <Button type="button" disabled={!vendedor || !sucio || ocupado} onClick={() => void guardar()}>
               {guardando ? "Guardando…" : "Guardar ruta"}
             </Button>
           </div>

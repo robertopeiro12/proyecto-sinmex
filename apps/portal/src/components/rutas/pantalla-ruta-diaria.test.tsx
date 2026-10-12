@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorApi } from "@/lib/api";
@@ -70,6 +70,10 @@ describe("PantallaRutaDiaria", () => {
       cliente("b", "Tienda B"),
     ]);
     vi.mocked(rutasLib.obtenerRutaDiaria).mockResolvedValue(ruta([FILA_A]));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("sin ruta_diaria.gestionar lo dice y no pide nada", () => {
@@ -145,7 +149,75 @@ describe("PantallaRutaDiaria", () => {
     expect(confirmar).toHaveBeenCalledWith(AVISO_CAMBIOS);
     expect(rutasLib.obtenerRutaDiaria).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Cambios sin guardar")).toBeInTheDocument();
-    confirmar.mockRestore();
+  });
+
+  it("si cambia la sucursal y el vendedor desaparece con cambios sin guardar, pregunta; cancelar los conserva", async () => {
+    mockAuth(() => true);
+    const confirmar = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const usuario = userEvent.setup();
+    const { rerender } = render(<PantallaRutaDiaria sucursal={null} />);
+    await elegirVendedor(usuario);
+    await usuario.click(screen.getByRole("button", { name: "Agregar Tienda B" }));
+
+    vi.mocked(vendedoresLib.listarVendedores).mockResolvedValue([]);
+    rerender(<PantallaRutaDiaria sucursal="OTRA" />);
+
+    await waitFor(() => expect(confirmar).toHaveBeenCalledWith(AVISO_CAMBIOS));
+    expect(screen.getByText("Cambios sin guardar")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Ruta del día" })).getByText("Tienda B")).toBeInTheDocument();
+    expect(screen.getByLabelText("Vendedor")).toHaveValue("v1");
+  });
+
+  it("si cambia la sucursal y el vendedor desaparece, aceptar descarta los cambios", async () => {
+    mockAuth(() => true);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const usuario = userEvent.setup();
+    const { rerender } = render(<PantallaRutaDiaria sucursal={null} />);
+    await elegirVendedor(usuario);
+    await usuario.click(screen.getByRole("button", { name: "Agregar Tienda B" }));
+
+    vi.mocked(vendedoresLib.listarVendedores).mockResolvedValue([]);
+    rerender(<PantallaRutaDiaria sucursal="OTRA" />);
+
+    await waitFor(() => expect(screen.queryByText("Cambios sin guardar")).toBeNull());
+    expect(screen.getByText("Elige un vendedor para ver su ruta.")).toBeInTheDocument();
+  });
+
+  it("mientras guarda no se puede cambiar de vendedor ni de fecha", async () => {
+    mockAuth(() => true);
+    vi.mocked(rutasLib.guardarRutaDiaria).mockReturnValue(new Promise(() => {}));
+    const usuario = userEvent.setup();
+    render(<PantallaRutaDiaria sucursal={null} />);
+    await elegirVendedor(usuario);
+    await usuario.click(screen.getByRole("button", { name: "Agregar Tienda B" }));
+    await usuario.click(screen.getByRole("button", { name: "Guardar ruta" }));
+
+    expect(screen.getByLabelText("Vendedor")).toBeDisabled();
+    expect(screen.getByLabelText("Fecha")).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Fecha"), { target: { value: "2030-01-01" } });
+    expect(rutasLib.obtenerRutaDiaria).toHaveBeenCalledTimes(1);
+  });
+
+  it("un guardado que resuelve cuando el vendedor ya se soltó no pisa la pantalla", async () => {
+    mockAuth(() => true);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    let resolver!: (r: RutaDiaria) => void;
+    vi.mocked(rutasLib.guardarRutaDiaria).mockReturnValue(new Promise((r) => (resolver = r)));
+    const usuario = userEvent.setup();
+    const { rerender } = render(<PantallaRutaDiaria sucursal={null} />);
+    await elegirVendedor(usuario);
+    await usuario.click(screen.getByRole("button", { name: "Agregar Tienda B" }));
+    await usuario.click(screen.getByRole("button", { name: "Guardar ruta" }));
+
+    vi.mocked(vendedoresLib.listarVendedores).mockResolvedValue([]);
+    rerender(<PantallaRutaDiaria sucursal="OTRA" />);
+    await screen.findByText("Elige un vendedor para ver su ruta.");
+    await act(async () => {
+      resolver(ruta([FILA_A]));
+    });
+
+    expect(screen.queryByText("Ruta guardada.")).toBeNull();
+    expect(screen.getByText("Elige un vendedor para ver su ruta.")).toBeInTheDocument();
   });
 
   it("si guardar falla, muestra el mensaje del servidor y conserva las ediciones para reintentar", async () => {
