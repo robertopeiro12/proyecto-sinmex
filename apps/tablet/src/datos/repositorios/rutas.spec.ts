@@ -419,7 +419,7 @@ describe('la cola del push', () => {
 });
 
 describe('purgar', () => {
-  it('borra filas y orden local de antes de hoy - 7, pero conserva las altas sin subir', () => {
+  it('borra filas y orden local de antes de hoy - 7, pero conserva un alta vieja pendiente', () => {
     const { rutas, deps } = montar();
     rutas.aplicarSnapshot([
       delServidor({ id: 'srv-viejo', fecha: '2026-07-30' }),
@@ -434,5 +434,16 @@ describe('purgar', () => {
     expect(rutas.porId('srv-limite')).not.toBeNull();
     expect(rutas.porId(altaVieja.id)).not.toBeNull();
     expect(deps.bd.getAllSync('select * from ruta_orden_local')).toEqual([]);
+  });
+
+  it('borra un alta vieja en error: ya la rechazo el servidor y no se reintenta para siempre', () => {
+    const { rutas } = montar();
+    const rechazada = rutas.agregar('cli-3', CTX, '2026-07-01');
+    rutas.marcarError(rechazada.id, 'cliente-inexistente: x');
+
+    rutas.purgar();
+
+    expect(rutas.porId(rechazada.id)).toBeNull();
+    expect(rutas.pendientesDeSincronizar()).toEqual([]);
   });
 });

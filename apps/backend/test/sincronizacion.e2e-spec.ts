@@ -3616,7 +3616,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
   });
 
   describe('ruta diaria: pull (T-37)', () => {
-    it('sin desde baja la ruta VIVA del vendedor, de ayer a dentro de 7 dias, con orden y origen', async () => {
+    it('sin desde baja la ruta VIVA del vendedor, de ayer en adelante (sin tope), con orden y origen', async () => {
       const c = await clienteDeRuta();
       const fueraAntes = await sembrarRuta({ cliente: c, dias: -2 });
       const ayer = await sembrarRuta({ cliente: c, dias: -1 });
@@ -3627,7 +3627,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
         origen: 'vendedor',
       });
       const ultimoDia = await sembrarRuta({ cliente: c, dias: 7 });
-      const fueraDespues = await sembrarRuta({ cliente: c, dias: 8 });
+      // Antes la ventana tenia tope en `+ 7`; ya no (D12, ajuste).
+      const masAdelante = await sembrarRuta({ cliente: c, dias: 8 });
       const otro = await clienteDeRuta();
       const borrada = await sembrarRuta({
         cliente: otro,
@@ -3651,8 +3652,9 @@ describe('Sincronizacion pull/push (e2e)', () => {
       expect(ids.has(ayer)).toBe(true);
       expect(ids.has(hoy)).toBe(true);
       expect(ids.has(ultimoDia)).toBe(true);
-      // Fuera de la ventana, dada de baja, semanal (T-36) o de otro vendedor: no.
-      for (const id of [fueraAntes, fueraDespues, borrada, semanal, ajena]) {
+      expect(ids.has(masAdelante)).toBe(true);
+      // Antes de ayer, dada de baja, semanal (T-36) o de otro vendedor: no.
+      for (const id of [fueraAntes, borrada, semanal, ajena]) {
         expect(ids.has(id)).toBe(false);
       }
 
@@ -3699,6 +3701,29 @@ describe('Sincronizacion pull/push (e2e)', () => {
       expect(cuerpo.rutas.find((r) => r.id === quitada)).toMatchObject({
         id: quitada,
         activo: 0,
+      });
+    });
+
+    it('una ruta asignada a mas de 7 dias baja en el pull incremental', async () => {
+      // El escenario real: la tablet ya hizo su pull completo (`desde` = hace
+      // un minuto) y la oficina guarda AHORA una ruta para dentro de 9 dias.
+      // Con la ventana topada en `+ 7` no bajaba ahora, y cuando entraba a la
+      // ventana su `updated_at` ya era anterior al cursor: no bajaba nunca.
+      const desde = (
+        await sql<{
+          t: Date;
+        }>`select now() - interval '1 minute' as t`.execute(db)
+      ).rows[0].t.toISOString();
+      const c = await clienteDeRuta();
+      const lejana = await sembrarRuta({ cliente: c, dias: 9 });
+
+      const cuerpo = (await pull({ desde }).expect(200)).body as RespuestaPull;
+
+      expect(cuerpo.rutas.find((r) => r.id === lejana)).toMatchObject({
+        id: lejana,
+        cliente_id: c,
+        fecha: await fechaServidor(9),
+        activo: 1,
       });
     });
   });

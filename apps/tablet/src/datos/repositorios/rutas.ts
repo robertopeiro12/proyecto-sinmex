@@ -69,7 +69,10 @@ export function restarDias(fecha: FechaISO, dias: number): FechaISO {
  *
  * 1. **Si su cliente no esta en la tablet, se omite.** La llave foranea a
  *    `cliente` revertiria el pull ENTERO y el vendedor se quedaria sin refrescar
- *    nada; la fila vuelve a bajar cuando el cliente llegue (Review Focus 1).
+ *    nada. La fila se omite; no se reintenta sola (su `updated_at` ya quedo
+ *    atras del cursor). En la practica no pasa: cliente y ruta viajan en la
+ *    misma respuesta y ambos se filtran por la sucursal del vendedor (Review
+ *    Focus 1).
  * 2. **Si viene viva, antes se borra cualquier fila del mismo `(fecha,
  *    cliente)` con otro id**: un alta local (se funde: queda la del servidor; si
  *    la operacion seguia pendiente, el servidor la respondera `ruta-duplicada`,
@@ -337,8 +340,12 @@ export function crearRepositorioRutas(
 
     /**
      * Borra la ruta y el orden local de los dias anteriores a `antesDe` (por
-     * defecto, hoy - 7). Lo llama "Abrir el dia". Las altas que todavia no suben
+     * defecto, hoy - 7). Lo llama "Abrir el dia". Las altas `pendiente`
      * **se conservan**: borrarlas perderia lo que la oficina necesita saber.
+     * Las altas en `error` viejas SI se borran: el servidor ya las rechazo
+     * (`cliente-inexistente`, `ruta-datos-invalidos`), `quitarRechazada` solo se
+     * alcanza desde la lista de hoy, y conservarlas las reintentaria en cada
+     * sync y las contaria como "por subir" para siempre.
      */
     purgar(antesDe: FechaISO = restarDias(reloj.hoy(), 7)): void {
       enTransaccion(bd, () => {
@@ -346,7 +353,7 @@ export function crearRepositorioRutas(
         bd.runSync(
           `delete from ruta
             where fecha < $antes
-              and not (clave is not null and sync_estado in ('pendiente', 'error'))`,
+              and not (clave is not null and sync_estado = 'pendiente')`,
           { $antes: antesDe },
         );
       });

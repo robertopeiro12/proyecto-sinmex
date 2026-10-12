@@ -186,7 +186,12 @@ de vendedores es **T-62**).
 - **Reordenar**: mantener presionado y arrastrar (`PanResponder`, `src/ui/lista-ruta.tsx`), con ▲/▼ siempre como
   respaldo. Si el arrastre resulta frágil en un equipo, `ARRASTRE_HABILITADO = false` deja solo los botones.
 - La lógica de la pantalla vive en `src/estado/ruta-del-dia.ts` (puro, con pruebas). "Abrir el día" purga la ruta
-  de hace más de 7 días (`rutas.purgar`), conservando las altas sin subir.
+  de hace más de 7 días (`rutas.purgar`), conservando las altas `pendiente` (las rechazadas en `error` de esos días
+  sí se borran: si no, se reintentarían en cada sincronización).
+- **El pull baja la ruta desde ayer en adelante**, sin tope (desde `current_date - 1` del servidor): una ruta futura
+  debe bajar en el pull siguiente a su creación.
+- **Tablet compartida:** el cursor de pull es global: las filas del vendedor anterior se quedan hasta la purga y las
+  del nuevo vendedor anteriores al cursor no bajan; pendiente (reiniciar el cursor al cambiar de vendedor).
 
 ## Pruebas
 

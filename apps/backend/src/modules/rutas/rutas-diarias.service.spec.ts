@@ -94,6 +94,8 @@ describe('RutasDiariasService.agregarAlDia (T-37)', () => {
 
     expect(error).toBeInstanceOf(RutaRechazada);
     expect(error).toMatchObject({ razon: 'cliente-inexistente' });
+    // La tablet pinta el motivo bajo la fila, que ya trae el nombre: sin uuid.
+    expect((error as Error).message).not.toContain(CLIENTE);
     expect(repo.insertarSiNoExiste).not.toHaveBeenCalled();
   });
 

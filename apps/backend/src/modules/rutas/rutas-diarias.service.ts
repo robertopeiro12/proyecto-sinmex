@@ -40,8 +40,15 @@ export interface EntidadRuta {
 export const MOTIVO_FECHA_INEXISTENTE = 'Esa fecha no existe.';
 export const MOTIVO_VENDEDOR_INEXISTENTE = 'No existe ese vendedor.';
 export const MOTIVO_CLIENTE_REPETIDO = 'Un cliente viene dos veces en la ruta.';
-export const MOTIVO_CLIENTE_NO_VALIDO =
-  'Uno de los clientes no existe, está dado de baja, es un prospecto o no es de la sucursal del vendedor.';
+
+/**
+ * El 400 de un `PUT` con clientes nuevos que no valen, nombrandolos: sin el
+ * nombre la oficina no sabe cual quitar. `nombres` trae el nombre del cliente
+ * (aunque este borrado) o, si ni existe, su id.
+ */
+export function motivoClientesNoValidos(nombres: readonly string[]): string {
+  return `Estos clientes no existen, están dados de baja, son prospectos o no son de la sucursal del vendedor: ${nombres.join(', ')}.`;
+}
 
 /** `GET`/`PUT /rutas/diaria` (D14). */
 export interface RutaDiaria {
@@ -101,7 +108,10 @@ export class RutasDiariasService {
     if (!valido) {
       throw new RutaRechazada({
         razon: 'cliente-inexistente',
-        motivo: `El cliente ${alta.clienteId} no existe, está dado de baja, es un prospecto o no es de tu sucursal.`,
+        // Sin el id: la tablet pinta el motivo bajo la fila, que ya lleva el
+        // nombre del cliente.
+        motivo:
+          'El cliente no existe, está dado de baja, es un prospecto o no es de tu sucursal.',
       });
     }
 
@@ -150,6 +160,12 @@ export class RutasDiariasService {
    * `PUT /rutas/diaria`: reemplaza la ruta de ese vendedor y dia con la lista,
    * en UNA transaccion (un error no deja la ruta a medias). La regla esta en
    * `planearReemplazo`.
+   *
+   * Solo se validan los clientes NUEVOS (sin fila viva ese dia). Adoptar o
+   * reordenar una viva no revalida: el portal no deja quitar las filas del
+   * vendedor, asi que si el cliente de una de ellas se borro, cambio de
+   * sucursal o volvio a prospecto, revalidarla bloquearia todo guardado de ese
+   * dia.
    */
   async reemplazarDiaria(
     usuarioId: string,
@@ -167,15 +183,21 @@ export class RutasDiariasService {
       // se leen DESPUES, asi que un alta que llego un instante antes se adopta
       // en vez de chocar con la unicidad.
       await this.repo.bloquearVendedor(vendedor.id, trx);
+      const vivas = await this.repo.filasVivas(vendedor.id, dto.fecha, trx);
+      const yaVivos = new Set(vivas.map((v) => v.clienteId));
+      const nuevos = clientes.filter((c) => !yaVivos.has(c));
       const validos = await this.repo.clientesParaRuta(
-        clientes,
+        nuevos,
         vendedor.sucursalId,
         trx,
       );
-      if (validos.size !== clientes.length) {
-        throw new BadRequestException(MOTIVO_CLIENTE_NO_VALIDO);
+      const invalidos = nuevos.filter((c) => !validos.has(c));
+      if (invalidos.length > 0) {
+        const nombres = await this.repo.nombresDeClientes(invalidos, trx);
+        throw new BadRequestException(
+          motivoClientesNoValidos(invalidos.map((c) => nombres.get(c) ?? c)),
+        );
       }
-      const vivas = await this.repo.filasVivas(vendedor.id, dto.fecha, trx);
       await this.repo.aplicarReemplazo(
         vendedor.id,
         dto.fecha,
@@ -233,7 +255,7 @@ export class RutasDiariasService {
   ): Promise<VendedorDeRuta> {
     const usuario = await this.repo.buscarSucursalUsuario(usuarioId);
     // El guard valido la FIRMA del token, no que el usuario siga existiendo.
-    if (!usuario) throw new UnauthorizedException('Sesion invalida.');
+    if (!usuario) throw new UnauthorizedException('Sesión inválida.');
 
     const vendedor = await this.repo.vendedorDeRuta(vendedorId.toLowerCase());
     const alcance = resolverAlcance(usuario.codigo, null);

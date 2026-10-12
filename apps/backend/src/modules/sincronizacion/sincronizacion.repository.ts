@@ -444,12 +444,16 @@ export class SincronizacionRepository {
    *
    * - **Solo la suya**: el alcance de T-09 dice que un vendedor jala lo suyo.
    * - Solo `tipo = 'diaria'`: la semanal (T-36) no viaja.
-   * - **Ventana por el reloj de Postgres**: de ayer a dentro de 7 dias. La base
+   * - **Ventana por el reloj de Postgres**: desde ayer en adelante. La base
    *   corre en UTC; el `- 1` es lo que mantiene "hoy en Tijuana" dentro de la
    *   ventana despues de las 17:00 locales, cuando en UTC ya es manana. La
-   *   tablet decide que dia muestra con su reloj local; el `+ 7` es para que una
-   *   ruta asignada el viernes para el lunes baje el viernes. No lo "corrijas" a
-   *   la zona de Tijuana: el spec la fija asi.
+   *   tablet decide que dia muestra con su reloj local. No lo "corrijas" a la
+   *   zona de Tijuana: el spec la fija asi.
+   * - **Sin tope superior**, a proposito: con un tope (antes `+ 7`) y el cursor
+   *   por `updated_at`, una ruta guardada hoy para dentro de 10 dias nunca
+   *   bajaba: cuando entraba a la ventana su `updated_at` ya era anterior al
+   *   `desde`, y la tablet solo hace pull completo una vez. Sin tope, una fila
+   *   futura viaja en el pull siguiente a su creacion.
    * - Sin `desde`, solo las vivas. Con `desde`, todo lo que cambio: una fila que
    *   la oficina quito viaja con `activo: 0` (baja como bandera, nunca como
    *   ausencia; `ruta` no tiene columna `activo`).
@@ -469,7 +473,7 @@ export class SincronizacionRepository {
       ])
       .where('vendedor_id', '=', vendedorId)
       .where('tipo', '=', 'diaria')
-      .where(sql<boolean>`fecha between current_date - 1 and current_date + 7`);
+      .where(sql<boolean>`fecha >= current_date - 1`);
     if (desde) {
       q = q.where('updated_at', '>', desde);
     } else {

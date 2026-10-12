@@ -104,7 +104,11 @@ export const CODIGOS_RECHAZO = [
    * clave. Se queda en `error` con el motivo; no se resuelve sola.
    */
   'jornada-duplicada',
-  /** T-37: `datos.cliente_id` del alta de ruta falta o no es uuid. Bug de la tablet. */
+  /**
+   * T-37: `datos.cliente_id` del alta de ruta falta o no es uuid, el sobre trae
+   * folio, o trae un `cliente_id` que no coincide con el de `datos`. Bug de la
+   * tablet.
+   */
   'ruta-datos-invalidos',
   /**
    * T-37: el cliente del alta no existe en el servidor, esta dado de baja, es de

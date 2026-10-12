@@ -238,6 +238,23 @@ export class RutasDiariasRepository {
   }
 
   /**
+   * Nombre de cada id que exista en `cliente`, borrado o no: para nombrar en el
+   * 400 a los clientes que no valen. Un id que ni existe no viene en el mapa.
+   */
+  async nombresDeClientes(
+    ids: readonly string[],
+    trx: Transaction<DB>,
+  ): Promise<Map<string, string>> {
+    if (ids.length === 0) return new Map();
+    const filas = await trx
+      .selectFrom('cliente')
+      .select(['id', 'nombre'])
+      .where('id', 'in', [...ids])
+      .execute();
+    return new Map(filas.map((f) => [f.id, f.nombre]));
+  }
+
+  /**
    * Escribe el plan del reemplazo. La fila del vendedor ya esta bloqueada y las
    * vivas se leyeron despues del candado, asi que los inserts no pueden chocar
    * con la unicidad.

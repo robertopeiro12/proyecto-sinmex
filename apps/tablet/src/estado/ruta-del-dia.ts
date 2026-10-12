@@ -96,7 +96,7 @@ export function indiceDestino(desde: number, dy: number, altoFila: number, total
 
 /** Sin acentos y en minusculas: "Doña" se encuentra escribiendo "dona". */
 function normalizar(texto: string): string {
-  return texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 }
 
 /**

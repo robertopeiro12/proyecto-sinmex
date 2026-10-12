@@ -469,6 +469,57 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
       }).expect(400);
       expect(await filasDe(vendedorTj, fecha)).toHaveLength(0);
     });
+
+    it('guardar conserva una fila del vendedor cuyo cliente ya se borro', async () => {
+      // El portal no deja quitar las filas del vendedor: si se revalidara su
+      // cliente, todo guardado de ese dia seria 400 y la oficina quedaria
+      // bloqueada.
+      const fecha = diaNuevo();
+      const delVendedor = await sembrarCliente(tjId);
+      const otro = await sembrarCliente(tjId);
+      const idVendedor = await sembrarRuta({
+        vendedor: vendedorTj,
+        cliente: delVendedor.id,
+        fecha,
+        orden: 1,
+        origen: 'vendedor',
+      });
+      await db
+        .updateTable('cliente')
+        .set({ deleted_at: new Date() })
+        .where('id', '=', delVendedor.id)
+        .execute();
+
+      await guardar(cookieGeneral, {
+        vendedorId: vendedorTj,
+        fecha,
+        clientes: [delVendedor.id, otro.id],
+      }).expect(200);
+
+      expect(
+        (await filasDe(vendedorTj, fecha)).filter((f) => f.deleted_at === null),
+      ).toMatchObject([
+        { id: idVendedor, cliente_id: delVendedor.id, orden: 1 },
+        { cliente_id: otro.id, orden: 2, origen: 'oficina' },
+      ]);
+    });
+
+    it('un cliente nuevo invalido se rechaza nombrandolo', async () => {
+      const fecha = diaNuevo();
+      const a = await sembrarCliente(tjId);
+      const p = await sembrarCliente(tjId, { tipo: 'prospecto' });
+
+      const res = await guardar(cookieGeneral, {
+        vendedorId: vendedorTj,
+        fecha,
+        clientes: [a.id, p.id],
+      }).expect(400);
+
+      const { message } = res.body as { message: string };
+      expect(message).toContain(p.nombre);
+      expect(message).not.toContain(a.nombre);
+      expect(await filasDe(vendedorTj, fecha)).toHaveLength(0);
+    });
   });
 
   describe('GET anterior (Copiar de ayer)', () => {

@@ -284,7 +284,8 @@ usuario con sesion pasa.
   - El `PUT` del portal **reemplaza** la ruta en una transacción: adopta lo que subió el vendedor, da de baja lo de
     la oficina que no viene y **conserva** (renumerado al final) lo del vendedor. Alta y `PUT` se serializan
     bloqueando la fila del vendedor (`for no key update`). Respuestas en camelCase; vendedor fuera de alcance = 404.
-  - El pull baja `rutas` del vendedor del token en la ventana `current_date - 1 .. + 7` del reloj de Postgres (UTC);
+  - El pull baja `rutas` del vendedor del token desde `current_date - 1` en adelante del reloj de Postgres (UTC),
+    sin tope: una ruta futura debe bajar en el pull siguiente a su creación;
     la baja viaja con `activo: 0`. El orden que arrastra el vendedor **no sube** (vive en `ruta_orden_local`).
 
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el

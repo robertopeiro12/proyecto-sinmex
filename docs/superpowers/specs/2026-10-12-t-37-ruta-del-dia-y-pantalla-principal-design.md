@@ -71,6 +71,7 @@ export interface RutaPull extends FilaSincronizable {   // id, activo (0 = baja)
 Reglas del repositorio del pull (`sincronizacion.repository.ts`, método `rutas(vendedorId, desde)`):
 - Solo filas del **vendedor del token** y `tipo = 'diaria'`.
 - Ventana de fechas por el reloj del servidor: `fecha between current_date - 1 and current_date + 7`. La tablet decide qué día mostrar con su `reloj.hoy()` local (Tijuana); la ventana existe para que una ruta asignada el viernes para el lunes baje el viernes.
+  - *Ajuste en la implementación:* sin tope superior (`fecha >= current_date - 1`); con tope, una ruta asignada a 8+ días nunca entraba al pull incremental (ventana + cursor por `updated_at`).
 - Incremental por `updated_at > desde` como las demás fuentes; una fila con `deleted_at` dentro de la ventana viaja con `activo: 0` (baja como bandera, nunca como ausencia).
 - Con `desde = null` (vuelco completo) bajan todas las vivas de la ventana.
 

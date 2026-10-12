@@ -335,9 +335,11 @@ Colección **nueva y de nivel superior** (junto a `notas_pendientes`, no dentro 
 tablet vieja la ignora; la tablet nueva la trata como opcional.
 
 - Solo filas del **vendedor del token** y de `tipo = 'diaria'` (la semanal de T-36 no viaja).
-- **Ventana** por el reloj del servidor: `fecha between current_date - 1 and current_date + 7`. Postgres corre en
-  UTC: el `- 1` es lo que mantiene "hoy en Tijuana" dentro de la ventana después de las 17:00 locales. La tablet
-  decide qué día muestra con su reloj local.
+- **Ventana** por el reloj del servidor: desde `current_date - 1` en adelante (`fecha >= current_date - 1`), **sin
+  tope**: una ruta futura debe bajar en el pull siguiente a su creación (con tope y el cursor por `updated_at`, una
+  ruta asignada a 8+ días nunca entraba al pull incremental). Postgres corre en UTC: el `- 1` es lo que mantiene
+  "hoy en Tijuana" dentro de la ventana después de las 17:00 locales. La tablet decide qué día muestra con su
+  reloj local.
 - Incremental por `updated_at > desde`. Una fila que la oficina quitó viaja con `activo: 0`; sin `desde` bajan
   solo las vivas.
 - `origen` dice quién puso al cliente: `oficina` (portal) o `vendedor` (un `ruta-alta` proyectado).
@@ -609,13 +611,14 @@ permiso o no haber señal, y eso no le impide registrar al prospecto.
   "tipo": "ruta-alta",                 // NO "ruta": ese tipo queda para la visita de T-39
   "fecha_operacion": "2026-10-12",     // el día de la ruta; se guarda tal cual
   "ocurrido_en": "2026-10-12T16:05:00.000Z",
-  // SIN "cliente_id" en el sobre y SIN "folio"
+  // sin "cliente_id" en el sobre (si viene y no coincide con datos, ruta-datos-invalidos) y SIN "folio"
   "datos": { "cliente_id": "uuid" }    // un cliente (no prospecto) de la sucursal del vendedor
 }
 ```
 
-- La forma se valida **antes** de la transacción: sin `cliente_id` uuid, o con folio en el sobre, es
-  `ruta-datos-invalidos`.
+- La forma se valida **antes** de la transacción: sin `cliente_id` uuid en `datos`, con folio en el sobre, o con un
+  `cliente_id` en el sobre que no coincide con el de `datos`, es `ruta-datos-invalidos`. Sin `cliente_id` en el
+  sobre es lo normal.
 - Dentro de la transacción (`RutasDiariasService.agregarAlDia`): un cliente que no existe, está dado de baja, es de
   otra sucursal o es **prospecto** es `cliente-inexistente`. Si ya había una fila viva de ese vendedor, fecha y
   cliente subida con **otra** clave, es `ruta-duplicada` (la tablet la trata como aplicada). La misma clave
@@ -673,7 +676,7 @@ texto en español** si reintenta o si avisa al vendedor.
 | `jornada-km-invalido` | `km_final` menor que `km_inicial`: el odómetro no retrocede (T-38) |
 | `vehiculo-inexistente` | El vehículo de la jornada no existe, está dado de baja o es de otra sucursal que la del vendedor. Uno desactivado sí entra. Se reintenta en la siguiente sincronización (T-38) |
 | `jornada-duplicada` | Ya hay una jornada viva de ese vendedor en esa fecha subida con **otra** clave. La misma clave es `duplicada`, no esto (T-38) |
-| `ruta-datos-invalidos` | `datos.cliente_id` de un `ruta-alta` falta o no es uuid, o el sobre trae folio. Bug de la tablet (T-37) |
+| `ruta-datos-invalidos` | `datos.cliente_id` de un `ruta-alta` falta o no es uuid, el sobre trae folio, o el `cliente_id` del sobre no coincide con el de `datos`. Bug de la tablet (T-37) |
 | `cliente-inexistente` | El cliente de un `ruta-alta` no existe, está dado de baja, es de otra sucursal o es prospecto. Se reintenta; el vendedor puede quitar la fila (T-37) |
 | `ruta-duplicada` | Ya había una fila viva de ese vendedor, fecha y cliente con **otra** clave. **La tablet la trata como aplicada** (T-37) |
 
