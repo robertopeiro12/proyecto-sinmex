@@ -1197,7 +1197,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
    trae `cliente_id` y sigue quedando `null`. Review Focus 5.
 3. **`ruta-duplicada` con `on conflict … do nothing`**, igual que `jornada-duplicada` (T-38): ni `select` previo
    (deja ventana) ni atrapar el `23505` (aborta la transacción). El predicado del índice parcial tiene dos partes;
-   la de `tipo` se escribe **literal** (`sql\`tipo = 'diaria'\``) y no como parámetro, para que Postgres pueda
+   la de `tipo` se escribe **literal** (`` sql`tipo = 'diaria'` ``) y no como parámetro, para que Postgres pueda
    inferir el índice árbitro sin depender del valor de un `$n`. Si el e2e falla con "there is no unique or
    exclusion constraint matching the ON CONFLICT specification", el problema está ahí.
 4. **Bloqueo de la fila del vendedor** (`select … for no key update`) antes de calcular el orden siguiente.
@@ -1209,6 +1209,10 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
    columna en `cliente` (su única baja es `deleted_at`), así que no hay caso aparte.
 6. **Sin folio**: un `ruta-alta` con folio es `ruta-datos-invalidos` (ocuparía un número de la serie de ventas en
    `sync_operacion.folio`), igual que el prospecto.
+7. **Las comparaciones contra `ruta.fecha` van con `` sql`fecha = ${fecha}::date` ``** y no con
+   `.where('fecha', '=', fecha)`: Kysely tipa la columna `date` con su tipo de lectura (`Date`) y no acepta la cadena
+   `AAAA-MM-DD`; pasar `new Date(fecha)` correría el día por la zona del proceso. Los `insert` sí aceptan la cadena.
+   Mismo criterio en la Tarea 5.
 
 - [ ] **Paso 1: Prueba de la forma (falla)**
 
@@ -1676,7 +1680,7 @@ export class RutasDiariasRepository {
       .selectFrom('ruta')
       .select(sql<number>`coalesce(max(orden), 0) + 1`.as('siguiente'))
       .where('vendedor_id', '=', vendedorId)
-      .where('fecha', '=', fecha)
+      .where(sql<boolean>`fecha = ${fecha}::date`)
       .where('tipo', '=', 'diaria')
       .where('deleted_at', 'is', null)
       .executeTakeFirstOrThrow();
@@ -2453,6 +2457,7 @@ Crear `apps/backend/test/rutas-diarias.e2e-spec.ts`:
 ```ts
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
+import { sql } from 'kysely';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
@@ -2634,7 +2639,7 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
       .selectFrom('ruta')
       .select(['id', 'cliente_id', 'orden', 'origen', 'deleted_at'])
       .where('vendedor_id', '=', vendedor)
-      .where('fecha', '=', fecha)
+      .where(sql<boolean>`fecha = ${fecha}::date`)
       .orderBy('orden')
       .execute();
 
@@ -3083,7 +3088,7 @@ c) Métodos, al final de la clase:
         'ruta.origen as origen',
       ])
       .where('ruta.vendedor_id', '=', vendedorId)
-      .where('ruta.fecha', '=', fecha)
+      .where(sql<boolean>`ruta.fecha = ${fecha}::date`)
       .where('ruta.tipo', '=', 'diaria')
       .where('ruta.deleted_at', 'is', null)
       .orderBy('ruta.orden')
@@ -3102,7 +3107,7 @@ c) Métodos, al final de la clase:
       .selectFrom('ruta')
       .select(['id', 'cliente_id', 'orden', 'origen'])
       .where('vendedor_id', '=', vendedorId)
-      .where('fecha', '=', fecha)
+      .where(sql<boolean>`fecha = ${fecha}::date`)
       .where('tipo', '=', 'diaria')
       .where('deleted_at', 'is', null)
       .orderBy('orden')
@@ -3186,7 +3191,7 @@ c) Métodos, al final de la clase:
       .where('vendedor_id', '=', vendedorId)
       .where('tipo', '=', 'diaria')
       .where('deleted_at', 'is', null)
-      .where('fecha', '<', fecha)
+      .where(sql<boolean>`fecha < ${fecha}::date`)
       .executeTakeFirst();
     return fila?.fecha ?? null;
   }
@@ -3206,7 +3211,7 @@ c) Métodos, al final de la clase:
       .innerJoin('cliente', 'cliente.id', 'ruta.cliente_id')
       .select('ruta.cliente_id as clienteId')
       .where('ruta.vendedor_id', '=', vendedorId)
-      .where('ruta.fecha', '=', fecha)
+      .where(sql<boolean>`ruta.fecha = ${fecha}::date`)
       .where('ruta.tipo', '=', 'diaria')
       .where('ruta.deleted_at', 'is', null)
       .where('cliente.deleted_at', 'is', null)
@@ -6491,6 +6496,10 @@ from '../tipos'` existente, y después del método `delDia` del repositorio:
      * cliente (T-37, D8). El servidor le da al cliente otro id que el del
      * prospecto local, asi que se reconoce por nombre (sin mayusculas ni
      * espacios de mas) y telefono. `null` si no hay: el boton no aparece.
+     *
+     * `lower()` de SQLite solo pliega ASCII (sin ICU): "DOÑA" y "doña" no
+     * coinciden. Es aceptable aqui porque los dos nombres salen del mismo
+     * teclado de la tablet; no es un bug.
      */
     fotoLocalDe(cliente: Pick<Cliente, 'nombre' | 'telefono'>): string | null {
       const fila = bd.getFirstSync<{ foto_uri: string }>(
@@ -8046,7 +8055,8 @@ Run:
 ```bash
 npm run supabase -- migration up --local
 npm run supabase -- test db --local
-npm run db:types --workspace=apps/backend && git diff --exit-code apps/backend/src/database/schema.d.ts
+npm run db:types --workspace=apps/backend
+git diff apps/backend/src/database/schema.d.ts
 npm run build --workspace=apps/backend
 npm test --workspace=apps/backend
 npm run test:e2e --workspace=apps/backend
@@ -8060,7 +8070,8 @@ npm exec --workspace=apps/portal -- tsc --noEmit
 git status
 git log --oneline origin/main..HEAD | head -20
 ```
-Expected: todo en verde contra la línea base de la Tarea 1 (anota los totales nuevos); `schema.d.ts` sin diff;
+Expected: todo en verde contra la línea base de la Tarea 1 (anota los totales nuevos); el diff de `schema.d.ts` vacío
+(si trae tablas de otra sesión aplicadas en tu base local, no las commitees: solo cuenta que no haya nada de esta rama sin commitear);
 `git status` limpio (revierte lo que `expo` haya ensuciado); doce commits `T-37: …` encima del commit del spec.
 
 - [ ] **Paso 5: Commit de la documentación**
