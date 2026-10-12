@@ -67,6 +67,18 @@ export type {
   ResumenCaptura,
   ResumenLinea,
 } from './ventas-reglas';
+export {
+  aplicarSnapshotRutas,
+  crearRepositorioRutas,
+  ErrorRuta,
+  restarDias,
+} from './repositorios/rutas';
+export type {
+  ContextoAltaRuta,
+  FilaRutaDelDia,
+  FilaRutaPull,
+  RepositorioRutas,
+} from './repositorios/rutas';
 export { crearRepositorioCobranzas, ErrorCobranza } from './repositorios/cobranzas';
 export type { DatosRegistroCobranza, RepositorioCobranzas } from './repositorios/cobranzas';
 export {

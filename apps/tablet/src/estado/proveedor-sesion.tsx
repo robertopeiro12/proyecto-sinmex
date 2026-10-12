@@ -20,6 +20,7 @@ import { fuenteCobranzas } from '@/sincronizacion/fuente-cobranzas';
 import { fuenteFotosProspectos } from '@/sincronizacion/fuente-fotos';
 import { fuenteJornadas } from '@/sincronizacion/fuente-jornadas';
 import { fuenteProspectos } from '@/sincronizacion/fuente-prospectos';
+import { fuenteRutas } from '@/sincronizacion/fuente-rutas';
 import { fuenteVentas } from '@/sincronizacion/fuente-ventas';
 import {
   crearMotorSincronizacion,
@@ -91,13 +92,15 @@ export function ProveedorSesion({
       catalogos: datos.catalogos,
       sync: datos.sync,
       // T-16: las ventas del dia suben despues de la jornada; T-40 suma los
-      // prospectos. Los cobros (T-20) van **al final**, para no llegar nunca
-      // antes que una venta del mismo dia.
+      // prospectos. Los cobros (T-20) van despues de las ventas, para no llegar
+      // nunca antes que una venta del mismo dia. Las altas de ruta (T-37) no
+      // dependen de nadie: van al final.
       fuentes: [
         fuenteJornadas(datos.jornadas),
         fuenteVentas(datos.ventas),
         fuenteProspectos(datos.prospectos),
         fuenteCobranzas(datos.cobranzas),
+        fuenteRutas(datos.rutas),
       ],
       // T-40: el canal de la foto, aparte del lote del push. Corre despues, y
       // solo para prospectos que el servidor ya acepto — antes no existe la fila

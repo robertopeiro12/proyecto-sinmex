@@ -4,6 +4,7 @@ import { crearRepositorioCobranzas } from '@/datos/repositorios/cobranzas';
 import { crearRepositorioFolios } from '@/datos/repositorios/folios';
 import { crearRepositorioJornadas } from '@/datos/repositorios/jornadas';
 import { crearRepositorioProspectos } from '@/datos/repositorios/prospectos';
+import { crearRepositorioRutas } from '@/datos/repositorios/rutas';
 import { crearRepositorioVentas } from '@/datos/repositorios/ventas';
 
 import { contarPendientesDeSubir } from './pendientes';
@@ -18,6 +19,7 @@ function montar() {
     ventas: crearRepositorioVentas(deps, { catalogos, folios }),
     prospectos: crearRepositorioProspectos(deps, { catalogos }),
     cobranzas: crearRepositorioCobranzas(deps, { catalogos }),
+    rutas: crearRepositorioRutas(deps, { catalogos }),
   };
 }
 
@@ -28,13 +30,13 @@ describe('contarPendientesDeSubir', () => {
   });
 
   /**
-   * Las 4 fuentes del push de hoy (T-07, T-16, T-40, T-20). Si se olvida una
-   * aqui, el menu de la jornada y "cerrar el dia" dicen "listo" con datos sin
-   * subir (I-1, PR #90).
+   * Las 5 fuentes del push de hoy (T-07, T-16, T-40, T-20, T-37). Si se olvida
+   * una aqui, el menu de la jornada y "cerrar el dia" dicen "listo" con datos
+   * sin subir (I-1, PR #90).
    */
-  it('suma jornada, venta, prospecto y cobranza pendientes', () => {
+  it('suma jornada, venta, prospecto, cobranza y alta de ruta pendientes', () => {
     const fuentes = montar();
-    const { jornadas, ventas, prospectos, cobranzas } = fuentes;
+    const { jornadas, ventas, prospectos, cobranzas, rutas } = fuentes;
 
     const jornada = jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
     ventas.registrar({
@@ -66,12 +68,13 @@ describe('contarPendientesDeSubir', () => {
       metodoPago: 'efectivo',
       fechaPago: '2026-08-07',
     });
+    rutas.agregar('cli-1', { vendedorId: 'ven-1', sucursalId: 'suc-tj' });
 
     // La jornada cuenta solo cerrada (D7). Se cierra al final: con el dia
     // cerrado ya no se puede registrar nada (D6).
     jornadas.cerrar(jornada.id, 20);
 
-    expect(contarPendientesDeSubir(fuentes)).toBe(4);
+    expect(contarPendientesDeSubir(fuentes)).toBe(5);
   });
 
   it('una jornada abierta no cuenta; al cerrarla, si (T-38, D7)', () => {
