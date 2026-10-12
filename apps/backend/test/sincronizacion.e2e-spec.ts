@@ -3702,4 +3702,214 @@ describe('Sincronizacion pull/push (e2e)', () => {
       });
     });
   });
+
+  describe('ruta diaria: push de ruta-alta (T-37)', () => {
+    /** Un alta de ruta como la arma `fuente-rutas.ts`: el cliente va en `datos`. */
+    const altaRuta = (
+      cliente: string,
+      fecha: string,
+      extra: Record<string, unknown> = {},
+    ) =>
+      operacion({
+        tipo: 'ruta-alta',
+        fecha_operacion: fecha,
+        ocurrido_en: `${fecha}T16:05:00.000-07:00`,
+        datos: { cliente_id: cliente },
+        ...extra,
+      });
+
+    /** Las filas de `ruta` del vendedor de la prueba para ese cliente. */
+    const rutasDe = (cliente: string) =>
+      db
+        .selectFrom('ruta')
+        .select([
+          'id',
+          'orden',
+          'origen',
+          'tipo',
+          'deleted_at',
+          sql<string>`to_char(fecha, 'YYYY-MM-DD')`.as('fecha'),
+        ])
+        .where('vendedor_id', '=', vendedorId)
+        .where('cliente_id', '=', cliente)
+        .orderBy('created_at')
+        .execute();
+
+    /** Un dia propio por prueba: la ruta del vendedor es nueva en cada corrida. */
+    let ultimoDiaRuta = 0;
+    const diaDeRuta = () =>
+      new Date(Date.UTC(2024, 2, 1) + ultimoDiaRuta++ * 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+
+    it('un alta entra a `ruta` como del vendedor y el buzon dice a que fila se convirtio', async () => {
+      const c = await clienteDeRuta();
+      const fecha = diaDeRuta();
+      const op = altaRuta(c, fecha);
+
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(res.resultados[0].estado).toBe('aplicada');
+
+      const filas = await rutasDe(c);
+      expect(filas).toEqual([
+        {
+          id: expect.any(String) as string,
+          orden: 1,
+          origen: 'vendedor',
+          tipo: 'diaria',
+          deleted_at: null,
+          fecha,
+        },
+      ]);
+      expect(await buzonDe(op.clave)).toEqual({
+        id: res.resultados[0].id_servidor,
+        entidad_tabla: 'ruta',
+        entidad_id: filas[0].id,
+      });
+    });
+
+    it('el buzon conserva el cliente del alta en datos (Review Focus 5)', async () => {
+      const c = await clienteDeRuta();
+      const op = altaRuta(c, diaDeRuta());
+
+      await push({ operaciones: [op] }).expect(200);
+
+      const fila = await db
+        .selectFrom('sync_operacion')
+        .select(sql<string | null>`datos->>'cliente_id'`.as('cliente'))
+        .where('vendedor_id', '=', vendedorId)
+        .where('clave_idempotencia', '=', op.clave)
+        .executeTakeFirstOrThrow();
+      expect(fila.cliente).toBe(c);
+    });
+
+    it('va al final: orden siguiente a las vivas de ese vendedor y dia', async () => {
+      const fecha = diaDeRuta();
+      const deLaOficina = await clienteDeRuta();
+      await sembrarRuta({ cliente: deLaOficina, fecha, orden: 5 });
+      const quitado = await clienteDeRuta();
+      // Una baja no cuenta para el orden.
+      await sembrarRuta({ cliente: quitado, fecha, orden: 9, borrada: true });
+      const c = await clienteDeRuta();
+
+      const res = (
+        await push({ operaciones: [altaRuta(c, fecha)] }).expect(200)
+      ).body as RespuestaPush;
+
+      expect(res.resultados[0].estado).toBe('aplicada');
+      expect(await rutasDe(c)).toMatchObject([{ orden: 6 }]);
+    });
+
+    it('un alta de AYER subida hoy cae en la ruta de ayer y no choca con la de hoy (Review Focus 2)', async () => {
+      const hoy = hoyEnTijuana();
+      const [a, m, d] = hoy.split('-').map(Number);
+      const ayer = new Date(Date.UTC(a, m - 1, d - 1))
+        .toISOString()
+        .slice(0, 10);
+      const c = await clienteDeRuta();
+      // La oficina ya lo asigno para hoy.
+      await sembrarRuta({ cliente: c, fecha: hoy, orden: 1 });
+
+      const res = (await push({ operaciones: [altaRuta(c, ayer)] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0].estado).toBe('aplicada');
+      const filas = await rutasDe(c);
+      expect(filas.map((f) => [f.fecha, f.origen])).toEqual([
+        [hoy, 'oficina'],
+        [ayer, 'vendedor'],
+      ]);
+    });
+
+    it('datos sin cliente es ruta-datos-invalidos, antes de la transaccion', async () => {
+      const op = altaRuta('x', diaDeRuta(), { datos: {} });
+
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'ruta-datos-invalidos',
+      });
+      expect(res.resultados[0].motivo).toContain('cliente_id');
+      expect(await buzonDe(op.clave)).toBeUndefined();
+    });
+
+    it('un cliente de otra sucursal es cliente-inexistente y no deja fila', async () => {
+      const op = altaRuta(clienteAjenoId, diaDeRuta());
+
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'cliente-inexistente',
+      });
+      expect(await buzonDe(op.clave)).toBeUndefined();
+      expect(await rutasDe(clienteAjenoId)).toHaveLength(0);
+    });
+
+    it('un prospecto es cliente-inexistente: a un prospecto no se le vende (D7)', async () => {
+      const p = await clienteDeRuta({ tipo: 'prospecto' });
+      const op = altaRuta(p, diaDeRuta());
+
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'cliente-inexistente',
+      });
+      expect(await rutasDe(p)).toHaveLength(0);
+    });
+
+    it('un cliente dado de baja es cliente-inexistente', async () => {
+      const borrado = await clienteDeRuta({ deleted_at: new Date() });
+      const res = (
+        await push({ operaciones: [altaRuta(borrado, diaDeRuta())] }).expect(
+          200,
+        )
+      ).body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'cliente-inexistente',
+      });
+    });
+
+    it('el mismo cliente que la oficina ya asigno, con OTRA clave, es ruta-duplicada y no deja fila', async () => {
+      const fecha = diaDeRuta();
+      const c = await clienteDeRuta();
+      await sembrarRuta({ cliente: c, fecha, orden: 1 });
+      const op = altaRuta(c, fecha);
+
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'ruta-duplicada',
+      });
+      expect(await buzonDe(op.clave)).toBeUndefined();
+      expect(await rutasDe(c)).toMatchObject([{ origen: 'oficina' }]);
+    });
+
+    it('la MISMA clave reenviada es duplicada, con el mismo id y una sola fila', async () => {
+      const c = await clienteDeRuta();
+      const op = altaRuta(c, diaDeRuta());
+
+      const primero = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      const segundo = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(primero.resultados[0].estado).toBe('aplicada');
+      expect(segundo.resultados[0]).toMatchObject({
+        estado: 'duplicada',
+        id_servidor: primero.resultados[0].id_servidor,
+      });
+      expect(await rutasDe(c)).toHaveLength(1);
+    });
+  });
 });

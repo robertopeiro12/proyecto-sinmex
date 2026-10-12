@@ -556,7 +556,13 @@ export class SincronizacionRepository {
         fecha_operacion: op.fechaOperacion,
         ocurrido_en: op.ocurridoEn,
         folio: op.folio,
-        datos: JSON.stringify({ ...op.datos, cliente_id: op.clienteId }),
+        // El `cliente_id` del sobre gana (venta, cobranza). Si el sobre no trae
+        // uno, se conserva el de `datos`: un `ruta-alta` (T-37) lo lleva ahi, y
+        // pisarlo con null dejaba el buzon sin saber de que cliente era.
+        datos: JSON.stringify({
+          ...op.datos,
+          cliente_id: op.clienteId ?? op.datos.cliente_id ?? null,
+        }),
       })
       .onConflict((oc) =>
         oc.columns(['vendedor_id', 'clave_idempotencia']).doNothing(),
