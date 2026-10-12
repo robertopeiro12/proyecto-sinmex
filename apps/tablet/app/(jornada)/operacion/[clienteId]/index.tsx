@@ -39,8 +39,7 @@ function abrir(url: string | null, queAbre: string) {
 
 /**
  * Ficha del cliente (T-37, D16): sus datos tocables, las tres acciones del dia
- * y lo que debe y lo que ya paso hoy. "Merma, promocion, consumo y gasto" ya no
- * esta aqui: vive en el menu hamburguesa.
+ * y lo que debe y lo que ya paso hoy.
  */
 export default function FichaCliente() {
   const { clienteId } = useLocalSearchParams<{ clienteId: string }>();
@@ -169,6 +168,17 @@ export default function FichaCliente() {
           titulo="Visita"
           descripcion="Visita sin venta (pendiente T-39)"
           destino={{ pathname: '/(jornada)/operacion/[clienteId]/visita-sin-venta', params }}
+          deshabilitado={!menu.operacionesHabilitadas}
+        />
+      </View>
+
+      {/* Secundario: sigue aqui hasta que T-27/T-31 den a la entrada del menu una
+          pantalla real (hoy abre un "pendiente"); entonces se quita. */}
+      <View style={[estilos.rejilla, { marginTop: espacio.sm }]}>
+        <BotonMenu
+          titulo="Merma, promoción, consumo y gasto"
+          descripcion="Registros de campo que afectan el inventario y el corte"
+          destino={{ pathname: '/(jornada)/operacion/[clienteId]/registros', params }}
           deshabilitado={!menu.operacionesHabilitadas}
         />
       </View>
