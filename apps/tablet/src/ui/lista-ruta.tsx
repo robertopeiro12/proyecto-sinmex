@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, Pressable, Text, View } from 'react-native';
 
 import type { FilaRutaDelDia } from '@/datos/repositorios/rutas';
@@ -57,48 +57,69 @@ export function ListaRuta({
   /** Mientras se arrastra, la pantalla apaga el scroll: si no, el scroll se lleva el gesto. */
   onArrastrando: (arrastrando: boolean) => void;
 }) {
-  const [arrastre, setArrastre] = useState<{ desde: number; dy: number } | null>(null);
-  // La fila que se arrastra, tambien fuera del estado: `terminar` la necesita
-  // en el mismo evento en que se suelta, sin esperar un render.
-  const desdeRef = useRef<number | null>(null);
+  // La fila que se arrastra se guarda por `cliente_id`, no por indice: si un
+  // pull cambia `filas` con el dedo abajo, el indice puede correrse.
+  const [arrastre, setArrastre] = useState<{ clienteId: string; dy: number } | null>(null);
+  // Tambien fuera del estado: `terminar` la necesita en el mismo evento en que
+  // se suelta, sin esperar un render.
+  const arrastradaRef = useRef<string | null>(null);
   const ids = useMemo(() => filas.map((f) => f.cliente_id), [filas]);
 
-  const iniciar = useCallback(
-    (desde: number) => {
-      desdeRef.current = desde;
-      setArrastre({ desde, dy: 0 });
-      onArrastrando(true);
+  // Lo ultimo que llego por props, para leerlo al soltar: `terminar` queda
+  // estable y el `PanResponder` de la fila no se rehace a media arrastre (uno
+  // nuevo reinicia `dy` en 0).
+  const ultimas = useRef({ ids, onReordenar, onArrastrando });
+  useLayoutEffect(() => {
+    ultimas.current = { ids, onReordenar, onArrastrando };
+  });
+
+  // Si la lista se desmonta con una fila despegada (la ruta se vacio bajo el
+  // dedo), la pantalla tiene que volver a tener scroll.
+  useEffect(
+    () => () => {
+      if (arrastradaRef.current !== null) {
+        arrastradaRef.current = null;
+        ultimas.current.onArrastrando(false);
+      }
     },
-    [onArrastrando],
+    [],
   );
+
+  const iniciar = useCallback((clienteId: string) => {
+    arrastradaRef.current = clienteId;
+    setArrastre({ clienteId, dy: 0 });
+    ultimas.current.onArrastrando(true);
+  }, []);
 
   const mover = useCallback((dy: number) => {
     setArrastre((a) => (a ? { ...a, dy } : a));
   }, []);
 
   /** `dy = null`: el sistema corto el gesto; se cancela sin mover nada. */
-  const terminar = useCallback(
-    (dy: number | null) => {
-      const desde = desdeRef.current;
-      desdeRef.current = null;
-      setArrastre(null);
-      onArrastrando(false);
-      if (desde === null || dy === null) return;
-      const hasta = indiceDestino(desde, dy, ALTO_FILA + HUECO, ids.length);
-      if (hasta !== desde) onReordenar(moverElemento(ids, desde, hasta));
-    },
-    [ids, onArrastrando, onReordenar],
-  );
+  const terminar = useCallback((dy: number | null) => {
+    const clienteId = arrastradaRef.current;
+    if (clienteId === null) return;
+    arrastradaRef.current = null;
+    setArrastre(null);
+    const { ids: actuales, onReordenar: reordenar, onArrastrando: avisar } = ultimas.current;
+    avisar(false);
+    const desde = actuales.indexOf(clienteId);
+    // La fila ya no esta (la quito un pull): no hay nada que mover.
+    if (dy === null || desde === -1) return;
+    const hasta = indiceDestino(desde, dy, ALTO_FILA + HUECO, actuales.length);
+    if (hasta !== desde) reordenar(moverElemento(actuales, desde, hasta));
+  }, []);
 
+  const desdeArrastre = arrastre === null ? -1 : ids.indexOf(arrastre.clienteId);
   const destino =
-    arrastre === null
+    arrastre === null || desdeArrastre === -1
       ? null
-      : indiceDestino(arrastre.desde, arrastre.dy, ALTO_FILA + HUECO, ids.length);
+      : indiceDestino(desdeArrastre, arrastre.dy, ALTO_FILA + HUECO, ids.length);
 
   return (
     <View style={{ gap: HUECO }}>
       {filas.map((fila, indice) => {
-        const esta = arrastre?.desde === indice;
+        const esta = desdeArrastre === indice;
         return (
           <FilaRuta
             key={fila.id}
@@ -145,7 +166,7 @@ function FilaRuta({
   desplazamiento: number | null;
   destino: number | null;
   onTocar: (clienteId: string) => void;
-  onIniciar: (indice: number) => void;
+  onIniciar: (clienteId: string) => void;
   onMover: (dy: number) => void;
   onSoltar: (dy: number | null) => void;
   onSubir: () => void;
@@ -156,30 +177,57 @@ function FilaRuta({
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
   const arrastrando = useRef(false);
 
-  const responder = useMemo(() => {
+  // Lo ultimo que llego por props. Los handlers leen de aqui para que el
+  // `PanResponder` se cree una sola vez: uno nuevo a media arrastre (un pull
+  // que cambia `filas` bajo el dedo) reiniciaria `dy` en 0.
+  const ultimas = useRef({ clienteId: fila.cliente_id, soloLectura, onTocar, onIniciar, onMover, onSoltar });
+  useLayoutEffect(() => {
+    ultimas.current = { clienteId: fila.cliente_id, soloLectura, onTocar, onIniciar, onMover, onSoltar };
+  });
+
+  // Si la fila se desmonta con el dedo abajo (un pull o "Quitar" la saca), la
+  // espera no debe disparar despues, y un arrastre en curso se cancela: si no,
+  // la pantalla se queda sin scroll.
+  useEffect(
+    () => () => {
+      if (temporizador.current !== null) {
+        clearTimeout(temporizador.current);
+        temporizador.current = null;
+      }
+      if (arrastrando.current) {
+        arrastrando.current = false;
+        ultimas.current.onSoltar(null);
+      }
+    },
+    [],
+  );
+
+  // `useState` y no `useMemo`: React garantiza que el inicializador corre una
+  // sola vez, y la identidad del responder no debe cambiar a media arrastre.
+  // eslint-disable-next-line react-hooks/refs -- los refs se leen solo en los handlers del gesto, nunca en render; `create` solo guarda los callbacks
+  const [responder] = useState(() => {
     const cancelarEspera = () => {
       if (temporizador.current !== null) {
         clearTimeout(temporizador.current);
         temporizador.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/refs -- los refs se leen solo en los handlers del gesto, nunca en render; `create` solo guarda los callbacks
     return PanResponder.create({
       // La fila toma el toque; los botones de dentro (subir, bajar, quitar) lo
       // reclaman antes porque son mas profundos.
       onStartShouldSetPanResponder: () => true,
       onPanResponderGrant: () => {
         arrastrando.current = false;
-        if (soloLectura || !ARRASTRE_HABILITADO) return;
+        if (ultimas.current.soloLectura || !ARRASTRE_HABILITADO) return;
         temporizador.current = setTimeout(() => {
           temporizador.current = null;
           arrastrando.current = true;
-          onIniciar(indice);
+          ultimas.current.onIniciar(ultimas.current.clienteId);
         }, ESPERA_ARRASTRE_MS);
       },
       onPanResponderMove: (_evento, gesto) => {
         if (arrastrando.current) {
-          onMover(gesto.dy);
+          ultimas.current.onMover(gesto.dy);
           return;
         }
         // Se movio antes de despegarse: es un scroll, no un arrastre.
@@ -193,22 +241,22 @@ function FilaRuta({
         cancelarEspera();
         if (arrastrando.current) {
           arrastrando.current = false;
-          onSoltar(gesto.dy);
+          ultimas.current.onSoltar(gesto.dy);
           return;
         }
         if (Math.abs(gesto.dx) <= TOLERANCIA_TOQUE && Math.abs(gesto.dy) <= TOLERANCIA_TOQUE) {
-          onTocar(fila.cliente_id);
+          ultimas.current.onTocar(ultimas.current.clienteId);
         }
       },
       onPanResponderTerminate: () => {
         cancelarEspera();
         if (arrastrando.current) {
           arrastrando.current = false;
-          onSoltar(null);
+          ultimas.current.onSoltar(null);
         }
       },
     });
-  }, [fila.cliente_id, indice, soloLectura, onTocar, onIniciar, onMover, onSoltar]);
+  });
 
   const conError = fila.sync_estado === 'error';
   const arrastrada = desplazamiento !== null;
