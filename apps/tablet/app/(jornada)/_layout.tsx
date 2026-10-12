@@ -37,8 +37,8 @@ export default function LayoutJornada() {
   // `title` son lo que lee el vendedor y si lo llevan.
   return (
     <Stack screenOptions={cabecera}>
-      <Stack.Screen name="index" options={{ title: 'Jornada' }} />
-      <Stack.Screen name="operacion/index" options={{ title: 'Operación por cliente' }} />
+      <Stack.Screen name="index" options={{ title: 'Ruta del día' }} />
+      <Stack.Screen name="operacion/index" options={{ title: 'Todos los clientes' }} />
       <Stack.Screen name="operacion/[clienteId]/index" options={{ title: 'Cliente' }} />
       <Stack.Screen name="operacion/[clienteId]/venta" options={{ title: 'Venta' }} />
       <Stack.Screen name="operacion/[clienteId]/cobranza" options={{ title: 'Cobranza / abono' }} />
@@ -52,6 +52,7 @@ export default function LayoutJornada() {
       />
       <Stack.Screen name="prospectos" options={{ title: 'Prospectos' }} />
       <Stack.Screen name="ruta" options={{ title: 'Ruta y GPS' }} />
+      <Stack.Screen name="pendiente/[seccion]" options={{ title: 'Próximamente' }} />
       <Stack.Screen name="cerrar-dia" options={{ title: 'Cerrar el día' }} />
     </Stack>
   );
