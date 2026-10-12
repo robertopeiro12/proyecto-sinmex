@@ -189,6 +189,7 @@ export interface Ruta {
   fecha: Timestamp;
   id: Generated<string>;
   orden: number;
+  origen: Generated<string>;
   tipo: string;
   updated_at: Generated<Timestamp>;
   vendedor_id: string;
