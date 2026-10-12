@@ -51,6 +51,7 @@ export default function LayoutJornada() {
         options={{ title: 'Merma, promoción, consumo y gastos' }}
       />
       <Stack.Screen name="prospectos" options={{ title: 'Prospectos' }} />
+      <Stack.Screen name="agregar-a-ruta" options={{ title: 'Agregar a mi ruta' }} />
       <Stack.Screen name="ruta" options={{ title: 'Ruta y GPS' }} />
       <Stack.Screen name="pendiente/[seccion]" options={{ title: 'Próximamente' }} />
       <Stack.Screen name="cerrar-dia" options={{ title: 'Cerrar el día' }} />

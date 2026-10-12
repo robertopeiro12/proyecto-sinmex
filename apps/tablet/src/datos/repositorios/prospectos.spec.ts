@@ -481,4 +481,24 @@ describe('repositorio de prospectos', () => {
       });
     });
   });
+
+  describe('fotoLocalDe (T-37, D8)', () => {
+    it('encuentra la foto del prospecto de esta tablet por nombre y telefono', () => {
+      const { prospectos } = montar();
+      prospectos.registrar(captura({ fotoUri: 'file:///cache/foto-1.jpg' }));
+
+      expect(
+        prospectos.fotoLocalDe({ nombre: '  tacos AARON ', telefono: '6641112233' }),
+      ).toBe('file:///cache/foto-1.jpg');
+    });
+
+    it('sin foto, con otro telefono o con otro nombre no hay foto', () => {
+      const { prospectos } = montar();
+      prospectos.registrar(captura());
+      prospectos.registrar(captura({ nombre: 'Otro', fotoUri: 'file:///cache/otro.jpg' }));
+
+      expect(prospectos.fotoLocalDe({ nombre: 'Tacos Aaron', telefono: '6641112233' })).toBeNull();
+      expect(prospectos.fotoLocalDe({ nombre: 'Otro', telefono: '0000000000' })).toBeNull();
+    });
+  });
 });
