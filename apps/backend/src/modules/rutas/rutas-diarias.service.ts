@@ -44,7 +44,9 @@ export const MOTIVO_CLIENTE_REPETIDO = 'Un cliente viene dos veces en la ruta.';
 /**
  * El 400 de un `PUT` con clientes nuevos que no valen, nombrandolos: sin el
  * nombre la oficina no sabe cual quitar. `nombres` trae el nombre del cliente
- * (aunque este borrado) o, si ni existe, su id.
+ * si es de la sucursal del vendedor (aunque este borrado o sea prospecto) o, si
+ * es de otra sucursal o ni existe, su id: el nombre de un cliente ajeno no se
+ * revela.
  */
 export function motivoClientesNoValidos(nombres: readonly string[]): string {
   return `Estos clientes no existen, están dados de baja, son prospectos o no son de la sucursal del vendedor: ${nombres.join(', ')}.`;
@@ -193,7 +195,11 @@ export class RutasDiariasService {
       );
       const invalidos = nuevos.filter((c) => !validos.has(c));
       if (invalidos.length > 0) {
-        const nombres = await this.repo.nombresDeClientes(invalidos, trx);
+        const nombres = await this.repo.nombresDeClientes(
+          invalidos,
+          vendedor.sucursalId,
+          trx,
+        );
         throw new BadRequestException(
           motivoClientesNoValidos(invalidos.map((c) => nombres.get(c) ?? c)),
         );

@@ -504,6 +504,21 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
       ]);
     });
 
+    it('un cliente de otra sucursal se rechaza por su id, sin revelar su nombre', async () => {
+      const fecha = diaNuevo();
+      const ajeno = await sembrarCliente(mxId);
+
+      const res = await guardar(cookieGeneral, {
+        vendedorId: vendedorTj,
+        fecha,
+        clientes: [ajeno.id],
+      }).expect(400);
+
+      const { message } = res.body as { message: string };
+      expect(message).toContain(ajeno.id);
+      expect(message).not.toContain(ajeno.nombre);
+    });
+
     it('un cliente nuevo invalido se rechaza nombrandolo', async () => {
       const fecha = diaNuevo();
       const a = await sembrarCliente(tjId);

@@ -238,11 +238,15 @@ export class RutasDiariasRepository {
   }
 
   /**
-   * Nombre de cada id que exista en `cliente`, borrado o no: para nombrar en el
-   * 400 a los clientes que no valen. Un id que ni existe no viene en el mapa.
+   * Nombre de cada id que sea un cliente de ESA sucursal (la del vendedor, que
+   * el usuario ya alcanza), borrado o prospecto incluidos: para nombrar en el
+   * 400 a los clientes que no valen. Un id de otra sucursal o que ni existe no
+   * viene en el mapa: nombrarlo filtraria datos de una sucursal que el usuario
+   * no alcanza.
    */
   async nombresDeClientes(
     ids: readonly string[],
+    sucursalId: string,
     trx: Transaction<DB>,
   ): Promise<Map<string, string>> {
     if (ids.length === 0) return new Map();
@@ -250,6 +254,7 @@ export class RutasDiariasRepository {
       .selectFrom('cliente')
       .select(['id', 'nombre'])
       .where('id', 'in', [...ids])
+      .where('sucursal_id', '=', sucursalId)
       .execute();
     return new Map(filas.map((f) => [f.id, f.nombre]));
   }
