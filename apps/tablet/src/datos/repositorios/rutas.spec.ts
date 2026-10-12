@@ -168,6 +168,21 @@ describe('aplicarSnapshot: la regla de fusion al refrescar (D15)', () => {
     expect(rutas.delDia().map((f) => [f.id, f.activo])).toEqual([['srv-2', 1]]);
   });
 
+  it('una baja vieja que llega en el mismo lote DESPUES de la viva nueva no se escribe', () => {
+    const { rutas } = montar();
+    rutas.aplicarSnapshot([delServidor({ id: 'srv-1', orden: 5 })]);
+
+    // El servidor ordena por (fecha, orden): la viva nueva (orden 1) va antes.
+    const escritas = rutas.aplicarSnapshot([
+      delServidor({ id: 'srv-2', orden: 1 }),
+      delServidor({ id: 'srv-1', orden: 5, activo: 0 }),
+    ]);
+
+    expect(escritas).toBe(1);
+    expect(rutas.porId('srv-1')).toBeNull();
+    expect(rutas.delDia().map((f) => [f.id, f.activo])).toEqual([['srv-2', 1]]);
+  });
+
   it('una fila cuyo cliente no esta en la tablet se omite y las demas entran (Review Focus 1)', () => {
     const { rutas } = montar();
 

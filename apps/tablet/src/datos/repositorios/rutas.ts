@@ -97,6 +97,19 @@ export function aplicarSnapshotRutas(
     });
     if (!cliente) continue;
 
+    if (fila.activo === 0) {
+      // El servidor manda las filas incrementales por (fecha, orden), no las
+      // bajas primero: si la oficina quito y volvio a poner al cliente, la viva
+      // nueva puede llegar ANTES que su baja vieja en el mismo lote. Esa baja
+      // no se escribe, o quedarian dos filas del mismo cliente y dia.
+      const viva = bd.getFirstSync<{ id: string }>(
+        `select id from ruta
+          where fecha = $fecha and cliente_id = $cliente_id and activo = 1 and id <> $id`,
+        { $fecha: fila.fecha, $cliente_id: fila.cliente_id, $id: fila.id },
+      );
+      if (viva) continue;
+    }
+
     if (fila.activo === 1) {
       bd.runSync(
         `delete from ruta
