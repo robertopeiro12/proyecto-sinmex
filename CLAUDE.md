@@ -311,6 +311,17 @@ usuario con sesion pasa.
     sin tope: una ruta futura debe bajar en el pull siguiente a su creación;
     la baja viaja con `activo: 0`. El orden que arrastra el vendedor **no sube** (vive en `ruta_orden_local`).
 
+- **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
+  lee la `jornada` de T-38; no escribe nada.
+  - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).
+  - **Salto** = `km_inicial` − `km_final` de la jornada anterior **del mismo vehículo** (orden `fecha, cerrada_en,
+    id`), buscada aunque caiga antes de `desde` (`lag` sobre todo lo anterior a `hasta`; el `desde` se aplica
+    después). Las jornadas borradas no cuentan.
+  - Rango máximo de 366 días; vehículos desactivados o dados de baja sí aparecen.
+  - **Todo reporte del portal exporta con `apps/portal/src/lib/excel/`** (`exportarExcel(definición)`), que carga
+    `exceljs` solo al exportar. `uuid` de `exceljs` va forzado a `^11.1.1` con `overrides` en el `package.json`
+    raíz (aviso de seguridad heredado).
+
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
 `--`: sin él, npm se come los argumentos).
 
