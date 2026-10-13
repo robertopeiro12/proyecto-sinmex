@@ -43,6 +43,11 @@ export interface NuevoAbono {
   origen: 'cobro' | 'venta_contado' | 'saldo_favor';
   /** Quien lo capturo en el portal (T-21). La tablet y la venta no lo ponen (queda null). */
   capturoUsuarioId?: string | null;
+  /**
+   * El pago al que pertenece (T-34). Ausente o null SOLO en el cobro automatico
+   * de una venta de contado, que no es un pago aparte (`ck_cobranza_abono_cobro`).
+   */
+  cobroId?: string | null;
 }
 
 export interface NuevoSaldoFavor {
@@ -53,6 +58,26 @@ export interface NuevoSaldoFavor {
   origen: 'excedente_cobro' | 'aplicacion';
   fechaOperacion: string;
   capturoUsuarioId: string | null;
+  /** El pago del que sale: el excedente o la aplicacion (T-34, not null en la base). */
+  cobroId: string;
+}
+
+/**
+ * Un pago (T-34): lo recibido de un cliente (tablet o portal) o el saldo a
+ * favor aplicado. Sus filas de `cobranza_abono` y su movimiento de saldo a
+ * favor cuelgan de el con `cobro_id`; borrar un pago es borrarlo completo.
+ */
+export interface NuevoCobro {
+  clienteId: string;
+  /** El cobrador; null = Oficina, y siempre null al aplicar saldo a favor. */
+  vendedorId: string | null;
+  capturoUsuarioId: string | null;
+  origen: 'cobro' | 'saldo_favor';
+  metodoPago: MetodoAbono;
+  /** Texto `numeric`: el pago completo, sobrante a saldo a favor incluido. */
+  monto: string;
+  fechaPago: string;
+  fechaOperacion: string;
 }
 
 /**
@@ -148,6 +173,27 @@ export class CobranzasRepository {
     return new Map(filas.map((f) => [f.venta_nota_id, f.abonado]));
   }
 
+  async insertarCobro(
+    cobro: NuevoCobro,
+    trx: Transaction<DB>,
+  ): Promise<string> {
+    const fila = await trx
+      .insertInto('cobro')
+      .values({
+        cliente_id: cobro.clienteId,
+        vendedor_id: cobro.vendedorId,
+        capturo_usuario_id: cobro.capturoUsuarioId,
+        origen: cobro.origen,
+        metodo_pago: cobro.metodoPago,
+        monto: cobro.monto,
+        fecha_pago: cobro.fechaPago,
+        fecha_operacion: cobro.fechaOperacion,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    return fila.id;
+  }
+
   async insertarAbono(
     abono: NuevoAbono,
     trx: Transaction<DB>,
@@ -165,6 +211,7 @@ export class CobranzasRepository {
         metodo_pago: abono.metodoPago,
         origen: abono.origen,
         capturo_usuario_id: abono.capturoUsuarioId ?? null,
+        cobro_id: abono.cobroId ?? null,
       })
       .returning('id')
       .executeTakeFirstOrThrow();
@@ -201,6 +248,7 @@ export class CobranzasRepository {
         origen: movimiento.origen,
         fecha_operacion: movimiento.fechaOperacion,
         capturo_usuario_id: movimiento.capturoUsuarioId,
+        cobro_id: movimiento.cobroId,
       })
       .returning('id')
       .executeTakeFirstOrThrow();

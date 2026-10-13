@@ -96,6 +96,7 @@ function montar(
     abonadoPorNota: jest
       .fn()
       .mockResolvedValue(opciones.abonado ?? new Map([[A, '100.00']])),
+    insertarCobro: jest.fn().mockResolvedValue('cobro-1'),
     insertarAbono: jest
       .fn()
       .mockImplementation(() => Promise.resolve(`abono-${++abonos}`)),
@@ -125,10 +126,7 @@ describe('CobranzasService.registrarCobranza (tablet, T-20)', () => {
 
     await expect(
       servicio.registrarCobranza(cobro(), contexto, trx),
-    ).resolves.toEqual({
-      tabla: 'cobranza_abono',
-      id: 'abono-1',
-    });
+    ).resolves.toEqual({ tabla: 'cobro', id: 'cobro-1' });
 
     expect(repo.insertarAbono).toHaveBeenCalledTimes(1);
     expect(repo.insertarAbono).toHaveBeenCalledWith(
@@ -143,6 +141,7 @@ describe('CobranzasService.registrarCobranza (tablet, T-20)', () => {
         metodoPago: 'efectivo',
         origen: 'cobro',
         capturoUsuarioId: null,
+        cobroId: 'cobro-1',
       },
       trx,
     );
@@ -185,7 +184,7 @@ describe('CobranzasService.registrarCobranza (tablet, T-20)', () => {
         contexto,
         trx,
       ),
-    ).resolves.toEqual({ tabla: 'cobranza_abono', id: 'abono-1' });
+    ).resolves.toEqual({ tabla: 'cobro', id: 'cobro-1' });
 
     // A (elegida) 100, luego C (la mas vieja, saldo 30) y B (80): sobran 40.
     expect(repo.insertarAbono).toHaveBeenCalledTimes(3);
@@ -212,6 +211,7 @@ describe('CobranzasService.registrarCobranza (tablet, T-20)', () => {
         origen: 'excedente_cobro',
         fechaOperacion: '2026-09-14',
         capturoUsuarioId: null,
+        cobroId: 'cobro-1',
       },
       trx,
     );
@@ -232,7 +232,7 @@ describe('CobranzasService.registrarCobranza (tablet, T-20)', () => {
         contexto,
         trx,
       ),
-    ).resolves.toEqual({ tabla: 'cobranza_abono', id: 'abono-1' });
+    ).resolves.toEqual({ tabla: 'cobro', id: 'cobro-1' });
 
     expect(repo.insertarAbono).toHaveBeenCalledTimes(1);
     expect(repo.insertarAbono).toHaveBeenCalledWith(
@@ -269,7 +269,7 @@ describe('CobranzasService.registrarCobranza (tablet, T-20)', () => {
     );
   });
 
-  it('si todo queda a favor, el buzon apunta al movimiento de saldo a favor', async () => {
+  it('si todo queda a favor, el buzon igual apunta al pago (T-34)', async () => {
     const { servicio } = montar({
       bloqueadas: [bloqueada(A, '2026-08-01', '250.00', { status: 'pagada' })],
       abonado: new Map([[A, '250.00']]),
@@ -277,10 +277,7 @@ describe('CobranzasService.registrarCobranza (tablet, T-20)', () => {
 
     await expect(
       servicio.registrarCobranza(cobro(), contexto, trx),
-    ).resolves.toEqual({
-      tabla: 'saldo_favor_movimiento',
-      id: 'favor-1',
-    });
+    ).resolves.toEqual({ tabla: 'cobro', id: 'cobro-1' });
   });
 
   it('bloquea las notas del cliente antes de leer lo abonado (D13)', async () => {
@@ -384,6 +381,7 @@ describe('CobranzasService.registrarPago (portal, T-21)', () => {
         metodoPago: 'transferencia',
         origen: 'cobro',
         capturoUsuarioId: 'usuario-1',
+        cobroId: 'cobro-1',
       },
       trx,
     );
@@ -420,6 +418,7 @@ describe('CobranzasService.registrarPago (portal, T-21)', () => {
         origen: 'excedente_cobro',
         fechaOperacion: '2026-10-07',
         capturoUsuarioId: 'usuario-1',
+        cobroId: 'cobro-1',
       },
       trx,
     );
@@ -584,6 +583,7 @@ describe('CobranzasService.aplicarSaldoFavor (T-21)', () => {
         metodoPago: 'saldo_favor',
         origen: 'saldo_favor',
         capturoUsuarioId: 'usuario-1',
+        cobroId: 'cobro-1',
       },
       trx,
     );
@@ -601,6 +601,7 @@ describe('CobranzasService.aplicarSaldoFavor (T-21)', () => {
         origen: 'aplicacion',
         fechaOperacion: '2026-10-07',
         capturoUsuarioId: 'usuario-1',
+        cobroId: 'cobro-1',
       },
       trx,
     );
@@ -711,5 +712,107 @@ describe('CobranzasService.aplicarSaldoFavor (T-21)', () => {
     expect(plan.aplicaciones.map((a) => a.notaId)).toEqual([A, B]);
     expect(repo.insertarAbono).not.toHaveBeenCalled();
     expect(repo.insertarSaldoFavor).not.toHaveBeenCalled();
+  });
+});
+
+describe('todo pago nace con su cobro (T-34)', () => {
+  it('tablet: el pago completo, antes de sus filas, y cada fila y el excedente cuelgan de el', async () => {
+    const { servicio, repo } = montar({
+      bloqueadas: [bloqueada(A, '2026-08-01', '100.00')],
+      abonado: new Map(),
+    });
+
+    await servicio.registrarCobranza(
+      cobro({ montoCentavos: 13050 }),
+      contexto,
+      trx,
+    );
+
+    expect(repo.insertarCobro).toHaveBeenCalledWith(
+      {
+        clienteId: CLIENTE,
+        vendedorId: 'vendedor-1',
+        capturoUsuarioId: null,
+        origen: 'cobro',
+        metodoPago: 'efectivo',
+        monto: '130.50',
+        fechaPago: '2026-09-10',
+        fechaOperacion: '2026-09-14',
+      },
+      trx,
+    );
+    expect(repo.insertarCobro.mock.invocationCallOrder[0]).toBeLessThan(
+      repo.insertarAbono.mock.invocationCallOrder[0],
+    );
+    expect(repo.insertarAbono).toHaveBeenCalledWith(
+      expect.objectContaining({ cobroId: 'cobro-1' }),
+      trx,
+    );
+    expect(repo.insertarSaldoFavor).toHaveBeenCalledWith(
+      expect.objectContaining({ monto: '30.50', cobroId: 'cobro-1' }),
+      trx,
+    );
+  });
+
+  it('portal: Oficina y quien capturo, con el monto completo aunque sobre', async () => {
+    const { servicio, repo } = tresNotas();
+    await servicio.registrarPago(
+      pago({ notaIds: [C], montoCentavos: 30000 }),
+      contextoPortal,
+      trx,
+    );
+    expect(repo.insertarCobro).toHaveBeenCalledTimes(1);
+    expect(repo.insertarCobro).toHaveBeenCalledWith(
+      {
+        clienteId: CLIENTE,
+        vendedorId: null,
+        capturoUsuarioId: 'usuario-1',
+        origen: 'cobro',
+        metodoPago: 'transferencia',
+        monto: '300.00',
+        fechaPago: '2026-10-05',
+        fechaOperacion: '2026-10-07',
+      },
+      trx,
+    );
+  });
+
+  it('aplicar saldo a favor: un pago saldo_favor sin cobrador, y el movimiento negativo es del mismo pago', async () => {
+    const { servicio, repo } = tresNotas(['150.00']);
+    await servicio.aplicarSaldoFavor(
+      { clienteId: CLIENTE, notaIds: [A], montoCentavos: 1000 },
+      { ...contextoPortal, vendedorId: 'vendedor-1' },
+      trx,
+    );
+    expect(repo.insertarCobro).toHaveBeenCalledWith(
+      {
+        clienteId: CLIENTE,
+        vendedorId: null,
+        capturoUsuarioId: 'usuario-1',
+        origen: 'saldo_favor',
+        metodoPago: 'saldo_favor',
+        monto: '10.00',
+        fechaPago: '2026-10-07',
+        fechaOperacion: '2026-10-07',
+      },
+      trx,
+    );
+    expect(repo.insertarSaldoFavor).toHaveBeenCalledWith(
+      expect.objectContaining({ origen: 'aplicacion', cobroId: 'cobro-1' }),
+      trx,
+    );
+  });
+
+  it('las vistas previas no crean pago', async () => {
+    const { servicio, repo } = tresNotas(['150.00']);
+    await servicio.planearPago(
+      { clienteId: CLIENTE, notaIds: [A], montoCentavos: 1000 },
+      trx,
+    );
+    await servicio.planearSaldoFavor(
+      { clienteId: CLIENTE, notaIds: [A], montoCentavos: 1000 },
+      trx,
+    );
+    expect(repo.insertarCobro).not.toHaveBeenCalled();
   });
 });

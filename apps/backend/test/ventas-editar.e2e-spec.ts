@@ -7,6 +7,7 @@ import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { OPCIONES_NEST, configurarApp } from './../src/configurar-app';
 import { iniciarEnLocal } from './apoyo-servidor';
+import { borrarCobrosDe, cobroParaNota } from './apoyo-cobros';
 import {
   DB_CONNECTION,
   type Database,
@@ -327,6 +328,11 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
         saldo_pendiente: '0.00',
         metodo_pago: 'efectivo',
         origen: 'cobro',
+        cobro_id: await cobroParaNota(db, ventaId, {
+          vendedorId: vendedorTj,
+          monto,
+          fecha: FECHA_A,
+        }),
       })
       .execute();
     await db
@@ -565,6 +571,7 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
       .deleteFrom('cobranza_abono')
       .where('venta_nota_id', 'in', ventas)
       .execute();
+    await borrarCobrosDe(db, clientes);
     await db
       .deleteFrom('venta_nota_detalle')
       .where('venta_nota_id', 'in', ventas)
@@ -1799,6 +1806,13 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
           metodo_pago: 'saldo_favor',
           origen: 'saldo_favor',
           capturo_usuario_id: usuarioGeneralId,
+          cobro_id: await cobroParaNota(db, v.id, {
+            vendedorId: null,
+            monto: '70.00',
+            fecha: FECHA_EDICION,
+            metodoPago: 'saldo_favor',
+            capturoUsuarioId: usuarioGeneralId,
+          }),
         })
         .execute();
       await db

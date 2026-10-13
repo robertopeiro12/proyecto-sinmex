@@ -18,12 +18,23 @@ insert into venta_nota
          41, 10, 'pendiente', c.sucursal_id, 'portal', u.id
     from cliente c, usuario u
    where c.nombre = 'ZZ-pgtap-T21 Cliente' and u.login = 'zz-pgtap-t21';
+insert into cobro
+    (cliente_id, vendedor_id, capturo_usuario_id, origen, metodo_pago, monto,
+     fecha_pago, fecha_operacion)
+  select c.id, null, u.id, x.origen, x.metodo, 100.00, '2026-10-07', '2026-10-07'
+    from cliente c, usuario u,
+         (values ('cobro', 'efectivo'), ('saldo_favor', 'saldo_favor')) as x(origen, metodo)
+   where c.nombre = 'ZZ-pgtap-T21 Cliente' and u.login = 'zz-pgtap-t21';
 
 create temporary table _t21 on commit drop as
 select
   (select id from usuario where login = 'zz-pgtap-t21') as usuario,
   (select id from cliente where nombre = 'ZZ-pgtap-T21 Cliente') as cliente,
-  (select id from venta_nota where folio = 'ZZPGTAPT2101') as nota;
+  (select id from venta_nota where folio = 'ZZPGTAPT2101') as nota,
+  (select id from cobro where origen = 'cobro'
+      and cliente_id = (select id from cliente where nombre = 'ZZ-pgtap-T21 Cliente')) as cobro,
+  (select id from cobro where origen = 'saldo_favor'
+      and cliente_id = (select id from cliente where nombre = 'ZZ-pgtap-T21 Cliente')) as cobro_sf;
 
 select hasnt_column('cobranza_abono', 'folio',
   'la cobranza no lleva folio (cliente, 2026-10-07)');
@@ -41,9 +52,9 @@ select col_is_null('cobranza_abono', 'capturo_usuario_id',
 select lives_ok(
   $$insert into cobranza_abono
       (venta_nota_id, fecha_pago, fecha_operacion, vendedor_id, monto, tipo,
-       saldo_pendiente, metodo_pago, origen, capturo_usuario_id)
+       saldo_pendiente, metodo_pago, origen, capturo_usuario_id, cobro_id)
     select nota, '2026-10-07', '2026-10-07', null, 100.00, 'abono',
-           200.00, 'saldo_favor', 'saldo_favor', usuario
+           200.00, 'saldo_favor', 'saldo_favor', usuario, cobro_sf
       from _t21$$,
   'aplicar saldo a favor: metodo y origen saldo_favor, sin cobrador'
 );
@@ -51,9 +62,9 @@ select lives_ok(
 select throws_ok(
   $$insert into cobranza_abono
       (venta_nota_id, fecha_pago, fecha_operacion, vendedor_id, monto, tipo,
-       saldo_pendiente, metodo_pago, origen)
+       saldo_pendiente, metodo_pago, origen, cobro_id)
     select nota, '2026-10-07', '2026-10-07', null, 10.00, 'abono',
-           190.00, 'saldo_favor', 'cobro'
+           190.00, 'saldo_favor', 'cobro', cobro_sf
       from _t21$$,
   '23514', null,
   'el metodo saldo_favor solo va con el origen saldo_favor'
@@ -62,9 +73,9 @@ select throws_ok(
 select throws_ok(
   $$insert into cobranza_abono
       (venta_nota_id, fecha_pago, fecha_operacion, vendedor_id, monto, tipo,
-       saldo_pendiente, metodo_pago, origen)
+       saldo_pendiente, metodo_pago, origen, cobro_id)
     select nota, '2026-10-07', '2026-10-07', null, 10.00, 'abono',
-           190.00, 'efectivo', 'saldo_favor'
+           190.00, 'efectivo', 'saldo_favor', cobro_sf
       from _t21$$,
   '23514', null,
   'y el origen saldo_favor solo con el metodo saldo_favor'
@@ -73,9 +84,9 @@ select throws_ok(
 select throws_ok(
   $$insert into cobranza_abono
       (venta_nota_id, fecha_pago, fecha_operacion, vendedor_id, monto, tipo,
-       saldo_pendiente, metodo_pago, origen)
+       saldo_pendiente, metodo_pago, origen, cobro_id)
     select nota, '2026-10-07', '2026-10-07', null, 10.00, 'abono',
-           190.00, 'tarjeta', 'cobro'
+           190.00, 'tarjeta', 'cobro', cobro
       from _t21$$,
   '23514', null,
   'un metodo fuera del catalogo no entra'
@@ -83,31 +94,31 @@ select throws_ok(
 
 select lives_ok(
   $$insert into saldo_favor_movimiento
-      (cliente_id, vendedor_id, monto, origen, fecha_operacion, capturo_usuario_id)
-    select cliente, null, -100.00, 'aplicacion', '2026-10-07', usuario from _t21$$,
+      (cliente_id, vendedor_id, monto, origen, fecha_operacion, capturo_usuario_id, cobro_id)
+    select cliente, null, -100.00, 'aplicacion', '2026-10-07', usuario, cobro_sf from _t21$$,
   'aplicar saldo a favor deja un movimiento negativo de origen aplicacion'
 );
 
 select throws_ok(
   $$insert into saldo_favor_movimiento
-      (cliente_id, vendedor_id, monto, origen, fecha_operacion)
-    select cliente, null, 10.00, 'ajuste', '2026-10-07' from _t21$$,
+      (cliente_id, vendedor_id, monto, origen, fecha_operacion, cobro_id)
+    select cliente, null, 10.00, 'ajuste', '2026-10-07', cobro from _t21$$,
   '23514', null,
   'otro origen de saldo a favor no entra'
 );
 
 select throws_ok(
   $$insert into saldo_favor_movimiento
-      (cliente_id, vendedor_id, monto, origen, fecha_operacion, capturo_usuario_id)
-    select cliente, null, 50.00, 'aplicacion', '2026-10-07', usuario from _t21$$,
+      (cliente_id, vendedor_id, monto, origen, fecha_operacion, capturo_usuario_id, cobro_id)
+    select cliente, null, 50.00, 'aplicacion', '2026-10-07', usuario, cobro_sf from _t21$$,
   '23514', null,
   'una aplicacion con monto positivo no entra (ck_saldo_favor_signo)'
 );
 
 select throws_ok(
   $$insert into saldo_favor_movimiento
-      (cliente_id, vendedor_id, monto, origen, fecha_operacion)
-    select cliente, null, -50.00, 'excedente_cobro', '2026-10-07' from _t21$$,
+      (cliente_id, vendedor_id, monto, origen, fecha_operacion, cobro_id)
+    select cliente, null, -50.00, 'excedente_cobro', '2026-10-07', cobro from _t21$$,
   '23514', null,
   'un excedente con monto negativo no entra (ck_saldo_favor_signo)'
 );

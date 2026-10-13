@@ -40,9 +40,13 @@ export interface ContextoCobranza {
   usuarioId: string | null;
 }
 
-/** La fila a la que apunta el buzon (`sync_operacion.entidad_*`). */
+/**
+ * La fila a la que apunta el buzon (`sync_operacion.entidad_*`): el pago
+ * (T-34). Antes era la primera fila de `cobranza_abono` o el movimiento de
+ * saldo a favor; ahora el pago las agrupa a todas.
+ */
 export interface EntidadCobranza {
-  tabla: 'cobranza_abono' | 'saldo_favor_movimiento';
+  tabla: 'cobro';
   id: string;
 }
 
@@ -127,8 +131,7 @@ export class CobranzasService {
    * cliente por fecha y folio, y el resto a saldo a favor. Una nota elegida ya
    * pagada, de cuenta perdida o borrada no se rechaza (D9).
    *
-   * Devuelve la primera fila `cobranza_abono` creada o, si todo quedo a favor,
-   * el movimiento de saldo a favor.
+   * Devuelve el pago (T-34): todas sus filas y su excedente cuelgan de el.
    *
    * @throws {CobranzaRechazada} `nota-no-encontrada` (D10). No escribe nada antes de lanzar.
    */
@@ -161,9 +164,9 @@ export class CobranzasService {
       notaIds,
       paraReparto,
     );
-    const entidad = await this.escribir(
+    const cobroId = await this.escribir(
       reparto,
-      cobranza.clienteId,
+      { clienteId: cobranza.clienteId, montoCentavos: cobranza.montoCentavos },
       {
         fechaPago: cobranza.fechaPago,
         metodoPago: cobranza.metodoPago,
@@ -172,10 +175,7 @@ export class CobranzasService {
       contexto,
       trx,
     );
-    // repartirPagoEnNotas no admite montos <= 0: si llega aqui, algo se rompio arriba.
-    if (entidad === null)
-      throw new Error('registrarCobranza no escribio ninguna fila.');
-    return entidad;
+    return { tabla: 'cobro', id: cobroId };
   }
 
   /**
@@ -228,7 +228,7 @@ export class CobranzasService {
     );
     await this.escribir(
       reparto,
-      pago.clienteId,
+      { clienteId: pago.clienteId, montoCentavos: pago.montoCentavos },
       {
         fechaPago: pago.fechaPago,
         metodoPago: pago.metodoPago,
@@ -271,9 +271,9 @@ export class CobranzasService {
   ): Promise<PlanDeCobro> {
     const pago = { ...pedido, notaIds: sinRepetir(pedido.notaIds) };
     const { reparto, bloqueadas } = await this.repartirSaldoFavor(pago, trx);
-    await this.escribir(
+    const cobroId = await this.escribir(
       reparto,
-      pago.clienteId,
+      { clienteId: pago.clienteId, montoCentavos: pago.montoCentavos },
       {
         fechaPago: contexto.fechaOperacion,
         metodoPago: 'saldo_favor',
@@ -292,6 +292,7 @@ export class CobranzasService {
         origen: 'aplicacion',
         fechaOperacion: contexto.fechaOperacion,
         capturoUsuarioId: contexto.usuarioId,
+        cobroId,
       },
       trx,
     );
@@ -387,20 +388,34 @@ export class CobranzasService {
   }
 
   /**
-   * Las filas `cobranza_abono` del reparto, el status de cada nota (se escribe
-   * aunque no cambie: el trigger le toca `updated_at` y el pull la ve, D12) y,
-   * si sobra, el excedente a saldo a favor. Devuelve la primera fila escrita.
+   * El pago (T-34) y, colgadas de el, las filas `cobranza_abono` del reparto,
+   * el status de cada nota (se escribe aunque no cambie: el trigger le toca
+   * `updated_at` y el pull la ve, D12) y, si sobra, el excedente a saldo a
+   * favor. Devuelve el id del pago.
    */
   private async escribir(
     reparto: Reparto,
-    clienteId: string,
+    pago: { clienteId: string; montoCentavos: number },
     forma: FormaDelAbono,
     contexto: ContextoCobranza,
     trx: Transaction<DB>,
-  ): Promise<EntidadCobranza | null> {
-    let primera: string | null = null;
+  ): Promise<string> {
+    const cobroId = await this.repo.insertarCobro(
+      {
+        clienteId: pago.clienteId,
+        vendedorId: contexto.vendedorId,
+        capturoUsuarioId: contexto.usuarioId,
+        origen: forma.origen,
+        metodoPago: forma.metodoPago,
+        monto: aPesos(pago.montoCentavos),
+        fechaPago: forma.fechaPago,
+        fechaOperacion: contexto.fechaOperacion,
+      },
+      trx,
+    );
+
     for (const a of reparto.aplicaciones) {
-      const id = await this.repo.insertarAbono(
+      await this.repo.insertarAbono(
         {
           ventaNotaId: a.notaId,
           vendedorId: contexto.vendedorId,
@@ -413,32 +428,29 @@ export class CobranzasService {
           metodoPago: forma.metodoPago,
           origen: forma.origen,
           capturoUsuarioId: contexto.usuarioId,
+          cobroId,
         },
         trx,
       );
-      primera ??= id;
       await this.repo.actualizarStatusNota(a.notaId, a.status, trx);
     }
 
-    let movimiento: string | null = null;
     if (reparto.saldoFavorCentavos > 0) {
-      movimiento = await this.repo.insertarSaldoFavor(
+      await this.repo.insertarSaldoFavor(
         {
-          clienteId,
+          clienteId: pago.clienteId,
           vendedorId: contexto.vendedorId,
           monto: aPesos(reparto.saldoFavorCentavos),
           origen: 'excedente_cobro',
           fechaOperacion: contexto.fechaOperacion,
           capturoUsuarioId: contexto.usuarioId,
+          cobroId,
         },
         trx,
       );
     }
 
-    if (primera !== null) return { tabla: 'cobranza_abono', id: primera };
-    if (movimiento !== null)
-      return { tabla: 'saldo_favor_movimiento', id: movimiento };
-    return null;
+    return cobroId;
   }
 
   /** El reparto con folio, # de nota y fecha de cada nota, para la pantalla. */

@@ -6,6 +6,7 @@ import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { OPCIONES_NEST, configurarApp } from './../src/configurar-app';
 import { iniciarEnLocal } from './apoyo-servidor';
+import { borrarCobrosDe, sembrarCobro } from './apoyo-cobros';
 import {
   DB_CONNECTION,
   type Database,
@@ -195,7 +196,7 @@ describe('Cobranza desde el portal (e2e)', () => {
     return id;
   };
 
-  const darSaldoFavor = (clienteId: string, monto: string) =>
+  const darSaldoFavor = async (clienteId: string, monto: string) =>
     db
       .insertInto('saldo_favor_movimiento')
       .values({
@@ -204,6 +205,12 @@ describe('Cobranza desde el portal (e2e)', () => {
         monto,
         origen: 'excedente_cobro',
         fecha_operacion: F1,
+        cobro_id: await sembrarCobro(db, {
+          clienteId,
+          vendedorId: null,
+          monto,
+          fecha: F1,
+        }),
       })
       .execute();
 
@@ -358,6 +365,7 @@ describe('Cobranza desde el portal (e2e)', () => {
         .deleteFrom('saldo_favor_movimiento')
         .where('cliente_id', 'in', clienteIds)
         .execute();
+      await borrarCobrosDe(db, clienteIds);
       await db
         .deleteFrom('venta_nota')
         .where('cliente_id', 'in', clienteIds)
@@ -447,6 +455,13 @@ describe('Cobranza desde el portal (e2e)', () => {
           saldo_pendiente: '70.00',
           metodo_pago: 'cheque',
           origen: 'cobro',
+          cobro_id: await sembrarCobro(db, {
+            clienteId: cli,
+            vendedorId: null,
+            monto: '30.00',
+            fecha: F2,
+            metodoPago: 'cheque',
+          }),
         })
         .execute();
       await darSaldoFavor(cli, '12.50');
@@ -659,6 +674,13 @@ describe('Cobranza desde el portal (e2e)', () => {
           saldo_pendiente: '0.00',
           metodo_pago: 'efectivo',
           origen: 'cobro',
+          cobro_id: await sembrarCobro(db, {
+            clienteId: cli,
+            vendedorId: vendedorApp,
+            monto: '80.00',
+            fecha: F2,
+            metodoPago: 'efectivo',
+          }),
         })
         .execute();
       await db
@@ -768,6 +790,13 @@ describe('Cobranza desde el portal (e2e)', () => {
       const n1 = await sembrarNota(cli, '100.00', F1);
       const n2 = await sembrarNota(cli, '80.00', F2);
       let pendiente: Promise<request.Response> | undefined;
+      const cobroTablet = await sembrarCobro(db, {
+        clienteId: cli,
+        vendedorId: vendedorApp,
+        monto: '80.00',
+        fecha: F2,
+        metodoPago: 'efectivo',
+      });
 
       await db
         .transaction()
@@ -787,6 +816,7 @@ describe('Cobranza desde el portal (e2e)', () => {
               saldo_pendiente: '0.00',
               metodo_pago: 'efectivo',
               origen: 'cobro',
+              cobro_id: cobroTablet,
             })
             .execute();
           await trx
@@ -976,6 +1006,85 @@ describe('Cobranza desde el portal (e2e)', () => {
       expect(mensaje(res)).toBe(
         'Tiene cobros registrados: no se puede eliminar.',
       );
+    });
+  });
+
+  describe('todo pago nace con su cobro (T-34)', () => {
+    it('un pago a varias notas con excedente es UN cobro con el monto completo; filas y excedente cuelgan de el', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const n2 = await sembrarNota(cli, '80.00', F2);
+
+      await cobrar(
+        cookieGeneral,
+        pago(cli, [n1.id, n2.id], { montoCentavos: 20000 }),
+      ).expect(201);
+
+      const pagos = await db
+        .selectFrom('cobro')
+        .select([
+          'id',
+          'monto',
+          'origen',
+          'metodo_pago',
+          'vendedor_id',
+          'capturo_usuario_id',
+        ])
+        .where('cliente_id', '=', cli)
+        .execute();
+      expect(pagos).toEqual([
+        {
+          id: expect.any(String) as string,
+          monto: '200.00',
+          origen: 'cobro',
+          metodo_pago: 'transferencia',
+          vendedor_id: null,
+          capturo_usuario_id: usuarioGeneralId,
+        },
+      ]);
+      const filas = await db
+        .selectFrom('cobranza_abono')
+        .select('cobro_id')
+        .where('venta_nota_id', 'in', [n1.id, n2.id])
+        .execute();
+      expect(filas.map((f) => f.cobro_id)).toEqual([pagos[0].id, pagos[0].id]);
+      const favor = await db
+        .selectFrom('saldo_favor_movimiento')
+        .select(['monto', 'cobro_id'])
+        .where('cliente_id', '=', cli)
+        .execute();
+      expect(favor).toEqual([{ monto: '20.00', cobro_id: pagos[0].id }]);
+    });
+
+    it('aplicar saldo a favor es un cobro saldo_favor y su movimiento negativo es del mismo pago', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      await darSaldoFavor(cli, '50.00');
+
+      await aplicarSaldo(cookieGeneral, {
+        clienteId: cli,
+        notaIds: [n1.id],
+        montoCentavos: 3000,
+      }).expect(201);
+
+      const aplicacion = await db
+        .selectFrom('cobro')
+        .select(['id', 'monto', 'origen', 'metodo_pago', 'vendedor_id'])
+        .where('cliente_id', '=', cli)
+        .where('origen', '=', 'saldo_favor')
+        .executeTakeFirstOrThrow();
+      expect(aplicacion).toMatchObject({
+        monto: '30.00',
+        metodo_pago: 'saldo_favor',
+        vendedor_id: null,
+      });
+      const negativo = await db
+        .selectFrom('saldo_favor_movimiento')
+        .select('cobro_id')
+        .where('cliente_id', '=', cli)
+        .where('origen', '=', 'aplicacion')
+        .executeTakeFirstOrThrow();
+      expect(negativo.cobro_id).toBe(aplicacion.id);
     });
   });
 
