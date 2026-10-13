@@ -104,6 +104,8 @@ describe("definicionExcelKilometraje", () => {
       ["Vehículo", "Todos"],
     ]);
     expect(def.columnas.map((c) => c.encabezado)).toEqual(["Fecha", "Vendedor", "Km inicial", "Km final", "Kilómetros", "Salto"]);
+    // El Salto lleva signo en Excel igual que en pantalla; el 0 queda en blanco.
+    expect(def.columnas[5].formato).toBe('"+"#,##0.0;"−"#,##0.0;');
     expect(def.nombreArchivo).toBe("kilometraje_2026-10-01_a_2026-10-13");
     expect(def.filas).toEqual([
       { tipo: "grupo", celdas: ["Nissan-01 (ABC-123)", null, null, null, null, null] },

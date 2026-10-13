@@ -97,6 +97,9 @@ export function etiquetaSucursal(codigoDelUsuario: string | null, pedida: string
 }
 
 const km = (decimas: number): number => decimas / 10;
+/** Con signo, como en pantalla; el tercer segmento vacio deja en blanco el 0. */
+const SALTO_FORMATO_EXCEL = '"+"#,##0.0;"−"#,##0.0;';
+
 const saltoEnKm = (decimas: number | null): number | null =>
   decimas === null || decimas === 0 ? null : decimas / 10;
 
@@ -141,7 +144,7 @@ export function definicionExcelKilometraje(
       { encabezado: "Km inicial", tipo: "numero", decimales: 1, ancho: 14 },
       { encabezado: "Km final", tipo: "numero", decimales: 1, ancho: 14 },
       { encabezado: "Kilómetros", tipo: "numero", decimales: 1, ancho: 14 },
-      { encabezado: "Salto", tipo: "numero", decimales: 1, ancho: 12 },
+      { encabezado: "Salto", tipo: "numero", decimales: 1, ancho: 12, formato: SALTO_FORMATO_EXCEL },
     ],
     filas,
     nombreArchivo: `kilometraje_${reporte.desde}_a_${reporte.hasta}`,

@@ -12,6 +12,8 @@ export interface ColumnaExcel {
   tipo: TipoColumna;
   /** Solo para `numero`. Por defecto 0. */
   decimales?: number;
+  /** Formato de numero de Excel propio (p. ej. con signo); gana sobre `tipo`/`decimales`. */
+  formato?: string;
 }
 
 /**

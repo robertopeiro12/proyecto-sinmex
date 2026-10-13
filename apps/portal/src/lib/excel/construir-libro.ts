@@ -22,6 +22,7 @@ const RELLENO_RESALTADA: Fill = { type: "pattern", pattern: "solid", fgColor: { 
 const BORDE_ARRIBA: Partial<Borders> = { top: { style: "thin" } };
 
 function formato(col: ColumnaExcel): string | undefined {
+  if (col.formato) return col.formato;
   switch (col.tipo) {
     case "numero": {
       const decimales = col.decimales ?? 0;

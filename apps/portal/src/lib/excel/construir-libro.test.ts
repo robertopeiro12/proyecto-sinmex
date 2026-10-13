@@ -66,6 +66,16 @@ describe("construirLibro", () => {
     expect(hoja.getCell("D8").value).toBeNull();
   });
 
+  it("un formato propio de la columna gana sobre el de su tipo y sobrevive al leer el archivo", async () => {
+    const formato = '"+"#,##0.0;"−"#,##0.0;';
+    const hoja = await leer({
+      ...DEF,
+      columnas: DEF.columnas.map((c) => (c.encabezado === "Km" ? { ...c, formato } : c)),
+    });
+    expect(hoja.getCell("C7").numFmt).toBe(formato);
+    expect(hoja.getCell("D7").numFmt).toBe('"$"#,##0.00');
+  });
+
   it("negrita en grupo, subtotal y total; borde arriba en subtotal y total; resaltada en amarillo", async () => {
     const hoja = await leer(DEF);
     expect(hoja.getCell("A6").font?.bold).toBe(true); // grupo
