@@ -22,7 +22,7 @@ import { ETIQUETA_STATUS, formatearPesos } from "@/lib/ventas";
  * se arma la selección.
  */
 export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
-  const { puede } = useAuth();
+  const { puede, cargando: cargandoSesion } = useAuth();
   const [clientes, setClientes] = useState<ClienteResumen[]>([]);
   const [cliente, setCliente] = useState<ClienteResumen | null>(null);
   const [incluirNA, setIncluirNA] = useState(false);
@@ -72,6 +72,11 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
       vigente = false;
     };
   }, [cliente, incluirNA, recarga]);
+
+  if (cargandoSesion) {
+    // Sin esto, quien si tiene el permiso ve "No tienes permiso" un instante.
+    return <p className="text-sm text-muted-foreground">Cargando…</p>;
+  }
 
   if (!permitido) {
     return <p className="text-sm text-muted-foreground">No tienes permiso para asignar facturas.</p>;

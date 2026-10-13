@@ -30,7 +30,7 @@ interface Consultado {
  * con `key={sucursal}`: cambiar el selector global de sucursal empieza limpio.
  */
 export function PantallaKilometraje({ sucursal }: { sucursal: string | null }) {
-  const { puede, usuario } = useAuth();
+  const { puede, usuario, cargando: cargandoSesion } = useAuth();
   const permitido = puede("reportes.ver");
   const [desde, setDesde] = useState(() => primerDiaDelMes(hoyEnTijuana()));
   const [hasta, setHasta] = useState(() => hoyEnTijuana());
@@ -58,6 +58,21 @@ export function PantallaKilometraje({ sucursal }: { sucursal: string | null }) {
       vigente = false;
     };
   }, [permitido, sucursal]);
+
+  if (cargandoSesion) {
+    // Mientras /auth/me no contesta, `puede()` da false a todos: sin esto, quien
+    // si tiene el permiso ve "No tienes permiso" un instante (como PantallaPerfiles).
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Reporte de Kilometraje</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (!permitido) {
     return (

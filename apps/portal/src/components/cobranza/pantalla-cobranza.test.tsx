@@ -41,6 +41,13 @@ describe("PantallaCobranza", () => {
     vi.mocked(ventasLib.listarRepartidores).mockResolvedValue([]);
   });
 
+  it("mientras carga la sesión dice Cargando…, no \"No tienes permiso\"", () => {
+    vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: true, cerrarSesion: vi.fn(), puede: () => false });
+    render(<PantallaCobranza sucursal={null} />);
+    expect(screen.getByText("Cargando…")).toBeInTheDocument();
+    expect(screen.queryByText(/No tienes permiso/)).not.toBeInTheDocument();
+  });
+
   it("sin cobranza.registrar lo dice y no pide nada", () => {
     mockAuth(() => false);
     render(<PantallaCobranza sucursal={null} />);

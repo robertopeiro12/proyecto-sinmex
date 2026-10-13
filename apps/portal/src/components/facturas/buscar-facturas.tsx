@@ -17,7 +17,7 @@ import { formatearPesos } from "@/lib/ventas";
 
 /** Buscar facturas por número o cliente, cambiar su número o quitarle ventas (T-19, §5.2). */
 export function BuscarFacturas({ sucursal }: { sucursal: string | null }) {
-  const { puede } = useAuth();
+  const { puede, cargando: cargandoSesion } = useAuth();
   const [clientes, setClientes] = useState<ClienteResumen[]>([]);
   const [numero, setNumero] = useState("");
   const [cliente, setCliente] = useState<ClienteResumen | null>(null);
@@ -40,6 +40,11 @@ export function BuscarFacturas({ sucursal }: { sucursal: string | null }) {
       vigente = false;
     };
   }, [sucursal, permitido]);
+
+  if (cargandoSesion) {
+    // Sin esto, quien si tiene el permiso ve "No tienes permiso" un instante.
+    return <p className="text-sm text-muted-foreground">Cargando…</p>;
+  }
 
   if (!permitido) {
     return <p className="text-sm text-muted-foreground">No tienes permiso para asignar facturas.</p>;

@@ -6,7 +6,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 
 /** Información → Reportes (T-50): la lista. Hoy, uno; Ventas (#49), Clientes nuevos (#51)... se suman aqui. */
 export function ListaReportes({ sucursal }: { sucursal: string | null }) {
-  const { puede } = useAuth();
+  const { puede, cargando: cargandoSesion } = useAuth();
   const consulta = sucursal ? `?sucursal=${encodeURIComponent(sucursal)}` : "";
 
   return (
@@ -15,7 +15,9 @@ export function ListaReportes({ sucursal }: { sucursal: string | null }) {
         <CardTitle>Reportes</CardTitle>
       </CardHeader>
       <CardContent>
-        {!puede("reportes.ver") ? (
+        {cargandoSesion ? (
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        ) : !puede("reportes.ver") ? (
           <p className="text-sm text-muted-foreground">No tienes permiso para ver reportes</p>
         ) : (
           <ul className="flex flex-col gap-3">

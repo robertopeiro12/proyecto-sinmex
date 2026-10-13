@@ -112,6 +112,13 @@ describe("AsignarFactura", () => {
     expect(screen.queryByText("Este cliente no tiene ventas por facturar.")).not.toBeInTheDocument();
   });
 
+  it("mientras carga la sesión dice Cargando…, no \"No tienes permiso\"", () => {
+    vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: true, cerrarSesion: vi.fn(), puede: () => false });
+    render(<AsignarFactura sucursal={null} />);
+    expect(screen.getByText("Cargando…")).toBeInTheDocument();
+    expect(screen.queryByText(/No tienes permiso/)).not.toBeInTheDocument();
+  });
+
   it("sin el permiso no se puede asignar", async () => {
     vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: false, cerrarSesion: vi.fn(), puede: () => false });
     render(<AsignarFactura sucursal={null} />);

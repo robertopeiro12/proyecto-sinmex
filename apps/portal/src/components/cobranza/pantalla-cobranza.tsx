@@ -10,8 +10,23 @@ type Vista = { tipo: "buscar" } | { tipo: "cliente"; clienteId: string; notaId: 
 
 /** Operación → Cobranza (T-21): buscar la cuenta por cobrar y registrar el pago. */
 export function PantallaCobranza({ sucursal }: { sucursal: string | null }) {
-  const { puede } = useAuth();
+  const { puede, cargando: cargandoSesion } = useAuth();
   const [vista, setVista] = useState<Vista>({ tipo: "buscar" });
+
+  if (cargandoSesion) {
+    // Mientras /auth/me no contesta, `puede()` da false a todos: sin esto, quien
+    // si tiene el permiso ve "No tienes permiso" un instante (como PantallaPerfiles).
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Cobranza</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (!puede("cobranza.registrar")) {
     return (

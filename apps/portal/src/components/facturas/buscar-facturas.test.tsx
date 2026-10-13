@@ -107,6 +107,13 @@ describe("BuscarFacturas", () => {
     expect(await screen.findByText("No se encontraron facturas.")).toBeInTheDocument();
   });
 
+  it("mientras carga la sesión dice Cargando…, no \"No tienes permiso\"", () => {
+    vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: true, cerrarSesion: vi.fn(), puede: () => false });
+    render(<BuscarFacturas sucursal={null} />);
+    expect(screen.getByText("Cargando…")).toBeInTheDocument();
+    expect(screen.queryByText(/No tienes permiso/)).not.toBeInTheDocument();
+  });
+
   it("sin el permiso muestra el texto y no pide clientes", () => {
     vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: false, cerrarSesion: vi.fn(), puede: () => false });
     render(<BuscarFacturas sucursal={null} />);

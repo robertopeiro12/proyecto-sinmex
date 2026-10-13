@@ -207,6 +207,13 @@ describe("PantallaRegistrarVenta", () => {
     );
   });
 
+  it("mientras carga la sesión no dice \"No tienes permiso\" ni muestra Grabar", async () => {
+    vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: true, cerrarSesion: vi.fn(), puede: () => false });
+    await prepararPantalla();
+    expect(screen.queryByRole("button", { name: "Grabar" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/No tienes permiso/)).not.toBeInTheDocument();
+  });
+
   it("sin el permiso venta.registrar no aparece Grabar", async () => {
     mockAuth(() => false);
     await prepararPantalla();
