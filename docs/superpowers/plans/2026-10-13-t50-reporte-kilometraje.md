@@ -1048,3 +1048,706 @@ git commit -m "T-50: GET /reportes/kilometraje — jornadas por vehiculo con el 
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
+
+---
+
+### Tarea 3: La utilidad de Excel (T-15) — `lib/excel/`
+
+Reutilizable por cualquier reporte del portal: recibe una definición (título, filtros, columnas, filas) y genera
+un `.xlsx` real en el navegador. No sabe nada de kilometraje.
+
+**Archivos:**
+- Modificar: `package.json` (raíz) — `overrides` de `uuid` solo para `exceljs` (desviación 2)
+- Modificar: `apps/portal/package.json` y `package-lock.json` — dependencia `exceljs@4.4.0`
+- Crear: `apps/portal/src/lib/excel/definicion.ts`
+- Crear: `apps/portal/src/lib/excel/construir-libro.ts` (+ `construir-libro.test.ts`)
+- Crear: `apps/portal/src/lib/excel/exportar.ts` (+ `exportar.test.ts`)
+
+**Interfaces:**
+- Produce:
+  - `type TipoColumna = "texto" | "numero" | "pesos" | "fecha"`
+  - `interface ColumnaExcel { encabezado: string; ancho?: number; tipo: TipoColumna; decimales?: number }`
+  - `type Celda = string | number | null` — en columnas `numero`/`pesos` va el número **en la unidad que se
+    muestra** (km, pesos), no en décimas ni centavos; en `fecha`, `AAAA-MM-DD` (otro texto se escribe tal cual,
+    p. ej. "Total Nissan-01" en la primera columna)
+  - `interface FilaExcel { celdas: Celda[]; tipo?: "normal" | "subtotal" | "total" | "grupo"; resaltada?: boolean }`
+  - `interface DefinicionExcel { titulo: string; filtros: Array<[etiqueta: string, valor: string]>; columnas: ColumnaExcel[]; filas: FilaExcel[]; nombreArchivo: string }`
+  - `cargarExcelJS(): Promise<typeof import("exceljs")>`
+  - `construirLibro(def: DefinicionExcel): Promise<ArrayBuffer>`
+  - `exportarExcel(def: DefinicionExcel): Promise<void>`
+
+- [ ] **Paso 1: Instala `exceljs` y el override**
+
+Run: `npm install exceljs@4.4.0 --workspace=apps/portal`
+
+Agrega al `package.json` de la **raíz**, después de `devDependencies`:
+
+```json
+  "overrides": {
+    "exceljs": {
+      "uuid": "^11.1.1"
+    }
+  }
+```
+
+Run: `npm install` y luego `npm ls uuid --workspace=apps/portal` (debe mostrar `exceljs@4.4.0 └── uuid@11.x`) y
+`npm audit --omit=dev --workspace=apps/portal` (no debe listar `uuid` por `exceljs`).
+Si `npm install` cambia en `package-lock.json` solo marcas `"peer": true` de otros paquetes, eso es ruido de la
+versión de npm: no lo mezcles, quédate con los cambios de `exceljs`/`uuid` (`git add -p package-lock.json`).
+
+- [ ] **Paso 2: Los tipos**
+
+```ts
+// apps/portal/src/lib/excel/definicion.ts
+
+/**
+ * Exportacion a Excel reutilizable (T-15). Un reporte describe QUE quiere en
+ * la hoja; `construirLibro` decide COMO se ve. Nada aqui sabe de kilometraje.
+ */
+
+export type TipoColumna = "texto" | "numero" | "pesos" | "fecha";
+
+export interface ColumnaExcel {
+  encabezado: string;
+  /** Ancho en caracteres. Sin el, el del encabezado + 2 (minimo 12). */
+  ancho?: number;
+  tipo: TipoColumna;
+  /** Solo para `numero`. Por defecto 0. */
+  decimales?: number;
+}
+
+/**
+ * - `numero` / `pesos`: el numero en la unidad que se ve (km, pesos), no en
+ *   decimas ni centavos.
+ * - `fecha`: `AAAA-MM-DD`. Cualquier otro texto se escribe tal cual (p. ej.
+ *   "Total Nissan-01" en la primera columna de un subtotal).
+ */
+export type Celda = string | number | null;
+
+export interface FilaExcel {
+  celdas: Celda[];
+  /** `grupo`: encabezado de un bloque (negrita). `subtotal`/`total`: negrita con borde arriba. */
+  tipo?: "normal" | "subtotal" | "total" | "grupo";
+  /** Fondo amarillo claro: algo que hay que mirar (p. ej. un salto de kilometraje). */
+  resaltada?: boolean;
+}
+
+export interface DefinicionExcel {
+  /** Fila 1, en negrita. */
+  titulo: string;
+  /** Una fila cada uno, debajo del titulo: "Rango: 01/10/2026 a 13/10/2026". */
+  filtros: Array<[etiqueta: string, valor: string]>;
+  columnas: ColumnaExcel[];
+  filas: FilaExcel[];
+  /** Sin extension. */
+  nombreArchivo: string;
+}
+```
+
+- [ ] **Paso 3: Escribe la prueba de `construirLibro` que falla**
+
+```ts
+// apps/portal/src/lib/excel/construir-libro.test.ts
+// @vitest-environment node
+// En jsdom, `exceljs` (version de Node) no siempre se lleva con los Blob/Buffer
+// del entorno; el libro no toca el DOM, asi que se prueba en Node.
+import { describe, expect, it } from "vitest";
+import { cargarExcelJS, construirLibro } from "./construir-libro";
+import type { DefinicionExcel } from "./definicion";
+
+const DEF: DefinicionExcel = {
+  titulo: "Reporte de prueba",
+  filtros: [
+    ["Rango", "01/10/2026 a 13/10/2026"],
+    ["Sucursal", "TJ"],
+  ],
+  columnas: [
+    { encabezado: "Fecha", tipo: "fecha", ancho: 12 },
+    { encabezado: "Vendedor", tipo: "texto", ancho: 24 },
+    { encabezado: "Km", tipo: "numero", decimales: 1 },
+    { encabezado: "Monto", tipo: "pesos" },
+  ],
+  filas: [
+    { tipo: "grupo", celdas: ["Nissan-01", null, null, null] },
+    { celdas: ["2026-10-01", "Juan Pérez", 10250.5, 1500] },
+    { celdas: ["2026-10-02", "Pedro López", 120, null], resaltada: true },
+    { tipo: "subtotal", celdas: ["Total Nissan-01", null, 10370.5, 1500] },
+    { tipo: "total", celdas: ["Total general", null, 10370.5, 1500] },
+  ],
+  nombreArchivo: "prueba",
+};
+
+async function leer(def: DefinicionExcel) {
+  const ExcelJS = await cargarExcelJS();
+  const libro = new ExcelJS.Workbook();
+  await libro.xlsx.load(await construirLibro(def));
+  const hoja = libro.worksheets[0];
+  if (!hoja) throw new Error("El libro no trae hoja.");
+  return hoja;
+}
+
+describe("construirLibro", () => {
+  it("pone titulo, filtros y encabezados congelados en negrita con fondo gris", async () => {
+    const hoja = await leer(DEF);
+    expect(hoja.getCell("A1").value).toBe("Reporte de prueba");
+    expect(hoja.getCell("A1").font?.bold).toBe(true);
+    expect(hoja.getCell("A2").value).toBe("Rango: 01/10/2026 a 13/10/2026");
+    expect(hoja.getCell("A3").value).toBe("Sucursal: TJ");
+    // Fila 4 en blanco; encabezados en la 5.
+    expect(hoja.getRow(5).values).toEqual([undefined, "Fecha", "Vendedor", "Km", "Monto"]);
+    expect(hoja.getCell("A5").font?.bold).toBe(true);
+    expect(hoja.getCell("A5").fill).toMatchObject({ pattern: "solid", fgColor: { argb: "FFE5E7EB" } });
+    expect(hoja.views[0]).toMatchObject({ state: "frozen", ySplit: 5 });
+    expect(hoja.getColumn(1).width).toBe(12);
+    expect(hoja.getColumn(3).width).toBe(12); // "Km" + 2 < 12: minimo
+  });
+
+  it("escribe numeros como numeros, fechas como fechas y cada formato", async () => {
+    const hoja = await leer(DEF);
+    const fecha = hoja.getCell("A7").value;
+    expect(fecha).toBeInstanceOf(Date);
+    expect((fecha as Date).toISOString().slice(0, 10)).toBe("2026-10-01");
+    expect(hoja.getCell("A7").numFmt).toBe("dd/mm/yyyy");
+    expect(hoja.getCell("C7").value).toBe(10250.5);
+    expect(typeof hoja.getCell("C7").value).toBe("number");
+    expect(hoja.getCell("C7").numFmt).toBe("#,##0.0");
+    expect(hoja.getCell("D7").numFmt).toBe('"$"#,##0.00');
+    expect(hoja.getCell("D8").value).toBeNull();
+  });
+
+  it("negrita en grupo, subtotal y total; borde arriba en subtotal y total; resaltada en amarillo", async () => {
+    const hoja = await leer(DEF);
+    expect(hoja.getCell("A6").font?.bold).toBe(true); // grupo
+    expect(hoja.getCell("A6").value).toBe("Nissan-01");
+    expect(hoja.getCell("B8").fill).toMatchObject({ fgColor: { argb: "FFFEF3C7" } });
+    expect(hoja.getCell("A7").fill).toBeUndefined();
+    expect(hoja.getCell("A9").value).toBe("Total Nissan-01"); // texto en columna de fecha
+    expect(hoja.getCell("C9").font?.bold).toBe(true);
+    expect(hoja.getCell("C9").border?.top?.style).toBe("thin");
+    expect(hoja.getCell("C10").font?.bold).toBe(true);
+    expect(hoja.getCell("C10").border?.top?.style).toBe("thin");
+  });
+});
+```
+
+- [ ] **Paso 4: Corre la prueba y confirma que falla**
+
+Run: `npm test --workspace=apps/portal -- src/lib/excel/construir-libro.test.ts`
+Expected: FAIL con `Failed to resolve import "./construir-libro"`.
+
+- [ ] **Paso 5: Implementa `construirLibro`**
+
+```ts
+// apps/portal/src/lib/excel/construir-libro.ts
+import type { Borders, Fill } from "exceljs";
+import type { Celda, ColumnaExcel, DefinicionExcel } from "./definicion";
+
+type ModuloExcelJS = typeof import("exceljs");
+
+/**
+ * `exceljs` pesa ~1 MB: se carga SOLO al exportar, no con cada pantalla.
+ * Es CommonJS: segun quien lo empaquete (Next en el navegador, Vitest en
+ * Node) llega con o sin `default`.
+ */
+export async function cargarExcelJS(): Promise<ModuloExcelJS> {
+  const modulo = (await import("exceljs")) as ModuloExcelJS & {
+    default?: ModuloExcelJS;
+  };
+  return modulo.default ?? modulo;
+}
+
+const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+const RELLENO_ENCABEZADO: Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE5E7EB" } };
+const RELLENO_RESALTADA: Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF3C7" } };
+const BORDE_ARRIBA: Partial<Borders> = { top: { style: "thin" } };
+
+function formato(col: ColumnaExcel): string | undefined {
+  switch (col.tipo) {
+    case "numero": {
+      const decimales = col.decimales ?? 0;
+      return decimales > 0 ? `#,##0.${"0".repeat(decimales)}` : "#,##0";
+    }
+    case "pesos":
+      return '"$"#,##0.00';
+    case "fecha":
+      return "dd/mm/yyyy";
+    default:
+      return undefined;
+  }
+}
+
+/** Una fecha `AAAA-MM-DD` va como fecha de Excel (medianoche UTC: sin corrimiento de dia). */
+function aValor(celda: Celda, col: ColumnaExcel | undefined): string | number | Date | null {
+  if (col?.tipo === "fecha" && typeof celda === "string" && RE_FECHA.test(celda)) {
+    return new Date(`${celda}T00:00:00Z`);
+  }
+  return celda;
+}
+
+/** El `.xlsx` como `ArrayBuffer`, sin tocar el DOM (se prueba en Node). */
+export async function construirLibro(def: DefinicionExcel): Promise<ArrayBuffer> {
+  const ExcelJS = await cargarExcelJS();
+  const libro = new ExcelJS.Workbook();
+  const hoja = libro.addWorksheet("Reporte");
+
+  hoja.columns = def.columnas.map((c) => ({
+    width: c.ancho ?? Math.max(12, c.encabezado.length + 2),
+  }));
+
+  const titulo = hoja.addRow([def.titulo]);
+  titulo.getCell(1).font = { bold: true, size: 14 };
+  for (const [etiqueta, valor] of def.filtros) {
+    hoja.addRow([`${etiqueta}: ${valor}`]);
+  }
+  hoja.addRow([]);
+
+  const encabezados = hoja.addRow(def.columnas.map((c) => c.encabezado));
+  encabezados.eachCell((celda) => {
+    celda.font = { bold: true };
+    celda.fill = RELLENO_ENCABEZADO;
+  });
+  hoja.views = [{ state: "frozen", ySplit: encabezados.number }];
+
+  for (const fila of def.filas) {
+    const renglon = hoja.addRow(fila.celdas.map((c, i) => aValor(c, def.columnas[i])));
+    def.columnas.forEach((col, i) => {
+      const celda = renglon.getCell(i + 1);
+      const numFmt = formato(col);
+      if (numFmt) celda.numFmt = numFmt;
+      if (fila.tipo && fila.tipo !== "normal") celda.font = { bold: true };
+      if (fila.tipo === "subtotal" || fila.tipo === "total") celda.border = BORDE_ARRIBA;
+      if (fila.resaltada) celda.fill = RELLENO_RESALTADA;
+    });
+  }
+
+  // En Node `writeBuffer` da un Buffer y en el navegador un ArrayBuffer;
+  // `new Uint8Array(...)` deja en los dos un ArrayBuffer propio y completo.
+  return new Uint8Array(await libro.xlsx.writeBuffer()).buffer;
+}
+```
+
+- [ ] **Paso 6: Corre la prueba y confirma que pasa**
+
+Run: `npm test --workspace=apps/portal -- src/lib/excel/construir-libro.test.ts`
+Expected: PASS, 3 pruebas.
+
+- [ ] **Paso 7: Prueba de `exportarExcel` que falla**
+
+```ts
+// apps/portal/src/lib/excel/exportar.test.ts
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as construir from "./construir-libro";
+import { exportarExcel } from "./exportar";
+import type { DefinicionExcel } from "./definicion";
+
+vi.mock("./construir-libro", () => ({ construirLibro: vi.fn(), cargarExcelJS: vi.fn() }));
+
+const DEF: DefinicionExcel = {
+  titulo: "T",
+  filtros: [],
+  columnas: [{ encabezado: "A", tipo: "texto" }],
+  filas: [],
+  nombreArchivo: "kilometraje_2026-10-01_a_2026-10-13",
+};
+
+describe("exportarExcel", () => {
+  const crear = vi.fn(() => "blob:prueba");
+  const revocar = vi.fn();
+
+  beforeEach(() => {
+    vi.mocked(construir.construirLibro).mockResolvedValue(new ArrayBuffer(4));
+    // jsdom no implementa createObjectURL.
+    Object.defineProperty(URL, "createObjectURL", { value: crear, configurable: true });
+    Object.defineProperty(URL, "revokeObjectURL", { value: revocar, configurable: true });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("descarga el libro con el nombre .xlsx y libera la URL", async () => {
+    const clic = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+      expect(this.download).toBe("kilometraje_2026-10-01_a_2026-10-13.xlsx");
+      expect(this.href).toBe("blob:prueba");
+    });
+
+    await exportarExcel(DEF);
+
+    expect(construir.construirLibro).toHaveBeenCalledWith(DEF);
+    expect(clic).toHaveBeenCalledTimes(1);
+    const blob = crear.mock.calls[0]?.[0] as unknown as Blob;
+    expect(blob.type).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    expect(revocar).toHaveBeenCalledWith("blob:prueba");
+    expect(document.querySelector("a[download]")).toBeNull();
+  });
+});
+```
+
+Run: `npm test --workspace=apps/portal -- src/lib/excel/exportar.test.ts`
+Expected: FAIL con `Failed to resolve import "./exportar"`.
+
+- [ ] **Paso 8: Implementa `exportarExcel`**
+
+```ts
+// apps/portal/src/lib/excel/exportar.ts
+import { construirLibro } from "./construir-libro";
+import type { DefinicionExcel } from "./definicion";
+
+const TIPO_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+/** Arma el libro y lo descarga como `<nombreArchivo>.xlsx`. */
+export async function exportarExcel(def: DefinicionExcel): Promise<void> {
+  const datos = await construirLibro(def);
+  const url = URL.createObjectURL(new Blob([datos], { type: TIPO_XLSX }));
+  const enlace = document.createElement("a");
+  enlace.href = url;
+  enlace.download = `${def.nombreArchivo}.xlsx`;
+  document.body.appendChild(enlace);
+  try {
+    enlace.click();
+  } finally {
+    enlace.remove();
+    URL.revokeObjectURL(url);
+  }
+}
+```
+
+Run: `npm test --workspace=apps/portal -- src/lib/excel`
+Expected: PASS, 4 pruebas.
+
+- [ ] **Paso 9: Suite, lint y commit**
+
+Run: `npm test --workspace=apps/portal` y `npm run lint --workspace=apps/portal`
+Expected: todo en verde. (`pantalla-ruta-diaria.test.tsx` tiene una falla intermitente previa ajena: si falla,
+re-corre y anótalo.)
+
+```bash
+git add package.json package-lock.json apps/portal/package.json apps/portal/src/lib/excel
+git commit -m "T-15: utilidad reutilizable de exportacion a Excel (exceljs bajo demanda)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Tarea 4: `lib/reportes.ts` — tipos, llamada, formatos y la definición de Excel del reporte
+
+**Archivos:**
+- Crear: `apps/portal/src/lib/reportes.ts`
+- Prueba: `apps/portal/src/lib/reportes.test.ts`
+
+**Interfaces:**
+- Consume: `apiFetch` de `./api`; `DefinicionExcel`, `FilaExcel` de `./excel/definicion` (Tarea 3). La forma de
+  `ReporteKilometraje` es la del backend (Tarea 1), copiada aquí: el portal no importa del backend.
+- Produce:
+  - tipos `JornadaEnReporte`, `VehiculoEnReporte`, `ReporteKilometraje`
+  - `interface FiltrosKilometraje { desde: string; hasta: string; vehiculoId: string | null; sucursal: string | null }`
+  - `obtenerReporteKilometraje(f: FiltrosKilometraje): Promise<ReporteKilometraje>`
+  - `formatearKm(decimas: number): string` · `formatearSalto(decimas: number | null): string`
+  - `formatearFecha(iso: string): string` (`AAAA-MM-DD` → `dd/mm/aaaa`)
+  - `explicarSalto(j: JornadaEnReporte): string | undefined`
+  - `etiquetaVehiculo(v: { nombre: string; placas: string | null; activo: boolean }): string`
+  - `etiquetaSucursal(codigoDelUsuario: string | null, pedida: string | null): string`
+  - `primerDiaDelMes(hoy: string): string`
+  - `definicionExcelKilometraje(reporte: ReporteKilometraje, filtros: { sucursal: string; vehiculo: string }): DefinicionExcel`
+
+- [ ] **Paso 1: Escribe la prueba que falla**
+
+```ts
+// apps/portal/src/lib/reportes.test.ts
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as api from "./api";
+import {
+  definicionExcelKilometraje,
+  etiquetaSucursal,
+  etiquetaVehiculo,
+  explicarSalto,
+  formatearFecha,
+  formatearKm,
+  formatearSalto,
+  obtenerReporteKilometraje,
+  primerDiaDelMes,
+  type ReporteKilometraje,
+} from "./reportes";
+
+vi.mock("./api", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./api")>();
+  return { ...real, apiFetch: vi.fn() };
+});
+const apiFetch = vi.mocked(api.apiFetch);
+
+export const REPORTE: ReporteKilometraje = {
+  desde: "2026-10-01",
+  hasta: "2026-10-13",
+  vehiculos: [
+    {
+      vehiculoId: "v1",
+      nombre: "Nissan-01",
+      placas: "ABC-123",
+      activo: true,
+      jornadas: [
+        { jornadaId: "j1", fecha: "2026-10-01", vendedor: "Juan Pérez", kmInicialDecimas: 100000, kmFinalDecimas: 102505, kilometrosDecimas: 2505, saltoDecimas: null, fechaAnterior: null },
+        { jornadaId: "j2", fecha: "2026-10-02", vendedor: "Pedro López", kmInicialDecimas: 104000, kmFinalDecimas: 105200, kilometrosDecimas: 1200, saltoDecimas: 1495, fechaAnterior: "2026-10-01" },
+      ],
+      totalKilometrosDecimas: 3705,
+      totalSaltoDecimas: 1495,
+    },
+  ],
+  totalKilometrosDecimas: 3705,
+  totalSaltoDecimas: 1495,
+};
+
+describe("obtenerReporteKilometraje", () => {
+  beforeEach(() => apiFetch.mockReset());
+
+  it("manda rango y omite vehiculo y sucursal si no hay", async () => {
+    apiFetch.mockResolvedValue(REPORTE);
+    await obtenerReporteKilometraje({ desde: "2026-10-01", hasta: "2026-10-13", vehiculoId: null, sucursal: null });
+    expect(apiFetch).toHaveBeenCalledWith("/reportes/kilometraje?desde=2026-10-01&hasta=2026-10-13");
+  });
+
+  it("agrega vehiculo y sucursal", async () => {
+    apiFetch.mockResolvedValue(REPORTE);
+    await obtenerReporteKilometraje({ desde: "2026-10-01", hasta: "2026-10-13", vehiculoId: "v1", sucursal: "TJ" });
+    expect(apiFetch).toHaveBeenCalledWith(
+      "/reportes/kilometraje?desde=2026-10-01&hasta=2026-10-13&vehiculo=v1&sucursal=TJ",
+    );
+  });
+});
+
+describe("formatos", () => {
+  it("formatearKm: miles con coma y un decimal (Review Focus 3)", () => {
+    expect(formatearKm(100005)).toBe("10,000.5");
+    expect(formatearKm(0)).toBe("0.0");
+    expect(formatearKm(-300)).toBe("−30.0");
+  });
+
+  it("formatearSalto: vacio sin salto, con signo si lo hay", () => {
+    expect(formatearSalto(null)).toBe("");
+    expect(formatearSalto(0)).toBe("");
+    expect(formatearSalto(1500)).toBe("+150.0");
+    expect(formatearSalto(-300)).toBe("−30.0");
+  });
+
+  it("formatearFecha y primerDiaDelMes", () => {
+    expect(formatearFecha("2026-10-02")).toBe("02/10/2026");
+    expect(primerDiaDelMes("2026-10-13")).toBe("2026-10-01");
+  });
+
+  it("explicarSalto solo cuando hay salto", () => {
+    expect(explicarSalto(REPORTE.vehiculos[0].jornadas[0])).toBeUndefined();
+    expect(explicarSalto(REPORTE.vehiculos[0].jornadas[1])).toBe(
+      "Empezó 149.5 km distinto a como terminó la jornada anterior de este vehículo (01/10/2026).",
+    );
+  });
+
+  it("etiquetas de vehiculo y sucursal", () => {
+    expect(etiquetaVehiculo({ nombre: "Nissan-01", placas: "ABC-123", activo: true })).toBe("Nissan-01 (ABC-123)");
+    expect(etiquetaVehiculo({ nombre: "Vieja", placas: null, activo: false })).toBe("Vieja (desactivado)");
+    expect(etiquetaSucursal("TJ", null)).toBe("TJ");
+    expect(etiquetaSucursal(null, "MX")).toBe("MX");
+    expect(etiquetaSucursal(null, "todas")).toBe("Todas");
+    expect(etiquetaSucursal(null, null)).toBe("Todas");
+  });
+});
+
+describe("definicionExcelKilometraje", () => {
+  it("arma titulo, filtros aplicados, columnas y filas con grupo, subtotal, total y salto resaltado", () => {
+    const def = definicionExcelKilometraje(REPORTE, { sucursal: "TJ", vehiculo: "Todos" });
+    expect(def.titulo).toBe("Reporte de Kilometraje");
+    expect(def.filtros).toEqual([
+      ["Rango", "01/10/2026 a 13/10/2026"],
+      ["Sucursal", "TJ"],
+      ["Vehículo", "Todos"],
+    ]);
+    expect(def.columnas.map((c) => c.encabezado)).toEqual(["Fecha", "Vendedor", "Km inicial", "Km final", "Kilómetros", "Salto"]);
+    expect(def.nombreArchivo).toBe("kilometraje_2026-10-01_a_2026-10-13");
+    expect(def.filas).toEqual([
+      { tipo: "grupo", celdas: ["Nissan-01 (ABC-123)", null, null, null, null, null] },
+      { celdas: ["2026-10-01", "Juan Pérez", 10000, 10250.5, 250.5, null], resaltada: false },
+      { celdas: ["2026-10-02", "Pedro López", 10400, 10520, 120, 149.5], resaltada: true },
+      { tipo: "subtotal", celdas: ["Total Nissan-01 (ABC-123)", null, null, null, 370.5, 149.5] },
+      { tipo: "total", celdas: ["Total general", null, null, null, 370.5, 149.5] },
+    ]);
+  });
+});
+```
+
+- [ ] **Paso 2: Corre la prueba y confirma que falla**
+
+Run: `npm test --workspace=apps/portal -- src/lib/reportes.test.ts`
+Expected: FAIL con `Failed to resolve import "./reportes"`.
+
+- [ ] **Paso 3: Implementa**
+
+```ts
+// apps/portal/src/lib/reportes.ts
+import { apiFetch } from "./api";
+import type { DefinicionExcel, FilaExcel } from "./excel/definicion";
+
+/*
+ * Reporte de Kilometraje (T-50). Misma forma que
+ * apps/backend/src/modules/estadisticas/reglas-kilometraje.ts (el portal no
+ * puede importar del backend). Kilometros en DECIMAS de km enteras.
+ */
+
+export interface JornadaEnReporte {
+  jornadaId: string;
+  fecha: string;
+  vendedor: string;
+  kmInicialDecimas: number;
+  kmFinalDecimas: number;
+  kilometrosDecimas: number;
+  /** `null` = sin jornada anterior; `0` = empezo donde termino la anterior. */
+  saltoDecimas: number | null;
+  fechaAnterior: string | null;
+}
+
+export interface VehiculoEnReporte {
+  vehiculoId: string;
+  nombre: string;
+  placas: string | null;
+  activo: boolean;
+  jornadas: JornadaEnReporte[];
+  totalKilometrosDecimas: number;
+  totalSaltoDecimas: number;
+}
+
+export interface ReporteKilometraje {
+  desde: string;
+  hasta: string;
+  vehiculos: VehiculoEnReporte[];
+  totalKilometrosDecimas: number;
+  totalSaltoDecimas: number;
+}
+
+export interface FiltrosKilometraje {
+  desde: string;
+  hasta: string;
+  vehiculoId: string | null;
+  /** Codigo, `todas`, o null: lo decide el servidor (`resolverAlcance`). */
+  sucursal: string | null;
+}
+
+export function obtenerReporteKilometraje(f: FiltrosKilometraje): Promise<ReporteKilometraje> {
+  const q = new URLSearchParams({ desde: f.desde, hasta: f.hasta });
+  if (f.vehiculoId) q.set("vehiculo", f.vehiculoId);
+  if (f.sucursal) q.set("sucursal", f.sucursal);
+  return apiFetch<ReporteKilometraje>(`/reportes/kilometraje?${q.toString()}`);
+}
+
+const MENOS = "−"; // U+2212: el signo menos tipografico, no el guion.
+
+/** `100005` → `"10,000.5"`; negativos con `−`. */
+export function formatearKm(decimas: number): string {
+  const texto = (Math.abs(decimas) / 10).toLocaleString("en-US", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+  return decimas < 0 ? `${MENOS}${texto}` : texto;
+}
+
+/** Vacio sin salto (`null` o `0`); si no, con signo: `+150.0` / `−30.0`. */
+export function formatearSalto(decimas: number | null): string {
+  if (decimas === null || decimas === 0) return "";
+  return decimas > 0 ? `+${formatearKm(decimas)}` : formatearKm(decimas);
+}
+
+/** `AAAA-MM-DD` → `dd/mm/aaaa`, sin pasar por `Date` (que correria el dia). */
+export function formatearFecha(iso: string): string {
+  const [anio, mes, dia] = iso.split("-");
+  return `${dia}/${mes}/${anio}`;
+}
+
+export function primerDiaDelMes(hoy: string): string {
+  return `${hoy.slice(0, 8)}01`;
+}
+
+/** El `title` del salto en pantalla. */
+export function explicarSalto(j: JornadaEnReporte): string | undefined {
+  if (j.saltoDecimas === null || j.saltoDecimas === 0 || j.fechaAnterior === null) return undefined;
+  return `Empezó ${formatearKm(Math.abs(j.saltoDecimas))} km distinto a como terminó la jornada anterior de este vehículo (${formatearFecha(j.fechaAnterior)}).`;
+}
+
+export function etiquetaVehiculo(v: { nombre: string; placas: string | null; activo: boolean }): string {
+  return `${v.nombre}${v.placas ? ` (${v.placas})` : ""}${v.activo ? "" : " (desactivado)"}`;
+}
+
+/** Lo que dice el Excel en "Sucursal": la del usuario si esta atado a una; si no, la pedida o "Todas". */
+export function etiquetaSucursal(codigoDelUsuario: string | null, pedida: string | null): string {
+  if (codigoDelUsuario) return codigoDelUsuario;
+  if (!pedida || pedida.toLowerCase() === "todas") return "Todas";
+  return pedida.toUpperCase();
+}
+
+const km = (decimas: number): number => decimas / 10;
+const saltoEnKm = (decimas: number | null): number | null =>
+  decimas === null || decimas === 0 ? null : decimas / 10;
+
+/**
+ * Lo que esta en pantalla, como hoja de Excel. `filtros` son los APLICADOS en
+ * la ultima consulta, no lo que el usuario tenga escrito ahora (Review Focus 5).
+ */
+export function definicionExcelKilometraje(
+  reporte: ReporteKilometraje,
+  filtros: { sucursal: string; vehiculo: string },
+): DefinicionExcel {
+  const filas: FilaExcel[] = [];
+  for (const v of reporte.vehiculos) {
+    const etiqueta = etiquetaVehiculo(v);
+    filas.push({ tipo: "grupo", celdas: [etiqueta, null, null, null, null, null] });
+    for (const j of v.jornadas) {
+      filas.push({
+        celdas: [j.fecha, j.vendedor, km(j.kmInicialDecimas), km(j.kmFinalDecimas), km(j.kilometrosDecimas), saltoEnKm(j.saltoDecimas)],
+        resaltada: j.saltoDecimas !== null && j.saltoDecimas !== 0,
+      });
+    }
+    filas.push({
+      tipo: "subtotal",
+      celdas: [`Total ${etiqueta}`, null, null, null, km(v.totalKilometrosDecimas), saltoEnKm(v.totalSaltoDecimas)],
+    });
+  }
+  filas.push({
+    tipo: "total",
+    celdas: ["Total general", null, null, null, km(reporte.totalKilometrosDecimas), saltoEnKm(reporte.totalSaltoDecimas)],
+  });
+
+  return {
+    titulo: "Reporte de Kilometraje",
+    filtros: [
+      ["Rango", `${formatearFecha(reporte.desde)} a ${formatearFecha(reporte.hasta)}`],
+      ["Sucursal", filtros.sucursal],
+      ["Vehículo", filtros.vehiculo],
+    ],
+    columnas: [
+      { encabezado: "Fecha", tipo: "fecha", ancho: 12 },
+      { encabezado: "Vendedor", tipo: "texto", ancho: 28 },
+      { encabezado: "Km inicial", tipo: "numero", decimales: 1, ancho: 14 },
+      { encabezado: "Km final", tipo: "numero", decimales: 1, ancho: 14 },
+      { encabezado: "Kilómetros", tipo: "numero", decimales: 1, ancho: 14 },
+      { encabezado: "Salto", tipo: "numero", decimales: 1, ancho: 12 },
+    ],
+    filas,
+    nombreArchivo: `kilometraje_${reporte.desde}_a_${reporte.hasta}`,
+  };
+}
+```
+
+> El fixture `REPORTE` se exporta para que la prueba de pantalla (Tarea 5) lo reuse **solo si** el lint del
+> portal no lo prohíbe; si lo marca, quita el `export` y define su propio fixture en la Tarea 5 (ya lo hace).
+
+- [ ] **Paso 4: Corre la prueba y confirma que pasa**
+
+Run: `npm test --workspace=apps/portal -- src/lib/reportes.test.ts`
+Expected: PASS, 8 pruebas.
+
+- [ ] **Paso 5: Suite, lint y commit**
+
+Run: `npm test --workspace=apps/portal` y `npm run lint --workspace=apps/portal`
+
+```bash
+git add apps/portal/src/lib/reportes.ts apps/portal/src/lib/reportes.test.ts
+git commit -m "T-50: portal — lib/reportes: llamada, formatos de km y la hoja de Excel del reporte
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
