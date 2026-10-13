@@ -164,9 +164,9 @@ el problema que el vault ya documentó:
 > |---|---|---|---|
 > | 1 | Ruta del día, pantalla principal, ficha del cliente ampliada, Ruta Diaria en el portal | T-37 | **PR #116** (2026-10-12) |
 > | 3 | Visita sin venta: catálogo de motivos editable en el portal con casilla "exige foto"; pantalla con motivo, observaciones, hora, GPS por visita y foto; canal de foto generalizado; descarga de fotos del servidor a la tablet | T-39 (ampliado) | siguiente |
-> | 4 | Prospecto con coordenada o dirección; geocodificación con Google en el servidor al proyectar | **sin issue** | después de 3 |
+> | 4 | Prospecto con coordenada o dirección; geocodificación con Google en el servidor al proyectar | **T-72 (#117)** | después de 3 |
 > | 6 | Gastos de la ruta: tipos de gasto en el portal, bajan en el `pull`, pantalla de gasto en la tablet | T-30 + T-31 (parte tablet) | después de 4 |
-> | 7 | Firma del cliente en la nota al vender; bloquea la nota en la tablet (el portal sigue editando) | **sin issue** | después de 6 |
+> | 7 | Firma del cliente en la nota al vender; bloquea la nota en la tablet (el portal sigue editando) | **T-73 (#118)** | después de 6 |
 >
 > Después siguen como estaban: T-45/T-46 → T-41 → T-24…T-27 → T-33 → T-43/T-44 → T-48. Dos
 > bloqueos "cliente" de la tabla quedan cerrados por diseño: los motivos de T-39 son **editables**
@@ -324,7 +324,7 @@ ticket las fija.
 >   a **servir fotos a la tablet** (hoy solo al portal) para la ficha del cliente.
 > - **Tareas:** ~10 (3 `haiku` · 6 `sonnet` · 1 `opus` para el canal de fotos).
 
-### Pieza 4 · Geocodificación del prospecto (S, sin issue)
+### Pieza 4 · T-72 Geocodificación del prospecto (S, #117)
 
 - **Tablet:** el alta de prospecto captura **coordenada** (GPS del momento, opcional) **o
   dirección** escrita; nada bloquea el alta.
@@ -335,7 +335,7 @@ ticket las fija.
   coordenada y se reintenta desde el portal).
 - **Tareas (~5):** 1 `haiku` · 3 `sonnet` · 1 `opus` (ADR + cliente HTTP con reintentos).
 
-### Pieza 7 · Firma del cliente en la nota (M, sin issue)
+### Pieza 7 · T-73 Firma del cliente en la nota (M, #118)
 
 - **Tablet:** al cerrar una venta, el cliente **firma en la pantalla** (lienzo propio o librería;
   spike de 1 tarea); la firma se guarda como imagen local y **bloquea la nota en la tablet** (no se
