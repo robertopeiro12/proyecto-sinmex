@@ -27,12 +27,18 @@ insert into venta_nota
          'credito', 37, 9, 'pendiente', c.sucursal_id
     from cliente c, vendedor v
    where c.nombre = 'ZZ-pgtap-T20 Cliente' and v.login = 'zz-pgtap-t20';
+insert into cobro
+    (cliente_id, vendedor_id, origen, metodo_pago, monto, fecha_pago, fecha_operacion)
+  select c.id, v.id, 'cobro', 'efectivo', 250.00, '2026-09-14', '2026-09-14'
+    from cliente c, vendedor v
+   where c.nombre = 'ZZ-pgtap-T20 Cliente' and v.login = 'zz-pgtap-t20';
 
 create temporary table _t20 on commit drop as
 select
   (select id from vendedor where login = 'zz-pgtap-t20') as vendedor,
   (select id from cliente where nombre = 'ZZ-pgtap-T20 Cliente') as cliente,
-  (select id from venta_nota where folio = 'ZZPGTAPT2001') as nota;
+  (select id from venta_nota where folio = 'ZZPGTAPT2001') as nota,
+  (select id from cobro where cliente_id = (select id from cliente where nombre = 'ZZ-pgtap-T20 Cliente')) as cobro;
 
 ------------------------------------------------------------------
 -- cobranza_abono: estructura
@@ -54,9 +60,9 @@ select has_index('cobranza_abono', 'idx_cobranza_abono_nota',
 select lives_ok(
   $$insert into cobranza_abono
       (venta_nota_id, fecha_pago, fecha_operacion, vendedor_id, monto, tipo,
-       saldo_pendiente, metodo_pago)
+       saldo_pendiente, metodo_pago, cobro_id)
     select nota, '2026-09-12', '2026-09-14', vendedor, 50.00, 'abono',
-           200.00, 'efectivo'
+           200.00, 'efectivo', cobro
       from _t20$$,
   'acepta un abono con fecha de operacion'
 );
@@ -68,13 +74,13 @@ select is(
   'un cobro sin origen explicito es un cobro capturado'
 );
 
--- Un mismo cobro reparte a varias filas; nada en la base lo impide.
+-- Un mismo cobro reparte a varias filas del mismo pago (T-34: cobro_id).
 select lives_ok(
   $$insert into cobranza_abono
       (venta_nota_id, fecha_pago, fecha_operacion, vendedor_id, monto, tipo,
-       saldo_pendiente, metodo_pago)
+       saldo_pendiente, metodo_pago, cobro_id)
     select nota, '2026-09-12', '2026-09-14', vendedor, 200.00, 'cobranza',
-           0.00, 'efectivo'
+           0.00, 'efectivo', cobro
       from _t20$$,
   'acepta otra fila del mismo dia sobre la misma nota'
 );
@@ -92,9 +98,9 @@ select lives_ok(
 select throws_ok(
   $$insert into cobranza_abono
       (venta_nota_id, fecha_pago, fecha_operacion, vendedor_id, monto, tipo,
-       saldo_pendiente, metodo_pago)
+       saldo_pendiente, metodo_pago, cobro_id)
     select nota, '2026-09-14', '2026-09-14', vendedor, 0.00, 'abono',
-           250.00, 'efectivo'
+           250.00, 'efectivo', cobro
       from _t20$$,
   '23514',
   null,
@@ -104,9 +110,9 @@ select throws_ok(
 select throws_ok(
   $$insert into cobranza_abono
       (venta_nota_id, fecha_pago, fecha_operacion, vendedor_id, monto, tipo,
-       saldo_pendiente, metodo_pago)
+       saldo_pendiente, metodo_pago, cobro_id)
     select nota, '2026-09-14', '2026-09-14', vendedor, 10.00, 'abono',
-           -0.01, 'efectivo'
+           -0.01, 'efectivo', cobro
       from _t20$$,
   '23514',
   null,
@@ -116,9 +122,9 @@ select throws_ok(
 select throws_ok(
   $$insert into cobranza_abono
       (venta_nota_id, fecha_pago, fecha_operacion, vendedor_id, monto, tipo,
-       saldo_pendiente, metodo_pago, origen)
+       saldo_pendiente, metodo_pago, origen, cobro_id)
     select nota, '2026-09-14', '2026-09-14', vendedor, 10.00, 'abono',
-           240.00, 'efectivo', 'portal'
+           240.00, 'efectivo', 'portal', cobro
       from _t20$$,
   '23514',
   null,
@@ -128,9 +134,9 @@ select throws_ok(
 select throws_ok(
   $$insert into cobranza_abono
       (venta_nota_id, fecha_pago, vendedor_id, monto, tipo,
-       saldo_pendiente, metodo_pago)
+       saldo_pendiente, metodo_pago, cobro_id)
     select nota, '2026-09-14', vendedor, 10.00, 'abono',
-           240.00, 'efectivo'
+           240.00, 'efectivo', cobro
       from _t20$$,
   '23502',
   null,
@@ -154,16 +160,16 @@ select has_trigger('saldo_favor_movimiento', 'trg_saldo_favor_movimiento_updated
 
 select lives_ok(
   $$insert into saldo_favor_movimiento
-      (cliente_id, vendedor_id, monto, origen, fecha_operacion)
-    select cliente, vendedor, 30.50, 'excedente_cobro', '2026-09-14'
+      (cliente_id, vendedor_id, monto, origen, fecha_operacion, cobro_id)
+    select cliente, vendedor, 30.50, 'excedente_cobro', '2026-09-14', cobro
       from _t20$$,
   'acepta el excedente de un cobro'
 );
 
 select throws_ok(
   $$insert into saldo_favor_movimiento
-      (cliente_id, vendedor_id, monto, origen, fecha_operacion)
-    select cliente, vendedor, 0.00, 'excedente_cobro', '2026-09-14'
+      (cliente_id, vendedor_id, monto, origen, fecha_operacion, cobro_id)
+    select cliente, vendedor, 0.00, 'excedente_cobro', '2026-09-14', cobro
       from _t20$$,
   '23514',
   null,
@@ -172,8 +178,8 @@ select throws_ok(
 
 select throws_ok(
   $$insert into saldo_favor_movimiento
-      (cliente_id, vendedor_id, monto, origen, fecha_operacion)
-    select cliente, vendedor, 10.00, 'ajuste_portal', '2026-09-14'
+      (cliente_id, vendedor_id, monto, origen, fecha_operacion, cobro_id)
+    select cliente, vendedor, 10.00, 'ajuste_portal', '2026-09-14', cobro
       from _t20$$,
   '23514',
   null,
@@ -182,8 +188,8 @@ select throws_ok(
 
 select throws_ok(
   $$insert into saldo_favor_movimiento
-      (cliente_id, vendedor_id, monto, origen)
-    select cliente, vendedor, 10.00, 'excedente_cobro'
+      (cliente_id, vendedor_id, monto, origen, cobro_id)
+    select cliente, vendedor, 10.00, 'excedente_cobro', cobro
       from _t20$$,
   '23502',
   null,
@@ -199,8 +205,8 @@ select throws_ok(
 alter table cobranza_abono alter column fecha_operacion drop not null;
 
 insert into cobranza_abono
-    (venta_nota_id, fecha_pago, vendedor_id, monto, tipo, saldo_pendiente, metodo_pago)
-  select nota, '2026-09-11', vendedor, 10.00, 'abono', 190.00, 'efectivo'
+    (venta_nota_id, fecha_pago, vendedor_id, monto, tipo, saldo_pendiente, metodo_pago, cobro_id)
+  select nota, '2026-09-11', vendedor, 10.00, 'abono', 190.00, 'efectivo', cobro
     from _t20;
 
 update cobranza_abono set fecha_operacion = fecha_pago where fecha_operacion is null;

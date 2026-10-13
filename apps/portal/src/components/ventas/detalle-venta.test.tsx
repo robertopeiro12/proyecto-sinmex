@@ -3,18 +3,26 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorApi } from "@/lib/api";
+import * as peticionesLib from "@/lib/peticiones";
 import * as ventasLib from "@/lib/ventas";
 import type { VentaDetalle } from "@/lib/ventas";
 import { DetalleVenta } from "./detalle-venta";
 
 vi.mock("@/lib/ventas", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/ventas")>();
-  return { ...real, eliminarVenta: vi.fn(), marcarCuentaPerdida: vi.fn() };
+  return { ...real, eliminarVenta: vi.fn(), marcarCuentaPerdida: vi.fn(), obtenerVenta: vi.fn() };
+});
+vi.mock("@/lib/peticiones", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/peticiones")>();
+  return { ...real, vistaBorradoDeCobro: vi.fn(), pedirBorrarCobro: vi.fn() };
 });
 vi.mock("@/components/auth/auth-provider");
 
 const eliminarVenta = vi.mocked(ventasLib.eliminarVenta);
 const marcarCuentaPerdida = vi.mocked(ventasLib.marcarCuentaPerdida);
+const obtenerVenta = vi.mocked(ventasLib.obtenerVenta);
+const vistaBorradoDeCobro = vi.mocked(peticionesLib.vistaBorradoDeCobro);
+const pedirBorrarCobro = vi.mocked(peticionesLib.pedirBorrarCobro);
 
 function mockAuth(puede: (clave: string) => boolean) {
   vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: false, cerrarSesion: vi.fn(), puede });
@@ -50,7 +58,7 @@ const VENTA: VentaDetalle = {
       subtotalCentavos: 24000,
     },
   ],
-  cobros: [{ id: "a1", fechaPago: "2024-03-05", metodoPago: "efectivo", montoCentavos: 10000, origen: "cobro" }],
+  cobros: [{ id: "a1", fechaPago: "2024-03-05", metodoPago: "efectivo", montoCentavos: 10000, origen: "cobro", cobroId: "co1", peticionPendiente: false }],
   editable: true,
   motivoNoEditable: null,
   puedeMarcarPerdida: true,
@@ -177,7 +185,7 @@ describe("DetalleVenta", () => {
     renderizar({
       ...VENTA,
       cobros: [
-        { id: "a2", fechaPago: "2024-03-06", metodoPago: "saldo_favor", montoCentavos: 5000, origen: "saldo_favor" },
+        { id: "a2", fechaPago: "2024-03-06", metodoPago: "saldo_favor", montoCentavos: 5000, origen: "saldo_favor", cobroId: "co2", peticionPendiente: false },
       ],
     });
     expect(screen.getAllByText("Saldo a favor")).toHaveLength(2);
@@ -190,5 +198,100 @@ describe("DetalleVenta", () => {
     await usuario.click(screen.getByRole("button", { name: "Eliminar" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Tiene cobros registrados: no se puede eliminar.");
     expect(onEliminada).not.toHaveBeenCalled();
+  });
+
+  describe("pedir borrado (T-34)", () => {
+    const ETIQUETA = "Pedir borrado del cobro del 2024-03-05 por $100.00";
+
+    it("con cobranza.editar_eliminar, un cobro que es un pago tiene Pedir borrado; el de contado no", () => {
+      renderizar({
+        ...VENTA,
+        cobros: [
+          ...VENTA.cobros,
+          {
+            id: "a9",
+            fechaPago: "2024-03-04",
+            metodoPago: "efectivo",
+            montoCentavos: 5000,
+            origen: "venta_contado",
+            cobroId: null,
+            peticionPendiente: false,
+          },
+        ],
+      });
+      expect(screen.getByRole("button", { name: ETIQUETA })).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: /^Pedir borrado/ })).toHaveLength(1);
+    });
+
+    it("un pago con petición pendiente dice Borrado pedido · pendiente", () => {
+      renderizar({ ...VENTA, cobros: [{ ...VENTA.cobros[0], peticionPendiente: true }] });
+      expect(screen.getByText("Borrado pedido · pendiente")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: ETIQUETA })).not.toBeInTheDocument();
+    });
+
+    it("sin el permiso no se ve Pedir borrado", () => {
+      mockAuth((clave) => clave !== "cobranza.editar_eliminar");
+      renderizar();
+      expect(screen.queryByRole("button", { name: ETIQUETA })).not.toBeInTheDocument();
+    });
+
+    it("al enviar la petición recarga la venta y muestra el aviso", async () => {
+      vistaBorradoDeCobro.mockResolvedValue({
+        cobro: {
+          id: "co1",
+          clienteId: "c1",
+          cliente: "Abarrotes Lupita",
+          sucursalCodigo: "TJ",
+          origen: "cobro",
+          metodoPago: "efectivo",
+          montoCentavos: 10000,
+          fechaPago: "2024-03-05",
+          fechaOperacion: "2024-03-05",
+          cobrador: null,
+        },
+        notas: [],
+        saldoFavorAntesCentavos: 0,
+        saldoFavorDespuesCentavos: 0,
+        movimientoSaldoFavorCentavos: 0,
+        bloqueo: null,
+      });
+      pedirBorrarCobro.mockResolvedValue({
+        id: "p1",
+        tipo: "eliminar_cobro",
+        status: "pendiente",
+        sucursalCodigo: "TJ",
+        motivo: "x",
+        solicito: "Ana",
+        creadaEn: "2024-03-06 10:00",
+        resolvio: null,
+        resueltaEn: null,
+        comentario: null,
+        cobro: {
+          id: "co1",
+          clienteId: "c1",
+          cliente: "Abarrotes Lupita",
+          montoCentavos: 10000,
+          metodoPago: "efectivo",
+          origen: "cobro",
+          fechaPago: "2024-03-05",
+          cobrador: null,
+          folios: ["TJ240304OF01"],
+        },
+      });
+      const actualizada = { ...VENTA, cobros: [{ ...VENTA.cobros[0], peticionPendiente: true }] };
+      obtenerVenta.mockResolvedValue(actualizada);
+
+      const { usuario, onCambiada } = renderizar();
+      await usuario.click(screen.getByRole("button", { name: ETIQUETA }));
+      expect(vistaBorradoDeCobro).toHaveBeenCalledWith("co1");
+      await usuario.type(await screen.findByLabelText("Motivo"), "Era de crédito");
+      await usuario.click(screen.getByRole("button", { name: "Enviar petición" }));
+
+      await vi.waitFor(() => expect(onCambiada).toHaveBeenCalledWith(actualizada));
+      expect(obtenerVenta).toHaveBeenCalledWith("v1");
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Petición enviada: borrar el pago de $100.00 de Abarrotes Lupita.",
+      );
+    });
   });
 });

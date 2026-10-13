@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
 import { CarteraClientesModule } from '../cartera-clientes/cartera-clientes.module';
+import { CobrosBorradoRepository } from './cobros-borrado.repository';
+import { CobrosBorradoService } from './cobros-borrado.service';
+import { CobrosController } from './cobros.controller';
 import { CobranzasRepository } from './cobranzas.repository';
 import { CobranzasPortalRepository } from './cobranzas-portal.repository';
 import { CobranzasPortalService } from './cobranzas-portal.service';
@@ -9,6 +12,9 @@ import { FacturasController } from './facturas.controller';
 import { FacturasRepository } from './facturas.repository';
 import { FacturasService } from './facturas.service';
 import { FoliosOficinaRepository } from './folios-oficina.repository';
+import { PeticionesController } from './peticiones.controller';
+import { PeticionesRepository } from './peticiones.repository';
+import { PeticionesService } from './peticiones.service';
 import { VentasConsultaRepository } from './ventas-consulta.repository';
 import { VentasConsultaService } from './ventas-consulta.service';
 import { VentasEdicionRepository } from './ventas-edicion.repository';
@@ -28,7 +34,13 @@ import { VentasService } from './ventas.service';
 // mismo `VentasService` que la tablet.
 @Module({
   imports: [CarteraClientesModule],
-  controllers: [VentasController, FacturasController, CobranzasController],
+  controllers: [
+    VentasController,
+    FacturasController,
+    CobranzasController,
+    PeticionesController,
+    CobrosController,
+  ],
   providers: [
     VentasService,
     VentasRepository,
@@ -47,6 +59,11 @@ import { VentasService } from './ventas.service';
     // T-21: cobranza desde el portal
     CobranzasPortalService,
     CobranzasPortalRepository,
+    // T-34: borrar un pago (via peticion)
+    CobrosBorradoService,
+    CobrosBorradoRepository,
+    PeticionesService,
+    PeticionesRepository,
   ],
   exports: [VentasService, CobranzasService],
 })

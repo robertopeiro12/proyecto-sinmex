@@ -7,6 +7,7 @@ import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { OPCIONES_NEST, configurarApp } from './../src/configurar-app';
 import { iniciarEnLocal } from './apoyo-servidor';
+import { borrarCobrosDe, sembrarCobro } from './apoyo-cobros';
 import {
   DB_CONNECTION,
   type Database,
@@ -454,6 +455,12 @@ describe('Sincronizacion pull/push (e2e)', () => {
             tipo: 'abono',
             saldo_pendiente: '0.00',
             metodo_pago: 'efectivo',
+            cobro_id: await sembrarCobro(db, {
+              clienteId: cliente,
+              vendedorId,
+              monto,
+              fecha: n.fecha,
+            }),
           })
           .execute();
       }
@@ -498,6 +505,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
         'vendedor_id',
         'fecha_pago',
         'fecha_operacion',
+        'cobro_id',
       ])
       .where('venta_nota_id', '=', ventaNotaId)
       .orderBy('created_at')
@@ -517,7 +525,14 @@ describe('Sincronizacion pull/push (e2e)', () => {
   const saldoFavorDe = (cliente: string) =>
     db
       .selectFrom('saldo_favor_movimiento')
-      .select(['id', 'monto', 'origen', 'vendedor_id', 'fecha_operacion'])
+      .select([
+        'id',
+        'monto',
+        'origen',
+        'vendedor_id',
+        'fecha_operacion',
+        'cobro_id',
+      ])
       .where('cliente_id', '=', cliente)
       .orderBy('created_at')
       .execute();
@@ -813,6 +828,12 @@ describe('Sincronizacion pull/push (e2e)', () => {
         tipo: 'abono',
         saldo_pendiente: '150.00',
         metodo_pago: 'efectivo',
+        cobro_id: await sembrarCobro(db, {
+          clienteId,
+          vendedorId,
+          monto: '100.00',
+          fecha: '2026-08-03',
+        }),
       })
       .execute();
 
@@ -855,6 +876,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
         .where('cliente_id', 'in', clientesCobro)
         .execute();
     }
+    // T-34: las peticiones y los pagos de esos clientes, antes que el cliente.
+    await borrarCobrosDe(db, [clienteId, clienteAjenoId, ...clientesCobro]);
     // T-16: las ventas que proyecto el push, ademas de `notaId`. Detalle antes
     // que cabecera, y las dos antes que cliente, presentacion y vendedor.
     await db
@@ -2533,7 +2556,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
   /* ================================================================ */
 
   describe('cobranzas (T-20)', () => {
-    it('una cobranza valida entra a cobranza_abono y el buzon apunta a la fila', async () => {
+    it('una cobranza valida entra a cobranza_abono y el buzon apunta a su pago (T-34)', async () => {
       const { clienteId: cli, notas } = await clienteConNotas([
         { monto: '250.00', fecha: '2026-08-02' },
       ]);
@@ -2559,8 +2582,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
 
       expect(await buzonDe(op.clave)).toEqual({
         id: res.resultados[0].id_servidor,
-        entidad_tabla: 'cobranza_abono',
-        entidad_id: abonos[0].id,
+        entidad_tabla: 'cobro',
+        entidad_id: abonos[0].cobro_id,
       });
     });
 
@@ -2726,10 +2749,10 @@ describe('Sincronizacion pull/push (e2e)', () => {
         expect(await statusDe(media)).toBe('abonado');
         expect(await saldoFavorDe(cli)).toEqual([]);
 
-        // El buzon apunta a la primera fila: la de la nota elegida.
+        // El buzon apunta al pago (T-34): el de la fila de la nota elegida.
         expect(await buzonDe(op.clave)).toMatchObject({
-          entidad_tabla: 'cobranza_abono',
-          entidad_id: aElegida.id,
+          entidad_tabla: 'cobro',
+          entidad_id: aElegida.cobro_id,
         });
       });
 
@@ -2775,12 +2798,12 @@ describe('Sincronizacion pull/push (e2e)', () => {
           '40.00',
         ]);
         expect(await buzonDe(op.clave)).toMatchObject({
-          entidad_tabla: 'cobranza_abono',
-          entidad_id: aOtra.id,
+          entidad_tabla: 'cobro',
+          entidad_id: aOtra.cobro_id,
         });
       });
 
-      it('si no hay nota que reciba dinero, el buzon apunta al movimiento de saldo a favor', async () => {
+      it('si no hay nota que reciba dinero, el buzon apunta al pago del excedente', async () => {
         const { clienteId: cli, notas } = await clienteConNotas([
           {
             monto: '100.00',
@@ -2795,8 +2818,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
         const favor = await saldoFavorDe(cli);
         expect(favor.map((f) => f.monto)).toEqual(['50.00']);
         expect(await buzonDe(op.clave)).toMatchObject({
-          entidad_tabla: 'saldo_favor_movimiento',
-          entidad_id: favor[0].id,
+          entidad_tabla: 'cobro',
+          entidad_id: favor[0].cobro_id,
         });
       });
 
@@ -2919,7 +2942,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
 
   describe('pull (T-20)', () => {
     it('el saldo es derivado de los abonos vivos, no de la foto saldo_pendiente', async () => {
-      const { notas } = await clienteConNotas([
+      const { clienteId: cli, notas } = await clienteConNotas([
         {
           monto: '300.00',
           fecha: '2026-08-02',
@@ -2940,6 +2963,13 @@ describe('Sincronizacion pull/push (e2e)', () => {
           saldo_pendiente: '0.00',
           metodo_pago: 'cheque',
           deleted_at: new Date(),
+          cobro_id: await sembrarCobro(db, {
+            clienteId: cli,
+            vendedorId,
+            monto: '25.00',
+            fecha: '2026-08-02',
+            metodoPago: 'cheque',
+          }),
         })
         .execute();
 
@@ -2967,32 +2997,43 @@ describe('Sincronizacion pull/push (e2e)', () => {
 
     it('el cliente baja con su saldo a favor: la suma de sus movimientos vivos', async () => {
       const { clienteId: cli } = await clienteConNotas([]);
+      const pagoDe = (monto: string) =>
+        sembrarCobro(db, {
+          clienteId: cli,
+          vendedorId,
+          monto,
+          fecha: FECHA_COBROS,
+        });
+      const movimientos = [
+        {
+          cliente_id: cli,
+          vendedor_id: vendedorId,
+          monto: '120.50',
+          origen: 'excedente_cobro',
+          fecha_operacion: FECHA_COBROS,
+          cobro_id: await pagoDe('120.50'),
+        },
+        {
+          cliente_id: cli,
+          vendedor_id: vendedorId,
+          monto: '30.00',
+          origen: 'excedente_cobro',
+          fecha_operacion: FECHA_COBROS,
+          cobro_id: await pagoDe('30.00'),
+        },
+        {
+          cliente_id: cli,
+          vendedor_id: vendedorId,
+          monto: '99.00',
+          origen: 'excedente_cobro',
+          fecha_operacion: FECHA_COBROS,
+          deleted_at: new Date(),
+          cobro_id: await pagoDe('99.00'),
+        },
+      ];
       await db
         .insertInto('saldo_favor_movimiento')
-        .values([
-          {
-            cliente_id: cli,
-            vendedor_id: vendedorId,
-            monto: '120.50',
-            origen: 'excedente_cobro',
-            fecha_operacion: FECHA_COBROS,
-          },
-          {
-            cliente_id: cli,
-            vendedor_id: vendedorId,
-            monto: '30.00',
-            origen: 'excedente_cobro',
-            fecha_operacion: FECHA_COBROS,
-          },
-          {
-            cliente_id: cli,
-            vendedor_id: vendedorId,
-            monto: '99.00',
-            origen: 'excedente_cobro',
-            fecha_operacion: FECHA_COBROS,
-            deleted_at: new Date(),
-          },
-        ])
+        .values(movimientos)
         .execute();
 
       const cuerpo = (await pull().expect(200)).body as RespuestaPull;

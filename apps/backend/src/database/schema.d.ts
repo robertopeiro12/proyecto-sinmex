@@ -71,6 +71,7 @@ export interface ClientePromocionProducto {
 
 export interface CobranzaAbono {
   capturo_usuario_id: string | null;
+  cobro_id: string | null;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
   fecha_operacion: Timestamp;
@@ -84,6 +85,22 @@ export interface CobranzaAbono {
   updated_at: Generated<Timestamp>;
   vendedor_id: string | null;
   venta_nota_id: string;
+}
+
+export interface Cobro {
+  capturo_usuario_id: string | null;
+  cliente_id: string;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  eliminado_por_usuario_id: string | null;
+  fecha_operacion: Timestamp;
+  fecha_pago: Timestamp;
+  id: Generated<string>;
+  metodo_pago: string;
+  monto: Numeric;
+  origen: string;
+  updated_at: Generated<Timestamp>;
+  vendedor_id: string | null;
 }
 
 export interface Factura {
@@ -152,6 +169,21 @@ export interface Permiso {
   updated_at: Generated<Timestamp>;
 }
 
+export interface Peticion {
+  cobro_id: string | null;
+  comentario_resolucion: string | null;
+  created_at: Generated<Timestamp>;
+  id: Generated<string>;
+  motivo: string;
+  resuelta_en: Timestamp | null;
+  resuelta_por_usuario_id: string | null;
+  solicito_usuario_id: string;
+  status: Generated<string>;
+  sucursal_id: string;
+  tipo: string;
+  updated_at: Generated<Timestamp>;
+}
+
 export interface Precio {
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -198,6 +230,7 @@ export interface Ruta {
 export interface SaldoFavorMovimiento {
   capturo_usuario_id: string | null;
   cliente_id: string;
+  cobro_id: string;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
   fecha_operacion: Timestamp;
@@ -358,6 +391,7 @@ export interface DB {
   cliente_precio: ClientePrecio;
   cliente_promocion_producto: ClientePromocionProducto;
   cobranza_abono: CobranzaAbono;
+  cobro: Cobro;
   factura: Factura;
   folio_oficina_contador: FolioOficinaContador;
   jornada: Jornada;
@@ -365,6 +399,7 @@ export interface DB {
   perfil: Perfil;
   perfil_permiso: PerfilPermiso;
   permiso: Permiso;
+  peticion: Peticion;
   precio: Precio;
   presentacion: Presentacion;
   producto: Producto;

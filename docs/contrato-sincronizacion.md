@@ -731,9 +731,10 @@ propia transacción**:
      con monto > 0, su fila `cobranza_abono` de origen `venta_contado`); la entidad es la
      `venta_nota`.
    - `CobranzasService.registrarCobranza` → bloquea `for update`, en orden de `id`, las notas
-     cobrables del cliente y la elegida; reparte; escribe una fila `cobranza_abono` por nota que
-     recibe dinero, su `status` y, si sobra, un `saldo_favor_movimiento`. La entidad
-     es la primera fila `cobranza_abono` o, si todo quedó a favor, el movimiento.
+     cobrables del cliente y la elegida; reparte; escribe el pago en `cobro` (T-34) y, colgadas de él
+     con `cobro_id`, una fila `cobranza_abono` por nota que recibe dinero, su `status` y, si sobra, un
+     `saldo_favor_movimiento`. La entidad es el `cobro` (antes de T-34 era la primera fila
+     `cobranza_abono` o el movimiento). El contrato con la tablet no cambia.
    - `JornadasService.cerrarJornada` (T-38) → comprueba que el vehículo sea de la sucursal del vendedor y no
      esté dado de baja, e inserta en `jornada` con `on conflict (vendedor_id, fecha) where deleted_at is null
      do nothing`; si no insertó, `jornada-duplicada`. La entidad es la fila de `jornada`.

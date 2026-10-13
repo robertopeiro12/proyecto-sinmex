@@ -72,6 +72,10 @@ export interface CobroDeVenta {
   metodoPago: string;
   montoCentavos: number;
   origen: 'cobro' | 'venta_contado' | 'saldo_favor';
+  /** El pago al que pertenece (T-34); `null` = cobro automatico de contado. */
+  cobroId: string | null;
+  /** Ya hay una peticion pendiente de borrar ese pago (T-34). */
+  peticionPendiente: boolean;
 }
 
 /**
@@ -256,13 +260,18 @@ export class VentasConsultaRepository {
       metodo_pago: string;
       monto: string;
       origen: string;
+      cobro_id: string | null;
+      peticion_pendiente: boolean;
     }>`
-      select id, to_char(fecha_pago, 'YYYY-MM-DD') as fecha_pago,
-             metodo_pago, monto, origen
-        from cobranza_abono
-       where venta_nota_id = ${id}
-         and deleted_at is null
-       order by fecha_pago, created_at
+      select ca.id, to_char(ca.fecha_pago, 'YYYY-MM-DD') as fecha_pago,
+             ca.metodo_pago, ca.monto, ca.origen, ca.cobro_id,
+             exists (select 1 from peticion p
+                      where p.cobro_id = ca.cobro_id
+                        and p.status = 'pendiente') as peticion_pendiente
+        from cobranza_abono ca
+       where ca.venta_nota_id = ${id}
+         and ca.deleted_at is null
+       order by ca.fecha_pago, ca.created_at
     `.execute(this.db);
     return filas.rows.map((f) => ({
       id: f.id,
@@ -270,6 +279,8 @@ export class VentasConsultaRepository {
       metodoPago: f.metodo_pago,
       montoCentavos: aCentavos(f.monto),
       origen: f.origen as CobroDeVenta['origen'],
+      cobroId: f.cobro_id,
+      peticionPendiente: f.peticion_pendiente,
     }));
   }
 }
