@@ -34,6 +34,19 @@ describe('validarRango', () => {
     );
   });
 
+  it('rechaza años anteriores a 1900 (Postgres truena con el año 0000)', () => {
+    expect(validarRango('0000-01-01', '2026-03-01')).toBe(
+      'La fecha "desde" no es una fecha válida.',
+    );
+    expect(validarRango('1899-12-31', '2026-03-01')).toBe(
+      'La fecha "desde" no es una fecha válida.',
+    );
+    expect(validarRango('2026-03-01', '0001-01-01')).toBe(
+      'La fecha "hasta" no es una fecha válida.',
+    );
+    expect(validarRango('1900-01-01', '1900-01-31')).toBeNull();
+  });
+
   it('rechaza desde posterior a hasta', () => {
     expect(validarRango('2026-10-13', '2026-10-01')).toBe(
       'La fecha "desde" no puede ser posterior a "hasta".',

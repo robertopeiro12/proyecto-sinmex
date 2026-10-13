@@ -15,10 +15,18 @@ export const MAX_DIAS_RANGO = 366;
 
 const MS_DIA = 24 * 60 * 60 * 1000;
 
+/** Antes de este año no hay datos y el año `0000` hace tronar a Postgres. */
+const ANIO_MINIMO = 1900;
+
+const esFechaSoportada = (f: string): boolean =>
+  esFechaReal(f) && Number(f.slice(0, 4)) >= ANIO_MINIMO;
+
 /** El mensaje del 400, o `null` si el rango sirve. El formato ya lo valido el DTO. */
 export function validarRango(desde: string, hasta: string): string | null {
-  if (!esFechaReal(desde)) return 'La fecha "desde" no es una fecha válida.';
-  if (!esFechaReal(hasta)) return 'La fecha "hasta" no es una fecha válida.';
+  if (!esFechaSoportada(desde))
+    return 'La fecha "desde" no es una fecha válida.';
+  if (!esFechaSoportada(hasta))
+    return 'La fecha "hasta" no es una fecha válida.';
   if (desde > hasta)
     return 'La fecha "desde" no puede ser posterior a "hasta".';
   const dias =
