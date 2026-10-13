@@ -810,7 +810,7 @@ En `apps/backend/src/modules/ventas-cobranza/cobranzas.service.spec.ts`:
    `el excedente va a las otras notas…`, `paga primero la palomeada mas vieja…`,
    `lo que sobra va a las demas…` y los dos de `reparte solo entre las palomeadas…`), agrega como última
    propiedad `cobroId: 'cobro-1',`.
-3. Cambia las cuatro expectativas `{ tabla: 'cobranza_abono', id: 'abono-1' }` por
+3. Cambia las tres expectativas `{ tabla: 'cobranza_abono', id: 'abono-1' }` por
    `{ tabla: 'cobro', id: 'cobro-1' }`. La prueba `si todo queda a favor, el buzon apunta al movimiento de
    saldo a favor` pasa a llamarse `si todo queda a favor, el buzon igual apunta al pago (T-34)` y espera
    `{ tabla: 'cobro', id: 'cobro-1' }`.
@@ -1426,7 +1426,7 @@ borrado (Tarea 3). **Modelo:** `haiku` para implementar, `sonnet` para revisar.
     id: string; folio: string; numNota: string | null; fecha: string;
     status: string;              // el de hoy, leido de la base
     montoTotalCentavos: number;
-    abonadoVivoCentavos: number; // TODO lo abonado vivo hoy, este pago incluido
+    abonadoVivoCentavos: number; // todo lo abonado vivo hoy, este pago incluido
     delPagoCentavos: number;     // lo que este pago le abono
   }
   export interface EntradaBorrado {
@@ -1660,7 +1660,7 @@ export interface NotaDelPago {
   /** El status de hoy, leido de la base. */
   status: string;
   montoTotalCentavos: number;
-  /** TODO lo abonado vivo hoy, este pago incluido. */
+  /** Todo lo abonado vivo hoy, este pago incluido. */
   abonadoVivoCentavos: number;
   /** Lo que este pago le abono (sus filas vivas). */
   delPagoCentavos: number;
@@ -5394,3 +5394,955 @@ git commit -m "T-34: portal — pedir el borrado de un cobro desde la venta y de
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
+
+### Tarea 7: Portal — la bandeja *Operación → Peticiones*
+
+`/operacion/peticiones` deja de ser placeholder: pestañas **Pendientes** e **Historial**, filtro global
+**"Por sucursal"** (llega como `?sucursal=` igual que en Cobranza), y en cada pendiente **Autorizar** (con la
+vista previa recalculada en ese momento) y **Denegar** (comentario opcional). Si la vista previa trae
+bloqueo, **"Confirmar y borrar"** queda deshabilitado con el motivo a la vista (desviación 6). Un 409 se
+muestra como alerta y la lista se recarga (Review Focus 5). **Modelo:** `sonnet` para implementar y revisar.
+
+**Archivos:**
+- Crear: `apps/portal/src/components/peticiones/bandeja-peticiones.tsx`, `bandeja-peticiones.test.tsx`
+- Crear: `apps/portal/src/components/peticiones/pantalla-peticiones.tsx`, `pantalla-peticiones.test.tsx`
+- Modificar: `apps/portal/src/app/(portal)/operacion/peticiones/page.tsx`
+
+**Interfaces:**
+- Consume (Tarea 6): `listarPeticiones`, `vistaPreviaDePeticion`, `autorizarPeticion`, `denegarPeticion`,
+  `describirPago`, `textoAutorizada`, `textoDenegada`, `ETIQUETA_STATUS_PETICION`, `LARGO_MAX_TEXTO`,
+  `PeticionEnBandeja`, `VistaBorrado` (`lib/peticiones.ts`) y `VistaBorradoPago`
+  (`components/peticiones/vista-borrado.tsx`).
+- Produce:
+  `export function PantallaPeticiones({ sucursal }: { sucursal: string | null })` y
+  `export function BandejaPeticiones({ status, sucursal }: { status: "pendiente" | "historial"; sucursal: string | null })`.
+
+- [ ] **Paso 1: Prueba de la bandeja que falla**
+
+Crea `apps/portal/src/components/peticiones/bandeja-peticiones.test.tsx`:
+
+```tsx
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { ErrorApi } from "@/lib/api";
+import * as peticionesLib from "@/lib/peticiones";
+import type { PeticionEnBandeja, VistaBorrado } from "@/lib/peticiones";
+import { BandejaPeticiones } from "./bandeja-peticiones";
+
+vi.mock("@/lib/peticiones", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/peticiones")>();
+  return {
+    ...real,
+    listarPeticiones: vi.fn(),
+    vistaPreviaDePeticion: vi.fn(),
+    autorizarPeticion: vi.fn(),
+    denegarPeticion: vi.fn(),
+  };
+});
+
+const listarPeticiones = vi.mocked(peticionesLib.listarPeticiones);
+const vistaPreviaDePeticion = vi.mocked(peticionesLib.vistaPreviaDePeticion);
+const autorizarPeticion = vi.mocked(peticionesLib.autorizarPeticion);
+const denegarPeticion = vi.mocked(peticionesLib.denegarPeticion);
+
+const PENDIENTE: PeticionEnBandeja = {
+  id: "p1",
+  tipo: "eliminar_cobro",
+  status: "pendiente",
+  sucursalCodigo: "TJ",
+  motivo: "Era de crédito",
+  solicito: "Ana",
+  creadaEn: "2026-10-13 09:15",
+  resolvio: null,
+  resueltaEn: null,
+  comentario: null,
+  cobro: {
+    id: "co1",
+    clienteId: "c1",
+    cliente: "Tacos Erick",
+    montoCentavos: 100000,
+    metodoPago: "efectivo",
+    origen: "cobro",
+    fechaPago: "2026-10-10",
+    cobrador: "Juan Pérez",
+    folios: ["TJ261001AP01", "TJ261003AP02"],
+  },
+};
+
+const VISTA: VistaBorrado = {
+  cobro: {
+    id: "co1",
+    clienteId: "c1",
+    cliente: "Tacos Erick",
+    sucursalCodigo: "TJ",
+    origen: "cobro",
+    metodoPago: "efectivo",
+    montoCentavos: 100000,
+    fechaPago: "2026-10-10",
+    fechaOperacion: "2026-10-10",
+    cobrador: "Juan Pérez",
+  },
+  notas: [],
+  saldoFavorAntesCentavos: 0,
+  saldoFavorDespuesCentavos: 0,
+  movimientoSaldoFavorCentavos: 0,
+  bloqueo: null,
+};
+
+const BOTON_AUTORIZAR = "Autorizar petición de Tacos Erick";
+const BOTON_DENEGAR = "Denegar petición de Tacos Erick";
+
+describe("BandejaPeticiones", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listarPeticiones.mockResolvedValue([PENDIENTE]);
+    vistaPreviaDePeticion.mockResolvedValue(VISTA);
+  });
+
+  it("pendientes: quién pidió, cliente, el pago, sus notas y el motivo, con sus botones", async () => {
+    render(<BandejaPeticiones status="pendiente" sucursal="TJ" />);
+    expect(await screen.findByText("Era de crédito")).toBeInTheDocument();
+    expect(listarPeticiones).toHaveBeenCalledWith("pendiente", "TJ");
+    expect(screen.getByText("2026-10-13 09:15")).toBeInTheDocument();
+    expect(screen.getByText("Ana")).toBeInTheDocument();
+    expect(screen.getByText("Tacos Erick · TJ")).toBeInTheDocument();
+    expect(
+      screen.getByText("Pago de $1,000.00 · Tacos Erick · 2026-10-10 · Efectivo · cobró Juan Pérez"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("TJ261001AP01, TJ261003AP02")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: BOTON_AUTORIZAR })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: BOTON_DENEGAR })).toBeInTheDocument();
+  });
+
+  it("vacías: lo dice según la pestaña", async () => {
+    listarPeticiones.mockResolvedValue([]);
+    const { unmount } = render(<BandejaPeticiones status="pendiente" sucursal={null} />);
+    expect(await screen.findByText("No hay peticiones pendientes.")).toBeInTheDocument();
+    unmount();
+    render(<BandejaPeticiones status="historial" sucursal={null} />);
+    expect(await screen.findByText("No hay peticiones resueltas.")).toBeInTheDocument();
+  });
+
+  it("historial: resultado, quién y cuándo resolvió, y el comentario; sin botones", async () => {
+    listarPeticiones.mockResolvedValue([
+      { ...PENDIENTE, status: "denegada", resolvio: "Beto", resueltaEn: "2026-10-13 10:00", comentario: "No procede" },
+    ]);
+    render(<BandejaPeticiones status="historial" sucursal={null} />);
+    expect(await screen.findByText("Denegada")).toBeInTheDocument();
+    expect(screen.getByText("Beto · 2026-10-13 10:00")).toBeInTheDocument();
+    expect(screen.getByText("No procede")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: BOTON_AUTORIZAR })).not.toBeInTheDocument();
+  });
+
+  it("autorizar: vista previa recalculada, confirmar, aviso y la lista se recarga", async () => {
+    autorizarPeticion.mockResolvedValue({ ...PENDIENTE, status: "autorizada" });
+    const usuario = userEvent.setup();
+    render(<BandejaPeticiones status="pendiente" sucursal={null} />);
+    await usuario.click(await screen.findByRole("button", { name: BOTON_AUTORIZAR }));
+    expect(vistaPreviaDePeticion).toHaveBeenCalledWith("p1");
+    await usuario.click(await screen.findByRole("button", { name: "Confirmar y borrar" }));
+
+    expect(autorizarPeticion).toHaveBeenCalledWith("p1");
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Petición autorizada: se borró el pago de $1,000.00 de Tacos Erick.",
+    );
+    expect(listarPeticiones).toHaveBeenCalledTimes(2);
+  });
+
+  it("con el saldo a favor ya aplicado no deja confirmar y dice por qué", async () => {
+    vistaPreviaDePeticion.mockResolvedValue({
+      ...VISTA,
+      bloqueo: {
+        codigo: "saldo-favor-aplicado",
+        motivo: "El saldo a favor que dejó este pago ya se aplicó a otras notas. Primero borra el pago que lo aplicó.",
+      },
+    });
+    const usuario = userEvent.setup();
+    render(<BandejaPeticiones status="pendiente" sucursal={null} />);
+    await usuario.click(await screen.findByRole("button", { name: BOTON_AUTORIZAR }));
+    expect(await screen.findByText(/ya se aplicó a otras notas/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirmar y borrar" })).toBeDisabled();
+  });
+
+  it("Review Focus 5: un 409 al autorizar se ve como alerta y la lista se recarga", async () => {
+    autorizarPeticion.mockRejectedValue(new ErrorApi("fallo", 409, "Esta petición ya fue resuelta."));
+    const usuario = userEvent.setup();
+    render(<BandejaPeticiones status="pendiente" sucursal={null} />);
+    await usuario.click(await screen.findByRole("button", { name: BOTON_AUTORIZAR }));
+    await usuario.click(await screen.findByRole("button", { name: "Confirmar y borrar" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Esta petición ya fue resuelta.");
+    await vi.waitFor(() => expect(listarPeticiones).toHaveBeenCalledTimes(2));
+  });
+
+  it("Review Focus 5: si la vista previa ya no se puede calcular (409), alerta y recarga", async () => {
+    vistaPreviaDePeticion.mockRejectedValue(new ErrorApi("fallo", 409, "Este cobro ya se borró."));
+    const usuario = userEvent.setup();
+    render(<BandejaPeticiones status="pendiente" sucursal={null} />);
+    await usuario.click(await screen.findByRole("button", { name: BOTON_AUTORIZAR }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Este cobro ya se borró.");
+    await vi.waitFor(() => expect(listarPeticiones).toHaveBeenCalledTimes(2));
+  });
+
+  it("denegar con comentario: aviso y recarga", async () => {
+    denegarPeticion.mockResolvedValue({ ...PENDIENTE, status: "denegada", comentario: "No procede" });
+    const usuario = userEvent.setup();
+    render(<BandejaPeticiones status="pendiente" sucursal={null} />);
+    await usuario.click(await screen.findByRole("button", { name: BOTON_DENEGAR }));
+    await usuario.type(screen.getByLabelText("Comentario (opcional)"), "No procede");
+    await usuario.click(screen.getByRole("button", { name: "Confirmar denegación" }));
+
+    expect(denegarPeticion).toHaveBeenCalledWith("p1", "No procede");
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "Petición denegada: el pago de Tacos Erick no cambia.",
+    );
+    expect(listarPeticiones).toHaveBeenCalledTimes(2);
+  });
+
+  it("si no carga, lo dice", async () => {
+    listarPeticiones.mockRejectedValue(new ErrorApi("fallo", 500));
+    render(<BandejaPeticiones status="pendiente" sucursal={null} />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudieron cargar las peticiones.");
+  });
+});
+```
+
+Run: `npm test --workspace=apps/portal -- bandeja-peticiones`
+Expected: FAIL — no existe `./bandeja-peticiones`.
+
+- [ ] **Paso 2: La bandeja**
+
+Crea `apps/portal/src/components/peticiones/bandeja-peticiones.tsx`:
+
+```tsx
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
+import { ErrorApi, mensajeDe } from "@/lib/api";
+import {
+  ETIQUETA_STATUS_PETICION,
+  LARGO_MAX_TEXTO,
+  autorizarPeticion,
+  denegarPeticion,
+  describirPago,
+  listarPeticiones,
+  textoAutorizada,
+  textoDenegada,
+  vistaPreviaDePeticion,
+  type PeticionEnBandeja,
+  type VistaBorrado,
+} from "@/lib/peticiones";
+import { VistaBorradoPago } from "./vista-borrado";
+
+type Accion = { tipo: "autorizar" | "denegar"; peticion: PeticionEnBandeja };
+
+/** Cómo termina una acción: un aviso (salió bien) o una alerta (409: la pantalla quedó vieja). */
+type Fin = { aviso: string } | { alerta: string };
+
+function esDesactualizado(err: unknown): err is ErrorApi {
+  return err instanceof ErrorApi && err.status === 409;
+}
+
+/**
+ * La bandeja de peticiones (T-34, §3.2). La lista la arma el servidor con el
+ * alcance del usuario; autorizar y denegar los vuelve a decidir el servidor con
+ * la petición bloqueada. Toda acción, salga bien o con 409, cierra el panel y
+ * recarga la lista: lo que se ve nunca se queda viejo.
+ */
+export function BandejaPeticiones({
+  status,
+  sucursal,
+}: {
+  status: "pendiente" | "historial";
+  sucursal: string | null;
+}) {
+  const [peticiones, setPeticiones] = useState<PeticionEnBandeja[] | null>(null);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [fin, setFin] = useState<Fin | null>(null);
+  const [accion, setAccion] = useState<Accion | null>(null);
+  const [recarga, setRecarga] = useState(0);
+
+  useEffect(() => {
+    let vigente = true;
+    listarPeticiones(status, sucursal)
+      .then((lista) => {
+        if (!vigente) return;
+        setPeticiones(lista);
+        setErrorCarga(null);
+      })
+      .catch((err) => {
+        if (!vigente) return;
+        setPeticiones(null);
+        setErrorCarga(mensajeDe(err, "No se pudieron cargar las peticiones."));
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [status, sucursal, recarga]);
+
+  const terminar = useCallback((resultado: Fin) => {
+    setFin(resultado);
+    setAccion(null);
+    setRecarga((n) => n + 1);
+  }, []);
+
+  function abrir(tipo: Accion["tipo"], peticion: PeticionEnBandeja) {
+    setFin(null);
+    setAccion({ tipo, peticion });
+  }
+
+  const pendientes = status === "pendiente";
+
+  return (
+    <div className="flex flex-col gap-4">
+      {fin && "aviso" in fin && (
+        <p role="status" className="rounded-md border p-3 text-sm">
+          {fin.aviso}
+        </p>
+      )}
+      {fin && "alerta" in fin && (
+        <p role="alert" className="text-sm text-destructive">
+          {fin.alerta}
+        </p>
+      )}
+      {errorCarga && (
+        <p role="alert" className="text-sm text-destructive">
+          {errorCarga}
+        </p>
+      )}
+      {peticiones === null && errorCarga === null && <p className="text-sm text-muted-foreground">Cargando…</p>}
+
+      {peticiones &&
+        (peticiones.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {pendientes ? "No hay peticiones pendientes." : "No hay peticiones resueltas."}
+          </p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left">
+                <th className="py-1.5">Pedida</th>
+                <th className="py-1.5">Pidió</th>
+                <th className="py-1.5">Cliente</th>
+                <th className="py-1.5">Pago</th>
+                <th className="py-1.5">Notas</th>
+                <th className="py-1.5">Motivo</th>
+                {pendientes ? (
+                  <th className="py-1.5" />
+                ) : (
+                  <>
+                    <th className="py-1.5">Resultado</th>
+                    <th className="py-1.5">Resolvió</th>
+                    <th className="py-1.5">Comentario</th>
+                  </>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {peticiones.map((p) => (
+                <tr key={p.id} className="border-t align-top">
+                  <td className="py-1.5">{p.creadaEn}</td>
+                  <td className="py-1.5">{p.solicito}</td>
+                  <td className="py-1.5">{`${p.cobro.cliente} · ${p.sucursalCodigo}`}</td>
+                  <td className="py-1.5">{describirPago(p.cobro)}</td>
+                  <td className="py-1.5 font-mono">{p.cobro.folios.join(", ") || "—"}</td>
+                  <td className="py-1.5">{p.motivo}</td>
+                  {pendientes ? (
+                    <td className="py-1.5 text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          aria-label={`Autorizar petición de ${p.cobro.cliente}`}
+                          disabled={accion !== null}
+                          onClick={() => abrir("autorizar", p)}
+                        >
+                          Autorizar
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          aria-label={`Denegar petición de ${p.cobro.cliente}`}
+                          disabled={accion !== null}
+                          onClick={() => abrir("denegar", p)}
+                        >
+                          Denegar
+                        </Button>
+                      </div>
+                    </td>
+                  ) : (
+                    <>
+                      <td className="py-1.5">{ETIQUETA_STATUS_PETICION[p.status]}</td>
+                      <td className="py-1.5">{`${p.resolvio ?? "—"} · ${p.resueltaEn ?? "—"}`}</td>
+                      <td className="py-1.5">{p.comentario ?? "—"}</td>
+                    </>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ))}
+
+      {accion?.tipo === "autorizar" && (
+        <AutorizarPeticion
+          key={accion.peticion.id}
+          peticion={accion.peticion}
+          onTerminar={terminar}
+          onCancelar={() => setAccion(null)}
+        />
+      )}
+      {accion?.tipo === "denegar" && (
+        <DenegarPeticion
+          key={accion.peticion.id}
+          peticion={accion.peticion}
+          onTerminar={terminar}
+          onCancelar={() => setAccion(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Autorizar: la vista previa recalculada al abrir, y confirmar. */
+function AutorizarPeticion({
+  peticion,
+  onTerminar,
+  onCancelar,
+}: {
+  peticion: PeticionEnBandeja;
+  onTerminar: (fin: Fin) => void;
+  onCancelar: () => void;
+}) {
+  const [vista, setVista] = useState<VistaBorrado | null>(null);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const { enviando, error, enviar } = useEnvioFormulario("No se pudo autorizar la petición.");
+  // El efecto de carga depende solo de la petición: el aviso al padre se lee del ref.
+  const avisar = useRef(onTerminar);
+  useEffect(() => {
+    avisar.current = onTerminar;
+  });
+
+  useEffect(() => {
+    let vigente = true;
+    vistaPreviaDePeticion(peticion.id)
+      .then((v) => {
+        if (vigente) setVista(v);
+      })
+      .catch((err) => {
+        if (!vigente) return;
+        if (esDesactualizado(err)) {
+          avisar.current({ alerta: err.mensajeApi ?? "La petición cambió; vuelve a cargar." });
+          return;
+        }
+        setErrorCarga(mensajeDe(err, "No se pudo calcular la vista previa."));
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [peticion.id]);
+
+  async function confirmar() {
+    await enviar(
+      async () => {
+        try {
+          onTerminar({ aviso: textoAutorizada(await autorizarPeticion(peticion.id)) });
+        } catch (err) {
+          if (esDesactualizado(err)) {
+            onTerminar({ alerta: err.mensajeApi ?? "La petición cambió; vuelve a cargar." });
+            return;
+          }
+          throw err;
+        }
+      },
+      () => {},
+    );
+  }
+
+  return (
+    <section aria-label="Autorizar petición" className="flex flex-col gap-3 rounded-md border p-3">
+      <h3 className="text-sm font-semibold">Autorizar: se borra el pago completo</h3>
+      <p className="text-sm">{`Motivo: ${peticion.motivo}`}</p>
+      {errorCarga && (
+        <p role="alert" className="text-sm text-destructive">
+          {errorCarga}
+        </p>
+      )}
+      {vista === null && errorCarga === null && <p className="text-sm text-muted-foreground">Cargando…</p>}
+      {vista && <VistaBorradoPago vista={vista} />}
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="destructive"
+          onClick={() => void confirmar()}
+          disabled={enviando || vista === null || vista.bloqueo !== null}
+        >
+          Confirmar y borrar
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancelar} disabled={enviando}>
+          Cancelar
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+/** Denegar: comentario opcional. El pago no cambia. */
+function DenegarPeticion({
+  peticion,
+  onTerminar,
+  onCancelar,
+}: {
+  peticion: PeticionEnBandeja;
+  onTerminar: (fin: Fin) => void;
+  onCancelar: () => void;
+}) {
+  const [comentario, setComentario] = useState("");
+  const { enviando, error, enviar } = useEnvioFormulario("No se pudo denegar la petición.");
+
+  async function confirmar() {
+    await enviar(
+      async () => {
+        try {
+          onTerminar({ aviso: textoDenegada(await denegarPeticion(peticion.id, comentario)) });
+        } catch (err) {
+          if (esDesactualizado(err)) {
+            onTerminar({ alerta: err.mensajeApi ?? "La petición cambió; vuelve a cargar." });
+            return;
+          }
+          throw err;
+        }
+      },
+      () => {},
+    );
+  }
+
+  return (
+    <section aria-label="Denegar petición" className="flex flex-col gap-3 rounded-md border p-3">
+      <h3 className="text-sm font-semibold">{`Denegar: ${describirPago(peticion.cobro)}`}</h3>
+      <label className="flex flex-col gap-1 text-sm">
+        Comentario (opcional)
+        <textarea
+          className="rounded-md border p-2"
+          rows={2}
+          maxLength={LARGO_MAX_TEXTO}
+          value={comentario}
+          onChange={(e) => setComentario(e.target.value)}
+        />
+      </label>
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <Button type="button" onClick={() => void confirmar()} disabled={enviando}>
+          Confirmar denegación
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancelar} disabled={enviando}>
+          Cancelar
+        </Button>
+      </div>
+    </section>
+  );
+}
+```
+
+Run: `npm test --workspace=apps/portal -- bandeja-peticiones`
+Expected: PASS.
+
+- [ ] **Paso 3: La pantalla y la ruta — prueba que falla**
+
+Crea `apps/portal/src/components/peticiones/pantalla-peticiones.test.tsx`:
+
+```tsx
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { useAuth } from "@/components/auth/auth-provider";
+import * as peticionesLib from "@/lib/peticiones";
+import { PantallaPeticiones } from "./pantalla-peticiones";
+
+vi.mock("@/lib/peticiones", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/peticiones")>();
+  return { ...real, listarPeticiones: vi.fn() };
+});
+vi.mock("@/components/auth/auth-provider");
+
+const listarPeticiones = vi.mocked(peticionesLib.listarPeticiones);
+
+function mockAuth(puede: (clave: string) => boolean) {
+  vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: false, cerrarSesion: vi.fn(), puede });
+}
+
+describe("PantallaPeticiones", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listarPeticiones.mockResolvedValue([]);
+  });
+
+  it("sin peticiones.gestionar lo dice y no pide nada", () => {
+    mockAuth((clave) => clave !== "peticiones.gestionar");
+    render(<PantallaPeticiones sucursal={null} />);
+    expect(screen.getByText("No tienes permiso para ver peticiones")).toBeInTheDocument();
+    expect(listarPeticiones).not.toHaveBeenCalled();
+  });
+
+  it("abre en Pendientes con la sucursal del filtro; Historial pide las resueltas", async () => {
+    mockAuth(() => true);
+    const usuario = userEvent.setup();
+    render(<PantallaPeticiones sucursal="TJ" />);
+    expect(await screen.findByText("No hay peticiones pendientes.")).toBeInTheDocument();
+    expect(listarPeticiones).toHaveBeenCalledWith("pendiente", "TJ");
+    expect(screen.getByRole("button", { name: "Pendientes" })).toHaveAttribute("aria-pressed", "true");
+
+    await usuario.click(screen.getByRole("button", { name: "Historial" }));
+    expect(await screen.findByText("No hay peticiones resueltas.")).toBeInTheDocument();
+    expect(listarPeticiones).toHaveBeenLastCalledWith("historial", "TJ");
+  });
+});
+```
+
+Run: `npm test --workspace=apps/portal -- pantalla-peticiones`
+Expected: FAIL — no existe `./pantalla-peticiones`.
+
+- [ ] **Paso 4: La pantalla y la ruta**
+
+Crea `apps/portal/src/components/peticiones/pantalla-peticiones.tsx`:
+
+```tsx
+"use client";
+
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/components/auth/auth-provider";
+import { BandejaPeticiones } from "./bandeja-peticiones";
+
+type Pestana = "pendiente" | "historial";
+
+/** Operación → Peticiones (T-34): autorizar o denegar el borrado de pagos. */
+export function PantallaPeticiones({ sucursal }: { sucursal: string | null }) {
+  const { puede } = useAuth();
+  const [pestana, setPestana] = useState<Pestana>("pendiente");
+
+  if (!puede("peticiones.gestionar")) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Peticiones</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">No tienes permiso para ver peticiones</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Peticiones</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant={pestana === "pendiente" ? "default" : "outline"}
+            aria-pressed={pestana === "pendiente"}
+            onClick={() => setPestana("pendiente")}
+          >
+            Pendientes
+          </Button>
+          <Button
+            type="button"
+            variant={pestana === "historial" ? "default" : "outline"}
+            aria-pressed={pestana === "historial"}
+            onClick={() => setPestana("historial")}
+          >
+            Historial
+          </Button>
+        </div>
+        {/* key: cambiar de pestaña empieza limpio (sin avisos ni paneles de la otra). */}
+        <BandejaPeticiones key={pestana} status={pestana} sucursal={sucursal} />
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+`apps/portal/src/app/(portal)/operacion/peticiones/page.tsx` queda:
+
+```tsx
+import { PantallaPeticiones } from "@/components/peticiones/pantalla-peticiones";
+
+// Server component delgado (mismo patron que /operacion/cobranza).
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ sucursal?: string }>;
+}) {
+  const { sucursal } = await searchParams;
+  return <PantallaPeticiones sucursal={sucursal ?? null} />;
+}
+```
+
+Run: `npm test --workspace=apps/portal`
+Expected: PASS.
+
+Run: `npm run lint --workspace=apps/portal && npm run build --workspace=apps/portal`
+Expected: sin errores.
+
+- [ ] **Paso 5: Commit**
+
+```bash
+git add apps/portal/src/components/peticiones/bandeja-peticiones.tsx \
+  apps/portal/src/components/peticiones/bandeja-peticiones.test.tsx \
+  apps/portal/src/components/peticiones/pantalla-peticiones.tsx \
+  apps/portal/src/components/peticiones/pantalla-peticiones.test.tsx \
+  "apps/portal/src/app/(portal)/operacion/peticiones/page.tsx"
+git commit -m "T-34: portal — bandeja de Peticiones con pendientes, historial, autorizar y denegar
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+### Tarea 8: Verificación completa, prueba a mano contra la base LOCAL y documentación
+
+**Modelo:** `sonnet` para la tarea; la revisión final de la rama, **`opus`**.
+
+**Archivos:**
+- Modificar: `CLAUDE.md`
+- (Sin tocar el vault ni GitHub: esta tarea deja los textos para quien coordina.)
+
+- [ ] **Paso 1: Suite completa**
+
+Run:
+```
+npm run lint --workspace=apps/backend && npm run build --workspace=apps/backend
+npm test --workspace=apps/backend && npm run test:e2e --workspace=apps/backend
+npm run supabase -- test db
+npm test --workspace=apps/portal && npm run lint --workspace=apps/portal && npm run build --workspace=apps/portal
+npm run typecheck --workspace=apps/tablet && npm test --workspace=apps/tablet
+```
+Expected: todo en verde. Anota los conteos por suite para el PR. Comprueba que `git diff main --stat -- apps/tablet`
+**no muestra nada** (T-34 no toca la app) y que `npm run db:types --workspace=apps/backend` no cambia
+`schema.d.ts` (`git diff --exit-code apps/backend/src/database/schema.d.ts`).
+
+- [ ] **Paso 2: Prueba a mano contra el Postgres LOCAL**
+
+`.env.development` apunta a la **nube**: no lo uses tal cual. Con el stack local arriba, toma `DATABASE_URL` de
+`.env.test`. En la Mac de Roberto el 3000 está ocupado:
+
+```bash
+export DATABASE_URL=$(grep '^DATABASE_URL=' .env.test | cut -d= -f2-)
+PORT=3010 npm run backend                                   # en una terminal
+NEXT_PUBLIC_API_URL=http://localhost:3010 npm run portal    # en otra
+```
+
+Antes de arrancar, comprueba que el backend de verdad lee ese `DATABASE_URL` (si `.env.development` lo pisa,
+cambia temporalmente su `DATABASE_URL` a la local y **restáuralo al terminar**; nunca lo subas). Crea dos
+usuarios `Administrador General` con `npm run crear-usuario --workspace=apps/backend` en esa misma terminal
+(uno pide, otro autoriza) y uno `Auxiliar Administrativo` (sin permisos).
+
+Recorrido (cliente de TJ con dos ventas a crédito registradas desde *Registrar venta*, fechas distintas):
+1. *Operación → Cobranza*: pagar las dos notas de más (sobra a saldo a favor).
+2. *Ventas → detalle* de la primera: el cobro tiene **"Pedir borrado"**. Abrirlo: la vista previa dice el pago
+   completo, las dos notas (saldo hoy → tras borrar) y "Saldo a favor: $… → $0.00". Sin motivo, "Enviar
+   petición" está deshabilitado. Con motivo → aviso "Petición enviada: …" y el cobro dice
+   **"Borrado pedido · pendiente"**.
+3. *Operación → Peticiones* con el otro usuario: la petición en **Pendientes** (cliente, pago, folios, motivo,
+   quién pidió). **Autorizar** → vista previa → **Confirmar y borrar** → aviso "Petición autorizada: …"; la
+   petición pasa a **Historial** con quién y cuándo.
+4. *Ventas → detalle*: sin cobros, **Editar** disponible otra vez; en *Cobranza*, las dos notas vuelven a deber
+   y el saldo a favor desapareció.
+5. Bloqueo: pagar de más una nota (sobra saldo a favor), registrar otra venta, *Aplicar saldo a favor* a
+   ella, pedir el borrado del **primer** pago → en Peticiones, **Confirmar y borrar** deshabilitado con "El
+   saldo a favor que dejó este pago ya se aplicó…". Pedir y autorizar primero el de la aplicación; después el
+   primero ya se autoriza.
+6. **Denegar** una petición con comentario → aparece en Historial como "Denegada" con el comentario; el cobro
+   vuelve a mostrar "Pedir borrado".
+7. Con el filtro global en MX, Peticiones no muestra las de TJ.
+8. Con el usuario sin permisos: Peticiones dice "No tienes permiso para ver peticiones" y en el detalle de venta
+   no hay "Pedir borrado".
+
+Toma una captura de la bandeja con una pendiente y de la vista previa de autorizar para el PR. Al terminar,
+apaga el backend y el portal, y deja `.env.development` como estaba.
+
+- [ ] **Paso 3: `CLAUDE.md`**
+
+a) En la viñeta **Toda corrección de una venta va por el portal (T-17, parte 2)**, cambia
+
+```markdown
+  - Una venta con abonos vivos de `origen` `cobro` o `saldo_favor` (T-21), o en cuenta perdida, no se edita ni se elimina.
+    Quitar cobros es T-34.
+```
+
+por
+
+```markdown
+  - Una venta con abonos vivos de `origen` `cobro` o `saldo_favor` (T-21), o en cuenta perdida, no se edita ni se elimina.
+    Para quitarlos se pide el borrado del pago en Peticiones (T-34, abajo).
+```
+
+b) En el bloque **Cobranza desde el portal (T-21)**, cambia
+`  - Un cobro del portal **no se deshace** todavía: eso es T-34. Por eso la vista previa.` por
+`  - Un cobro (de la tablet o del portal) se deshace **solo** con una petición autorizada (T-34, abajo).`
+
+c) Justo después del bloque **Cobranza desde el portal (T-21)** (antes de **Jornada y kilometraje (T-38)**),
+agrega:
+
+```markdown
+- **Peticiones: borrar un pago con autorización (T-34).** Quien tiene `cobranza.editar_eliminar` **pide**
+  (`POST /peticiones/eliminar-cobro`, con motivo); quien tiene `peticiones.gestionar` **autoriza o deniega** en
+  *Operación → Peticiones*. Puede ser la misma persona (decisión de Roberto, 2026-10-13). Todo en
+  `ventas-cobranza/peticiones.*`, `cobros-borrado.*`, `cobros.controller.ts` y `reglas-borrado-cobro.ts`.
+  - **El pago es una entidad: tabla `cobro`.** Cada cobro (tablet, portal o aplicar saldo a favor) crea su fila
+    en `cobro`, y sus filas de `cobranza_abono` y su `saldo_favor_movimiento` cuelgan de él con `cobro_id`. El
+    cobro automático de una venta de **contado no es un pago**: `cobro_id` null (`ck_cobranza_abono_cobro`) y se
+    corrige editando la venta. Quien escriba cobros por debajo del servicio (pruebas incluidas) crea su `cobro`
+    (`apps/backend/test/apoyo-cobros.ts`). La entidad del push de cobranza en `sync_operacion` es el `cobro`.
+  - **Se borra el pago completo**, nunca un pedazo: `deleted_at` en el `cobro` (+ `eliminado_por_usuario_id`),
+    sus filas y su saldo a favor; cada nota recalcula su status (`cuenta_perdida` se queda). El status se
+    escribe aunque no cambie y se toca `cliente.updated_at`: así la tablet recibe la nota otra vez pendiente en
+    el pull **sin cambiar la app**.
+  - **Candados al autorizar:** la `peticion` (`for update`) → notas del cliente → su saldo a favor → el `cobro`.
+    Mismo orden que el cobro: sin abrazo mortal con T-20/T-21. La vista previa toma los mismos candados.
+  - **Se rechaza (409)** si el saldo a favor que dejó el pago ya se aplicó (quedaría negativo): primero se borra
+    el pago que lo aplicó. La petición sigue pendiente.
+  - Una sola petición **pendiente** por pago (`uq_peticion_cobro_pendiente`). El alcance (sucursal del cliente)
+    se comprueba **antes** de decir si el pago está borrado o la petición resuelta.
+  - **Corte, Flujo de Efectivo y Tesorería** (aún no existen) deben contar pagos de `cobro` **vivos** y excluir
+    los de origen `saldo_favor` (no es dinero nuevo).
+```
+
+d) En el párrafo "Si el pull trajo migraciones y prefieres partir limpio, `npm run supabase -- db reset`
+reaplica las 23+ desde cero", no cambies nada (sigue siendo cierto).
+
+- [ ] **Paso 4: Commit**
+
+```bash
+git add CLAUDE.md
+git commit -m "T-34: CLAUDE.md anota el pago como entidad y las peticiones de borrado
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+**No hagas push ni abras el PR.** Entrega en tu reporte, tal cual, los textos de los pasos 5 y 6.
+
+- [ ] **Paso 5: Textos para el vault (los aplica quien coordina en `../jawa-obsidian-memory`)**
+
+- `30-Decisiones/ADR-0013 El pago como entidad y peticiones de borrado.md` (nuevo, frontmatter de
+  `Plantilla ADR`: `tipo: adr`, `producto: ambos`, `estado: aceptado`, `relacionado` con [[Cobranza-Abono]],
+  [[Ventas y Cobranza]], [[Portal Web]], [[ADR-0009 Proyección de operaciones sincronizadas a los módulos de dominio]],
+  [[ADR-0012 La cobranza no lleva folio]]):
+  - **Contexto:** el cliente pide borrar una cobranza mal capturada con autorización del administrador (fuentes
+    v2.0 y julio); un pago a varias notas eran filas sueltas sin nada que las uniera; borrar un pedazo deja las
+    cuentas chuecas.
+  - **Decisión:** tabla `cobro` (un renglón por pago, `cobro_id` en abonos y saldo a favor; el cobro de contado
+    no es un pago); se borra el pago completo vía `peticion` (pendiente → autorizada/denegada), con
+    `cobranza.editar_eliminar` para pedir y `peticiones.gestionar` para resolver, la misma persona puede hacer
+    las dos; cualquier fecha; candados en el orden del cobro; se rechaza si el saldo a favor que dejó ya se
+    aplicó. La entidad del push de cobranza pasa a ser el `cobro` (enmienda a ADR-0009 §2.4).
+  - **Consecuencias:** la tablet no cambia (las notas vuelven en el pull); Corte/Flujo/Tesorería deben contar
+    pagos vivos; pedir desde la app queda para después (necesitaría `solicito_vendedor_id` y bajar `cobro_id`
+    en el pull); la bandeja nace genérica (`tipo`) para peticiones de ventas o producción.
+  - Agregar la línea en `30-Decisiones/_MOC Decisiones.md`.
+- `10-Dominio/Entidades/Cobranza-Abono.md` (`actualizado:`): en el `[!tip] Consideraciones para el modelo de
+  datos`, la viñeta de "eliminar una cobranza" gana "— **implementado en T-34** (petición en el portal; pedir
+  desde la app queda pendiente)". Agregar un `[!success] Implementado en T-34 (2026-10-13)` con: el pago como
+  entidad (`cobro`), se borra completo, status recalculado, bloqueo por saldo a favor aplicado, la tablet lo
+  recibe en el pull. Enlace al spec y a ADR-0013.
+- `10-Dominio/Modulos/Ventas y Cobranza.md`: sección "Peticiones" con el flujo (pedir con motivo desde Ventas o
+  Cobranza → bandeja → autorizar/denegar) y los permisos.
+- `20-Arquitectura/Portal Web.md`: la viñeta **Peticiones** de Operación gana "Implementado en T-34: hoy solo el
+  borrado de pagos; pestañas Pendientes/Historial, filtro por sucursal".
+- `00-Inicio/Estado del proyecto.md`: fila de T-34 con el PR (y `actualizado:`).
+- `40-Equipo/Bitácora/2026-10-13.md`: las decisiones de Roberto (petición en portal; solo cobros; pago completo;
+  la misma persona puede pedir y autorizar; cualquier fecha; tabla `cobro`) y las desviaciones del plan.
+
+- [ ] **Paso 6: Texto para el PR (lo abre quien coordina)**
+
+````markdown
+## T-34 · Peticiones — borrar un cobro con autorización
+
+Un pago mal capturado (de la tablet o del portal, o una aplicación de saldo a favor) ya se puede borrar:
+quien tiene *Editar y eliminar cobranza* **pide** el borrado con un motivo desde el detalle de la venta o
+desde Cobranza, y quien tiene *Peticiones* lo **autoriza o deniega** en *Operación → Peticiones*.
+
+- **El pago es una entidad** (tabla `cobro`): sus filas en notas y su saldo a favor cuelgan de él. Se borra
+  **completo**; cada nota recalcula su status y la venta se vuelve a poder editar.
+- **La tablet no cambia**: la nota vuelve a ella como pendiente en el siguiente pull, con el saldo a favor nuevo.
+- Se rechaza si el saldo a favor que dejó el pago ya se aplicó (primero se borra el que lo aplicó).
+- Candados en el orden del cobro (petición → notas → saldo a favor → pago); una sola petición pendiente por pago.
+
+### Desviaciones del spec (decididas al escribir el plan)
+
+(copiar la lista "Desviaciones del spec" del plan, 1–7)
+
+### Migración `20261013120000_peticiones_cobro` — pre-flight en `sinmex dev`
+
+```sql
+-- Lo que el relleno tendria que agrupar. Al 2026-10-13 ambas daban 0.
+select count(*) from cobranza_abono where origen <> 'venta_contado';
+select count(*) from saldo_favor_movimiento;
+-- Si alguna no da 0: aplicaciones de saldo a favor sin abonos del mismo instante (quedarian sin pago y la
+-- migracion abortaria sola). Debe dar 0.
+select count(*) from saldo_favor_movimiento sf
+ where sf.origen = 'aplicacion'
+   and not exists (select 1 from cobranza_abono ca join venta_nota vn on vn.id = ca.venta_nota_id
+                    where vn.cliente_id = sf.cliente_id and ca.created_at = sf.created_at
+                      and ca.origen = 'saldo_favor');
+-- Los nombres nuevos estan libres: deben dar 0.
+select count(*) from pg_tables where schemaname = 'public' and tablename in ('cobro', 'peticion');
+select count(*) from information_schema.columns
+ where table_name in ('cobranza_abono', 'saldo_favor_movimiento') and column_name = 'cobro_id';
+```
+
+La migración valida sola que no quede nada sin agrupar (`raise exception`) y falla entera si pasa. Si `main` ya
+tiene una migración con timestamp posterior a `20261013120000`, el `db push` necesitará `--include-all`:
+anotarlo aquí con la razón.
+
+### Para Mario
+
+La app **no cambia**. Una nota cuyo cobro se borra en el portal vuelve a la tablet como pendiente en el siguiente
+pull y se cobra como siempre. Si después quieres que el vendedor pida el borrado desde la tablet, el §8 del spec
+dice qué haría falta (`solicito_vendedor_id` en `peticion` y bajar el `cobro_id` en el pull).
+
+### Pruebas
+
+(conteos del Paso 1) · capturas de la bandeja y de la vista previa · Closes #34
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+````
+
+---
+
+## Autorrevisión del plan (hecha al escribirlo)
+
+- **Cobertura del spec:** §2 (flujo, alcance solo cobros, pago completo, misma persona, cualquier fecha, tabla
+  `cobro`) → Tareas 1, 3 y 4. §3.1 (pedir desde Ventas y Cobranza, vista previa, motivo, "Borrado pedido ·
+  pendiente") → Tareas 5 y 6. §3.2 (bandeja, pestañas, filtro por sucursal, autorizar/denegar, 409 visible) →
+  Tareas 4 y 7. §4.1 (modelo y relleno) → Tarea 1. §4.2 (todo cobro nace con su pago, entidad del push) →
+  Tarea 1. §4.3 (regla y borrado con candados) → Tareas 2 y 3. §4.4 (endpoints) → Tarea 4. §4.5 (pull de la
+  tablet, edición de ventas, lectores) → Tareas 4 y 5. §4.6 (portal) → Tareas 6 y 7. §4.7 (pre-flight) →
+  Tarea 8. §5 respetado: la app no se toca, sin peticiones de ventas/producción, sin cancelar, sin Corte/
+  Tesorería. §6 → pruebas en cada tarea. §7 → Tarea 8. §8 → texto del PR.
+- **Sin huecos:** cada paso de código trae el código; las ediciones a archivos existentes citan el texto exacto
+  a cambiar o el lugar exacto donde insertar.
+- **Tipos consistentes:** `CabeceraCobro`, `VistaBorrado`, `CobroEnVista`, `NotaTrasBorrar`, `BloqueoBorrado`
+  (Tareas 2–3) son los que consumen la Tarea 4 (backend) y la copia del portal en `lib/peticiones.ts` (Tarea 6);
+  `PeticionEnBandeja`/`CobroDePeticion` (Tarea 4) igual en la Tarea 6; `cobroId`/`peticionPendiente`
+  (Tarea 5) en `CobroDeVenta` y `AbonoAnterior` de backend y portal. `NuevoCobro.monto` y `NuevoSaldoFavor.cobroId`
+  (Tarea 1) los usa `escribir`. Los mensajes de las "Restricciones globales" son las constantes de las Tareas 2–4
+  y los textos de `lib/peticiones.ts`.
+- **Review Focus con su prueba:** 1 → Tarea 3 (orden de candados, unitaria) y Tarea 4 (saldo ya aplicado, e2e);
+  2 → Tarea 4 (dos autorizaciones y autorizar+denegar con `Promise.all`); 3 → Tarea 2 (unitaria) y Tarea 4 (e2e);
+  4 → Tarea 4 (usuario de TJ contra MX, también ya resuelta); 5 → Tarea 4 (409 de pendiente y de borrado) y
+  Tareas 6–7 (409 visible y recarga).
