@@ -1,5 +1,11 @@
-import { Placeholder } from "@/components/layout/placeholder";
+import { ListaReportes } from "@/components/reportes/lista-reportes";
 
-export default function Page() {
-  return <Placeholder title="Reportes" />;
+// Server component delgado (mismo patron que /operacion/peticiones).
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ sucursal?: string }>;
+}) {
+  const { sucursal } = await searchParams;
+  return <ListaReportes sucursal={sucursal ?? null} />;
 }
