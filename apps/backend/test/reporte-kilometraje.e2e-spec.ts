@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
@@ -37,6 +38,7 @@ describe('Reporte de kilometraje (e2e)', () => {
   let vehB: string; // TJ, desactivado
   let vehMx: string; // MX
   let vehC: string; // TJ, dos jornadas el mismo dia
+  let vehGrande: string; // TJ, km en el tope de la columna
   let juan: string;
   let pedro: string;
   let ana: string; // MX
@@ -194,6 +196,7 @@ describe('Reporte de kilometraje (e2e)', () => {
     vehB = await sembrarVehiculo('B', idTijuana, false);
     vehMx = await sembrarVehiculo('MX', idMexicali);
     vehC = await sembrarVehiculo('C', idTijuana);
+    vehGrande = await sembrarVehiculo('Grande', idTijuana);
 
     // Vehiculo A: 01/03 fuera del rango que se consulta (desde 05/03),
     // 03/03 BORRADA (Review Focus 2: no cuenta como anterior), 05/03 con salto
@@ -231,8 +234,11 @@ describe('Reporte de kilometraje (e2e)', () => {
       kmInicial: 10520,
       kmFinal: 10600,
     });
-    // Vehiculo C: EMPATE de fecha. Se siembra primero la que cerro DESPUES, para
-    // que el orden por id (fijado aqui: el de Pedro, que cierra despues, tiene el id menor) no sea el de cierre y la prueba distinga.
+    // Vehiculo C: EMPATE de fecha. Se siembra primero la que cerro DESPUES
+    // (Pedro, 23:00) y se le da el id MENOR: lo que fuerza el caso es el id, no
+    // el orden de insercion; ordenar por id pondria a Pedro antes que a Juan y
+    // la prueba lo notaria. Ids al azar para no chocar con una corrida previa.
+    const [idMenor, idMayor] = [randomUUID(), randomUUID()].sort();
     await sembrarJornada({
       vendedorId: pedro,
       vehiculoId: vehC,
@@ -241,7 +247,7 @@ describe('Reporte de kilometraje (e2e)', () => {
       kmInicial: 300,
       kmFinal: 340,
       cerradaEn: '2019-04-02T23:00:00Z',
-      id: '00000000-0000-4000-8000-0000000000c1',
+      id: idMenor,
     });
     await sembrarJornada({
       vendedorId: juan,
@@ -251,7 +257,25 @@ describe('Reporte de kilometraje (e2e)', () => {
       kmInicial: 100,
       kmFinal: 150,
       cerradaEn: '2019-04-02T20:00:00Z',
-      id: 'ffffffff-ffff-4fff-8fff-ffffffffffc2',
+      id: idMayor,
+    });
+    // Vehiculo Grande: km en el tope de numeric(10,1) (999,999,999.9), que en
+    // decimas no cabe en un int4. La segunda jornada trae un salto.
+    await sembrarJornada({
+      vendedorId: juan,
+      vehiculoId: vehGrande,
+      sucursalId: idTijuana,
+      fecha: '2019-05-01',
+      kmInicial: 999999990.9,
+      kmFinal: 999999999.9,
+    });
+    await sembrarJornada({
+      vendedorId: juan,
+      vehiculoId: vehGrande,
+      sucursalId: idTijuana,
+      fecha: '2019-05-02',
+      kmInicial: 999999999.9,
+      kmFinal: 999999999.9,
     });
     // Vehiculo B (desactivado): una jornada.
     await sembrarJornada({
@@ -414,7 +438,36 @@ describe('Reporte de kilometraje (e2e)', () => {
     });
   });
 
+  it('un kilometraje en el tope de la columna no tumba el reporte (decimas > int4)', async () => {
+    const res = await pedirReporte(
+      cookieGeneral,
+      `desde=2019-05-01&hasta=2019-05-31&vehiculo=${vehGrande}`,
+    ).expect(200);
+    const [v] = (res.body as ReporteKilometraje).vehiculos;
+    expect(v.jornadas[0]).toMatchObject({
+      kmInicialDecimas: 9999999909,
+      kmFinalDecimas: 9999999999,
+      kilometrosDecimas: 90,
+      saltoDecimas: null,
+    });
+    expect(v.jornadas[1]).toMatchObject({
+      kmInicialDecimas: 9999999999,
+      kmFinalDecimas: 9999999999,
+      kilometrosDecimas: 0,
+      saltoDecimas: 0,
+      fechaAnterior: '2019-05-01',
+    });
+  });
+
   it.each([
+    [
+      'desde=0000-01-01&hasta=2019-03-31',
+      'La fecha "desde" no es una fecha válida.',
+    ],
+    [
+      'desde=2019-03-01&hasta=0001-01-01',
+      'La fecha "hasta" no es una fecha válida.',
+    ],
     [
       'desde=2019-3-1&hasta=2019-03-31',
       'La fecha "desde" debe tener el formato AAAA-MM-DD.',

@@ -39,9 +39,10 @@ export class ReporteKilometrajeRepository {
       vehiculo_activo: boolean;
       fecha: string;
       vendedor: string;
-      km_inicial_decimas: number;
-      km_final_decimas: number;
-      km_final_anterior_decimas: number | null;
+      // bigint: node-pg lo entrega como texto (int4 desbordaba desde 214,748,364.8 km).
+      km_inicial_decimas: string;
+      km_final_decimas: string;
+      km_final_anterior_decimas: string | null;
       fecha_anterior: string | null;
     }>`
       with base as (
@@ -64,9 +65,9 @@ export class ReporteKilometrajeRepository {
              v.activo as vehiculo_activo,
              to_char(b.fecha, 'YYYY-MM-DD') as fecha,
              ve.nombre as vendedor,
-             round(b.km_inicial * 10)::int as km_inicial_decimas,
-             round(b.km_final * 10)::int as km_final_decimas,
-             round(b.km_final_anterior * 10)::int as km_final_anterior_decimas,
+             round(b.km_inicial * 10)::bigint as km_inicial_decimas,
+             round(b.km_final * 10)::bigint as km_final_decimas,
+             round(b.km_final_anterior * 10)::bigint as km_final_anterior_decimas,
              to_char(b.fecha_anterior, 'YYYY-MM-DD') as fecha_anterior
         from base b
         join vehiculo v on v.id = b.vehiculo_id
@@ -83,9 +84,12 @@ export class ReporteKilometrajeRepository {
       vehiculoActivo: r.vehiculo_activo,
       fecha: r.fecha,
       vendedor: r.vendedor,
-      kmInicialDecimas: r.km_inicial_decimas,
-      kmFinalDecimas: r.km_final_decimas,
-      kmFinalAnteriorDecimas: r.km_final_anterior_decimas,
+      kmInicialDecimas: Number(r.km_inicial_decimas),
+      kmFinalDecimas: Number(r.km_final_decimas),
+      kmFinalAnteriorDecimas:
+        r.km_final_anterior_decimas === null
+          ? null
+          : Number(r.km_final_anterior_decimas),
       fechaAnterior: r.fecha_anterior,
     }));
   }
