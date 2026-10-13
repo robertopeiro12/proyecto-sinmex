@@ -1,5 +1,11 @@
-import { Placeholder } from "@/components/layout/placeholder";
+import { PantallaRutaDiaria } from "@/components/rutas/pantalla-ruta-diaria";
 
-export default function Page() {
-  return <Placeholder title="Ruta Diaria" />;
+// Server component delgado (mismo patrón que /operacion/cobranza).
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ sucursal?: string }>;
+}) {
+  const { sucursal } = await searchParams;
+  return <PantallaRutaDiaria sucursal={sucursal ?? null} />;
 }

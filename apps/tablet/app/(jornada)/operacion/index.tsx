@@ -10,11 +10,8 @@ import { Pantalla, Tarjeta } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
 
 /**
- * Clientes a visitar. Se leen de SQLite, sin red: es la demostracion de que la
- * capa de datos local sirve para **consultar offline**.
- *
- * TODO: T-37 — el orden real es el de la [[Rutas|ruta diaria]] del vendedor,
- *       no alfabetico; la ruta baja del portal con la sincronizacion.
+ * Todos los clientes de la sucursal (T-37: sale del menu hamburguesa; el camino
+ * principal es la ruta del dia). Se leen de SQLite, sin red.
  */
 export default function ListaClientes() {
   const { datos, sucursalId, versionCatalogos } = useJawa();
@@ -36,7 +33,7 @@ export default function ListaClientes() {
 
   return (
     <Pantalla
-      titulo="Clientes de hoy"
+      titulo="Todos los clientes"
       subtitulo={
         <Text style={estilos.subtitulo}>
           <Cifra valor={clientes.length} tono="suave" /> cliente(s) en el catálogo local. Catálogos

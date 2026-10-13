@@ -82,7 +82,7 @@ import { trocearLotes } from './lotes';
  * De donde salen las operaciones que se suben.
  *
  * Cada modulo de negocio registra la suya sin tocar el motor: hoy jornada
- * (T-04), venta (T-16), prospecto (T-40) y cobranza (T-20), en
+ * (T-04), venta (T-16), prospecto (T-40), cobranza (T-20) y el alta de ruta (T-37), en
  * `proveedor-sesion.tsx`. Faltan gasto, merma y ruta (T-27/T-33/T-39).
  */
 export interface FuenteOperaciones {
@@ -482,6 +482,10 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
       ...nota,
       abonos_json: JSON.stringify(abonos ?? []),
     })),
+    // T-37: un servidor anterior a este ticket no manda la coleccion. Se pasa
+    // `undefined` y `guardarSnapshot` no escribe nada de la ruta: la tablet
+    // funciona sin ruta asignada (D3).
+    rutas: respuesta.rutas,
   };
 }
 

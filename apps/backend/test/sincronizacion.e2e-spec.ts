@@ -181,6 +181,98 @@ describe('Sincronizacion pull/push (e2e)', () => {
   const vehiculosT38: string[] = [];
 
   /* ---------------------------------------------------------------- */
+  /* Ruta diaria (T-37)                                                */
+  /* ---------------------------------------------------------------- */
+
+  /** Clientes que crean las pruebas de T-37; los borra el `afterAll`. */
+  const clientesRuta: string[] = [];
+
+  /** Un cliente nuevo de la sucursal del vendedor, para UNA prueba de ruta. */
+  const clienteDeRuta = async (
+    extra: {
+      tipo?: 'cliente' | 'prospecto';
+      sucursal_id?: string;
+      deleted_at?: Date;
+    } = {},
+  ) => {
+    const lista = await db
+      .selectFrom('lista_precio')
+      .select('id')
+      .where('nombre', '=', 'Lista 1')
+      .executeTakeFirstOrThrow();
+    const prospecto = extra.tipo === 'prospecto';
+    const id = (
+      await db
+        .insertInto('cliente')
+        .values({
+          nombre: `Ruta ${SUFIJO} ${clientesRuta.length + 1}`,
+          // Un prospecto de la app no trae domicilio ni lista (T-40).
+          domicilio: prospecto ? null : 'Calle 9 #4',
+          telefono: '6640000009',
+          tipo: extra.tipo ?? 'cliente',
+          lista_precio_id: prospecto ? null : lista.id,
+          sucursal_id: extra.sucursal_id ?? sucursalId,
+          deleted_at: extra.deleted_at ?? null,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+    clientesRuta.push(id);
+    return id;
+  };
+
+  /**
+   * Una fila de `ruta` escrita por debajo del servicio. `dias` es relativo a
+   * `current_date` de Postgres (el reloj con el que el pull calcula su ventana);
+   * `fecha` fija un dia exacto en su lugar.
+   */
+  const sembrarRuta = async (valores: {
+    cliente: string;
+    vendedor?: string;
+    dias?: number;
+    fecha?: string;
+    orden?: number;
+    origen?: 'oficina' | 'vendedor';
+    tipo?: 'diaria' | 'semanal';
+    borrada?: boolean;
+    actualizadaHace?: string;
+  }) =>
+    (
+      await db
+        .insertInto('ruta')
+        .values({
+          cliente_id: valores.cliente,
+          vendedor_id: valores.vendedor ?? vendedorId,
+          fecha:
+            valores.fecha ??
+            sql<string>`current_date + ${valores.dias ?? 0}::int`,
+          orden: valores.orden ?? 1,
+          origen: valores.origen ?? 'oficina',
+          tipo: valores.tipo ?? 'diaria',
+          deleted_at: valores.borrada ? new Date() : null,
+          // El trigger solo corre en UPDATE: en el INSERT se puede fechar hacia
+          // atras, que es lo que necesita la prueba del pull incremental.
+          ...(valores.actualizadaHace
+            ? {
+                updated_at: sql<Date>`now() - ${valores.actualizadaHace}::interval`,
+              }
+            : {}),
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+
+  /** `current_date + dias` de Postgres, como `AAAA-MM-DD`. */
+  const fechaServidor = async (dias: number) =>
+    (
+      await sql<{
+        f: string;
+      }>`select to_char(current_date + ${dias}::int, 'YYYY-MM-DD') as f`.execute(
+        db,
+      )
+    ).rows[0].f;
+
+  /* ---------------------------------------------------------------- */
   /* Ventas (T-16)                                                     */
   /* ---------------------------------------------------------------- */
 
@@ -733,6 +825,11 @@ describe('Sincronizacion pull/push (e2e)', () => {
       .deleteFrom('sync_operacion')
       .where('vendedor_id', 'in', [vendedorId, vendedorAjenoId])
       .execute();
+    // T-37: la ruta diaria apunta a vendedor y cliente.
+    await db
+      .deleteFrom('ruta')
+      .where('vendedor_id', 'in', [vendedorId, vendedorAjenoId])
+      .execute();
     // T-38: las jornadas proyectadas apuntan a vendedor y vehiculo.
     await db
       .deleteFrom('jornada')
@@ -785,7 +882,12 @@ describe('Sincronizacion pull/push (e2e)', () => {
       .execute();
     await db
       .deleteFrom('cliente')
-      .where('id', 'in', [clienteId, clienteAjenoId, ...clientesCobro])
+      .where('id', 'in', [
+        clienteId,
+        clienteAjenoId,
+        ...clientesCobro,
+        ...clientesRuta,
+      ])
       .execute();
     await db
       .deleteFrom('presentacion')
@@ -3510,6 +3612,329 @@ describe('Sincronizacion pull/push (e2e)', () => {
         id_servidor: primero.resultados[0].id_servidor,
       });
       expect(await jornadasDel(fecha)).toHaveLength(1);
+    });
+  });
+
+  describe('ruta diaria: pull (T-37)', () => {
+    it('sin desde baja la ruta VIVA del vendedor, de ayer en adelante (sin tope), con orden y origen', async () => {
+      const c = await clienteDeRuta();
+      const fueraAntes = await sembrarRuta({ cliente: c, dias: -2 });
+      const ayer = await sembrarRuta({ cliente: c, dias: -1 });
+      const hoy = await sembrarRuta({
+        cliente: c,
+        dias: 0,
+        orden: 2,
+        origen: 'vendedor',
+      });
+      const ultimoDia = await sembrarRuta({ cliente: c, dias: 7 });
+      // Antes la ventana tenia tope en `+ 7`; ya no (D12, ajuste).
+      const masAdelante = await sembrarRuta({ cliente: c, dias: 8 });
+      const otro = await clienteDeRuta();
+      const borrada = await sembrarRuta({
+        cliente: otro,
+        dias: 0,
+        borrada: true,
+      });
+      const semanal = await sembrarRuta({
+        cliente: otro,
+        dias: 0,
+        tipo: 'semanal',
+      });
+      const ajena = await sembrarRuta({
+        cliente: clienteAjenoId,
+        vendedor: vendedorAjenoId,
+        dias: 0,
+      });
+
+      const cuerpo = (await pull().expect(200)).body as RespuestaPull;
+      const ids = new Set(cuerpo.rutas.map((r) => r.id));
+
+      expect(ids.has(ayer)).toBe(true);
+      expect(ids.has(hoy)).toBe(true);
+      expect(ids.has(ultimoDia)).toBe(true);
+      expect(ids.has(masAdelante)).toBe(true);
+      // Antes de ayer, dada de baja, semanal (T-36) o de otro vendedor: no.
+      for (const id of [fueraAntes, borrada, semanal, ajena]) {
+        expect(ids.has(id)).toBe(false);
+      }
+
+      expect(cuerpo.rutas.find((r) => r.id === hoy)).toEqual({
+        id: hoy,
+        cliente_id: c,
+        fecha: await fechaServidor(0),
+        orden: 2,
+        origen: 'vendedor',
+        activo: 1,
+      });
+    });
+
+    it('con desde baja solo lo que cambio, y una fila que la oficina quito viaja con activo 0', async () => {
+      const c = await clienteDeRuta();
+      const quieta = await sembrarRuta({
+        cliente: c,
+        dias: 0,
+        actualizadaHace: '1 hour',
+      });
+      const otro = await clienteDeRuta();
+      const quitada = await sembrarRuta({
+        cliente: otro,
+        dias: 0,
+        actualizadaHace: '1 hour',
+      });
+      const desde = (
+        await sql<{
+          t: Date;
+        }>`select now() - interval '1 minute' as t`.execute(db)
+      ).rows[0].t.toISOString();
+
+      // La oficina la quita desde el portal: baja logica, y el trigger mueve
+      // `updated_at`, que es lo que la hace viajar en el pull incremental.
+      await db
+        .updateTable('ruta')
+        .set({ deleted_at: new Date() })
+        .where('id', '=', quitada)
+        .execute();
+
+      const cuerpo = (await pull({ desde }).expect(200)).body as RespuestaPull;
+
+      expect(cuerpo.rutas.some((r) => r.id === quieta)).toBe(false);
+      expect(cuerpo.rutas.find((r) => r.id === quitada)).toMatchObject({
+        id: quitada,
+        activo: 0,
+      });
+    });
+
+    it('una ruta asignada a mas de 7 dias baja en el pull incremental', async () => {
+      // El escenario real: la tablet ya hizo su pull completo (`desde` = hace
+      // un minuto) y la oficina guarda AHORA una ruta para dentro de 9 dias.
+      // Con la ventana topada en `+ 7` no bajaba ahora, y cuando entraba a la
+      // ventana su `updated_at` ya era anterior al cursor: no bajaba nunca.
+      const desde = (
+        await sql<{
+          t: Date;
+        }>`select now() - interval '1 minute' as t`.execute(db)
+      ).rows[0].t.toISOString();
+      const c = await clienteDeRuta();
+      const lejana = await sembrarRuta({ cliente: c, dias: 9 });
+
+      const cuerpo = (await pull({ desde }).expect(200)).body as RespuestaPull;
+
+      expect(cuerpo.rutas.find((r) => r.id === lejana)).toMatchObject({
+        id: lejana,
+        cliente_id: c,
+        fecha: await fechaServidor(9),
+        activo: 1,
+      });
+    });
+  });
+
+  describe('ruta diaria: push de ruta-alta (T-37)', () => {
+    /** Un alta de ruta como la arma `fuente-rutas.ts`: el cliente va en `datos`. */
+    const altaRuta = (
+      cliente: string,
+      fecha: string,
+      extra: Record<string, unknown> = {},
+    ) =>
+      operacion({
+        tipo: 'ruta-alta',
+        fecha_operacion: fecha,
+        ocurrido_en: `${fecha}T16:05:00.000-07:00`,
+        datos: { cliente_id: cliente },
+        ...extra,
+      });
+
+    /** Las filas de `ruta` del vendedor de la prueba para ese cliente. */
+    const rutasDe = (cliente: string) =>
+      db
+        .selectFrom('ruta')
+        .select([
+          'id',
+          'orden',
+          'origen',
+          'tipo',
+          'deleted_at',
+          sql<string>`to_char(fecha, 'YYYY-MM-DD')`.as('fecha'),
+        ])
+        .where('vendedor_id', '=', vendedorId)
+        .where('cliente_id', '=', cliente)
+        .orderBy('created_at')
+        .execute();
+
+    /** Un dia propio por prueba: la ruta del vendedor es nueva en cada corrida. */
+    let ultimoDiaRuta = 0;
+    const diaDeRuta = () =>
+      new Date(Date.UTC(2024, 2, 1) + ultimoDiaRuta++ * 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+
+    it('un alta entra a `ruta` como del vendedor y el buzon dice a que fila se convirtio', async () => {
+      const c = await clienteDeRuta();
+      const fecha = diaDeRuta();
+      const op = altaRuta(c, fecha);
+
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      expect(res.resultados[0].estado).toBe('aplicada');
+
+      const filas = await rutasDe(c);
+      expect(filas).toEqual([
+        {
+          id: expect.any(String) as string,
+          orden: 1,
+          origen: 'vendedor',
+          tipo: 'diaria',
+          deleted_at: null,
+          fecha,
+        },
+      ]);
+      expect(await buzonDe(op.clave)).toEqual({
+        id: res.resultados[0].id_servidor,
+        entidad_tabla: 'ruta',
+        entidad_id: filas[0].id,
+      });
+    });
+
+    it('el buzon conserva el cliente del alta en datos (Review Focus 5)', async () => {
+      const c = await clienteDeRuta();
+      const op = altaRuta(c, diaDeRuta());
+
+      await push({ operaciones: [op] }).expect(200);
+
+      const fila = await db
+        .selectFrom('sync_operacion')
+        .select(sql<string | null>`datos->>'cliente_id'`.as('cliente'))
+        .where('vendedor_id', '=', vendedorId)
+        .where('clave_idempotencia', '=', op.clave)
+        .executeTakeFirstOrThrow();
+      expect(fila.cliente).toBe(c);
+    });
+
+    it('va al final: orden siguiente a las vivas de ese vendedor y dia', async () => {
+      const fecha = diaDeRuta();
+      const deLaOficina = await clienteDeRuta();
+      await sembrarRuta({ cliente: deLaOficina, fecha, orden: 5 });
+      const quitado = await clienteDeRuta();
+      // Una baja no cuenta para el orden.
+      await sembrarRuta({ cliente: quitado, fecha, orden: 9, borrada: true });
+      const c = await clienteDeRuta();
+
+      const res = (
+        await push({ operaciones: [altaRuta(c, fecha)] }).expect(200)
+      ).body as RespuestaPush;
+
+      expect(res.resultados[0].estado).toBe('aplicada');
+      expect(await rutasDe(c)).toMatchObject([{ orden: 6 }]);
+    });
+
+    it('un alta de AYER subida hoy cae en la ruta de ayer y no choca con la de hoy (Review Focus 2)', async () => {
+      const hoy = hoyEnTijuana();
+      const [a, m, d] = hoy.split('-').map(Number);
+      const ayer = new Date(Date.UTC(a, m - 1, d - 1))
+        .toISOString()
+        .slice(0, 10);
+      const c = await clienteDeRuta();
+      // La oficina ya lo asigno para hoy.
+      await sembrarRuta({ cliente: c, fecha: hoy, orden: 1 });
+
+      const res = (await push({ operaciones: [altaRuta(c, ayer)] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0].estado).toBe('aplicada');
+      const filas = await rutasDe(c);
+      expect(filas.map((f) => [f.fecha, f.origen])).toEqual([
+        [hoy, 'oficina'],
+        [ayer, 'vendedor'],
+      ]);
+    });
+
+    it('datos sin cliente es ruta-datos-invalidos, antes de la transaccion', async () => {
+      const op = altaRuta('x', diaDeRuta(), { datos: {} });
+
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'ruta-datos-invalidos',
+      });
+      expect(res.resultados[0].motivo).toContain('cliente_id');
+      expect(await buzonDe(op.clave)).toBeUndefined();
+    });
+
+    it('un cliente de otra sucursal es cliente-inexistente y no deja fila', async () => {
+      const op = altaRuta(clienteAjenoId, diaDeRuta());
+
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'cliente-inexistente',
+      });
+      expect(await buzonDe(op.clave)).toBeUndefined();
+      expect(await rutasDe(clienteAjenoId)).toHaveLength(0);
+    });
+
+    it('un prospecto es cliente-inexistente: a un prospecto no se le vende (D7)', async () => {
+      const p = await clienteDeRuta({ tipo: 'prospecto' });
+      const op = altaRuta(p, diaDeRuta());
+
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'cliente-inexistente',
+      });
+      expect(await rutasDe(p)).toHaveLength(0);
+    });
+
+    it('un cliente dado de baja es cliente-inexistente', async () => {
+      const borrado = await clienteDeRuta({ deleted_at: new Date() });
+      const res = (
+        await push({ operaciones: [altaRuta(borrado, diaDeRuta())] }).expect(
+          200,
+        )
+      ).body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'cliente-inexistente',
+      });
+    });
+
+    it('el mismo cliente que la oficina ya asigno, con OTRA clave, es ruta-duplicada y no deja fila', async () => {
+      const fecha = diaDeRuta();
+      const c = await clienteDeRuta();
+      await sembrarRuta({ cliente: c, fecha, orden: 1 });
+      const op = altaRuta(c, fecha);
+
+      const res = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(res.resultados[0]).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'ruta-duplicada',
+      });
+      expect(await buzonDe(op.clave)).toBeUndefined();
+      expect(await rutasDe(c)).toMatchObject([{ origen: 'oficina' }]);
+    });
+
+    it('la MISMA clave reenviada es duplicada, con el mismo id y una sola fila', async () => {
+      const c = await clienteDeRuta();
+      const op = altaRuta(c, diaDeRuta());
+
+      const primero = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+      const segundo = (await push({ operaciones: [op] }).expect(200))
+        .body as RespuestaPush;
+
+      expect(primero.resultados[0].estado).toBe('aplicada');
+      expect(segundo.resultados[0]).toMatchObject({
+        estado: 'duplicada',
+        id_servidor: primero.resultados[0].id_servidor,
+      });
+      expect(await rutasDe(c)).toHaveLength(1);
     });
   });
 });

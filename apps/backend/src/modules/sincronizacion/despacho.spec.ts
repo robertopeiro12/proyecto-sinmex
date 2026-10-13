@@ -118,6 +118,30 @@ describe('prepararProyeccion', () => {
     });
   });
 
+  it('un alta de ruta pasa por prepararRutaAlta y sale como proyeccion de ruta-alta (T-37)', () => {
+    expect(
+      prepararProyeccion(
+        op({
+          tipo: 'ruta-alta',
+          folio: null,
+          clienteId: null,
+          datos: { cliente_id: CLIENTE.toUpperCase() },
+        }),
+      ),
+    ).toEqual({
+      ok: true,
+      proyeccion: { tipo: 'ruta-alta', alta: { clienteId: CLIENTE } },
+    });
+  });
+
+  it('un alta de ruta sin cliente es ruta-datos-invalidos (T-37)', () => {
+    expect(
+      prepararProyeccion(
+        op({ tipo: 'ruta-alta', folio: null, clienteId: null, datos: {} }),
+      ),
+    ).toMatchObject({ ok: false, codigo: 'ruta-datos-invalidos' });
+  });
+
   it('una venta valida se prepara para VentasService', () => {
     expect(prepararProyeccion(op())).toEqual({
       ok: true,

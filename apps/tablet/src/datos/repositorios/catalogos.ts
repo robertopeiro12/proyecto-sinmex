@@ -13,6 +13,7 @@ import type {
   Vehiculo,
   Vendedor,
 } from '../tipos';
+import { aplicarSnapshotRutas, type FilaRutaPull } from './rutas';
 
 /**
  * Snapshot de catalogos tal como lo entrega el `pull` de T-07.
@@ -34,6 +35,11 @@ export interface SnapshotCatalogos {
   tiposNegocio?: Omit<TipoNegocio, 'sincronizado_en'>[];
   precios?: Omit<ClientePrecio, 'sincronizado_en'>[];
   notas?: Omit<NotaPendiente, 'sincronizado_en'>[];
+  /**
+   * T-37. La ruta diaria del vendedor. Se aplica con su propia regla de fusion
+   * (`aplicarSnapshotRutas`), no con el upsert generico.
+   */
+  rutas?: FilaRutaPull[];
 }
 
 /** Una fila de la pantalla de venta: que se puede vender y a cuanto (T-16). */
@@ -231,7 +237,8 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
 
       const filasEscritas = enTransaccion(bd, () => {
         // Orden de llaves foraneas: sucursal -> vendedor/vehiculo/cliente,
-        // producto -> presentacion -> cliente_precio -> nota_pendiente.
+        // producto -> presentacion -> cliente_precio -> nota_pendiente;
+        // cliente -> ruta.
         return (
           upsert(bd, 'sucursal', COLUMNAS.sucursal, snapshot.sucursales, ahora) +
           upsert(bd, 'vendedor', COLUMNAS.vendedor, snapshot.vendedores, ahora) +
@@ -242,6 +249,10 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
           upsert(bd, 'tipo_negocio', COLUMNAS.tipo_negocio, snapshot.tiposNegocio, ahora) +
           upsert(bd, 'presentacion', COLUMNAS.presentacion, snapshot.presentaciones, ahora) +
           upsert(bd, 'cliente', COLUMNAS.cliente, snapshot.clientes, ahora) +
+          // T-37: despues de `cliente`, porque la fila de ruta lo referencia y un
+          // cliente nuevo puede venir en este mismo snapshot. Regla de fusion en
+          // `rutas.ts`; omite filas de clientes que la tablet no tiene.
+          aplicarSnapshotRutas(bd, snapshot.rutas, ahora) +
           upsert(bd, 'cliente_precio', COLUMNAS.cliente_precio, snapshot.precios, ahora) +
           upsert(bd, 'nota_pendiente', COLUMNAS.nota_pendiente, snapshot.notas, ahora)
         );

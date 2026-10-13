@@ -67,6 +67,10 @@ export const MAX_BYTES_POR_LOTE = 1_000_000;
  * TODO: T-27 — `gasto` (hielo, gasolina, reparacion, adelanto).
  * TODO: T-33 — `merma` (los 3 tipos de merma del documento de julio 2026).
  * TODO: T-39 — `ruta` (visitas, orden real, tiempos y GPS).
+ * Hecho: T-37 — `ruta-alta`, un cliente que el vendedor agrego a su ruta del
+ *        dia (ver {@link DatosRutaAlta}); se proyecta a la tabla `ruta` con
+ *        `origen = 'vendedor'`. **No** reutiliza `ruta`, que queda reservado a
+ *        la visita de T-39. Tipo nuevo = cambio aditivo: no sube la version.
  * Hecho: T-38 — `jornada` (vehiculo + kilometraje inicial/final del dia ya
  *        cerrado, ver {@link DatosJornada}); se proyecta a la tabla `jornada`.
  *
@@ -82,6 +86,7 @@ export const TIPOS_OPERACION = [
   'merma',
   'ruta',
   'prospecto',
+  'ruta-alta',
 ] as const;
 
 export type TipoOperacion = (typeof TIPOS_OPERACION)[number];
@@ -202,6 +207,26 @@ export const CODIGOS_RECHAZO = [
    * `duplicada`.
    */
   'jornada-duplicada',
+  /**
+   * `datos.cliente_id` de un alta de ruta falta o no es un uuid, o el sobre
+   * trae un folio (un alta de ruta no es una nota que nadie firme). T-37. Bug
+   * de la tablet. Se rechaza antes de abrir la transaccion.
+   */
+  'ruta-datos-invalidos',
+  /**
+   * El cliente de un alta de ruta no existe, esta dado de baja (`deleted_at`),
+   * es de otra sucursal que la del vendedor del token, o es un prospecto (a un
+   * prospecto no se le vende, D7). T-37. No es un bug: el catalogo de la tablet
+   * pudo quedarse viejo. Se reintenta en la siguiente sincronizacion.
+   */
+  'cliente-inexistente',
+  /**
+   * Ya habia una fila viva de ese vendedor, fecha y cliente en la ruta,
+   * subida con **otra** clave (la oficina y el vendedor agregaron al mismo
+   * cliente). T-37. La misma clave es `duplicada`, no esto. **La tablet la
+   * trata como aplicada**: no es un error del vendedor.
+   */
+  'ruta-duplicada',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -369,6 +394,26 @@ export type DatosJornada = {
   abierta_en: string;
   /** Instante ISO-8601 **con zona** en que lo cerro. */
   cerrada_en: string;
+};
+
+/**
+ * `datos` de una operacion `tipo: "ruta-alta"` (T-37): un cliente que el
+ * vendedor agrego a mano a su ruta del dia.
+ *
+ * El cliente va en `datos` y **no** en el sobre a proposito: con el
+ * `cliente_id` del sobre, el alcance generico del push responderia
+ * `cliente-fuera-de-alcance` y la tablet no podria distinguir un prospecto (que
+ * nunca entra a la ruta, D7) de un cliente que el portal movio de sucursal. El
+ * dia de la ruta es `fecha_operacion`, tal cual la manda la tablet. Sin folio.
+ *
+ * El ORDEN no viaja: el que arrastra el vendedor se queda en la tablet (D4); el
+ * servidor pone la fila al final de la ruta de ese dia.
+ *
+ * Es `type` y no `interface` por la misma razon que {@link DatosVenta}.
+ */
+export type DatosRutaAlta = {
+  /** uuid de un `cliente` (no prospecto) de la sucursal del vendedor. */
+  cliente_id: string;
 };
 
 export interface ResultadoOperacion {
@@ -581,6 +626,30 @@ export interface NotaPendientePull extends FilaSincronizable {
   abonos: AbonoPull[];
 }
 
+/**
+ * Una fila de la ruta diaria del vendedor del token (T-37, D12).
+ *
+ * - Solo `tipo = 'diaria'` y solo del vendedor del token.
+ * - Ventana de fechas por el reloj del servidor: desde ayer en adelante, sin
+ *   tope: una ruta futura debe bajar en el pull siguiente a su creacion (con
+ *   tope y el cursor por `updated_at`, una ruta asignada a 8+ dias nunca
+ *   entraba al pull incremental). La tablet decide que dia mostrar con su reloj
+ *   local (Tijuana).
+ * - Incremental por `updated_at` como las demas colecciones. Una fila que la
+ *   oficina quito viaja con `activo: 0` (baja como bandera, nunca como
+ *   ausencia); sin `desde` bajan solo las vivas.
+ *
+ * Coleccion nueva = cambio aditivo: no sube la version.
+ */
+export interface RutaPull extends FilaSincronizable {
+  cliente_id: string;
+  /** `AAAA-MM-DD`, el dia de la asignacion. */
+  fecha: string;
+  /** El orden de la oficina. La tablet lo usa solo si el vendedor no reordeno. */
+  orden: number;
+  origen: 'oficina' | 'vendedor';
+}
+
 export interface RespuestaPull {
   contrato: number;
   /** Reloj del servidor al atender la peticion. */
@@ -629,4 +698,6 @@ export interface RespuestaPull {
     precios: PrecioPull[];
   };
   notas_pendientes: NotaPendientePull[];
+  /** T-37. La ruta diaria del vendedor (ver {@link RutaPull}). Aditiva. */
+  rutas: RutaPull[];
 }

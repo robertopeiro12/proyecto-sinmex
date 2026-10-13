@@ -1,4 +1,4 @@
-import type { FechaISO, MomentoISO, Prospecto } from '../tipos';
+import type { Cliente, FechaISO, MomentoISO, Prospecto } from '../tipos';
 import type { RepositorioCatalogos } from './catalogos';
 import type { DepsRepositorio } from './deps';
 import { exigirJornadaAbierta } from './jornadas';
@@ -205,6 +205,29 @@ export function crearRepositorioProspectos(
           order by grabado_en, rowid`,
         { $vendedor_id: vendedorId, $fecha: fecha },
       );
+    },
+
+    /**
+     * La foto que ESTA tablet tomo del lugar, para "Ver foto" en la ficha del
+     * cliente (T-37, D8). El servidor le da al cliente otro id que el del
+     * prospecto local, asi que se reconoce por nombre (sin mayusculas ni
+     * espacios de mas) y telefono. `null` si no hay: el boton no aparece.
+     *
+     * `lower()` de SQLite solo pliega ASCII (sin ICU): "DOÑA" y "doña" no
+     * coinciden. Es aceptable aqui porque los dos nombres salen del mismo
+     * teclado de la tablet; no es un bug.
+     */
+    fotoLocalDe(cliente: Pick<Cliente, 'nombre' | 'telefono'>): string | null {
+      const fila = bd.getFirstSync<{ foto_uri: string }>(
+        `select foto_uri from prospecto
+          where foto_uri is not null
+            and lower(trim(nombre)) = lower(trim($nombre))
+            and trim(telefono) = trim($telefono)
+          order by grabado_en desc, rowid desc
+          limit 1`,
+        { $nombre: cliente.nombre, $telefono: cliente.telefono },
+      );
+      return fila?.foto_uri ?? null;
     },
 
     /**

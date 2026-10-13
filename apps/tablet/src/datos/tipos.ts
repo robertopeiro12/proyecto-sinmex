@@ -262,6 +262,38 @@ export interface VentaLinea {
   /** El del catalogo local al grabar; 0 solo en lineas de pura promocion. */
   precio_centavos: number;
 }
+
+/** Quien puso al cliente en la ruta (T-37): el portal o el vendedor. */
+export type OrigenRuta = 'oficina' | 'vendedor';
+
+/**
+ * Estado de sincronizacion de una fila de `ruta`. Femenino a proposito, como
+ * lo escribe el spec y la migracion 011 (las demas tablas dicen `sincronizado`).
+ */
+export type SyncEstadoRuta = 'sincronizada' | 'pendiente' | 'error';
+
+/**
+ * Una fila de la ruta del dia (T-37, D15). La escribe el pull; un alta local
+ * del vendedor nace `pendiente`, con `clave` y `origen = 'vendedor'`.
+ */
+export interface Ruta {
+  /** Id del servidor, o uuid local mientras es un alta pendiente. */
+  id: string;
+  cliente_id: string;
+  fecha: FechaISO;
+  /** El del servidor. Lo que el vendedor arrastra vive en `ruta_orden_local`. */
+  orden: number;
+  origen: OrigenRuta;
+  /** `0` = la oficina lo quito de la ruta. La pantalla decide si se ve (D16). */
+  activo: Booleano;
+  sync_estado: SyncEstadoRuta;
+  /** Motivo con el que el servidor la rechazo, si `sync_estado = 'error'`. */
+  sync_error: string | null;
+  /** Clave de idempotencia de un alta local (= su id); `null` en las del servidor. */
+  clave: string | null;
+  /** Cuando bajo. En un alta pendiente, cuando se capturo (va como `ocurrido_en`). */
+  sincronizado_en: MomentoISO;
+}
 /**
  * Prospecto que el vendedor dio de alta en ruta (T-40).
  *

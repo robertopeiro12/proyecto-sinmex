@@ -220,6 +220,21 @@ describe('aSnapshot (T-20)', () => {
   });
 });
 
+describe('aSnapshot (T-37)', () => {
+  it('pasa la ruta del pull al snapshot y tolera un servidor que todavia no la manda', () => {
+    const fila = {
+      id: 'srv-1',
+      cliente_id: 'cli-1',
+      fecha: '2026-08-07',
+      orden: 1,
+      origen: 'oficina' as const,
+      activo: 1 as const,
+    };
+    expect(aSnapshot(respuestaPullDePrueba({ rutas: [fila] })).rutas).toEqual([fila]);
+    expect(aSnapshot(respuestaPullDePrueba()).rutas).toBeUndefined();
+  });
+});
+
 describe('motor de sincronizacion', () => {
   describe('renovar la sesion es el PRIMER paso', () => {
     it('llama a renovar() antes que a pull o push', async () => {

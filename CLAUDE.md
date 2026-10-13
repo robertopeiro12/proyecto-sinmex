@@ -273,6 +273,20 @@ usuario con sesion pasa.
     backfill). El reporte de Kilometraje del portal todavía no existe.
   - En la tablet, con la jornada de hoy cerrada **no se registra** venta, cobranza ni prospecto
     (`exigirJornadaAbierta`); no hay reabrir.
+- **Ruta diaria (T-37).** La oficina arma la ruta del día en el portal (`PUT /rutas/diaria`, permiso
+  `ruta_diaria.gestionar`) y el vendedor la complementa desde la tablet con la operación **`ruta-alta`** (no `ruta`,
+  que queda para la visita de T-39). Todo en `rutas/rutas-diarias.*`.
+  - `ruta.origen` (`oficina`/`vendedor`) y un único vivo por vendedor, fecha y cliente en la diaria
+    (`uq_ruta_diaria_vendedor_fecha_cliente`, parcial; la semanal de T-36 no entra). El alta usa `on conflict … do
+    nothing` y, si no insertó, rechaza `ruta-duplicada`, que **la tablet trata como aplicada**.
+  - `cliente_id` de `ruta-alta` viaja en **`datos`**, no en el sobre (así un prospecto o un cliente borrado sale como
+    `cliente-inexistente` y no como `cliente-fuera-de-alcance`); el buzón lo conserva (`guardarOperacion`).
+  - El `PUT` del portal **reemplaza** la ruta en una transacción: adopta lo que subió el vendedor, da de baja lo de
+    la oficina que no viene y **conserva** (renumerado al final) lo del vendedor. Alta y `PUT` se serializan
+    bloqueando la fila del vendedor (`for no key update`). Respuestas en camelCase; vendedor fuera de alcance = 404.
+  - El pull baja `rutas` del vendedor del token desde `current_date - 1` en adelante del reloj de Postgres (UTC),
+    sin tope: una ruta futura debe bajar en el pull siguiente a su creación;
+    la baja viaja con `activo: 0`. El orden que arrastra el vendedor **no sube** (vive en `ruta_orden_local`).
 
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
 `--`: sin él, npm se come los argumentos).

@@ -9,6 +9,7 @@ import type {
   PrecioPull,
   PresentacionPull,
   ProductoPull,
+  RutaPull,
   SucursalPull,
   TipoNegocioPull,
   VehiculoPull,
@@ -438,6 +439,57 @@ export class SincronizacionRepository {
     });
   }
 
+  /**
+   * La ruta diaria del vendedor del token (T-37, D12).
+   *
+   * - **Solo la suya**: el alcance de T-09 dice que un vendedor jala lo suyo.
+   * - Solo `tipo = 'diaria'`: la semanal (T-36) no viaja.
+   * - **Ventana por el reloj de Postgres**: desde ayer en adelante. La base
+   *   corre en UTC; el `- 1` es lo que mantiene "hoy en Tijuana" dentro de la
+   *   ventana despues de las 17:00 locales, cuando en UTC ya es manana. La
+   *   tablet decide que dia muestra con su reloj local. No lo "corrijas" a la
+   *   zona de Tijuana: el spec la fija asi.
+   * - **Sin tope superior**, a proposito: con un tope (antes `+ 7`) y el cursor
+   *   por `updated_at`, una ruta guardada hoy para dentro de 10 dias nunca
+   *   bajaba: cuando entraba a la ventana su `updated_at` ya era anterior al
+   *   `desde`, y la tablet solo hace pull completo una vez. Sin tope, una fila
+   *   futura viaja en el pull siguiente a su creacion.
+   * - Sin `desde`, solo las vivas. Con `desde`, todo lo que cambio: una fila que
+   *   la oficina quito viaja con `activo: 0` (baja como bandera, nunca como
+   *   ausencia; `ruta` no tiene columna `activo`).
+   */
+  async rutas(vendedorId: string, desde: Date | null): Promise<RutaPull[]> {
+    let q = this.db
+      .selectFrom('ruta')
+      .select([
+        'id',
+        'cliente_id',
+        // `date` -> texto en Postgres: el driver lo convertiria a Date en la
+        // hora local del proceso.
+        sql<string>`to_char(fecha, 'YYYY-MM-DD')`.as('fecha'),
+        'orden',
+        'origen',
+        'deleted_at',
+      ])
+      .where('vendedor_id', '=', vendedorId)
+      .where('tipo', '=', 'diaria')
+      .where(sql<boolean>`fecha >= current_date - 1`);
+    if (desde) {
+      q = q.where('updated_at', '>', desde);
+    } else {
+      q = q.where('deleted_at', 'is', null);
+    }
+
+    return (await q.orderBy('fecha').orderBy('orden').execute()).map((f) => ({
+      id: f.id,
+      cliente_id: f.cliente_id,
+      fecha: f.fecha,
+      orden: f.orden,
+      origen: f.origen as 'oficina' | 'vendedor',
+      activo: bandera(true, f.deleted_at),
+    }));
+  }
+
   /* ---------------------------------------------------------------- */
   /* Push                                                              */
   /* ---------------------------------------------------------------- */
@@ -508,7 +560,13 @@ export class SincronizacionRepository {
         fecha_operacion: op.fechaOperacion,
         ocurrido_en: op.ocurridoEn,
         folio: op.folio,
-        datos: JSON.stringify({ ...op.datos, cliente_id: op.clienteId }),
+        // El `cliente_id` del sobre gana (venta, cobranza). Si el sobre no trae
+        // uno, se conserva el de `datos`: un `ruta-alta` (T-37) lo lleva ahi, y
+        // pisarlo con null dejaba el buzon sin saber de que cliente era.
+        datos: JSON.stringify({
+          ...op.datos,
+          cliente_id: op.clienteId ?? op.datos.cliente_id ?? null,
+        }),
       })
       .onConflict((oc) =>
         oc.columns(['vendedor_id', 'clave_idempotencia']).doNothing(),

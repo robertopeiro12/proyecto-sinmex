@@ -16,6 +16,8 @@ import {
 } from '../sucursales/alcance-sucursal';
 import { JornadaRechazada } from '../rutas/jornada-rechazada';
 import { JornadasService } from '../rutas/jornadas.service';
+import { RutaRechazada } from '../rutas/ruta-rechazada';
+import { RutasDiariasService } from '../rutas/rutas-diarias.service';
 import { CobranzaRechazada } from '../ventas-cobranza/cobranza-rechazada';
 import { CobranzasService } from '../ventas-cobranza/cobranzas.service';
 import { VentaRechazada } from '../ventas-cobranza/venta-rechazada';
@@ -36,6 +38,7 @@ import {
 import { CODIGO_POR_RAZON_COBRANZA } from './despacho-cobranza';
 import { CODIGO_POR_RAZON_JORNADA } from './despacho-jornada';
 import { CODIGO_POR_RAZON_PROSPECTO } from './despacho-prospecto';
+import { CODIGO_POR_RAZON_RUTA } from './despacho-ruta-alta';
 import type { PullDto, PushDto } from './dto/sincronizacion.dto';
 import { INTENTOS_ANTE_CONFLICTO, reintentarAnteConflicto } from './reintento';
 import {
@@ -79,6 +82,8 @@ export class SincronizacionService {
     private readonly cobranzas: CobranzasService,
     // T-38: Rutas es la duena de la jornada (vehiculo + kilometraje del dia).
     private readonly jornadas: JornadasService,
+    // T-37: Rutas tambien es la duena de la ruta diaria (`ruta-alta`).
+    private readonly rutasDiarias: RutasDiariasService,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -104,6 +109,7 @@ export class SincronizacionService {
       clientes,
       tiposNegocio,
       notasPendientes,
+      rutas,
     ] = await Promise.all([
       this.repo.sucursales(vendedor.sucursal_id, desde),
       this.repo.vendedores(vendedor.id, desde),
@@ -114,6 +120,8 @@ export class SincronizacionService {
       // T-40: el desplegable de la pantalla de prospectos. No lleva sucursal.
       this.repo.tiposNegocio(desde),
       this.repo.notasPendientes(vendedor.sucursal_id, desde),
+      // T-37: la ruta diaria. Por VENDEDOR, no por sucursal.
+      this.repo.rutas(vendedor.id, desde),
     ]);
 
     // Los precios van completos o no van: ver `RespuestaPull.catalogos.precios`.
@@ -155,6 +163,7 @@ export class SincronizacionService {
         precios,
       },
       notas_pendientes: notasPendientes,
+      rutas,
     };
   }
 
@@ -402,6 +411,17 @@ export class SincronizacionService {
           motivo: error.message,
         };
       }
+      // T-37: el rollback ya dejo sin fila tanto el buzon como la ruta. La
+      // tablet trata `ruta-duplicada` como aplicada (D15).
+      if (error instanceof RutaRechazada) {
+        return {
+          clave: op.clave,
+          tipo: op.tipo,
+          estado: 'rechazada',
+          codigo: CODIGO_POR_RAZON_RUTA[error.razon],
+          motivo: error.message,
+        };
+      }
       if (esColisionDeFolio(error)) {
         return this.clasificarColision(vendedor, op);
       }
@@ -483,6 +503,19 @@ export class SincronizacionService {
           proyeccion.jornada,
           {
             // Del token, nunca del cuerpo: el vehiculo se coteja contra ella.
+            sucursalId: vendedor.sucursal_id,
+            vendedorId: vendedor.id,
+            // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
+            fechaOperacion: op.fechaOperacion,
+          },
+          trx,
+        );
+      case 'ruta-alta':
+        // La entidad del buzon es la fila de `ruta` (ADR-0009 §2.4, enmendado).
+        return this.rutasDiarias.agregarAlDia(
+          proyeccion.alta,
+          {
+            // Del token, nunca del cuerpo: el cliente se coteja contra ella.
             sucursalId: vendedor.sucursal_id,
             vendedorId: vendedor.id,
             // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.

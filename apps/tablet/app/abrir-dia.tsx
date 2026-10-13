@@ -80,6 +80,14 @@ export default function AbrirDia() {
     }
     try {
       datos.jornadas.abrir({ vendedorId: vendedor.id, vehiculoId, kmInicial: kmNumero });
+      // T-37: la ruta de hace mas de 7 dias ya no sirve en la tablet (las altas
+      // sin subir se conservan). Una vez al dia, con la tablet quieta. Aparte, porque
+      // una limpieza fallida nunca debe impedir que el dia quede abierto.
+      try {
+        datos.rutas.purgar();
+      } catch (e) {
+        console.warn('No se pudo purgar la ruta vieja', e);
+      }
       refrescarJornada();
       router.replace('/(jornada)');
     } catch (e) {

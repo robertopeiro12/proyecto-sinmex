@@ -204,7 +204,9 @@ nadie relacionaría con nada.
                           "monto_total_centavos": 25000, "saldo_centavos": 15000,
                           "abonos": [{ "fecha_pago": "2026-08-03", "monto_centavos": 10000,
                                        "metodo_pago": "efectivo" }],
-                          "activo": 1 }]
+                          "activo": 1 }],
+  "rutas": [{ "id": "…", "cliente_id": "…", "fecha": "2026-10-12", "orden": 1,
+              "origen": "oficina", "activo": 1 }]
 }
 ```
 
@@ -327,6 +329,23 @@ listas en campo.
   pull incremental (y con él, la colección de precios completa: es su regla de siempre).
 - Los tres campos son **aditivos**: una tablet vieja los ignora.
 
+### `rutas`: la ruta diaria del vendedor (T-37)
+
+Colección **nueva y de nivel superior** (junto a `notas_pendientes`, no dentro de `catalogos`). Aditiva: una
+tablet vieja la ignora; la tablet nueva la trata como opcional.
+
+- Solo filas del **vendedor del token** y de `tipo = 'diaria'` (la semanal de T-36 no viaja).
+- **Ventana** por el reloj del servidor: desde `current_date - 1` en adelante (`fecha >= current_date - 1`), **sin
+  tope**: una ruta futura debe bajar en el pull siguiente a su creación (con tope y el cursor por `updated_at`, una
+  ruta asignada a 8+ días nunca entraba al pull incremental). Postgres corre en UTC: el `- 1` es lo que mantiene
+  "hoy en Tijuana" dentro de la ventana después de las 17:00 locales. La tablet decide qué día muestra con su
+  reloj local.
+- Incremental por `updated_at > desde`. Una fila que la oficina quitó viaja con `activo: 0`; sin `desde` bajan
+  solo las vivas.
+- `origen` dice quién puso al cliente: `oficina` (portal) o `vendedor` (un `ruta-alta` proyectado).
+- El orden que el vendedor arrastra en la tablet **no sube** (D4): vive en la tabla local `ruta_orden_local` y
+  ningún pull lo pisa.
+
 ---
 
 ## 6. `POST /sync/push`
@@ -341,7 +360,7 @@ listas en campo.
   "operaciones": [
     {
       "clave": "9e0b…-4a1f",             // OBLIGATORIA. Ver idempotencia
-      "tipo": "jornada",                  // jornada|venta|cobranza|gasto|merma|ruta|prospecto
+      "tipo": "jornada",                  // jornada|venta|cobranza|gasto|merma|ruta|prospecto|ruta-alta
       "fecha_operacion": "2026-08-07",   // día de trabajo (§4)
       "ocurrido_en": "2026-08-07T14:03:22.000-07:00",
       "cliente_id": "…",                  // opcional; se valida el alcance
@@ -385,9 +404,9 @@ no hacer.
 
 `datos` lo fija el ticket de cada módulo, y fijarlo es un cambio **aditivo** que
 no sube la versión del contrato. Hoy tienen forma fija **`venta`** (T-16),
-**`prospecto`** (T-40), **`cobranza`** (T-20) y **`jornada`** (T-38), los cuatro
-abajo; gastos, merma y ruta siguen libres hasta T-27/T-33/T-39, y el servidor las
-guarda tal cual.
+**`prospecto`** (T-40), **`cobranza`** (T-20), **`jornada`** (T-38) y
+**`ruta-alta`** (T-37), los cinco abajo; gastos, merma y ruta siguen libres hasta
+T-27/T-33/T-39, y el servidor las guarda tal cual.
 
 ### `datos` de una venta (T-16)
 
@@ -584,6 +603,30 @@ permiso o no haber señal, y eso no le impide registrar al prospecto.
   (`entidad_tabla = 'jornada'`).
 - Las jornadas que ya estaban en el buzón antes de T-38 **no** se reprocesan (sin backfill).
 
+### `datos` de un alta de ruta (T-37)
+
+```jsonc
+{
+  "clave": "uuid de la fila local",
+  "tipo": "ruta-alta",                 // NO "ruta": ese tipo queda para la visita de T-39
+  "fecha_operacion": "2026-10-12",     // el día de la ruta; se guarda tal cual
+  "ocurrido_en": "2026-10-12T16:05:00.000Z",
+  // sin "cliente_id" en el sobre (si viene y no coincide con datos, ruta-datos-invalidos) y SIN "folio"
+  "datos": { "cliente_id": "uuid" }    // un cliente (no prospecto) de la sucursal del vendedor
+}
+```
+
+- La forma se valida **antes** de la transacción: sin `cliente_id` uuid en `datos`, con folio en el sobre, o con un
+  `cliente_id` en el sobre que no coincide con el de `datos`, es `ruta-datos-invalidos`. Sin `cliente_id` en el
+  sobre es lo normal.
+- Dentro de la transacción (`RutasDiariasService.agregarAlDia`): un cliente que no existe, está dado de baja, es de
+  otra sucursal o es **prospecto** es `cliente-inexistente`. Si ya había una fila viva de ese vendedor, fecha y
+  cliente subida con **otra** clave, es `ruta-duplicada` (la tablet la trata como aplicada). La misma clave
+  reenviada es `duplicada`, como cualquier operación.
+- Se guarda en `ruta` con `fecha = fecha_operacion`, `origen = 'vendedor'`, `tipo = 'diaria'` y `orden = max + 1`
+  entre las vivas de ese vendedor y día. El buzón apunta a esa fila (`entidad_tabla = 'ruta'`) y conserva el
+  `cliente_id` en su `datos`.
+
 ### Respuesta `200` — parcial y honesta
 
 ```jsonc
@@ -633,6 +676,9 @@ texto en español** si reintenta o si avisa al vendedor.
 | `jornada-km-invalido` | `km_final` menor que `km_inicial`: el odómetro no retrocede (T-38) |
 | `vehiculo-inexistente` | El vehículo de la jornada no existe, está dado de baja o es de otra sucursal que la del vendedor. Uno desactivado sí entra. Se reintenta en la siguiente sincronización (T-38) |
 | `jornada-duplicada` | Ya hay una jornada viva de ese vendedor en esa fecha subida con **otra** clave. La misma clave es `duplicada`, no esto (T-38) |
+| `ruta-datos-invalidos` | `datos.cliente_id` de un `ruta-alta` falta o no es uuid, el sobre trae folio, o el `cliente_id` del sobre no coincide con el de `datos`. Bug de la tablet (T-37) |
+| `cliente-inexistente` | El cliente de un `ruta-alta` no existe, está dado de baja, es de otra sucursal o es prospecto. Se reintenta; el vendedor puede quitar la fila (T-37) |
+| `ruta-duplicada` | Ya había una fila viva de ese vendedor, fecha y cliente con **otra** clave. **La tablet la trata como aplicada** (T-37) |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo
@@ -675,7 +721,7 @@ El rechazo se recalcula en cada intento: es determinista y no necesita memoria.
 ### Una transacción por operación (T-16, ADR-0009)
 
 Cuando un `tipo` tiene un módulo de dominio que lo proyecta (hoy `venta`,
-`cobranza`, `prospecto` y `jornada`), cada operación del lote se aplica **en su
+`cobranza`, `prospecto`, `jornada` y `ruta-alta`), cada operación del lote se aplica **en su
 propia transacción**:
 
 1. `INSERT` en `sync_operacion` con `on conflict (vendedor_id, clave_idempotencia) do nothing`.
@@ -691,8 +737,12 @@ propia transacción**:
    - `JornadasService.cerrarJornada` (T-38) → comprueba que el vehículo sea de la sucursal del vendedor y no
      esté dado de baja, e inserta en `jornada` con `on conflict (vendedor_id, fecha) where deleted_at is null
      do nothing`; si no insertó, `jornada-duplicada`. La entidad es la fila de `jornada`.
+   - `RutasDiariasService.agregarAlDia` (T-37) → comprueba el cliente (vivo, de la sucursal, `tipo = 'cliente'`),
+     bloquea la fila del vendedor (`for no key update`, para serializar con el portal), calcula el orden siguiente
+     e inserta en `ruta` con `on conflict (vendedor_id, fecha, cliente_id) where deleted_at is null and tipo =
+     'diaria' do nothing`; si no insertó, `ruta-duplicada`. La entidad es la fila de `ruta`.
 3. `commit` → `aplicada`. Si el dominio rechaza (`presentacion-inactiva`,
-   `precio-no-asignado`, `nota-no-encontrada`, `vehiculo-inexistente`, `jornada-duplicada`),
+   `precio-no-asignado`, `nota-no-encontrada`, `vehiculo-inexistente`, `jornada-duplicada`, `cliente-inexistente`, `ruta-duplicada`),
    `rollback`: no queda **ni** la fila de negocio **ni** la del buzón.
 
 Los tipos sin módulo todavía (`gasto`, `merma`, `ruta`) se guardan en el buzón y
@@ -827,6 +877,7 @@ sincronizar.
 | Tema | Ticket |
 |---|---|
 | Resolución de conflictos (portal y tablet tocan lo mismo) | **T-43** |
+| Subir el orden en que el vendedor arrastró su ruta (hoy se queda en la tablet, D4) | Futuro, aditivo |
 | Sincronización automática 11:00/14:00 | **T-44** |
 | Forma de `datos` para gasto / merma / ruta (las de venta, cobranza y jornada ya están, §6) | **T-27 / T-33 / T-39** |
 | Proyección de `gasto`, `merma` y `ruta` a sus tablas de negocio (las de `venta`, `cobranza` y `jornada` ya existen, §7) | Los mismos |

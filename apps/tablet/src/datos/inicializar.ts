@@ -5,6 +5,7 @@ import { ejecutarMigraciones, migraciones } from './migraciones';
 import { relojSistema } from './reloj';
 import { crearRepositorioCatalogos, type RepositorioCatalogos } from './repositorios/catalogos';
 import { crearRepositorioCobranzas, type RepositorioCobranzas } from './repositorios/cobranzas';
+import { crearRepositorioRutas, type RepositorioRutas } from './repositorios/rutas';
 import { crearRepositorioFolios, type RepositorioFolios } from './repositorios/folios';
 import { crearRepositorioJornadas, type RepositorioJornadas } from './repositorios/jornadas';
 import {
@@ -33,6 +34,8 @@ export interface CapaDatos {
   prospectos: RepositorioProspectos;
   /** Cobros y abonos capturados en ruta (T-20). */
   cobranzas: RepositorioCobranzas;
+  /** La ruta del dia: lo que baja del portal y lo que agrega el vendedor (T-37). */
+  rutas: RepositorioRutas;
   /** Version de esquema con la que quedo la base tras migrar. */
   versionEsquema: number;
 }
@@ -70,6 +73,9 @@ export function inicializarCapaDatos(): CapaDatos {
     // elegido sigue vivo en el catalogo local.
     prospectos: crearRepositorioProspectos(deps, { catalogos }),
     cobranzas: crearRepositorioCobranzas(deps, { catalogos }),
+    // El MISMO `catalogos`: es quien publica la version que observa la
+    // pantalla principal, y la ruta se aplica dentro de su `guardarSnapshot`.
+    rutas: crearRepositorioRutas(deps, { catalogos }),
     versionEsquema: versionFinal,
   };
 }

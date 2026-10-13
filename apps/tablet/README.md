@@ -29,10 +29,12 @@ apps/tablet/
 │   ├── abrir-dia.tsx          # vehiculo + km inicial (BLOQUEANTE)
 │   └── (jornada)/             # todo lo que exige sesion + jornada abierta
 │       ├── _layout.tsx        # guardia de sesion + del kilometraje inicial
-│       ├── index.tsx          # menu de la jornada
-│       ├── operacion/         # clientes -> venta / cobranza / visita / registros
+│       ├── index.tsx          # la ruta del dia (pantalla principal, T-37)
+│       ├── agregar-a-ruta.tsx # clientes existentes que el vendedor suma a su ruta
+│       ├── operacion/         # todos los clientes -> ficha -> venta / cobranza / visita
+│       ├── pendiente/         # secciones del menu que aun no existen (gastos, inventario, merma)
 │       ├── prospectos.tsx
-│       ├── ruta.tsx
+│       ├── ruta.tsx           # Ruta y GPS (T-41)
 │       └── cerrar-dia.tsx     # km final (el corte es T-33)
 ├── src/
 │   ├── datos/                 # capa de datos local (SQLite)
@@ -168,6 +170,29 @@ de vendedores es **T-62**).
   servidor la rechaza (`vehiculo-inexistente`, `jornada-duplicada`, …), la fila queda en `error` con el motivo
   y se reintenta en cada sincronización.
 
+## Ruta del día y pantalla principal (T-37)
+
+- **La jornada abre en la ruta del día** (`app/(jornada)/index.tsx`): barra con *Prospecto*, *Refrescar* (es el
+  "Sincronizar ahora" de siempre, con la pastilla de pendientes) y *Agregar a mi ruta*; menú hamburguesa en una
+  hoja modal (`src/ui/menu-hoja.tsx`, sin cajón: la app no trae gesture-handler ni reanimated).
+- **Dos tablas locales** (migración 011): `ruta` la escribe el pull con su regla de fusión
+  (`aplicarSnapshotRutas` en `src/datos/repositorios/rutas.ts`) y `ruta_orden_local` solo el dedo del vendedor.
+  Ningún pull toca el orden local, y el orden **no sube** al servidor.
+- **Las altas del vendedor suben como `ruta-alta`** (`src/sincronizacion/fuente-rutas.ts`). `ruta-duplicada` no es
+  error: la fila queda sincronizada y el pull posterior la funde con la del servidor. Un alta rechazada por otro
+  motivo se ve en rojo bajo la fila y el vendedor la puede quitar (`quitarRechazada`).
+- **"Visitado" se deriva** (venta o cobro de hoy en la tablet) y la **burbuja** cuenta las notas con saldo; los dos
+  salen de `rutas.delDia()`. Una fila que la oficina quitó se queda en "Fuera de ruta" solo si hoy tuvo actividad.
+- **Reordenar**: mantener presionado y arrastrar (`PanResponder`, `src/ui/lista-ruta.tsx`), con ▲/▼ siempre como
+  respaldo. Si el arrastre resulta frágil en un equipo, `ARRASTRE_HABILITADO = false` deja solo los botones.
+- La lógica de la pantalla vive en `src/estado/ruta-del-dia.ts` (puro, con pruebas). "Abrir el día" purga la ruta
+  de hace más de 7 días (`rutas.purgar`), conservando las altas `pendiente` (las rechazadas en `error` de esos días
+  sí se borran: si no, se reintentarían en cada sincronización).
+- **El pull baja la ruta desde ayer en adelante**, sin tope (desde `current_date - 1` del servidor): una ruta futura
+  debe bajar en el pull siguiente a su creación.
+- **Tablet compartida:** el cursor de pull es global: las filas del vendedor anterior se quedan hasta la purga y las
+  del nuevo vendedor anteriores al cursor no bajan; pendiente (reiniciar el cursor al cambiar de vendedor).
+
 ## Pruebas
 
 `npm test --workspace=apps/tablet` corre Jest con `ts-jest` en Node puro y prueba
@@ -198,5 +223,5 @@ solo cuando el portal suba a React 19.2.x, que no es alcance de T-04.
   implementar la sincronizacion. T-07 debe llamar a `gestor.renovar()` al
   conectarse: es lo que corre hacia adelante la ventana offline de la tablet.
 - **T-14** — folios (ver `ADR-0001`).
-- **T-16 / T-20 / T-27 / T-31 / T-33 / T-37 / T-39 / T-40 / T-41** — los modulos de la jornada;
-  hoy son placeholders.
+- **T-20 / T-27 / T-31 / T-33 / T-39 / T-41** — módulos de la jornada que todavía son placeholders (gastos,
+  inventario, merma, visita sin venta, Ruta y GPS).

@@ -1,6 +1,7 @@
 import { depsDePrueba, snapshotDePrueba, MOMENTO } from '../pruebas-apoyo';
 import { crearRepositorioCatalogos } from './catalogos';
 import { crearRepositorioJornadas } from './jornadas';
+import { crearRepositorioRutas } from './rutas';
 
 function conCatalogos() {
   const deps = depsDePrueba();
@@ -379,5 +380,54 @@ describe('presentaciones para vender (T-16)', () => {
     const { catalogos } = conCatalogos();
     catalogos.guardarSnapshot({ productos: [{ id: 'pro-1', nombre: 'Jamaica', activo: 0 }] });
     expect(catalogos.presentacionesParaVenta('cli-1', '2026-08-07')).toEqual([]);
+  });
+});
+
+describe('guardarSnapshot con la ruta del dia (T-37)', () => {
+  const fila = {
+    id: 'srv-1',
+    cliente_id: 'cli-9',
+    fecha: '2026-08-07',
+    orden: 1,
+    origen: 'oficina' as const,
+    activo: 1 as const,
+  };
+  const clienteNuevo = () => ({
+    ...snapshotDePrueba().clientes![0]!,
+    id: 'cli-9',
+    nombre: 'Cliente nuevo en el mismo pull',
+  });
+
+  it('aplica la ruta DESPUES de los clientes: un cliente nuevo y su fila pueden venir juntos', () => {
+    const deps = depsDePrueba();
+    const catalogos = crearRepositorioCatalogos(deps);
+    const rutas = crearRepositorioRutas(deps, { catalogos });
+
+    catalogos.guardarSnapshot({
+      ...snapshotDePrueba(),
+      clientes: [...(snapshotDePrueba().clientes ?? []), clienteNuevo()],
+      rutas: [fila],
+    });
+
+    expect(rutas.delDia('2026-08-07').map((f) => f.id)).toEqual(['srv-1']);
+  });
+
+  it('el snapshot entero entra aunque una ruta apunte a un cliente desconocido (Review Focus 1)', () => {
+    const deps = depsDePrueba();
+    const catalogos = crearRepositorioCatalogos(deps);
+
+    catalogos.guardarSnapshot({ ...snapshotDePrueba(), rutas: [fila] });
+
+    expect(catalogos.obtenerCliente('cli-1')).not.toBeNull();
+    expect(deps.bd.getAllSync('select id from ruta')).toEqual([]);
+  });
+
+  it('un pull que solo trae ruta avisa a las pantallas', () => {
+    const { catalogos } = conCatalogos();
+    const antes = catalogos.version();
+
+    catalogos.guardarSnapshot({ rutas: [{ ...fila, cliente_id: 'cli-1' }] });
+
+    expect(catalogos.version()).toBeGreaterThan(antes);
   });
 });

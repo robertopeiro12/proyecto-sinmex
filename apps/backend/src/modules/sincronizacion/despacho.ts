@@ -5,12 +5,14 @@ import {
   type VentaNormalizada,
 } from '../ventas-cobranza/datos-venta';
 import type { JornadaNormalizada } from '../rutas/datos-jornada';
+import type { RutaAltaNormalizada } from '../rutas/datos-ruta-alta';
 import type { CobranzaNormalizada } from '../ventas-cobranza/datos-cobranza';
 import type { RazonRechazoVenta } from '../ventas-cobranza/venta-rechazada';
 import type { CodigoRechazo } from './contrato';
 import { prepararCobranza } from './despacho-cobranza';
 import { prepararJornada } from './despacho-jornada';
 import { prepararProspecto } from './despacho-prospecto';
+import { prepararRutaAlta } from './despacho-ruta-alta';
 import type { OperacionNormalizada, Rechazo } from './operaciones';
 
 /**
@@ -26,7 +28,7 @@ import type { OperacionNormalizada, Rechazo } from './operaciones';
  * Un `tipo` sin modulo todavia (`gasto`, `merma`, `ruta`) no tiene proyeccion:
  * se guarda en el buzon y queda `aplicada`, como desde T-07.
  * Orden acordado entre tickets: `venta`, `prospecto` (T-40), `cobranza` (T-20),
- * `jornada` (T-38).
+ * `jornada` (T-38), `ruta-alta` (T-37).
  */
 export type Proyeccion =
   // T-17: el folio viaja con la proyeccion. Aqui ya se comprobo que no es null,
@@ -37,7 +39,9 @@ export type Proyeccion =
   | { tipo: 'prospecto'; prospecto: ProspectoNormalizado }
   | { tipo: 'cobranza'; cobranza: CobranzaNormalizada }
   // T-38. La fila es de `jornada`; vendedor, sucursal y fecha van en el contexto.
-  | { tipo: 'jornada'; jornada: JornadaNormalizada };
+  | { tipo: 'jornada'; jornada: JornadaNormalizada }
+  // T-37. La fila es de `ruta`; vendedor, sucursal y fecha van en el contexto.
+  | { tipo: 'ruta-alta'; alta: RutaAltaNormalizada };
 
 export type ResultadoPreparacion =
   { ok: true; proyeccion: Proyeccion | null } | ({ ok: false } & Rechazo);
@@ -106,6 +110,13 @@ export function prepararProyeccion(
     case 'merma':
     case 'ruta':
       return { ok: true, proyeccion: null };
+    case 'ruta-alta': {
+      // T-37. La forma la revisa `despacho-ruta-alta.ts`; el cliente y el dia
+      // repetido, `RutasDiariasService` dentro de la transaccion.
+      const r = prepararRutaAlta(op);
+      if (!r.ok) return r;
+      return { ok: true, proyeccion: { tipo: 'ruta-alta', alta: r.alta } };
+    }
   }
 }
 

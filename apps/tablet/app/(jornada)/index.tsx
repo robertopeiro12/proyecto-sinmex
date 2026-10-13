@@ -1,19 +1,21 @@
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 
+import { ErrorRuta } from '@/datos';
+import { estadoMenuJornada } from '@/estado/menu-jornada';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
-import { estadoMenuJornada } from '@/estado/menu-jornada';
+import { agruparRuta, entradasMenu, textoAvisoSinRuta } from '@/estado/ruta-del-dia';
 import type { MotivoAbandono } from '@/sincronizacion/motor';
 import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 import { Boton } from '@/ui/boton';
-import { BotonMenu } from '@/ui/boton-menu';
-import { Cifra } from '@/ui/cifra';
+import { FilaFueraDeRuta, ListaRuta } from '@/ui/lista-ruta';
+import { MenuHoja } from '@/ui/menu-hoja';
 import { formatearMomento } from '@/ui/momento';
-import { Pantalla, Pastilla, Tarjeta } from '@/ui/pantalla';
+import { Pastilla, Tarjeta } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
-import { espacio } from '@/ui/tokens';
+import { colores, espacio, fuente, grosor, radio, tipo } from '@/ui/tokens';
 
 /**
  * Lo que se le dice al vendedor cuando la sincronizacion no sale.
@@ -31,24 +33,22 @@ const MENSAJE: Record<MotivoAbandono, string> = {
 };
 
 /**
- * Menu de la jornada: las 4 secciones que [[App Tablet]] describe como flujo
- * del dia, una vez abierto.
+ * La jornada abre en la ruta del dia (T-37, D16): la que asigno la oficina mas
+ * lo que agrego el vendedor, en el orden en que el la recorre.
+ *
+ * Todo lo que esta pantalla decide vive en funciones puras con prueba
+ * (`src/estado/ruta-del-dia.ts`, `menu-jornada.ts`); aqui solo se pinta.
  */
-export default function MenuJornada() {
-  const { jornada, vendedor, datos } = useJawa();
+export default function RutaDelDia() {
+  const { jornada, datos, versionCatalogos } = useJawa();
   const { salir, sincronizar, ultimaSincronizacion } = useSesion();
-  const { estilos } = useTema();
+  const { estilos, t } = useTema();
   const [sincronizando, setSincronizando] = useState(false);
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const [arrastrando, setArrastrando] = useState(false);
 
-  // Suma jornada, venta y prospecto (`contarPendientesDeSubir`, T-07/T-16/T-40):
-  // si algo de eso queda sin subir, la jornada no puede decir "listo" aunque
-  // ella misma ya este sincronizada, o el vendedor cierra el dia sin WiFi
-  // creyendo que ya subio todo.
-  //
-  // Se relee al volver a esta pantalla (`useFocusEffect`): grabar una venta no
-  // mueve `datos`, y esta pantalla sigue montada mientras el vendedor captura en
-  // operacion/[clienteId]/venta.tsx y regresa con `router.back()` (Copilot,
-  // revision PR #89).
+  // Se relee al volver a esta pantalla (`useFocusEffect`): vender o cobrar en
+  // la ficha no mueve `datos`, y esta pantalla sigue montada debajo.
   const [vueltas, setVueltas] = useState(0);
   useFocusEffect(
     useCallback(() => {
@@ -56,35 +56,36 @@ export default function MenuJornada() {
     }, []),
   );
 
+  // `versionCatalogos` sube cuando el pull escribe y cuando la ruta cambia
+  // (agregar, reordenar, quitar publican el cambio).
+  const filas = useMemo(() => {
+    void vueltas;
+    void versionCatalogos;
+    void ultimaSincronizacion;
+    return datos.rutas.delDia();
+  }, [datos, vueltas, versionCatalogos, ultimaSincronizacion]);
+  // Memoizado: un arreglo nuevo en cada render rehace el `PanResponder` de cada
+  // fila (y reinicia su `dy`) en cuanto el arrastre cambia el estado de aqui.
+  const { enRuta, fueraDeRuta } = useMemo(() => agruparRuta(filas), [filas]);
+
+  // Suma las cinco fuentes del push, altas de ruta incluidas (T-37).
   const pendientes = useMemo(() => {
     void vueltas;
+    void versionCatalogos;
     void ultimaSincronizacion;
     return contarPendientesDeSubir(datos);
-  }, [datos, vueltas, ultimaSincronizacion]);
-  const falloUltima = ultimaSincronizacion !== null && !ultimaSincronizacion.ok;
+  }, [datos, vueltas, versionCatalogos, ultimaSincronizacion]);
 
-  /**
-   * Estado de la sincronizacion en un solo valor, en orden de gravedad: un
-   * fallo manda sobre "quedan pendientes", y "quedan pendientes" manda sobre
-   * "todo subido". Lo usan la tarjeta y la pastilla, asi que las dos no pueden
-   * contradecirse.
-   */
-  const estadoSync = falloUltima ? 'error' : pendientes > 0 ? 'pendiente' : 'listo';
-
-  // T-38 (D6 capa 2): con el dia cerrado, lo que captura queda deshabilitado.
-  // La capa de datos lo rechazaria igual (`exigirJornadaAbierta`); esto evita
-  // que el vendedor entre a capturar para enterarse al final.
+  // T-38 (D6 capa 2): con el dia cerrado, la lista queda en solo lectura.
   const menu = estadoMenuJornada(jornada);
+  const soloLectura = !menu.operacionesHabilitadas;
+  const sinRuta = enRuta.length === 0 && fueraDeRuta.length === 0;
 
   /**
-   * Sincronizacion manual.
-   *
-   * El modelo del negocio es sincronizar al volver al WiFi
-   * ([[Sincronizacion offline]]), y hasta que exista el disparo automatico de
-   * T-44 este boton es el unico camino a media jornada. Ademas **renueva la
-   * sesion**, que es lo que corre hacia adelante la ventana de 72 h.
+   * "Refrescar" es el "Sincronizar ahora" de siempre (D6): pull, push, fotos y
+   * pull posterior. No hay un segundo camino de red. Sin red, la lista no cambia.
    */
-  async function sincronizarAhora() {
+  async function refrescar() {
     setSincronizando(true);
     try {
       const r = await sincronizar();
@@ -92,19 +93,44 @@ export default function MenuJornada() {
         r.ok ? 'Sincronización completa' : 'No se pudo terminar',
         r.ok
           ? `Se bajaron ${r.pull?.filas ?? 0} registro(s) y se subieron ${r.push?.aplicadas ?? 0}.` +
-            (r.push?.rechazadas ? ` ${r.push.rechazadas} quedaron con error.` : '')
+              (r.push?.rechazadas ? ` ${r.push.rechazadas} quedaron con error.` : '')
           : MENSAJE[r.motivo ?? 'sin-red'],
       );
     } finally {
       setSincronizando(false);
+      // Se relee la ruta al terminar, salga bien o mal (incluso si `sincronizar`
+      // lanza y no deja `ultimaSincronizacion` nueva): una alta que pasa de
+      // `error` a `sincronizada` por `ruta-duplicada` no publica un cambio.
+      setVueltas((n) => n + 1);
     }
   }
 
+  const abrirCliente = useCallback((clienteId: string) => {
+    router.push({ pathname: '/(jornada)/operacion/[clienteId]', params: { clienteId } });
+  }, []);
+
+  const reordenar = useCallback(
+    (clienteIds: string[]) => {
+      if (jornada) datos.rutas.reordenar(jornada.fecha, clienteIds);
+    },
+    [datos, jornada],
+  );
+
+  const quitar = useCallback(
+    (id: string) => {
+      try {
+        datos.rutas.quitarRechazada(id);
+      } catch (e) {
+        Alert.alert('No se pudo quitar', e instanceof ErrorRuta ? e.message : 'Intenta de nuevo.');
+      }
+    },
+    [datos],
+  );
+
   /**
    * Cerrar sesion borra el material que permite entrar sin red (ver
-   * `gestor.salir()`). En ruta eso deja al vendedor fuera hasta volver al
-   * WiFi del negocio, asi que se confirma antes: es el boton que no debe
-   * apretar por error, y esta a un dedo de "Cerrar el dia".
+   * `gestor.salir()`). En ruta eso deja al vendedor fuera hasta volver al WiFi
+   * del negocio, asi que se confirma antes. Vive al pie del menu (T-37).
    */
   function confirmarSalida() {
     Alert.alert(
@@ -118,94 +144,155 @@ export default function MenuJornada() {
   }
 
   return (
-    <Pantalla
-      titulo={`Jornada del ${jornada?.fecha}`}
-      subtitulo={
+    <View style={{ flex: 1, backgroundColor: colores.papel }}>
+      <ScrollView
+        style={estilos.pantalla}
+        contentContainerStyle={estilos.contenido}
+        scrollEnabled={!arrastrando}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Barra: tres acciones con icono y texto corto a la izquierda; menu a la derecha. */}
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: espacio.sm,
+            marginBottom: espacio.md,
+          }}
+        >
+          <Boton
+            etiqueta="Prospecto"
+            glifo="+"
+            tono="neutra"
+            ancho="ajustado"
+            deshabilitado={soloLectura}
+            onPress={() => router.push('/(jornada)/prospectos')}
+          />
+          <Boton
+            etiqueta={sincronizando ? 'Refrescando…' : 'Refrescar'}
+            glifo="↻"
+            tono="neutra"
+            ancho="ajustado"
+            ocupado={sincronizando}
+            onPress={() => void refrescar()}
+          />
+          <Pastilla
+            numero={pendientes}
+            texto="por subir"
+            estado={pendientes > 0 ? 'pendiente' : 'listo'}
+          />
+          <Boton
+            etiqueta="Agregar a mi ruta"
+            glifo="+"
+            ancho="ajustado"
+            deshabilitado={soloLectura}
+            onPress={() => router.push('/(jornada)/agregar-a-ruta')}
+          />
+          <View style={{ flex: 1 }} />
+          <Pressable
+            onPress={() => setMenuAbierto(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Abrir el menú"
+            hitSlop={espacio.xs}
+            style={({ pressed }) => [
+              {
+                minWidth: 48,
+                height: 48,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: radio.chico,
+                borderWidth: grosor.fuerte,
+                borderColor: colores.bordeFuerte,
+                backgroundColor: colores.superficie,
+              },
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <Text style={{ fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.subtitulo), color: colores.tinta }}>
+              ☰
+            </Text>
+          </Pressable>
+        </View>
+
         <Text style={estilos.subtitulo}>
-          {vendedor?.nombre ?? 'Sin vendedor'} · {vendedor?.sucursalCodigo ?? '—'} · km inicial{' '}
-          <Cifra valor={jornada?.km_inicial ?? 0} tono="suave" /> · esquema local v
-          <Cifra valor={datos.versionEsquema} tono="suave" />
+          Jornada del {jornada?.fecha} · Catálogos bajados:{' '}
+          {formatearMomento(datos.catalogos.frescuraCatalogos())}
         </Text>
-      }
-    >
-      <View style={estilos.rejilla}>
-        <BotonMenu
-          titulo="Operación por cliente"
-          descripcion="Venta, cobranza, visita sin venta y registros de campo"
-          destino="/(jornada)/operacion"
-          deshabilitado={!menu.operacionesHabilitadas}
-        />
-        <BotonMenu
-          titulo="Prospectos"
-          descripcion="Alta de prospectos (el vendedor ya no da de alta clientes)"
-          destino="/(jornada)/prospectos"
-          deshabilitado={!menu.operacionesHabilitadas}
-        />
-        <BotonMenu
-          titulo="Ruta y GPS"
-          descripcion="Mapa de clientes del día y orden real de la ruta"
-          destino="/(jornada)/ruta"
-          deshabilitado={!menu.operacionesHabilitadas}
-        />
-        <BotonMenu
-          titulo="Cerrar el día"
-          descripcion="Kilometraje final, corte e impresión"
-          destino="/(jornada)/cerrar-dia"
-        />
-      </View>
 
-      {menu.avisoDiaCerrado ? (
-        <Tarjeta estado="listo" etiqueta="Día cerrado">
-          <Text style={estilos.textoTarjeta}>{menu.avisoDiaCerrado}</Text>
-        </Tarjeta>
-      ) : null}
-
-      <Tarjeta estado={estadoSync} etiqueta="Sincronización">
-        <Pastilla
-          numero={pendientes}
-          texto={pendientes === 1 ? 'registro por subir' : 'registros por subir'}
-          estado={pendientes > 0 ? 'pendiente' : 'listo'}
-        />
-        <Text style={estilos.textoSuave}>
-          Catálogos bajados: {formatearMomento(datos.catalogos.frescuraCatalogos())}
-        </Text>
-        {ultimaSincronizacion ? (
-          ultimaSincronizacion.ok ? (
-            <Text style={estilos.textoSuave}>
-              Última sincronización correcta ·{' '}
-              <Cifra valor={ultimaSincronizacion.pull?.filas ?? 0} tono="suave" /> bajados ·{' '}
-              <Cifra valor={ultimaSincronizacion.push?.aplicadas ?? 0} tono="suave" /> subidos
-            </Text>
-          ) : (
-            <Text style={estilos.textoSuave}>
-              {MENSAJE[ultimaSincronizacion.motivo ?? 'sin-red']}
-            </Text>
-          )
+        {ultimaSincronizacion && !ultimaSincronizacion.ok ? (
+          <Text style={estilos.error}>{MENSAJE[ultimaSincronizacion.motivo ?? 'sin-red']}</Text>
         ) : null}
-        {/* Unica accion primaria de la pantalla: lo demas son tarjetas de navegacion. */}
-        <Boton
-          etiqueta={sincronizando ? 'Sincronizando…' : 'Sincronizar ahora'}
-          glifo="↻"
-          onPress={() => void sincronizarAhora()}
-          ocupado={sincronizando}
-          estilo={{ marginTop: espacio.md }}
-        />
-      </Tarjeta>
 
-      {/*
-        Aislado del resto a proposito, y en `peligro` (contorno rojo, no
-        relleno). Esta a un dedo de "Cerrar el dia", que suena parecido y hace
-        algo completamente distinto: uno termina la jornada, el otro deja al
-        vendedor fuera de la app hasta volver al WiFi. El hueco de arriba y el
-        tono son lo que impide confundirlos con el pulgar en movimiento.
-      */}
-      <Boton
-        etiqueta="Cerrar sesión"
-        tono="peligro"
-        glifo="×"
-        onPress={confirmarSalida}
-        estilo={{ marginTop: espacio.xl, marginBottom: espacio.xl }}
+        {menu.avisoDiaCerrado ? (
+          <Tarjeta estado="listo" etiqueta="Día cerrado">
+            <Text style={estilos.textoTarjeta}>{menu.avisoDiaCerrado}</Text>
+          </Tarjeta>
+        ) : null}
+
+        {sinRuta ? (
+          // D3: sin ruta asignada la tablet funciona igual.
+          <Tarjeta estado="pendiente" etiqueta="Sin ruta">
+            <Text style={estilos.textoTarjeta}>{textoAvisoSinRuta(datos.sync.leerCursor())}</Text>
+            <View style={estilos.filaAcciones}>
+              <Boton
+                etiqueta={sincronizando ? 'Sincronizando…' : 'Sincronizar'}
+                glifo="↻"
+                tono="neutra"
+                ancho="ajustado"
+                ocupado={sincronizando}
+                onPress={() => void refrescar()}
+              />
+              <Boton
+                etiqueta="Agregar a mi ruta"
+                glifo="+"
+                ancho="ajustado"
+                deshabilitado={soloLectura}
+                onPress={() => router.push('/(jornada)/agregar-a-ruta')}
+              />
+            </View>
+          </Tarjeta>
+        ) : (
+          <ListaRuta
+            filas={enRuta}
+            soloLectura={soloLectura}
+            onTocar={abrirCliente}
+            onReordenar={reordenar}
+            onQuitar={quitar}
+            onArrastrando={setArrastrando}
+          />
+        )}
+
+        {fueraDeRuta.length > 0 ? (
+          <View style={{ gap: espacio.sm, marginTop: espacio.lg }}>
+            <Text style={estilos.seccion}>Fuera de ruta</Text>
+            {fueraDeRuta.map((fila) => (
+              <FilaFueraDeRuta key={fila.id} fila={fila} onTocar={abrirCliente} />
+            ))}
+          </View>
+        ) : null}
+      </ScrollView>
+
+      <MenuHoja
+        visible={menuAbierto}
+        entradas={entradasMenu(soloLectura)}
+        onElegir={(entrada) => {
+          setMenuAbierto(false);
+          router.push(entrada.destino as Href);
+        }}
+        onCerrar={() => setMenuAbierto(false)}
+        pie={
+          <Boton
+            etiqueta="Cerrar sesión"
+            tono="peligro"
+            glifo="×"
+            onPress={() => {
+              setMenuAbierto(false);
+              confirmarSalida();
+            }}
+          />
+        }
       />
-    </Pantalla>
+    </View>
   );
 }

@@ -48,7 +48,9 @@ export type TipoOperacion =
   | 'merma'
   | 'ruta'
   /** T-40. Un alta de prospecto: el servidor la proyecta a `cliente`. */
-  | 'prospecto';
+  | 'prospecto'
+  /** T-37. Un cliente que el vendedor agrego a su ruta del dia. */
+  | 'ruta-alta';
 
 export type EstadoOperacion = 'aplicada' | 'duplicada' | 'rechazada';
 
@@ -102,6 +104,24 @@ export const CODIGOS_RECHAZO = [
    * clave. Se queda en `error` con el motivo; no se resuelve sola.
    */
   'jornada-duplicada',
+  /**
+   * T-37: `datos.cliente_id` del alta de ruta falta o no es uuid, el sobre trae
+   * folio, o trae un `cliente_id` que no coincide con el de `datos`. Bug de la
+   * tablet.
+   */
+  'ruta-datos-invalidos',
+  /**
+   * T-37: el cliente del alta no existe en el servidor, esta dado de baja, es de
+   * otra sucursal o es un prospecto. La fila queda en `error`; el vendedor la
+   * puede quitar.
+   */
+  'cliente-inexistente',
+  /**
+   * T-37: la oficina ya tenia a ese cliente en la ruta de ese dia. **No es un
+   * error**: `fuente-rutas.ts` la marca como sincronizada y el pull posterior la
+   * funde con la fila del servidor.
+   */
+  'ruta-duplicada',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -240,6 +260,21 @@ export interface NotaPendientePull extends FilaSincronizable {
   abonos: AbonoPull[];
 }
 
+/**
+ * Una fila de la ruta diaria del vendedor (T-37). Copia de la del backend.
+ *
+ * Ventana por el reloj del servidor: desde ayer en adelante, sin tope: una ruta
+ * futura debe bajar en el pull siguiente a su creacion. La tablet decide que
+ * dia mostrar con su reloj local.
+ */
+export interface RutaPull extends FilaSincronizable {
+  cliente_id: string;
+  /** `AAAA-MM-DD`. */
+  fecha: string;
+  orden: number;
+  origen: 'oficina' | 'vendedor';
+}
+
 export interface RespuestaPull {
   contrato: number;
   servidor_en: string;
@@ -276,6 +311,13 @@ export interface RespuestaPull {
     precios: PrecioPull[];
   };
   notas_pendientes: NotaPendientePull[];
+  /**
+   * T-37. **Opcional en la copia de la tablet, obligatoria en el servidor**, por
+   * la misma razon que `catalogos.tipos_negocio`: esta tablet puede hablar con
+   * un servidor que todavia no la manda, y leer `undefined` no puede reventar la
+   * sincronizacion. Sin la coleccion, la tablet funciona sin ruta asignada (D3).
+   */
+  rutas?: RutaPull[];
 }
 
 /**
@@ -454,6 +496,14 @@ export type DatosJornada = {
   abierta_en: string;
   /** ISO-8601 con zona. */
   cerrada_en: string;
+};
+
+/**
+ * `datos` de una operacion `tipo: "ruta-alta"` (T-37). Copia del tipo del
+ * backend: el cliente va aqui y no en el sobre; el dia es `fecha_operacion`.
+ */
+export type DatosRutaAlta = {
+  cliente_id: string;
 };
 
 export interface ResultadoOperacion {
