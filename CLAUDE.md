@@ -272,7 +272,8 @@ usuario con sesion pasa.
     (`apps/backend/test/apoyo-cobros.ts`). La entidad del push de cobranza en `sync_operacion` es el `cobro`.
   - **Se borra el pago completo**, nunca un pedazo: `deleted_at` en el `cobro` (+ `eliminado_por_usuario_id`),
     sus filas y su saldo a favor; cada nota recalcula su status (`cuenta_perdida` se queda). El status se
-    escribe aunque no cambie y se toca `cliente.updated_at`: así la tablet recibe la nota otra vez pendiente en
+    escribe aunque no cambie (eso le toca `updated_at` a la nota y la tablet la vuelve a bajar) y, si el pago
+    movió saldo a favor, se toca `cliente.updated_at`: así la tablet recibe la nota otra vez pendiente en
     el pull **sin cambiar la app**.
   - **Candados al autorizar:** la `peticion` (`for update`) → notas del cliente → su saldo a favor → el `cobro`.
     Mismo orden que el cobro: sin abrazo mortal con T-20/T-21. La vista previa toma los mismos candados.
