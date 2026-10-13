@@ -94,7 +94,9 @@ export function leerPiezas(texto: string): number | null {
 
 /** Centavos a `$1,234.56`. */
 export function formatearPesos(centavos: number): string {
-  return `$${(centavos / 100).toLocaleString("en-US", {
+  // El signo va antes del $ ("-$50.00"), como se escribe a mano (T-34).
+  const signo = centavos < 0 ? "-" : "";
+  return `${signo}$${(Math.abs(centavos) / 100).toLocaleString("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   })}`;

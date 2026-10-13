@@ -46,6 +46,12 @@ describe("formatearPesos", () => {
     expect(formatearPesos(27000)).toBe("$270.00");
     expect(formatearPesos(123456)).toBe("$1,234.56");
   });
+
+  it("un negativo lleva el signo antes del $ (T-34: saldo a favor ya aplicado)", () => {
+    expect(formatearPesos(-5000)).toBe("-$50.00");
+    expect(formatearPesos(-123456)).toBe("-$1,234.56");
+    expect(formatearPesos(0)).toBe("$0.00");
+  });
 });
 
 const CATALOGO: PresentacionDeCatalogo[] = [
