@@ -1220,7 +1220,8 @@ describe("construirLibro", () => {
     expect(hoja.getCell("A6").font?.bold).toBe(true); // grupo
     expect(hoja.getCell("A6").value).toBe("Nissan-01");
     expect(hoja.getCell("B8").fill).toMatchObject({ fgColor: { argb: "FFFEF3C7" } });
-    expect(hoja.getCell("A7").fill).toBeUndefined();
+    const sinResaltar = hoja.getCell("A7").fill as { fgColor?: { argb?: string } } | undefined;
+    expect(sinResaltar?.fgColor?.argb).not.toBe("FFFEF3C7");
     expect(hoja.getCell("A9").value).toBe("Total Nissan-01"); // texto en columna de fecha
     expect(hoja.getCell("C9").font?.bold).toBe(true);
     expect(hoja.getCell("C9").border?.top?.style).toBe("thin");
@@ -1322,7 +1323,7 @@ export async function construirLibro(def: DefinicionExcel): Promise<ArrayBuffer>
 
   // En Node `writeBuffer` da un Buffer y en el navegador un ArrayBuffer;
   // `new Uint8Array(...)` deja en los dos un ArrayBuffer propio y completo.
-  return new Uint8Array(await libro.xlsx.writeBuffer()).buffer;
+  return new Uint8Array(await libro.xlsx.writeBuffer()).buffer as ArrayBuffer;
 }
 ```
 
@@ -1476,7 +1477,7 @@ vi.mock("./api", async (importOriginal) => {
 });
 const apiFetch = vi.mocked(api.apiFetch);
 
-export const REPORTE: ReporteKilometraje = {
+const REPORTE: ReporteKilometraje = {
   desde: "2026-10-01",
   hasta: "2026-10-13",
   vehiculos: [
@@ -1733,9 +1734,6 @@ export function definicionExcelKilometraje(
 }
 ```
 
-> El fixture `REPORTE` se exporta para que la prueba de pantalla (Tarea 5) lo reuse **solo si** el lint del
-> portal no lo prohíbe; si lo marca, quita el `export` y define su propio fixture en la Tarea 5 (ya lo hace).
-
 - [ ] **Paso 4: Corre la prueba y confirma que pasa**
 
 Run: `npm test --workspace=apps/portal -- src/lib/reportes.test.ts`
@@ -1751,3 +1749,811 @@ git commit -m "T-50: portal — lib/reportes: llamada, formatos de km y la hoja 
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
+
+---
+
+### Tarea 5: Portal — *Información → Reportes* y el Reporte de Kilometraje
+
+**Archivos:**
+- Crear: `apps/portal/src/components/reportes/lista-reportes.tsx` (+ `lista-reportes.test.tsx`)
+- Crear: `apps/portal/src/components/reportes/tabla-kilometraje.tsx`
+- Crear: `apps/portal/src/components/reportes/pantalla-kilometraje.tsx` (+ `pantalla-kilometraje.test.tsx`)
+- Modificar: `apps/portal/src/app/(portal)/informacion/reportes/page.tsx` (hoy `Placeholder`)
+- Crear: `apps/portal/src/app/(portal)/informacion/reportes/kilometraje/page.tsx`
+
+**Interfaces:**
+- Consume (Tarea 4): `obtenerReporteKilometraje`, `definicionExcelKilometraje`, `etiquetaSucursal`,
+  `etiquetaVehiculo`, `explicarSalto`, `formatearFecha`, `formatearKm`, `formatearSalto`, `primerDiaDelMes`,
+  `ReporteKilometraje` de `@/lib/reportes`.
+- Consume (Tarea 3): `exportarExcel` de `@/lib/excel/exportar`.
+- Consume (existentes): `useAuth()` → `{ usuario, puede }` de `@/components/auth/auth-provider`;
+  `listarVehiculos(sucursal)` y `Vehiculo` de `@/lib/vehiculos`; `hoyEnTijuana()` de `@/lib/ventas`;
+  `mensajeDe(err, porDefecto)` de `@/lib/api`; `cn` de `@/lib/utils`; `Button`, `Card*` de `@/components/ui/`.
+- Produce: `ListaReportes({ sucursal })`, `PantallaKilometraje({ sucursal })`, `TablaKilometraje({ reporte })`.
+
+- [ ] **Paso 1: Escribe las pruebas que fallan**
+
+```tsx
+// apps/portal/src/components/reportes/lista-reportes.test.tsx
+import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { useAuth } from "@/components/auth/auth-provider";
+import { ListaReportes } from "./lista-reportes";
+
+vi.mock("@/components/auth/auth-provider");
+// next/link fuera del router de Next: un <a> basta para la prueba.
+vi.mock("next/link", () => ({
+  default: ({ href, children, ...resto }: { href: string; children: ReactNode }) => (
+    <a href={href} {...resto}>
+      {children}
+    </a>
+  ),
+}));
+
+function mockAuth(puede: (clave: string) => boolean) {
+  vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: false, cerrarSesion: vi.fn(), puede });
+}
+
+describe("ListaReportes", () => {
+  it("sin reportes.ver lo dice", () => {
+    mockAuth(() => false);
+    render(<ListaReportes sucursal={null} />);
+    expect(screen.getByText("No tienes permiso para ver reportes")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Kilometraje" })).not.toBeInTheDocument();
+  });
+
+  it("enlaza Kilometraje conservando la sucursal del filtro global", () => {
+    mockAuth((clave) => clave === "reportes.ver");
+    render(<ListaReportes sucursal="TJ" />);
+    expect(screen.getByRole("link", { name: "Kilometraje" })).toHaveAttribute(
+      "href",
+      "/informacion/reportes/kilometraje?sucursal=TJ",
+    );
+  });
+});
+```
+
+```tsx
+// apps/portal/src/components/reportes/pantalla-kilometraje.test.tsx
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { useAuth } from "@/components/auth/auth-provider";
+import { ErrorApi } from "@/lib/api";
+import * as excel from "@/lib/excel/exportar";
+import * as reportes from "@/lib/reportes";
+import type { ReporteKilometraje } from "@/lib/reportes";
+import { hoyEnTijuana } from "@/lib/ventas";
+import * as vehiculosLib from "@/lib/vehiculos";
+import { PantallaKilometraje } from "./pantalla-kilometraje";
+
+vi.mock("@/components/auth/auth-provider");
+vi.mock("@/lib/reportes", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/reportes")>();
+  return { ...real, obtenerReporteKilometraje: vi.fn() };
+});
+vi.mock("@/lib/vehiculos", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/vehiculos")>();
+  return { ...real, listarVehiculos: vi.fn() };
+});
+vi.mock("@/lib/excel/exportar", () => ({ exportarExcel: vi.fn() }));
+
+const obtener = vi.mocked(reportes.obtenerReporteKilometraje);
+const listarVehiculos = vi.mocked(vehiculosLib.listarVehiculos);
+const exportarExcel = vi.mocked(excel.exportarExcel);
+
+const REPORTE: ReporteKilometraje = {
+  desde: "2026-10-01",
+  hasta: "2026-10-13",
+  vehiculos: [
+    {
+      vehiculoId: "v1",
+      nombre: "Nissan-01",
+      placas: "ABC-123",
+      activo: true,
+      jornadas: [
+        { jornadaId: "j1", fecha: "2026-10-01", vendedor: "Juan Pérez", kmInicialDecimas: 100000, kmFinalDecimas: 102505, kilometrosDecimas: 2505, saltoDecimas: null, fechaAnterior: null },
+        { jornadaId: "j2", fecha: "2026-10-02", vendedor: "Pedro López", kmInicialDecimas: 104000, kmFinalDecimas: 105200, kilometrosDecimas: 1200, saltoDecimas: 1495, fechaAnterior: "2026-10-01" },
+      ],
+      totalKilometrosDecimas: 3705,
+      totalSaltoDecimas: 1495,
+    },
+    {
+      vehiculoId: "v2",
+      nombre: "Vieja",
+      placas: null,
+      activo: false,
+      jornadas: [
+        { jornadaId: "j3", fecha: "2026-10-03", vendedor: "Juan Pérez", kmInicialDecimas: 5000, kmFinalDecimas: 5600, kilometrosDecimas: 600, saltoDecimas: null, fechaAnterior: null },
+      ],
+      totalKilometrosDecimas: 600,
+      totalSaltoDecimas: 0,
+    },
+  ],
+  totalKilometrosDecimas: 4305,
+  totalSaltoDecimas: 1495,
+};
+
+const VEHICULOS = [
+  { id: "v1", nombre: "Nissan-01", placas: "ABC-123", kmInicial: 0, sucursalId: "s", sucursalCodigo: "TJ", activo: true },
+  { id: "v2", nombre: "Vieja", placas: null, kmInicial: 0, sucursalId: "s", sucursalCodigo: "TJ", activo: false },
+];
+
+function mockAuth(puede: (clave: string) => boolean, codigoSucursal: string | null = null) {
+  vi.mocked(useAuth).mockReturnValue({
+    usuario: {
+      id: "u1",
+      login: "ana",
+      nombre: "Ana",
+      perfil: "Administrador General",
+      sucursal: codigoSucursal ? { id: "s", codigo: codigoSucursal, nombre: codigoSucursal } : null,
+      permisos: [],
+    },
+    cargando: false,
+    cerrarSesion: vi.fn(),
+    puede,
+  });
+}
+
+describe("PantallaKilometraje", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    listarVehiculos.mockResolvedValue(VEHICULOS);
+    obtener.mockResolvedValue(REPORTE);
+    exportarExcel.mockResolvedValue(undefined);
+  });
+
+  it("sin reportes.ver lo dice y no pide nada", () => {
+    mockAuth(() => false);
+    render(<PantallaKilometraje sucursal={null} />);
+    expect(screen.getByText("No tienes permiso para ver reportes")).toBeInTheDocument();
+    expect(listarVehiculos).not.toHaveBeenCalled();
+    expect(obtener).not.toHaveBeenCalled();
+  });
+
+  it("arranca con el mes en curso, lista los vehiculos de la sucursal y no consulta hasta Consultar", async () => {
+    mockAuth(() => true);
+    render(<PantallaKilometraje sucursal="TJ" />);
+    const hoy = hoyEnTijuana();
+    expect(screen.getByLabelText("Desde")).toHaveValue(`${hoy.slice(0, 8)}01`);
+    expect(screen.getByLabelText("Hasta")).toHaveValue(hoy);
+    expect(await screen.findByRole("option", { name: "Vieja (desactivado)" })).toBeInTheDocument();
+    expect(listarVehiculos).toHaveBeenCalledWith("TJ");
+    expect(obtener).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Exportar a Excel" })).toBeDisabled();
+  });
+
+  it("con fechas invertidas avisa y no consulta", async () => {
+    mockAuth(() => true);
+    const usuario = userEvent.setup();
+    render(<PantallaKilometraje sucursal={null} />);
+    const desde = screen.getByLabelText("Desde");
+    await usuario.clear(desde);
+    await usuario.type(desde, "2026-12-31");
+    await usuario.click(screen.getByRole("button", { name: "Consultar" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("La fecha inicial no puede ser posterior a la final.");
+    expect(obtener).not.toHaveBeenCalled();
+  });
+
+  it("pinta grupos, totales y el salto resaltado con su explicacion", async () => {
+    mockAuth(() => true);
+    const usuario = userEvent.setup();
+    render(<PantallaKilometraje sucursal="TJ" />);
+    await usuario.click(screen.getByRole("button", { name: "Consultar" }));
+
+    expect(await screen.findByText("Nissan-01 (ABC-123)")).toBeInTheDocument();
+    expect(screen.getByText("Vieja (desactivado)", { selector: "th" })).toBeInTheDocument();
+    const salto = screen.getByText("+149.5");
+    expect(salto).toHaveAttribute(
+      "title",
+      "Empezó 149.5 km distinto a como terminó la jornada anterior de este vehículo (01/10/2026).",
+    );
+    expect(salto.closest("tr")).toHaveAttribute("data-salto", "si");
+    expect(screen.getByText("02/10/2026").closest("tr")).toHaveAttribute("data-salto", "si");
+    expect(screen.getByText("01/10/2026").closest("tr")).not.toHaveAttribute("data-salto");
+    const total = screen.getByText("Total general").closest("tr");
+    expect(total).not.toBeNull();
+    expect(within(total as HTMLElement).getByText("430.5")).toBeInTheDocument();
+    expect(obtener).toHaveBeenCalledWith({
+      desde: `${hoyEnTijuana().slice(0, 8)}01`,
+      hasta: hoyEnTijuana(),
+      vehiculoId: null,
+      sucursal: "TJ",
+    });
+  });
+
+  it("sin jornadas lo dice y no deja exportar", async () => {
+    mockAuth(() => true);
+    obtener.mockResolvedValue({ ...REPORTE, vehiculos: [], totalKilometrosDecimas: 0, totalSaltoDecimas: 0 });
+    const usuario = userEvent.setup();
+    render(<PantallaKilometraje sucursal={null} />);
+    await usuario.click(screen.getByRole("button", { name: "Consultar" }));
+    expect(await screen.findByText("No hay jornadas cerradas en ese rango.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exportar a Excel" })).toBeDisabled();
+  });
+
+  it("muestra el mensaje del servidor si la consulta falla", async () => {
+    mockAuth(() => true);
+    obtener.mockRejectedValue(new ErrorApi("x", 400, "El rango no puede pasar de un año."));
+    const usuario = userEvent.setup();
+    render(<PantallaKilometraje sucursal={null} />);
+    await usuario.click(screen.getByRole("button", { name: "Consultar" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("El rango no puede pasar de un año.");
+  });
+
+  it("Review Focus 5: exporta lo consultado con los filtros aplicados, aunque luego se cambien", async () => {
+    mockAuth(() => true, "TJ");
+    const usuario = userEvent.setup();
+    render(<PantallaKilometraje sucursal={null} />);
+    await screen.findByRole("option", { name: "Nissan-01 (ABC-123)" });
+    await usuario.selectOptions(screen.getByLabelText("Vehículo"), "v1");
+    await usuario.click(screen.getByRole("button", { name: "Consultar" }));
+    await screen.findByText("Total general");
+
+    // Cambia los filtros SIN volver a consultar.
+    await usuario.selectOptions(screen.getByLabelText("Vehículo"), "");
+    await usuario.click(screen.getByRole("button", { name: "Exportar a Excel" }));
+
+    expect(exportarExcel).toHaveBeenCalledTimes(1);
+    const def = exportarExcel.mock.calls[0]?.[0];
+    expect(def?.filtros).toEqual([
+      ["Rango", "01/10/2026 a 13/10/2026"],
+      ["Sucursal", "TJ"],
+      ["Vehículo", "Nissan-01 (ABC-123)"],
+    ]);
+    expect(def?.nombreArchivo).toBe("kilometraje_2026-10-01_a_2026-10-13");
+  });
+});
+```
+
+- [ ] **Paso 2: Corre las pruebas y confirma que fallan**
+
+Run: `npm test --workspace=apps/portal -- src/components/reportes`
+Expected: FAIL con `Failed to resolve import "./lista-reportes"` y `"./pantalla-kilometraje"`.
+
+- [ ] **Paso 3: La lista de reportes**
+
+```tsx
+// apps/portal/src/components/reportes/lista-reportes.tsx
+"use client";
+
+import Link from "next/link";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/components/auth/auth-provider";
+
+/** Información → Reportes (T-50): la lista. Hoy, uno; Ventas (#49), Clientes nuevos (#51)... se suman aqui. */
+export function ListaReportes({ sucursal }: { sucursal: string | null }) {
+  const { puede } = useAuth();
+  const consulta = sucursal ? `?sucursal=${encodeURIComponent(sucursal)}` : "";
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Reportes</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {!puede("reportes.ver") ? (
+          <p className="text-sm text-muted-foreground">No tienes permiso para ver reportes</p>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            <li>
+              <Link href={`/informacion/reportes/kilometraje${consulta}`} className="font-medium underline">
+                Kilometraje
+              </Link>
+              <p className="text-sm text-muted-foreground">
+                Kilómetros por vehículo y día, con los saltos entre jornadas. Exportable a Excel.
+              </p>
+            </li>
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+- [ ] **Paso 4: La tabla**
+
+```tsx
+// apps/portal/src/components/reportes/tabla-kilometraje.tsx
+import {
+  etiquetaVehiculo,
+  explicarSalto,
+  formatearFecha,
+  formatearKm,
+  formatearSalto,
+  type ReporteKilometraje,
+} from "@/lib/reportes";
+import { cn } from "@/lib/utils";
+
+/** Un `tbody` por vehiculo: encabezado, sus jornadas y su total. Gran total en el `tfoot`. */
+export function TablaKilometraje({ reporte }: { reporte: ReporteKilometraje }) {
+  return (
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="text-left text-muted-foreground">
+          <th className="py-2">Fecha</th>
+          <th>Vendedor</th>
+          <th className="text-right">Km inicial</th>
+          <th className="text-right">Km final</th>
+          <th className="text-right">Kilómetros</th>
+          <th className="text-right">Salto</th>
+        </tr>
+      </thead>
+      {reporte.vehiculos.map((v) => (
+        <tbody key={v.vehiculoId}>
+          <tr className="border-t bg-muted/40">
+            <th colSpan={6} scope="rowgroup" className="py-2 text-left font-semibold">
+              {etiquetaVehiculo(v)}
+            </th>
+          </tr>
+          {v.jornadas.map((j) => {
+            const conSalto = j.saltoDecimas !== null && j.saltoDecimas !== 0;
+            return (
+              <tr
+                key={j.jornadaId}
+                className={cn("border-t", conSalto && "bg-amber-50")}
+                data-salto={conSalto ? "si" : undefined}
+              >
+                <td className="py-1.5">{formatearFecha(j.fecha)}</td>
+                <td>{j.vendedor}</td>
+                <td className="text-right">{formatearKm(j.kmInicialDecimas)}</td>
+                <td className="text-right">{formatearKm(j.kmFinalDecimas)}</td>
+                <td className="text-right">{formatearKm(j.kilometrosDecimas)}</td>
+                <td className="text-right font-semibold" title={explicarSalto(j)}>
+                  {formatearSalto(j.saltoDecimas)}
+                </td>
+              </tr>
+            );
+          })}
+          <tr className="border-t font-semibold">
+            <td colSpan={4} className="py-1.5">
+              Total {etiquetaVehiculo(v)}
+            </td>
+            <td className="text-right">{formatearKm(v.totalKilometrosDecimas)}</td>
+            <td className="text-right">{formatearSalto(v.totalSaltoDecimas)}</td>
+          </tr>
+        </tbody>
+      ))}
+      <tfoot>
+        <tr className="border-t-2 font-semibold">
+          <td colSpan={4} className="py-2">
+            Total general
+          </td>
+          <td className="text-right">{formatearKm(reporte.totalKilometrosDecimas)}</td>
+          <td className="text-right">{formatearSalto(reporte.totalSaltoDecimas)}</td>
+        </tr>
+      </tfoot>
+    </table>
+  );
+}
+```
+
+- [ ] **Paso 5: La pantalla**
+
+```tsx
+// apps/portal/src/components/reportes/pantalla-kilometraje.tsx
+"use client";
+
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/components/auth/auth-provider";
+import { mensajeDe } from "@/lib/api";
+import { exportarExcel } from "@/lib/excel/exportar";
+import {
+  definicionExcelKilometraje,
+  etiquetaSucursal,
+  etiquetaVehiculo,
+  obtenerReporteKilometraje,
+  primerDiaDelMes,
+  type ReporteKilometraje,
+} from "@/lib/reportes";
+import { listarVehiculos, type Vehiculo } from "@/lib/vehiculos";
+import { hoyEnTijuana } from "@/lib/ventas";
+import { TablaKilometraje } from "./tabla-kilometraje";
+
+/** Lo que se consulto y con que filtros: es lo que se exporta (Review Focus 5). */
+interface Consultado {
+  reporte: ReporteKilometraje;
+  sucursal: string;
+  vehiculo: string;
+}
+
+/**
+ * Información → Reportes → Kilometraje (T-50). La pagina monta este componente
+ * con `key={sucursal}`: cambiar el selector global de sucursal empieza limpio.
+ */
+export function PantallaKilometraje({ sucursal }: { sucursal: string | null }) {
+  const { puede, usuario } = useAuth();
+  const permitido = puede("reportes.ver");
+  const [desde, setDesde] = useState(() => primerDiaDelMes(hoyEnTijuana()));
+  const [hasta, setHasta] = useState(() => hoyEnTijuana());
+  const [vehiculoId, setVehiculoId] = useState("");
+  const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
+  const [consultado, setConsultado] = useState<Consultado | null>(null);
+  const [cargando, setCargando] = useState(false);
+  const [exportando, setExportando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Una consulta lenta que llega tarde no pisa a la mas nueva.
+  const ultimaConsulta = useRef(0);
+
+  useEffect(() => {
+    if (!permitido) return;
+    let vigente = true;
+    listarVehiculos(sucursal).then(
+      (lista) => {
+        if (vigente) setVehiculos(lista);
+      },
+      () => {
+        // Sin la lista, el filtro se queda en "Todos": el reporte sigue sirviendo.
+      },
+    );
+    return () => {
+      vigente = false;
+    };
+  }, [permitido, sucursal]);
+
+  if (!permitido) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Reporte de Kilometraje</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">No tienes permiso para ver reportes</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  async function alConsultar(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (desde > hasta) {
+      setError("La fecha inicial no puede ser posterior a la final.");
+      return;
+    }
+    const esta = ++ultimaConsulta.current;
+    setCargando(true);
+    try {
+      const reporte = await obtenerReporteKilometraje({
+        desde,
+        hasta,
+        vehiculoId: vehiculoId || null,
+        sucursal,
+      });
+      if (esta !== ultimaConsulta.current) return;
+      const elegido = vehiculos.find((v) => v.id === vehiculoId);
+      setConsultado({
+        reporte,
+        sucursal: etiquetaSucursal(usuario?.sucursal?.codigo ?? null, sucursal),
+        vehiculo: elegido ? etiquetaVehiculo(elegido) : "Todos",
+      });
+    } catch (err) {
+      if (esta !== ultimaConsulta.current) return;
+      setConsultado(null);
+      setError(mensajeDe(err, "No se pudo consultar el reporte."));
+    } finally {
+      if (esta === ultimaConsulta.current) setCargando(false);
+    }
+  }
+
+  async function alExportar() {
+    if (!consultado) return;
+    setError(null);
+    setExportando(true);
+    try {
+      await exportarExcel(
+        definicionExcelKilometraje(consultado.reporte, {
+          sucursal: consultado.sucursal,
+          vehiculo: consultado.vehiculo,
+        }),
+      );
+    } catch {
+      setError("No se pudo generar el Excel.");
+    } finally {
+      setExportando(false);
+    }
+  }
+
+  const hayResultados = consultado !== null && consultado.reporte.vehiculos.length > 0;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Reporte de Kilometraje</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5">
+        <form onSubmit={alConsultar} className="flex flex-wrap items-end gap-4">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="km-desde" className="text-sm font-medium">
+              Desde
+            </label>
+            <input
+              id="km-desde"
+              type="date"
+              required
+              value={desde}
+              onChange={(e) => setDesde(e.target.value)}
+              className="rounded-md border px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="km-hasta" className="text-sm font-medium">
+              Hasta
+            </label>
+            <input
+              id="km-hasta"
+              type="date"
+              required
+              value={hasta}
+              onChange={(e) => setHasta(e.target.value)}
+              className="rounded-md border px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="km-vehiculo" className="text-sm font-medium">
+              Vehículo
+            </label>
+            <select
+              id="km-vehiculo"
+              value={vehiculoId}
+              onChange={(e) => setVehiculoId(e.target.value)}
+              className="rounded-md border px-3 py-2 text-sm"
+            >
+              <option value="">Todos</option>
+              {vehiculos.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {etiquetaVehiculo(v)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <Button type="submit" disabled={cargando}>
+            Consultar
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!hayResultados || exportando}
+            onClick={() => void alExportar()}
+          >
+            Exportar a Excel
+          </Button>
+        </form>
+
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+
+        {cargando && <p className="text-sm text-muted-foreground">Cargando…</p>}
+
+        {consultado &&
+          (hayResultados ? (
+            <TablaKilometraje reporte={consultado.reporte} />
+          ) : (
+            <p className="text-sm text-muted-foreground">No hay jornadas cerradas en ese rango.</p>
+          ))}
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+- [ ] **Paso 6: Las rutas**
+
+```tsx
+// apps/portal/src/app/(portal)/informacion/reportes/page.tsx
+import { ListaReportes } from "@/components/reportes/lista-reportes";
+
+// Server component delgado (mismo patron que /operacion/peticiones).
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ sucursal?: string }>;
+}) {
+  const { sucursal } = await searchParams;
+  return <ListaReportes sucursal={sucursal ?? null} />;
+}
+```
+
+```tsx
+// apps/portal/src/app/(portal)/informacion/reportes/kilometraje/page.tsx
+import { PantallaKilometraje } from "@/components/reportes/pantalla-kilometraje";
+
+// `key`: cambiar la sucursal del selector global vuelve a montar la pantalla
+// (filtros y resultados limpios, sin mostrar datos de la sucursal anterior).
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ sucursal?: string }>;
+}) {
+  const { sucursal } = await searchParams;
+  return <PantallaKilometraje key={sucursal ?? ""} sucursal={sucursal ?? null} />;
+}
+```
+
+- [ ] **Paso 7: Corre las pruebas y confirma que pasan**
+
+Run: `npm test --workspace=apps/portal -- src/components/reportes`
+Expected: PASS, 9 pruebas (2 + 7).
+
+- [ ] **Paso 8: Suite, lint, build y commit**
+
+Run: `npm test --workspace=apps/portal`, `npm run lint --workspace=apps/portal`,
+`npm run build --workspace=apps/portal`
+Expected: todo en verde. El build es el que comprueba que Next empaqueta `exceljs` para el navegador (carga
+diferida en un chunk aparte): si el build falla por `exceljs` (p. ej. `fs`/`stream`), **para y reporta** — no
+lo "arregles" con configuración de webpack sin preguntar.
+
+```bash
+git add apps/portal/src/components/reportes "apps/portal/src/app/(portal)/informacion/reportes"
+git commit -m "T-50: portal — Informacion -> Reportes y el Reporte de Kilometraje con exportar a Excel
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+### Tarea 6: Verificación completa, prueba a mano contra la base LOCAL y documentación
+
+**Archivos:**
+- Modificar: `CLAUDE.md`
+- Modificar (vault, `../jawa-obsidian-memory`, commit local **sin push**): `10-Dominio/Modulos/Estadísticas y Reportes.md`,
+  `20-Arquitectura/Stack tecnológico.md` (si existe; si no, la nota de stack que enlace ADR-0002),
+  `00-Inicio/Estado del proyecto.md`, `40-Equipo/Bitácora/2026-10-13.md`
+- Crear (fuera de git, en el espacio de trabajo que indique el coordinador): `texto-pr.md` y `textos-issues.md`
+
+- [ ] **Paso 1: Todas las suites**
+
+Run, desde la raíz:
+- `npm run lint --workspace=apps/backend` · `npm run build --workspace=apps/backend`
+- `npm test --workspace=apps/backend` · `npm run test:e2e --workspace=apps/backend`
+- `npm run supabase -- test db` (no cambia: sin migración)
+- `npm test --workspace=apps/portal` · `npm run lint --workspace=apps/portal` · `npm run build --workspace=apps/portal`
+- `git diff main --stat -- apps/tablet` → vacío
+- `npm run db:types --workspace=apps/backend` y `git diff --exit-code apps/backend/src/database/schema.d.ts` → sin cambios
+
+Anota los números de cada una para el texto del PR.
+
+- [ ] **Paso 2: Prueba a mano contra la base LOCAL**
+
+> **`.env.development` apunta a la NUBE.** No lo uses. **Nunca** `npm run crear-usuario`/`crear-vendedor` (van a
+> la nube).
+
+1. Usuario de prueba con hash real (desde la raíz):
+   ```bash
+   HASH=$(cd apps/backend && node -e "require('@node-rs/argon2').hash('t50admin1234').then(h=>process.stdout.write(h))")
+   C=$(docker ps --format '{{.Names}}' | grep supabase_db)
+   docker exec -i $C psql -U postgres -v hash="$HASH" <<'SQL'
+   insert into usuario (login, nombre, password_hash, perfil_id, sucursal_id)
+   select 't50admin', 'Admin T-50', :'hash', p.id, null from perfil p where p.nombre = 'Administrador General';
+   SQL
+   ```
+2. Datos: un vendedor y dos vehículos de TJ, y jornadas de este mes con **un salto** (+149.5) y un vehículo
+   desactivado (por SQL, como en la e2e de la Tarea 2: `insert into vendedor …`, `insert into vehiculo …`,
+   `insert into jornada (… abierta_en, cerrada_en)`), con nombres `T50 …` para poder borrarlos.
+3. Backend y portal contra la local:
+   ```bash
+   export DATABASE_URL=$(grep '^DATABASE_URL=' .env.test | cut -d= -f2-)
+   PORT=3010 npm run backend                                  # terminal 1
+   NEXT_PUBLIC_API_URL=http://localhost:3010 npm run portal   # terminal 2
+   ```
+   Comprueba que el backend lee la local: `t50admin` entra por `/auth/login` (solo existe en la local).
+4. En el navegador (`http://localhost:3001`): *Información → Reportes → Kilometraje*; consultar el mes; ver el
+   grupo, el salto resaltado con su `title`, el desactivado, los totales; filtrar por vehículo; fechas invertidas;
+   **Exportar a Excel** y abrir el `.xlsx` (números sumables, fechas, negritas, amarillo, encabezado congelado).
+   Si hay herramientas de navegador (Playwright / Claude in Chrome), guarda capturas en el espacio de trabajo.
+5. Limpieza: detén backend y portal; borra lo sembrado (`jornada` → `vehiculo` → `vendedor` → `sesion_refresh` →
+   `usuario`, por los nombres `T50 …`/`t50admin`) y confirma que la base quedó como estaba.
+
+- [ ] **Paso 3: `CLAUDE.md`**
+
+Agrega, después del bloque **Ruta diaria (T-37)** y antes de la línea que empieza con
+`` `npm run supabase -- migration up --local` aplica migraciones nuevas``:
+
+```markdown
+- **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
+  lee la `jornada` de T-38; no escribe nada.
+  - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).
+  - **Salto** = `km_inicial` − `km_final` de la jornada anterior **del mismo vehículo** (orden `fecha, cerrada_en,
+    id`), buscada aunque caiga antes de `desde` (`lag` sobre todo lo anterior a `hasta`; el `desde` se aplica
+    después). Las jornadas borradas no cuentan.
+  - Rango máximo de 366 días; vehículos desactivados o dados de baja sí aparecen.
+  - **Todo reporte del portal exporta con `apps/portal/src/lib/excel/`** (`exportarExcel(definición)`), que carga
+    `exceljs` solo al exportar. `uuid` de `exceljs` va forzado a `^11.1.1` con `overrides` en el `package.json`
+    raíz (aviso de seguridad heredado).
+```
+
+- [ ] **Paso 4: Vault** (`../jawa-obsidian-memory`; lee su `AGENTS.md`; frontmatter con `actualizado: 2026-10-13`)
+
+- `Estadísticas y Reportes.md`: el Reporte Kilometraje ya existe (T-50): columnas, salto, rango, Excel; la
+  utilidad de Excel (T-15) es la que usarán Ventas (#49), Clientes nuevos (#51) y Nómina (#47).
+- Nota de stack del portal: dependencia `exceljs` (carga diferida) y el override de `uuid`.
+- `Estado del proyecto.md`: filas **T-50** y **T-15** (implementadas en la rama, PR por abrir) y en **T-38** que su
+  tercer criterio queda cubierto por T-50.
+- Bitácora `2026-10-13.md`: sección "T-50 y T-15" con las decisiones (renglón por jornada, saltos, T-15 dentro de
+  T-50) y la prueba a mano.
+- Commit local en el vault (sin `.obsidian/graph.json`), **sin push**.
+
+- [ ] **Paso 5: Textos para quien coordina (sin publicar)**
+
+`texto-pr.md` (cuerpo del PR):
+
+````markdown
+## T-50 · Reporte de Kilometraje (+ T-15, exportación a Excel)
+
+*Información → Reportes → Kilometraje*: las jornadas cerradas que sube la tablet (T-38), por vehículo y rango de
+fechas, con km inicial, final, kilómetros, **salto** contra la jornada anterior del mismo vehículo y totales.
+Exportable a Excel con la utilidad nueva `lib/excel` (T-15), que usarán los demás reportes.
+
+- Un renglón por jornada, agrupado por vehículo, con total por vehículo y gran total.
+- **Salto:** si una jornada empieza distinto a como terminó la anterior del mismo vehículo (aunque esa anterior
+  sea de antes del rango), el renglón se resalta y dice cuánto (+ km sin registrar, − odómetro que "retrocede").
+- Filtros: rango (máx. un año), vehículo y el "Por sucursal" global. Permiso `reportes.ver`.
+- Excel real (`exceljs`, cargado solo al exportar): números sumables, fechas, subtotales en negrita, saltos en
+  amarillo, encabezado congelado.
+- **Sin migración.** La app de tablet no cambia.
+
+### Desviaciones del spec
+1. Orden dentro de un vehículo `fecha, cerrada_en, id` (el mismo del salto), no "fecha, luego vendedor".
+2. `exceljs` trae un aviso moderado heredado (`uuid` < 11.1.1); se fuerza `uuid@^11.1.1` solo para `exceljs` con
+   `overrides` en el `package.json` raíz (`npm audit` en 0).
+3. `construirLibro` devuelve `ArrayBuffer` igual en Node y en el navegador.
+4. Vehículos dados de baja también aparecen si tienen jornadas en el rango.
+5. La lista de vehículos del filtro reusa `GET /vehiculos` (ya existente).
+
+### Pruebas
+- Backend: lint y build · unitarias **N** · e2e **N** · pgTAP **N** (sin cambios)
+- Portal: **N** pruebas · lint y build
+- Tablet: sin cambios (`git diff main --stat -- apps/tablet` vacío)
+- A mano en navegador contra la base local: consulta, salto resaltado, vehículo desactivado, filtros, Excel abierto.
+
+### Para Mario
+La app no cambia. El reporte se llena con las jornadas que cierra la tablet (T-38): en `sinmex dev` hoy hay 0.
+
+Closes #50
+Closes #15
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+````
+
+`textos-issues.md` (para publicar después del merge):
+
+- **#50**: marcar las 3 casillas (columnas; rango con datos de la app; Excel) y comentar
+  "Hecho en #<PR>: *Información → Reportes → Kilometraje*, con salto entre jornadas y exportación a Excel."
+- **#15**: marcar las 3 casillas y comentar "Hecho en #<PR> (dentro de T-50): `apps/portal/src/lib/excel/`
+  (`exportarExcel(definición)`): encabezados, filtros/rango en el encabezado, subtotales y totales; `exceljs`
+  cargado solo al exportar. La usan los próximos reportes (#49, #51, #47)."
+- **#38**: marcar la tercera casilla ("alimenta el reporte de kilometraje") — las dos primeras las cierra Mario o
+  ya están; comentar "El reporte de kilometraje ya existe (#<PR>, T-50)."
+- **#64**: comentario "Idea de T-50: comparar la primera jornada de un vehículo contra el `km_inicial` de su
+  alta (hoy el salto solo se mide entre jornadas)."
+- **#49, #51, #47**: comentario "La utilidad de Excel ya existe: `apps/portal/src/lib/excel/` (T-15, #<PR>)."
+
+- [ ] **Paso 6: Commit (repo)**
+
+```bash
+git add CLAUDE.md
+git commit -m "T-50: CLAUDE.md — reportes, decimas de km, salto y la utilidad de Excel
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+## Autorrevisión del plan (hecha al escribirlo)
+
+- **Cobertura del spec:** §3.1 lista y permiso → Tarea 5; §3.2 filtros, tabla, salto, totales, vacío, exportar →
+  Tareas 1, 4, 5; §4.1 endpoint, validación, alcance, `lag`, décimas → Tareas 1–2; §4.2 pantallas y `lib/reportes`
+  → Tareas 4–5; §4.3 `lib/excel` con `exceljs` diferido, formatos, congelado → Tarea 3; §6 pruebas → en cada
+  tarea; §7 documentación y cierre de issues → Tarea 6. Sin huecos.
+- **Marcadores pendientes:** ninguno; los "N" del texto del PR los llena la Tarea 6 con los números reales.
+- **Tipos entre tareas:** `ReporteKilometraje`/`VehiculoEnReporte`/`JornadaEnReporte` iguales en backend
+  (Tarea 1) y portal (Tarea 4); `DefinicionExcel`/`FilaExcel` (Tarea 3) los consume `definicionExcelKilometraje`
+  (Tarea 4) y `exportarExcel` (Tarea 5).
+- **Review Focus:** 1 → Tareas 1 y 2; 2 → Tarea 2; 3 → Tareas 2 y 4; 4 → Tareas 1 y 2; 5 → Tareas 4 y 5.
