@@ -38,6 +38,7 @@ const LOGIN_APP = `e2e-pet-app-${SUFIJO}`;
 
 const F1 = '2023-06-01';
 const F2 = '2023-06-02';
+const F3 = '2023-06-03';
 const PAGO = '2023-06-10';
 
 const mensaje = (res: request.Response) =>
@@ -603,6 +604,14 @@ describe('Peticiones: borrar un cobro (e2e)', () => {
       await autorizar(cookieGeneral, pendiente.id).expect(200);
       await autorizar(cookieTijuana, pendiente.id).expect(403);
       await vistaBorrado(cookieTijuana, cobroId).expect(403);
+      // (a) la vista previa de una peticion de MX, (b) pedir sobre un pago de MX
+      // ya borrado (no 409 "ya se borro"), (c) denegar una ya resuelta (no 409).
+      await request(app.getHttpServer())
+        .get(`/peticiones/${pendiente.id}/vista-previa`)
+        .set('Cookie', cookieTijuana)
+        .expect(403);
+      await pedir(cookieTijuana, { cobroId, motivo: 'x' }).expect(403);
+      await denegar(cookieTijuana, pendiente.id).expect(403);
     });
   });
 
@@ -976,6 +985,97 @@ describe('Peticiones: borrar un cobro (e2e)', () => {
         movimientoSaldoFavorCentavos: 0,
         bloqueo: null,
       });
+    });
+  });
+
+  describe('los lectores del portal (T-34)', () => {
+    it('detalle de venta y Cobranza dicen a que pago pertenece cada cobro y si ya se pidio borrarlo', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const cobroId = await cobrar(cli, [n1.id], 3000);
+
+      const detalle = async () =>
+        (
+          await request(app.getHttpServer())
+            .get(`/ventas/${n1.id}`)
+            .set('Cookie', cookieGeneral)
+            .expect(200)
+        ).body as VentaDetalle;
+      const porCobrar = async () =>
+        (
+          (
+            await request(app.getHttpServer())
+              .get(`/cobranzas/por-cobrar?clienteId=${cli}`)
+              .set('Cookie', cookieGeneral)
+              .expect(200)
+          ).body as {
+            notas: {
+              id: string;
+              abonos: { cobroId: string | null; peticionPendiente: boolean }[];
+            }[];
+          }
+        ).notas.find((n) => n.id === n1.id);
+
+      expect((await detalle()).cobros).toEqual([
+        expect.objectContaining({ cobroId, peticionPendiente: false }),
+      ]);
+      expect((await porCobrar())?.abonos).toEqual([
+        expect.objectContaining({ cobroId, peticionPendiente: false }),
+      ]);
+
+      const p = await pedirOk(cobroId);
+      expect((await detalle()).cobros).toEqual([
+        expect.objectContaining({ cobroId, peticionPendiente: true }),
+      ]);
+      expect((await porCobrar())?.abonos).toEqual([
+        expect.objectContaining({ cobroId, peticionPendiente: true }),
+      ]);
+
+      // Denegada ya no esta pendiente; autorizada, el cobro desaparece.
+      await denegar(cookieGeneral, p.id).expect(200);
+      expect((await detalle()).cobros[0]).toMatchObject({
+        peticionPendiente: false,
+      });
+      await autorizar(cookieGeneral, (await pedirOk(cobroId)).id).expect(200);
+      expect((await detalle()).cobros).toEqual([]);
+    });
+
+    it('el cobro de una venta de contado no tiene pago: cobroId null', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n = await sembrarNota(cli, '50.00', F3);
+      await db
+        .updateTable('venta_nota')
+        .set({ contado_credito: 'contado', status: 'pagada' })
+        .where('id', '=', n.id)
+        .execute();
+      await db
+        .insertInto('cobranza_abono')
+        .values({
+          venta_nota_id: n.id,
+          vendedor_id: null,
+          fecha_pago: F3,
+          fecha_operacion: F3,
+          monto: '50.00',
+          tipo: 'cobranza',
+          saldo_pendiente: '0.00',
+          metodo_pago: 'transferencia',
+          origen: 'venta_contado',
+        })
+        .execute();
+
+      const venta = (
+        await request(app.getHttpServer())
+          .get(`/ventas/${n.id}`)
+          .set('Cookie', cookieGeneral)
+          .expect(200)
+      ).body as VentaDetalle;
+      expect(venta.cobros).toEqual([
+        expect.objectContaining({
+          origen: 'venta_contado',
+          cobroId: null,
+          peticionPendiente: false,
+        }),
+      ]);
     });
   });
 });

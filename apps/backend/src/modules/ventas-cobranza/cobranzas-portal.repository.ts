@@ -12,6 +12,10 @@ export interface AbonoAnterior {
   montoCentavos: number;
   metodoPago: string;
   origen: OrigenAbono;
+  /** El pago al que pertenece (T-34); `null` = cobro automatico de contado. */
+  cobroId: string | null;
+  /** Ya hay una peticion pendiente de borrar ese pago (T-34). */
+  peticionPendiente: boolean;
 }
 
 /** Una nota por cobrar: `pendiente`/`abonado` y viva (§3.1, §3.2). */
@@ -122,6 +126,8 @@ export class CobranzasPortalRepository {
         monto: string;
         metodo_pago: string;
         origen: string;
+        cobro_id: string | null;
+        peticion_pendiente: boolean;
       }[];
     }>`
       select vn.id, vn.folio, vn.num_nota,
@@ -140,7 +146,11 @@ export class CobranzasPortalRepository {
                      'fecha_pago', to_char(ca.fecha_pago, 'YYYY-MM-DD'),
                      'monto', ca.monto::text,
                      'metodo_pago', ca.metodo_pago,
-                     'origen', ca.origen
+                     'origen', ca.origen,
+                     'cobro_id', ca.cobro_id,
+                     'peticion_pendiente', exists (select 1 from peticion p
+                                                    where p.cobro_id = ca.cobro_id
+                                                      and p.status = 'pendiente')
                    ) order by ca.fecha_pago, ca.created_at
                  ) as abonos
             from cobranza_abono ca
@@ -170,6 +180,8 @@ export class CobranzasPortalRepository {
         montoCentavos: aCentavos(a.monto),
         metodoPago: a.metodo_pago,
         origen: a.origen as OrigenAbono,
+        cobroId: a.cobro_id,
+        peticionPendiente: a.peticion_pendiente,
       })),
     }));
   }

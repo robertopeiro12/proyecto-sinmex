@@ -911,6 +911,8 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
             metodoPago: 'efectivo',
             montoCentavos: 27000,
             origen: 'venta_contado',
+            cobroId: null,
+            peticionPendiente: false,
           },
         ],
         editable: true,
