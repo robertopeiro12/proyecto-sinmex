@@ -1817,7 +1817,7 @@ describe("ListaReportes", () => {
 ```tsx
 // apps/portal/src/components/reportes/pantalla-kilometraje.test.tsx
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorApi } from "@/lib/api";
@@ -1928,9 +1928,8 @@ describe("PantallaKilometraje", () => {
     mockAuth(() => true);
     const usuario = userEvent.setup();
     render(<PantallaKilometraje sucursal={null} />);
-    const desde = screen.getByLabelText("Desde");
-    await usuario.clear(desde);
-    await usuario.type(desde, "2026-12-31");
+    // Un <input type="date"> en jsdom se cambia con un evento, no tecleando.
+    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2099-12-31" } });
     await usuario.click(screen.getByRole("button", { name: "Consultar" }));
     expect(screen.getByRole("alert")).toHaveTextContent("La fecha inicial no puede ser posterior a la final.");
     expect(obtener).not.toHaveBeenCalled();
@@ -1942,7 +1941,8 @@ describe("PantallaKilometraje", () => {
     render(<PantallaKilometraje sucursal="TJ" />);
     await usuario.click(screen.getByRole("button", { name: "Consultar" }));
 
-    expect(await screen.findByText("Nissan-01 (ABC-123)")).toBeInTheDocument();
+    // `selector: "th"`: el mismo texto esta en la lista de vehiculos del filtro.
+    expect(await screen.findByText("Nissan-01 (ABC-123)", { selector: "th" })).toBeInTheDocument();
     expect(screen.getByText("Vieja (desactivado)", { selector: "th" })).toBeInTheDocument();
     const salto = screen.getByText("+149.5");
     expect(salto).toHaveAttribute(
