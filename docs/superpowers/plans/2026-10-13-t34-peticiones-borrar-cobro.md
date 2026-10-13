@@ -4082,3 +4082,1315 @@ git commit -m "T-34: endpoints de peticiones — pedir, bandeja, vista previa, a
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
+
+### Tarea 5: Los lectores dicen a qué pago pertenece cada cobro y si ya se pidió borrarlo
+
+El detalle de venta (`GET /ventas/:id`, `CobroDeVenta`) y la Cobranza del portal (`GET /cobranzas/por-cobrar`,
+`AbonoAnterior`) ganan `cobroId` (`null` en el cobro de contado) y `peticionPendiente`. Con eso la pantalla
+pinta "Pedir borrado" o "Borrado pedido · pendiente" sin pedir nada más. Los dos ya filtran
+`deleted_at is null`: un pago borrado desaparece solo. Las comparaciones existentes de esos objetos usan
+`toMatchObject`/`objectContaining`, así que agregar campos no las rompe. **Modelo:** `haiku` para implementar,
+`sonnet` para revisar.
+
+**Archivos:**
+- Modificar: `apps/backend/src/modules/ventas-cobranza/ventas-consulta.repository.ts` (`CobroDeVenta`, `cobros`)
+- Modificar: `apps/backend/src/modules/ventas-cobranza/cobranzas-portal.repository.ts` (`AbonoAnterior`, `notasPorCobrar`)
+- Modificar: `apps/backend/test/peticiones.e2e-spec.ts`
+
+**Interfaces:**
+- Consume: tablas `cobro`, `peticion` (Tarea 1); endpoints de la Tarea 4 (en la e2e).
+- Produce:
+  ```ts
+  // CobroDeVenta y AbonoAnterior ganan:
+  /** El pago al que pertenece; `null` = cobro automatico de contado (no se pide su borrado). */
+  cobroId: string | null;
+  /** Ya hay una peticion pendiente de borrar ese pago. */
+  peticionPendiente: boolean;
+  ```
+
+- [ ] **Paso 1: La e2e que falla**
+
+En `apps/backend/test/peticiones.e2e-spec.ts`, agrega al final del `describe` principal (antes de su `});`):
+
+```ts
+  describe('los lectores del portal (T-34)', () => {
+    it('detalle de venta y Cobranza dicen a que pago pertenece cada cobro y si ya se pidio borrarlo', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const cobroId = await cobrar(cli, [n1.id], 3000);
+
+      const detalle = async () =>
+        (
+          await request(app.getHttpServer())
+            .get(`/ventas/${n1.id}`)
+            .set('Cookie', cookieGeneral)
+            .expect(200)
+        ).body as VentaDetalle;
+      const porCobrar = async () =>
+        (
+          (
+            await request(app.getHttpServer())
+              .get(`/cobranzas/por-cobrar?clienteId=${cli}`)
+              .set('Cookie', cookieGeneral)
+              .expect(200)
+          ).body as { notas: { id: string; abonos: { cobroId: string | null; peticionPendiente: boolean }[] }[] }
+        ).notas.find((n) => n.id === n1.id);
+
+      expect((await detalle()).cobros).toEqual([
+        expect.objectContaining({ cobroId, peticionPendiente: false }),
+      ]);
+      expect((await porCobrar())?.abonos).toEqual([
+        expect.objectContaining({ cobroId, peticionPendiente: false }),
+      ]);
+
+      const p = await pedirOk(cobroId);
+      expect((await detalle()).cobros).toEqual([
+        expect.objectContaining({ cobroId, peticionPendiente: true }),
+      ]);
+      expect((await porCobrar())?.abonos).toEqual([
+        expect.objectContaining({ cobroId, peticionPendiente: true }),
+      ]);
+
+      // Denegada ya no esta pendiente; autorizada, el cobro desaparece.
+      await denegar(cookieGeneral, p.id).expect(200);
+      expect((await detalle()).cobros[0]).toMatchObject({ peticionPendiente: false });
+      await autorizar(cookieGeneral, (await pedirOk(cobroId)).id).expect(200);
+      expect((await detalle()).cobros).toEqual([]);
+    });
+
+    it('el cobro de una venta de contado no tiene pago: cobroId null', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n = await sembrarNota(cli, '50.00', F3);
+      await db
+        .updateTable('venta_nota')
+        .set({ contado_credito: 'contado', status: 'pagada' })
+        .where('id', '=', n.id)
+        .execute();
+      await db
+        .insertInto('cobranza_abono')
+        .values({
+          venta_nota_id: n.id,
+          vendedor_id: null,
+          fecha_pago: F3,
+          fecha_operacion: F3,
+          monto: '50.00',
+          tipo: 'cobranza',
+          saldo_pendiente: '0.00',
+          metodo_pago: 'transferencia',
+          origen: 'venta_contado',
+        })
+        .execute();
+
+      const venta = (
+        await request(app.getHttpServer())
+          .get(`/ventas/${n.id}`)
+          .set('Cookie', cookieGeneral)
+          .expect(200)
+      ).body as VentaDetalle;
+      expect(venta.cobros).toEqual([
+        expect.objectContaining({ origen: 'venta_contado', cobroId: null, peticionPendiente: false }),
+      ]);
+    });
+  });
+```
+
+Run: `npm run test:e2e --workspace=apps/backend -- peticiones`
+Expected: FAIL en las dos pruebas nuevas (`cobroId` y `peticionPendiente` no vienen).
+
+- [ ] **Paso 2: El detalle de venta**
+
+En `apps/backend/src/modules/ventas-cobranza/ventas-consulta.repository.ts`, `CobroDeVenta` queda:
+
+```ts
+export interface CobroDeVenta {
+  id: string;
+  fechaPago: string;
+  metodoPago: string;
+  montoCentavos: number;
+  origen: 'cobro' | 'venta_contado' | 'saldo_favor';
+  /** El pago al que pertenece (T-34); `null` = cobro automatico de contado. */
+  cobroId: string | null;
+  /** Ya hay una peticion pendiente de borrar ese pago (T-34). */
+  peticionPendiente: boolean;
+}
+```
+
+y `cobros` queda:
+
+```ts
+  /** Abonos vivos (el cobro de contado y los de cobranza), por fecha de pago. */
+  async cobros(id: string): Promise<CobroDeVenta[]> {
+    const filas = await sql<{
+      id: string;
+      fecha_pago: string;
+      metodo_pago: string;
+      monto: string;
+      origen: string;
+      cobro_id: string | null;
+      peticion_pendiente: boolean;
+    }>`
+      select ca.id, to_char(ca.fecha_pago, 'YYYY-MM-DD') as fecha_pago,
+             ca.metodo_pago, ca.monto, ca.origen, ca.cobro_id,
+             exists (select 1 from peticion p
+                      where p.cobro_id = ca.cobro_id
+                        and p.status = 'pendiente') as peticion_pendiente
+        from cobranza_abono ca
+       where ca.venta_nota_id = ${id}
+         and ca.deleted_at is null
+       order by ca.fecha_pago, ca.created_at
+    `.execute(this.db);
+    return filas.rows.map((f) => ({
+      id: f.id,
+      fechaPago: f.fecha_pago,
+      metodoPago: f.metodo_pago,
+      montoCentavos: aCentavos(f.monto),
+      origen: f.origen as CobroDeVenta['origen'],
+      cobroId: f.cobro_id,
+      peticionPendiente: f.peticion_pendiente,
+    }));
+  }
+```
+
+- [ ] **Paso 3: La Cobranza del portal**
+
+En `apps/backend/src/modules/ventas-cobranza/cobranzas-portal.repository.ts`:
+
+- `AbonoAnterior` gana, después de `origen: OrigenAbono;`:
+
+```ts
+  /** El pago al que pertenece (T-34); `null` = cobro automatico de contado. */
+  cobroId: string | null;
+  /** Ya hay una peticion pendiente de borrar ese pago (T-34). */
+  peticionPendiente: boolean;
+```
+
+- en el tipo de `abonos` de la consulta de `notasPorCobrar`, agrega `cobro_id: string | null;` y
+  `peticion_pendiente: boolean;`;
+- en el `json_build_object(...)`, después de `'origen', ca.origen`, agrega:
+
+```sql
+                     'origen', ca.origen,
+                     'cobro_id', ca.cobro_id,
+                     'peticion_pendiente', exists (select 1 from peticion p
+                                                    where p.cobro_id = ca.cobro_id
+                                                      and p.status = 'pendiente')
+```
+
+  (quita la coma que deja colgando la línea anterior si hace falta);
+- en el `map` de `abonos`, después de `origen: a.origen as OrigenAbono,`, agrega
+  `cobroId: a.cobro_id,` y `peticionPendiente: a.peticion_pendiente,`.
+
+- [ ] **Paso 4: Correr**
+
+Run: `npm run test:e2e --workspace=apps/backend -- peticiones cobranzas-portal ventas-editar`
+Expected: PASS.
+
+Run: `npm run lint --workspace=apps/backend && npm run build --workspace=apps/backend`
+Expected: sin errores.
+
+- [ ] **Paso 5: Commit**
+
+```bash
+git add apps/backend/src/modules/ventas-cobranza/ventas-consulta.repository.ts \
+  apps/backend/src/modules/ventas-cobranza/cobranzas-portal.repository.ts \
+  apps/backend/test/peticiones.e2e-spec.ts
+git commit -m "T-34: detalle de venta y Cobranza dicen el pago de cada cobro y si tiene peticion pendiente
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+### Tarea 6: Portal — pedir el borrado desde el detalle de venta y desde Cobranza
+
+El botón **"Pedir borrado"** en cada cobro que es un pago (`cobroId` no nulo), con un panel debajo de la
+tabla (el portal no tiene componente de diálogo: desviación 5) que muestra la vista previa del servidor, pide
+el **Motivo** y envía. Un pago con petición pendiente dice **"Borrado pedido · pendiente"**. Un 409 (ya se
+pidió, ya se borró) recarga la pantalla con el mensaje del servidor (Review Focus 5). **Modelo:** `sonnet`
+para implementar y revisar.
+
+**Archivos:**
+- Crear: `apps/portal/src/lib/peticiones.ts`, `apps/portal/src/lib/peticiones.test.ts`
+- Modificar: `apps/portal/src/lib/ventas.ts` (`CobroDeVenta`), `apps/portal/src/lib/cobranzas.ts` (`AbonoAnterior`)
+- Crear: `apps/portal/src/components/peticiones/vista-borrado.tsx`
+- Crear: `apps/portal/src/components/peticiones/pedir-borrado-cobro.tsx`, `pedir-borrado-cobro.test.tsx`
+- Modificar: `apps/portal/src/components/ventas/detalle-venta.tsx`, `detalle-venta.test.tsx`
+- Modificar: `apps/portal/src/components/cobranza/cobranza-cliente.tsx`, `cobranza-cliente.test.tsx`
+- Modificar (fixtures con los campos nuevos): `apps/portal/src/components/ventas/formulario-editar-venta.test.tsx`,
+  `apps/portal/src/lib/ventas.test.ts`
+
+**Interfaces:**
+- Consume: los endpoints de la Tarea 4 y los campos `cobroId`/`peticionPendiente` de la Tarea 5;
+  `apiFetch`, `ErrorApi`, `mensajeDe` (`lib/api.ts`); `formatearPesos`, `ETIQUETA_STATUS`, `obtenerVenta`
+  (`lib/ventas.ts`); `ETIQUETA_METODO_PAGO` (`lib/cobranzas.ts`); `useEnvioFormulario`
+  (`components/catalogo/use-envio-formulario.ts`); `useAuth().puede`.
+- Produce (`lib/peticiones.ts`, usados también por la Tarea 7):
+  ```ts
+  export type StatusPeticion = "pendiente" | "autorizada" | "denegada";
+  export interface NotaTrasBorrar { notaId; folio; numNota: string | null; fecha; delPagoCentavos; saldoAntesCentavos; saldoDespuesCentavos; statusDespues: "pendiente" | "abonado" | "pagada" | "cuenta_perdida" }
+  export interface BloqueoBorrado { codigo: "saldo-favor-aplicado"; motivo: string }
+  export interface CobroEnVista { id; clienteId; cliente; sucursalCodigo; origen: "cobro" | "saldo_favor"; metodoPago; montoCentavos; fechaPago; fechaOperacion; cobrador: string | null }
+  export interface VistaBorrado { cobro: CobroEnVista; notas: NotaTrasBorrar[]; saldoFavorAntesCentavos; saldoFavorDespuesCentavos; movimientoSaldoFavorCentavos; bloqueo: BloqueoBorrado | null }
+  export interface CobroDePeticion { id; clienteId; cliente; montoCentavos; metodoPago; origen: "cobro" | "saldo_favor"; fechaPago; cobrador: string | null; folios: string[] }
+  export interface PeticionEnBandeja { id; tipo: "eliminar_cobro"; status: StatusPeticion; sucursalCodigo; motivo; solicito; creadaEn; resolvio: string | null; resueltaEn: string | null; comentario: string | null; cobro: CobroDePeticion }
+  export const ETIQUETA_STATUS_PETICION: Record<StatusPeticion, string>;
+  export const ETIQUETA_BORRADO_PEDIDO = "Borrado pedido · pendiente";
+  export const LARGO_MAX_TEXTO = 500;
+  export function vistaBorradoDeCobro(cobroId: string): Promise<VistaBorrado>;
+  export function vistaPreviaDePeticion(id: string): Promise<VistaBorrado>;
+  export function pedirBorrarCobro(cobroId: string, motivo: string): Promise<PeticionEnBandeja>;
+  export function listarPeticiones(status: "pendiente" | "historial", sucursal: string | null): Promise<PeticionEnBandeja[]>;
+  export function autorizarPeticion(id: string): Promise<PeticionEnBandeja>;
+  export function denegarPeticion(id: string, comentario: string): Promise<PeticionEnBandeja>;
+  export function describirPago(c: { cliente; montoCentavos; metodoPago; origen; fechaPago; cobrador }): string;
+  export function textoPeticionEnviada(p: PeticionEnBandeja): string;
+  export function textoAutorizada(p: PeticionEnBandeja): string;
+  export function textoDenegada(p: PeticionEnBandeja): string;
+  ```
+  - `components/peticiones/vista-borrado.tsx`: `export function VistaBorradoPago({ vista }: { vista: VistaBorrado })`.
+  - `components/peticiones/pedir-borrado-cobro.tsx`:
+    `export function PedirBorradoCobro({ cobroId, onEnviada, onDesactualizado, onCancelar }: { cobroId: string; onEnviada: (mensaje: string) => void; onDesactualizado: (mensaje: string) => void; onCancelar: () => void })`.
+
+- [ ] **Paso 1: Las formas compartidas ganan los campos de la Tarea 5**
+
+`apps/portal/src/lib/ventas.ts`, `CobroDeVenta` gana después de `origen: …;`:
+
+```ts
+  /** El pago al que pertenece (T-34); `null` = cobro automático de contado. */
+  cobroId: string | null;
+  /** Ya hay una petición pendiente de borrar ese pago (T-34). */
+  peticionPendiente: boolean;
+```
+
+`apps/portal/src/lib/cobranzas.ts`, `AbonoAnterior` gana los mismos dos campos (mismos comentarios) después de
+`origen: OrigenAbono;`.
+
+Agrega `cobroId` y `peticionPendiente` a los objetos de cobro/abono de las pruebas que los construyen, para que
+el `tsc` de `next build` no se queje:
+- `components/ventas/detalle-venta.test.tsx`: en `VENTA.cobros` → `cobroId: "co1", peticionPendiente: false`;
+  en el cobro `a2` de la prueba de saldo a favor → `cobroId: "co2", peticionPendiente: false`;
+- `components/ventas/formulario-editar-venta.test.tsx` y `lib/ventas.test.ts`: el cobro `venta_contado` →
+  `cobroId: null, peticionPendiente: false`;
+- `components/cobranza/cobranza-cliente.test.tsx`: el abono de `N2` → `cobroId: "co2", peticionPendiente: false`.
+
+- [ ] **Paso 2: Prueba de `lib/peticiones` que falla**
+
+Crea `apps/portal/src/lib/peticiones.test.ts`:
+
+```ts
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import * as api from "./api";
+import {
+  autorizarPeticion,
+  denegarPeticion,
+  describirPago,
+  listarPeticiones,
+  pedirBorrarCobro,
+  textoAutorizada,
+  textoDenegada,
+  textoPeticionEnviada,
+  vistaBorradoDeCobro,
+  vistaPreviaDePeticion,
+  type PeticionEnBandeja,
+} from "./peticiones";
+
+vi.mock("./api", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./api")>();
+  return { ...real, apiFetch: vi.fn() };
+});
+const apiFetch = vi.mocked(api.apiFetch);
+
+const PETICION: PeticionEnBandeja = {
+  id: "p1",
+  tipo: "eliminar_cobro",
+  status: "pendiente",
+  sucursalCodigo: "TJ",
+  motivo: "Era de crédito",
+  solicito: "Ana",
+  creadaEn: "2026-10-13 09:15",
+  resolvio: null,
+  resueltaEn: null,
+  comentario: null,
+  cobro: {
+    id: "co1",
+    clienteId: "c1",
+    cliente: "Tacos Erick",
+    montoCentavos: 100000,
+    metodoPago: "efectivo",
+    origen: "cobro",
+    fechaPago: "2026-10-10",
+    cobrador: "Juan Pérez",
+    folios: ["TJ261001AP01"],
+  },
+};
+
+describe("lib/peticiones", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    apiFetch.mockResolvedValue({});
+  });
+
+  it("las vistas previas piden por cobro y por petición", async () => {
+    await vistaBorradoDeCobro("co1");
+    expect(apiFetch).toHaveBeenLastCalledWith("/cobros/co1/vista-borrado");
+    await vistaPreviaDePeticion("p1");
+    expect(apiFetch).toHaveBeenLastCalledWith("/peticiones/p1/vista-previa");
+  });
+
+  it("pedir, autorizar y denegar hacen POST", async () => {
+    await pedirBorrarCobro("co1", "Era de crédito");
+    expect(apiFetch).toHaveBeenLastCalledWith("/peticiones/eliminar-cobro", {
+      method: "POST",
+      body: JSON.stringify({ cobroId: "co1", motivo: "Era de crédito" }),
+    });
+    await autorizarPeticion("p1");
+    expect(apiFetch).toHaveBeenLastCalledWith("/peticiones/p1/autorizar", { method: "POST" });
+    await denegarPeticion("p1", "  No procede ");
+    expect(apiFetch).toHaveBeenLastCalledWith("/peticiones/p1/denegar", {
+      method: "POST",
+      body: JSON.stringify({ comentario: "No procede" }),
+    });
+    await denegarPeticion("p1", "   ");
+    expect(apiFetch).toHaveBeenLastCalledWith("/peticiones/p1/denegar", {
+      method: "POST",
+      body: JSON.stringify({}),
+    });
+  });
+
+  it("la bandeja manda el status y la sucursal si hay", async () => {
+    await listarPeticiones("pendiente", "TJ");
+    expect(apiFetch).toHaveBeenLastCalledWith("/peticiones?status=pendiente&sucursal=TJ");
+    await listarPeticiones("historial", null);
+    expect(apiFetch).toHaveBeenLastCalledWith("/peticiones?status=historial");
+  });
+
+  it("describe el pago: con cobrador, de Oficina o saldo a favor", () => {
+    expect(describirPago(PETICION.cobro)).toBe(
+      "Pago de $1,000.00 · Tacos Erick · 2026-10-10 · Efectivo · cobró Juan Pérez",
+    );
+    expect(describirPago({ ...PETICION.cobro, cobrador: null, metodoPago: "transferencia" })).toBe(
+      "Pago de $1,000.00 · Tacos Erick · 2026-10-10 · Transferencia · Oficina",
+    );
+    expect(
+      describirPago({ ...PETICION.cobro, origen: "saldo_favor", metodoPago: "saldo_favor", cobrador: null }),
+    ).toBe("Saldo a favor aplicado de $1,000.00 · Tacos Erick · 2026-10-10");
+  });
+
+  it("los avisos de enviada, autorizada y denegada", () => {
+    expect(textoPeticionEnviada(PETICION)).toBe("Petición enviada: borrar el pago de $1,000.00 de Tacos Erick.");
+    expect(textoAutorizada(PETICION)).toBe("Petición autorizada: se borró el pago de $1,000.00 de Tacos Erick.");
+    expect(textoDenegada(PETICION)).toBe("Petición denegada: el pago de Tacos Erick no cambia.");
+  });
+});
+```
+
+Run: `npm test --workspace=apps/portal -- peticiones`
+Expected: FAIL — `Failed to resolve import "./peticiones"`.
+
+- [ ] **Paso 3: `lib/peticiones.ts`**
+
+Crea `apps/portal/src/lib/peticiones.ts`:
+
+```ts
+import { apiFetch } from "./api";
+import { ETIQUETA_METODO_PAGO } from "./cobranzas";
+import { formatearPesos } from "./ventas";
+
+// Copia normativa de las formas de apps/backend/src/modules/ventas-cobranza/reglas-borrado-cobro.ts
+// (`NotaTrasBorrar`, `BloqueoBorrado`), cobros-borrado.service.ts (`CobroEnVista`, `VistaBorrado`) y
+// peticiones.repository.ts (`CobroDePeticion`, `PeticionEnBandeja`). Mismo trato que lib/cobranzas.ts:
+// un cambio de forma en un lado exige el equivalente en el otro.
+
+export type StatusPeticion = "pendiente" | "autorizada" | "denegada";
+
+/** Cómo quedaría una nota del pago si se borra. */
+export interface NotaTrasBorrar {
+  notaId: string;
+  folio: string;
+  numNota: string | null;
+  fecha: string;
+  delPagoCentavos: number;
+  saldoAntesCentavos: number;
+  saldoDespuesCentavos: number;
+  statusDespues: "pendiente" | "abonado" | "pagada" | "cuenta_perdida";
+}
+
+export interface BloqueoBorrado {
+  codigo: "saldo-favor-aplicado";
+  motivo: string;
+}
+
+export interface CobroEnVista {
+  id: string;
+  clienteId: string;
+  cliente: string;
+  sucursalCodigo: string;
+  origen: "cobro" | "saldo_favor";
+  metodoPago: string;
+  montoCentavos: number;
+  fechaPago: string;
+  fechaOperacion: string;
+  /** `null` = Oficina (o saldo a favor). */
+  cobrador: string | null;
+}
+
+/** La calcula el servidor con las notas bloqueadas: aquí no se decide nada. */
+export interface VistaBorrado {
+  cobro: CobroEnVista;
+  notas: NotaTrasBorrar[];
+  saldoFavorAntesCentavos: number;
+  saldoFavorDespuesCentavos: number;
+  /** + excedente, - aplicación, 0 si el pago no movió saldo a favor. */
+  movimientoSaldoFavorCentavos: number;
+  bloqueo: BloqueoBorrado | null;
+}
+
+export interface CobroDePeticion {
+  id: string;
+  clienteId: string;
+  cliente: string;
+  montoCentavos: number;
+  metodoPago: string;
+  origen: "cobro" | "saldo_favor";
+  fechaPago: string;
+  cobrador: string | null;
+  folios: string[];
+}
+
+export interface PeticionEnBandeja {
+  id: string;
+  tipo: "eliminar_cobro";
+  status: StatusPeticion;
+  sucursalCodigo: string;
+  motivo: string;
+  solicito: string;
+  /** `AAAA-MM-DD HH:MM`, hora de Tijuana. */
+  creadaEn: string;
+  resolvio: string | null;
+  resueltaEn: string | null;
+  comentario: string | null;
+  cobro: CobroDePeticion;
+}
+
+export const ETIQUETA_STATUS_PETICION: Record<StatusPeticion, string> = {
+  pendiente: "Pendiente",
+  autorizada: "Autorizada",
+  denegada: "Denegada",
+};
+
+export const ETIQUETA_BORRADO_PEDIDO = "Borrado pedido · pendiente";
+
+/** Motivo y comentario: el servidor rechaza más (`ck_peticion_motivo`). */
+export const LARGO_MAX_TEXTO = 500;
+
+export function vistaBorradoDeCobro(cobroId: string): Promise<VistaBorrado> {
+  return apiFetch<VistaBorrado>(`/cobros/${encodeURIComponent(cobroId)}/vista-borrado`);
+}
+
+export function vistaPreviaDePeticion(id: string): Promise<VistaBorrado> {
+  return apiFetch<VistaBorrado>(`/peticiones/${encodeURIComponent(id)}/vista-previa`);
+}
+
+export function pedirBorrarCobro(cobroId: string, motivo: string): Promise<PeticionEnBandeja> {
+  return apiFetch<PeticionEnBandeja>("/peticiones/eliminar-cobro", {
+    method: "POST",
+    body: JSON.stringify({ cobroId, motivo }),
+  });
+}
+
+export function listarPeticiones(
+  status: "pendiente" | "historial",
+  sucursal: string | null,
+): Promise<PeticionEnBandeja[]> {
+  const params = new URLSearchParams({ status });
+  if (sucursal) params.set("sucursal", sucursal);
+  return apiFetch<PeticionEnBandeja[]>(`/peticiones?${params.toString()}`);
+}
+
+export function autorizarPeticion(id: string): Promise<PeticionEnBandeja> {
+  return apiFetch<PeticionEnBandeja>(`/peticiones/${encodeURIComponent(id)}/autorizar`, { method: "POST" });
+}
+
+/** El comentario es opcional: vacío no viaja. */
+export function denegarPeticion(id: string, comentario: string): Promise<PeticionEnBandeja> {
+  const limpio = comentario.trim();
+  return apiFetch<PeticionEnBandeja>(`/peticiones/${encodeURIComponent(id)}/denegar`, {
+    method: "POST",
+    body: JSON.stringify(limpio ? { comentario: limpio } : {}),
+  });
+}
+
+/** "Pago de $1,000.00 · Tacos Erick · 2026-10-10 · Efectivo · cobró Juan Pérez" (§3.1). */
+export function describirPago(c: {
+  cliente: string;
+  montoCentavos: number;
+  metodoPago: string;
+  origen: "cobro" | "saldo_favor";
+  fechaPago: string;
+  cobrador: string | null;
+}): string {
+  if (c.origen === "saldo_favor")
+    return `Saldo a favor aplicado de ${formatearPesos(c.montoCentavos)} · ${c.cliente} · ${c.fechaPago}`;
+  const metodo = ETIQUETA_METODO_PAGO[c.metodoPago] ?? c.metodoPago;
+  const quien = c.cobrador ? `cobró ${c.cobrador}` : "Oficina";
+  return `Pago de ${formatearPesos(c.montoCentavos)} · ${c.cliente} · ${c.fechaPago} · ${metodo} · ${quien}`;
+}
+
+export function textoPeticionEnviada(p: PeticionEnBandeja): string {
+  return `Petición enviada: borrar el pago de ${formatearPesos(p.cobro.montoCentavos)} de ${p.cobro.cliente}.`;
+}
+
+export function textoAutorizada(p: PeticionEnBandeja): string {
+  return `Petición autorizada: se borró el pago de ${formatearPesos(p.cobro.montoCentavos)} de ${p.cobro.cliente}.`;
+}
+
+export function textoDenegada(p: PeticionEnBandeja): string {
+  return `Petición denegada: el pago de ${p.cobro.cliente} no cambia.`;
+}
+```
+
+Run: `npm test --workspace=apps/portal -- peticiones`
+Expected: PASS.
+
+- [ ] **Paso 4: Prueba del panel que falla**
+
+Crea `apps/portal/src/components/peticiones/pedir-borrado-cobro.test.tsx`:
+
+```tsx
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { ErrorApi } from "@/lib/api";
+import * as peticionesLib from "@/lib/peticiones";
+import type { PeticionEnBandeja, VistaBorrado } from "@/lib/peticiones";
+import { PedirBorradoCobro } from "./pedir-borrado-cobro";
+
+vi.mock("@/lib/peticiones", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/peticiones")>();
+  return { ...real, vistaBorradoDeCobro: vi.fn(), pedirBorrarCobro: vi.fn() };
+});
+
+const vistaBorradoDeCobro = vi.mocked(peticionesLib.vistaBorradoDeCobro);
+const pedirBorrarCobro = vi.mocked(peticionesLib.pedirBorrarCobro);
+
+export const VISTA: VistaBorrado = {
+  cobro: {
+    id: "co1",
+    clienteId: "c1",
+    cliente: "Tacos Erick",
+    sucursalCodigo: "TJ",
+    origen: "cobro",
+    metodoPago: "efectivo",
+    montoCentavos: 100000,
+    fechaPago: "2026-10-10",
+    fechaOperacion: "2026-10-10",
+    cobrador: "Juan Pérez",
+  },
+  notas: [
+    {
+      notaId: "n1",
+      folio: "TJ261001AP01",
+      numNota: "77",
+      fecha: "2026-10-01",
+      delPagoCentavos: 40000,
+      saldoAntesCentavos: 0,
+      saldoDespuesCentavos: 40000,
+      statusDespues: "abonado",
+    },
+  ],
+  saldoFavorAntesCentavos: 30000,
+  saldoFavorDespuesCentavos: 20000,
+  movimientoSaldoFavorCentavos: 10000,
+  bloqueo: null,
+};
+
+const PETICION: PeticionEnBandeja = {
+  id: "p1",
+  tipo: "eliminar_cobro",
+  status: "pendiente",
+  sucursalCodigo: "TJ",
+  motivo: "Era de crédito",
+  solicito: "Ana",
+  creadaEn: "2026-10-13 09:15",
+  resolvio: null,
+  resueltaEn: null,
+  comentario: null,
+  cobro: {
+    id: "co1",
+    clienteId: "c1",
+    cliente: "Tacos Erick",
+    montoCentavos: 100000,
+    metodoPago: "efectivo",
+    origen: "cobro",
+    fechaPago: "2026-10-10",
+    cobrador: "Juan Pérez",
+    folios: ["TJ261001AP01"],
+  },
+};
+
+function renderizar() {
+  const props = { onEnviada: vi.fn(), onDesactualizado: vi.fn(), onCancelar: vi.fn() };
+  render(<PedirBorradoCobro cobroId="co1" {...props} />);
+  return { usuario: userEvent.setup(), ...props };
+}
+
+describe("PedirBorradoCobro", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vistaBorradoDeCobro.mockResolvedValue(VISTA);
+    pedirBorrarCobro.mockResolvedValue(PETICION);
+  });
+
+  it("muestra el pago y cómo quedaría cada nota y el saldo a favor", async () => {
+    renderizar();
+    expect(
+      await screen.findByText("Pago de $1,000.00 · Tacos Erick · 2026-10-10 · Efectivo · cobró Juan Pérez"),
+    ).toBeInTheDocument();
+    expect(vistaBorradoDeCobro).toHaveBeenCalledWith("co1");
+    expect(screen.getByText("TJ261001AP01")).toBeInTheDocument();
+    expect(screen.getByText("Abonado")).toBeInTheDocument();
+    expect(screen.getByText("Saldo a favor: $300.00 → $200.00")).toBeInTheDocument();
+  });
+
+  it("sin motivo no se envía; con motivo manda la petición y avisa", async () => {
+    const { usuario, onEnviada } = renderizar();
+    await screen.findByText("TJ261001AP01");
+    const enviar = screen.getByRole("button", { name: "Enviar petición" });
+    expect(enviar).toBeDisabled();
+    await usuario.type(screen.getByLabelText("Motivo"), "Era de crédito");
+    await usuario.click(enviar);
+    expect(pedirBorrarCobro).toHaveBeenCalledWith("co1", "Era de crédito");
+    expect(onEnviada).toHaveBeenCalledWith("Petición enviada: borrar el pago de $1,000.00 de Tacos Erick.");
+  });
+
+  it("con el saldo a favor ya aplicado lo avisa, pero deja enviar la petición", async () => {
+    vistaBorradoDeCobro.mockResolvedValue({
+      ...VISTA,
+      saldoFavorDespuesCentavos: -6000,
+      bloqueo: {
+        codigo: "saldo-favor-aplicado",
+        motivo: "El saldo a favor que dejó este pago ya se aplicó a otras notas. Primero borra el pago que lo aplicó.",
+      },
+    });
+    const { usuario } = renderizar();
+    expect(await screen.findByText(/ya se aplicó a otras notas/)).toBeInTheDocument();
+    await usuario.type(screen.getByLabelText("Motivo"), "x");
+    expect(screen.getByRole("button", { name: "Enviar petición" })).toBeEnabled();
+  });
+
+  it("Review Focus 5: un 409 al enviar avisa al padre con el mensaje del servidor", async () => {
+    pedirBorrarCobro.mockRejectedValue(
+      new ErrorApi("fallo", 409, "Este cobro ya tiene una petición de borrado pendiente."),
+    );
+    const { usuario, onDesactualizado, onEnviada } = renderizar();
+    await screen.findByText("TJ261001AP01");
+    await usuario.type(screen.getByLabelText("Motivo"), "x");
+    await usuario.click(screen.getByRole("button", { name: "Enviar petición" }));
+    expect(onDesactualizado).toHaveBeenCalledWith("Este cobro ya tiene una petición de borrado pendiente.");
+    expect(onEnviada).not.toHaveBeenCalled();
+  });
+
+  it("Review Focus 5: un cobro que ya se borró (409 al cargar) avisa al padre", async () => {
+    vistaBorradoDeCobro.mockRejectedValue(new ErrorApi("fallo", 409, "Este cobro ya se borró."));
+    const { onDesactualizado } = renderizar();
+    await vi.waitFor(() => expect(onDesactualizado).toHaveBeenCalledWith("Este cobro ya se borró."));
+  });
+
+  it("otro error al enviar se queda en el panel", async () => {
+    pedirBorrarCobro.mockRejectedValue(new ErrorApi("fallo", 400, "Escribe el motivo de la petición."));
+    const { usuario } = renderizar();
+    await screen.findByText("TJ261001AP01");
+    await usuario.type(screen.getByLabelText("Motivo"), "x");
+    await usuario.click(screen.getByRole("button", { name: "Enviar petición" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Escribe el motivo de la petición.");
+  });
+
+  it("Cancelar avisa al padre", async () => {
+    const { usuario, onCancelar } = renderizar();
+    await usuario.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(onCancelar).toHaveBeenCalledTimes(1);
+  });
+});
+```
+
+Run: `npm test --workspace=apps/portal -- pedir-borrado-cobro`
+Expected: FAIL — no existe `./pedir-borrado-cobro`.
+
+- [ ] **Paso 5: La vista previa y el panel**
+
+Crea `apps/portal/src/components/peticiones/vista-borrado.tsx`:
+
+```tsx
+import { describirPago, type VistaBorrado } from "@/lib/peticiones";
+import { ETIQUETA_STATUS, formatearPesos } from "@/lib/ventas";
+
+/**
+ * Qué pasaría si se borra el pago (§3.1): lo calculó el servidor con las notas
+ * bloqueadas. La usan quien pide y quien autoriza. El bloqueo (saldo a favor ya
+ * aplicado) se lee aquí; el servidor lo rechazaría igual al autorizar.
+ */
+export function VistaBorradoPago({ vista }: { vista: VistaBorrado }) {
+  return (
+    <div className="flex flex-col gap-2 text-sm">
+      <p className="font-medium">{describirPago(vista.cobro)}</p>
+      {vista.notas.length > 0 && (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-muted-foreground">
+              <th className="py-1 font-medium">Folio</th>
+              <th className="py-1 font-medium"># de nota</th>
+              <th className="py-1 text-right font-medium">Le abonó</th>
+              <th className="py-1 text-right font-medium">Saldo hoy</th>
+              <th className="py-1 text-right font-medium">Saldo tras borrar</th>
+              <th className="py-1 font-medium">Queda</th>
+            </tr>
+          </thead>
+          <tbody>
+            {vista.notas.map((n) => (
+              <tr key={n.notaId} className="border-t">
+                <td className="py-1.5 font-mono">{n.folio}</td>
+                <td className="py-1.5">{n.numNota ?? "—"}</td>
+                <td className="py-1.5 text-right">{formatearPesos(n.delPagoCentavos)}</td>
+                <td className="py-1.5 text-right">{formatearPesos(n.saldoAntesCentavos)}</td>
+                <td className="py-1.5 text-right font-semibold">{formatearPesos(n.saldoDespuesCentavos)}</td>
+                <td className="py-1.5">{ETIQUETA_STATUS[n.statusDespues]}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {vista.movimientoSaldoFavorCentavos !== 0 && (
+        <p>{`Saldo a favor: ${formatearPesos(vista.saldoFavorAntesCentavos)} → ${formatearPesos(vista.saldoFavorDespuesCentavos)}`}</p>
+      )}
+      {vista.bloqueo && <p className="font-medium text-destructive">{vista.bloqueo.motivo}</p>}
+    </div>
+  );
+}
+```
+
+Crea `apps/portal/src/components/peticiones/pedir-borrado-cobro.tsx`:
+
+```tsx
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
+import { ErrorApi, mensajeDe } from "@/lib/api";
+import {
+  LARGO_MAX_TEXTO,
+  pedirBorrarCobro,
+  textoPeticionEnviada,
+  vistaBorradoDeCobro,
+  type VistaBorrado,
+} from "@/lib/peticiones";
+import { VistaBorradoPago } from "./vista-borrado";
+
+/** El 409 de "ya se pidió" o "ya se borró": lo que se ve en pantalla quedó viejo. */
+function esDesactualizado(err: unknown): err is ErrorApi {
+  return err instanceof ErrorApi && err.status === 409;
+}
+
+/**
+ * Pedir el borrado de un pago (T-34, §3.1): la vista previa del servidor, el
+ * motivo y enviar. Pedir no cambia nada: el pago sigue vivo hasta que alguien
+ * con "Peticiones" lo autorice. Un 409 (otra persona ya lo pidió, o ya se
+ * borró) no se queda aquí: el padre recarga y muestra el mensaje.
+ */
+export function PedirBorradoCobro({
+  cobroId,
+  onEnviada,
+  onDesactualizado,
+  onCancelar,
+}: {
+  cobroId: string;
+  onEnviada: (mensaje: string) => void;
+  onDesactualizado: (mensaje: string) => void;
+  onCancelar: () => void;
+}) {
+  const [vista, setVista] = useState<VistaBorrado | null>(null);
+  const [errorCarga, setErrorCarga] = useState<string | null>(null);
+  const [motivo, setMotivo] = useState("");
+  const { enviando, error, enviar } = useEnvioFormulario("No se pudo enviar la petición.");
+  // El efecto de carga depende solo del cobro: el aviso al padre se lee del ref.
+  const avisarDesactualizado = useRef(onDesactualizado);
+  useEffect(() => {
+    avisarDesactualizado.current = onDesactualizado;
+  });
+
+  useEffect(() => {
+    let vigente = true;
+    vistaBorradoDeCobro(cobroId)
+      .then((v) => {
+        if (vigente) setVista(v);
+      })
+      .catch((err) => {
+        if (!vigente) return;
+        if (esDesactualizado(err)) {
+          avisarDesactualizado.current(err.mensajeApi ?? "Este cobro ya cambió; vuelve a cargar.");
+          return;
+        }
+        setErrorCarga(mensajeDe(err, "No se pudo cargar el cobro."));
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [cobroId]);
+
+  async function enviarPeticion() {
+    await enviar(
+      async () => {
+        try {
+          onEnviada(textoPeticionEnviada(await pedirBorrarCobro(cobroId, motivo)));
+        } catch (err) {
+          if (esDesactualizado(err)) {
+            onDesactualizado(err.mensajeApi ?? "Este cobro ya cambió; vuelve a cargar.");
+            return;
+          }
+          throw err;
+        }
+      },
+      () => {},
+    );
+  }
+
+  return (
+    <section aria-label="Pedir borrado del cobro" className="flex flex-col gap-3 rounded-md border p-3">
+      <h3 className="text-sm font-semibold">Pedir borrado del cobro</h3>
+      {errorCarga && (
+        <p role="alert" className="text-sm text-destructive">
+          {errorCarga}
+        </p>
+      )}
+      {vista === null && errorCarga === null && <p className="text-sm text-muted-foreground">Cargando…</p>}
+      {vista && <VistaBorradoPago vista={vista} />}
+      <label className="flex flex-col gap-1 text-sm">
+        Motivo
+        <textarea
+          className="rounded-md border p-2"
+          rows={3}
+          maxLength={LARGO_MAX_TEXTO}
+          value={motivo}
+          onChange={(e) => setMotivo(e.target.value)}
+        />
+      </label>
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          onClick={() => void enviarPeticion()}
+          disabled={enviando || vista === null || motivo.trim() === ""}
+        >
+          Enviar petición
+        </Button>
+        <Button type="button" variant="ghost" onClick={onCancelar} disabled={enviando}>
+          Cancelar
+        </Button>
+      </div>
+    </section>
+  );
+}
+```
+
+Run: `npm test --workspace=apps/portal -- pedir-borrado-cobro`
+Expected: PASS.
+
+- [ ] **Paso 6: El detalle de venta — prueba que falla**
+
+En `apps/portal/src/components/ventas/detalle-venta.test.tsx`:
+- el `vi.mock("@/lib/ventas", …)` agrega `obtenerVenta: vi.fn()` al objeto que devuelve, y agrega:
+
+```tsx
+vi.mock("@/lib/peticiones", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/peticiones")>();
+  return { ...real, vistaBorradoDeCobro: vi.fn(), pedirBorrarCobro: vi.fn() };
+});
+```
+
+- importa `import * as peticionesLib from "@/lib/peticiones";` y declara
+  `const obtenerVenta = vi.mocked(ventasLib.obtenerVenta);`,
+  `const vistaBorradoDeCobro = vi.mocked(peticionesLib.vistaBorradoDeCobro);`,
+  `const pedirBorrarCobro = vi.mocked(peticionesLib.pedirBorrarCobro);`
+- agrega al final del `describe("DetalleVenta", …)`:
+
+```tsx
+  describe("pedir borrado (T-34)", () => {
+    const ETIQUETA = "Pedir borrado del cobro del 2024-03-05 por $100.00";
+
+    it("con cobranza.editar_eliminar, un cobro que es un pago tiene Pedir borrado; el de contado no", () => {
+      renderizar({
+        ...VENTA,
+        cobros: [
+          ...VENTA.cobros,
+          {
+            id: "a9",
+            fechaPago: "2024-03-04",
+            metodoPago: "efectivo",
+            montoCentavos: 5000,
+            origen: "venta_contado",
+            cobroId: null,
+            peticionPendiente: false,
+          },
+        ],
+      });
+      expect(screen.getByRole("button", { name: ETIQUETA })).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: /^Pedir borrado/ })).toHaveLength(1);
+    });
+
+    it("un pago con petición pendiente dice Borrado pedido · pendiente", () => {
+      renderizar({ ...VENTA, cobros: [{ ...VENTA.cobros[0], peticionPendiente: true }] });
+      expect(screen.getByText("Borrado pedido · pendiente")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: ETIQUETA })).not.toBeInTheDocument();
+    });
+
+    it("sin el permiso no se ve Pedir borrado", () => {
+      mockAuth((clave) => clave !== "cobranza.editar_eliminar");
+      renderizar();
+      expect(screen.queryByRole("button", { name: ETIQUETA })).not.toBeInTheDocument();
+    });
+
+    it("al enviar la petición recarga la venta y muestra el aviso", async () => {
+      vistaBorradoDeCobro.mockResolvedValue({
+        cobro: {
+          id: "co1",
+          clienteId: "c1",
+          cliente: "Abarrotes Lupita",
+          sucursalCodigo: "TJ",
+          origen: "cobro",
+          metodoPago: "efectivo",
+          montoCentavos: 10000,
+          fechaPago: "2024-03-05",
+          fechaOperacion: "2024-03-05",
+          cobrador: null,
+        },
+        notas: [],
+        saldoFavorAntesCentavos: 0,
+        saldoFavorDespuesCentavos: 0,
+        movimientoSaldoFavorCentavos: 0,
+        bloqueo: null,
+      });
+      pedirBorrarCobro.mockResolvedValue({
+        id: "p1",
+        tipo: "eliminar_cobro",
+        status: "pendiente",
+        sucursalCodigo: "TJ",
+        motivo: "x",
+        solicito: "Ana",
+        creadaEn: "2024-03-06 10:00",
+        resolvio: null,
+        resueltaEn: null,
+        comentario: null,
+        cobro: {
+          id: "co1",
+          clienteId: "c1",
+          cliente: "Abarrotes Lupita",
+          montoCentavos: 10000,
+          metodoPago: "efectivo",
+          origen: "cobro",
+          fechaPago: "2024-03-05",
+          cobrador: null,
+          folios: ["TJ240304OF01"],
+        },
+      });
+      const actualizada = { ...VENTA, cobros: [{ ...VENTA.cobros[0], peticionPendiente: true }] };
+      obtenerVenta.mockResolvedValue(actualizada);
+
+      const { usuario, onCambiada } = renderizar();
+      await usuario.click(screen.getByRole("button", { name: ETIQUETA }));
+      expect(vistaBorradoDeCobro).toHaveBeenCalledWith("co1");
+      await usuario.type(await screen.findByLabelText("Motivo"), "Era de crédito");
+      await usuario.click(screen.getByRole("button", { name: "Enviar petición" }));
+
+      await vi.waitFor(() => expect(onCambiada).toHaveBeenCalledWith(actualizada));
+      expect(obtenerVenta).toHaveBeenCalledWith("v1");
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Petición enviada: borrar el pago de $100.00 de Abarrotes Lupita.",
+      );
+    });
+  });
+```
+
+Run: `npm test --workspace=apps/portal -- detalle-venta`
+Expected: FAIL — no hay botón "Pedir borrado".
+
+- [ ] **Paso 7: El detalle de venta**
+
+En `apps/portal/src/components/ventas/detalle-venta.tsx`:
+
+- imports: agrega `import { useState } from "react";`,
+  `import { PedirBorradoCobro } from "@/components/peticiones/pedir-borrado-cobro";`,
+  `import { ETIQUETA_BORRADO_PEDIDO } from "@/lib/peticiones";` y `obtenerVenta` a la lista de `@/lib/ventas`;
+- dentro del componente, después de `const { enviando, error, enviar } = …`:
+
+```tsx
+  const puedePedirBorrado = puede("cobranza.editar_eliminar");
+  // El pago cuyo borrado se está pidiendo (T-34); uno a la vez.
+  const [pidiendo, setPidiendo] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  function pedirBorrado(cobroId: string | null) {
+    if (cobroId === null) return;
+    setAviso(null);
+    setPidiendo(cobroId);
+  }
+
+  /** Tras pedir (o tras un 409): la venta fresca, para que el cobro diga "Borrado pedido · pendiente". */
+  async function refrescar(mensaje: string) {
+    setPidiendo(null);
+    setAviso(mensaje);
+    try {
+      onCambiada(await obtenerVenta(venta.id));
+    } catch {
+      setAviso(`${mensaje} Vuelve a abrir la venta para ver el cambio.`);
+    }
+  }
+```
+
+- en la tabla de cobros, agrega una última columna: en `thead` `<th className="py-1" />` y en cada fila:
+
+```tsx
+                    <td className="py-1.5 text-right">
+                      {c.cobroId !== null && c.peticionPendiente && (
+                        <span className="text-muted-foreground">{ETIQUETA_BORRADO_PEDIDO}</span>
+                      )}
+                      {c.cobroId !== null && !c.peticionPendiente && puedePedirBorrado && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          aria-label={`Pedir borrado del cobro del ${c.fechaPago} por ${formatearPesos(c.montoCentavos)}`}
+                          disabled={pidiendo !== null}
+                          onClick={() => pedirBorrado(c.cobroId)}
+                        >
+                          Pedir borrado
+                        </Button>
+                      )}
+                    </td>
+```
+
+- justo después de la `</section>` de Cobros:
+
+```tsx
+        {pidiendo && (
+          <PedirBorradoCobro
+            key={pidiendo}
+            cobroId={pidiendo}
+            onEnviada={(mensaje) => void refrescar(mensaje)}
+            onDesactualizado={(mensaje) => void refrescar(mensaje)}
+            onCancelar={() => setPidiendo(null)}
+          />
+        )}
+
+        {aviso && (
+          <p role="status" className="rounded-md border p-3 text-sm">
+            {aviso}
+          </p>
+        )}
+```
+
+Run: `npm test --workspace=apps/portal -- detalle-venta`
+Expected: PASS (las pruebas viejas y las 4 nuevas).
+
+- [ ] **Paso 8: Cobranza — prueba que falla**
+
+En `apps/portal/src/components/cobranza/cobranza-cliente.test.tsx`:
+- agrega el mock:
+
+```tsx
+vi.mock("@/lib/peticiones", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/peticiones")>();
+  return { ...real, vistaBorradoDeCobro: vi.fn(), pedirBorrarCobro: vi.fn() };
+});
+```
+
+- importa `import * as peticionesLib from "@/lib/peticiones";` y declara
+  `const vistaBorradoDeCobro = vi.mocked(peticionesLib.vistaBorradoDeCobro);` y
+  `const pedirBorrarCobro = vi.mocked(peticionesLib.pedirBorrarCobro);`
+- agrega al final del `describe("CobranzaCliente", …)`:
+
+```tsx
+  describe("pedir borrado de un abono (T-34)", () => {
+    const ETIQUETA = "Pedir borrado del abono del 2024-04-03 por $30.00";
+
+    it("cada abono que es un pago tiene Pedir borrado", async () => {
+      renderizar();
+      await screen.findByText("Cobranza · Cobach XXI");
+      expect(screen.getByRole("button", { name: ETIQUETA })).toBeInTheDocument();
+    });
+
+    it("con petición pendiente dice Borrado pedido · pendiente", async () => {
+      porCobrarDeCliente.mockResolvedValue({
+        ...DATOS,
+        notas: [N1, { ...N2, abonos: [{ ...N2.abonos[0], peticionPendiente: true }] }],
+      });
+      renderizar();
+      expect(await screen.findByText("Borrado pedido · pendiente")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: ETIQUETA })).not.toBeInTheDocument();
+    });
+
+    it("sin cobranza.editar_eliminar no se ve el botón", async () => {
+      mockAuth((clave) => clave !== "cobranza.editar_eliminar");
+      renderizar();
+      await screen.findByText("Cobranza · Cobach XXI");
+      expect(screen.queryByRole("button", { name: ETIQUETA })).not.toBeInTheDocument();
+    });
+
+    it("al enviar la petición recarga el cliente y muestra el aviso", async () => {
+      vistaBorradoDeCobro.mockResolvedValue({
+        cobro: {
+          id: "co2",
+          clienteId: "c1",
+          cliente: "Cobach XXI",
+          sucursalCodigo: "TJ",
+          origen: "saldo_favor",
+          metodoPago: "saldo_favor",
+          montoCentavos: 3000,
+          fechaPago: "2024-04-03",
+          fechaOperacion: "2024-04-03",
+          cobrador: null,
+        },
+        notas: [],
+        saldoFavorAntesCentavos: 0,
+        saldoFavorDespuesCentavos: 3000,
+        movimientoSaldoFavorCentavos: -3000,
+        bloqueo: null,
+      });
+      pedirBorrarCobro.mockResolvedValue({
+        id: "p1",
+        tipo: "eliminar_cobro",
+        status: "pendiente",
+        sucursalCodigo: "TJ",
+        motivo: "x",
+        solicito: "Ana",
+        creadaEn: "2024-04-04 10:00",
+        resolvio: null,
+        resueltaEn: null,
+        comentario: null,
+        cobro: {
+          id: "co2",
+          clienteId: "c1",
+          cliente: "Cobach XXI",
+          montoCentavos: 3000,
+          metodoPago: "saldo_favor",
+          origen: "saldo_favor",
+          fechaPago: "2024-04-03",
+          cobrador: null,
+          folios: ["TJ240402OF01"],
+        },
+      });
+      const { usuario } = renderizar();
+      await screen.findByText("Cobranza · Cobach XXI");
+      await usuario.click(screen.getByRole("button", { name: ETIQUETA }));
+      expect(vistaBorradoDeCobro).toHaveBeenCalledWith("co2");
+      await usuario.type(await screen.findByLabelText("Motivo"), "Se aplicó por error");
+      await usuario.click(screen.getByRole("button", { name: "Enviar petición" }));
+
+      expect(await screen.findByRole("status")).toHaveTextContent(
+        "Petición enviada: borrar el pago de $30.00 de Cobach XXI.",
+      );
+      expect(porCobrarDeCliente).toHaveBeenCalledTimes(2);
+      expect(screen.queryByRole("region", { name: "Pedir borrado del cobro" })).not.toBeInTheDocument();
+    });
+  });
+```
+
+Run: `npm test --workspace=apps/portal -- cobranza-cliente`
+Expected: FAIL — no hay botón "Pedir borrado".
+
+- [ ] **Paso 9: Cobranza**
+
+En `apps/portal/src/components/cobranza/cobranza-cliente.tsx`:
+
+- imports: `import { PedirBorradoCobro } from "@/components/peticiones/pedir-borrado-cobro";` y
+  `import { ETIQUETA_BORRADO_PEDIDO } from "@/lib/peticiones";`;
+- después de `const [version, setVersion] = useState(0);`:
+
+```tsx
+  // El pago cuyo borrado se está pidiendo (T-34); uno a la vez. Toda recarga lo cierra.
+  const [pidiendo, setPidiendo] = useState<string | null>(null);
+```
+
+- `recargar` queda:
+
+```tsx
+  const recargar = useCallback((mensaje: string | null) => {
+    setAviso(mensaje);
+    setPidiendo(null);
+    setRecarga((n) => n + 1);
+  }, []);
+```
+
+- después de `const puedePerdida = puede("venta.editar_eliminar");`:
+
+```tsx
+  const puedePedirBorrado = puede("cobranza.editar_eliminar");
+
+  function pedirBorrado(cobroId: string | null) {
+    if (cobroId === null) return;
+    setAviso(null);
+    setPidiendo(cobroId);
+  }
+```
+
+- el `<li>` de cada abono queda:
+
+```tsx
+                              <li key={`${a.fechaPago}-${i}`}>
+                                {`${a.fechaPago} · ${formatearPesos(a.montoCentavos)} · ${ETIQUETA_METODO_PAGO[a.metodoPago] ?? a.metodoPago}`}
+                                {a.cobroId !== null && a.peticionPendiente && (
+                                  <span className="ml-2 text-muted-foreground">{ETIQUETA_BORRADO_PEDIDO}</span>
+                                )}
+                                {a.cobroId !== null && !a.peticionPendiente && puedePedirBorrado && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="ml-2"
+                                    aria-label={`Pedir borrado del abono del ${a.fechaPago} por ${formatearPesos(a.montoCentavos)}`}
+                                    disabled={pidiendo !== null}
+                                    onClick={() => pedirBorrado(a.cobroId)}
+                                  >
+                                    Pedir borrado
+                                  </Button>
+                                )}
+                              </li>
+```
+
+- justo después del bloque de la tabla (antes de `{datos && palomeadas.length > 0 && (<RegistrarPago …`):
+
+```tsx
+        {pidiendo && (
+          <PedirBorradoCobro
+            key={pidiendo}
+            cobroId={pidiendo}
+            onEnviada={recargar}
+            onDesactualizado={recargar}
+            onCancelar={() => setPidiendo(null)}
+          />
+        )}
+```
+
+Run: `npm test --workspace=apps/portal`
+Expected: PASS (todas las del portal).
+
+Run: `npm run lint --workspace=apps/portal && npm run build --workspace=apps/portal`
+Expected: sin errores; `next build` también revisa los tipos de las pruebas.
+
+- [ ] **Paso 10: Commit**
+
+```bash
+git add apps/portal/src/lib/peticiones.ts apps/portal/src/lib/peticiones.test.ts \
+  apps/portal/src/lib/ventas.ts apps/portal/src/lib/cobranzas.ts apps/portal/src/lib/ventas.test.ts \
+  apps/portal/src/components/peticiones/vista-borrado.tsx \
+  apps/portal/src/components/peticiones/pedir-borrado-cobro.tsx \
+  apps/portal/src/components/peticiones/pedir-borrado-cobro.test.tsx \
+  apps/portal/src/components/ventas/detalle-venta.tsx apps/portal/src/components/ventas/detalle-venta.test.tsx \
+  apps/portal/src/components/ventas/formulario-editar-venta.test.tsx \
+  apps/portal/src/components/cobranza/cobranza-cliente.tsx \
+  apps/portal/src/components/cobranza/cobranza-cliente.test.tsx
+git commit -m "T-34: portal — pedir el borrado de un cobro desde la venta y desde Cobranza
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
