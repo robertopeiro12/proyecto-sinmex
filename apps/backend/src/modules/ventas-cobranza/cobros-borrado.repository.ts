@@ -33,10 +33,17 @@ export interface CabeceraCobro {
 export class CobrosBorradoRepository {
   constructor(@Inject(DB_CONNECTION) private readonly db: Database) {}
 
-  /** El pago, **incluso borrado** (quien llama decide). Sin candado. */
+  /**
+   * El pago, **incluso borrado** (quien llama decide). Sin candado, salvo
+   * `compartido`: `for share of co`, para PEDIR su borrado. Si otra transaccion
+   * lo esta borrando (tiene su `for update`), espera a que confirme y lee el
+   * `deleted_at` ya escrito, en vez de dejar una peticion pendiente sobre un
+   * pago borrado. No choca con otro `for share` (dos que piden a la vez).
+   */
   async cabecera(
     cobroId: string,
     conexion: Database = this.db,
+    compartido = false,
   ): Promise<CabeceraCobro | undefined> {
     const filas = await sql<{
       id: string;
@@ -64,6 +71,7 @@ export class CobrosBorradoRepository {
         join sucursal s on s.id = c.sucursal_id
         left join vendedor v on v.id = co.vendedor_id
        where co.id = ${cobroId}
+       ${compartido ? sql`for share of co` : sql``}
     `.execute(conexion);
     const f = filas.rows[0];
     return f
