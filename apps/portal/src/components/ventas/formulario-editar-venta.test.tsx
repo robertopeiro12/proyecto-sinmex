@@ -145,7 +145,7 @@ describe("FormularioEditarVenta", () => {
       ...VENTA,
       contadoCredito: "contado",
       cobros: [
-        { id: "a1", fechaPago: "2024-03-04", metodoPago: "efectivo", montoCentavos: 21600, origen: "venta_contado" },
+        { id: "a1", fechaPago: "2024-03-04", metodoPago: "efectivo", montoCentavos: 21600, origen: "venta_contado", cobroId: null, peticionPendiente: false },
       ],
     });
     expect(screen.getByLabelText("Método de pago")).toHaveValue("efectivo");

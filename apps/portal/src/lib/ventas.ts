@@ -167,6 +167,10 @@ export interface CobroDeVenta {
   metodoPago: string;
   montoCentavos: number;
   origen: "cobro" | "venta_contado" | "saldo_favor";
+  /** El pago al que pertenece (T-34); `null` = cobro automático de contado. */
+  cobroId: string | null;
+  /** Ya hay una petición pendiente de borrar ese pago (T-34). */
+  peticionPendiente: boolean;
 }
 
 export interface VentaDetalle {

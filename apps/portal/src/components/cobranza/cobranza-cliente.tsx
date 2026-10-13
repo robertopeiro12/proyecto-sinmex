@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { mensajeDe } from "@/lib/api";
 import { ETIQUETA_METODO_PAGO, porCobrarDeCliente, type ClientePorCobrar } from "@/lib/cobranzas";
+import { PedirBorradoCobro } from "@/components/peticiones/pedir-borrado-cobro";
+import { ETIQUETA_BORRADO_PEDIDO } from "@/lib/peticiones";
 import { ETIQUETA_STATUS, formatearPesos, marcarCuentaPerdida } from "@/lib/ventas";
 import { AplicarSaldoFavor } from "./aplicar-saldo-favor";
 import { RegistrarPago } from "./registrar-pago";
@@ -34,6 +36,8 @@ export function CobranzaCliente({
   const [marcando, setMarcando] = useState(false);
   // Sube con cada carga buena: los paneles de pago se remontan y sus vistas previas viejas desaparecen.
   const [version, setVersion] = useState(0);
+  // El pago cuyo borrado se está pidiendo (T-34); uno a la vez. Toda recarga lo cierra.
+  const [pidiendo, setPidiendo] = useState<string | null>(null);
 
   useEffect(() => {
     let vigente = true;
@@ -60,6 +64,7 @@ export function CobranzaCliente({
 
   const recargar = useCallback((mensaje: string | null) => {
     setAviso(mensaje);
+    setPidiendo(null);
     setRecarga((n) => n + 1);
   }, []);
 
@@ -89,6 +94,13 @@ export function CobranzaCliente({
 
   const palomeadas = datos ? datos.notas.filter((n) => seleccion.has(n.id)) : [];
   const puedePerdida = puede("venta.editar_eliminar");
+  const puedePedirBorrado = puede("cobranza.editar_eliminar");
+
+  function pedirBorrado(cobroId: string | null) {
+    if (cobroId === null) return;
+    setAviso(null);
+    setPidiendo(cobroId);
+  }
 
   return (
     <Card>
@@ -166,6 +178,22 @@ export function CobranzaCliente({
                             {n.abonos.map((a, i) => (
                               <li key={`${a.fechaPago}-${i}`}>
                                 {`${a.fechaPago} · ${formatearPesos(a.montoCentavos)} · ${ETIQUETA_METODO_PAGO[a.metodoPago] ?? a.metodoPago}`}
+                                {a.cobroId !== null && a.peticionPendiente && (
+                                  <span className="ml-2 text-muted-foreground">{ETIQUETA_BORRADO_PEDIDO}</span>
+                                )}
+                                {a.cobroId !== null && !a.peticionPendiente && puedePedirBorrado && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="ml-2"
+                                    aria-label={`Pedir borrado del abono del ${a.fechaPago} por ${formatearPesos(a.montoCentavos)}`}
+                                    disabled={pidiendo !== null}
+                                    onClick={() => pedirBorrado(a.cobroId)}
+                                  >
+                                    Pedir borrado
+                                  </Button>
+                                )}
                               </li>
                             ))}
                           </ul>
@@ -191,6 +219,16 @@ export function CobranzaCliente({
               </tbody>
             </table>
           ))}
+
+        {pidiendo && (
+          <PedirBorradoCobro
+            key={pidiendo}
+            cobroId={pidiendo}
+            onEnviada={recargar}
+            onDesactualizado={recargar}
+            onCancelar={() => setPidiendo(null)}
+          />
+        )}
 
         {datos && palomeadas.length > 0 && (
           <RegistrarPago key={version} cliente={datos} palomeadas={palomeadas} onRegistrado={recargar} onDesactualizado={recargar} />

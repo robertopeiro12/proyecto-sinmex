@@ -16,6 +16,10 @@ export interface AbonoAnterior {
   montoCentavos: number;
   metodoPago: string;
   origen: OrigenAbono;
+  /** El pago al que pertenece (T-34); `null` = cobro automático de contado. */
+  cobroId: string | null;
+  /** Ya hay una petición pendiente de borrar ese pago (T-34). */
+  peticionPendiente: boolean;
 }
 
 /** Una nota por cobrar (`pendiente`/`abonado`, viva), de la más vieja a la más nueva. */

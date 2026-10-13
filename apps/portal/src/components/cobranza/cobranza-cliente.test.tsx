@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import * as cobranzasLib from "@/lib/cobranzas";
 import type { ClientePorCobrar, NotaPorCobrar } from "@/lib/cobranzas";
+import * as peticionesLib from "@/lib/peticiones";
 import * as ventasLib from "@/lib/ventas";
 import type { VentaDetalle } from "@/lib/ventas";
 import { CobranzaCliente } from "./cobranza-cliente";
@@ -22,11 +23,17 @@ vi.mock("@/lib/ventas", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/ventas")>();
   return { ...real, marcarCuentaPerdida: vi.fn(), listarRepartidores: vi.fn() };
 });
+vi.mock("@/lib/peticiones", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/peticiones")>();
+  return { ...real, vistaBorradoDeCobro: vi.fn(), pedirBorrarCobro: vi.fn() };
+});
 vi.mock("@/components/auth/auth-provider");
 
 const porCobrarDeCliente = vi.mocked(cobranzasLib.porCobrarDeCliente);
 const marcarCuentaPerdida = vi.mocked(ventasLib.marcarCuentaPerdida);
 const listarRepartidores = vi.mocked(ventasLib.listarRepartidores);
+const vistaBorradoDeCobro = vi.mocked(peticionesLib.vistaBorradoDeCobro);
+const pedirBorrarCobro = vi.mocked(peticionesLib.pedirBorrarCobro);
 
 function mockAuth(puede: (clave: string) => boolean) {
   vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: false, cerrarSesion: vi.fn(), puede });
@@ -39,7 +46,7 @@ const N1: NotaPorCobrar = {
 const N2: NotaPorCobrar = {
   ...N1, id: "n2", folio: "TJ240402OF01", numNota: "77", fecha: "2024-04-02", montoCentavos: 8000, saldoCentavos: 5000,
   status: "abonado",
-  abonos: [{ fechaPago: "2024-04-03", montoCentavos: 3000, metodoPago: "saldo_favor", origen: "saldo_favor" }],
+  abonos: [{ fechaPago: "2024-04-03", montoCentavos: 3000, metodoPago: "saldo_favor", origen: "saldo_favor", cobroId: "co2", peticionPendiente: false }],
 };
 const DATOS: ClientePorCobrar = {
   id: "c1", nombre: "Cobach XXI", sucursalId: "suc-tj", sucursalCodigo: "TJ", saldoFavorCentavos: 0, notas: [N1, N2],
@@ -211,5 +218,89 @@ describe("CobranzaCliente", () => {
       expect(screen.queryByRole("button", { name: "Aplicar saldo a favor" })).not.toBeInTheDocument(),
     );
     expect(within(screen.getByRole("region", { name: "Aplicar saldo a favor" })).getByLabelText("Monto a aplicar")).toHaveValue("50.00");
+  });
+
+  describe("pedir borrado de un abono (T-34)", () => {
+    const ETIQUETA = "Pedir borrado del abono del 2024-04-03 por $30.00";
+
+    it("cada abono que es un pago tiene Pedir borrado", async () => {
+      renderizar();
+      await screen.findByText("Cobranza · Cobach XXI");
+      expect(screen.getByRole("button", { name: ETIQUETA })).toBeInTheDocument();
+    });
+
+    it("con petición pendiente dice Borrado pedido · pendiente", async () => {
+      porCobrarDeCliente.mockResolvedValue({
+        ...DATOS,
+        notas: [N1, { ...N2, abonos: [{ ...N2.abonos[0], peticionPendiente: true }] }],
+      });
+      renderizar();
+      expect(await screen.findByText("Borrado pedido · pendiente")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: ETIQUETA })).not.toBeInTheDocument();
+    });
+
+    it("sin cobranza.editar_eliminar no se ve el botón", async () => {
+      mockAuth((clave) => clave !== "cobranza.editar_eliminar");
+      renderizar();
+      await screen.findByText("Cobranza · Cobach XXI");
+      expect(screen.queryByRole("button", { name: ETIQUETA })).not.toBeInTheDocument();
+    });
+
+    it("al enviar la petición recarga el cliente y muestra el aviso", async () => {
+      vistaBorradoDeCobro.mockResolvedValue({
+        cobro: {
+          id: "co2",
+          clienteId: "c1",
+          cliente: "Cobach XXI",
+          sucursalCodigo: "TJ",
+          origen: "saldo_favor",
+          metodoPago: "saldo_favor",
+          montoCentavos: 3000,
+          fechaPago: "2024-04-03",
+          fechaOperacion: "2024-04-03",
+          cobrador: null,
+        },
+        notas: [],
+        saldoFavorAntesCentavos: 0,
+        saldoFavorDespuesCentavos: 3000,
+        movimientoSaldoFavorCentavos: -3000,
+        bloqueo: null,
+      });
+      pedirBorrarCobro.mockResolvedValue({
+        id: "p1",
+        tipo: "eliminar_cobro",
+        status: "pendiente",
+        sucursalCodigo: "TJ",
+        motivo: "x",
+        solicito: "Ana",
+        creadaEn: "2024-04-04 10:00",
+        resolvio: null,
+        resueltaEn: null,
+        comentario: null,
+        cobro: {
+          id: "co2",
+          clienteId: "c1",
+          cliente: "Cobach XXI",
+          montoCentavos: 3000,
+          metodoPago: "saldo_favor",
+          origen: "saldo_favor",
+          fechaPago: "2024-04-03",
+          cobrador: null,
+          folios: ["TJ240402OF01"],
+        },
+      });
+      const { usuario } = renderizar();
+      await screen.findByText("Cobranza · Cobach XXI");
+      await usuario.click(screen.getByRole("button", { name: ETIQUETA }));
+      expect(vistaBorradoDeCobro).toHaveBeenCalledWith("co2");
+      await usuario.type(await screen.findByLabelText("Motivo"), "Se aplicó por error");
+      await usuario.click(screen.getByRole("button", { name: "Enviar petición" }));
+
+      expect(await screen.findByRole("status")).toHaveTextContent(
+        "Petición enviada: borrar el pago de $30.00 de Cobach XXI.",
+      );
+      expect(porCobrarDeCliente).toHaveBeenCalledTimes(2);
+      expect(screen.queryByRole("region", { name: "Pedir borrado del cobro" })).not.toBeInTheDocument();
+    });
   });
 });

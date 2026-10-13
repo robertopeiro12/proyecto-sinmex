@@ -94,7 +94,7 @@ const VENTA: VentaDetalle = {
     },
   ],
   cobros: [
-    { id: "a1", fechaPago: "2024-03-04", metodoPago: "efectivo", montoCentavos: 21600, origen: "venta_contado" },
+    { id: "a1", fechaPago: "2024-03-04", metodoPago: "efectivo", montoCentavos: 21600, origen: "venta_contado", cobroId: null, peticionPendiente: false },
   ],
   editable: true,
   motivoNoEditable: null,

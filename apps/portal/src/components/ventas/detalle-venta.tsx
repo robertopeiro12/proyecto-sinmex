@@ -1,16 +1,20 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
+import { PedirBorradoCobro } from "@/components/peticiones/pedir-borrado-cobro";
 import { ETIQUETA_METODO_PAGO } from "@/lib/cobranzas";
+import { ETIQUETA_BORRADO_PEDIDO } from "@/lib/peticiones";
 import {
   ETIQUETA_ORIGEN,
   ETIQUETA_STATUS,
   eliminarVenta,
   formatearPesos,
   marcarCuentaPerdida,
+  obtenerVenta,
   type VentaDetalle,
 } from "@/lib/ventas";
 
@@ -42,6 +46,27 @@ export function DetalleVenta({
   const { puede } = useAuth();
   const puedeGestionar = puede("venta.editar_eliminar");
   const { enviando, error, enviar } = useEnvioFormulario("No se pudo completar la acción.");
+  const puedePedirBorrado = puede("cobranza.editar_eliminar");
+  // El pago cuyo borrado se está pidiendo (T-34); uno a la vez.
+  const [pidiendo, setPidiendo] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  function pedirBorrado(cobroId: string | null) {
+    if (cobroId === null) return;
+    setAviso(null);
+    setPidiendo(cobroId);
+  }
+
+  /** Tras pedir (o tras un 409): la venta fresca, para que el cobro diga "Borrado pedido · pendiente". */
+  async function refrescar(mensaje: string) {
+    setPidiendo(null);
+    setAviso(mensaje);
+    try {
+      onCambiada(await obtenerVenta(venta.id));
+    } catch {
+      setAviso(`${mensaje} Vuelve a abrir la venta para ver el cambio.`);
+    }
+  }
 
   async function eliminar() {
     if (!window.confirm(`¿Eliminar la venta ${venta.folio}${venta.numNota ? ` (nota ${venta.numNota})` : ""}? No se puede deshacer.`)) {
@@ -118,6 +143,7 @@ export function DetalleVenta({
                   <th className="py-1 font-medium">Método</th>
                   <th className="py-1 font-medium">Origen</th>
                   <th className="py-1 text-right font-medium">Monto</th>
+                  <th className="py-1" />
                 </tr>
               </thead>
               <tbody>
@@ -127,12 +153,45 @@ export function DetalleVenta({
                     <td className="py-1.5">{ETIQUETA_METODO_PAGO[c.metodoPago] ?? c.metodoPago}</td>
                     <td className="py-1.5">{ETIQUETA_COBRO[c.origen]}</td>
                     <td className="py-1.5 text-right">{formatearPesos(c.montoCentavos)}</td>
+                    <td className="py-1.5 text-right">
+                      {c.cobroId !== null && c.peticionPendiente && (
+                        <span className="text-muted-foreground">{ETIQUETA_BORRADO_PEDIDO}</span>
+                      )}
+                      {c.cobroId !== null && !c.peticionPendiente && puedePedirBorrado && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          aria-label={`Pedir borrado del cobro del ${c.fechaPago} por ${formatearPesos(c.montoCentavos)}`}
+                          disabled={pidiendo !== null}
+                          onClick={() => pedirBorrado(c.cobroId)}
+                        >
+                          Pedir borrado
+                        </Button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
         </section>
+
+        {pidiendo && (
+          <PedirBorradoCobro
+            key={pidiendo}
+            cobroId={pidiendo}
+            onEnviada={(mensaje) => void refrescar(mensaje)}
+            onDesactualizado={(mensaje) => void refrescar(mensaje)}
+            onCancelar={() => setPidiendo(null)}
+          />
+        )}
+
+        {aviso && (
+          <p role="status" className="rounded-md border p-3 text-sm">
+            {aviso}
+          </p>
+        )}
 
         {venta.motivoNoEditable && (
           <p className="text-sm text-muted-foreground">{venta.motivoNoEditable}</p>
