@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CarteraClientesModule } from '../cartera-clientes/cartera-clientes.module';
+import { CobrosBorradoRepository } from './cobros-borrado.repository';
+import { CobrosBorradoService } from './cobros-borrado.service';
 import { CobranzasRepository } from './cobranzas.repository';
 import { CobranzasPortalRepository } from './cobranzas-portal.repository';
 import { CobranzasPortalService } from './cobranzas-portal.service';
@@ -47,6 +49,9 @@ import { VentasService } from './ventas.service';
     // T-21: cobranza desde el portal
     CobranzasPortalService,
     CobranzasPortalRepository,
+    // T-34: borrar un pago (via peticion)
+    CobrosBorradoService,
+    CobrosBorradoRepository,
   ],
   exports: [VentasService, CobranzasService],
 })
