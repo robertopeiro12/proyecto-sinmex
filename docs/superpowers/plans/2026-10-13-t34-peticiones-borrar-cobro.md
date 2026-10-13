@@ -105,6 +105,14 @@ Manda el spec; si este plan lo contradice (fuera de las desviaciones anotadas ab
    leer sin candados: es lo que ya hace la vista previa del cobro en T-21 (`planearPago`), y así vista previa y
    borrado son literalmente el mismo cálculo. Los candados duran lo que la consulta.
 
+8. **Ajustes que aparecieron al ejecutar** (aplicados y revisados):
+   (a) al crear la petición, el motivo se valida **primero** (400), antes de 404/403/409;
+   (b) la vista previa muestra la fecha en ISO y "Saldo a favor: $A → $B" también en una aplicación de saldo a
+   favor (el spec decía "10/10/2026" y "+$50.00");
+   (c) el texto del interbloqueo es el de `MOTIVO_INTERBLOQUEO_COBRO` de T-21, no el literal del spec.
+   Además: `cabecera(..., compartido)` toma `for share` al crear la petición, para no dejar una pendiente sobre
+   un pago que se está borrando, y la entidad del push de cobranza en `sync_operacion` es `('cobro', id)`.
+
 ## Puntos de revisión (Review Focus)
 
 1. **Autorizar mientras entra otro movimiento del mismo cliente** (un cobro de la tablet, otro pago o una
@@ -132,7 +140,10 @@ Manda el spec; si este plan lo contradice (fuera de las desviaciones anotadas ab
 | `apps/backend/src/database/schema.d.ts` | 1 | Tipos regenerados |
 | `apps/backend/src/modules/ventas-cobranza/cobranzas.{repository,service}.ts` (+ `.spec`) | 1 | Todo cobro nace con su `cobro` |
 | `apps/backend/src/modules/sincronizacion/sincronizacion.service.ts` + `docs/contrato-sincronizacion.md` | 1 | La entidad del push de cobranza es el `cobro` |
-| `apps/backend/test/{sincronizacion,cobranzas-portal,ventas-editar}.e2e-spec.ts` | 1 | Inserciones a mano con `cobro_id` y limpieza |
+| `apps/backend/test/{sincronizacion,cobranzas-portal,ventas-editar,ventas}.e2e-spec.ts` | 1 | Inserciones a mano con `cobro_id` y limpieza |
+| `apps/backend/test/apoyo-cobros.ts` (nuevo) | 1 | Crear el `cobro` de las filas que las pruebas escriben a mano |
+| `apps/backend/src/modules/ventas-cobranza/peticiones.service.spec.ts` | 4 | Unitarias del servicio de peticiones |
+| `apps/portal/src/components/ventas/formulario-editar-venta.test.tsx`, `apps/portal/src/lib/ventas.test.ts` | 6 | Ajustes por los campos nuevos del cobro en la venta |
 | `apps/backend/src/modules/ventas-cobranza/reglas-borrado-cobro.ts` (+ `.spec`) | 2 | `planearBorrado`, `statusTrasBorrar` |
 | `apps/backend/src/modules/ventas-cobranza/cobros-borrado.{repository,service}.ts` (+ `.service.spec`) | 3 | Vista previa y borrado con candados |
 | `apps/backend/src/modules/ventas-cobranza/peticiones.{repository,service,controller}.ts`, `cobros.controller.ts`, `dto/peticiones.dto.ts`, `ventas-cobranza.module.ts` | 4 | Endpoints |
@@ -1383,7 +1394,7 @@ Run: `npm test --workspace=apps/backend`
 Expected: PASS.
 
 Run: `npm run test:e2e --workspace=apps/backend`
-Expected: PASS (incluidas las dos pruebas nuevas de `cobranzas-portal` y las cuatro del buzón renombradas).
+Expected: PASS (incluidas las dos pruebas nuevas de `cobranzas-portal` y las cuatro expectativas del buzón (dos renombradas)).
 
 Run: `npm run supabase -- test db`
 Expected: PASS.

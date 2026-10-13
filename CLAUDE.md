@@ -229,7 +229,7 @@ usuario con sesion pasa.
   - Bloquean la venta con `for update of vn` y **nunca** cambian folio, cliente, fecha, sucursal ni
     origen. Un folio eliminado no se reutiliza.
   - Una venta con abonos vivos de `origen` `cobro` o `saldo_favor` (T-21), o en cuenta perdida, no se edita ni se elimina.
-    Quitar cobros es T-34.
+    Para quitarlos se pide el borrado del pago en Peticiones (T-34, abajo).
   - Las líneas existentes conservan su precio guardado; las nuevas toman el de la lista **a la fecha
     de la venta**.
   - `uq_venta_detalle_presentacion` es un índice **parcial** (`where deleted_at is null`), para poder
@@ -259,7 +259,29 @@ usuario con sesion pasa.
   - **Aplicar saldo a favor** no es dinero nuevo: abono con `metodo_pago = origen = 'saldo_favor'` (un check
     exige los dos o ninguno) y un movimiento **negativo** `aplicacion` en `saldo_favor_movimiento`. Flujo de
     Efectivo y Tesorería **no** deben contarlo como ingreso.
-  - Un cobro del portal **no se deshace** todavía: eso es T-34. Por eso la vista previa.
+  - Un cobro (de la tablet o del portal) se deshace **solo** con una petición autorizada (T-34, abajo).
+
+- **Peticiones: borrar un pago con autorización (T-34).** Quien tiene `cobranza.editar_eliminar` **pide**
+  (`POST /peticiones/eliminar-cobro`, con motivo); quien tiene `peticiones.gestionar` **autoriza o deniega** en
+  *Operación → Peticiones*. Puede ser la misma persona (decisión de Roberto, 2026-10-13). Todo en
+  `ventas-cobranza/peticiones.*`, `cobros-borrado.*`, `cobros.controller.ts` y `reglas-borrado-cobro.ts`.
+  - **El pago es una entidad: tabla `cobro`.** Cada cobro (tablet, portal o aplicar saldo a favor) crea su fila
+    en `cobro`, y sus filas de `cobranza_abono` y su `saldo_favor_movimiento` cuelgan de él con `cobro_id`. El
+    cobro automático de una venta de **contado no es un pago**: `cobro_id` null (`ck_cobranza_abono_cobro`) y se
+    corrige editando la venta. Quien escriba cobros por debajo del servicio (pruebas incluidas) crea su `cobro`
+    (`apps/backend/test/apoyo-cobros.ts`). La entidad del push de cobranza en `sync_operacion` es el `cobro`.
+  - **Se borra el pago completo**, nunca un pedazo: `deleted_at` en el `cobro` (+ `eliminado_por_usuario_id`),
+    sus filas y su saldo a favor; cada nota recalcula su status (`cuenta_perdida` se queda). El status se
+    escribe aunque no cambie y se toca `cliente.updated_at`: así la tablet recibe la nota otra vez pendiente en
+    el pull **sin cambiar la app**.
+  - **Candados al autorizar:** la `peticion` (`for update`) → notas del cliente → su saldo a favor → el `cobro`.
+    Mismo orden que el cobro: sin abrazo mortal con T-20/T-21. La vista previa toma los mismos candados.
+  - **Se rechaza (409)** si el saldo a favor que dejó el pago ya se aplicó (quedaría negativo): primero se borra
+    el pago que lo aplicó. La petición sigue pendiente.
+  - Una sola petición **pendiente** por pago (`uq_peticion_cobro_pendiente`). El alcance (sucursal del cliente)
+    se comprueba **antes** de decir si el pago está borrado o la petición resuelta.
+  - **Corte, Flujo de Efectivo y Tesorería** (aún no existen) deben contar pagos de `cobro` **vivos** y excluir
+    los de origen `saldo_favor` (no es dinero nuevo).
 - **Jornada y kilometraje (T-38).** La jornada cerrada que sube la tablet (`tipo: 'jornada'`) se proyecta a la
   tabla `jornada` con `rutas/jornadas.service.ts` (`cerrarJornada`), dentro de la transacción de la operación.
   - Una **viva** por vendedor y día (`uq_jornada_vendedor_fecha`, parcial); el insert usa `on conflict … where
