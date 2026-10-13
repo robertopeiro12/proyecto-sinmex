@@ -101,6 +101,9 @@ Manda el spec; si este plan lo contradice (fuera de las desviaciones anotadas ab
    como "Registrar pago" en Cobranza.
 6. **Autorizar con bloqueo:** si la vista previa trae bloqueo, el botón "Confirmar y borrar" queda
    deshabilitado y se lee el motivo (el servidor lo rechazaría igual).
+7. **La vista previa toma los mismos candados que el borrado** (en una transacción que no escribe), en vez de
+   leer sin candados: es lo que ya hace la vista previa del cobro en T-21 (`planearPago`), y así vista previa y
+   borrado son literalmente el mismo cálculo. Los candados duran lo que la consulta.
 
 ## Puntos de revisión (Review Focus)
 
@@ -1763,7 +1766,7 @@ Run: `npm test --workspace=apps/backend -- reglas-borrado-cobro`
 Expected: PASS (6 casos de `statusTrasBorrar` + 6 de `planearBorrado`).
 
 Run: `npm run lint --workspace=apps/backend`
-Expected: sin errores (prettier puede reacomodar líneas largas: corre `npm run lint --workspace=apps/backend -- --fix` si lo pide).
+Expected: sin errores (el script de lint ya corre con `--fix` y reacomoda las líneas largas).
 
 - [ ] **Paso 5: Commit**
 
@@ -1771,6 +1774,2311 @@ Expected: sin errores (prettier puede reacomodar líneas largas: corre `npm run 
 git add apps/backend/src/modules/ventas-cobranza/reglas-borrado-cobro.ts \
   apps/backend/src/modules/ventas-cobranza/reglas-borrado-cobro.spec.ts
 git commit -m "T-34: regla pura de borrar un pago — status tras borrar y saldo a favor ya aplicado
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+### Tarea 3: `CobrosBorradoService` — la vista previa y el borrado, con los candados del cobro
+
+El borrado de verdad. **Una sola ruta para los dos**, como la vista previa de T-21 (`planearPago` bloquea y
+calcula sin escribir): `planear` toma los candados y calcula; `borrar` = `planear` + escribir. Así la vista
+previa y el borrado no pueden discrepar. La vista previa corre en una transacción que no escribe nada; sus
+candados duran milisegundos (desviación 7, anotada abajo). Las pruebas de esta tarea son unitarias con el
+repositorio de mentira; las e2e de punta a punta llegan con los endpoints (Tarea 4).
+**Modelo:** `sonnet` para implementar, **`opus`** para revisar (candados).
+
+**Archivos:**
+- Crear: `apps/backend/src/modules/ventas-cobranza/cobros-borrado.repository.ts`
+- Crear: `apps/backend/src/modules/ventas-cobranza/cobros-borrado.service.ts`
+- Crear: `apps/backend/src/modules/ventas-cobranza/cobros-borrado.service.spec.ts`
+- Modificar: `apps/backend/src/modules/ventas-cobranza/ventas-cobranza.module.ts` (proveedores)
+
+**Interfaces:**
+- Consume:
+  - de la Tarea 1: tablas `cobro`, `cobranza_abono.cobro_id`, `saldo_favor_movimiento.cobro_id`;
+  - de la Tarea 2: `planearBorrado`, `NotaTrasBorrar`, `BloqueoBorrado`, `StatusNota`, `MOTIVO_SALDO_FAVOR_APLICADO`;
+  - de T-20/T-21 (`cobranzas.repository.ts`, sin cambios): `bloquearNotasDelCliente(clienteId, notaIds, trx): Promise<NotaBloqueada[]>`,
+    `abonadoPorNota(ids, trx): Promise<Map<string, string>>`, `bloquearSaldoFavor(clienteId, trx): Promise<string[]>`.
+- Produce:
+  ```ts
+  // cobros-borrado.repository.ts
+  export interface CabeceraCobro {
+    id: string; clienteId: string; cliente: string; sucursalId: string; sucursalCodigo: string;
+    origen: 'cobro' | 'saldo_favor'; metodoPago: string; monto: string;   // texto numeric
+    fechaPago: string; fechaOperacion: string;                              // AAAA-MM-DD
+    cobrador: string | null;                                                // nombre del vendedor; null = Oficina
+    borrado: boolean;
+  }
+  class CobrosBorradoRepository {
+    cabecera(cobroId: string, conexion?: Database): Promise<CabeceraCobro | undefined>;
+    delPagoPorNota(cobroId: string, trx: Transaction<DB>): Promise<Map<string, string>>;
+    bloquearCobro(cobroId: string, trx: Transaction<DB>): Promise<{ borrado: boolean }>;
+    movimientoDelPago(cobroId: string, trx: Transaction<DB>): Promise<string>;
+    borrarPago(cobroId: string, usuarioId: string, trx: Transaction<DB>): Promise<void>;
+    escribirStatusNota(notaId: string, status: StatusNota, trx: Transaction<DB>): Promise<void>;
+    tocarCliente(clienteId: string, trx: Transaction<DB>): Promise<void>;
+  }
+  // cobros-borrado.service.ts
+  export const MOTIVO_COBRO_NO_EXISTE = 'No existe ese cobro.';
+  export const MOTIVO_COBRO_BORRADO = 'Este cobro ya se borró.';
+  export type RazonNoBorrable = 'no-existe' | 'cobro-borrado' | 'saldo-favor-aplicado';
+  export class CobroNoBorrable extends Error { readonly razon: RazonNoBorrable }
+  export interface CobroEnVista {
+    id: string; clienteId: string; cliente: string; sucursalCodigo: string;
+    origen: 'cobro' | 'saldo_favor'; metodoPago: string; montoCentavos: number;
+    fechaPago: string; fechaOperacion: string; cobrador: string | null;
+  }
+  export interface VistaBorrado {
+    cobro: CobroEnVista;
+    notas: NotaTrasBorrar[];
+    saldoFavorAntesCentavos: number;
+    saldoFavorDespuesCentavos: number;
+    movimientoSaldoFavorCentavos: number;  // + excedente, - aplicacion, 0
+    bloqueo: BloqueoBorrado | null;
+  }
+  class CobrosBorradoService {
+    planear(cobroId: string, trx: Transaction<DB>): Promise<VistaBorrado>;
+    borrar(cobroId: string, usuarioId: string, trx: Transaction<DB>): Promise<VistaBorrado>;
+  }
+  ```
+  `planear` y `borrar` **no** exigen alcance ni permisos: los llama `PeticionesService` (Tarea 4) después de
+  comprobar el alcance con `repo.cabecera`.
+
+- [ ] **Paso 1: Pruebas unitarias que fallan**
+
+Crea `apps/backend/src/modules/ventas-cobranza/cobros-borrado.service.spec.ts`:
+
+```ts
+import type { Transaction } from 'kysely';
+import type { DB } from '../../database/schema';
+import type { CabeceraCobro } from './cobros-borrado.repository';
+import {
+  CobroNoBorrable,
+  CobrosBorradoService,
+  MOTIVO_COBRO_BORRADO,
+  MOTIVO_COBRO_NO_EXISTE,
+} from './cobros-borrado.service';
+import type { NotaBloqueada } from './cobranzas.repository';
+import { MOTIVO_SALDO_FAVOR_APLICADO } from './reglas-borrado-cobro';
+
+const trx = {} as Transaction<DB>;
+const COBRO = 'cobro-1';
+const CLIENTE = 'cliente-1';
+const A = 'nota-a';
+const B = 'nota-b';
+
+const cabecera = (extra: Partial<CabeceraCobro> = {}): CabeceraCobro => ({
+  id: COBRO,
+  clienteId: CLIENTE,
+  cliente: 'Tacos Erick',
+  sucursalId: 'sucursal-tj',
+  sucursalCodigo: 'TJ',
+  origen: 'cobro',
+  metodoPago: 'efectivo',
+  monto: '1000.00',
+  fechaPago: '2026-10-10',
+  fechaOperacion: '2026-10-10',
+  cobrador: 'Juan Perez',
+  borrado: false,
+  ...extra,
+});
+
+const bloqueada = (
+  id: string,
+  fecha: string,
+  montoTotal: string,
+  status = 'pagada',
+): NotaBloqueada => ({
+  id,
+  fecha,
+  folio: `TJ${fecha.slice(2, 4)}${fecha.slice(5, 7)}${fecha.slice(8, 10)}AP01`,
+  numNota: null,
+  status,
+  borrada: false,
+  montoTotal,
+});
+
+/** Pago de $1,000: $400 a A, $500 a B y $100 a saldo a favor. */
+function montar(
+  opciones: {
+    cab?: CabeceraCobro | undefined;
+    delPago?: Map<string, string>;
+    abonado?: Map<string, string>;
+    saldoFavor?: string[];
+    movimiento?: string;
+    borradoAlBloquear?: boolean;
+  } = {},
+) {
+  const repo = {
+    cabecera: jest
+      .fn()
+      .mockResolvedValue('cab' in opciones ? opciones.cab : cabecera()),
+    delPagoPorNota: jest.fn().mockResolvedValue(
+      opciones.delPago ??
+        new Map([
+          [A, '400.00'],
+          [B, '500.00'],
+        ]),
+    ),
+    bloquearCobro: jest
+      .fn()
+      .mockResolvedValue({ borrado: opciones.borradoAlBloquear ?? false }),
+    movimientoDelPago: jest.fn().mockResolvedValue(opciones.movimiento ?? '100.00'),
+    borrarPago: jest.fn().mockResolvedValue(undefined),
+    escribirStatusNota: jest.fn().mockResolvedValue(undefined),
+    tocarCliente: jest.fn().mockResolvedValue(undefined),
+  };
+  const cobranzas = {
+    bloquearNotasDelCliente: jest
+      .fn()
+      .mockResolvedValue([
+        bloqueada(A, '2026-08-01', '600.00'),
+        bloqueada(B, '2026-08-03', '500.00'),
+      ]),
+    abonadoPorNota: jest.fn().mockResolvedValue(
+      opciones.abonado ??
+        new Map([
+          [A, '600.00'],
+          [B, '500.00'],
+        ]),
+    ),
+    bloquearSaldoFavor: jest.fn().mockResolvedValue(opciones.saldoFavor ?? ['300.00']),
+  };
+  const servicio = new CobrosBorradoService(repo as never, cobranzas as never);
+  return { servicio, repo, cobranzas };
+}
+
+describe('CobrosBorradoService.planear', () => {
+  it('cada nota vuelve a deber lo que le abono el pago, y el saldo a favor baja el excedente', async () => {
+    const { servicio } = montar();
+    await expect(servicio.planear(COBRO, trx)).resolves.toEqual({
+      cobro: {
+        id: COBRO,
+        clienteId: CLIENTE,
+        cliente: 'Tacos Erick',
+        sucursalCodigo: 'TJ',
+        origen: 'cobro',
+        metodoPago: 'efectivo',
+        montoCentavos: 100000,
+        fechaPago: '2026-10-10',
+        fechaOperacion: '2026-10-10',
+        cobrador: 'Juan Perez',
+      },
+      notas: [
+        {
+          notaId: A,
+          folio: 'TJ260801AP01',
+          numNota: null,
+          fecha: '2026-08-01',
+          delPagoCentavos: 40000,
+          saldoAntesCentavos: 0,
+          saldoDespuesCentavos: 40000,
+          statusDespues: 'abonado',
+        },
+        {
+          notaId: B,
+          folio: 'TJ260803AP01',
+          numNota: null,
+          fecha: '2026-08-03',
+          delPagoCentavos: 50000,
+          saldoAntesCentavos: 0,
+          saldoDespuesCentavos: 50000,
+          statusDespues: 'pendiente',
+        },
+      ],
+      saldoFavorAntesCentavos: 30000,
+      saldoFavorDespuesCentavos: 20000,
+      movimientoSaldoFavorCentavos: 10000,
+      bloqueo: null,
+    });
+  });
+
+  it('Review Focus 1: candados en el orden del cobro — notas, saldo a favor, pago — y lo del pago se relee despues', async () => {
+    const { servicio, repo, cobranzas } = montar();
+    await servicio.planear(COBRO, trx);
+
+    expect(cobranzas.bloquearNotasDelCliente).toHaveBeenCalledWith(
+      CLIENTE,
+      [A, B],
+      trx,
+    );
+    const orden = [
+      cobranzas.bloquearNotasDelCliente.mock.invocationCallOrder[0],
+      cobranzas.abonadoPorNota.mock.invocationCallOrder[0],
+      cobranzas.bloquearSaldoFavor.mock.invocationCallOrder[0],
+      repo.bloquearCobro.mock.invocationCallOrder[0],
+      repo.movimientoDelPago.mock.invocationCallOrder[0],
+    ];
+    expect([...orden].sort((x, y) => x - y)).toEqual(orden);
+    // La segunda lectura de lo del pago va despues del candado del pago.
+    expect(repo.delPagoPorNota.mock.invocationCallOrder[1]).toBeGreaterThan(
+      repo.bloquearCobro.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('un pago que solo dejo saldo a favor igual bloquea las notas del cliente (mismo orden de candados)', async () => {
+    const { servicio, cobranzas } = montar({ delPago: new Map() });
+    const vista = await servicio.planear(COBRO, trx);
+    expect(cobranzas.bloquearNotasDelCliente).toHaveBeenCalledWith(CLIENTE, [], trx);
+    expect(vista.notas).toEqual([]);
+  });
+
+  it('un pago que no existe es no-existe', async () => {
+    const { servicio, cobranzas } = montar({ cab: undefined });
+    await expect(servicio.planear(COBRO, trx)).rejects.toMatchObject({
+      razon: 'no-existe',
+      message: MOTIVO_COBRO_NO_EXISTE,
+    });
+    expect(cobranzas.bloquearNotasDelCliente).not.toHaveBeenCalled();
+  });
+
+  it('un pago que resulto borrado al tomar su candado es cobro-borrado', async () => {
+    const { servicio } = montar({ borradoAlBloquear: true });
+    const error = await servicio.planear(COBRO, trx).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(CobroNoBorrable);
+    expect(error).toMatchObject({
+      razon: 'cobro-borrado',
+      message: MOTIVO_COBRO_BORRADO,
+    });
+  });
+
+  it('el bloqueo de saldo a favor ya aplicado viaja en la vista (no lanza)', async () => {
+    const { servicio } = montar({ saldoFavor: ['100.00', '-60.00'] });
+    const vista = await servicio.planear(COBRO, trx);
+    expect(vista.saldoFavorDespuesCentavos).toBe(-6000);
+    expect(vista.bloqueo).toEqual({
+      codigo: 'saldo-favor-aplicado',
+      motivo: MOTIVO_SALDO_FAVOR_APLICADO,
+    });
+  });
+});
+
+describe('CobrosBorradoService.borrar', () => {
+  it('borra el pago completo, escribe el status de cada nota y toca al cliente por el saldo a favor', async () => {
+    const { servicio, repo } = montar();
+    const vista = await servicio.borrar(COBRO, 'usuario-1', trx);
+
+    expect(repo.borrarPago).toHaveBeenCalledWith(COBRO, 'usuario-1', trx);
+    expect(repo.escribirStatusNota).toHaveBeenCalledTimes(2);
+    expect(repo.escribirStatusNota).toHaveBeenCalledWith(A, 'abonado', trx);
+    expect(repo.escribirStatusNota).toHaveBeenCalledWith(B, 'pendiente', trx);
+    expect(repo.tocarCliente).toHaveBeenCalledWith(CLIENTE, trx);
+    expect(vista.saldoFavorDespuesCentavos).toBe(20000);
+  });
+
+  it('borrar una aplicacion de saldo a favor tambien toca al cliente (su saldo sube)', async () => {
+    const { servicio, repo } = montar({
+      cab: cabecera({ origen: 'saldo_favor', metodoPago: 'saldo_favor', cobrador: null }),
+      delPago: new Map([[A, '30.00']]),
+      abonado: new Map([[A, '30.00']]),
+      movimiento: '-30.00',
+      saldoFavor: ['20.00'],
+    });
+    const vista = await servicio.borrar(COBRO, 'usuario-1', trx);
+    expect(vista.saldoFavorDespuesCentavos).toBe(5000);
+    expect(repo.tocarCliente).toHaveBeenCalledWith(CLIENTE, trx);
+  });
+
+  it('un pago sin movimiento de saldo a favor no toca al cliente', async () => {
+    const { servicio, repo } = montar({ movimiento: '0' });
+    await servicio.borrar(COBRO, 'usuario-1', trx);
+    expect(repo.tocarCliente).not.toHaveBeenCalled();
+  });
+
+  it('Review Focus 1: con el saldo a favor ya aplicado lanza y no escribe nada', async () => {
+    const { servicio, repo } = montar({ saldoFavor: ['50.00'] });
+    await expect(servicio.borrar(COBRO, 'usuario-1', trx)).rejects.toMatchObject({
+      razon: 'saldo-favor-aplicado',
+      message: MOTIVO_SALDO_FAVOR_APLICADO,
+    });
+    expect(repo.borrarPago).not.toHaveBeenCalled();
+    expect(repo.escribirStatusNota).not.toHaveBeenCalled();
+    expect(repo.tocarCliente).not.toHaveBeenCalled();
+  });
+
+  it('un pago ya borrado no se vuelve a borrar', async () => {
+    const { servicio, repo } = montar({ borradoAlBloquear: true });
+    await expect(servicio.borrar(COBRO, 'usuario-1', trx)).rejects.toMatchObject({
+      razon: 'cobro-borrado',
+    });
+    expect(repo.borrarPago).not.toHaveBeenCalled();
+  });
+});
+```
+
+- [ ] **Paso 2: Correr y ver que falla**
+
+Run: `npm test --workspace=apps/backend -- cobros-borrado`
+Expected: FAIL — `Cannot find module './cobros-borrado.repository'`.
+
+- [ ] **Paso 3: El repositorio**
+
+Crea `apps/backend/src/modules/ventas-cobranza/cobros-borrado.repository.ts`:
+
+```ts
+import { Inject, Injectable } from '@nestjs/common';
+import { sql, type Transaction } from 'kysely';
+import { DB_CONNECTION, type Database } from '../../database/database.tokens';
+import type { DB } from '../../database/schema';
+import type { StatusNota } from './reglas-borrado-cobro';
+
+/** Un pago con lo necesario para pintarlo y exigir el alcance (T-34). */
+export interface CabeceraCobro {
+  id: string;
+  clienteId: string;
+  /** Nombre del cliente. */
+  cliente: string;
+  /** La sucursal del CLIENTE: la que define el alcance, como en el cobro. */
+  sucursalId: string;
+  sucursalCodigo: string;
+  origen: 'cobro' | 'saldo_favor';
+  metodoPago: string;
+  /** Texto `numeric`: el pago completo. */
+  monto: string;
+  /** `AAAA-MM-DD` con `to_char`: un `date` leido como `Date` se corre un dia. */
+  fechaPago: string;
+  fechaOperacion: string;
+  /** Nombre del vendedor que cobro; `null` = Oficina (o saldo a favor). */
+  cobrador: string | null;
+  borrado: boolean;
+}
+
+/**
+ * SQL de borrar un pago (T-34). Como `CobranzasRepository`: lo que escribe
+ * recibe la `trx` de quien llama y ninguno abre la suya.
+ */
+@Injectable()
+export class CobrosBorradoRepository {
+  constructor(@Inject(DB_CONNECTION) private readonly db: Database) {}
+
+  /** El pago, **incluso borrado** (quien llama decide). Sin candado. */
+  async cabecera(
+    cobroId: string,
+    conexion: Database = this.db,
+  ): Promise<CabeceraCobro | undefined> {
+    const filas = await sql<{
+      id: string;
+      cliente_id: string;
+      cliente: string;
+      sucursal_id: string;
+      sucursal_codigo: string;
+      origen: string;
+      metodo_pago: string;
+      monto: string;
+      fecha_pago: string;
+      fecha_operacion: string;
+      cobrador: string | null;
+      borrado: boolean;
+    }>`
+      select co.id, co.cliente_id, c.nombre as cliente, c.sucursal_id,
+             s.codigo as sucursal_codigo, co.origen, co.metodo_pago,
+             co.monto::text as monto,
+             to_char(co.fecha_pago, 'YYYY-MM-DD') as fecha_pago,
+             to_char(co.fecha_operacion, 'YYYY-MM-DD') as fecha_operacion,
+             v.nombre as cobrador,
+             co.deleted_at is not null as borrado
+        from cobro co
+        join cliente c on c.id = co.cliente_id
+        join sucursal s on s.id = c.sucursal_id
+        left join vendedor v on v.id = co.vendedor_id
+       where co.id = ${cobroId}
+    `.execute(conexion);
+    const f = filas.rows[0];
+    return f
+      ? {
+          id: f.id,
+          clienteId: f.cliente_id,
+          cliente: f.cliente,
+          sucursalId: f.sucursal_id,
+          sucursalCodigo: f.sucursal_codigo,
+          origen: f.origen as 'cobro' | 'saldo_favor',
+          metodoPago: f.metodo_pago,
+          monto: f.monto,
+          fechaPago: f.fecha_pago,
+          fechaOperacion: f.fecha_operacion,
+          cobrador: f.cobrador,
+          borrado: f.borrado,
+        }
+      : undefined;
+  }
+
+  /** Lo que el pago le abono a cada nota (sus filas vivas), texto `numeric`. */
+  async delPagoPorNota(
+    cobroId: string,
+    trx: Transaction<DB>,
+  ): Promise<Map<string, string>> {
+    const filas = await trx
+      .selectFrom('cobranza_abono')
+      .select(['venta_nota_id', sql<string>`sum(monto)::text`.as('monto')])
+      .where('cobro_id', '=', cobroId)
+      .where('deleted_at', 'is', null)
+      .groupBy('venta_nota_id')
+      .execute();
+    return new Map(filas.map((f) => [f.venta_nota_id, f.monto]));
+  }
+
+  /** `for update` de la fila del pago: el ultimo candado (despues de notas y saldo a favor). */
+  async bloquearCobro(
+    cobroId: string,
+    trx: Transaction<DB>,
+  ): Promise<{ borrado: boolean }> {
+    const filas = await sql<{ borrado: boolean }>`
+      select deleted_at is not null as borrado
+        from cobro
+       where id = ${cobroId}
+         for update
+    `.execute(trx);
+    const fila = filas.rows[0];
+    if (!fila) throw new Error(`El cobro ${cobroId} desaparecio bajo el candado.`);
+    return fila;
+  }
+
+  /** Su movimiento vivo de saldo a favor: + excedente, - aplicacion, `0` si no tiene. */
+  async movimientoDelPago(
+    cobroId: string,
+    trx: Transaction<DB>,
+  ): Promise<string> {
+    const fila = await trx
+      .selectFrom('saldo_favor_movimiento')
+      .select(sql<string>`coalesce(sum(monto), 0)::text`.as('total'))
+      .where('cobro_id', '=', cobroId)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirstOrThrow();
+    return fila.total;
+  }
+
+  /** El pago completo: el `cobro` (con quien lo borro), sus filas en notas y su saldo a favor. */
+  async borrarPago(
+    cobroId: string,
+    usuarioId: string,
+    trx: Transaction<DB>,
+  ): Promise<void> {
+    await trx
+      .updateTable('cobranza_abono')
+      .set({ deleted_at: sql`now()` })
+      .where('cobro_id', '=', cobroId)
+      .where('deleted_at', 'is', null)
+      .execute();
+    await trx
+      .updateTable('saldo_favor_movimiento')
+      .set({ deleted_at: sql`now()` })
+      .where('cobro_id', '=', cobroId)
+      .where('deleted_at', 'is', null)
+      .execute();
+    await trx
+      .updateTable('cobro')
+      .set({ deleted_at: sql`now()`, eliminado_por_usuario_id: usuarioId })
+      .where('id', '=', cobroId)
+      .execute();
+  }
+
+  /**
+   * El status tras borrar. Se escribe aunque no cambie: el trigger le toca
+   * `updated_at` y el pull incremental de la tablet la vuelve a bajar (D12).
+   */
+  async escribirStatusNota(
+    notaId: string,
+    status: StatusNota,
+    trx: Transaction<DB>,
+  ): Promise<void> {
+    await trx
+      .updateTable('venta_nota')
+      .set({ status })
+      .where('id', '=', notaId)
+      .execute();
+  }
+
+  /** `updated_at` del cliente: asi el pull incremental le baja el saldo a favor nuevo. */
+  async tocarCliente(clienteId: string, trx: Transaction<DB>): Promise<void> {
+    await trx
+      .updateTable('cliente')
+      .set({ updated_at: sql`now()` })
+      .where('id', '=', clienteId)
+      .execute();
+  }
+}
+```
+
+- [ ] **Paso 4: El servicio**
+
+Crea `apps/backend/src/modules/ventas-cobranza/cobros-borrado.service.ts`:
+
+```ts
+import { Injectable } from '@nestjs/common';
+import type { Transaction } from 'kysely';
+import type { DB } from '../../database/schema';
+import { aCentavos } from '../sincronizacion/dinero';
+import {
+  CobrosBorradoRepository,
+  type CabeceraCobro,
+} from './cobros-borrado.repository';
+import { CobranzasRepository } from './cobranzas.repository';
+import {
+  planearBorrado,
+  type BloqueoBorrado,
+  type NotaTrasBorrar,
+} from './reglas-borrado-cobro';
+
+export const MOTIVO_COBRO_NO_EXISTE = 'No existe ese cobro.';
+export const MOTIVO_COBRO_BORRADO = 'Este cobro ya se borró.';
+
+export type RazonNoBorrable =
+  | 'no-existe'
+  | 'cobro-borrado'
+  | 'saldo-favor-aplicado';
+
+/** Un pago que no se puede borrar (o ver) ahora. Quien llama lo traduce a HTTP. */
+export class CobroNoBorrable extends Error {
+  constructor(
+    readonly razon: RazonNoBorrable,
+    mensaje: string,
+  ) {
+    super(mensaje);
+    this.name = 'CobroNoBorrable';
+  }
+}
+
+/** El pago, listo para la pantalla: dinero en centavos. */
+export interface CobroEnVista {
+  id: string;
+  clienteId: string;
+  cliente: string;
+  sucursalCodigo: string;
+  origen: 'cobro' | 'saldo_favor';
+  metodoPago: string;
+  montoCentavos: number;
+  fechaPago: string;
+  fechaOperacion: string;
+  /** `null` = Oficina (o saldo a favor). */
+  cobrador: string | null;
+}
+
+/** `GET /cobros/:id/vista-borrado` y `GET /peticiones/:id/vista-previa` (§3.1). */
+export interface VistaBorrado {
+  cobro: CobroEnVista;
+  notas: NotaTrasBorrar[];
+  saldoFavorAntesCentavos: number;
+  saldoFavorDespuesCentavos: number;
+  /** El movimiento del pago: + excedente, - aplicacion, 0 si no movio saldo a favor. */
+  movimientoSaldoFavorCentavos: number;
+  bloqueo: BloqueoBorrado | null;
+}
+
+const enVista = (c: CabeceraCobro): CobroEnVista => ({
+  id: c.id,
+  clienteId: c.clienteId,
+  cliente: c.cliente,
+  sucursalCodigo: c.sucursalCodigo,
+  origen: c.origen,
+  metodoPago: c.metodoPago,
+  montoCentavos: aCentavos(c.monto),
+  fechaPago: c.fechaPago,
+  fechaOperacion: c.fechaOperacion,
+  cobrador: c.cobrador,
+});
+
+/**
+ * Borrar un pago completo (T-34). No sabe de peticiones, permisos ni alcance:
+ * `PeticionesService` exige el alcance con `cabecera` antes de llamarlo.
+ *
+ * Candados en el MISMO orden que el cobro (T-20/T-21): las notas del cliente
+ * (`bloquearNotasDelCliente`, en orden de id), su saldo a favor, y al final la
+ * fila del pago. Un cobro de la tablet o del portal sobre el mismo cliente se
+ * serializa con el borrado, sin abrazo mortal; las decisiones se toman sobre lo
+ * bloqueado, nunca sobre lo que leyo la pantalla (leccion de T-19).
+ */
+@Injectable()
+export class CobrosBorradoService {
+  constructor(
+    private readonly repo: CobrosBorradoRepository,
+    private readonly cobranzas: CobranzasRepository,
+  ) {}
+
+  /**
+   * Toma los candados y dice que pasaria. No escribe nada. El bloqueo (saldo a
+   * favor ya aplicado) viaja en la vista, no se lanza: la pantalla lo muestra.
+   *
+   * @throws {CobroNoBorrable} `no-existe` o `cobro-borrado`.
+   */
+  async planear(cobroId: string, trx: Transaction<DB>): Promise<VistaBorrado> {
+    const cabecera = await this.repo.cabecera(cobroId, trx);
+    if (!cabecera)
+      throw new CobroNoBorrable('no-existe', MOTIVO_COBRO_NO_EXISTE);
+
+    // Las notas de un pago no cambian nunca (sus filas se escriben al cobrar),
+    // asi que se pueden leer antes del candado para saber cuales bloquear.
+    const notaIds = [...(await this.repo.delPagoPorNota(cobroId, trx)).keys()];
+    const bloqueadas = await this.cobranzas.bloquearNotasDelCliente(
+      cabecera.clienteId,
+      notaIds,
+      trx,
+    );
+    const abonado = await this.cobranzas.abonadoPorNota(notaIds, trx);
+    const saldoFavorVivo = (
+      await this.cobranzas.bloquearSaldoFavor(cabecera.clienteId, trx)
+    ).reduce((total, monto) => total + aCentavos(monto), 0);
+
+    if ((await this.repo.bloquearCobro(cobroId, trx)).borrado)
+      throw new CobroNoBorrable('cobro-borrado', MOTIVO_COBRO_BORRADO);
+
+    // Ya con el pago bloqueado: lo suyo, releido.
+    const delPago = await this.repo.delPagoPorNota(cobroId, trx);
+    const movimiento = aCentavos(await this.repo.movimientoDelPago(cobroId, trx));
+
+    const porId = new Map(bloqueadas.map((n) => [n.id, n]));
+    const plan = planearBorrado({
+      notas: [...delPago].map(([id, monto]) => {
+        const nota = porId.get(id);
+        // Imposible por construccion: el pago y sus notas son del mismo cliente.
+        if (!nota) throw new Error(`La nota ${id} del cobro ${cobroId} no es de su cliente.`);
+        return {
+          id,
+          folio: nota.folio,
+          numNota: nota.numNota,
+          fecha: nota.fecha,
+          status: nota.status,
+          montoTotalCentavos: aCentavos(nota.montoTotal),
+          abonadoVivoCentavos: aCentavos(abonado.get(id)),
+          delPagoCentavos: aCentavos(monto),
+        };
+      }),
+      saldoFavorVivoCentavos: saldoFavorVivo,
+      movimientoDelPagoCentavos: movimiento,
+    });
+
+    return {
+      cobro: enVista(cabecera),
+      ...plan,
+      movimientoSaldoFavorCentavos: movimiento,
+    };
+  }
+
+  /**
+   * Borra el pago completo dentro de la transaccion de quien llama: el
+   * `cobro`, sus filas en notas y su saldo a favor (`deleted_at`), el status de
+   * cada nota y, si movio saldo a favor, el `updated_at` del cliente (pull).
+   *
+   * @throws {CobroNoBorrable} `no-existe`, `cobro-borrado` o
+   * `saldo-favor-aplicado`. No escribe nada antes de lanzar.
+   */
+  async borrar(
+    cobroId: string,
+    usuarioId: string,
+    trx: Transaction<DB>,
+  ): Promise<VistaBorrado> {
+    const vista = await this.planear(cobroId, trx);
+    if (vista.bloqueo)
+      throw new CobroNoBorrable('saldo-favor-aplicado', vista.bloqueo.motivo);
+
+    await this.repo.borrarPago(cobroId, usuarioId, trx);
+    for (const nota of vista.notas)
+      await this.repo.escribirStatusNota(nota.notaId, nota.statusDespues, trx);
+    if (vista.movimientoSaldoFavorCentavos !== 0)
+      await this.repo.tocarCliente(vista.cobro.clienteId, trx);
+    return vista;
+  }
+}
+```
+
+`cabecera` recibe la `trx` como `Database`: `Transaction<DB>` extiende `Kysely<DB>`, así que el tipo encaja.
+
+En `ventas-cobranza.module.ts`, importa `CobrosBorradoRepository` y `CobrosBorradoService` y agrégalos a
+`providers` con el comentario `// T-34: borrar un pago (via peticion)`.
+
+- [ ] **Paso 5: Correr y ver que pasa**
+
+Run: `npm test --workspace=apps/backend -- cobros-borrado`
+Expected: PASS (6 de `planear` + 5 de `borrar`).
+
+Run: `npm run build --workspace=apps/backend && npm run lint --workspace=apps/backend`
+Expected: compila y sin errores de lint (el script de lint ya corre con `--fix`).
+
+- [ ] **Paso 6: Commit**
+
+```bash
+git add apps/backend/src/modules/ventas-cobranza/cobros-borrado.repository.ts \
+  apps/backend/src/modules/ventas-cobranza/cobros-borrado.service.ts \
+  apps/backend/src/modules/ventas-cobranza/cobros-borrado.service.spec.ts \
+  apps/backend/src/modules/ventas-cobranza/ventas-cobranza.module.ts
+git commit -m "T-34: CobrosBorradoService — vista previa y borrado del pago completo con los candados del cobro
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+### Tarea 4: Peticiones — los endpoints y las pruebas de punta a punta
+
+Pedir, ver la bandeja, autorizar y denegar, y la vista previa por cobro o por petición. Toda decisión se toma
+dentro de **una** transacción y **después** de los candados. El alcance se exige **antes** de decir si el
+pago está borrado o la petición resuelta (Review Focus 4). **Modelo:** **`opus`** para implementar y revisar.
+
+**Archivos:**
+- Crear: `apps/backend/src/modules/ventas-cobranza/peticiones.repository.ts`
+- Crear: `apps/backend/src/modules/ventas-cobranza/peticiones.service.ts`
+- Crear: `apps/backend/src/modules/ventas-cobranza/peticiones.service.spec.ts`
+- Crear: `apps/backend/src/modules/ventas-cobranza/peticiones.controller.ts`
+- Crear: `apps/backend/src/modules/ventas-cobranza/cobros.controller.ts`
+- Crear: `apps/backend/src/modules/ventas-cobranza/dto/peticiones.dto.ts`
+- Modificar: `apps/backend/src/modules/ventas-cobranza/ventas-cobranza.module.ts`
+- Crear: `apps/backend/test/peticiones.e2e-spec.ts`
+
+**Interfaces:**
+- Consume:
+  - Tarea 3: `CobrosBorradoService.planear(cobroId, trx)`, `.borrar(cobroId, usuarioId, trx)`, `CobroNoBorrable`
+    (`razon`), `MOTIVO_COBRO_NO_EXISTE`, `MOTIVO_COBRO_BORRADO`, `VistaBorrado`;
+    `CobrosBorradoRepository.cabecera(cobroId, conexion)`.
+  - T-17/T-21: `exigirAlcanceSobre(usuario, codigo)` (`alcance-venta.ts`), `resolverAlcance` y
+    `normalizarSucursalPedida` (`sucursales/alcance-sucursal.ts`), `VentasPortalRepository.buscarSucursalUsuario(usuarioId)`,
+    `MOTIVO_INTERBLOQUEO_COBRO` (`cobranzas-portal.service.ts`), `esConflictoDeConcurrencia`,
+    `esViolacionUnicidad`, `restriccionDelError` (`database/errores-postgres.ts`).
+  - Tarea 1 (e2e): `borrarCobrosDe(db, clienteIds)` de `apoyo-cobros.ts`.
+- Produce:
+  ```ts
+  // peticiones.repository.ts
+  export type StatusPeticion = 'pendiente' | 'autorizada' | 'denegada';
+  export interface CobroDePeticion {
+    id: string; clienteId: string; cliente: string; montoCentavos: number;
+    metodoPago: string; origen: 'cobro' | 'saldo_favor'; fechaPago: string;
+    cobrador: string | null;
+    folios: string[];   // las notas del pago, por fecha y folio (sus filas vivas o borradas)
+  }
+  export interface PeticionEnBandeja {
+    id: string; tipo: 'eliminar_cobro'; status: StatusPeticion; sucursalCodigo: string;
+    motivo: string; solicito: string; creadaEn: string;          // 'AAAA-MM-DD HH:MM' Tijuana
+    resolvio: string | null; resueltaEn: string | null; comentario: string | null;
+    cobro: CobroDePeticion;
+  }
+  // peticiones.service.ts
+  export const MOTIVO_PETICION_NO_EXISTE = 'No existe esa petición.';
+  export const MOTIVO_PETICION_RESUELTA = 'Esta petición ya fue resuelta.';
+  export const MOTIVO_PETICION_PENDIENTE = 'Este cobro ya tiene una petición de borrado pendiente.';
+  export const MOTIVO_SIN_MOTIVO = 'Escribe el motivo de la petición.';
+  export const MOTIVO_MOTIVO_LARGO = 'El motivo no puede pasar de 500 caracteres.';
+  export const MOTIVO_COMENTARIO_LARGO = 'El comentario no puede pasar de 500 caracteres.';
+  export function normalizarMotivo(crudo: string | undefined): string;          // 400 si vacio o > 500
+  export function normalizarComentario(crudo: string | undefined): string | null; // 400 si > 500
+  // dto/peticiones.dto.ts
+  export const MOTIVO_STATUS_BANDEJA = 'Elige pendientes o historial.';
+  ```
+  Endpoints: la tabla de "Restricciones globales".
+
+- [ ] **Paso 1: Pruebas unitarias de las normalizaciones**
+
+Crea `apps/backend/src/modules/ventas-cobranza/peticiones.service.spec.ts`:
+
+```ts
+import { BadRequestException } from '@nestjs/common';
+import {
+  MOTIVO_COMENTARIO_LARGO,
+  MOTIVO_MOTIVO_LARGO,
+  MOTIVO_SIN_MOTIVO,
+  normalizarComentario,
+  normalizarMotivo,
+} from './peticiones.service';
+
+describe('normalizarMotivo', () => {
+  it('recorta los espacios', () => {
+    expect(normalizarMotivo('  Era de credito  ')).toBe('Era de credito');
+  });
+
+  it.each([[undefined], [''], ['   ']])('sin texto (%p) es 400', (crudo) => {
+    expect(() => normalizarMotivo(crudo)).toThrow(
+      new BadRequestException(MOTIVO_SIN_MOTIVO),
+    );
+  });
+
+  it('500 caracteres entran; 501 no', () => {
+    expect(normalizarMotivo('x'.repeat(500))).toHaveLength(500);
+    expect(() => normalizarMotivo('x'.repeat(501))).toThrow(MOTIVO_MOTIVO_LARGO);
+  });
+});
+
+describe('normalizarComentario', () => {
+  it('vacio o ausente es null; con texto, recortado', () => {
+    expect(normalizarComentario(undefined)).toBeNull();
+    expect(normalizarComentario('   ')).toBeNull();
+    expect(normalizarComentario(' No procede ')).toBe('No procede');
+  });
+
+  it('mas de 500 caracteres es 400', () => {
+    expect(() => normalizarComentario('x'.repeat(501))).toThrow(
+      MOTIVO_COMENTARIO_LARGO,
+    );
+  });
+});
+```
+
+Run: `npm test --workspace=apps/backend -- peticiones.service`
+Expected: FAIL — `Cannot find module './peticiones.service'`.
+
+- [ ] **Paso 2: El DTO**
+
+Crea `apps/backend/src/modules/ventas-cobranza/dto/peticiones.dto.ts`:
+
+```ts
+import { IsIn, IsOptional, IsString, IsUUID } from 'class-validator';
+import { MOTIVO_SIN_MOTIVO } from '../peticiones.service';
+
+export const MOTIVO_STATUS_BANDEJA = 'Elige pendientes o historial.';
+
+/** `GET /peticiones` (T-34, §3.2). */
+export class BandejaDto {
+  @IsIn(['pendiente', 'historial'], { message: MOTIVO_STATUS_BANDEJA })
+  status!: 'pendiente' | 'historial';
+
+  /** Codigo de sucursal o `todas`: lo interpreta `resolverAlcance`. */
+  @IsOptional()
+  @IsString()
+  sucursal?: string;
+}
+
+/**
+ * `POST /peticiones/eliminar-cobro`. El motivo se recorta y se mide en el
+ * servicio (`normalizarMotivo`): aqui solo se exige que sea texto.
+ */
+export class SolicitarEliminarCobroDto {
+  @IsUUID(undefined, { message: 'Elige el cobro.' })
+  cobroId!: string;
+
+  @IsString({ message: MOTIVO_SIN_MOTIVO })
+  motivo!: string;
+}
+
+/** `POST /peticiones/:id/denegar`. El comentario es opcional. */
+export class DenegarPeticionDto {
+  @IsOptional()
+  @IsString({ message: 'El comentario debe ser texto.' })
+  comentario?: string;
+}
+```
+
+- [ ] **Paso 3: El repositorio**
+
+Crea `apps/backend/src/modules/ventas-cobranza/peticiones.repository.ts`:
+
+```ts
+import { Inject, Injectable } from '@nestjs/common';
+import { sql, type Transaction } from 'kysely';
+import { DB_CONNECTION, type Database } from '../../database/database.tokens';
+import type { DB } from '../../database/schema';
+import { aCentavos } from '../sincronizacion/dinero';
+
+export type StatusPeticion = 'pendiente' | 'autorizada' | 'denegada';
+
+/** El pago de una peticion, para pintarlo en la bandeja. */
+export interface CobroDePeticion {
+  id: string;
+  clienteId: string;
+  cliente: string;
+  montoCentavos: number;
+  metodoPago: string;
+  origen: 'cobro' | 'saldo_favor';
+  /** `AAAA-MM-DD`. */
+  fechaPago: string;
+  /** Nombre del vendedor; `null` = Oficina (o saldo a favor). */
+  cobrador: string | null;
+  /** Folios de las notas del pago, por fecha y folio. Incluye filas ya borradas (historial). */
+  folios: string[];
+}
+
+/** Un renglon de la bandeja (§3.2). Fechas en hora de Tijuana, `AAAA-MM-DD HH:MM`. */
+export interface PeticionEnBandeja {
+  id: string;
+  tipo: 'eliminar_cobro';
+  status: StatusPeticion;
+  sucursalCodigo: string;
+  motivo: string;
+  /** Nombre de quien la pidio. */
+  solicito: string;
+  creadaEn: string;
+  resolvio: string | null;
+  resueltaEn: string | null;
+  comentario: string | null;
+  cobro: CobroDePeticion;
+}
+
+/** Ya resuelto por el servicio: el alcance aplicado. */
+export interface FiltroBandeja {
+  id?: string;
+  status?: 'pendiente' | 'historial';
+  /** `null` = todas las sucursales. */
+  sucursalCodigo: string | null;
+}
+
+/** Lo minimo para decidir sobre una peticion. */
+export interface PeticionParaResolver {
+  id: string;
+  status: StatusPeticion;
+  cobroId: string;
+  sucursalCodigo: string;
+}
+
+/** El historial muestra solo las mas recientes (§5: sin paginacion por ahora). */
+export const LIMITE_HISTORIAL = 200;
+
+/**
+ * SQL de la bandeja de peticiones (T-34). Las escrituras reciben la `trx` de
+ * `PeticionesService`, que abre UNA transaccion por accion.
+ */
+@Injectable()
+export class PeticionesRepository {
+  constructor(@Inject(DB_CONNECTION) private readonly db: Database) {}
+
+  enTransaccion<T>(tarea: (trx: Transaction<DB>) => Promise<T>): Promise<T> {
+    return this.db.transaction().execute(tarea);
+  }
+
+  async buscar(filtro: FiltroBandeja): Promise<PeticionEnBandeja[]> {
+    const condiciones = [sql`true`];
+    if (filtro.id !== undefined) condiciones.push(sql`p.id = ${filtro.id}`);
+    if (filtro.status === 'pendiente')
+      condiciones.push(sql`p.status = 'pendiente'`);
+    if (filtro.status === 'historial')
+      condiciones.push(sql`p.status <> 'pendiente'`);
+    if (filtro.sucursalCodigo !== null)
+      condiciones.push(sql`s.codigo = ${filtro.sucursalCodigo}`);
+    const orden =
+      filtro.status === 'historial'
+        ? sql`order by p.resuelta_en desc, p.created_at desc limit ${LIMITE_HISTORIAL}`
+        : sql`order by p.created_at, p.id`;
+
+    const filas = await sql<{
+      id: string;
+      status: string;
+      sucursal_codigo: string;
+      motivo: string;
+      solicito: string;
+      creada_en: string;
+      resolvio: string | null;
+      resuelta_en: string | null;
+      comentario: string | null;
+      cobro_id: string;
+      cliente_id: string;
+      cliente: string;
+      monto: string;
+      metodo_pago: string;
+      origen: string;
+      fecha_pago: string;
+      cobrador: string | null;
+      folios: string[];
+    }>`
+      select p.id, p.status, s.codigo as sucursal_codigo, p.motivo,
+             us.nombre as solicito,
+             to_char(p.created_at at time zone 'America/Tijuana', 'YYYY-MM-DD HH24:MI') as creada_en,
+             ur.nombre as resolvio,
+             to_char(p.resuelta_en at time zone 'America/Tijuana', 'YYYY-MM-DD HH24:MI') as resuelta_en,
+             p.comentario_resolucion as comentario,
+             co.id as cobro_id, co.cliente_id, c.nombre as cliente,
+             co.monto::text as monto, co.metodo_pago, co.origen,
+             to_char(co.fecha_pago, 'YYYY-MM-DD') as fecha_pago,
+             v.nombre as cobrador,
+             coalesce((select array_agg(vn.folio order by vn.fecha, vn.folio)
+                         from venta_nota vn
+                        where vn.id in (select ca.venta_nota_id
+                                          from cobranza_abono ca
+                                         where ca.cobro_id = co.id)),
+                      '{}') as folios
+        from peticion p
+        join sucursal s on s.id = p.sucursal_id
+        join usuario us on us.id = p.solicito_usuario_id
+        left join usuario ur on ur.id = p.resuelta_por_usuario_id
+        join cobro co on co.id = p.cobro_id
+        join cliente c on c.id = co.cliente_id
+        left join vendedor v on v.id = co.vendedor_id
+       where ${sql.join(condiciones, sql` and `)}
+       ${orden}
+    `.execute(this.db);
+
+    return filas.rows.map((f) => ({
+      id: f.id,
+      tipo: 'eliminar_cobro',
+      status: f.status as StatusPeticion,
+      sucursalCodigo: f.sucursal_codigo,
+      motivo: f.motivo,
+      solicito: f.solicito,
+      creadaEn: f.creada_en,
+      resolvio: f.resolvio,
+      resueltaEn: f.resuelta_en,
+      comentario: f.comentario,
+      cobro: {
+        id: f.cobro_id,
+        clienteId: f.cliente_id,
+        cliente: f.cliente,
+        montoCentavos: aCentavos(f.monto),
+        metodoPago: f.metodo_pago,
+        origen: f.origen as 'cobro' | 'saldo_favor',
+        fechaPago: f.fecha_pago,
+        cobrador: f.cobrador,
+        folios: f.folios,
+      },
+    }));
+  }
+
+  /** Pendiente por default. El `unique` parcial decide si ya hay otra (23505). */
+  async insertar(
+    nueva: { cobroId: string; sucursalId: string; motivo: string; usuarioId: string },
+    trx: Transaction<DB>,
+  ): Promise<string> {
+    const fila = await trx
+      .insertInto('peticion')
+      .values({
+        tipo: 'eliminar_cobro',
+        cobro_id: nueva.cobroId,
+        sucursal_id: nueva.sucursalId,
+        motivo: nueva.motivo,
+        solicito_usuario_id: nueva.usuarioId,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    return fila.id;
+  }
+
+  /** Sin candado: para la vista previa de una peticion. */
+  cabecera(
+    id: string,
+    conexion: Database = this.db,
+  ): Promise<PeticionParaResolver | undefined> {
+    return this.leer(id, false, conexion);
+  }
+
+  /**
+   * `for update of p`: el PRIMER candado de autorizar y denegar. Ningun cobro
+   * bloquea peticiones, asi que tomarlo antes que las notas no arma ciclos.
+   * Dos resoluciones a la vez: la segunda espera aqui y luego ve la resuelta.
+   */
+  bloquear(
+    id: string,
+    trx: Transaction<DB>,
+  ): Promise<PeticionParaResolver | undefined> {
+    return this.leer(id, true, trx);
+  }
+
+  async resolver(
+    id: string,
+    resolucion: {
+      status: 'autorizada' | 'denegada';
+      usuarioId: string;
+      comentario: string | null;
+    },
+    trx: Transaction<DB>,
+  ): Promise<void> {
+    await trx
+      .updateTable('peticion')
+      .set({
+        status: resolucion.status,
+        resuelta_por_usuario_id: resolucion.usuarioId,
+        resuelta_en: sql`now()`,
+        comentario_resolucion: resolucion.comentario,
+      })
+      .where('id', '=', id)
+      .execute();
+  }
+
+  private async leer(
+    id: string,
+    bloquear: boolean,
+    conexion: Database,
+  ): Promise<PeticionParaResolver | undefined> {
+    const filas = await sql<{
+      id: string;
+      status: string;
+      cobro_id: string;
+      sucursal_codigo: string;
+    }>`
+      select p.id, p.status, p.cobro_id, s.codigo as sucursal_codigo
+        from peticion p
+        join sucursal s on s.id = p.sucursal_id
+       where p.id = ${id}
+       ${bloquear ? sql`for update of p` : sql``}
+    `.execute(conexion);
+    const f = filas.rows[0];
+    return f
+      ? {
+          id: f.id,
+          status: f.status as StatusPeticion,
+          cobroId: f.cobro_id,
+          sucursalCodigo: f.sucursal_codigo,
+        }
+      : undefined;
+  }
+}
+```
+
+- [ ] **Paso 4: El servicio**
+
+Crea `apps/backend/src/modules/ventas-cobranza/peticiones.service.ts`:
+
+```ts
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import type { Transaction } from 'kysely';
+import {
+  esConflictoDeConcurrencia,
+  esViolacionUnicidad,
+  restriccionDelError,
+} from '../../database/errores-postgres';
+import type { DB } from '../../database/schema';
+import {
+  normalizarSucursalPedida,
+  resolverAlcance,
+} from '../sucursales/alcance-sucursal';
+import { exigirAlcanceSobre } from './alcance-venta';
+import { CobrosBorradoRepository } from './cobros-borrado.repository';
+import {
+  CobroNoBorrable,
+  CobrosBorradoService,
+  MOTIVO_COBRO_BORRADO,
+  MOTIVO_COBRO_NO_EXISTE,
+  type VistaBorrado,
+} from './cobros-borrado.service';
+import { MOTIVO_INTERBLOQUEO_COBRO } from './cobranzas-portal.service';
+import type {
+  BandejaDto,
+  DenegarPeticionDto,
+  SolicitarEliminarCobroDto,
+} from './dto/peticiones.dto';
+import {
+  PeticionesRepository,
+  type PeticionEnBandeja,
+  type PeticionParaResolver,
+} from './peticiones.repository';
+import { VentasPortalRepository } from './ventas-portal.repository';
+
+export const MOTIVO_PETICION_NO_EXISTE = 'No existe esa petición.';
+export const MOTIVO_PETICION_RESUELTA = 'Esta petición ya fue resuelta.';
+export const MOTIVO_PETICION_PENDIENTE =
+  'Este cobro ya tiene una petición de borrado pendiente.';
+export const MOTIVO_SIN_MOTIVO = 'Escribe el motivo de la petición.';
+export const MOTIVO_MOTIVO_LARGO = 'El motivo no puede pasar de 500 caracteres.';
+export const MOTIVO_COMENTARIO_LARGO =
+  'El comentario no puede pasar de 500 caracteres.';
+
+const LARGO_MAX = 500;
+
+/** El motivo recortado; vacio o de mas de 500 es 400 (`ck_peticion_motivo` lo repite en la base). */
+export function normalizarMotivo(crudo: string | undefined): string {
+  const motivo = (crudo ?? '').trim();
+  if (motivo === '') throw new BadRequestException(MOTIVO_SIN_MOTIVO);
+  if (motivo.length > LARGO_MAX)
+    throw new BadRequestException(MOTIVO_MOTIVO_LARGO);
+  return motivo;
+}
+
+/** El comentario de una denegacion: opcional, recortado, `null` si viene vacio. */
+export function normalizarComentario(crudo: string | undefined): string | null {
+  const comentario = (crudo ?? '').trim();
+  if (comentario === '') return null;
+  if (comentario.length > LARGO_MAX)
+    throw new BadRequestException(MOTIVO_COMENTARIO_LARGO);
+  return comentario;
+}
+
+type UsuarioConSucursal = Parameters<typeof exigirAlcanceSobre>[0];
+
+/**
+ * Peticiones (T-34): pedir el borrado de un pago y autorizarlo o denegarlo.
+ *
+ * - **Alcance primero**: se compara contra la sucursal LEIDA (del cliente del
+ *   pago, o la que guardo la peticion), y ANTES de decir si el pago esta
+ *   borrado o la peticion resuelta, para no revelar nada de otra sucursal.
+ * - **Una transaccion por accion**; al autorizar, la peticion se bloquea
+ *   PRIMERO y despues `CobrosBorradoService.borrar` toma los candados del cobro.
+ * - Quien pide puede ser quien autoriza (decision de Roberto, 2026-10-13).
+ */
+@Injectable()
+export class PeticionesService {
+  constructor(
+    private readonly repo: PeticionesRepository,
+    private readonly borrado: CobrosBorradoService,
+    private readonly cobros: CobrosBorradoRepository,
+    private readonly portal: VentasPortalRepository,
+  ) {}
+
+  async bandeja(
+    usuarioId: string,
+    dto: BandejaDto,
+  ): Promise<PeticionEnBandeja[]> {
+    const usuario = await this.portal.buscarSucursalUsuario(usuarioId);
+    if (!usuario) throw new UnauthorizedException('Sesion invalida.');
+    // El query param es solo preferencia; pedir una sucursal ajena es 403.
+    const alcance = resolverAlcance(
+      usuario.codigo,
+      normalizarSucursalPedida(dto.sucursal),
+    );
+    return this.repo.buscar({
+      status: dto.status,
+      sucursalCodigo: alcance.tipo === 'una' ? alcance.codigo : null,
+    });
+  }
+
+  /** `GET /cobros/:id/vista-borrado`: para quien pide. */
+  async vistaDeCobro(usuarioId: string, cobroId: string): Promise<VistaBorrado> {
+    const usuario = await this.portal.buscarSucursalUsuario(usuarioId);
+    return this.enTransaccion(async (trx) => {
+      await this.cobroConAlcance(usuario, cobroId, trx);
+      return this.borrado.planear(cobroId, trx);
+    });
+  }
+
+  /** `GET /peticiones/:id/vista-previa`: para quien autoriza, recalculada al momento. */
+  async vistaDePeticion(
+    usuarioId: string,
+    peticionId: string,
+  ): Promise<VistaBorrado> {
+    const usuario = await this.portal.buscarSucursalUsuario(usuarioId);
+    return this.enTransaccion(async (trx) => {
+      const peticion = await this.repo.cabecera(peticionId, trx);
+      this.exigirPeticion(usuario, peticion);
+      return this.borrado.planear(peticion.cobroId, trx);
+    });
+  }
+
+  async solicitarEliminarCobro(
+    usuarioId: string,
+    dto: SolicitarEliminarCobroDto,
+  ): Promise<PeticionEnBandeja> {
+    const motivo = normalizarMotivo(dto.motivo);
+    const cobroId = dto.cobroId.toLowerCase();
+    // Fuera de la transaccion: dentro seria una segunda conexion abierta a la vez.
+    const usuario = await this.portal.buscarSucursalUsuario(usuarioId);
+
+    const id = await this.enTransaccion(async (trx) => {
+      const cabecera = await this.cobroConAlcance(usuario, cobroId, trx);
+      if (cabecera.borrado) throw new ConflictException(MOTIVO_COBRO_BORRADO);
+      try {
+        return await this.repo.insertar(
+          { cobroId, sucursalId: cabecera.sucursalId, motivo, usuarioId },
+          trx,
+        );
+      } catch (error) {
+        if (
+          esViolacionUnicidad(error) &&
+          restriccionDelError(error) === 'uq_peticion_cobro_pendiente'
+        )
+          throw new ConflictException(MOTIVO_PETICION_PENDIENTE);
+        throw error;
+      }
+    });
+    return this.unaPeticion(id);
+  }
+
+  async autorizar(
+    usuarioId: string,
+    peticionId: string,
+  ): Promise<PeticionEnBandeja> {
+    const usuario = await this.portal.buscarSucursalUsuario(usuarioId);
+    await this.enTransaccion(async (trx) => {
+      const peticion = await this.pendienteBloqueada(usuario, peticionId, trx);
+      // Si no se puede (saldo a favor ya aplicado), lanza y la transaccion
+      // entera se revierte: la peticion sigue pendiente.
+      await this.borrado.borrar(peticion.cobroId, usuarioId, trx);
+      await this.repo.resolver(
+        peticion.id,
+        { status: 'autorizada', usuarioId, comentario: null },
+        trx,
+      );
+    });
+    return this.unaPeticion(peticionId);
+  }
+
+  async denegar(
+    usuarioId: string,
+    peticionId: string,
+    dto: DenegarPeticionDto,
+  ): Promise<PeticionEnBandeja> {
+    const comentario = normalizarComentario(dto.comentario);
+    const usuario = await this.portal.buscarSucursalUsuario(usuarioId);
+    await this.enTransaccion(async (trx) => {
+      const peticion = await this.pendienteBloqueada(usuario, peticionId, trx);
+      await this.repo.resolver(
+        peticion.id,
+        { status: 'denegada', usuarioId, comentario },
+        trx,
+      );
+    });
+    return this.unaPeticion(peticionId);
+  }
+
+  /* ---------------------------------------------------------------- */
+
+  private async cobroConAlcance(
+    usuario: UsuarioConSucursal,
+    cobroId: string,
+    trx: Transaction<DB>,
+  ) {
+    const cabecera = await this.cobros.cabecera(cobroId, trx);
+    if (!cabecera) throw new NotFoundException(MOTIVO_COBRO_NO_EXISTE);
+    exigirAlcanceSobre(usuario, cabecera.sucursalCodigo);
+    return cabecera;
+  }
+
+  private exigirPeticion(
+    usuario: UsuarioConSucursal,
+    peticion: PeticionParaResolver | undefined,
+  ): asserts peticion is PeticionParaResolver {
+    if (!peticion) throw new NotFoundException(MOTIVO_PETICION_NO_EXISTE);
+    exigirAlcanceSobre(usuario, peticion.sucursalCodigo);
+  }
+
+  private async pendienteBloqueada(
+    usuario: UsuarioConSucursal,
+    peticionId: string,
+    trx: Transaction<DB>,
+  ): Promise<PeticionParaResolver> {
+    const peticion = await this.repo.bloquear(peticionId, trx);
+    this.exigirPeticion(usuario, peticion);
+    if (peticion.status !== 'pendiente')
+      throw new ConflictException(MOTIVO_PETICION_RESUELTA);
+    return peticion;
+  }
+
+  private async unaPeticion(id: string): Promise<PeticionEnBandeja> {
+    const [peticion] = await this.repo.buscar({ id, sucursalCodigo: null });
+    if (!peticion) throw new NotFoundException(MOTIVO_PETICION_NO_EXISTE);
+    return peticion;
+  }
+
+  /**
+   * UNA transaccion. Kysely ya hizo rollback cuando llega el `catch`: aqui solo
+   * se traduce a HTTP. Un interbloqueo con un cobro de la tablet (o de otro
+   * usuario) sale como 409, nunca como 500 (mismo trato que T-21).
+   */
+  private async enTransaccion<T>(
+    tarea: (trx: Transaction<DB>) => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await this.repo.enTransaccion(tarea);
+    } catch (error) {
+      if (error instanceof CobroNoBorrable)
+        throw error.razon === 'no-existe'
+          ? new NotFoundException(error.message)
+          : new ConflictException(error.message);
+      if (esConflictoDeConcurrencia(error))
+        throw new ConflictException(MOTIVO_INTERBLOQUEO_COBRO);
+      throw error;
+    }
+  }
+}
+```
+
+Nota: `this.cobros.cabecera(cobroId, trx)` y `this.repo.cabecera(peticionId, trx)` reciben la `trx` como
+`Database`: `Transaction<DB>` extiende `Kysely<DB>`.
+
+- [ ] **Paso 5: Los controllers y el módulo**
+
+Crea `apps/backend/src/modules/ventas-cobranza/peticiones.controller.ts`:
+
+```ts
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { RequierePermiso } from '../auth/requiere-permiso.decorator';
+import { UsuarioActual } from '../auth/usuario-actual.decorator';
+import type { VistaBorrado } from './cobros-borrado.service';
+import {
+  BandejaDto,
+  DenegarPeticionDto,
+  SolicitarEliminarCobroDto,
+} from './dto/peticiones.dto';
+import type { PeticionEnBandeja } from './peticiones.repository';
+import { PeticionesService } from './peticiones.service';
+
+// T-34. La bandeja, la vista previa de una peticion y resolverla piden
+// `peticiones.gestionar`; PEDIR el borrado pide `cobranza.editar_eliminar`.
+// Si alguien tiene los dos, puede pedir y autorizar (decision de Roberto).
+@Controller('peticiones')
+export class PeticionesController {
+  constructor(private readonly peticiones: PeticionesService) {}
+
+  @Get()
+  @RequierePermiso('peticiones.gestionar')
+  bandeja(
+    @UsuarioActual() usuarioId: string,
+    @Query() q: BandejaDto,
+  ): Promise<PeticionEnBandeja[]> {
+    return this.peticiones.bandeja(usuarioId, q);
+  }
+
+  @Get(':id/vista-previa')
+  @RequierePermiso('peticiones.gestionar')
+  vistaPrevia(
+    @UsuarioActual() usuarioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<VistaBorrado> {
+    return this.peticiones.vistaDePeticion(usuarioId, id);
+  }
+
+  @Post('eliminar-cobro')
+  @RequierePermiso('cobranza.editar_eliminar')
+  solicitar(
+    @UsuarioActual() usuarioId: string,
+    @Body() dto: SolicitarEliminarCobroDto,
+  ): Promise<PeticionEnBandeja> {
+    return this.peticiones.solicitarEliminarCobro(usuarioId, dto);
+  }
+
+  @Post(':id/autorizar')
+  @HttpCode(200)
+  @RequierePermiso('peticiones.gestionar')
+  autorizar(
+    @UsuarioActual() usuarioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<PeticionEnBandeja> {
+    return this.peticiones.autorizar(usuarioId, id);
+  }
+
+  @Post(':id/denegar')
+  @HttpCode(200)
+  @RequierePermiso('peticiones.gestionar')
+  denegar(
+    @UsuarioActual() usuarioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: DenegarPeticionDto,
+  ): Promise<PeticionEnBandeja> {
+    return this.peticiones.denegar(usuarioId, id, dto);
+  }
+}
+```
+
+Crea `apps/backend/src/modules/ventas-cobranza/cobros.controller.ts`:
+
+```ts
+import { Controller, Get, Param, ParseUUIDPipe } from '@nestjs/common';
+import { RequierePermiso } from '../auth/requiere-permiso.decorator';
+import { UsuarioActual } from '../auth/usuario-actual.decorator';
+import type { VistaBorrado } from './cobros-borrado.service';
+import { PeticionesService } from './peticiones.service';
+
+// T-34: la vista previa de borrar un pago, para quien lo PIDE. Quien autoriza
+// usa `GET /peticiones/:id/vista-previa` (otro permiso, mismo calculo).
+@Controller('cobros')
+export class CobrosController {
+  constructor(private readonly peticiones: PeticionesService) {}
+
+  @Get(':id/vista-borrado')
+  @RequierePermiso('cobranza.editar_eliminar')
+  vistaBorrado(
+    @UsuarioActual() usuarioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<VistaBorrado> {
+    return this.peticiones.vistaDeCobro(usuarioId, id);
+  }
+}
+```
+
+En `ventas-cobranza.module.ts`: importa `PeticionesController`, `CobrosController`, `PeticionesService` y
+`PeticionesRepository`; agrega los dos controllers al final de `controllers` y, bajo el comentario
+`// T-34: borrar un pago (via peticion)` que dejó la Tarea 3, `PeticionesService` y `PeticionesRepository`.
+
+Run: `npm test --workspace=apps/backend -- peticiones.service`
+Expected: PASS (3 + 2 pruebas; el `it.each` cuenta 3).
+
+Run: `npm run build --workspace=apps/backend`
+Expected: compila.
+
+- [ ] **Paso 6: Las e2e de punta a punta**
+
+Crea `apps/backend/test/peticiones.e2e-spec.ts`:
+
+```ts
+import { Test, type TestingModule } from '@nestjs/testing';
+import type { INestApplication } from '@nestjs/common';
+import { sql } from 'kysely';
+import request from 'supertest';
+import type { App } from 'supertest/types';
+import { AppModule } from './../src/app.module';
+import { OPCIONES_NEST, configurarApp } from './../src/configurar-app';
+import { iniciarEnLocal } from './apoyo-servidor';
+import { borrarCobrosDe } from './apoyo-cobros';
+import {
+  DB_CONNECTION,
+  type Database,
+} from './../src/database/database.tokens';
+import { PasswordService } from './../src/modules/auth/password.service';
+import {
+  CONTRATO_ACTUAL,
+  type RespuestaPull,
+} from './../src/modules/sincronizacion/contrato';
+import type { VistaBorrado } from './../src/modules/ventas-cobranza/cobros-borrado.service';
+import type { PeticionEnBandeja } from './../src/modules/ventas-cobranza/peticiones.repository';
+import { MOTIVO_SALDO_FAVOR_APLICADO } from './../src/modules/ventas-cobranza/reglas-borrado-cobro';
+import type { VentaDetalle } from './../src/modules/ventas-cobranza/ventas-consulta.service';
+
+/**
+ * Peticiones: borrar un pago con autorizacion (T-34), §6 del spec.
+ *
+ * Fechas de JUNIO DE 2023 exclusivas de este archivo. Los pagos se crean por
+ * la puerta real (`POST /cobranzas`, T-21), asi que nacen con su `cobro`.
+ */
+const SUFIJO = `${Date.now()}-${process.pid}`;
+const PASSWORD = 'contrasena-de-prueba';
+const LOGIN_GENERAL = `e2e-pet-gen-${SUFIJO}`;
+const LOGIN_OTRO = `e2e-pet-otro-${SUFIJO}`;
+const LOGIN_TIJUANA = `e2e-pet-tj-${SUFIJO}`;
+const LOGIN_SIN_PERMISO = `e2e-pet-sin-${SUFIJO}`;
+const LOGIN_SOLO_PIDE = `e2e-pet-pide-${SUFIJO}`;
+const LOGIN_APP = `e2e-pet-app-${SUFIJO}`;
+
+const F1 = '2023-06-01';
+const F2 = '2023-06-02';
+const F3 = '2023-06-03';
+const PAGO = '2023-06-10';
+
+const mensaje = (res: request.Response) =>
+  (res.body as { message: string }).message;
+
+describe('Peticiones: borrar un cobro (e2e)', () => {
+  let app: INestApplication<App>;
+  let db: Database;
+  let tjId: string;
+  let mxId: string;
+  const usuarioIds: string[] = [];
+  const clienteIds: string[] = [];
+  let vendedorApp: string;
+  let usuarioGeneralId: string;
+  let usuarioOtroId: string;
+  let cookieGeneral: string;
+  let cookieOtro: string;
+  let cookieTijuana: string;
+  let cookieSinPermiso: string;
+  let cookieSoloPide: string;
+  let bearerApp: string;
+  let folios = 0;
+  let clientes = 0;
+
+  const iniciarSesion = async (login: string): Promise<string> => {
+    const res = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ login, password: PASSWORD })
+      .expect(200);
+    const cookies = res.headers['set-cookie'] as unknown as string[];
+    const acceso = cookies.find((c) => c.startsWith('jawa_access='));
+    if (!acceso) throw new Error('El login no devolvio cookie de acceso.');
+    return acceso.split(';')[0];
+  };
+
+  /** `Administrador General` trae todos los permisos; `Auxiliar Administrativo` esta vacio. */
+  const crearUsuario = async (
+    login: string,
+    perfil: string,
+    sucursalId: string | null,
+  ) => {
+    const hash = await app.get(PasswordService).hashear(PASSWORD);
+    const { id: perfilId } = await db
+      .selectFrom('perfil')
+      .select('id')
+      .where('nombre', '=', perfil)
+      .executeTakeFirstOrThrow();
+    const { id } = await db
+      .insertInto('usuario')
+      .values({
+        login,
+        nombre: login,
+        password_hash: hash,
+        perfil_id: perfilId,
+        sucursal_id: sucursalId,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    usuarioIds.push(id);
+    return id;
+  };
+
+  const sembrarCliente = async (sucursalId: string): Promise<string> => {
+    const lista = await db
+      .selectFrom('lista_precio')
+      .select('id')
+      .where('nombre', '=', 'Lista 1')
+      .executeTakeFirstOrThrow();
+    const { id } = await db
+      .insertInto('cliente')
+      .values({
+        nombre: `Peticiones ${++clientes} ${SUFIJO}`,
+        domicilio: 'Calle 1',
+        telefono: '6640000000',
+        tipo: 'cliente',
+        lista_precio_id: lista.id,
+        sucursal_id: sucursalId,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    clienteIds.push(id);
+    return id;
+  };
+
+  /** Una venta a credito de oficina, `pendiente`. */
+  const sembrarNota = async (clienteId: string, monto: string, fecha: string) => {
+    const cliente = await db
+      .selectFrom('cliente')
+      .select('sucursal_id')
+      .where('id', '=', clienteId)
+      .executeTakeFirstOrThrow();
+    return db
+      .insertInto('venta_nota')
+      .values({
+        folio: `ZZP${String(++folios).padStart(3, '0')}${SUFIJO}`.slice(0, 30),
+        fecha,
+        cliente_id: clienteId,
+        vendedor_id: null,
+        monto_total: monto,
+        num_nota: null,
+        contado_credito: 'credito',
+        semana: 22,
+        mes: 6,
+        status: 'pendiente',
+        sucursal_id: cliente.sucursal_id,
+        origen: 'portal',
+        capturo_usuario_id: usuarioGeneralId,
+      })
+      .returning(['id', 'folio'])
+      .executeTakeFirstOrThrow();
+  };
+
+  /** Un pago real del portal (transferencia de Oficina); devuelve el id de su `cobro`. */
+  const cobrar = async (
+    clienteId: string,
+    notaIds: string[],
+    montoCentavos: number,
+  ): Promise<string> => {
+    await request(app.getHttpServer())
+      .post('/cobranzas')
+      .set('Cookie', cookieGeneral)
+      .send({
+        clienteId,
+        notaIds,
+        montoCentavos,
+        fechaPago: PAGO,
+        metodoPago: 'transferencia',
+        vendedorId: null,
+      })
+      .expect(201);
+    return ultimoCobro(clienteId);
+  };
+
+  const aplicarSaldo = async (
+    clienteId: string,
+    notaIds: string[],
+    montoCentavos: number,
+  ): Promise<string> => {
+    await request(app.getHttpServer())
+      .post('/cobranzas/saldo-favor')
+      .set('Cookie', cookieGeneral)
+      .send({ clienteId, notaIds, montoCentavos })
+      .expect(201);
+    return ultimoCobro(clienteId);
+  };
+
+  const ultimoCobro = async (clienteId: string): Promise<string> =>
+    (
+      await db
+        .selectFrom('cobro')
+        .select('id')
+        .where('cliente_id', '=', clienteId)
+        .orderBy('created_at', 'desc')
+        .executeTakeFirstOrThrow()
+    ).id;
+
+  const pedir = (cookie: string, cuerpo: Record<string, unknown>) =>
+    request(app.getHttpServer())
+      .post('/peticiones/eliminar-cobro')
+      .set('Cookie', cookie)
+      .send(cuerpo);
+
+  const autorizar = (cookie: string, id: string) =>
+    request(app.getHttpServer())
+      .post(`/peticiones/${id}/autorizar`)
+      .set('Cookie', cookie);
+
+  const denegar = (cookie: string, id: string, cuerpo: Record<string, unknown> = {}) =>
+    request(app.getHttpServer())
+      .post(`/peticiones/${id}/denegar`)
+      .set('Cookie', cookie)
+      .send(cuerpo);
+
+  const bandeja = (cookie: string, query: Record<string, string>) =>
+    request(app.getHttpServer())
+      .get(`/peticiones?${new URLSearchParams(query).toString()}`)
+      .set('Cookie', cookie);
+
+  const vistaBorrado = (cookie: string, cobroId: string) =>
+    request(app.getHttpServer())
+      .get(`/cobros/${cobroId}/vista-borrado`)
+      .set('Cookie', cookie);
+
+  /** Pide el borrado y devuelve la peticion creada. */
+  const pedirOk = async (cobroId: string, cookie = cookieGeneral) =>
+    (await pedir(cookie, { cobroId, motivo: 'Era de credito' }).expect(201))
+      .body as PeticionEnBandeja;
+
+  const statusDe = async (id: string) =>
+    (
+      await db
+        .selectFrom('venta_nota')
+        .select('status')
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow()
+    ).status;
+
+  /** La suma de los movimientos vivos, texto: `'0'` si no queda ninguno, `'20.00'` si hay. */
+  const saldoFavorDe = async (clienteId: string) =>
+    (
+      await db
+        .selectFrom('saldo_favor_movimiento')
+        .select(sql<string>`coalesce(sum(monto), 0)::text`.as('total'))
+        .where('cliente_id', '=', clienteId)
+        .where('deleted_at', 'is', null)
+        .executeTakeFirstOrThrow()
+    ).total;
+
+  const abonosVivos = (notaId: string) =>
+    db
+      .selectFrom('cobranza_abono')
+      .select(['monto', 'cobro_id'])
+      .where('venta_nota_id', '=', notaId)
+      .where('deleted_at', 'is', null)
+      .execute();
+
+  const pull = (query: Record<string, string> = {}) =>
+    request(app.getHttpServer())
+      .get(
+        `/sync/pull?${new URLSearchParams({ contrato: String(CONTRATO_ACTUAL), ...query }).toString()}`,
+      )
+      .set('Authorization', `Bearer ${bearerApp}`);
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+    app = moduleFixture.createNestApplication(OPCIONES_NEST);
+    configurarApp(app);
+    await iniciarEnLocal(app);
+    db = app.get<Database>(DB_CONNECTION);
+
+    tjId = (
+      await db
+        .selectFrom('sucursal')
+        .select('id')
+        .where('codigo', '=', 'TJ')
+        .executeTakeFirstOrThrow()
+    ).id;
+    mxId = (
+      await db
+        .selectFrom('sucursal')
+        .select('id')
+        .where('codigo', '=', 'MX')
+        .executeTakeFirstOrThrow()
+    ).id;
+
+    usuarioGeneralId = await crearUsuario(LOGIN_GENERAL, 'Administrador General', null);
+    usuarioOtroId = await crearUsuario(LOGIN_OTRO, 'Administrador General', null);
+    await crearUsuario(LOGIN_TIJUANA, 'Administrador General', tjId);
+    await crearUsuario(LOGIN_SIN_PERMISO, 'Auxiliar Administrativo', null);
+    // Solo puede PEDIR: perfil vacio + la excepcion cobranza.editar_eliminar (T-08a).
+    const soloPide = await crearUsuario(LOGIN_SOLO_PIDE, 'Auxiliar Administrativo', null);
+    const { id: permisoPedir } = await db
+      .selectFrom('permiso')
+      .select('id')
+      .where('clave', '=', 'cobranza.editar_eliminar')
+      .executeTakeFirstOrThrow();
+    await db
+      .insertInto('usuario_permiso')
+      .values({ usuario_id: soloPide, permiso_id: permisoPedir, habilitado: true })
+      .execute();
+
+    cookieGeneral = await iniciarSesion(LOGIN_GENERAL);
+    cookieOtro = await iniciarSesion(LOGIN_OTRO);
+    cookieTijuana = await iniciarSesion(LOGIN_TIJUANA);
+    cookieSinPermiso = await iniciarSesion(LOGIN_SIN_PERMISO);
+    cookieSoloPide = await iniciarSesion(LOGIN_SOLO_PIDE);
+
+    // El de la tablet de TJ: para comprobar lo que baja en el pull.
+    const { id } = await db
+      .insertInto('vendedor')
+      .values({
+        login: LOGIN_APP,
+        nombre: `Vendedor peticiones ${SUFIJO}`,
+        password_hash: await app.get(PasswordService).hashear(PASSWORD),
+        sucursal_id: tjId,
+        activo: true,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    vendedorApp = id;
+    bearerApp = (
+      (
+        await request(app.getHttpServer())
+          .post('/auth/app/login')
+          .send({ login: LOGIN_APP, password: PASSWORD })
+          .expect(200)
+      ).body as { tokenAcceso: string }
+    ).tokenAcceso;
+  });
+
+  afterAll(async () => {
+    if (clienteIds.length > 0) {
+      const notas = db
+        .selectFrom('venta_nota')
+        .select('id')
+        .where('cliente_id', 'in', clienteIds);
+      await db.deleteFrom('cobranza_abono').where('venta_nota_id', 'in', notas).execute();
+      await db
+        .deleteFrom('saldo_favor_movimiento')
+        .where('cliente_id', 'in', clienteIds)
+        .execute();
+      await borrarCobrosDe(db, clienteIds);
+      await db.deleteFrom('venta_nota').where('cliente_id', 'in', clienteIds).execute();
+      await db.deleteFrom('cliente').where('id', 'in', clienteIds).execute();
+    }
+    await db.deleteFrom('sesion_vendedor').where('vendedor_id', '=', vendedorApp).execute();
+    await db.deleteFrom('vendedor').where('id', '=', vendedorApp).execute();
+    await db.deleteFrom('usuario_permiso').where('usuario_id', 'in', usuarioIds).execute();
+    await db.deleteFrom('sesion_refresh').where('usuario_id', 'in', usuarioIds).execute();
+    await db.deleteFrom('usuario').where('id', 'in', usuarioIds).execute();
+    await app.close();
+  });
+
+  /* ================================================================ */
+
+  describe('pedir el borrado', () => {
+    it('crea la peticion pendiente con el pago, sus folios, quien pidio y el motivo recortado', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const n2 = await sembrarNota(cli, '80.00', F2);
+      const cobroId = await cobrar(cli, [n1.id, n2.id], 20000);
+
+      const p = (
+        await pedir(cookieGeneral, { cobroId, motivo: '  Era de credito  ' }).expect(201)
+      ).body as PeticionEnBandeja;
+
+      expect(p).toMatchObject({
+        tipo: 'eliminar_cobro',
+        status: 'pendiente',
+        sucursalCodigo: 'TJ',
+        motivo: 'Era de credito',
+        solicito: LOGIN_GENERAL,
+        resolvio: null,
+        resueltaEn: null,
+        comentario: null,
+        cobro: {
+          id: cobroId,
+          clienteId: cli,
+          montoCentavos: 20000,
+          metodoPago: 'transferencia',
+          origen: 'cobro',
+          fechaPago: PAGO,
+          cobrador: null,
+          folios: [n1.folio, n2.folio],
+        },
+      });
+      expect(p.creadaEn).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+      // Pedir no cambia nada: el pago sigue vivo.
+      expect(await statusDe(n1.id)).toBe('pagada');
+    });
+
+    it('motivo vacio o de mas de 500 caracteres es 400', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const cobroId = await cobrar(cli, [n1.id], 5000);
+
+      expect(mensaje(await pedir(cookieGeneral, { cobroId, motivo: '   ' }).expect(400))).toBe(
+        'Escribe el motivo de la petición.',
+      );
+      expect(mensaje(await pedir(cookieGeneral, { cobroId }).expect(400))).toEqual(
+        expect.arrayContaining(['Escribe el motivo de la petición.']),
+      );
+      expect(
+        mensaje(await pedir(cookieGeneral, { cobroId, motivo: 'x'.repeat(501) }).expect(400)),
+      ).toBe('El motivo no puede pasar de 500 caracteres.');
+    });
+
+    it('un pago que no existe es 404 y un id mal formado es 400', async () => {
+      expect(
+        mensaje(
+          await pedir(cookieGeneral, {
+            cobroId: '00000000-0000-4000-8000-000000000000',
+            motivo: 'x',
+          }).expect(404),
+        ),
+      ).toBe('No existe ese cobro.');
+      await pedir(cookieGeneral, { cobroId: 'no-es-uuid', motivo: 'x' }).expect(400);
+    });
+
+    it('Review Focus 5: una segunda peticion pendiente sobre el mismo pago es 409', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const cobroId = await cobrar(cli, [n1.id], 5000);
+      await pedirOk(cobroId);
+
+      expect(
+        mensaje(await pedir(cookieOtro, { cobroId, motivo: 'Otra vez' }).expect(409)),
+      ).toBe('Este cobro ya tiene una petición de borrado pendiente.');
+    });
+
+    it('Review Focus 5: un pago ya borrado es 409', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const cobroId = await cobrar(cli, [n1.id], 5000);
+      const p = await pedirOk(cobroId);
+      await autorizar(cookieGeneral, p.id).expect(200);
+
+      expect(mensaje(await pedir(cookieGeneral, { cobroId, motivo: 'x' }).expect(409))).toBe(
+        'Este cobro ya se borró.',
+      );
+    });
+  });
+
+  describe('permisos y alcance', () => {
+    it('sin permisos todo es 403', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const cobroId = await cobrar(cli, [n1.id], 5000);
+      const p = await pedirOk(cobroId);
+
+      await bandeja(cookieSinPermiso, { status: 'pendiente' }).expect(403);
+      await pedir(cookieSinPermiso, { cobroId, motivo: 'x' }).expect(403);
+      await vistaBorrado(cookieSinPermiso, cobroId).expect(403);
+      await autorizar(cookieSinPermiso, p.id).expect(403);
+      await denegar(cookieSinPermiso, p.id).expect(403);
+    });
+
+    it('con solo cobranza.editar_eliminar se pide y se ve la vista previa, pero no se ve la bandeja ni se autoriza', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const cobroId = await cobrar(cli, [n1.id], 5000);
+
+      await vistaBorrado(cookieSoloPide, cobroId).expect(200);
+      const p = await pedirOk(cobroId, cookieSoloPide);
+      await bandeja(cookieSoloPide, { status: 'pendiente' }).expect(403);
+      await autorizar(cookieSoloPide, p.id).expect(403);
+      await request(app.getHttpServer())
+        .get(`/peticiones/${p.id}/vista-previa`)
+        .set('Cookie', cookieSoloPide)
+        .expect(403);
+    });
+
+    it('Review Focus 4: un usuario de TJ no ve, no pide ni resuelve nada de MX, aunque este borrado o resuelto', async () => {
+      const cli = await sembrarCliente(mxId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const cobroId = await cobrar(cli, [n1.id], 5000);
+      const pendiente = await pedirOk(cobroId);
+
+      await vistaBorrado(cookieTijuana, cobroId).expect(403);
+      await pedir(cookieTijuana, { cobroId, motivo: 'x' }).expect(403);
+      await autorizar(cookieTijuana, pendiente.id).expect(403);
+      await denegar(cookieTijuana, pendiente.id).expect(403);
+      await bandeja(cookieTijuana, { status: 'pendiente', sucursal: 'MX' }).expect(403);
+      const suya = (await bandeja(cookieTijuana, { status: 'pendiente' }).expect(200))
+        .body as PeticionEnBandeja[];
+      expect(suya.find((x) => x.id === pendiente.id)).toBeUndefined();
+
+      // Ya resuelta y con el pago borrado: sigue siendo 403, no 409.
+      await autorizar(cookieGeneral, pendiente.id).expect(200);
+      await autorizar(cookieTijuana, pendiente.id).expect(403);
+      await vistaBorrado(cookieTijuana, cobroId).expect(403);
+    });
+  });
+
+  describe('autorizar', () => {
+    it('borra el pago completo: filas, status recalculados, saldo a favor y quien lo borro', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const n2 = await sembrarNota(cli, '80.00', F2);
+      // 200 = 100 (n1) + 80 (n2) + 20 a saldo a favor.
+      const cobroId = await cobrar(cli, [n1.id, n2.id], 20000);
+      expect(await saldoFavorDe(cli)).toBe('20.00');
+      const p = await pedirOk(cobroId);
+
+      const resuelta = (await autorizar(cookieOtro, p.id).expect(200)).body as PeticionEnBandeja;
+
+      expect(resuelta).toMatchObject({ status: 'autorizada', resolvio: LOGIN_OTRO, comentario: null });
+      expect(resuelta.resueltaEn).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+      expect(await abonosVivos(n1.id)).toEqual([]);
+      expect(await abonosVivos(n2.id)).toEqual([]);
+      expect(await statusDe(n1.id)).toBe('pendiente');
+      expect(await statusDe(n2.id)).toBe('pendiente');
+      expect(await saldoFavorDe(cli)).toBe('0');
+      const pago = await db
+        .selectFrom('cobro')
+        .select(['deleted_at', 'eliminado_por_usuario_id'])
+        .where('id', '=', cobroId)
+        .executeTakeFirstOrThrow();
+      expect(pago.deleted_at).not.toBeNull();
+      expect(pago.eliminado_por_usuario_id).toBe(usuarioOtroId);
+    });
+
+    it('la misma persona que pidio puede autorizar', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const cobroId = await cobrar(cli, [n1.id], 5000);
+      const p = await pedirOk(cobroId, cookieGeneral);
+      await autorizar(cookieGeneral, p.id).expect(200);
+      expect(await statusDe(n1.id)).toBe('pendiente');
+    });
+
+    it('Review Focus 3: con otro pago vivo la nota queda abonada; una en cuenta perdida no cambia', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const n2 = await sembrarNota(cli, '80.00', F2);
+      const primero = await cobrar(cli, [n1.id], 3000); // n1 abonada con $30
+      await cobrar(cli, [n1.id], 2000); // y otro pago vivo de $20
+      const deN2 = await cobrar(cli, [n2.id], 1000);
+      await db
+        .updateTable('venta_nota')
+        .set({ status: 'cuenta_perdida' })
+        .where('id', '=', n2.id)
+        .execute();
+
+      await autorizar(cookieGeneral, (await pedirOk(primero)).id).expect(200);
+      expect(await statusDe(n1.id)).toBe('abonado');
+      expect((await abonosVivos(n1.id)).map((a) => a.monto)).toEqual(['20.00']);
+
+      await autorizar(cookieGeneral, (await pedirOk(deN2)).id).expect(200);
+      expect(await statusDe(n2.id)).toBe('cuenta_perdida');
+      expect(await abonosVivos(n2.id)).toEqual([]);
+    });
+
+    it('Review Focus 1: si el saldo a favor que dejo el pago ya se aplico, 409 y nada cambia; borrando antes la aplicacion, si se puede', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      // Sin otras notas abiertas, lo que sobra va a saldo a favor: 100 a n1 y 50 a favor.
+      const conExcedente = await cobrar(cli, [n1.id], 15000);
+      const n2 = await sembrarNota(cli, '80.00', F2);
+      const aplicacion = await aplicarSaldo(cli, [n2.id], 5000); // usa los 50
+      expect(await saldoFavorDe(cli)).toBe('0.00');
+
+      const p = await pedirOk(conExcedente);
+      const vista = (await vistaBorrado(cookieGeneral, conExcedente).expect(200)).body as VistaBorrado;
+      expect(vista.bloqueo).toEqual({ codigo: 'saldo-favor-aplicado', motivo: MOTIVO_SALDO_FAVOR_APLICADO });
+
+      expect(mensaje(await autorizar(cookieGeneral, p.id).expect(409))).toBe(MOTIVO_SALDO_FAVOR_APLICADO);
+      expect(await statusDe(n1.id)).toBe('pagada');
+      expect((await bandeja(cookieGeneral, { status: 'pendiente' }).expect(200)).body).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: p.id, status: 'pendiente' })]),
+      );
+
+      // Primero la aplicacion (devuelve el saldo), luego el pago con excedente.
+      await autorizar(cookieGeneral, (await pedirOk(aplicacion)).id).expect(200);
+      expect(await saldoFavorDe(cli)).toBe('50.00');
+      expect(await statusDe(n2.id)).toBe('pendiente');
+      await autorizar(cookieGeneral, p.id).expect(200);
+      expect(await saldoFavorDe(cli)).toBe('0'); // ya no queda ningun movimiento vivo
+      expect(await statusDe(n1.id)).toBe('pendiente');
+    });
+
+    it('Review Focus 2: dos autorizaciones a la vez — una gana, la otra ve la peticion resuelta', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const cobroId = await cobrar(cli, [n1.id], 5000);
+      const p = await pedirOk(cobroId);
+
+      const [a, b] = await Promise.all([autorizar(cookieGeneral, p.id), autorizar(cookieOtro, p.id)]);
+      expect([a.status, b.status].sort()).toEqual([200, 409]);
+      expect(mensaje(a.status === 409 ? a : b)).toBe('Esta petición ya fue resuelta.');
+      const pagos = await db
+        .selectFrom('cobro')
+        .select('deleted_at')
+        .where('id', '=', cobroId)
+        .execute();
+      expect(pagos).toHaveLength(1);
+    });
+
+    it('Review Focus 2: autorizar y denegar a la vez — solo una resolucion queda', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const cobroId = await cobrar(cli, [n1.id], 5000);
+      const p = await pedirOk(cobroId);
+
+      const [a, d] = await Promise.all([autorizar(cookieGeneral, p.id), denegar(cookieOtro, p.id)]);
+      expect([a.status, d.status].sort()).toEqual([200, 409]);
+      const final = await db
+        .selectFrom('peticion')
+        .select('status')
+        .where('id', '=', p.id)
+        .executeTakeFirstOrThrow();
+      const borrado = await db
+        .selectFrom('cobro')
+        .select('deleted_at')
+        .where('id', '=', cobroId)
+        .executeTakeFirstOrThrow();
+      expect(final.status === 'autorizada').toBe(borrado.deleted_at !== null);
+    });
+
+    it('tras borrar el pago la venta se vuelve a poder editar', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const cobroId = await cobrar(cli, [n1.id], 5000);
+      const antes = (
+        await request(app.getHttpServer()).get(`/ventas/${n1.id}`).set('Cookie', cookieGeneral).expect(200)
+      ).body as VentaDetalle;
+      expect(antes.editable).toBe(false);
+
+      await autorizar(cookieGeneral, (await pedirOk(cobroId)).id).expect(200);
+
+      const despues = (
+        await request(app.getHttpServer()).get(`/ventas/${n1.id}`).set('Cookie', cookieGeneral).expect(200)
+      ).body as VentaDetalle;
+      expect(despues.editable).toBe(true);
+      expect(despues.cobros).toEqual([]);
+    });
+
+    it('la tablet: el pull incremental baja la nota otra vez pendiente, sin el abono borrado, y el saldo a favor nuevo', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const n2 = await sembrarNota(cli, '80.00', F2);
+      const cobroId = await cobrar(cli, [n1.id, n2.id], 20000);
+      const p = await pedirOk(cobroId);
+      const corte = ((await pull().expect(200)).body as RespuestaPull).servidor_en;
+
+      await autorizar(cookieGeneral, p.id).expect(200);
+
+      const cuerpo = (await pull({ desde: corte }).expect(200)).body as RespuestaPull;
+      expect(cuerpo.notas_pendientes.find((n) => n.id === n1.id)).toMatchObject({
+        activo: 1,
+        status: 'pendiente',
+        saldo_centavos: 10000,
+        abonos: [],
+      });
+      expect(cuerpo.notas_pendientes.find((n) => n.id === n2.id)).toMatchObject({
+        activo: 1,
+        saldo_centavos: 8000,
+      });
+      expect(cuerpo.catalogos.clientes.find((c) => c.id === cli)?.saldo_favor_centavos).toBe(0);
+    });
+  });
+
+  describe('denegar', () => {
+    it('con comentario: el pago no cambia y se puede volver a pedir', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const cobroId = await cobrar(cli, [n1.id], 5000);
+      const p = await pedirOk(cobroId);
+
+      const r = (await denegar(cookieOtro, p.id, { comentario: '  No procede  ' }).expect(200))
+        .body as PeticionEnBandeja;
+      expect(r).toMatchObject({ status: 'denegada', resolvio: LOGIN_OTRO, comentario: 'No procede' });
+      expect(await statusDe(n1.id)).toBe('abonado');
+      await pedirOk(cobroId);
+    });
+
+    it('sin comentario queda null; con mas de 500 es 400; resuelta ya no se deniega', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const p = await pedirOk(await cobrar(cli, [n1.id], 5000));
+
+      expect(
+        mensaje(await denegar(cookieGeneral, p.id, { comentario: 'x'.repeat(501) }).expect(400)),
+      ).toBe('El comentario no puede pasar de 500 caracteres.');
+      const r = (await denegar(cookieGeneral, p.id).expect(200)).body as PeticionEnBandeja;
+      expect(r.comentario).toBeNull();
+      expect(mensaje(await denegar(cookieGeneral, p.id).expect(409))).toBe(
+        'Esta petición ya fue resuelta.',
+      );
+    });
+
+    it('una peticion que no existe es 404', async () => {
+      expect(
+        mensaje(await denegar(cookieGeneral, '00000000-0000-4000-8000-000000000000').expect(404)),
+      ).toBe('No existe esa petición.');
+    });
+  });
+
+  describe('bandeja y vista previa', () => {
+    it('pendientes (de la mas vieja) e historial (de la mas reciente), con filtro por sucursal', async () => {
+      const cliTj = await sembrarCliente(tjId);
+      const cliMx = await sembrarCliente(mxId);
+      const nTj = await sembrarNota(cliTj, '100.00', F1);
+      const nMx = await sembrarNota(cliMx, '100.00', F1);
+      const pTj = await pedirOk(await cobrar(cliTj, [nTj.id], 1000));
+      const pMx = await pedirOk(await cobrar(cliMx, [nMx.id], 1000));
+
+      const todas = (await bandeja(cookieGeneral, { status: 'pendiente' }).expect(200))
+        .body as PeticionEnBandeja[];
+      const ids = todas.map((x) => x.id);
+      expect(ids.indexOf(pTj.id)).toBeLessThan(ids.indexOf(pMx.id));
+
+      const soloMx = (await bandeja(cookieGeneral, { status: 'pendiente', sucursal: 'MX' }).expect(200))
+        .body as PeticionEnBandeja[];
+      expect(soloMx.every((x) => x.sucursalCodigo === 'MX')).toBe(true);
+      expect(soloMx.map((x) => x.id)).toContain(pMx.id);
+
+      await denegar(cookieGeneral, pTj.id, { comentario: 'No' }).expect(200);
+      await autorizar(cookieGeneral, pMx.id).expect(200);
+      const historial = (await bandeja(cookieGeneral, { status: 'historial' }).expect(200))
+        .body as PeticionEnBandeja[];
+      const hIds = historial.map((x) => x.id);
+      expect(hIds.indexOf(pMx.id)).toBeLessThan(hIds.indexOf(pTj.id));
+      expect(historial.find((x) => x.id === pTj.id)).toMatchObject({ status: 'denegada', comentario: 'No' });
+      expect(historial.find((x) => x.id === pMx.id)?.cobro.folios).toEqual([nMx.folio]);
+    });
+
+    it('un status que no es pendiente ni historial es 400', async () => {
+      expect(mensaje(await bandeja(cookieGeneral, { status: 'todas' }).expect(400))).toEqual(
+        expect.arrayContaining(['Elige pendientes o historial.']),
+      );
+    });
+
+    it('la vista previa de la peticion es la misma que la del cobro, recalculada', async () => {
+      const cli = await sembrarCliente(tjId);
+      const n1 = await sembrarNota(cli, '100.00', F1);
+      const n2 = await sembrarNota(cli, '80.00', F2);
+      const cobroId = await cobrar(cli, [n1.id, n2.id], 12000);
+      const p = await pedirOk(cobroId);
+
+      const porCobro = (await vistaBorrado(cookieGeneral, cobroId).expect(200)).body as VistaBorrado;
+      const porPeticion = (
+        await request(app.getHttpServer())
+          .get(`/peticiones/${p.id}/vista-previa`)
+          .set('Cookie', cookieGeneral)
+          .expect(200)
+      ).body as VistaBorrado;
+      expect(porPeticion).toEqual(porCobro);
+      expect(porCobro).toMatchObject({
+        cobro: { id: cobroId, montoCentavos: 12000, metodoPago: 'transferencia', cobrador: null },
+        notas: [
+          { notaId: n1.id, delPagoCentavos: 10000, saldoAntesCentavos: 0, saldoDespuesCentavos: 10000, statusDespues: 'pendiente' },
+          { notaId: n2.id, delPagoCentavos: 2000, saldoAntesCentavos: 6000, saldoDespuesCentavos: 8000, statusDespues: 'pendiente' },
+        ],
+        saldoFavorAntesCentavos: 0,
+        saldoFavorDespuesCentavos: 0,
+        movimientoSaldoFavorCentavos: 0,
+        bloqueo: null,
+      });
+    });
+  });
+});
+```
+
+Run: `npm run test:e2e --workspace=apps/backend -- peticiones`
+Expected: FAIL antes del Paso 5 (404 en las rutas); tras el Paso 5, PASS.
+
+- [ ] **Paso 7: Todo el backend**
+
+Run: `npm run lint --workspace=apps/backend && npm test --workspace=apps/backend && npm run test:e2e --workspace=apps/backend`
+Expected: todo PASS.
+
+- [ ] **Paso 8: Commit**
+
+```bash
+git add apps/backend/src/modules/ventas-cobranza/peticiones.repository.ts \
+  apps/backend/src/modules/ventas-cobranza/peticiones.service.ts \
+  apps/backend/src/modules/ventas-cobranza/peticiones.service.spec.ts \
+  apps/backend/src/modules/ventas-cobranza/peticiones.controller.ts \
+  apps/backend/src/modules/ventas-cobranza/cobros.controller.ts \
+  apps/backend/src/modules/ventas-cobranza/dto/peticiones.dto.ts \
+  apps/backend/src/modules/ventas-cobranza/ventas-cobranza.module.ts \
+  apps/backend/test/peticiones.e2e-spec.ts
+git commit -m "T-34: endpoints de peticiones — pedir, bandeja, vista previa, autorizar y denegar
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
