@@ -76,6 +76,13 @@ describe("PantallaRutaDiaria", () => {
     vi.restoreAllMocks();
   });
 
+  it("mientras carga la sesión dice Cargando…, no \"No tienes permiso\"", () => {
+    vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: true, cerrarSesion: vi.fn(), puede: () => false });
+    render(<PantallaRutaDiaria sucursal={null} />);
+    expect(screen.getByText("Cargando…")).toBeInTheDocument();
+    expect(screen.queryByText(/No tienes permiso/)).not.toBeInTheDocument();
+  });
+
   it("sin ruta_diaria.gestionar lo dice y no pide nada", () => {
     mockAuth(() => false);
     render(<PantallaRutaDiaria sucursal={null} />);

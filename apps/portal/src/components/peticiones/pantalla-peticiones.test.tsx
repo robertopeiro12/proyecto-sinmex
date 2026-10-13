@@ -23,6 +23,13 @@ describe("PantallaPeticiones", () => {
     listarPeticiones.mockResolvedValue([]);
   });
 
+  it("mientras carga la sesión dice Cargando…, no \"No tienes permiso\"", () => {
+    vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: true, cerrarSesion: vi.fn(), puede: () => false });
+    render(<PantallaPeticiones sucursal={null} />);
+    expect(screen.getByText("Cargando…")).toBeInTheDocument();
+    expect(screen.queryByText(/No tienes permiso/)).not.toBeInTheDocument();
+  });
+
   it("sin peticiones.gestionar lo dice y no pide nada", () => {
     mockAuth((clave) => clave !== "peticiones.gestionar");
     render(<PantallaPeticiones sucursal={null} />);

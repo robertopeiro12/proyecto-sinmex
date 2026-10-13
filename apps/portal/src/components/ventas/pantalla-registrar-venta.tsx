@@ -45,7 +45,7 @@ import { TablaProductosVenta } from "./tabla-productos-venta";
  * reglas del payload son las mismas que usa "Editar venta" (parte 2).
  */
 export function PantallaRegistrarVenta({ sucursal }: { sucursal: string | null }) {
-  const { puede } = useAuth();
+  const { puede, cargando: cargandoSesion } = useAuth();
   const puedeRegistrar = puede("venta.registrar");
 
   const [fecha, setFecha] = useState(() => hoyEnTijuana());
@@ -317,7 +317,7 @@ export function PantallaRegistrarVenta({ sucursal }: { sucursal: string | null }
             </p>
           )}
 
-          {puedeRegistrar ? (
+          {cargandoSesion ? null : puedeRegistrar ? (
             <div>
               <Button type="submit" disabled={enviando}>
                 {enviando ? "Grabando…" : "Grabar"}

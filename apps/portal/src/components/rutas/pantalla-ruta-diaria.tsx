@@ -34,7 +34,7 @@ export const AVISO_CAMBIOS = "Hay cambios sin guardar en la ruta. ¿Descartarlos
  * sin ruta semanal (T-36).
  */
 export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
-  const { puede } = useAuth();
+  const { puede, cargando: cargandoSesion } = useAuth();
   const permitido = puede("ruta_diaria.gestionar");
 
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
@@ -207,6 +207,21 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
     } finally {
       setCopiando(false);
     }
+  }
+
+  if (cargandoSesion) {
+    // Mientras /auth/me no contesta, `puede()` da false a todos: sin esto, quien
+    // si tiene el permiso ve "No tienes permiso" un instante (como PantallaPerfiles).
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Ruta Diaria</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        </CardContent>
+      </Card>
+    );
   }
 
   if (!permitido) {

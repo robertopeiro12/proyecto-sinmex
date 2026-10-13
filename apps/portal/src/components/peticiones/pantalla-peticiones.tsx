@@ -10,8 +10,23 @@ type Pestana = "pendiente" | "historial";
 
 /** Operación → Peticiones (T-34): autorizar o denegar el borrado de pagos. */
 export function PantallaPeticiones({ sucursal }: { sucursal: string | null }) {
-  const { puede } = useAuth();
+  const { puede, cargando: cargandoSesion } = useAuth();
   const [pestana, setPestana] = useState<Pestana>("pendiente");
+
+  if (cargandoSesion) {
+    // Mientras /auth/me no contesta, `puede()` da false a todos: sin esto, quien
+    // si tiene el permiso ve "No tienes permiso" un instante (como PantallaPerfiles).
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Peticiones</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">Cargando…</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (!puede("peticiones.gestionar")) {
     return (
