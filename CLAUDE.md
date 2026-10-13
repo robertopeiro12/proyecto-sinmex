@@ -293,7 +293,7 @@ usuario con sesion pasa.
   - Forma y `km_final >= km_inicial` se validan **antes** de la transacción (`rutas/datos-jornada.ts`,
     `sincronizacion/despacho-jornada.ts`): `jornada-datos-invalidos`, `jornada-km-invalido`.
   - Solo jornadas **cerradas** hasta T-43. Las que llegaron antes de T-38 siguen en el buzón sin proyectar (sin
-    backfill). El reporte de Kilometraje del portal todavía no existe.
+    backfill). El reporte de Kilometraje del portal es T-50 (ver el bloque Reportes y Excel, más abajo).
   - En la tablet, con la jornada de hoy cerrada **no se registra** venta, cobranza ni prospecto
     (`exigirJornadaAbierta`); no hay reabrir.
 - **Ruta diaria (T-37).** La oficina arma la ruta del día en el portal (`PUT /rutas/diaria`, permiso
