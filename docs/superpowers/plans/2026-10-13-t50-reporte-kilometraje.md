@@ -70,7 +70,7 @@ spec; si este plan lo contradice (fuera de las desviaciones anotadas abajo), par
    luego vendedor". Así el renglón anterior en pantalla es justo contra el que se compara el salto.
 2. **`exceljs` trae un aviso moderado heredado** (`uuid < 11.1.1`, "Missing buffer bounds check in v3/v5/v6";
    `exceljs` solo usa `v4`). Se fuerza `uuid@^11.1.1` **solo para `exceljs`** con `overrides` en el
-   `package.json` raíz; probado: `exceljs` sigue funcionando y `npm audit` queda en 0. El spec decía "sin
+   `package.json` raíz; probado: `exceljs` sigue funcionando y no agrega ningún aviso a `npm audit` (el override quita el que traía; los ~91 avisos que hay ya existían en `main`). El spec decía "sin
    vulnerabilidades conocidas": con el override es cierto.
 3. **`construirLibro` devuelve `ArrayBuffer`** creado con `new Uint8Array(await writeBuffer()).buffer` (en Node
    `writeBuffer` da un `Buffer`; en el navegador, un `ArrayBuffer`): misma firma que el spec, comportamiento
@@ -2502,7 +2502,7 @@ Exportable a Excel con la utilidad nueva `lib/excel` (T-15), que usarán los dem
 ### Desviaciones del spec
 1. Orden dentro de un vehículo `fecha, cerrada_en, id` (el mismo del salto), no "fecha, luego vendedor".
 2. `exceljs` trae un aviso moderado heredado (`uuid` < 11.1.1); se fuerza `uuid@^11.1.1` solo para `exceljs` con
-   `overrides` en el `package.json` raíz (`npm audit` en 0).
+   `overrides` en el `package.json` raíz (`exceljs` no agrega ningún aviso a `npm audit`; los ~91 que hay ya existían en `main`).
 3. `construirLibro` devuelve `ArrayBuffer` igual en Node y en el navegador.
 4. Vehículos dados de baja también aparecen si tienen jornadas en el rango.
 5. La lista de vehículos del filtro reusa `GET /vehiculos` (ya existente).
