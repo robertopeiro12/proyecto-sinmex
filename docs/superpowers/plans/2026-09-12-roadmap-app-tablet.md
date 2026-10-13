@@ -153,6 +153,26 @@ el problema que el vault ya documentó:
 
 ## 6. Orden de los tickets
 
+> [!warning] Enmienda 2026-10-13 — el rediseño de la app reordena lo que falta
+> El 2026-10-12 Mario pidió rediseñar la app alrededor de la **ruta del día** (spec de T-37,
+> `docs/superpowers/specs/2026-10-12-t-37-ruta-del-dia-y-pantalla-principal-design.md`, sección
+> "El rediseño completo, en piezas"). La tabla de abajo sigue valiendo para dependencias y tamaños,
+> pero el **orden de lo que falta** pasa a ser por piezas; cada pieza lleva su propio
+> `brainstorming → spec → plan → PR`, igual que antes:
+>
+> | Pieza | Qué | Ticket | Estado |
+> |---|---|---|---|
+> | 1 | Ruta del día, pantalla principal, ficha del cliente ampliada, Ruta Diaria en el portal | T-37 | **PR #116** (2026-10-12) |
+> | 3 | Visita sin venta: catálogo de motivos editable en el portal con casilla "exige foto"; pantalla con motivo, observaciones, hora, GPS por visita y foto; canal de foto generalizado; descarga de fotos del servidor a la tablet | T-39 (ampliado) | siguiente |
+> | 4 | Prospecto con coordenada o dirección; geocodificación con Google en el servidor al proyectar | **sin issue** | después de 3 |
+> | 6 | Gastos de la ruta: tipos de gasto en el portal, bajan en el `pull`, pantalla de gasto en la tablet | T-30 + T-31 (parte tablet) | después de 4 |
+> | 7 | Firma del cliente en la nota al vender; bloquea la nota en la tablet (el portal sigue editando) | **sin issue** | después de 6 |
+>
+> Después siguen como estaban: T-45/T-46 → T-41 → T-24…T-27 → T-33 → T-43/T-44 → T-48. Dos
+> bloqueos "cliente" de la tabla quedan cerrados por diseño: los motivos de T-39 son **editables**
+> (ya no "cerrados o con otro") y el GPS de T-41 es **por visita** (se captura en la pieza 3; a T-41
+> le queda el mapa). Las fichas de §7 llevan su enmienda donde cambia el alcance.
+
 Salido de las dependencias declaradas en los issues (`gh issue list`, 2026-09-12). Se incluyen
 los tickets del portal/backend **solo** en la parte que la app necesita.
 
@@ -293,6 +313,37 @@ ticket las fija.
   hasta T-43.
 - **Tareas (~7):** 2 `haiku` · 5 `sonnet`.
 
+> [!warning] Enmienda 2026-10-13 — pieza 3 del rediseño, alcance ampliado
+> - **Motivos**: catálogo **editable en el portal** (tabla propia, CRUD con permiso, baja en el
+>   `pull`), con casilla **"exige foto"**; semilla con los cinco motivos del vault. Para *cerrado* y
+>   *no estaba el encargado* la **foto es obligatoria** además de hora y nombre.
+> - **Pantalla** (botón "Visita" de la ficha del cliente): motivo, observaciones, hora, **un punto
+>   GPS por visita** (`expo-location`, sin segundo plano) y foto. La visita cuenta como "visitado" en
+>   la ruta del día (`visitas.delDia` en `src/estado/ruta-del-dia.ts`).
+> - **Fotos**: el canal de foto del prospecto (T-40) se generaliza (`fotos/`), y el servidor empieza
+>   a **servir fotos a la tablet** (hoy solo al portal) para la ficha del cliente.
+> - **Tareas:** ~10 (3 `haiku` · 6 `sonnet` · 1 `opus` para el canal de fotos).
+
+### Pieza 4 · Geocodificación del prospecto (S, sin issue)
+
+- **Tablet:** el alta de prospecto captura **coordenada** (GPS del momento, opcional) **o
+  dirección** escrita; nada bloquea el alta.
+- **Backend:** al proyectar el prospecto, si trae dirección y no coordenada, se geocodifica con
+  **Google Geocoding** en el servidor (clave en el entorno del backend, nunca en la tablet); el
+  resultado va a `cliente` (lat/lng) y baja en el `pull`. Decisión de Mario del 2026-10-12.
+  Requiere un ADR corto (proveedor, costo, qué pasa si falla la geocodificación: se guarda sin
+  coordenada y se reintenta desde el portal).
+- **Tareas (~5):** 1 `haiku` · 3 `sonnet` · 1 `opus` (ADR + cliente HTTP con reintentos).
+
+### Pieza 7 · Firma del cliente en la nota (M, sin issue)
+
+- **Tablet:** al cerrar una venta, el cliente **firma en la pantalla** (lienzo propio o librería;
+  spike de 1 tarea); la firma se guarda como imagen local y **bloquea la nota en la tablet** (no se
+  edita ni se cancela desde la app; el portal sigue editando, T-17).
+- **Backend:** la firma sube por el canal de fotos de la pieza 3, asociada a la venta, y el portal
+  la muestra en la nota.
+- **Tareas (~7):** 1 spike `opus` · 2 `haiku` · 4 `sonnet`.
+
 ### 5 · T-40 Prospectos (S)
 
 - **Backend:** tipo de push nuevo `prospecto` → `ClientesService.crearProspecto`
@@ -310,6 +361,12 @@ ticket las fija.
 - **Tablet:** tabla local de ruta y la lista ordenada en la jornada.
 - **Portal:** según la respuesta sobre quién hace la UI. Si nadie: API + pgTAP + e2e.
 - **Tareas (~8):** 2 `haiku` · 6 `sonnet`.
+
+> [!success] Hecho — enmienda 2026-10-13
+> Ejecutado el 2026-10-12 como **pieza 1 del rediseño**, más grande que esta ficha: 12 tareas, PR
+> #116. Además de la ruta: pantalla principal nueva (la jornada abre en la ruta del día), "Agregar
+> a mi ruta" (`ruta-alta`, `ruta.origen`), ficha del cliente ampliada, menú hamburguesa y la
+> pantalla `operacion/ruta-diaria` del portal (la UI la hizo el agente). Decisiones en el spec.
 
 ### 7 · T-39 Visita sin venta (M)
 
@@ -337,6 +394,10 @@ ticket las fija.
   diarios recorridos.
 - **Tareas (~12):** 1 spike `opus` · 3 `haiku` · 6 `sonnet` · 2 `opus` (módulo nativo, segundo
   plano).
+- **Enmienda 2026-10-13:** la pregunta "GPS por visita o continuo" quedó resuelta **por visita**
+  (se captura en la pieza 3). A T-41 le queda el **mapa** de la ruta del día y, si el cliente insiste
+  en "detectar vueltas personales", el rastreo continuo como decisión aparte. Entrada "Ruta y GPS"
+  del menú hamburguesa, hoy "pendiente".
 
 ### 11–14 · T-28, T-29, T-30, T-31 Tesorería y gastos (M cada uno)
 
@@ -351,6 +412,13 @@ ticket las fija.
 - **Tareas:** ~6–9 cada uno, mayoría `sonnet`, migraciones y semillas `haiku`, proyección de
   `gasto` con revisor `opus`.
 
+> [!warning] Enmienda 2026-10-13 — pieza 6 del rediseño
+> T-30 + la parte de tablet de T-31 forman la **pieza 6**: tipos de gasto administrados en el
+> portal, bajan en el `pull`, y una **pantalla de gasto** en la tablet (entrada "Gastos" del menú
+> hamburguesa, hoy "pendiente"). Qué parte de T-28/T-29 (tesorería) hace falta para proyectar el
+> gasto se decide en el spec de la pieza; si T-29 no existe aún, el gasto se proyecta a `gasto` y
+> la afectación a tesorería se difiere a T-29 (patrón ADR-0009).
+
 ### 15–18 · T-24, T-25, T-26, T-27 Inventario (M, M, M, L)
 
 - **T-24:** **ADR del modelo de inventario** (tarea `opus`) — la propuesta del vault es un
@@ -363,6 +431,10 @@ ticket las fija.
   enviar el sobrante); `MovimientosService.registrarMovimiento`; cuadre en 0 como función pura con
   la fórmula detallada (teórico vs. validado). **Regla de acciones opuestas obligatoria** (ADR-0008).
 - **Tareas:** T-24 ~9 · T-25 ~6 · T-26 ~7 · T-27 ~12.
+- **Enmienda 2026-10-13:** fuera del rediseño, pero ya con su sitio: entradas **Inventario**
+  (recarga/devolución a media jornada) y **Merma, promoción y consumo** del menú hamburguesa, hoy
+  "pendiente"; al existir T-27, se quita el botón secundario "Merma, promoción, consumo y gasto" que
+  T-37 dejó en la ficha del cliente.
 
 ### 19 · T-33 Cierre del día (L)
 
