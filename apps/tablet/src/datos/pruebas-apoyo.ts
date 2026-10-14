@@ -74,8 +74,8 @@ export function snapshotDePrueba(): SnapshotCatalogos {
         encargado: 'Lupita',
         tipo: 'cliente',
         pct_comision: 3.5,
-        promocion: '10+1',
         plazo_credito_dias: 7,
+        primera_venta_en: null,
         lat: 32.5149,
         lng: -117.0382,
         sucursal_id: 'suc-tj',
@@ -90,13 +90,29 @@ export function snapshotDePrueba(): SnapshotCatalogos {
         encargado: null,
         tipo: 'prospecto',
         pct_comision: null,
-        promocion: 'ninguna',
         plazo_credito_dias: null,
+        primera_venta_en: null,
         lat: null,
         lng: null,
         sucursal_id: 'suc-tj',
         activo: 1,
         saldo_favor_centavos: 0,
+      },
+    ],
+    promociones: [
+      // Por cada 10 Jamaica (producto), 1 Jamaica gratis, se repite. General.
+      {
+        id: 'promo-general', audiencia: 'todos', cliente_id: null,
+        compra_tipo: 'producto', compra_producto_id: 'pro-1', compra_presentacion_id: null, compra_cantidad: 10,
+        regalo_tipo: 'mismo', regalo_producto_id: null, regalo_presentacion_id: null, regalo_cantidad: 1,
+        se_repite: 1, activo: 1,
+      },
+      // Bienvenida al prospecto: 2 Jamaica 500 ml sin compra.
+      {
+        id: 'promo-prospecto', audiencia: 'prospecto', cliente_id: null,
+        compra_tipo: 'cualquiera', compra_producto_id: null, compra_presentacion_id: null, compra_cantidad: 0,
+        regalo_tipo: 'presentacion', regalo_producto_id: null, regalo_presentacion_id: 'pre-2', regalo_cantidad: 2,
+        se_repite: 0, activo: 1,
       },
     ],
     precios: [

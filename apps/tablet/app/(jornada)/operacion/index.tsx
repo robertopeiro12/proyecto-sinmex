@@ -55,7 +55,7 @@ export default function ListaClientes() {
             <BotonMenu
               key={cliente.id}
               titulo={cliente.nombre}
-              descripcion={`${cliente.domicilio} · promoción ${cliente.promocion}`}
+              descripcion={`${cliente.domicilio}`}
               destino={{
                 pathname: '/(jornada)/operacion/[clienteId]',
                 params: { clienteId: cliente.id },
