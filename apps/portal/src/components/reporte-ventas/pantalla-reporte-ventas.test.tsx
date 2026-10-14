@@ -248,14 +248,14 @@ describe("PantallaReporteVentas", () => {
     );
   });
 
-  it("I-1: la columna Monto mide w-26 en las dos tablas (cabe $1,234,567.89)", async () => {
+  it("I-1: la columna Monto cabe $1,234,567.89 en negrita (w-28 en Ventas, w-26 en el resumen)", async () => {
     mockAuth([PERMISO]);
     const u = userEvent.setup();
     render(<PantallaReporteVentas sucursal={null} />);
     await u.click(screen.getByRole("button", { name: "Mostrar" }));
     const tabla = await screen.findByRole("table", { name: "Ventas" });
-    expect(tabla).toHaveClass("min-w-[60rem]");
-    expect(tabla.querySelectorAll("col")[10]).toHaveClass("w-26");
+    expect(tabla).toHaveClass("min-w-[61rem]");
+    expect(tabla.querySelectorAll("col")[10]).toHaveClass("w-28");
     const resumen = screen.getByRole("table", { name: "Resumen por repartidor" });
     expect(resumen.querySelectorAll("col")[4]).toHaveClass("w-26");
   });

@@ -23,12 +23,12 @@ export function TablaClientesNuevos({ clientes }: { clientes: ClienteNuevo[] }) 
     <div className="w-0 min-w-full max-h-[70vh] overflow-auto rounded-md border">
       <table aria-label="Clientes nuevos" className="w-full min-w-[57rem] table-fixed text-[13px]">
         <colgroup>
-          <col className="w-23" />
+          <col className="w-25" />
           <col />
-          <col className="w-17" />
+          <col className="w-18" />
           <col className="w-28" />
-          <col className="w-26" />
-          <col className="w-22" />
+          <col className="w-28" />
+          <col className="w-24" />
           <col className="w-32" />
           <col className="w-28" />
         </colgroup>
