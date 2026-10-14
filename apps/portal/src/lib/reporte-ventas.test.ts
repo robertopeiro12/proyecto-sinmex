@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "./api";
 import {
   definicionExcelReporteVentas,
+  formatearPiezas,
   nombreRepartidor,
   obtenerReporteVentas,
   rangoMes,
@@ -109,5 +110,14 @@ describe("definicionExcelReporteVentas", () => {
       { sucursal: "Todas", repartidor: "Juan Pérez" },
     );
     expect(def.filas.at(-1)?.celdas[2]).toBe("Juan Pérez (3 ventas)");
+  });
+});
+
+describe("formatearPiezas", () => {
+  it("separa los miles con coma", () => {
+    expect(formatearPiezas(0)).toBe("0");
+    expect(formatearPiezas(999)).toBe("999");
+    expect(formatearPiezas(12345)).toBe("12,345");
+    expect(formatearPiezas(1234567)).toBe("1,234,567");
   });
 });

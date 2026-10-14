@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { formatearFecha } from "@/lib/reportes";
-import { nombreRepartidor, type ReporteVentas } from "@/lib/reporte-ventas";
+import { formatearPiezas, nombreRepartidor, type ReporteVentas } from "@/lib/reporte-ventas";
 import { ETIQUETA_STATUS, formatearPesos } from "@/lib/ventas";
 
 /*
@@ -17,7 +17,7 @@ export function TablaReporteVentas({ reporte }: { reporte: ReporteVentas }) {
   // min-w-0 en el layout compartido); ocupa el ancho disponible y la tabla se desplaza dentro.
   return (
     <div className="max-h-[70vh] w-0 min-w-full overflow-auto rounded-md border">
-      <table aria-label="Ventas" className="w-full min-w-[72rem] table-fixed text-sm">
+      <table aria-label="Ventas" className="w-full min-w-[74rem] table-fixed text-sm">
         <colgroup>
           <col className="w-24" />
           <col className="w-32" />
@@ -29,7 +29,7 @@ export function TablaReporteVentas({ reporte }: { reporte: ReporteVentas }) {
           <col className="w-16" />
           <col className="w-20" />
           <col className="w-16" />
-          <col className="w-28" />
+          <col className="w-36" />
         </colgroup>
         <thead className="text-left">
           <tr>
@@ -65,8 +65,8 @@ export function TablaReporteVentas({ reporte }: { reporte: ReporteVentas }) {
                     {v.factura}
                   </td>
                   <td className={`${TD} ${NUM}`}>{v.semana}</td>
-                  <td className={`${TD} ${NUM}`}>{v.cantidad}</td>
-                  <td className={`${TD} ${NUM}`}>{v.promocion}</td>
+                  <td className={`${TD} ${NUM}`}>{formatearPiezas(v.cantidad)}</td>
+                  <td className={`${TD} ${NUM}`}>{formatearPiezas(v.promocion)}</td>
                   <td className={`${TD} ${NUM}`}>{formatearPesos(v.montoCentavos)}</td>
                 </tr>
               ))}
@@ -74,8 +74,8 @@ export function TablaReporteVentas({ reporte }: { reporte: ReporteVentas }) {
                 <td className={TD} colSpan={8}>
                   Total {formatearFecha(dia.fecha)}
                 </td>
-                <td className={`${TD} ${NUM}`}>{dia.subtotal.cantidad}</td>
-                <td className={`${TD} ${NUM}`}>{dia.subtotal.promocion}</td>
+                <td className={`${TD} ${NUM}`}>{formatearPiezas(dia.subtotal.cantidad)}</td>
+                <td className={`${TD} ${NUM}`}>{formatearPiezas(dia.subtotal.promocion)}</td>
                 <td className={`${TD} ${NUM}`}>{formatearPesos(dia.subtotal.montoCentavos)}</td>
               </tr>
             </Fragment>
@@ -84,8 +84,8 @@ export function TablaReporteVentas({ reporte }: { reporte: ReporteVentas }) {
             <td className={TD} colSpan={8}>
               TOTAL
             </td>
-            <td className={`${TD} ${NUM}`}>{reporte.total.cantidad}</td>
-            <td className={`${TD} ${NUM}`}>{reporte.total.promocion}</td>
+            <td className={`${TD} ${NUM}`}>{formatearPiezas(reporte.total.cantidad)}</td>
+            <td className={`${TD} ${NUM}`}>{formatearPiezas(reporte.total.promocion)}</td>
             <td className={`${TD} ${NUM}`}>{formatearPesos(reporte.total.montoCentavos)}</td>
           </tr>
         </tbody>
@@ -102,7 +102,7 @@ export function ResumenRepartidores({ reporte }: { reporte: ReporteVentas }) {
         <col className="w-20" />
         <col className="w-24" />
         <col className="w-20" />
-        <col className="w-32" />
+        <col className="w-36" />
       </colgroup>
       <thead className="border-b text-left">
         <tr>
@@ -118,8 +118,8 @@ export function ResumenRepartidores({ reporte }: { reporte: ReporteVentas }) {
           <tr key={p.vendedorId ?? "oficina"} className="border-t">
             <td className={`${TD} truncate`}>{nombreRepartidor(p.repartidor)}</td>
             <td className={`${TD} ${NUM}`}>{p.ventas}</td>
-            <td className={`${TD} ${NUM}`}>{p.cantidad}</td>
-            <td className={`${TD} ${NUM}`}>{p.promocion}</td>
+            <td className={`${TD} ${NUM}`}>{formatearPiezas(p.cantidad)}</td>
+            <td className={`${TD} ${NUM}`}>{formatearPiezas(p.promocion)}</td>
             <td className={`${TD} ${NUM}`}>{formatearPesos(p.montoCentavos)}</td>
           </tr>
         ))}

@@ -128,7 +128,7 @@ describe("PantallaReporteVentas", () => {
     mockAuth([PERMISO]);
     render(<PantallaReporteVentas sucursal={null} />);
     const filtro = await screen.findByLabelText("Repartidor");
-    expect(await within(filtro).findByRole("option", { name: "Beto Viejo (inactivo)" })).toHaveValue("viejo");
+    expect(await within(filtro).findByRole("option", { name: "Beto Viejo · TJ (inactivo)" })).toHaveValue("viejo");
     expect(within(filtro).getByRole("option", { name: "Todos" })).toHaveValue("");
     expect(within(filtro).getByRole("option", { name: "Oficina" })).toHaveValue("oficina");
   });
@@ -246,5 +246,76 @@ describe("PantallaReporteVentas", () => {
     expect(exportarExcel).toHaveBeenCalledWith(
       rv.definicionExcelReporteVentas(REPORTE, { sucursal: "TJ", repartidor: "Juan Pérez" }),
     );
+  });
+
+  it("I-1: la columna Monto mide w-36 en las dos tablas (cabe $1,234,567.89)", async () => {
+    mockAuth([PERMISO]);
+    const u = userEvent.setup();
+    render(<PantallaReporteVentas sucursal={null} />);
+    await u.click(screen.getByRole("button", { name: "Mostrar" }));
+    const tabla = await screen.findByRole("table", { name: "Ventas" });
+    expect(tabla).toHaveClass("min-w-[74rem]");
+    expect(tabla.querySelectorAll("col")[10]).toHaveClass("w-36");
+    const resumen = screen.getByRole("table", { name: "Resumen por repartidor" });
+    expect(resumen.querySelectorAll("col")[4]).toHaveClass("w-36");
+  });
+
+  it("M-2: muestra el rango y filtros consultados aunque se editen las fechas", async () => {
+    mockAuth([PERMISO]);
+    const u = userEvent.setup();
+    render(<PantallaReporteVentas sucursal="TJ" />);
+    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-10-13" } });
+    fireEvent.change(screen.getByLabelText("Hasta"), { target: { value: "2026-10-14" } });
+    await u.click(screen.getByRole("button", { name: "Mostrar" }));
+    await screen.findByRole("table", { name: "Ventas" });
+    const linea = "Del 13/10/2026 al 14/10/2026 · Repartidor: Todos · Sucursal: TJ";
+    expect(screen.getByText(linea)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-10-01" } });
+    expect(screen.getByText(linea)).toBeInTheDocument();
+  });
+
+  it("M-3: sin sucursal y usuario General el filtro lleva el código; con sucursal no", async () => {
+    mockAuth([PERMISO]);
+    const { unmount } = render(<PantallaReporteVentas sucursal={null} />);
+    expect(await screen.findByRole("option", { name: "Juan Pérez · TJ" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Beto Viejo · TJ (inactivo)" })).toBeInTheDocument();
+    unmount();
+    render(<PantallaReporteVentas sucursal="TJ" />);
+    expect(await screen.findByRole("option", { name: "Juan Pérez" })).toBeInTheDocument();
+  });
+
+  it("M-3: la fila de Excel usa la misma etiqueta del filtro", async () => {
+    mockAuth([PERMISO]);
+    const u = userEvent.setup();
+    render(<PantallaReporteVentas sucursal="todas" />);
+    await screen.findByRole("option", { name: "Juan Pérez · TJ" });
+    await u.selectOptions(screen.getByLabelText("Repartidor"), "juan");
+    await u.click(screen.getByRole("button", { name: "Mostrar" }));
+    await screen.findByRole("table", { name: "Ventas" });
+    await u.click(screen.getByRole("button", { name: "Exportar a Excel" }));
+    expect(exportarExcel).toHaveBeenCalledWith(
+      rv.definicionExcelReporteVentas(REPORTE, { sucursal: "Todas", repartidor: "Juan Pérez · TJ" }),
+    );
+  });
+
+  it("M-4: piezas con separador de miles en resumen, tabla y subtotales", async () => {
+    mockAuth([PERMISO]);
+    const grande: ReporteVentas = {
+      ...REPORTE,
+      dias: [{ ...REPORTE.dias[0], ventas: [{ ...REPORTE.dias[0].ventas[0], cantidad: 12345, promocion: 1500 }], subtotal: { ventas: 1, cantidad: 12345, promocion: 1500, montoCentavos: 13000 } }],
+      porRepartidor: [{ vendedorId: "juan", repartidor: "Juan Pérez", ventas: 1, cantidad: 12345, promocion: 1500, montoCentavos: 13000 }],
+      total: { ventas: 1, cantidad: 12345, promocion: 1500, montoCentavos: 13000 },
+    };
+    obtener.mockResolvedValue(grande);
+    const u = userEvent.setup();
+    render(<PantallaReporteVentas sucursal={null} />);
+    await u.click(screen.getByRole("button", { name: "Mostrar" }));
+    const tabla = await screen.findByRole("table", { name: "Ventas" });
+    expect(screen.getByText("1 venta · 12,345 piezas · 1,500 promo · $130.00")).toBeInTheDocument();
+    expect(within(within(tabla).getByText("TOTAL").closest("tr")!).getByText("12,345")).toBeInTheDocument();
+    expect(within(within(tabla).getByText("Total 13/10/2026").closest("tr")!).getByText("1,500")).toBeInTheDocument();
+    expect(within(within(tabla).getByText("TJ261013AP01").closest("tr")!).getByText("12,345")).toBeInTheDocument();
+    const resumen = screen.getByRole("table", { name: "Resumen por repartidor" });
+    expect(within(resumen).getByText("12,345")).toBeInTheDocument();
   });
 });

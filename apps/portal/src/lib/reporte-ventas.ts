@@ -88,6 +88,11 @@ export function rangoMes(hoy: string): { desde: string; hasta: string } {
   return { desde: `${hoy.slice(0, 8)}01`, hasta: aIso(ultimo) };
 }
 
+/** Piezas con separador de miles (12,345); en Excel van los números crudos. */
+export function formatearPiezas(n: number): string {
+  return n.toLocaleString("en-US");
+}
+
 export function nombreRepartidor(repartidor: string | null): string {
   return repartidor ?? "Oficina";
 }

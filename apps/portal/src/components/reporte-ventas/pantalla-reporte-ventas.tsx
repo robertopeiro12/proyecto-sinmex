@@ -6,9 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { mensajeDe } from "@/lib/api";
 import { exportarExcel } from "@/lib/excel/exportar";
-import { etiquetaSucursal } from "@/lib/reportes";
+import { etiquetaSucursal, formatearFecha } from "@/lib/reportes";
 import {
   definicionExcelReporteVentas,
+  formatearPiezas,
   obtenerReporteVentas,
   rangoMes,
   rangoSemana,
@@ -21,6 +22,8 @@ import { ResumenRepartidores, TablaReporteVentas } from "./tabla-reporte-ventas"
 /** Lo consultado y con qué filtros: es lo que se exporta. */
 interface Consultado {
   reporte: ReporteVentas;
+  desde: string;
+  hasta: string;
   sucursal: string;
   repartidor: string;
 }
@@ -93,10 +96,15 @@ export function PantallaReporteVentas({ sucursal }: { sucursal: string | null })
     setHasta(r.hasta);
   }
 
+  // Viendo todas las sucursales, dos vendedores pueden llamarse igual: se distingue con el código.
+  const verTodas = !usuario?.sucursal && (sucursal === null || sucursal.toLowerCase() === "todas");
+  const nombreVendedor = (v: Vendedor) => (verTodas ? `${v.nombre} · ${v.sucursalCodigo}` : v.nombre);
+
   function etiquetaRepartidor(valor: string): string {
     if (valor === "") return "Todos";
     if (valor === "oficina") return "Oficina";
-    return vendedores.find((v) => v.id === valor)?.nombre ?? "Todos";
+    const v = vendedores.find((x) => x.id === valor);
+    return v ? nombreVendedor(v) : "Todos";
   }
 
   async function alMostrar(e: FormEvent) {
@@ -119,6 +127,8 @@ export function PantallaReporteVentas({ sucursal }: { sucursal: string | null })
       if (esta !== ultima.current) return;
       setConsultado({
         reporte,
+        desde,
+        hasta,
         sucursal: etiquetaSucursal(usuario?.sucursal?.codigo ?? null, sucursal),
         repartidor: etiquetaRepartidor(filtroRepartidor),
       });
@@ -212,7 +222,7 @@ export function PantallaReporteVentas({ sucursal }: { sucursal: string | null })
               <option value="oficina">Oficina</option>
               {vendedores.map((v) => (
                 <option key={v.id} value={v.id}>
-                  {v.activo ? v.nombre : `${v.nombre} (inactivo)`}
+                  {v.activo ? nombreVendedor(v) : `${nombreVendedor(v)} (inactivo)`}
                 </option>
               ))}
             </select>
@@ -241,8 +251,11 @@ export function PantallaReporteVentas({ sucursal }: { sucursal: string | null })
         {reporte &&
           (hayVentas ? (
             <div aria-busy={actualizando} className={`flex flex-col gap-5 ${actualizando ? "opacity-60" : ""}`}>
+              <p className="text-sm text-muted-foreground">
+                {`Del ${formatearFecha(consultado!.desde)} al ${formatearFecha(consultado!.hasta)} · Repartidor: ${consultado!.repartidor} · Sucursal: ${consultado!.sucursal}`}
+              </p>
               <p className="text-sm font-medium">
-                {`${plural(reporte.total.ventas, "venta", "ventas")} · ${plural(reporte.total.cantidad, "pieza", "piezas")} · ${reporte.total.promocion} promo · ${formatearPesos(reporte.total.montoCentavos)}`}
+                {`${plural(reporte.total.ventas, "venta", "ventas")} · ${reporte.total.cantidad === 1 ? "1 pieza" : `${formatearPiezas(reporte.total.cantidad)} piezas`} · ${formatearPiezas(reporte.total.promocion)} promo · ${formatearPesos(reporte.total.montoCentavos)}`}
               </p>
               <ResumenRepartidores reporte={reporte} />
               <TablaReporteVentas reporte={reporte} />
