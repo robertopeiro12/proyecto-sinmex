@@ -52,6 +52,8 @@ const EXPLICACION_PERMISO: Record<string, string> = {
   "analisis_cliente.ver":
     "Puede consultar el análisis e historial de compra de un cliente.",
   "reportes.ver": "Puede consultar los reportes generales del negocio.",
+  "cuentas_cobrar.ver":
+    "Puede ver cuánto debe cada cliente, con sus notas pendientes y vencidas (no puede cobrar).",
 };
 
 interface Props {
