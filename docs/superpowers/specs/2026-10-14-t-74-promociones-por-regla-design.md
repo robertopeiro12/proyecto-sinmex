@@ -37,6 +37,13 @@ Lo que falta es la regla que une las dos: qué se regala, a quién, por cuánto 
 
 **D11 · Dónde la ve el vendedor** *(acordado con Mario)*: en la **ficha del cliente** y arriba de la **pantalla de venta**, en lenguaje llano ("Por cada 10 Jawa 600 ml, 1 gratis"); conforme captura, la app va calculando y lo muestra por producto; al revisar, los regalos salen aparte con su frase.
 
+> [!note] Enmiendas de la ejecución (2026-10-14, controlador; detalle en el PR)
+> - **D2/D7:** la promoción de **prospecto nunca se repite por bloques**: el portal no ofrece la casilla y la API la rechaza con `se_repite`; la tablet la calcula como un solo bloque. Su frase "Bienvenida al prospecto: …" no decía "por cada", y repetirla haría que la nota congelara una frase que no describe lo que se dio.
+> - **D5:** una propia del cliente que coincide en producto desplaza **también** la de bienvenida al prospecto (portal y tablet por igual). Y, al pie de la letra de D5, una general "de lo que sea" coincide con todo producto: cualquier propia la desplaza (el paso 2 de la aceptación esperaba lo contrario; **a revisar por Mario**).
+> - **Portal, `GET /promociones?clienteId=`:** para un prospecto sin primera venta incluye además las de `prospecto` de su sucursal, con `desplazada`.
+> - **Prospectos en la app:** la bienvenida está construida, pero hoy la app no tiene camino hasta la ficha de un prospecto (no sale en "Todos los clientes" ni entra a la ruta); se alcanza solo por enlace directo. **Ticket de seguimiento.**
+> - **Despliegue:** tras el `db push` hay que limpiar o reinstalar las tablets de demo antes de crear promociones (el cursor del pull solo avanza).
+
 ## Decisiones del agente (a revisar por Mario)
 
 **D12 · Trazabilidad por nota, no por línea.** Nueva tabla `venta_nota_promocion` (nota, promoción, presentación, cantidad, texto congelado de la promoción). Una línea puede recibir regalo de dos promociones distintas (una propia y una general de "cualquier producto"), así que no cabe un `promocion_id` en la línea. `cantidad_promocion` de la línea sigue siendo la suma de lo regalado en esa presentación. Costo si está mal: una tabla más.
