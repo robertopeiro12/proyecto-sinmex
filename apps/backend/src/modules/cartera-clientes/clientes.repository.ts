@@ -371,7 +371,11 @@ export class ClientesRepository {
    * falta `on conflict`.
    */
   async crear(
-    datos: DatosClienteBase & { tipo: TipoCliente; sucursal_id: string },
+    datos: DatosClienteBase & {
+      tipo: TipoCliente;
+      sucursal_id: string;
+      altaUsuarioId: string;
+    },
     productosPromocion: string[],
     overridesPrecio: { presentacionId: string; precio: number }[],
     vigenteDesde: string,
@@ -395,6 +399,10 @@ export class ClientesRepository {
           lng: datos.lng?.toString() ?? null,
           comentarios: datos.comentarios,
           sucursal_id: datos.sucursal_id,
+          // T-51: solo un CLIENTE tiene alta; un prospecto la tendra al convertirse.
+          alta_cliente_en: datos.tipo === 'cliente' ? sql<Date>`now()` : null,
+          alta_cliente_usuario_id:
+            datos.tipo === 'cliente' ? datos.altaUsuarioId : null,
         })
         .returning('id')
         .executeTakeFirstOrThrow();
@@ -564,10 +572,18 @@ export class ClientesRepository {
    * verifico que el cliente existe y que `tipo` sigue siendo 'prospecto'
    * antes de llamar aqui, asi que esto es un `UPDATE` liso, sin condicion.
    */
-  async convertirACliente(id: string): Promise<ClienteDetalle> {
+  async convertirACliente(
+    id: string,
+    usuarioId: string,
+  ): Promise<ClienteDetalle> {
     await this.db
       .updateTable('cliente')
-      .set({ tipo: 'cliente' })
+      // T-51: la fecha de alta como cliente es la de la conversion, no la del prospecto.
+      .set({
+        tipo: 'cliente',
+        alta_cliente_en: sql<Date>`now()`,
+        alta_cliente_usuario_id: usuarioId,
+      })
       .where('id', '=', id)
       .executeTakeFirstOrThrow();
 

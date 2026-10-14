@@ -460,6 +460,57 @@ describe('Clientes (e2e)', () => {
         .expect(400);
     });
 
+    it('T-51: un alta de tipo cliente guarda fecha y usuario de alta; un prospecto no', async () => {
+      const { id: usuarioTj } = await db
+        .selectFrom('usuario')
+        .select('id')
+        .where('login', '=', LOGIN_TIJUANA)
+        .executeTakeFirstOrThrow();
+
+      const antes = Date.now();
+      const cliente = (
+        await request(app.getHttpServer())
+          .post('/clientes')
+          .set('Cookie', cookieTijuana)
+          .send(datosMinimos({ nombre: `${PREFIJO} Alta T51` }))
+          .expect(201)
+      ).body as ClienteDetalleRespuesta;
+      clienteIds.push(cliente.id);
+
+      const fila = await db
+        .selectFrom('cliente')
+        .select(['alta_cliente_en', 'alta_cliente_usuario_id'])
+        .where('id', '=', cliente.id)
+        .executeTakeFirstOrThrow();
+      expect(fila.alta_cliente_usuario_id).toBe(usuarioTj);
+      expect(
+        new Date(fila.alta_cliente_en as unknown as string).getTime(),
+      ).toBeGreaterThanOrEqual(antes - 5000);
+
+      const prospecto = (
+        await request(app.getHttpServer())
+          .post('/clientes')
+          .set('Cookie', cookieTijuana)
+          .send(
+            datosMinimos({
+              nombre: `${PREFIJO} Prospecto T51`,
+              tipo: 'prospecto',
+            }),
+          )
+          .expect(201)
+      ).body as ClienteDetalleRespuesta;
+      clienteIds.push(prospecto.id);
+      const filaP = await db
+        .selectFrom('cliente')
+        .select(['alta_cliente_en', 'alta_cliente_usuario_id'])
+        .where('id', '=', prospecto.id)
+        .executeTakeFirstOrThrow();
+      expect(filaP).toEqual({
+        alta_cliente_en: null,
+        alta_cliente_usuario_id: null,
+      });
+    });
+
     it('rechaza sin cliente.gestionar con 403', async () => {
       await request(app.getHttpServer())
         .post('/clientes')
@@ -811,6 +862,41 @@ describe('Clientes (e2e)', () => {
   });
 
   describe('POST /clientes/:id/convertir-a-cliente', () => {
+    it('T-51: convertir guarda la fecha de conversion y el usuario que convirtio', async () => {
+      const id = await sembrarCliente(
+        `${PREFIJO} Convertir T51`,
+        idTijuana,
+        'prospecto',
+      );
+      // El prospecto se "creo" hace 10 dias: la fecha de alta debe ser la de la conversion.
+      await db
+        .updateTable('cliente')
+        .set({ created_at: new Date(Date.now() - 10 * 24 * 3600 * 1000) })
+        .where('id', '=', id)
+        .execute();
+      const { id: usuarioTj } = await db
+        .selectFrom('usuario')
+        .select('id')
+        .where('login', '=', LOGIN_TIJUANA)
+        .executeTakeFirstOrThrow();
+
+      const antes = Date.now();
+      await request(app.getHttpServer())
+        .post(`/clientes/${id}/convertir-a-cliente`)
+        .set('Cookie', cookieTijuana)
+        .expect(201);
+
+      const fila = await db
+        .selectFrom('cliente')
+        .select(['alta_cliente_en', 'alta_cliente_usuario_id'])
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow();
+      expect(fila.alta_cliente_usuario_id).toBe(usuarioTj);
+      expect(
+        new Date(fila.alta_cliente_en as unknown as string).getTime(),
+      ).toBeGreaterThanOrEqual(antes - 5000);
+    });
+
     it('convierte un prospecto en cliente', async () => {
       const id = await sembrarCliente(
         `${PREFIJO} Convertir`,

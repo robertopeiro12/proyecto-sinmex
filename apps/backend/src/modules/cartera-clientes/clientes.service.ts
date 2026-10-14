@@ -186,6 +186,7 @@ export class ClientesService {
           lng: dto.lng ?? null,
           comentarios: dto.comentarios ?? null,
           sucursal_id: sucursalId,
+          altaUsuarioId: usuarioId,
         },
         plan.insertar,
         // En el alta, un override con `precio: null` no tiene nada que
@@ -378,7 +379,7 @@ export class ClientesService {
     }
 
     try {
-      return await this.repo.convertirACliente(id);
+      return await this.repo.convertirACliente(id, usuarioId);
     } catch (error) {
       // Red de seguridad para la carrera: otro usuario pudo vaciar uno de los
       // dos campos entre el `obtener` y el `update`. La base es quien decide.
