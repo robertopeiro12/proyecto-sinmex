@@ -12,6 +12,7 @@ export const navSections: NavSection[] = [
       { label: "Cobranza", href: "/operacion/cobranza" },
       { label: "Cuentas por Cobrar", href: "/operacion/cuentas-por-cobrar" },
       { label: "Reporte de Ventas", href: "/operacion/reporte-de-ventas" },
+      { label: "Promociones", href: "/operacion/promociones" },
       { label: "Procesos", href: "/operacion/procesos" },
       { label: "Peticiones", href: "/operacion/peticiones" },
       { label: "Notificaciones", href: "/operacion/notificaciones" },

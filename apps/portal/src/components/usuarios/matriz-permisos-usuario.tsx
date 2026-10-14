@@ -27,7 +27,7 @@ const EXPLICACION_PERMISO: Record<string, string> = {
   "peticiones.gestionar":
     "Puede aprobar o rechazar solicitudes para eliminar una venta o un cobro ya registrado.",
   "promocion.gestionar":
-    "Puede registrar promociones (como 10+1) y el consumo interno de producto.",
+    "Puede crear, editar y desactivar las promociones (regalos por compra) para clientes, para todos o para prospectos.",
   "prospecto.gestionar":
     "Puede dar de alta o editar clientes potenciales (prospectos) antes de que se conviertan en clientes.",
   "ruta_diaria.gestionar":
