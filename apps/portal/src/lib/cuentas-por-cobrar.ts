@@ -29,6 +29,8 @@ export interface ClienteConDeuda {
   clienteId: string;
   cliente: string;
   sucursalCodigo: string;
+  /** Dado de baja pero aún debe: Cobranza ya no lo encuentra, así que no se le ofrece Cobrar. */
+  clienteDadoDeBaja: boolean;
   saldoCentavos: number;
   vencidoCentavos: number;
   notas: NotaPorCobrar[];
@@ -80,13 +82,15 @@ export function definicionExcelCuentasPorCobrar(
   const filas: FilaExcel[] = [];
   let monto = 0;
   let abonado = 0;
+  let saldo = 0;
   for (const c of datos.clientes) {
     for (const n of c.notas) {
       monto += n.montoCentavos;
       abonado += n.abonadoCentavos;
+      saldo += n.saldoCentavos;
       filas.push({
         celdas: [
-          c.cliente,
+          c.clienteDadoDeBaja ? `${c.cliente} (dado de baja)` : c.cliente,
           c.sucursalCodigo,
           n.fecha,
           n.folio,
@@ -104,7 +108,7 @@ export function definicionExcelCuentasPorCobrar(
   }
   filas.push({
     tipo: "total",
-    celdas: ["Total", null, null, null, null, pesos(monto), pesos(abonado), pesos(datos.totalCentavos), null, null, null],
+    celdas: ["Total", null, null, null, null, pesos(monto), pesos(abonado), pesos(saldo), null, null, null],
   });
 
   const archivoSucursal = filtros.sucursal === "Todas" ? "todas" : filtros.sucursal;

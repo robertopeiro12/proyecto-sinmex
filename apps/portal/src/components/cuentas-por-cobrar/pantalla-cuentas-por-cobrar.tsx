@@ -99,6 +99,8 @@ export function PantallaCuentasPorCobrar({ sucursal }: { sucursal: string | null
     }
   }
 
+  // Refetch (p. ej. al marcar Solo vencidas): lo viejo sigue a la vista, atenuado.
+  const actualizando = cargando && datos !== null;
   const hayNotas = datos !== null && datos.clientes.length > 0;
 
   return (
@@ -107,8 +109,14 @@ export function PantallaCuentasPorCobrar({ sucursal }: { sucursal: string | null
         <CardTitle>Cuentas por Cobrar</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
+        {actualizando && <p className="text-sm text-muted-foreground">Actualizando…</p>}
+
         {datos && (
-          <div className="flex flex-wrap gap-8">
+          <div
+            data-testid="totales-cuentas"
+            aria-busy={actualizando}
+            className={`flex flex-wrap gap-8 ${actualizando ? "opacity-60" : ""}`}
+          >
             <div>
               <p className="text-sm text-muted-foreground">Total por cobrar</p>
               <p className="text-2xl font-semibold" data-total="total">{formatearPesos(datos.totalCentavos)}</p>
@@ -154,18 +162,25 @@ export function PantallaCuentasPorCobrar({ sucursal }: { sucursal: string | null
 
         {cargando && !datos && <p className="text-sm text-muted-foreground">Cargando…</p>}
 
-        {datos &&
-          (hayNotas ? (
-            <TablaCuentasPorCobrar
-              clientes={datos.clientes}
-              sucursal={sucursal}
-              puedeCobrar={puede("cobranza.registrar")}
-            />
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {consultadoConVencidas ? "No hay notas vencidas." : "No hay cuentas por cobrar."}
-            </p>
-          ))}
+        {datos && (
+          <div
+            data-testid="tabla-cuentas"
+            aria-busy={actualizando}
+            className={actualizando ? "opacity-60" : undefined}
+          >
+            {hayNotas ? (
+              <TablaCuentasPorCobrar
+                clientes={datos.clientes}
+                sucursal={sucursal}
+                puedeCobrar={puede("cobranza.registrar")}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {consultadoConVencidas ? "No hay notas vencidas." : "No hay cuentas por cobrar."}
+              </p>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

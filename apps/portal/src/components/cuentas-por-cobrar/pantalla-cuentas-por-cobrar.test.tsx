@@ -25,14 +25,14 @@ const DATOS: CuentasPorCobrar = {
   notas: 3,
   clientes: [
     {
-      clienteId: "c1", cliente: "Cobach XXI", sucursalCodigo: "TJ", saldoCentavos: 29900, vencidoCentavos: 14950,
+      clienteId: "c1", cliente: "Cobach XXI", sucursalCodigo: "TJ", clienteDadoDeBaja: false, saldoCentavos: 29900, vencidoCentavos: 14950,
       notas: [
         { id: "n1", fecha: "2026-09-13", folio: "TJ260913AP05", numNota: "2346", montoCentavos: 14950, abonadoCentavos: 0, saldoCentavos: 14950, status: "pendiente", vence: "2026-09-28", diasAtraso: 16 },
         { id: "n2", fecha: "2026-10-10", folio: "TJ261010AP02", numNota: null, montoCentavos: 20000, abonadoCentavos: 5050, saldoCentavos: 14950, status: "abonado", vence: null, diasAtraso: 0 },
       ],
     },
     {
-      clienteId: "c2", cliente: "El Moreno", sucursalCodigo: "MX", saldoCentavos: 7800, vencidoCentavos: 0,
+      clienteId: "c2", cliente: "El Moreno", sucursalCodigo: "MX", clienteDadoDeBaja: false, saldoCentavos: 7800, vencidoCentavos: 0,
       notas: [
         { id: "n3", fecha: "2026-10-01", folio: "MX261001JP01", numNota: null, montoCentavos: 7800, abonadoCentavos: 0, saldoCentavos: 7800, status: "pendiente", vence: "2026-10-31", diasAtraso: 0 },
       ],
@@ -135,6 +135,47 @@ describe("PantallaCuentasPorCobrar", () => {
     expect(screen.getByText("1 nota de 1 cliente")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /El Moreno/ })).toBeNull();
     expect(screen.queryByText("3 notas de 2 clientes")).toBeNull();
+  });
+
+  it("al volver a pedir muestra Actualizando… y atenúa lo viejo; al llegar, desaparece", async () => {
+    mockAuth(["cuentas_cobrar.ver"]);
+    let soltar: (d: CuentasPorCobrar) => void = () => {};
+    obtener
+      .mockResolvedValueOnce(DATOS)
+      .mockImplementationOnce(() => new Promise((r) => { soltar = r; }));
+    const u = userEvent.setup();
+    render(<PantallaCuentasPorCobrar sucursal={null} />);
+    await screen.findByText("3 notas de 2 clientes");
+    expect(screen.queryByText("Actualizando…")).toBeNull();
+    await u.click(screen.getByRole("checkbox", { name: "Solo vencidas" }));
+    expect(screen.getByText("Actualizando…")).toBeInTheDocument();
+    expect(screen.getByTestId("totales-cuentas")).toHaveAttribute("aria-busy", "true");
+    expect(screen.getByTestId("tabla-cuentas")).toHaveAttribute("aria-busy", "true");
+    await act(async () => {
+      soltar({ ...DATOS, notas: 1, clientes: [DATOS.clientes[0]] });
+    });
+    expect(screen.queryByText("Actualizando…")).toBeNull();
+    expect(screen.getByTestId("totales-cuentas")).not.toHaveAttribute("aria-busy", "true");
+    expect(screen.getByTestId("tabla-cuentas")).not.toHaveAttribute("aria-busy", "true");
+  });
+
+  it("un cliente dado de baja se marca y no tiene Cobrar", async () => {
+    mockAuth(["cuentas_cobrar.ver", "cobranza.registrar"]);
+    obtener.mockResolvedValue({ ...DATOS, clientes: [{ ...DATOS.clientes[0], clienteDadoDeBaja: true }, DATOS.clientes[1]] });
+    const u = userEvent.setup();
+    render(<PantallaCuentasPorCobrar sucursal={null} />);
+    const baja = await screen.findByRole("button", { name: /Cobach XXI \(dado de baja\)/ });
+    await u.click(baja);
+    await u.click(screen.getByRole("button", { name: /El Moreno/ }));
+    expect(screen.getByText("TJ260913AP05")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Cobrar TJ260913AP05" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Cobrar MX261001JP01" })).toBeInTheDocument();
+  });
+
+  it("la flecha no forma parte del nombre accesible del botón", async () => {
+    mockAuth(["cuentas_cobrar.ver"]);
+    render(<PantallaCuentasPorCobrar sucursal={null} />);
+    expect(await screen.findByRole("button", { name: "Cobach XXI · TJ" })).toBeInTheDocument();
   });
 
   it("sin notas lo dice y deshabilita Excel", async () => {

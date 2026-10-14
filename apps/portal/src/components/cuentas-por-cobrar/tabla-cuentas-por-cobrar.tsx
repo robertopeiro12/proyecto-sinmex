@@ -51,7 +51,8 @@ export function TablaCuentasPorCobrar({
                     onClick={() => alternar(c.clienteId)}
                     className="text-left font-medium hover:underline"
                   >
-                    {abierto ? "▾" : "▸"} {c.cliente} · {c.sucursalCodigo}
+                    <span aria-hidden="true">{abierto ? "▾" : "▸"}</span> {c.cliente}
+                    {c.clienteDadoDeBaja ? " (dado de baja)" : ""} · {c.sucursalCodigo}
                   </button>
                 </td>
                 <td className="py-1.5 text-right">{c.notas.length}</td>
@@ -74,7 +75,7 @@ export function TablaCuentasPorCobrar({
                           <th className="py-1 text-right">Saldo</th>
                           <th className="py-1">Status</th>
                           <th className="py-1">Vence</th>
-                          {puedeCobrar && <th className="py-1" />}
+                          {puedeCobrar && !c.clienteDadoDeBaja && <th className="py-1" />}
                         </tr>
                       </thead>
                       <tbody>
@@ -88,7 +89,7 @@ export function TablaCuentasPorCobrar({
                             <td className="py-1 text-right font-semibold">{formatearPesos(n.saldoCentavos)}</td>
                             <td className="py-1">{ETIQUETA_STATUS[n.status]}</td>
                             <td className={`py-1 ${n.diasAtraso > 0 ? "text-destructive" : ""}`}>{textoVence(n)}</td>
-                            {puedeCobrar && (
+                            {puedeCobrar && !c.clienteDadoDeBaja && (
                               <td className="py-1 text-right">
                                 <Link
                                   href={enlaceCobrar(c.clienteId, n.id, sucursal)}

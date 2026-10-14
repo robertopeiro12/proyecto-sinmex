@@ -24,6 +24,7 @@ const DATOS: CuentasPorCobrar = {
       clienteId: "c1",
       cliente: "Cobach XXI",
       sucursalCodigo: "TJ",
+      clienteDadoDeBaja: false,
       saldoCentavos: 29900,
       vencidoCentavos: 14950,
       notas: [
@@ -84,6 +85,20 @@ describe("definicionExcelCuentasPorCobrar", () => {
       { tipo: "total", celdas: ["Total", null, null, null, null, 349.5, 50.5, 299, null, null, null] },
     ]);
     expect(def.nombreArchivo).toBe("cuentas-por-cobrar-TJ-2026-10-14");
+  });
+
+  it("el total de Saldo suma las filas, no datos.totalCentavos", () => {
+    const def = definicionExcelCuentasPorCobrar({ ...DATOS, totalCentavos: 1 }, { sucursal: "TJ", soloVencidas: false });
+    expect(def.filas[def.filas.length - 1]).toEqual({
+      tipo: "total",
+      celdas: ["Total", null, null, null, null, 349.5, 50.5, 299, null, null, null],
+    });
+  });
+
+  it("un cliente dado de baja lleva (dado de baja) en la celda Cliente", () => {
+    const baja = { ...DATOS, clientes: [{ ...DATOS.clientes[0], clienteDadoDeBaja: true }] };
+    const def = definicionExcelCuentasPorCobrar(baja, { sucursal: "TJ", soloVencidas: false });
+    expect(def.filas[0].celdas[0]).toBe("Cobach XXI (dado de baja)");
   });
 
   it("Todas → archivo con 'todas'; solo vencidas lo dice en los filtros", () => {
