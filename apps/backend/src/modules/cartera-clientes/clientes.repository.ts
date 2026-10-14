@@ -569,14 +569,15 @@ export class ClientesRepository {
 
   /**
    * Un solo sentido (Prospecto -> Cliente, nunca al reves): el servicio ya
-   * verifico que el cliente existe y que `tipo` sigue siendo 'prospecto'
-   * antes de llamar aqui, asi que esto es un `UPDATE` liso, sin condicion.
+   * verifico `tipo` antes, pero otra conversion simultanea pudo ganar: el
+   * `UPDATE` exige `tipo = 'prospecto'` para no pisar la atribucion del
+   * ganador. Devuelve `null` si ya no era prospecto (0 filas).
    */
   async convertirACliente(
     id: string,
     usuarioId: string,
-  ): Promise<ClienteDetalle> {
-    await this.db
+  ): Promise<ClienteDetalle | null> {
+    const res = await this.db
       .updateTable('cliente')
       // T-51: la fecha de alta como cliente es la de la conversion, no la del prospecto.
       .set({
@@ -585,8 +586,10 @@ export class ClientesRepository {
         alta_cliente_usuario_id: usuarioId,
       })
       .where('id', '=', id)
-      .executeTakeFirstOrThrow();
+      .where('tipo', '=', 'prospecto')
+      .executeTakeFirst();
 
+    if (Number(res.numUpdatedRows) === 0) return null;
     return (await this.obtener(id))!;
   }
 

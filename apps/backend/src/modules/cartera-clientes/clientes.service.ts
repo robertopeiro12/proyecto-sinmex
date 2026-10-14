@@ -379,7 +379,10 @@ export class ClientesService {
     }
 
     try {
-      return await this.repo.convertirACliente(id, usuarioId);
+      const convertido = await this.repo.convertirACliente(id, usuarioId);
+      // Otra conversion simultanea ganó entre el `obtener` y el update.
+      if (!convertido) throw new ConflictException('Ya es cliente.');
+      return convertido;
     } catch (error) {
       // Red de seguridad para la carrera: otro usuario pudo vaciar uno de los
       // dos campos entre el `obtener` y el `update`. La base es quien decide.

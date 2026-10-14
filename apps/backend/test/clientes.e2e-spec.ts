@@ -897,6 +897,35 @@ describe('Clientes (e2e)', () => {
       ).toBeGreaterThanOrEqual(antes - 5000);
     });
 
+    it('T-51: dos conversiones simultaneas -> una 201, otra 409, y la atribucion es del ganador', async () => {
+      const id = await sembrarCliente(
+        `${PREFIJO} Convertir Carrera`,
+        idTijuana,
+        'prospecto',
+      );
+      const [a, b] = await Promise.all([
+        request(app.getHttpServer())
+          .post(`/clientes/${id}/convertir-a-cliente`)
+          .set('Cookie', cookieTijuana),
+        request(app.getHttpServer())
+          .post(`/clientes/${id}/convertir-a-cliente`)
+          .set('Cookie', cookieGeneral),
+      ]);
+      expect([a.status, b.status].sort()).toEqual([201, 409]);
+      const ganador = a.status === 201 ? LOGIN_TIJUANA : LOGIN_GENERAL;
+      const { id: usuarioGanador } = await db
+        .selectFrom('usuario')
+        .select('id')
+        .where('login', '=', ganador)
+        .executeTakeFirstOrThrow();
+      const fila = await db
+        .selectFrom('cliente')
+        .select('alta_cliente_usuario_id')
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow();
+      expect(fila.alta_cliente_usuario_id).toBe(usuarioGanador);
+    });
+
     it('convierte un prospecto en cliente', async () => {
       const id = await sembrarCliente(
         `${PREFIJO} Convertir`,
