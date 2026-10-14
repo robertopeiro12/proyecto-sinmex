@@ -141,7 +141,11 @@ type VentaEnReporte = {
 - **Columnas y orden:** Fecha · Folio · Cliente · # nota · Repartidor · Status · Factura · Semana · Cantidad · Promo ·
   Monto.
 - **Alineación:** texto a la izquierda; Semana, Cantidad, Promo y Monto a la derecha con `tabular-nums`. Todas las
-  celdas con el mismo relleno horizontal (`px-3`) para que ninguna columna quede pegada a otra.
+  celdas con el mismo relleno horizontal para que ninguna columna quede pegada a otra.
+- **Cabe en laptops (enmienda al implementar, 2026-10-14):** el portal se usa en computadora, así que la tabla debe
+  caber sin desplazarse desde **1366 px** de ventana. Quedó con letra de 13 px, `px-2`, anchos de columna medidos
+  sobre el texto real en el navegador y `min-w-[60rem]` (Cliente ≥ ~150 px); en ventanas más angostas se desplaza
+  dentro de su propia caja, nunca la página. Medido: 1366 cabe, 1280 se desplaza 34 px.
 - **Fila de subtotal por día** ("Total 13/10/2026"), en negrita con borde arriba: cantidad, promo y monto bajo sus
   columnas. **Fila TOTAL** al final, más marcada (borde doble o fondo).
 - **Encabezado fijo** (`sticky top-0`) al hacer scroll.
