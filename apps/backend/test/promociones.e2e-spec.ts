@@ -38,6 +38,9 @@ describe('Promociones del portal (e2e)', () => {
   const usuarioIds: string[] = [];
   const clienteIds: string[] = [];
   const promocionIds: string[] = [];
+  /** Catalogo propio (I1, I3): se borra en `afterAll`, despues de las promociones. */
+  const presentacionIds: string[] = [];
+  const productoIds: string[] = [];
   const notaIds: string[] = [];
   let cookieGeneral: string;
   let cookieTijuana: string;
@@ -88,6 +91,7 @@ describe('Promociones del portal (e2e)', () => {
 
   const sembrarCliente = async (
     sucursalId: string,
+    tipo: 'cliente' | 'prospecto' = 'cliente',
   ): Promise<{ id: string; nombre: string }> => {
     const lista = await db
       .selectFrom('lista_precio')
@@ -101,7 +105,7 @@ describe('Promociones del portal (e2e)', () => {
         nombre,
         domicilio: 'Calle 1',
         telefono: '6640000000',
-        tipo: 'cliente',
+        tipo,
         lista_precio_id: lista.id,
         sucursal_id: sucursalId,
       })
@@ -221,6 +225,15 @@ describe('Promociones del portal (e2e)', () => {
         .where('id', 'in', promocionIds)
         .execute();
     }
+    if (presentacionIds.length > 0) {
+      await db
+        .deleteFrom('presentacion')
+        .where('id', 'in', presentacionIds)
+        .execute();
+    }
+    if (productoIds.length > 0) {
+      await db.deleteFrom('producto').where('id', 'in', productoIds).execute();
+    }
     if (clienteIds.length > 0) {
       await db.deleteFrom('cliente').where('id', 'in', clienteIds).execute();
     }
@@ -244,26 +257,33 @@ describe('Promociones del portal (e2e)', () => {
     const res = await crear(cookieGeneral, regla({ sucursalId: 'todas' }));
     expect(res.status).toBe(201);
     const creadas = res.body as Promocion[];
-    // Otras suites (sucursales) crean y borran sucursales en paralelo: se
-    // comprueba lo que no depende de ellas (TJ y MX, una fila cada una) y las
-    // filas de sucursales ajenas se borran enseguida para no atorar su limpieza.
-    const codigos = creadas.map((p) => p.sucursalCodigo);
-    expect(new Set(codigos).size).toBe(codigos.length);
-    expect(codigos).toEqual(expect.arrayContaining(['TJ', 'MX']));
-    await db
-      .deleteFrom('promocion')
-      .where(
-        'id',
-        'in',
-        creadas.map((p) => p.id),
-      )
-      .where('sucursal_id', 'not in', [tjId, mxId])
-      .execute();
-    for (const p of creadas) {
-      expect(p.texto).toBe(
-        `Por cada 10 ${productoA.nombre}, 1 ${productoA.nombre} gratis`,
-      );
-      expect(p.activo).toBe(true);
+    // Otras suites (sucursales, reportes, cuentas por cobrar) crean y borran
+    // sucursales en paralelo: las filas de sucursales ajenas se borran antes de
+    // cualquier assert (y otra vez en el finally, por si acaso) para no atorar su
+    // limpieza por FK. Se comprueba lo que no depende de ellas: TJ y MX.
+    const borrarAjenas = () =>
+      db
+        .deleteFrom('promocion')
+        .where(
+          'id',
+          'in',
+          creadas.map((p) => p.id),
+        )
+        .where('sucursal_id', 'not in', [tjId, mxId])
+        .execute();
+    await borrarAjenas();
+    try {
+      const codigos = creadas.map((p) => p.sucursalCodigo);
+      expect(new Set(codigos).size).toBe(codigos.length);
+      expect(codigos).toEqual(expect.arrayContaining(['TJ', 'MX']));
+      for (const p of creadas) {
+        expect(p.texto).toBe(
+          `Por cada 10 ${productoA.nombre}, 1 ${productoA.nombre} gratis`,
+        );
+        expect(p.activo).toBe(true);
+      }
+    } finally {
+      await borrarAjenas();
     }
   });
 
@@ -434,7 +454,7 @@ describe('Promociones del portal (e2e)', () => {
     ).toBe(true);
   });
 
-  it('PATCH cambia la regla y desactiva; fuera de alcance es 403 y un id ausente 404', async () => {
+  it('PATCH cambia la regla y desactiva; fuera de alcance y un id ausente son 404', async () => {
     const creada = (await crear(cookieTijuana, regla())).body as Promocion[];
     const id = creada[0].id;
 
@@ -450,8 +470,171 @@ describe('Promociones del portal (e2e)', () => {
       `Por cada 6 ${productoA.nombre}, 1 ${productoA.nombre} gratis`,
     );
 
-    await editar(cookieMexicali, id, cuerpoEditar()).expect(403);
+    // 404 y no 403: no se confirma que la promocion exista en otra sucursal.
+    const ajena = await editar(cookieMexicali, id, cuerpoEditar());
+    expect(ajena.status).toBe(404);
+    expect(ajena.body).toMatchObject({ message: 'No existe esa promoción.' });
     await editar(cookieGeneral, UUID_AUSENTE, cuerpoEditar()).expect(404);
+  });
+
+  /** Un producto y una presentacion propios de la prueba, para darlos de baja o alargar sus nombres. */
+  const sembrarCatalogo = async (nombre: string, volumen: string) => {
+    const { id: productoId } = await db
+      .insertInto('producto')
+      .values({ nombre })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    productoIds.push(productoId);
+    const { id: presentacionId } = await db
+      .insertInto('presentacion')
+      .values({ producto_id: productoId, volumen })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    presentacionIds.push(presentacionId);
+    return { productoId, presentacionId };
+  };
+
+  it('se puede desactivar una promocion cuya presentacion se dio de baja', async () => {
+    const { presentacionId } = await sembrarCatalogo(
+      `ZZ e2e promo baja ${SUFIJO}`,
+      '750 ml',
+    );
+    const reglaPres = {
+      compraTipo: 'presentacion',
+      compraProductoId: undefined,
+      compraPresentacionId: presentacionId,
+    };
+    const creada = (await crear(cookieTijuana, regla(reglaPres)))
+      .body as Promocion[];
+    const id = creada[0].id;
+    await db
+      .updateTable('presentacion')
+      .set({ deleted_at: new Date() })
+      .where('id', '=', presentacionId)
+      .execute();
+
+    const res = await editar(
+      cookieTijuana,
+      id,
+      cuerpoEditar({ ...reglaPres, activo: false }),
+    );
+    expect(res.status).toBe(200);
+    expect((res.body as Promocion).activo).toBe(false);
+
+    // Lo que si cambia se sigue comprobando: apuntar a otra presentacion dada de baja es 404.
+    const otra = await sembrarCatalogo(
+      `ZZ e2e promo baja otra ${SUFIJO}`,
+      '1 L',
+    );
+    await db
+      .updateTable('presentacion')
+      .set({ deleted_at: new Date() })
+      .where('id', '=', otra.presentacionId)
+      .execute();
+    const aOtra = await editar(
+      cookieTijuana,
+      id,
+      cuerpoEditar({
+        ...reglaPres,
+        compraPresentacionId: otra.presentacionId,
+        activo: false,
+      }),
+    );
+    expect(aOtra.status).toBe(404);
+    expect(aOtra.body).toMatchObject({
+      message: 'No existe la presentación que se compra.',
+    });
+  });
+
+  it('una frase de mas de 200 caracteres es 400 y no deja fila', async () => {
+    // 80 caracteres de nombre y 40 de volumen: "Por cada 10 <nombre volumen>, 1 <...> gratis" pasa de 200.
+    const nombre = `ZZ e2e promo largo ${SUFIJO} `.padEnd(80, 'x');
+    const volumen = ''.padEnd(40, 'v');
+    const { presentacionId } = await sembrarCatalogo(nombre, volumen);
+    const res = await crear(
+      cookieGeneral,
+      regla({
+        sucursalId: tjId,
+        compraTipo: 'presentacion',
+        compraProductoId: undefined,
+        compraPresentacionId: presentacionId,
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      message:
+        'La frase de la promoción pasa de 200 caracteres; acorta el nombre del producto o la presentación.',
+    });
+    const filas = await db
+      .selectFrom('promocion')
+      .select('id')
+      .where('compra_presentacion_id', '=', presentacionId)
+      .execute();
+    expect(filas).toEqual([]);
+
+    // Editar una existente hacia esa presentacion tambien se rechaza y no cambia nada.
+    const corta = (await crear(cookieTijuana, regla())).body as Promocion[];
+    const editada = await editar(
+      cookieTijuana,
+      corta[0].id,
+      cuerpoEditar({
+        compraTipo: 'presentacion',
+        compraProductoId: undefined,
+        compraPresentacionId: presentacionId,
+      }),
+    );
+    expect(editada.status).toBe(400);
+    const intacta = await db
+      .selectFrom('promocion')
+      .select(['compra_tipo', 'compra_producto_id'])
+      .where('id', '=', corta[0].id)
+      .executeTakeFirstOrThrow();
+    expect(intacta).toEqual({
+      compra_tipo: 'producto',
+      compra_producto_id: productoA.id,
+    });
+  });
+
+  it('GET ?clienteId= de un prospecto sin primera venta incluye las de prospecto de su sucursal', async () => {
+    const prospecto = await sembrarCliente(tjId, 'prospecto');
+    const yaCliente = await sembrarCliente(tjId);
+    const bienvenida = (
+      await crear(cookieTijuana, {
+        audiencia: 'prospecto',
+        compraTipo: 'cualquiera',
+        compraCantidad: 0,
+        regaloTipo: 'producto',
+        regaloProductoId: productoA.id,
+        regaloCantidad: 1,
+        seRepite: false,
+      })
+    ).body as Promocion[];
+    const id = bienvenida[0].id;
+
+    const delProspecto = (
+      await listar(cookieTijuana, { clienteId: prospecto.id }).expect(200)
+    ).body as Promocion[];
+    expect(delProspecto.find((p) => p.id === id)).toMatchObject({
+      audiencia: 'prospecto',
+      texto: `Bienvenida al prospecto: 1 ${productoA.nombre} gratis en su primera venta`,
+      desplazada: false,
+    });
+
+    const delCliente = (
+      await listar(cookieTijuana, { clienteId: yaCliente.id }).expect(200)
+    ).body as Promocion[];
+    expect(delCliente.map((p) => p.id)).not.toContain(id);
+
+    // Con su primera venta ya registrada deja de tocarle.
+    await db
+      .updateTable('cliente')
+      .set({ primera_venta_en: new Date() })
+      .where('id', '=', prospecto.id)
+      .execute();
+    const despues = (
+      await listar(cookieTijuana, { clienteId: prospecto.id }).expect(200)
+    ).body as Promocion[];
+    expect(despues.map((p) => p.id)).not.toContain(id);
   });
 
   it('desactivar no borra la fila ni toca las notas que la usaron', async () => {

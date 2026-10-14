@@ -108,8 +108,8 @@ export class PromocionesRepository {
    * son necesarios porque compra y regalo pueden apuntar a productos y
    * presentaciones distintos.
    */
-  private base() {
-    return this.db
+  private base(trx?: Transaction<DB>) {
+    return (trx ?? this.db)
       .selectFrom('promocion as p')
       .innerJoin('sucursal as s', 's.id', 'p.sucursal_id')
       .leftJoin('cliente as c', 'c.id', 'p.cliente_id')
@@ -158,18 +158,24 @@ export class PromocionesRepository {
     return filas.map((f) => aPromocion(f));
   }
 
-  /** Las propias del cliente mas las de `todos` de su sucursal. */
+  /**
+   * Las propias del cliente mas las de `todos` de su sucursal; con
+   * `incluirProspecto` (un prospecto sin primera venta, D7), tambien las de
+   * `prospecto` de su sucursal.
+   */
   async deCliente(
     clienteId: string,
     sucursalId: string,
+    incluirProspecto: boolean,
   ): Promise<Omit<Promocion, 'texto'>[]> {
+    const audiencias = incluirProspecto ? ['todos', 'prospecto'] : ['todos'];
     const filas = await this.base()
       .where((eb) =>
         eb.or([
           eb('p.cliente_id', '=', clienteId),
           eb.and([
             eb('p.sucursal_id', '=', sucursalId),
-            eb('p.audiencia', '=', 'todos'),
+            eb('p.audiencia', 'in', audiencias),
           ]),
         ]),
       )
@@ -179,8 +185,12 @@ export class PromocionesRepository {
     return filas.map((f) => aPromocion(f));
   }
 
-  async buscar(id: string): Promise<Omit<Promocion, 'texto'> | undefined> {
-    const fila = await this.base().where('p.id', '=', id).executeTakeFirst();
+  /** Con `trx`, lee dentro de la transaccion (ve lo recien escrito, aun sin confirmar). */
+  async buscar(
+    id: string,
+    trx?: Transaction<DB>,
+  ): Promise<Omit<Promocion, 'texto'> | undefined> {
+    const fila = await this.base(trx).where('p.id', '=', id).executeTakeFirst();
     return fila ? aPromocion(fila) : undefined;
   }
 
@@ -215,8 +225,9 @@ export class PromocionesRepository {
     cambios: Omit<ReglaCompleta, 'audiencia' | 'clienteId'> & {
       activo: boolean;
     },
+    trx?: Transaction<DB>,
   ): Promise<void> {
-    await this.db
+    await (trx ?? this.db)
       .updateTable('promocion')
       .set({
         compra_tipo: cambios.compraTipo,
@@ -235,21 +246,40 @@ export class PromocionesRepository {
       .execute();
   }
 
-  /** El cliente, si vive: su sucursal (id y codigo) para el alcance y la fila. */
-  async clienteVivo(
-    id: string,
-  ): Promise<
-    { id: string; sucursalId: string; sucursalCodigo: string } | undefined
+  /**
+   * El cliente, si vive: su sucursal (id y codigo) para el alcance y la fila,
+   * y si es un prospecto sin primera venta (D7) para saber si le toca la bienvenida.
+   */
+  async clienteVivo(id: string): Promise<
+    | {
+        id: string;
+        sucursalId: string;
+        sucursalCodigo: string;
+        prospectoSinVenta: boolean;
+      }
+    | undefined
   > {
     const f = await this.db
       .selectFrom('cliente')
       .innerJoin('sucursal', 'sucursal.id', 'cliente.sucursal_id')
-      .select(['cliente.id', 'cliente.sucursal_id', 'sucursal.codigo'])
+      .select([
+        'cliente.id',
+        'cliente.sucursal_id',
+        'sucursal.codigo',
+        'cliente.tipo',
+        'cliente.primera_venta_en',
+      ])
       .where('cliente.id', '=', id)
       .where('cliente.deleted_at', 'is', null)
       .executeTakeFirst();
     return f
-      ? { id: f.id, sucursalId: f.sucursal_id, sucursalCodigo: f.codigo }
+      ? {
+          id: f.id,
+          sucursalId: f.sucursal_id,
+          sucursalCodigo: f.codigo,
+          prospectoSinVenta:
+            f.tipo === 'prospecto' && f.primera_venta_en === null,
+        }
       : undefined;
   }
 

@@ -1,11 +1,13 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import type { Transaction } from 'kysely';
+import type { DB } from '../../database/schema';
 import { resolverAlcance, type Alcance } from '../sucursales/alcance-sucursal';
+import { LARGO_MAX_TEXTO_PROMOCION } from '../ventas-cobranza/datos-venta';
 import type {
   CrearPromocionDto,
   EditarPromocionDto,
@@ -25,6 +27,12 @@ import {
 export const MOTIVO_PROMOCION_INEXISTENTE = 'No existe esa promoción.';
 export const MOTIVO_CLIENTE_INEXISTENTE = 'No existe ese cliente.';
 const MOTIVO_SUCURSAL_INEXISTENTE = 'No existe esa sucursal.';
+export const MOTIVO_TEXTO_LARGO = `La frase de la promoción pasa de ${LARGO_MAX_TEXTO_PROMOCION} caracteres; acorta el nombre del producto o la presentación.`;
+
+/** El id si cambio respecto a lo guardado; `null` si sigue igual (no se vuelve a comprobar). */
+function nuevo(id: string | null, guardado: string | null): string | null {
+  return id === guardado ? null : id;
+}
 
 function cobertura(p: Pick<Promocion, 'compraProductoCubierto'>): Cobertura {
   return p.compraProductoCubierto === null
@@ -41,7 +49,8 @@ export class PromocionesService {
    * `GET /promociones`. Sin `clienteId`: las generales (todos + prospecto) de la
    * sucursal pedida (un General sin sucursal: 400, la pantalla siempre manda
    * una). Con `clienteId`: las propias del cliente y las de `todos` de su
-   * sucursal, con `desplazada` (D5).
+   * sucursal (mas las de `prospecto` si es un prospecto sin primera venta, D7),
+   * con `desplazada` (D5).
    */
   async listar(
     usuarioId: string,
@@ -59,13 +68,17 @@ export class PromocionesService {
         throw new NotFoundException(MOTIVO_CLIENTE_INEXISTENTE);
       }
       const filas = (
-        await this.repo.deCliente(cliente.id, cliente.sucursalId)
+        await this.repo.deCliente(
+          cliente.id,
+          cliente.sucursalId,
+          cliente.prospectoSinVenta,
+        )
       ).map((f) => this.conTexto(f));
       const propias = filas.filter(
         (f) => f.audiencia === 'cliente' && f.activo,
       );
       return filas.map((f) =>
-        f.audiencia === 'todos'
+        f.audiencia !== 'cliente'
           ? {
               ...f,
               desplazada: propias.some((p) =>
@@ -128,13 +141,17 @@ export class PromocionesService {
       sucursales = [dto.sucursalId];
     }
 
-    const ids = await this.repo.enTransaccion((trx) =>
-      this.repo.crear(
+    return this.repo.enTransaccion(async (trx) => {
+      const ids = await this.repo.crear(
         sucursales.map((sucursalId) => ({ ...regla, sucursalId })),
         trx,
-      ),
-    );
-    return Promise.all(ids.map((id) => this.obtener(id)));
+      );
+      // Todas las filas llevan la misma regla y los mismos nombres: basta la primera.
+      const creadas: Promocion[] = [];
+      for (const id of ids) creadas.push(await this.obtener(id, trx));
+      if (creadas[0]) this.exigirTextoCorto(creadas[0]);
+      return creadas;
+    });
   }
 
   /** `PATCH /promociones/:id`: la regla completa y `activo`. Audiencia, cliente y sucursal no cambian. */
@@ -146,21 +163,51 @@ export class PromocionesService {
     const actual = await this.repo.buscar(id);
     if (!actual) throw new NotFoundException(MOTIVO_PROMOCION_INEXISTENTE);
     const alcance = await this.alcanceDe(usuarioId, null);
+    // 404 y no 403, como con los clientes: no se confirma que exista en otra sucursal.
     if (alcance.tipo === 'una' && alcance.codigo !== actual.sucursalCodigo) {
-      throw new ForbiddenException('No tienes acceso a esa sucursal.');
+      throw new NotFoundException(MOTIVO_PROMOCION_INEXISTENTE);
     }
     const regla = this.aRegla({
       ...dto,
       audiencia: actual.audiencia,
       clienteId: actual.clienteId ?? undefined,
     });
-    await this.exigirObjetivos(regla);
-    await this.repo.actualizar(id, { ...regla, activo: dto.activo });
-    return this.obtener(id);
+    // Solo se exige que exista lo que cambia: la promocion de una presentacion
+    // (o producto) dado de baja se tiene que poder desactivar mandando la misma regla.
+    await this.exigirObjetivos({
+      ...regla,
+      compraProductoId: nuevo(regla.compraProductoId, actual.compraProductoId),
+      compraPresentacionId: nuevo(
+        regla.compraPresentacionId,
+        actual.compraPresentacionId,
+      ),
+      regaloProductoId: nuevo(regla.regaloProductoId, actual.regaloProductoId),
+      regaloPresentacionId: nuevo(
+        regla.regaloPresentacionId,
+        actual.regaloPresentacionId,
+      ),
+    });
+    return this.repo.enTransaccion(async (trx) => {
+      await this.repo.actualizar(id, { ...regla, activo: dto.activo }, trx);
+      const editada = await this.obtener(id, trx);
+      this.exigirTextoCorto(editada);
+      return editada;
+    });
   }
 
-  private async obtener(id: string): Promise<Promocion> {
-    const fila = await this.repo.buscar(id);
+  /**
+   * La frase se congela en la nota (`venta_nota_promocion.promocion_texto`,
+   * maximo 200): una frase mas larga haria fallar la venta al grabarla en la
+   * tablet. Se rechaza aqui, dentro de la transaccion, y la escritura se deshace.
+   */
+  private exigirTextoCorto(p: Promocion): void {
+    if (p.texto.length > LARGO_MAX_TEXTO_PROMOCION) {
+      throw new BadRequestException(MOTIVO_TEXTO_LARGO);
+    }
+  }
+
+  private async obtener(id: string, trx?: Transaction<DB>): Promise<Promocion> {
+    const fila = await this.repo.buscar(id, trx);
     if (!fila) throw new NotFoundException(MOTIVO_PROMOCION_INEXISTENTE);
     return this.conTexto(fila);
   }
