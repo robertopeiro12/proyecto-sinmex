@@ -15,8 +15,10 @@ import type { CuentasPorCobrar } from './../src/modules/cuentas-cobrar-pagar/reg
 
 const SUFIJO = `${Date.now()}-${process.pid}`;
 const PASSWORD = 'contrasena-de-prueba';
-// Sucursal propia: los totales de QC son solo de esta suite.
-const CODIGO = 'QC';
+// Sucursal propia: los totales son solo de esta suite. El codigo ordena despues
+// de TJ a proposito: otras suites toman las primeras sucursales por codigo y
+// les cuelgan vendedores, y eso trababa el borrado de esta al final.
+const CODIGO = 'ZQ';
 
 /** `AAAA-MM-DD` menos `dias`, sin zona horaria de por medio. */
 function restarDias(iso: string, dias: number): string {
@@ -198,7 +200,7 @@ describe('Cuentas por Cobrar (e2e)', () => {
     await iniciarEnLocal(app);
     db = app.get<Database>(DB_CONNECTION);
 
-    // Una corrida que trono pudo dejar QC: se reusa.
+    // Una corrida que trono pudo dejar ZQ: se reusa.
     idQc = (
       await db
         .insertInto('sucursal')
@@ -305,13 +307,13 @@ describe('Cuentas por Cobrar (e2e)', () => {
       await pedir(cookieGeneral, { soloVencidas: 'quizas' }).expect(400);
     });
 
-    it('atado a QC: "todas" o nada le da QC; pedir TJ es 403 (Review Focus 5)', async () => {
+    it('atado a ZQ: "todas" o nada le da ZQ; pedir TJ es 403 (Review Focus 5)', async () => {
       const cli = await sembrarCliente('Alcance', 10);
       await sembrarNota(cli, '10.00', hoy);
       const cliTj = await sembrarCliente('Alcance TJ', 10, idTijuana);
       await sembrarNota(cliTj, '10.00', hoy);
 
-      for (const query of [{}, { sucursal: 'todas' }, { sucursal: 'qc' }]) {
+      for (const query of [{}, { sucursal: 'todas' }, { sucursal: 'zq' }]) {
         const r = (await pedir(cookieQc, query).expect(200))
           .body as CuentasPorCobrar;
         const ids = r.clientes.map((c) => c.clienteId);
