@@ -165,6 +165,17 @@ mensaje y ninguna petición, sesión cargando → "Cargando…".
 Navegador contra la base **local**: alta en el portal y conversión de un prospecto (para ver el Usuario), cliente dado
 de baja, nombres largos; medir a 1366 y 1440 px; Excel abierto; capturas.
 
+## 5.8 Enmienda (2026-10-14, Roberto): columna "Prospectó"
+
+Roberto pidió agregar quién **prospectó** al cliente en la tablet. Sale de la bitácora de sincronización, sin
+migración y también para prospectos viejos: `sync_operacion` con `tipo = 'prospecto'`, `entidad_tabla = 'cliente'` y
+`entidad_id = cliente.id` → `vendedor.nombre`. Si el cliente se dio de alta directo en el portal (no hay operación),
+"—". Va como última columna ("Prospectó") en pantalla y Excel; la tabla se vuelve a medir para que siga cabiendo desde
+1366 px.
+
+**Pendiente para producción:** si al arrancar `sinmex prod` se importan en bloque los clientes del Excel del cliente,
+esos quedarán sin Usuario ni Prospectó, salvo que la importación los ponga.
+
 ## 6. Vault (al terminar)
 
 - `Cliente.md`: campos nuevos (fecha y usuario de alta como cliente).
