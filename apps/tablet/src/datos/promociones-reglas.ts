@@ -78,9 +78,14 @@ export function cobertura(p: Promocion, catalogo: CatalogoPromociones): Cobertur
   return new Set(pres ? [pres.productoId] : []);
 }
 
-export function coincidenEnProducto(a: Cobertura, b: Cobertura): boolean {
-  if (a === 'todos' || b === 'todos') return true;
-  for (const p of a) if (b.has(p)) return true;
+/**
+ * D5 (asimetrica): una propia "cualquiera" desplaza a toda general; una propia de
+ * productos desplaza a la que comparte alguno, pero NO a la "de lo que sea".
+ */
+export function propiaDesplaza(propia: Cobertura, general: Cobertura): boolean {
+  if (general === 'todos') return propia === 'todos';
+  if (propia === 'todos') return true;
+  for (const p of propia) if (general.has(p)) return true;
   return false;
 }
 
@@ -89,8 +94,8 @@ export function coincidenEnProducto(a: Cobertura, b: Cobertura): boolean {
  * generales que ninguna propia desplaza, y la de bienvenida si es un prospecto
  * sin primera venta (ni en el servidor ni en esta tablet: la venta local aun
  * no subida no ha llenado `primera_venta_en`). D5 vale tambien para la
- * bienvenida: una propia activa que coincide en producto (o una propia
- * "cualquiera") la desplaza, igual que el portal la marca `desplazada`.
+ * bienvenida: una propia activa que cubre su producto (o una propia
+ * "cualquiera") la desplaza; la de bienvenida "cualquiera" solo la desplaza una propia "cualquiera", igual que el portal la marca `desplazada`.
  */
 export function promocionesAplicables({
   cliente,
@@ -107,7 +112,7 @@ export function promocionesAplicables({
   const activas = promociones.filter((p) => p.activo === 1);
   const propias = activas.filter((p) => p.audiencia === 'cliente' && p.cliente_id === cliente.id);
   const desplazada = (p: Promocion) =>
-    propias.some((q) => coincidenEnProducto(cobertura(q, catalogo), cobertura(p, catalogo)));
+    propias.some((q) => propiaDesplaza(cobertura(q, catalogo), cobertura(p, catalogo)));
   const generales = activas.filter((p) => p.audiencia === 'todos' && !desplazada(p));
   const esPrimeraVenta = cliente.tipo === 'prospecto' && cliente.primera_venta_en === null && !tieneVentas;
   const bienvenida = esPrimeraVenta ? activas.filter((p) => p.audiencia === 'prospecto' && !desplazada(p)) : [];

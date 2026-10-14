@@ -18,7 +18,7 @@ import {
   type Promocion,
 } from './promociones.repository';
 import {
-  coincidenEnProducto,
+  propiaDesplaza,
   problemaDeRegla,
   type Cobertura,
   type ReglaCompleta,
@@ -82,7 +82,7 @@ export class PromocionesService {
           ? {
               ...f,
               desplazada: propias.some((p) =>
-                coincidenEnProducto(cobertura(p), cobertura(f)),
+                propiaDesplaza(cobertura(p), cobertura(f)),
               ),
             }
           : f,

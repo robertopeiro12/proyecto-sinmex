@@ -319,7 +319,8 @@ usuario con sesion pasa.
     (D1, D3); regalo de M piezas del mismo, de un producto o de una presentación; `se_repite` (D2); audiencia
     `todos` / `cliente` / `prospecto`: `todos` y `prospecto` son de una sucursal, `cliente` sigue al cliente y se
     crea en su sucursal (D4); la de prospecto nunca se repite por bloques; la propia del cliente **desplaza** a la
-    general que coincide en algún producto y las demás se aplican **todas** (D5); el vendedor solo puede **quitar**
+    general que comparte su producto (una propia "de lo que sea" desplaza a toda general; una de un producto no desplaza
+    a la "de lo que sea") y las demás se aplican **todas** (D5); el vendedor solo puede **quitar**
     un regalo (D6); la de prospecto aplica solo en su primera venta y puede regalar sin compra (D7); sin fechas,
     baja lógica y nunca se borra (D8).
   - `venta_nota_promocion` guarda por nota qué promoción dio qué presentación, con la **frase congelada** (D12): si

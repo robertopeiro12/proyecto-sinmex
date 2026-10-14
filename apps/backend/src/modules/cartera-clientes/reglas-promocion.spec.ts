@@ -1,5 +1,5 @@
 import {
-  coincidenEnProducto,
+  propiaDesplaza,
   problemaDeRegla,
   type ReglaCompleta,
 } from './reglas-promocion';
@@ -103,13 +103,16 @@ describe('problemaDeRegla (T-74)', () => {
   });
 });
 
-describe('coincidenEnProducto (D5)', () => {
-  it('cualquiera coincide con todo', () => {
-    expect(coincidenEnProducto('todos', new Set(['p1']))).toBe(true);
-    expect(coincidenEnProducto(new Set(['p1']), 'todos')).toBe(true);
+describe('propiaDesplaza (D5)', () => {
+  it('una propia "de lo que sea" desplaza a toda general', () => {
+    expect(propiaDesplaza('todos', new Set(['p1']))).toBe(true);
+    expect(propiaDesplaza('todos', 'todos')).toBe(true);
   });
-  it('dos conjuntos coinciden si comparten un producto', () => {
-    expect(coincidenEnProducto(new Set(['p1']), new Set(['p1']))).toBe(true);
-    expect(coincidenEnProducto(new Set(['p1']), new Set(['p2']))).toBe(false);
+  it('una propia de un producto desplaza a la general que lo comparte', () => {
+    expect(propiaDesplaza(new Set(['p1']), new Set(['p1']))).toBe(true);
+    expect(propiaDesplaza(new Set(['p1']), new Set(['p2']))).toBe(false);
+  });
+  it('una propia de un producto NO desplaza a la general "de lo que sea"', () => {
+    expect(propiaDesplaza(new Set(['p1']), 'todos')).toBe(false);
   });
 });
