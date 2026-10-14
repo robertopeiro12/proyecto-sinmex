@@ -52,7 +52,7 @@ export function TablaClientesNuevos({ clientes }: { clientes: ClienteNuevo[] }) 
               <td className={TD}>{c.sucursalCodigo}</td>
               <Texto valor={c.tipoNegocio} />
               <Texto valor={c.listaPrecio} />
-              <td className={TD}>{c.telefono}</td>
+              <Texto valor={c.telefono} />
               <Texto valor={c.encargado} />
               <Texto valor={c.usuario} />
             </tr>
