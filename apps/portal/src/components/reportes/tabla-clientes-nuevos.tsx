@@ -29,7 +29,8 @@ export function TablaClientesNuevos({ clientes }: { clientes: ClienteNuevo[] }) 
           <col className="w-28" />
           <col className="w-28" />
           <col className="w-24" />
-          <col className="w-32" />
+          <col className="w-28" />
+          <col className="w-28" />
           <col className="w-28" />
         </colgroup>
         <thead className="text-left">
@@ -42,6 +43,7 @@ export function TablaClientesNuevos({ clientes }: { clientes: ClienteNuevo[] }) 
             <th className={TH}>Teléfono</th>
             <th className={TH}>Encargado</th>
             <th className={TH}>Usuario</th>
+            <th className={TH}>Prospectó</th>
           </tr>
         </thead>
         <tbody>
@@ -55,6 +57,7 @@ export function TablaClientesNuevos({ clientes }: { clientes: ClienteNuevo[] }) 
               <Texto valor={c.telefono} />
               <Texto valor={c.encargado} />
               <Texto valor={c.usuario} />
+              <Texto valor={c.prospecto} />
             </tr>
           ))}
         </tbody>

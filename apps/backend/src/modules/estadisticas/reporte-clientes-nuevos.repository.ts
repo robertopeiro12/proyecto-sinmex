@@ -32,6 +32,7 @@ export class ReporteClientesNuevosRepository {
       telefono: string;
       encargado: string | null;
       usuario: string | null;
+      prospecto: string | null;
       dado_de_baja: boolean;
     }>`
       select * from (
@@ -41,12 +42,23 @@ export class ReporteClientesNuevosRepository {
                c.nombre, s.codigo as sucursal_codigo,
                tn.nombre as tipo_negocio, lp.nombre as lista_precio,
                c.telefono, c.encargado, u.nombre as usuario,
+               p.nombre as prospecto,
                c.deleted_at is not null as dado_de_baja
           from cliente c
           join sucursal s on s.id = c.sucursal_id
           left join tipo_negocio tn on tn.id = c.tipo_negocio_id
           left join lista_precio lp on lp.id = c.lista_precio_id
           left join usuario u on u.id = c.alta_cliente_usuario_id
+          left join lateral (
+            select v.nombre
+              from sync_operacion so
+              join vendedor v on v.id = so.vendedor_id
+             where so.tipo = 'prospecto'
+               and so.entidad_tabla = 'cliente'
+               and so.entidad_id = c.id
+             order by so.recibido_en
+             limit 1
+          ) p on true
          where c.tipo = 'cliente'
            and (${f.codigoSucursal}::text is null or s.codigo = ${f.codigoSucursal}::text)
       ) x
@@ -63,6 +75,7 @@ export class ReporteClientesNuevosRepository {
       telefono: r.telefono,
       encargado: r.encargado,
       usuario: r.usuario,
+      prospecto: r.prospecto,
       dadoDeBaja: r.dado_de_baja,
     }));
   }

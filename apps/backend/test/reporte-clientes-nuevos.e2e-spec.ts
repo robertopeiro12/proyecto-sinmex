@@ -23,6 +23,7 @@ describe('Reporte de Clientes nuevos (e2e)', () => {
   let db: Database;
   const usuarioIds: string[] = [];
   const clienteIds: string[] = [];
+  let vendedorId: string;
   let idZn: string;
   let idTijuana: string;
   let altaId: string;
@@ -218,9 +219,43 @@ describe('Reporte de Clientes nuevos (e2e)', () => {
       creado: '2018-05-03T17:00:00Z',
       alta: '2018-05-03T17:00:00Z',
     });
+
+    // Quien prospecto a "convertido" en la tablet: su operacion en la bitacora.
+    vendedorId = (
+      await db
+        .insertInto('vendedor')
+        .values({
+          login: `e2e-cn-vend-${SUFIJO}`,
+          nombre: `Vendedor ${SUFIJO}`,
+          password_hash: 'x',
+          sucursal_id: idZn,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+    await db
+      .insertInto('sync_operacion')
+      .values({
+        tipo: 'prospecto',
+        entidad_tabla: 'cliente',
+        entidad_id: ids.convertido,
+        vendedor_id: vendedorId,
+        sucursal_id: idZn,
+        contrato: 1,
+        clave_idempotencia: `e2e-cn-${SUFIJO}`,
+        datos: '{}',
+        fecha_operacion: '2018-04-20',
+        ocurrido_en: new Date('2018-04-20T17:00:00Z'),
+      })
+      .execute();
   });
 
   afterAll(async () => {
+    await db
+      .deleteFrom('sync_operacion')
+      .where('vendedor_id', '=', vendedorId)
+      .execute();
+    await db.deleteFrom('vendedor').where('id', '=', vendedorId).execute();
     await db.deleteFrom('cliente').where('id', 'in', clienteIds).execute();
     await db
       .deleteFrom('sesion_refresh')
@@ -305,7 +340,9 @@ describe('Reporte de Clientes nuevos (e2e)', () => {
     expect(porId.get(ids.convertido)).toMatchObject({
       fechaAlta: '2018-05-10',
       usuario: `Lupita ${SUFIJO}`,
+      prospecto: `Vendedor ${SUFIJO}`,
     });
+    expect(porId.get(ids.conAlta)?.prospecto).toBeNull();
     expect(porId.get(ids.baja)).toMatchObject({ dadoDeBaja: true });
     expect(porId.get(ids.medianoche)?.fechaAlta).toBe('2018-05-31');
     expect(porId.get(ids.inicio)?.fechaAlta).toBe('2018-05-01');

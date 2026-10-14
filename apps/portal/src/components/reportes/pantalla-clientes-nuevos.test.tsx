@@ -25,8 +25,8 @@ const REPORTE: ReporteClientesNuevos = {
   desde: "2026-10-01",
   hasta: "2026-10-14",
   clientes: [
-    { id: "1", fechaAlta: "2026-10-03", nombre: "Cobach XXI", sucursalCodigo: "TJ", tipoNegocio: "Escuela", listaPrecio: "Lista 1", telefono: "6640000001", encargado: "Lupita", usuario: "Ana Admin", dadoDeBaja: false },
-    { id: "2", fechaAlta: "2026-10-09", nombre: "Abarrotes Cerrado", sucursalCodigo: "TJ", tipoNegocio: null, listaPrecio: null, telefono: "6640000002", encargado: null, usuario: null, dadoDeBaja: true },
+    { id: "1", fechaAlta: "2026-10-03", nombre: "Cobach XXI", sucursalCodigo: "TJ", tipoNegocio: "Escuela", listaPrecio: "Lista 1", telefono: "6640000001", encargado: "Lupita", usuario: "Ana Admin", prospecto: "Beto Vendedor", dadoDeBaja: false },
+    { id: "2", fechaAlta: "2026-10-09", nombre: "Abarrotes Cerrado", sucursalCodigo: "TJ", tipoNegocio: null, listaPrecio: null, telefono: "6640000002", encargado: null, usuario: null, prospecto: null, dadoDeBaja: true },
   ],
   total: 2,
 };
@@ -101,13 +101,14 @@ describe("PantallaClientesNuevos", () => {
     const fila1 = within(tabla).getByText("Cobach XXI").closest("tr")!;
     expect(within(fila1).getByText("03/10/2026")).toBeInTheDocument();
     expect(within(fila1).getByText("Ana Admin")).toBeInTheDocument();
+    expect(within(fila1).getByText("Beto Vendedor")).toBeInTheDocument();
     const fila2 = within(tabla).getByText("Abarrotes Cerrado (dado de baja)").closest("tr")!;
-    expect(within(fila2).getAllByText("—")).toHaveLength(4);
+    expect(within(fila2).getAllByText("—")).toHaveLength(5);
     expect(screen.getByText("Del 01/10/2026 al 14/10/2026 · Sucursal: Todas")).toBeInTheDocument();
     expect(screen.getByText("2 clientes nuevos")).toBeInTheDocument();
   });
 
-  it("tabla alineada: table-fixed, px-2 en toda celda, 8 columnas por fila", async () => {
+  it("tabla alineada: table-fixed, px-2 en toda celda, 9 columnas por fila", async () => {
     mockAuth([PERMISO]);
     const u = userEvent.setup();
     render(<PantallaClientesNuevos sucursal={null} />);
@@ -115,15 +116,15 @@ describe("PantallaClientesNuevos", () => {
     const tabla = await screen.findByRole("table", { name: "Clientes nuevos" });
     expect(tabla).toHaveClass("table-fixed");
     expect(tabla).toHaveClass("min-w-[57rem]");
-    expect(tabla.querySelectorAll("col")).toHaveLength(8);
+    expect(tabla.querySelectorAll("col")).toHaveLength(9);
     for (const celda of [...within(tabla).getAllByRole("cell"), ...within(tabla).getAllByRole("columnheader")]) {
       expect(celda).toHaveClass("px-2");
     }
     for (const fila of within(tabla).getAllByRole("row")) {
-      expect(fila.children).toHaveLength(8);
+      expect(fila.children).toHaveLength(9);
     }
     expect(within(tabla).getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
-      "Fecha de alta", "Cliente", "Sucursal", "Tipo de negocio", "Lista de precios", "Teléfono", "Encargado", "Usuario",
+      "Fecha de alta", "Cliente", "Sucursal", "Tipo de negocio", "Lista de precios", "Teléfono", "Encargado", "Usuario", "Prospectó",
     ]);
   });
 

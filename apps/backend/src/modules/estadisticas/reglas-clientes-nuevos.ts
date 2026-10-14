@@ -16,6 +16,8 @@ export interface ClienteNuevo {
   encargado: string | null;
   /** Usuario del portal que lo dio de alta; `null` = no se sabe. */
   usuario: string | null;
+  /** Vendedor que lo prospecto en la tablet; `null` = alta directa en el portal. */
+  prospecto: string | null;
   dadoDeBaja: boolean;
 }
 

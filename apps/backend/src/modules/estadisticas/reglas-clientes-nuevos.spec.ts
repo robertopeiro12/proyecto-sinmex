@@ -13,6 +13,7 @@ const c = (extra: Partial<ClienteNuevo>): ClienteNuevo => ({
   telefono: '664',
   encargado: null,
   usuario: null,
+  prospecto: null,
   dadoDeBaja: false,
   ...extra,
 });

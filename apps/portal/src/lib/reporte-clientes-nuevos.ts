@@ -19,6 +19,8 @@ export interface ClienteNuevo {
   encargado: string | null;
   /** `null` = no se sabe (clientes anteriores a T-51). */
   usuario: string | null;
+  /** Vendedor que lo prospectó en la tablet; `null` = alta directa en el portal. */
+  prospecto: string | null;
   dadoDeBaja: boolean;
 }
 
@@ -64,9 +66,10 @@ export function definicionExcelClientesNuevos(
       c.telefono,
       oGuion(c.encargado),
       oGuion(c.usuario),
+      oGuion(c.prospecto),
     ],
   }));
-  filas.push({ tipo: "total", celdas: [`Total: ${textoTotalClientes(r.total)}`, null, null, null, null, null, null, null] });
+  filas.push({ tipo: "total", celdas: [`Total: ${textoTotalClientes(r.total)}`, null, null, null, null, null, null, null, null] });
 
   return {
     titulo: "Clientes nuevos",
@@ -83,6 +86,7 @@ export function definicionExcelClientesNuevos(
       { encabezado: "Teléfono", tipo: "texto", ancho: 14 },
       { encabezado: "Encargado", tipo: "texto", ancho: 22 },
       { encabezado: "Usuario", tipo: "texto", ancho: 22 },
+      { encabezado: "Prospectó", tipo: "texto", ancho: 22 },
     ],
     filas,
     nombreArchivo: `clientes-nuevos_${r.desde}_a_${r.hasta}`,
