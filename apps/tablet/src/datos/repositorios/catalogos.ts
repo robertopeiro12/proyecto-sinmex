@@ -7,6 +7,7 @@ import type {
   FechaISO,
   NotaPendiente,
   Presentacion,
+  Promocion,
   Producto,
   Sucursal,
   TipoNegocio,
@@ -40,6 +41,8 @@ export interface SnapshotCatalogos {
    * (`aplicarSnapshotRutas`), no con el upsert generico.
    */
   rutas?: FilaRutaPull[];
+  /** T-74. Coleccion nueva del pull; baja como bandera. */
+  promociones?: Omit<Promocion, 'sincronizado_en'>[];
 }
 
 /** Una fila de la pantalla de venta: que se puede vender y a cuanto (T-16). */
@@ -77,14 +80,20 @@ const COLUMNAS = {
     'encargado',
     'tipo',
     'pct_comision',
-    'promocion',
     'plazo_credito_dias',
+    'primera_venta_en',
     'lat',
     'lng',
     'sucursal_id',
     'activo',
     // T-20 (D5): solo se muestra.
     'saldo_favor_centavos',
+  ],
+  promocion: [
+    'id', 'audiencia', 'cliente_id',
+    'compra_tipo', 'compra_producto_id', 'compra_presentacion_id', 'compra_cantidad',
+    'regalo_tipo', 'regalo_producto_id', 'regalo_presentacion_id', 'regalo_cantidad',
+    'se_repite', 'activo',
   ],
   cliente_precio: [
     'id',
@@ -253,6 +262,8 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
           // cliente nuevo puede venir en este mismo snapshot. Regla de fusion en
           // `rutas.ts`; omite filas de clientes que la tablet no tiene.
           aplicarSnapshotRutas(bd, snapshot.rutas, ahora) +
+          // T-74: sin llaves foraneas; va aqui por orden de lectura.
+          upsert(bd, 'promocion', COLUMNAS.promocion, snapshot.promociones, ahora) +
           upsert(bd, 'cliente_precio', COLUMNAS.cliente_precio, snapshot.precios, ahora) +
           upsert(bd, 'nota_pendiente', COLUMNAS.nota_pendiente, snapshot.notas, ahora)
         );

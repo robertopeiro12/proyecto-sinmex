@@ -70,18 +70,6 @@ export class CrearClienteDto {
   @Max(100, { message: 'El % de comisión no puede pasar de 100.' })
   pctComision?: number;
 
-  @IsIn(['ninguna', '10+1', '20+1'], {
-    message: 'La promoción debe ser "ninguna", "10+1" o "20+1".',
-  })
-  promocion!: 'ninguna' | '10+1' | '20+1';
-
-  // Siempre presente (puede ser []), no opcional: el formulario manda el
-  // estado completo (D4 del spec), igual que `presentaciones` en
-  // EditarProductoDto de T-10.
-  @IsArray()
-  @IsUUID(undefined, { each: true })
-  productosPromocion!: string[];
-
   @IsOptional()
   @IsInt()
   @Min(0, { message: 'El plazo de crédito no puede ser negativo.' })

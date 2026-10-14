@@ -27,6 +27,17 @@ export interface LineaVentaNormalizada {
   precioCentavos: number;
 }
 
+/** Un regalo de la nota (T-74, D12): que promocion dio cuantas piezas y con que frase. */
+export interface RegaloNormalizado {
+  /** uuid en minusculas. Puede no existir en el servidor (D13). */
+  promocionId: string;
+  /** uuid en minusculas; siempre una presentacion de las lineas. */
+  presentacionId: string;
+  cantidad: number;
+  /** La frase que vio el vendedor, congelada. */
+  texto: string;
+}
+
 /** La venta ya validada. El folio no va aqui: viaja en el `contexto` de `registrarVenta`. */
 export interface VentaNormalizada {
   clienteId: string;
@@ -36,6 +47,8 @@ export interface VentaNormalizada {
   factura: FacturaVenta;
   comentarios: string | null;
   lineas: LineaVentaNormalizada[];
+  /** T-74 (D13). Vacio si la tablet no mando regalos. */
+  regalos: RegaloNormalizado[];
 }
 
 export type ResultadoDatosVenta =
@@ -51,6 +64,8 @@ export type ResultadoDatosVenta =
 export const MAX_LINEAS_VENTA = 50;
 export const LARGO_MAX_NUM_NOTA = 30;
 export const LARGO_MAX_COMENTARIOS = 500;
+export const MAX_REGALOS_VENTA = 50;
+export const LARGO_MAX_TEXTO_PROMOCION = 200;
 
 /** `integer` de Postgres: lo que cabe en `cantidad` y `cantidad_promocion`. */
 const MAX_ENTERO_POSTGRES = 2_147_483_647;
@@ -233,6 +248,82 @@ export function normalizarDatosVenta(
     });
   }
 
+  // T-74 (D13): opcional y aditivo. Si viene, cada regalo apunta a una linea de
+  // esta venta y, por presentacion, las piezas regaladas suman exactamente
+  // `cantidad_promocion`: el servidor no decide si la promocion aplicaba (las
+  // piezas ya se entregaron), pero si que la nota se describe a si misma.
+  // Ausente (tablet anterior a T-74) la venta entra como antes, sin trazabilidad.
+  const regalos: RegaloNormalizado[] = [];
+  const regalosCrudos = datos.regalos;
+  if (regalosCrudos !== undefined && regalosCrudos !== null) {
+    if (!Array.isArray(regalosCrudos)) {
+      return invalido('regalos', 'debe ser una lista.');
+    }
+    if (regalosCrudos.length > MAX_REGALOS_VENTA) {
+      return invalido(
+        'regalos',
+        `no puede traer mas de ${MAX_REGALOS_VENTA} regalos.`,
+      );
+    }
+    for (const [indice, crudo] of (regalosCrudos as unknown[]).entries()) {
+      const campo = `regalos[${indice}]`;
+      if (typeof crudo !== 'object' || crudo === null || Array.isArray(crudo)) {
+        return invalido(campo, 'debe ser un objeto.');
+      }
+      const r = crudo as Record<string, unknown>;
+      if (typeof r.promocion_id !== 'string' || !RE_UUID.test(r.promocion_id)) {
+        return invalido(
+          `${campo}.promocion_id`,
+          'debe ser el identificador de una promocion.',
+        );
+      }
+      if (
+        typeof r.presentacion_id !== 'string' ||
+        !presentacionesVistas.has(r.presentacion_id.toLowerCase())
+      ) {
+        return invalido(
+          `${campo}.presentacion_id`,
+          'debe ser una presentacion de las lineas de esta venta.',
+        );
+      }
+      const cantidad = enteroEnRango(r.cantidad, MAX_ENTERO_POSTGRES);
+      if (cantidad === null || cantidad < 1) {
+        return invalido(
+          `${campo}.cantidad`,
+          'debe ser un entero de piezas mayor que 0.',
+        );
+      }
+      const texto = typeof r.texto === 'string' ? r.texto.trim() : '';
+      if (texto.length === 0 || texto.length > LARGO_MAX_TEXTO_PROMOCION) {
+        return invalido(
+          `${campo}.texto`,
+          `debe ser la frase de la promocion, de 1 a ${LARGO_MAX_TEXTO_PROMOCION} caracteres.`,
+        );
+      }
+      regalos.push({
+        promocionId: r.promocion_id.toLowerCase(),
+        presentacionId: r.presentacion_id.toLowerCase(),
+        cantidad,
+        texto,
+      });
+    }
+    const regaladas = new Map<string, number>();
+    for (const r of regalos) {
+      regaladas.set(
+        r.presentacionId,
+        (regaladas.get(r.presentacionId) ?? 0) + r.cantidad,
+      );
+    }
+    for (const l of lineas) {
+      if ((regaladas.get(l.presentacionId) ?? 0) !== l.cantidadPromocion) {
+        return invalido(
+          'regalos',
+          `las piezas regaladas de la presentacion ${l.presentacionId} no cuadran con cantidad_promocion.`,
+        );
+      }
+    }
+  }
+
   if (montoTotalCentavos(lineas) > MAX_CENTAVOS) {
     return invalido(
       'lineas',
@@ -242,6 +333,14 @@ export function normalizarDatosVenta(
 
   return {
     ok: true,
-    venta: { clienteId, numNota, contadoCredito, factura, comentarios, lineas },
+    venta: {
+      clienteId,
+      numNota,
+      contadoCredito,
+      factura,
+      comentarios,
+      lineas,
+      regalos,
+    },
   };
 }

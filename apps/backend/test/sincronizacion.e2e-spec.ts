@@ -699,7 +699,6 @@ describe('Sincronizacion pull/push (e2e)', () => {
           tipo: 'cliente',
           lista_precio_id: lista.id,
           pct_comision: '3.50',
-          promocion: '10+1',
           plazo_credito_dias: 7,
           lat: '32.514900',
           lng: '-117.038200',
@@ -1074,7 +1073,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
       expect(cliente?.pct_comision).toBe(3.5);
       expect(cliente?.lat).toBeCloseTo(32.5149, 4);
       expect(cliente?.lng).toBeCloseTo(-117.0382, 4);
-      expect(cliente?.promocion).toBe('10+1');
+      // T-74 (D14): sin notas vivas, no hay primera venta.
+      expect(cliente?.primera_venta_en).toBeNull();
       expect(cliente?.plazo_credito_dias).toBe(7);
       expect(cliente?.activo).toBe(1);
       // T-20: sin movimientos, el saldo a favor es 0.

@@ -383,6 +383,42 @@ describe('presentaciones para vender (T-16)', () => {
   });
 });
 
+describe('guardarSnapshot con las promociones (T-74)', () => {
+  it('escribe las promociones del snapshot y una baja llega como activo: 0', () => {
+    const { deps, catalogos } = conCatalogos();
+    const activos = () =>
+      deps.bd.getAllSync<{ id: string; activo: number; se_repite: number }>(
+        'select id, activo, se_repite from promocion order by id',
+      );
+    expect(activos()).toEqual([
+      { id: 'promo-general', activo: 1, se_repite: 1 },
+      { id: 'promo-prospecto', activo: 1, se_repite: 0 },
+    ]);
+
+    catalogos.guardarSnapshot({
+      promociones: [{ ...snapshotDePrueba().promociones![0]!, activo: 0 }],
+    });
+    expect(activos().map((p) => [p.id, p.activo])).toEqual([
+      ['promo-general', 0],
+      ['promo-prospecto', 1],
+    ]);
+  });
+
+  it('el cliente ya no escribe promocion y si primera_venta_en', () => {
+    const { deps, catalogos } = conCatalogos();
+    catalogos.guardarSnapshot({
+      clientes: [
+        { ...snapshotDePrueba().clientes![0]!, primera_venta_en: '2026-10-14T00:00:00.000Z' },
+      ],
+    });
+    expect(
+      deps.bd.getFirstSync('select promocion, primera_venta_en from cliente where id = $id', {
+        $id: 'cli-1',
+      }),
+    ).toEqual({ promocion: 'ninguna', primera_venta_en: '2026-10-14T00:00:00.000Z' });
+  });
+});
+
 describe('guardarSnapshot con la ruta del dia (T-37)', () => {
   const fila = {
     id: 'srv-1',

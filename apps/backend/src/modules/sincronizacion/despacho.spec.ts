@@ -163,6 +163,7 @@ describe('prepararProyeccion', () => {
               precioCentavos: 1350,
             },
           ],
+          regalos: [],
         },
       },
     });

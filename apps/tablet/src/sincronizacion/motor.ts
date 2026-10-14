@@ -53,6 +53,7 @@
  */
 import type { RepositorioCatalogos, SnapshotCatalogos } from '@/datos/repositorios/catalogos';
 import type { RepositorioSync } from '@/datos/repositorios/sync';
+import type { Promocion } from '@/datos/tipos';
 import { SinRedError } from '@/sesion/api';
 
 import {
@@ -471,6 +472,8 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
     clientes: c.clientes.map((cliente) => ({
       ...cliente,
       saldo_favor_centavos: cliente.saldo_favor_centavos ?? 0,
+      // T-74: un servidor anterior no lo manda.
+      primera_venta_en: cliente.primera_venta_en ?? null,
     })),
     // T-40: un servidor anterior a este ticket no manda la coleccion. Se pasa
     // `undefined` y `guardarSnapshot` simplemente no escribe nada de esa tabla;
@@ -486,6 +489,12 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
     // `undefined` y `guardarSnapshot` no escribe nada de la ruta: la tablet
     // funciona sin ruta asignada (D3).
     rutas: respuesta.rutas,
+    // T-74: un servidor anterior no manda la coleccion; `undefined` no escribe
+    // nada y la ficha dice "Sin promoción". `se_repite` llega booleano y SQLite
+    // guarda 0/1.
+    promociones: respuesta.promociones?.map(
+      (p): Omit<Promocion, 'sincronizado_en'> => ({ ...p, se_repite: p.se_repite ? 1 : 0 }),
+    ),
   };
 }
 

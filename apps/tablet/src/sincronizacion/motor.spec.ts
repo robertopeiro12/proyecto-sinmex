@@ -1107,3 +1107,32 @@ describe('motor de sincronizacion', () => {
     });
   });
 });
+
+describe('aSnapshot (T-74)', () => {
+  it('pasa las promociones con se_repite 0/1 y tolera que no vengan', () => {
+    const base = {
+      cliente_id: null,
+      compra_tipo: 'cualquiera' as const,
+      compra_producto_id: null,
+      compra_presentacion_id: null,
+      compra_cantidad: 0,
+      regalo_tipo: 'presentacion' as const,
+      regalo_producto_id: null,
+      regalo_presentacion_id: 'pre-2',
+      regalo_cantidad: 2,
+      audiencia: 'todos' as const,
+      activo: 1 as const,
+    };
+    const respuesta = respuestaPullDePrueba({
+      promociones: [
+        { ...base, id: 'p-1', se_repite: true },
+        { ...base, id: 'p-2', se_repite: false },
+      ],
+    });
+    expect(aSnapshot(respuesta).promociones?.map((p) => [p.id, p.se_repite])).toEqual([
+      ['p-1', 1],
+      ['p-2', 0],
+    ]);
+    expect(aSnapshot(respuestaPullDePrueba()).promociones).toBeUndefined();
+  });
+});

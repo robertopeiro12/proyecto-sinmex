@@ -3,6 +3,8 @@ import { useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import {
+  aplicarRegalos,
+  calcularRegalos,
   ErrorFolio,
   ErrorJornada,
   ErrorVenta,
@@ -10,6 +12,7 @@ import {
   LARGO_MAX_NUM_NOTA,
   leerCantidad,
   problemasDeCaptura,
+  problemasDeRegalos,
   resumirCaptura,
   type ContadoCredito,
   type FacturaVenta,
@@ -37,13 +40,13 @@ type Paso = 'captura' | 'revision' | 'grabada';
 /** Lo que el vendedor teclea en una fila, tal cual (texto). */
 interface CapturaTexto {
   cantidad: string;
-  promocion: string;
 }
 
 /**
  * Venta a un cliente (T-16): captura, revision y folio.
  *
- * El vendedor solo captura cantidades y piezas de promocion. Los precios se
+ * El vendedor solo captura cantidades; las piezas de promocion las calcula la
+ * app con las promociones del cliente (T-74, D6). Los precios se
  * **muestran** pero no se envian: `datos.ventas.registrar()` los pone desde el
  * catalogo local (D15), asi que un error de esta pantalla no puede grabar un
  * precio distinto al del catalogo.
@@ -74,6 +77,16 @@ export default function PantallaVenta() {
     return datos.catalogos.notasPendientesDe(clienteId);
   }, [datos, clienteId, versionCatalogos]);
 
+  const catalogoPromos = useMemo(() => {
+    void versionCatalogos;
+    return datos.promociones.catalogo();
+  }, [datos, versionCatalogos]);
+
+  const promociones = useMemo(() => {
+    void versionCatalogos;
+    return datos.promociones.aplicablesPara(clienteId);
+  }, [datos, clienteId, versionCatalogos]);
+
   const [paso, setPaso] = useState<Paso>('captura');
   const [capturas, setCapturas] = useState<Record<string, CapturaTexto>>({});
   const [contadoCredito, setContadoCredito] = useState<ContadoCredito | null>(null);
@@ -83,8 +96,14 @@ export default function PantallaVenta() {
   const [problemas, setProblemas] = useState<string[]>([]);
   const [grabada, setGrabada] = useState<Venta | null>(null);
   const [grabando, setGrabando] = useState(false);
+  /** Promociones cuyo regalo el cliente no quiso (D6). */
+  const [descartados, setDescartados] = useState<Set<string>>(new Set());
+  /** promocion_id -> presentacion elegida para un regalo de producto completo (D16). */
+  const [elecciones, setElecciones] = useState<Map<string, string>>(new Map());
 
-  const lineas = useMemo<LineaCaptura[]>(
+  // Todas las presentaciones van como base, aunque no se compren: un regalo a
+  // una presentacion que el vendedor no capturo necesita su linea.
+  const lineasBase = useMemo<LineaCaptura[]>(
     () =>
       presentaciones.map((p) => {
         const captura = capturas[p.presentacion_id];
@@ -94,14 +113,32 @@ export default function PantallaVenta() {
           // Una cantidad ilegible viaja como NaN para que `problemasDeCaptura`
           // la senale en su fila, en vez de volverse 0 en silencio.
           cantidad: leerCantidad(captura?.cantidad ?? '') ?? Number.NaN,
-          cantidadPromocion: leerCantidad(captura?.promocion ?? '') ?? Number.NaN,
+          cantidadPromocion: 0,
           precioCentavos: p.precio_centavos,
         };
       }),
     [presentaciones, capturas],
   );
 
+  // D6: los regalos los calcula la app sobre lo capturado; el vendedor solo
+  // puede quitarlos (`descartados`) o elegir presentacion (`elecciones`, D16).
+  const regalosPosibles = useMemo(
+    () => calcularRegalos(lineasBase, promociones, catalogoPromos, elecciones),
+    [lineasBase, promociones, catalogoPromos, elecciones],
+  );
+  const { lineas, regalos } = useMemo(
+    () => aplicarRegalos(lineasBase, regalosPosibles, descartados),
+    [lineasBase, regalosPosibles, descartados],
+  );
   const resumen = useMemo(() => resumirCaptura(lineas), [lineas]);
+  /** Piezas gratis por presentacion, para el texto bajo cada fila. */
+  const gratisPor = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of regalos) {
+      if (r.presentacionId) m.set(r.presentacionId, (m.get(r.presentacionId) ?? 0) + r.cantidad);
+    }
+    return m;
+  }, [regalos]);
 
   // Antes de este punto solo hay hooks: se llaman siempre, en el mismo orden.
   if (!cliente || !vendedor) {
@@ -120,15 +157,24 @@ export default function PantallaVenta() {
   const vendedorId = vendedor.id;
   const nombreCliente = cliente.nombre;
 
-  function capturar(presentacionId: string, campo: keyof CapturaTexto, valor: string) {
-    setCapturas((previas) => {
-      const actual = previas[presentacionId] ?? { cantidad: '', promocion: '' };
-      return { ...previas, [presentacionId]: { ...actual, [campo]: valor } };
+  function capturar(presentacionId: string, valor: string) {
+    setCapturas((previas) => ({ ...previas, [presentacionId]: { cantidad: valor } }));
+  }
+
+  function alternarDescarte(promocionId: string) {
+    setDescartados((previos) => {
+      const s = new Set(previos);
+      if (s.has(promocionId)) s.delete(promocionId);
+      else s.add(promocionId);
+      return s;
     });
   }
 
   function revisar() {
-    const encontrados = problemasDeCaptura({ numNota, contadoCredito, comentarios, lineas });
+    const encontrados = [
+      ...problemasDeCaptura({ numNota, contadoCredito, comentarios, lineas }),
+      ...problemasDeRegalos(regalos),
+    ];
     setProblemas(encontrados);
     if (encontrados.length === 0) setPaso('revision');
   }
@@ -154,6 +200,16 @@ export default function PantallaVenta() {
           cantidad: l.cantidad,
           cantidadPromocion: l.cantidadPromocion,
         })),
+        // Solo los regalos con presentacion: `revisar` ya exigio elegirla, y el
+        // repositorio vuelve a comprobar que cuadran con `cantidadPromocion`.
+        regalos: regalos
+          .filter((r) => r.presentacionId !== null)
+          .map((r) => ({
+            promocionId: r.promocionId,
+            presentacionId: r.presentacionId as string,
+            cantidad: r.cantidad,
+            texto: r.texto,
+          })),
       });
       setProblemas([]);
       setGrabada(venta);
@@ -267,6 +323,18 @@ export default function PantallaVenta() {
           ))}
         </Tarjeta>
 
+        {regalos.length > 0 ? (
+          <Tarjeta estado="listo" etiqueta="Regalos">
+            {regalos.map((r) => (
+              <Text key={r.promocionId} style={estilos.textoTarjeta}>
+                <Cifra valor={r.cantidad} /> ×{' '}
+                {r.presentacionId ? catalogoPromos.presentaciones.get(r.presentacionId)?.etiqueta : ''} ·{' '}
+                {r.texto}
+              </Text>
+            ))}
+          </Tarjeta>
+        ) : null}
+
         <Tarjeta estado="accion" etiqueta="Total">
           <Cifra valor={pesos(resumen.totalCentavos)} tamano="grande" />
           <Text style={estilos.textoSuave}>
@@ -311,6 +379,18 @@ export default function PantallaVenta() {
       titulo={`Venta · ${nombreCliente}`}
       subtitulo="Captura solo cantidades: el precio sale del catálogo del cliente."
     >
+      {/* T-74 (D11): la misma tarjeta de la ficha, para saber que esperar al capturar. */}
+      {promociones.length > 0 ? (
+        <Tarjeta estado="listo" etiqueta="Promociones">
+          {promociones.map((p) => (
+            <Text key={p.id} style={estilos.textoTarjeta}>
+              {p.texto}
+              {p.audiencia === 'prospecto' ? ' (primera venta)' : ''}
+            </Text>
+          ))}
+        </Tarjeta>
+      ) : null}
+
       {notas.length > 0 ? (
         <Tarjeta estado="pendiente" etiqueta="Notas pendientes (solo lectura)">
           {notas.map((n) => (
@@ -342,45 +422,86 @@ export default function PantallaVenta() {
         presentaciones.map((p) => {
           const captura = capturas[p.presentacion_id];
           const cantidad = leerCantidad(captura?.cantidad ?? '');
-          const promocion = leerCantidad(captura?.promocion ?? '');
           const sinPrecio = p.precio_centavos === null || p.precio_centavos === 0;
           return (
             <Tarjeta key={p.presentacion_id} etiqueta={`${p.producto_nombre} · ${p.volumen}`}>
               <Text style={estilos.textoSuave}>
                 {sinPrecio ? (
-                  'Sin precio para este cliente: solo promoción.'
+                  'Sin precio para este cliente: solo puede ir como regalo.'
                 ) : (
                   <>
                     Precio <Cifra valor={pesos(p.precio_centavos ?? 0)} tono="suave" />
                   </>
                 )}
               </Text>
-              <View style={estilos.filaAcciones}>
-                <View style={{ flex: 1 }}>
-                  <Campo
-                    etiqueta="Cantidad"
-                    cifra
-                    value={captura?.cantidad ?? ''}
-                    onChangeText={(v) => capturar(p.presentacion_id, 'cantidad', v)}
-                    invalido={cantidad === null || (sinPrecio && (cantidad ?? 0) > 0)}
-                    placeholder="0"
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Campo
-                    etiqueta="Promoción"
-                    cifra
-                    value={captura?.promocion ?? ''}
-                    onChangeText={(v) => capturar(p.presentacion_id, 'promocion', v)}
-                    invalido={promocion === null}
-                    placeholder="0"
-                  />
-                </View>
-              </View>
+              {gratisPor.has(p.presentacion_id) ? (
+                <Text style={estilos.textoTarjeta}>
+                  +<Cifra valor={gratisPor.get(p.presentacion_id) ?? 0} /> gratis por promoción
+                </Text>
+              ) : null}
+              {/* Sin precio no se vende (el servidor rechaza piezas a $0): el campo
+                  queda bloqueado y la fila solo recibe regalos. */}
+              <Campo
+                etiqueta="Cantidad"
+                cifra
+                value={captura?.cantidad ?? ''}
+                onChangeText={(v) => capturar(p.presentacion_id, v)}
+                editable={!sinPrecio}
+                invalido={cantidad === null || (sinPrecio && (cantidad ?? 0) > 0)}
+                placeholder="0"
+              />
             </Tarjeta>
           );
         })
       )}
+
+      {regalosPosibles.length > 0 ? (
+        <Tarjeta estado="listo" etiqueta="Regalos por promoción">
+          {regalosPosibles.map((r) => {
+            const descartado = descartados.has(r.promocionId);
+            const opciones = [...catalogoPromos.presentaciones].filter(
+              ([, pres]) => pres.productoId === r.productoId,
+            );
+            // D16: solo el regalo de producto completo con varias presentaciones se
+            // elige; la lista se queda visible para corregir un toque equivocado.
+            const elegible =
+              promociones.find((p) => p.id === r.promocionId)?.regalo_tipo === 'producto' &&
+              opciones.length > 1;
+            return (
+              <View key={r.promocionId} style={{ marginBottom: espacio.sm, gap: espacio.xs }}>
+                <Text
+                  style={[estilos.textoTarjeta, descartado && { textDecorationLine: 'line-through' }]}
+                >
+                  <Cifra valor={r.cantidad} /> gratis · {r.texto}
+                </Text>
+                {!descartado && elegible ? (
+                  <View style={estilos.rejilla}>
+                    {opciones.map(([id, pres]) => (
+                      <Opcion
+                        key={id}
+                        etiqueta={pres.etiqueta}
+                        seleccionada={id === r.presentacionId}
+                        onPress={() => setElecciones((previas) => new Map(previas).set(r.promocionId, id))}
+                      />
+                    ))}
+                  </View>
+                ) : null}
+                {!descartado && !elegible && r.presentacionId !== null ? (
+                  <Text style={estilos.textoSuave}>
+                    {catalogoPromos.presentaciones.get(r.presentacionId)?.etiqueta}
+                  </Text>
+                ) : null}
+                <Boton
+                  etiqueta={descartado ? 'Volver a dar' : 'El cliente no lo quiso'}
+                  tono="neutra"
+                  ancho="ajustado"
+                  onPress={() => alternarDescarte(r.promocionId)}
+                />
+              </View>
+            );
+          })}
+        </Tarjeta>
+      ) : null}
 
       <Text style={estilos.seccion}>Pago</Text>
       <View style={estilos.rejilla}>

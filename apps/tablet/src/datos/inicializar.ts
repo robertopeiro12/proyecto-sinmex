@@ -12,6 +12,7 @@ import {
   crearRepositorioProspectos,
   type RepositorioProspectos,
 } from './repositorios/prospectos';
+import { crearRepositorioPromociones, type RepositorioPromociones } from './repositorios/promociones';
 import { crearRepositorioSync, type RepositorioSync } from './repositorios/sync';
 import { crearRepositorioVentas, type RepositorioVentas } from './repositorios/ventas';
 import type { DepsRepositorio } from './repositorios/deps';
@@ -36,6 +37,8 @@ export interface CapaDatos {
   cobranzas: RepositorioCobranzas;
   /** La ruta del dia: lo que baja del portal y lo que agrega el vendedor (T-37). */
   rutas: RepositorioRutas;
+  /** Que promociones aplican hoy a un cliente y como se llaman (T-74). */
+  promociones: RepositorioPromociones;
   /** Version de esquema con la que quedo la base tras migrar. */
   versionEsquema: number;
 }
@@ -76,6 +79,7 @@ export function inicializarCapaDatos(): CapaDatos {
     // El MISMO `catalogos`: es quien publica la version que observa la
     // pantalla principal, y la ruta se aplica dentro de su `guardarSnapshot`.
     rutas: crearRepositorioRutas(deps, { catalogos }),
+    promociones: crearRepositorioPromociones(deps, { catalogos }),
     versionEsquema: versionFinal,
   };
 }

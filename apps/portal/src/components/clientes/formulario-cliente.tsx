@@ -11,9 +11,9 @@ import {
   crearCliente,
   editarCliente,
   type ClienteDetalle,
-  type Promocion,
 } from "@/lib/clientes";
 import { FotoProspecto } from "./foto-prospecto";
+import { PromocionesDeCliente } from "./promociones-de-cliente";
 import { SelectorTipoNegocio } from "./selector-tipo-negocio";
 
 interface Props {
@@ -23,7 +23,23 @@ interface Props {
   alCancelar: () => void;
 }
 
-export function FormularioCliente({ cliente, alGuardar, alCancelar }: Props) {
+export function FormularioCliente(props: Props) {
+  const { cliente } = props;
+  return (
+    <>
+      <FormularioDatosCliente {...props} />
+      {/*
+        Fuera del <form> de los datos: FormularioPromocion trae el suyo y un form dentro de otro
+        es HTML inválido. Solo al editar: en un alta no hay `id` con el que pedir sus promociones.
+      */}
+      {cliente !== null && (
+        <PromocionesDeCliente clienteId={cliente.id} clienteNombre={cliente.nombre} />
+      )}
+    </>
+  );
+}
+
+function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
   const { usuario } = useAuth();
   const esAlta = cliente === null;
 
@@ -41,10 +57,6 @@ export function FormularioCliente({ cliente, alGuardar, alCancelar }: Props) {
   const [listaPrecioId, setListaPrecioId] = useState(cliente?.listaPrecioId ?? "");
   const [pctComision, setPctComision] = useState(
     cliente?.pctComision?.toString() ?? "",
-  );
-  const [promocion, setPromocion] = useState<Promocion>(cliente?.promocion ?? "ninguna");
-  const [productosPromocion, setProductosPromocion] = useState<string[]>(
-    cliente?.productosPromocion ?? [],
   );
   const [plazoCreditoDias, setPlazoCreditoDias] = useState(
     cliente?.plazoCreditoDias?.toString() ?? "",
@@ -101,12 +113,6 @@ export function FormularioCliente({ cliente, alGuardar, alCancelar }: Props) {
     };
   }, []);
 
-  function alternarProducto(id: string) {
-    setProductosPromocion((previos) =>
-      previos.includes(id) ? previos.filter((p) => p !== id) : [...previos, id],
-    );
-  }
-
   function cambiarOverride(presentacionId: string, texto: string) {
     setOverrides((previos) => {
       const copia = new Map(previos);
@@ -155,8 +161,6 @@ export function FormularioCliente({ cliente, alGuardar, alCancelar }: Props) {
       tipoNegocioId: tipoNegocioId === "" ? undefined : tipoNegocioId,
       listaPrecioId,
       pctComision: pctComision.trim() === "" ? undefined : Number(pctComision),
-      promocion,
-      productosPromocion,
       plazoCreditoDias:
         plazoCreditoDias.trim() === "" ? undefined : Number(plazoCreditoDias),
       lat: lat.trim() === "" ? undefined : Number(lat),
@@ -388,25 +392,9 @@ export function FormularioCliente({ cliente, alGuardar, alCancelar }: Props) {
 
       <fieldset className="flex flex-col gap-4">
         <legend className="mb-1 text-sm font-semibold text-muted-foreground">
-          Promoción y crédito
+          Comisión y crédito
         </legend>
         <div className="flex flex-wrap gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="promocion" className="text-sm font-medium">
-              Promoción
-            </label>
-            <select
-              id="promocion"
-              disabled={enviando}
-              value={promocion}
-              onChange={(e) => setPromocion(e.target.value as Promocion)}
-              className="w-40 rounded-md border px-3 py-2 text-sm"
-            >
-              <option value="ninguna">Ninguna</option>
-              <option value="10+1">10+1</option>
-              <option value="20+1">20+1</option>
-            </select>
-          </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor="comision" className="text-sm font-medium">
               % Comisión
@@ -439,29 +427,6 @@ export function FormularioCliente({ cliente, alGuardar, alCancelar }: Props) {
             />
           </div>
         </div>
-        {promocion !== "ninguna" && (
-          <div>
-            <p className="mb-2 text-sm font-medium">Productos Jawa con promoción</p>
-            <div className="flex flex-wrap gap-3">
-              {productos.map((producto) => (
-                <label key={producto.id} className="flex items-center gap-1.5 text-sm">
-                  <input
-                    type="checkbox"
-                    disabled={enviando}
-                    checked={productosPromocion.includes(producto.id)}
-                    onChange={() => alternarProducto(producto.id)}
-                  />
-                  {producto.nombre}
-                  {!producto.activo && (
-                    <span className="text-xs text-muted-foreground">
-                      Inactivo
-                    </span>
-                  )}
-                </label>
-              ))}
-            </div>
-          </div>
-        )}
       </fieldset>
 
       <fieldset className="flex flex-col gap-4">

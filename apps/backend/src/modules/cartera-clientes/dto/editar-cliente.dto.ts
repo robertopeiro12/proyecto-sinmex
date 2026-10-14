@@ -2,7 +2,6 @@ import { Transform, Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
-  IsIn,
   IsInt,
   IsNumber,
   IsOptional,
@@ -74,15 +73,6 @@ export class EditarClienteDto {
   @Min(0, { message: 'El % de comisión no puede ser negativo.' })
   @Max(100, { message: 'El % de comisión no puede pasar de 100.' })
   pctComision?: number;
-
-  @IsIn(['ninguna', '10+1', '20+1'], {
-    message: 'La promoción debe ser "ninguna", "10+1" o "20+1".',
-  })
-  promocion!: 'ninguna' | '10+1' | '20+1';
-
-  @IsArray()
-  @IsUUID(undefined, { each: true })
-  productosPromocion!: string[];
 
   @IsOptional()
   @IsInt()

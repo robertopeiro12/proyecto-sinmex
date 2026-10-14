@@ -8,6 +8,9 @@ import { ListasPrecioController } from './listas-precio.controller';
 import { PreciosController } from './precios.controller';
 import { PreciosRepository } from './precios.repository';
 import { PreciosService } from './precios.service';
+import { PromocionesController } from './promociones.controller';
+import { PromocionesRepository } from './promociones.repository';
+import { PromocionesService } from './promociones.service';
 import { TiposNegocioController } from './tipos-negocio.controller';
 import { TiposNegocioRepository } from './tipos-negocio.repository';
 import { TiposNegocioService } from './tipos-negocio.service';
@@ -21,6 +24,8 @@ import { TiposNegocioService } from './tipos-negocio.service';
     ClientesController,
     ListasPrecioController,
     PreciosController,
+    // T-74 (D20): promociones por regla, del modulo cartera-clientes.
+    PromocionesController,
     TiposNegocioController,
   ],
   providers: [
@@ -32,6 +37,8 @@ import { TiposNegocioService } from './tipos-negocio.service';
     FotosRepository,
     PreciosService,
     PreciosRepository,
+    PromocionesService,
+    PromocionesRepository,
     TiposNegocioService,
     TiposNegocioRepository,
   ],

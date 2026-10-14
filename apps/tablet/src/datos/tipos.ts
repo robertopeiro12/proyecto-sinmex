@@ -83,7 +83,6 @@ export interface TipoNegocio {
 }
 
 export type TipoCliente = 'cliente' | 'prospecto';
-export type Promocion = 'ninguna' | '10+1' | '20+1';
 
 export interface Cliente {
   id: string;
@@ -99,8 +98,12 @@ export interface Cliente {
   encargado: string | null;
   tipo: TipoCliente;
   pct_comision: number | null;
-  promocion: Promocion;
   plazo_credito_dias: number | null;
+  /**
+   * T-74 (D14): cuando el servidor proyecto su primera nota (ISO), o `null`.
+   * Decide, con `tipo`, si le aplica la promocion de bienvenida al prospecto.
+   */
+  primera_venta_en: MomentoISO | null;
   lat: number | null;
   lng: number | null;
   sucursal_id: string;
@@ -293,6 +296,40 @@ export interface Ruta {
   clave: string | null;
   /** Cuando bajo. En un alta pendiente, cuando se capturo (va como `ocurrido_en`). */
   sincronizado_en: MomentoISO;
+}
+
+/* T-74: promociones por regla. Espejo de `PromocionPull`, con `se_repite` como entero de SQLite. */
+export type AudienciaPromocion = 'todos' | 'cliente' | 'prospecto';
+export type CompraPromocion = 'cualquiera' | 'producto' | 'presentacion';
+export type RegaloPromocion = 'mismo' | 'producto' | 'presentacion';
+
+export interface Promocion {
+  id: string;
+  audiencia: AudienciaPromocion;
+  cliente_id: string | null;
+  compra_tipo: CompraPromocion;
+  compra_producto_id: string | null;
+  compra_presentacion_id: string | null;
+  compra_cantidad: number;
+  regalo_tipo: RegaloPromocion;
+  regalo_producto_id: string | null;
+  regalo_presentacion_id: string | null;
+  regalo_cantidad: number;
+  se_repite: Booleano;
+  /** `0` = desactivada o dada de baja en el portal: se conserva, no se aplica. */
+  activo: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
+/** Un regalo de una venta local (T-74, D12). Sube en `datos.regalos`. */
+export interface VentaPromocion {
+  id: string;
+  venta_id: string;
+  promocion_id: string;
+  presentacion_id: string;
+  cantidad: number;
+  /** La frase tal como la vio el vendedor al vender. */
+  texto: string;
 }
 /**
  * Prospecto que el vendedor dio de alta en ruta (T-40).

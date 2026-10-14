@@ -311,6 +311,41 @@ usuario con sesion pasa.
     sin tope: una ruta futura debe bajar en el pull siguiente a su creación;
     la baja viaja con `activo: 0`. El orden que arrastra el vendedor **no sube** (vive en `ruta_orden_local`).
 
+- **Promociones (T-74).** Regla de regalo por compra, configurada en el portal (*Operación → Promociones*, permiso
+  `promocion.gestionar`; backend en `cartera-clientes/promociones.*`, `/promociones`) y **aplicada solo por la
+  tablet**. Reemplaza al enum `cliente.promocion` y a `cliente_promocion_producto`. Spec:
+  `docs/superpowers/specs/2026-10-14-t-74-promociones-por-regla-design.md`.
+  - Tabla `promocion`, una regla por fila: compra de N piezas de un producto, una presentación o lo que sea
+    (D1, D3); regalo de M piezas del mismo, de un producto o de una presentación; `se_repite` (D2); audiencia
+    `todos` / `cliente` / `prospecto`: `todos` y `prospecto` son de una sucursal, `cliente` sigue al cliente y se
+    crea en su sucursal (D4); la de prospecto nunca se repite por bloques; la propia del cliente **desplaza** a la
+    general que coincide en algún producto y las demás se aplican **todas** (D5); el vendedor solo puede **quitar**
+    un regalo (D6); la de prospecto aplica solo en su primera venta y puede regalar sin compra (D7); sin fechas,
+    baja lógica y nunca se borra (D8).
+  - `venta_nota_promocion` guarda por nota qué promoción dio qué presentación, con la **frase congelada** (D12): si
+    la oficina cambia la promoción después, la nota conserva su texto. `promocion_id` nulo si la tablet manda un id
+    desconocido.
+  - `cliente.primera_venta_en` lo marca `VentasService` al proyectar la primera nota viva del cliente (tablet o
+    portal) y **toca `updated_at`** para que el pull incremental lo baje (D14).
+  - **La regla de aplicación vive solo en la tablet** (`apps/tablet/src/datos/promociones-reglas.ts`, puro). El
+    servidor valida la **forma** de `regalos` (uuids, cantidades, sumas por presentación = `cantidad_promocion`) y
+    **no** la regla (D13): las piezas ya se entregaron.
+  - Editar una nota desde el portal **borra** sus filas de `venta_nota_promocion` (D15). El portal registra ventas
+    con piezas de promoción **libres** (D9); la regla ata a la app, no a la oficina.
+  - **La frase está copiada en tres sitios** (`cartera-clientes/promociones-texto.ts`, `promociones-reglas.ts` de la
+    tablet y `apps/portal/src/lib/promociones.ts`) y las tres comparten la misma tabla de casos en sus pruebas.
+    Si cambias una, cambia las tres.
+  - Pull: colección `promociones` de nivel superior (por sucursal del vendedor, baja como `activo: 0`); push:
+    `regalos` opcional en `venta`. `ClientePull.promocion` salió y entró `primera_venta_en` sin subir
+    `CONTRATO_ACTUAL` (D17). Migración local 012 (`promocion`, `venta_promocion`).
+  - **Pre-flight de D10 para quien empuje la migración a la nube:** la migración se niega a correr si hay datos del
+    esquema viejo. Antes: `select count(*) from cliente where promocion <> 'ninguna'; select count(*) from
+    cliente_promocion_producto;` → debe dar 0 y 0 (además del pre-flight del protocolo de arriba).
+  - **Orden del despliegue en `sinmex dev`:** después del `db push` de `20261014130000_promociones.sql`, las
+    tablets de demo se **reinstalan o se limpian** (`adb shell pm clear mx.jawa.tablet`) **antes** de que la oficina
+    dé de alta promociones. Una tablet que sincronizó entre el deploy y su propia actualización ya movió su cursor
+    de pull (`updated_at`, solo avanza) y no recibe las promociones creadas en esa ventana hasta que cada una se edite.
+
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
   - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).

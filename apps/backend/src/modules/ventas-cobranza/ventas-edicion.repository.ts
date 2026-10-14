@@ -233,6 +233,21 @@ export class VentasEdicionRepository {
     }
   }
 
+  /**
+   * D15 (T-74): la oficina tomo el control de las piezas de promocion; el
+   * detalle de la tablet ya no describe la nota. Borrado fisico: la fila no
+   * tiene `deleted_at` y una trazabilidad que ya no cuadra no sirve de nada.
+   */
+  async borrarRegalos(
+    ventaNotaId: string,
+    trx: Transaction<DB>,
+  ): Promise<void> {
+    await trx
+      .deleteFrom('venta_nota_promocion')
+      .where('venta_nota_id', '=', ventaNotaId)
+      .execute();
+  }
+
   /** El cobro automatico de contado vivo, si lo hay (§4.2 paso 8). */
   async borrarCobroContado(id: string, trx: Transaction<DB>): Promise<void> {
     await trx

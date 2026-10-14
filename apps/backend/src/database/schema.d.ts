@@ -43,7 +43,7 @@ export interface Cliente {
   nombre: string;
   pct_comision: Numeric | null;
   plazo_credito_dias: number | null;
-  promocion: Generated<string>;
+  primera_venta_en: Timestamp | null;
   sucursal_id: string;
   telefono: string;
   tipo: string;
@@ -60,15 +60,6 @@ export interface ClientePrecio {
   presentacion_id: string;
   updated_at: Generated<Timestamp>;
   vigente_desde: Timestamp;
-}
-
-export interface ClientePromocionProducto {
-  cliente_id: string;
-  created_at: Generated<Timestamp>;
-  deleted_at: Timestamp | null;
-  id: Generated<string>;
-  producto_id: string;
-  updated_at: Generated<Timestamp>;
 }
 
 export interface CobranzaAbono {
@@ -213,6 +204,26 @@ export interface Producto {
   deleted_at: Timestamp | null;
   id: Generated<string>;
   nombre: string;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface Promocion {
+  activo: Generated<boolean>;
+  audiencia: string;
+  cliente_id: string | null;
+  compra_cantidad: number;
+  compra_presentacion_id: string | null;
+  compra_producto_id: string | null;
+  compra_tipo: string;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  id: Generated<string>;
+  regalo_cantidad: number;
+  regalo_presentacion_id: string | null;
+  regalo_producto_id: string | null;
+  regalo_tipo: string;
+  se_repite: Generated<boolean>;
+  sucursal_id: string;
   updated_at: Generated<Timestamp>;
 }
 
@@ -388,10 +399,19 @@ export interface VentaNotaDetalle {
   venta_nota_id: string;
 }
 
+export interface VentaNotaPromocion {
+  cantidad: number;
+  created_at: Generated<Timestamp>;
+  id: Generated<string>;
+  presentacion_id: string;
+  promocion_id: string | null;
+  promocion_texto: string;
+  venta_nota_id: string;
+}
+
 export interface DB {
   cliente: Cliente;
   cliente_precio: ClientePrecio;
-  cliente_promocion_producto: ClientePromocionProducto;
   cobranza_abono: CobranzaAbono;
   cobro: Cobro;
   factura: Factura;
@@ -405,6 +425,7 @@ export interface DB {
   precio: Precio;
   presentacion: Presentacion;
   producto: Producto;
+  promocion: Promocion;
   ruta: Ruta;
   saldo_favor_movimiento: SaldoFavorMovimiento;
   sesion_refresh: SesionRefresh;
@@ -418,4 +439,5 @@ export interface DB {
   vendedor: Vendedor;
   venta_nota: VentaNota;
   venta_nota_detalle: VentaNotaDetalle;
+  venta_nota_promocion: VentaNotaPromocion;
 }

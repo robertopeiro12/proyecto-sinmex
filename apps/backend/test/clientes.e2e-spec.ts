@@ -29,18 +29,17 @@ interface ClienteDetalleRespuesta extends ClienteResumenRespuesta {
   /** `null` en un prospecto que nacio en la app (T-40). */
   listaPrecioId: string | null;
   pctComision: number | null;
-  promocion: 'ninguna' | '10+1' | '20+1';
   plazoCreditoDias: number | null;
   lat: number | null;
   lng: number | null;
   comentarios: string | null;
   sucursalId: string;
+  primeraVentaEn: string | null;
   overridesPrecio: {
     presentacionId: string;
     precio: number;
     vigenteDesde: string;
   }[];
-  productosPromocion: string[];
 }
 
 // El PID va pegado al timestamp porque Jest corre archivos en paralelo, en
@@ -134,7 +133,7 @@ describe('Clientes (e2e)', () => {
     return id;
   };
 
-  /** Producto con una presentacion, para las pruebas de override y promocion. */
+  /** Producto con una presentacion, para las pruebas de override. */
   const sembrarProducto = async (
     nombre: string,
   ): Promise<{ productoId: string; presentacionId: string }> => {
@@ -193,10 +192,6 @@ describe('Clientes (e2e)', () => {
 
   afterAll(async () => {
     if (clienteIds.length > 0) {
-      await db
-        .deleteFrom('cliente_promocion_producto')
-        .where('cliente_id', 'in', clienteIds)
-        .execute();
       await db
         .deleteFrom('cliente_precio')
         .where('cliente_id', 'in', clienteIds)
@@ -296,7 +291,7 @@ describe('Clientes (e2e)', () => {
   });
 
   describe('GET /clientes/:id', () => {
-    it('devuelve el detalle completo, con arreglos vacios si no hay overrides ni promocion', async () => {
+    it('devuelve el detalle completo, con arreglo vacio si no hay overrides', async () => {
       const id = await sembrarCliente(`${PREFIJO} Detalle`, idTijuana);
 
       const res = await request(app.getHttpServer())
@@ -308,8 +303,7 @@ describe('Clientes (e2e)', () => {
       expect(cliente.nombre).toBe(`${PREFIJO} Detalle`);
       expect(cliente.sucursalCodigo).toBe('TJ');
       expect(cliente.overridesPrecio).toEqual([]);
-      expect(cliente.productosPromocion).toEqual([]);
-      expect(cliente.promocion).toBe('ninguna');
+      expect(cliente.primeraVentaEn).toBeNull();
     });
 
     it('responde 404 para un id que no existe', async () => {
@@ -345,15 +339,13 @@ describe('Clientes (e2e)', () => {
       factura: false,
       tipo: 'cliente',
       listaPrecioId: listaId,
-      promocion: 'ninguna',
-      productosPromocion: [],
       overridesPrecio: [],
       vigenteDesde: '2026-08-31',
       ...extra,
     });
 
-    it('da de alta un cliente completo con override y promocion', async () => {
-      const { productoId, presentacionId } = await sembrarProducto(
+    it('da de alta un cliente completo con override', async () => {
+      const { presentacionId } = await sembrarProducto(
         `${PREFIJO} Producto Alta`,
       );
 
@@ -363,8 +355,6 @@ describe('Clientes (e2e)', () => {
         .send(
           datosMinimos({
             nombre: `${PREFIJO} Completo`,
-            promocion: '10+1',
-            productosPromocion: [productoId],
             overridesPrecio: [{ presentacionId, precio: 18.5 }],
           }),
         )
@@ -373,27 +363,9 @@ describe('Clientes (e2e)', () => {
       const cliente = res.body as ClienteDetalleRespuesta;
       clienteIds.push(cliente.id);
       expect(cliente.sucursalCodigo).toBe('TJ');
-      expect(cliente.promocion).toBe('10+1');
-      expect(cliente.productosPromocion).toEqual([productoId]);
       expect(cliente.overridesPrecio).toEqual([
         { presentacionId, precio: 18.5, vigenteDesde: '2026-08-31' },
       ]);
-    });
-
-    it('promocion "ninguna" ignora productosPromocion aunque se manden ids (D4)', async () => {
-      const { productoId } = await sembrarProducto(
-        `${PREFIJO} Producto Ignorado`,
-      );
-
-      const res = await request(app.getHttpServer())
-        .post('/clientes')
-        .set('Cookie', cookieTijuana)
-        .send(datosMinimos({ productosPromocion: [productoId] }))
-        .expect(201);
-
-      const cliente = res.body as ClienteDetalleRespuesta;
-      clienteIds.push(cliente.id);
-      expect(cliente.productosPromocion).toEqual([]);
     });
 
     it('un usuario atado a TJ no puede mandar sucursalId de MX: se ignora, no 403', async () => {
@@ -528,8 +500,6 @@ describe('Clientes (e2e)', () => {
       encargado: 'Encargado editado',
       factura: true,
       listaPrecioId: listaId,
-      promocion: 'ninguna',
-      productosPromocion: [],
       overridesPrecio: [],
       vigenteDesde: '2026-08-31',
       ...extra,
@@ -695,34 +665,6 @@ describe('Clientes (e2e)', () => {
       expect((detalle.body as ClienteDetalleRespuesta).overridesPrecio).toEqual(
         [],
       );
-    });
-
-    it('quitar y volver a agregar el mismo producto de promocion no revienta con 23505', async () => {
-      const id = await sembrarCliente(`${PREFIJO} Promo Vuelta`, idTijuana);
-      const { productoId } = await sembrarProducto(
-        `${PREFIJO} Producto Vuelta`,
-      );
-
-      await request(app.getHttpServer())
-        .patch(`/clientes/${id}`)
-        .set('Cookie', cookieTijuana)
-        .send(cambios({ promocion: '10+1', productosPromocion: [productoId] }))
-        .expect(200);
-
-      await request(app.getHttpServer())
-        .patch(`/clientes/${id}`)
-        .set('Cookie', cookieTijuana)
-        .send(cambios({ promocion: 'ninguna', productosPromocion: [] }))
-        .expect(200);
-
-      const res = await request(app.getHttpServer())
-        .patch(`/clientes/${id}`)
-        .set('Cookie', cookieTijuana)
-        .send(cambios({ promocion: '20+1', productosPromocion: [productoId] }))
-        .expect(200);
-
-      const cliente = res.body as ClienteDetalleRespuesta;
-      expect(cliente.productosPromocion).toEqual([productoId]);
     });
 
     it('quitar y volver a agregar el mismo override el mismo dia revive la fila, no la deja invisible', async () => {

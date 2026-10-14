@@ -51,8 +51,19 @@ export { crearRepositorioVentas, ErrorVenta } from './repositorios/ventas';
 export type {
   DatosRegistroVenta,
   LineaRegistroVenta,
+  RegaloRegistroVenta,
   RepositorioVentas,
 } from './repositorios/ventas';
+export { crearRepositorioPromociones } from './repositorios/promociones';
+export type { RepositorioPromociones } from './repositorios/promociones';
+export {
+  aplicarRegalos,
+  calcularRegalos,
+  problemasDeRegalos,
+  promocionesAplicables,
+  textoPromocion,
+} from './promociones-reglas';
+export type { CatalogoPromociones, PromocionAplicable, Regalo } from './promociones-reglas';
 export {
   LARGO_MAX_COMENTARIOS,
   LARGO_MAX_NUM_NOTA,

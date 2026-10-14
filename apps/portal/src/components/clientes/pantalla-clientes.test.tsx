@@ -9,6 +9,7 @@ import * as tiposNegocioLib from "@/lib/tipos-negocio";
 import * as productosLib from "@/lib/productos";
 import * as preciosLib from "@/lib/precios";
 import * as sucursalesLib from "@/lib/sucursales";
+import * as promocionesLib from "@/lib/promociones";
 import { PantallaClientes } from "./pantalla-clientes";
 
 // Mismo limite que pantalla-sucursales.test.tsx (T-65): se mockea la capa de
@@ -21,6 +22,7 @@ vi.mock("@/lib/tipos-negocio");
 vi.mock("@/lib/productos");
 vi.mock("@/lib/precios");
 vi.mock("@/lib/sucursales");
+vi.mock("@/lib/promociones");
 vi.mock("@/components/auth/auth-provider");
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -74,7 +76,6 @@ const DETALLE: ClienteDetalle = {
   tipoNegocioId: null,
   listaPrecioId: "lista-1",
   pctComision: null,
-  promocion: "ninguna",
   plazoCreditoDias: null,
   lat: null,
   lng: null,
@@ -86,7 +87,7 @@ const DETALLE: ClienteDetalle = {
   tieneFoto: false,
   fotoSubidaEn: null,
   overridesPrecio: [],
-  productosPromocion: [],
+  primeraVentaEn: null,
 };
 
 describe("PantallaClientes", () => {
@@ -98,6 +99,7 @@ describe("PantallaClientes", () => {
       { id: "lista-1", nombre: "Lista 1" },
     ]);
     vi.mocked(sucursalesLib.listarSucursales).mockResolvedValue([]);
+    vi.mocked(promocionesLib.listarPromociones).mockResolvedValue([]);
   });
 
   it("muestra los clientes cargados y permite dar de alta cuando el usuario puede gestionar", async () => {
@@ -160,7 +162,8 @@ describe("PantallaClientes", () => {
     expect(payload.nombre).toBe("Abarrotes Lupita");
     expect(payload.listaPrecioId).toBe("lista-1");
     expect(payload.overridesPrecio).toEqual([]);
-    expect(payload.productosPromocion).toEqual([]);
+    expect(payload).not.toHaveProperty("promocion");
+    expect(payload).not.toHaveProperty("productosPromocion");
 
     expect(await screen.findByText("Abarrotes Lupita")).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Nuevo cliente" })).not.toBeInTheDocument();
@@ -231,6 +234,28 @@ describe("PantallaClientes", () => {
     await usuario.click(screen.getByRole("button", { name: "Editar" }));
     await waitFor(() => expect(obtenerCliente).toHaveBeenCalledWith("1"));
     expect(await screen.findByLabelText("Encargado")).not.toBeRequired();
+  });
+
+  it("al editar un cliente se ve el bloque Promociones de este cliente y ya no el enum; al dar de alta no", async () => {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    listarClientes.mockResolvedValue([RESUMEN]);
+    obtenerCliente.mockResolvedValue(DETALLE);
+
+    render(<PantallaClientes sucursal={null} tipo="todos" />);
+    await screen.findByText("Abarrotes Lupita");
+
+    await usuario.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    await screen.findByLabelText("Lista de precios");
+    expect(screen.queryByText("Promociones de este cliente")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Promoción")).not.toBeInTheDocument();
+    await usuario.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    await usuario.click(screen.getByRole("button", { name: "Editar" }));
+    expect(await screen.findByText("Promociones de este cliente")).toBeInTheDocument();
+    expect(promocionesLib.listarPromociones).toHaveBeenCalledWith({ clienteId: "1" });
+    expect(screen.queryByLabelText("Promoción")).not.toBeInTheDocument();
+    expect(screen.queryByText("Productos Jawa con promoción")).not.toBeInTheDocument();
   });
 
   it("da de baja un cliente tras confirmar, y recarga la lista", async () => {

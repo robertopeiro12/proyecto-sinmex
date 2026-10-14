@@ -85,12 +85,12 @@ describe('problemasDeCaptura', () => {
   it('sin nada capturado no se puede grabar', () => {
     expect(
       problemasDeCaptura(captura({ lineas: [linea({ cantidad: 0, cantidadPromocion: 0 })] })),
-    ).toContain('Captura al menos una cantidad o una pieza de promoción.');
+    ).toContain('Captura al menos una cantidad.');
   });
 
   it('vender una presentacion sin precio para el cliente no se puede (D15)', () => {
     expect(problemasDeCaptura(captura({ lineas: [linea({ precioCentavos: null })] }))).toEqual([
-      'Jamaica 1 L no tiene precio para este cliente: solo se puede regalar como promoción.',
+      'Jamaica 1 L no tiene precio para este cliente: solo puede ir como regalo de promoción.',
     ]);
   });
 

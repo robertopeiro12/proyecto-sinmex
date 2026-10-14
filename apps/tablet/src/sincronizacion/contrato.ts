@@ -220,7 +220,16 @@ export interface ClientePull extends FilaSincronizable {
   encargado: string | null;
   tipo: 'cliente' | 'prospecto';
   pct_comision: number | null;
-  promocion: 'ninguna' | '10+1' | '20+1';
+  /**
+   * T-74 (D14): cuando el servidor proyecto la primera nota viva de este
+   * cliente (ISO), o `null` si nunca le han vendido. La tablet lo usa para la
+   * promocion de prospecto, que solo aplica en su primera venta.
+   *
+   * > `promocion` ('ninguna' | '10+1' | '20+1') se QUITO aqui sin subir el
+   * > contrato (D17): mismo criterio que `domicilio` arriba. Las promociones
+   * > ahora bajan en la coleccion `promociones` (T-74).
+   */
+  primera_venta_en: string | null;
   plazo_credito_dias: number | null;
   lat: number | null;
   lng: number | null;
@@ -275,6 +284,54 @@ export interface RutaPull extends FilaSincronizable {
   origen: 'oficina' | 'vendedor';
 }
 
+/* ------------------------------------------------------------------ */
+/* T-74: promociones por regla                                         */
+/* ------------------------------------------------------------------ */
+
+export type AudienciaPromocion = 'todos' | 'cliente' | 'prospecto';
+export type CompraPromocion = 'cualquiera' | 'producto' | 'presentacion';
+export type RegaloPromocion = 'mismo' | 'producto' | 'presentacion';
+
+/**
+ * Una regla de promocion (T-74, D1): por la compra de `compra_cantidad` piezas
+ * del objetivo de `compra_*` se regalan `regalo_cantidad` piezas del objetivo
+ * de `regalo_*`. La regla de APLICACION vive en la tablet
+ * (`src/datos/promociones-reglas.ts`); el servidor solo la transporta.
+ *
+ * - `audiencia`: `todos` (los clientes de la sucursal), `cliente` (uno:
+ *   `cliente_id`) o `prospecto` (solo en la primera venta del prospecto, D7).
+ * - `compra_cantidad` puede ser 0 solo con `prospecto` (regalo sin compra).
+ * - `regalo_tipo = 'mismo'` nunca viene con `compra_tipo = 'cualquiera'`.
+ * - `activo: 0` = desactivada o dada de baja: la tablet la conserva (una venta
+ *   local puede referenciarla) pero no la aplica.
+ */
+export interface PromocionPull extends FilaSincronizable {
+  audiencia: AudienciaPromocion;
+  cliente_id: string | null;
+  compra_tipo: CompraPromocion;
+  compra_producto_id: string | null;
+  compra_presentacion_id: string | null;
+  compra_cantidad: number;
+  regalo_tipo: RegaloPromocion;
+  regalo_producto_id: string | null;
+  regalo_presentacion_id: string | null;
+  regalo_cantidad: number;
+  se_repite: boolean;
+}
+
+/**
+ * Un regalo de una venta (T-74, D12): que promocion dio cuantas piezas de que
+ * presentacion. `texto` es la frase de la promocion tal como la vio el
+ * vendedor; el servidor la congela en la nota aunque la oficina edite la
+ * promocion despues.
+ */
+export type RegaloVenta = {
+  promocion_id: string;
+  presentacion_id: string;
+  cantidad: number;
+  texto: string;
+};
+
 export interface RespuestaPull {
   contrato: number;
   servidor_en: string;
@@ -318,6 +375,15 @@ export interface RespuestaPull {
    * sincronizacion. Sin la coleccion, la tablet funciona sin ruta asignada (D3).
    */
   rutas?: RutaPull[];
+  /**
+   * T-74. Las filas de `promocion` cuyo `sucursal_id` es la sucursal del
+   * vendedor: las de `todos`, las de `prospecto` y las de `cliente` creadas en
+   * esa sucursal (se crean en la del cliente). El filtro es la columna
+   * `sucursal_id` de la promocion, no la cartera de clientes. Opcional: un
+   * servidor anterior a este ticket no la manda y la tablet trabaja sin
+   * promociones (la ficha dice "Sin promoción").
+   */
+  promociones?: PromocionPull[];
 }
 
 /**
@@ -398,6 +464,14 @@ export type DatosVenta = {
   comentarios: string | null;
   /** De 1 a 50, sin presentacion repetida. */
   lineas: LineaVenta[];
+  /**
+   * T-74 (D13). Opcional y aditivo: ausente en una tablet anterior y en la
+   * venta del portal (D9). Si viene, por cada presentacion la suma de
+   * `cantidad` de sus regalos tiene que ser igual a `cantidad_promocion` de la
+   * linea; si no cuadra es `datos-invalidos`. El servidor NO rechaza por la
+   * regla de negocio: las piezas ya se entregaron en la calle.
+   */
+  regalos?: RegaloVenta[];
 };
 
 /**
