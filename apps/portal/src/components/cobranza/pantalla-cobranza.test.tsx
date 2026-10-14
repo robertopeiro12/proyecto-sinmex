@@ -86,4 +86,22 @@ describe("PantallaCobranza", () => {
     expect(screen.getByLabelText("Marcar TJ240402OF01")).toBeChecked();
     expect(screen.getByLabelText("Marcar TJ240401OF01")).not.toBeChecked();
   });
+
+  it("con clienteInicial abre directo ese cliente con su nota, y Volver va al buscador", async () => {
+    mockAuth(() => true);
+    const usuario = userEvent.setup();
+    render(<PantallaCobranza sucursal={null} clienteInicial="c1" notaInicial="n1" />);
+    expect(await screen.findByText("Cobranza · Cobach XXI")).toBeInTheDocument();
+    expect(porCobrarDeCliente).toHaveBeenCalledWith("c1");
+    expect(listarClientes).not.toHaveBeenCalled();
+    await usuario.click(screen.getByRole("button", { name: /Volver/ }));
+    expect(await screen.findByText("Buscar por fecha")).toBeInTheDocument();
+  });
+
+  it("sin cobranza.registrar no abre al cliente aunque venga en la dirección", () => {
+    mockAuth(() => false);
+    render(<PantallaCobranza sucursal={null} clienteInicial="c1" notaInicial="n1" />);
+    expect(screen.getByText("No tienes permiso para registrar cobranza")).toBeInTheDocument();
+    expect(porCobrarDeCliente).not.toHaveBeenCalled();
+  });
 });

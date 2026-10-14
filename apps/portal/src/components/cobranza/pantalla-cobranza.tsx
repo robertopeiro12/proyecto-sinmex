@@ -8,10 +8,23 @@ import { CobranzaCliente } from "./cobranza-cliente";
 
 type Vista = { tipo: "buscar" } | { tipo: "cliente"; clienteId: string; notaId: string | null };
 
-/** Operación → Cobranza (T-21): buscar la cuenta por cobrar y registrar el pago. */
-export function PantallaCobranza({ sucursal }: { sucursal: string | null }) {
+/** Operación → Cobranza (T-21): buscar la cuenta por cobrar y registrar el pago.
+ *  Con `clienteInicial` (desde Cuentas por Cobrar, T-22) abre directo ese cliente. */
+export function PantallaCobranza({
+  sucursal,
+  clienteInicial = null,
+  notaInicial = null,
+}: {
+  sucursal: string | null;
+  clienteInicial?: string | null;
+  notaInicial?: string | null;
+}) {
   const { puede, cargando: cargandoSesion } = useAuth();
-  const [vista, setVista] = useState<Vista>({ tipo: "buscar" });
+  const [vista, setVista] = useState<Vista>(() =>
+    clienteInicial
+      ? { tipo: "cliente", clienteId: clienteInicial, notaId: notaInicial }
+      : { tipo: "buscar" },
+  );
 
   if (cargandoSesion) {
     // Mientras /auth/me no contesta, `puede()` da false a todos: sin esto, quien
