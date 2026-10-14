@@ -114,7 +114,7 @@ describe("PantallaClientesNuevos", () => {
     await u.click(screen.getByRole("button", { name: "Mostrar" }));
     const tabla = await screen.findByRole("table", { name: "Clientes nuevos" });
     expect(tabla).toHaveClass("table-fixed");
-    expect(tabla).toHaveClass("min-w-[60rem]");
+    expect(tabla).toHaveClass("min-w-[57rem]");
     expect(tabla.querySelectorAll("col")).toHaveLength(8);
     for (const celda of [...within(tabla).getAllByRole("cell"), ...within(tabla).getAllByRole("columnheader")]) {
       expect(celda).toHaveClass("px-2");
