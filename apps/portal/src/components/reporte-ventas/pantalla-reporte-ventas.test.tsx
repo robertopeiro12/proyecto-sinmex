@@ -166,7 +166,7 @@ describe("PantallaReporteVentas", () => {
     expect(screen.getByText("3 ventas · 62 piezas · 2 promo · $403.00")).toBeInTheDocument();
   });
 
-  it("tabla alineada: toda celda con px-3 y números a la derecha (Review Focus 5)", async () => {
+  it("tabla alineada: toda celda con px-2.5 y números a la derecha (Review Focus 5)", async () => {
     mockAuth([PERMISO]);
     const u = userEvent.setup();
     render(<PantallaReporteVentas sucursal={null} />);
@@ -174,7 +174,7 @@ describe("PantallaReporteVentas", () => {
     const tabla = await screen.findByRole("table", { name: "Ventas" });
     expect(tabla).toHaveClass("table-fixed");
     for (const celda of within(tabla).getAllByRole("cell").concat(within(tabla).getAllByRole("columnheader"))) {
-      expect(celda).toHaveClass("px-3");
+      expect(celda).toHaveClass("px-2.5");
     }
     for (const fila of within(tabla).getAllByRole("row")) {
       const total = Array.from(fila.children).reduce((n, c) => n + Number(c.getAttribute("colspan") ?? 1), 0);
@@ -248,16 +248,16 @@ describe("PantallaReporteVentas", () => {
     );
   });
 
-  it("I-1: la columna Monto mide w-36 en las dos tablas (cabe $1,234,567.89)", async () => {
+  it("I-1: la columna Monto mide w-29 en las dos tablas (cabe $1,234,567.89)", async () => {
     mockAuth([PERMISO]);
     const u = userEvent.setup();
     render(<PantallaReporteVentas sucursal={null} />);
     await u.click(screen.getByRole("button", { name: "Mostrar" }));
     const tabla = await screen.findByRole("table", { name: "Ventas" });
-    expect(tabla).toHaveClass("min-w-[74rem]");
-    expect(tabla.querySelectorAll("col")[10]).toHaveClass("w-36");
+    expect(tabla).toHaveClass("min-w-[66rem]");
+    expect(tabla.querySelectorAll("col")[10]).toHaveClass("w-29");
     const resumen = screen.getByRole("table", { name: "Resumen por repartidor" });
-    expect(resumen.querySelectorAll("col")[4]).toHaveClass("w-36");
+    expect(resumen.querySelectorAll("col")[4]).toHaveClass("w-29");
   });
 
   it("M-2: muestra el rango y filtros consultados aunque se editen las fechas", async () => {
