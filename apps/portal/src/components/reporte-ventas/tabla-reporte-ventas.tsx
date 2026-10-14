@@ -17,19 +17,19 @@ export function TablaReporteVentas({ reporte }: { reporte: ReporteVentas }) {
   // min-w-0 en el layout compartido); ocupa el ancho disponible y la tabla se desplaza dentro.
   return (
     <div className="max-h-[70vh] w-0 min-w-full overflow-auto rounded-md border">
-      <table aria-label="Ventas" className="w-full min-w-[60rem] table-fixed text-[13px]">
+      <table aria-label="Ventas" className="w-full min-w-[61rem] table-fixed text-[13px]">
         <colgroup>
-          <col className="w-19" />
+          <col className="w-22" />
           <col className="w-28" />
           <col />
-          <col className="w-13" />
-          <col className="w-26" />
+          <col className="w-14" />
           <col className="w-24" />
-          <col className="w-17" />
+          <col className="w-27" />
           <col className="w-16" />
+          <col className="w-17" />
           <col className="w-18" />
           <col className="w-14" />
-          <col className="w-26" />
+          <col className="w-28" />
         </colgroup>
         <thead className="text-left">
           <tr>

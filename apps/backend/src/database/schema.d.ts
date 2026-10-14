@@ -26,6 +26,8 @@ export type Numeric = ColumnType<string, number | string, number | string>;
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
 export interface Cliente {
+  alta_cliente_en: Timestamp | null;
+  alta_cliente_usuario_id: string | null;
   comentarios: string | null;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
