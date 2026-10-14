@@ -66,6 +66,8 @@ export default function FichaCliente() {
       ventas: datos.ventas.delDia(clienteId),
       cobros: datos.cobranzas.delDia(clienteId),
       notas: datos.catalogos.notasPendientesDe(clienteId).filter((n) => n.saldo_centavos > 0),
+      // Con las mismas dependencias: una venta recien grabada apaga la bienvenida del prospecto.
+      promociones: datos.promociones.aplicablesPara(clienteId),
     };
   }, [datos, clienteId, vueltas, ultimaSincronizacion, versionCatalogos]);
 
@@ -196,6 +198,20 @@ export default function FichaCliente() {
           <Text style={estilos.textoSuave}>Lo aplica la oficina desde el portal.</Text>
         </Tarjeta>
       ) : null}
+
+      {/* T-74 (D11): lo que le toca hoy, en lenguaje llano; la venta lo calcula sola. */}
+      <Tarjeta estado={hoy.promociones.length > 0 ? 'listo' : 'neutro'} etiqueta="Promociones">
+        {hoy.promociones.length === 0 ? (
+          <Text style={estilos.textoSuave}>Sin promoción.</Text>
+        ) : (
+          hoy.promociones.map((p) => (
+            <Text key={p.id} style={estilos.textoTarjeta}>
+              {p.texto}
+              {p.audiencia === 'prospecto' ? ' (primera venta)' : ''}
+            </Text>
+          ))
+        )}
+      </Tarjeta>
 
       <Tarjeta estado={hoy.notas.length > 0 ? 'pendiente' : 'neutro'} etiqueta="Notas pendientes">
         {hoy.notas.length === 0 ? (
