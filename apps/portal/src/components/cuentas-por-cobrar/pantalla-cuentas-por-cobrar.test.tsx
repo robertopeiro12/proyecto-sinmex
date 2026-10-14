@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorApi } from "@/lib/api";
@@ -129,9 +129,12 @@ describe("PantallaCuentasPorCobrar", () => {
     await u.click(screen.getByRole("checkbox", { name: "Solo vencidas" }));
     expect(obtener).toHaveBeenLastCalledWith({ sucursal: null, soloVencidas: true });
     expect(await screen.findByText("1 nota de 1 cliente")).toBeInTheDocument();
-    soltarVieja(DATOS);
-    await waitFor(() => expect(screen.getByText("1 nota de 1 cliente")).toBeInTheDocument());
-    expect(screen.queryByText("El Moreno")).not.toBeInTheDocument();
+    await act(async () => {
+      soltarVieja(DATOS);
+    });
+    expect(screen.getByText("1 nota de 1 cliente")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /El Moreno/ })).toBeNull();
+    expect(screen.queryByText("3 notas de 2 clientes")).toBeNull();
   });
 
   it("sin notas lo dice y deshabilita Excel", async () => {
