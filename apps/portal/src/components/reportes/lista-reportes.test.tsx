@@ -41,4 +41,13 @@ describe("ListaReportes", () => {
       "/informacion/reportes/kilometraje?sucursal=TJ",
     );
   });
+
+  it("enlaza Clientes nuevos conservando la sucursal del filtro global", () => {
+    mockAuth((clave) => clave === "reportes.ver");
+    render(<ListaReportes sucursal="TJ" />);
+    expect(screen.getByRole("link", { name: "Clientes nuevos" })).toHaveAttribute(
+      "href",
+      "/informacion/reportes/clientes-nuevos?sucursal=TJ",
+    );
+  });
 });
