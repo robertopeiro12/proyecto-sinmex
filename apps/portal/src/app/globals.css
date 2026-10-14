@@ -7,7 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
+  /* Geist la carga app/layout.tsx como --font-geist-sans. Apuntar --font-sans a si
+     misma invalidaba la variable y todo el portal caia en Times. */
+  --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);

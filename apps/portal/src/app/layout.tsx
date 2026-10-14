@@ -23,10 +23,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+    // Las variables de la fuente van en <html>: globals.css aplica `font-sans` ahi, y
+    // definidas en <body> no las veia, asi que todo el portal caia en Times.
+    <html lang="es" className={`${geistSans.variable} ${geistMono.variable}`}>
+      <body className="antialiased">
         {children}
       </body>
     </html>
