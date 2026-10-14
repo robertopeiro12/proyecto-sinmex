@@ -9,6 +9,7 @@ import type {
   PrecioPull,
   PresentacionPull,
   ProductoPull,
+  PromocionPull,
   RutaPull,
   SucursalPull,
   TipoNegocioPull,
@@ -489,6 +490,61 @@ export class SincronizacionRepository {
       orden: f.orden,
       origen: f.origen as 'oficina' | 'vendedor',
       activo: bandera(true, f.deleted_at),
+    }));
+  }
+
+  /**
+   * Las promociones que la tablet necesita (T-74): las vivas de la sucursal del
+   * vendedor. Por sucursal y no por vendedor: las de `todos` y `prospecto` son
+   * de la sucursal, y las de `cliente` se crean en la sucursal del cliente
+   * (PromocionesService.crear), asi que un solo filtro las cubre.
+   *
+   * Incremental por `updated_at`. Desactivar (`activo = false`) o dar de baja
+   * (`deleted_at`) viajan igual, como `activo: 0`: la tablet la conserva porque
+   * una venta local puede referenciarla, pero deja de aplicarla.
+   */
+  async promociones(
+    sucursalId: string,
+    desde: Date | null,
+  ): Promise<PromocionPull[]> {
+    let q = this.db
+      .selectFrom('promocion')
+      .select([
+        'id',
+        'audiencia',
+        'cliente_id',
+        'compra_tipo',
+        'compra_producto_id',
+        'compra_presentacion_id',
+        'compra_cantidad',
+        'regalo_tipo',
+        'regalo_producto_id',
+        'regalo_presentacion_id',
+        'regalo_cantidad',
+        'se_repite',
+        'activo',
+        'deleted_at',
+      ])
+      .where('sucursal_id', '=', sucursalId);
+    if (desde) {
+      q = q.where('updated_at', '>', desde);
+    } else {
+      q = q.where('deleted_at', 'is', null).where('activo', '=', true);
+    }
+    return (await q.orderBy('created_at').execute()).map((f) => ({
+      id: f.id,
+      audiencia: f.audiencia as PromocionPull['audiencia'],
+      cliente_id: f.cliente_id,
+      compra_tipo: f.compra_tipo as PromocionPull['compra_tipo'],
+      compra_producto_id: f.compra_producto_id,
+      compra_presentacion_id: f.compra_presentacion_id,
+      compra_cantidad: f.compra_cantidad,
+      regalo_tipo: f.regalo_tipo as PromocionPull['regalo_tipo'],
+      regalo_producto_id: f.regalo_producto_id,
+      regalo_presentacion_id: f.regalo_presentacion_id,
+      regalo_cantidad: f.regalo_cantidad,
+      se_repite: f.se_repite,
+      activo: bandera(f.activo, f.deleted_at),
     }));
   }
 
