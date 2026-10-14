@@ -176,6 +176,13 @@ describe("PantallaReporteVentas", () => {
     for (const celda of within(tabla).getAllByRole("cell").concat(within(tabla).getAllByRole("columnheader"))) {
       expect(celda).toHaveClass("px-3");
     }
+    for (const fila of within(tabla).getAllByRole("row")) {
+      const total = Array.from(fila.children).reduce((n, c) => n + Number(c.getAttribute("colspan") ?? 1), 0);
+      expect(total).toBe(11);
+    }
+    for (const texto of ["Total 13/10/2026", "TOTAL"]) {
+      expect(within(tabla).getByText(texto)).toHaveAttribute("colspan", "8");
+    }
     const encabezados = within(tabla).getAllByRole("columnheader").map((h) => h.textContent);
     expect(encabezados).toEqual(["Fecha", "Folio", "Cliente", "# nota", "Repartidor", "Status", "Factura", "Semana", "Cantidad", "Promo", "Monto"]);
     const monto = within(tabla).getByText("$130.00");
