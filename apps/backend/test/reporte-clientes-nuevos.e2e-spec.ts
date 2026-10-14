@@ -261,6 +261,19 @@ describe('Reporte de Clientes nuevos (e2e)', () => {
     }).expect(403);
   });
 
+  it('General (sin sucursal atada): "todas" o nada trae ZN y TJ', async () => {
+    for (const q of [{}, { sucursal: 'todas' }]) {
+      const r = (
+        await pedir(cookieGeneral, { desde: DESDE, hasta: HASTA, ...q }).expect(
+          200,
+        )
+      ).body as ReporteClientesNuevos;
+      const ids2 = r.clientes.map((x) => x.id);
+      expect(ids2).toContain(ids.conAlta);
+      expect(ids2).toContain(ids.tj);
+    }
+  });
+
   it('universo, fecha de Tijuana, usuario y baja (Review Focus 1-3)', async () => {
     const r = await deZn();
     const porId = new Map(r.clientes.map((x) => [x.id, x]));
