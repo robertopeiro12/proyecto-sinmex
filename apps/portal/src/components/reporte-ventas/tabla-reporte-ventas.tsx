@@ -5,11 +5,11 @@ import { ETIQUETA_STATUS, formatearPesos } from "@/lib/ventas";
 
 /*
  * Una sola tabla `table-fixed` para todo el rango (nunca una por día) para que
- * las columnas queden alineadas. Toda celda lleva `px-2.5` para que ninguna
+ * las columnas queden alineadas. Toda celda lleva `px-2` para que ninguna
  * columna quede pegada a otra; los números van a la derecha con `tabular-nums`.
  */
-const TH = "sticky top-0 bg-background px-2.5 py-2 font-medium shadow-[inset_0_-1px_0_var(--border)]";
-const TD = "px-2.5 py-1.5";
+const TH = "sticky top-0 bg-background px-2 py-2 font-medium shadow-[inset_0_-1px_0_var(--border)]";
+const TD = "px-2 py-1.5";
 const NUM = "text-right tabular-nums";
 
 export function TablaReporteVentas({ reporte }: { reporte: ReporteVentas }) {
@@ -17,19 +17,19 @@ export function TablaReporteVentas({ reporte }: { reporte: ReporteVentas }) {
   // min-w-0 en el layout compartido); ocupa el ancho disponible y la tabla se desplaza dentro.
   return (
     <div className="max-h-[70vh] w-0 min-w-full overflow-auto rounded-md border">
-      <table aria-label="Ventas" className="w-full min-w-[66rem] table-fixed text-sm">
+      <table aria-label="Ventas" className="w-full min-w-[60rem] table-fixed text-[13px]">
         <colgroup>
-          <col className="w-21" />
-          <col className="w-31" />
-          <col />
-          <col className="w-15" />
-          <col className="w-28" />
-          <col className="w-27" />
           <col className="w-19" />
+          <col className="w-28" />
+          <col />
+          <col className="w-13" />
+          <col className="w-26" />
+          <col className="w-24" />
           <col className="w-17" />
-          <col className="w-20" />
           <col className="w-16" />
-          <col className="w-29" />
+          <col className="w-18" />
+          <col className="w-14" />
+          <col className="w-26" />
         </colgroup>
         <thead className="text-left">
           <tr>
@@ -96,13 +96,13 @@ export function TablaReporteVentas({ reporte }: { reporte: ReporteVentas }) {
 
 export function ResumenRepartidores({ reporte }: { reporte: ReporteVentas }) {
   return (
-    <table aria-label="Resumen por repartidor" className="w-full max-w-2xl table-fixed text-sm">
+    <table aria-label="Resumen por repartidor" className="w-full max-w-2xl table-fixed text-[13px]">
       <colgroup>
         <col />
         <col className="w-20" />
         <col className="w-24" />
         <col className="w-20" />
-        <col className="w-29" />
+        <col className="w-26" />
       </colgroup>
       <thead className="border-b text-left">
         <tr>
