@@ -144,21 +144,34 @@ describe('Promociones en la sincronizacion (e2e)', () => {
     tjId = await sucursal('TJ');
     mxId = await sucursal('MX');
 
+    // Catalogo propio: la base de CI no trae productos.
     productoA = await db
-      .selectFrom('producto')
-      .select('id')
-      .where('deleted_at', 'is', null)
-      .orderBy('nombre')
-      .limit(1)
+      .insertInto('producto')
+      .values({ nombre: `e2e-psync-${SUFIJO}` })
+      .returning('id')
       .executeTakeFirstOrThrow();
     presentacionA = await db
-      .selectFrom('presentacion')
-      .select('id')
-      .where('producto_id', '=', productoA.id)
-      .where('deleted_at', 'is', null)
-      .orderBy('volumen')
-      .limit(1)
+      .insertInto('presentacion')
+      .values({ producto_id: productoA.id, volumen: '1 L' })
+      .returning('id')
       .executeTakeFirstOrThrow();
+    // El override del cliente solo cuenta si la lista tiene precio para la
+    // presentacion (ver `presentacionesConPrecio`): se siembra el de la lista.
+    const lista = await db
+      .selectFrom('lista_precio')
+      .select('id')
+      .where('nombre', '=', 'Lista 1')
+      .executeTakeFirstOrThrow();
+    await db
+      .insertInto('precio')
+      .values({
+        presentacion_id: presentacionA.id,
+        lista_precio_id: lista.id,
+        sucursal_id: tjId,
+        precio: '10.00',
+        vigente_desde: '2023-01-01',
+      })
+      .execute();
 
     const hash = await app.get(PasswordService).hashear(PASSWORD);
     vendedorId = (
@@ -259,6 +272,15 @@ describe('Promociones en la sincronizacion (e2e)', () => {
       .where('vendedor_id', '=', vendedorId)
       .execute();
     await db.deleteFrom('vendedor').where('id', '=', vendedorId).execute();
+    await db
+      .deleteFrom('precio')
+      .where('presentacion_id', '=', presentacionA.id)
+      .execute();
+    await db
+      .deleteFrom('presentacion')
+      .where('id', '=', presentacionA.id)
+      .execute();
+    await db.deleteFrom('producto').where('id', '=', productoA.id).execute();
     await db
       .deleteFrom('sesion_refresh')
       .where('usuario_id', '=', usuarioId)

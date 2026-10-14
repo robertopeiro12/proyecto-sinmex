@@ -17,8 +17,8 @@ import type { Promocion } from './../src/modules/cartera-clientes/promociones.re
  * alcance por sucursal, validacion con mensaje, la frase y el desplazamiento
  * de una general por una propia del cliente (D5).
  *
- * Usa los productos y presentaciones de la semilla base; lo que crea (clientes,
- * promociones, notas) se borra en `afterAll` por id.
+ * Siembra sus propios productos y presentaciones (la base de CI no trae
+ * catalogo); lo que crea (productos, clientes, promociones, notas) se borra en `afterAll` por id.
  */
 const SUFIJO = `${Date.now()}-${process.pid}`;
 const PASSWORD = 'contrasena-de-prueba';
@@ -156,6 +156,23 @@ describe('Promociones del portal (e2e)', () => {
     return { ...resto, activo: true, ...extra };
   };
 
+  /** Un producto y una presentacion propios de la prueba, para darlos de baja o alargar sus nombres. */
+  const sembrarCatalogo = async (nombre: string, volumen: string) => {
+    const { id: productoId } = await db
+      .insertInto('producto')
+      .values({ nombre })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    productoIds.push(productoId);
+    const { id: presentacionId } = await db
+      .insertInto('presentacion')
+      .values({ producto_id: productoId, volumen })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    presentacionIds.push(presentacionId);
+    return { productoId, presentacionId };
+  };
+
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -180,25 +197,15 @@ describe('Promociones del portal (e2e)', () => {
         .executeTakeFirstOrThrow()
     ).id;
 
-    const productos = await db
-      .selectFrom('producto')
-      .select(['id', 'nombre'])
-      .where('deleted_at', 'is', null)
-      .orderBy('nombre')
-      .limit(2)
-      .execute();
-    [productoA, productoB] = productos;
-    const pres = await db
-      .selectFrom('presentacion')
-      .select(['id', 'volumen'])
-      .where('producto_id', '=', productoA.id)
-      .where('deleted_at', 'is', null)
-      .orderBy('volumen')
-      .limit(1)
-      .executeTakeFirstOrThrow();
+    // Catalogo propio: la base de CI no trae productos (solo permisos,
+    // sucursales y listas), asi que la prueba no depende de ninguno.
+    const a = await sembrarCatalogo(`e2e-promo-A-${SUFIJO}`, '1 L');
+    const b = await sembrarCatalogo(`e2e-promo-B-${SUFIJO}`, '2 L');
+    productoA = { id: a.productoId, nombre: `e2e-promo-A-${SUFIJO}` };
+    productoB = { id: b.productoId, nombre: `e2e-promo-B-${SUFIJO}` };
     presentacionA = {
-      id: pres.id,
-      nombre: `${productoA.nombre} ${pres.volumen}`,
+      id: a.presentacionId,
+      nombre: `${productoA.nombre} 1 L`,
     };
 
     await crearUsuario(LOGIN_GENERAL, 'Administrador General', null);
@@ -476,23 +483,6 @@ describe('Promociones del portal (e2e)', () => {
     expect(ajena.body).toMatchObject({ message: 'No existe esa promoción.' });
     await editar(cookieGeneral, UUID_AUSENTE, cuerpoEditar()).expect(404);
   });
-
-  /** Un producto y una presentacion propios de la prueba, para darlos de baja o alargar sus nombres. */
-  const sembrarCatalogo = async (nombre: string, volumen: string) => {
-    const { id: productoId } = await db
-      .insertInto('producto')
-      .values({ nombre })
-      .returning('id')
-      .executeTakeFirstOrThrow();
-    productoIds.push(productoId);
-    const { id: presentacionId } = await db
-      .insertInto('presentacion')
-      .values({ producto_id: productoId, volumen })
-      .returning('id')
-      .executeTakeFirstOrThrow();
-    presentacionIds.push(presentacionId);
-    return { productoId, presentacionId };
-  };
 
   it('se puede desactivar una promocion cuya presentacion se dio de baja', async () => {
     const { presentacionId } = await sembrarCatalogo(
