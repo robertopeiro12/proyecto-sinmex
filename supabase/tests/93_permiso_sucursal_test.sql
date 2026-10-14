@@ -10,11 +10,11 @@ select is(
 -- T-05 sembro 22 permisos desde el documento del cliente; T-08a agrego 23o
 -- (sucursal.gestionar); T-18 agrego 24o (precio.gestionar); T-08b agrega 25o
 -- (perfil.gestionar); T-13 agrega 26o (usuario.gestionar); T-19 agrega 27o
--- (venta.asignar_factura).
+-- (venta.asignar_factura); T-22 agrega 28o (cuentas_cobrar.ver).
 select is(
   (select count(*)::int from permiso where deleted_at is null),
-  27,
-  'el catalogo de permisos tiene 27 claves'
+  28,
+  'el catalogo de permisos tiene 28 claves'
 );
 
 select * from finish();
