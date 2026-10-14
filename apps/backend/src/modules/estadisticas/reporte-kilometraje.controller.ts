@@ -7,13 +7,17 @@ import { ReporteKilometrajeService } from './reporte-kilometraje.service';
 import { ReporteVentasDto } from './dto/reporte-ventas.dto';
 import type { ReporteVentas } from './reglas-reporte-ventas';
 import { ReporteVentasService } from './reporte-ventas.service';
+import { ReporteClientesNuevosDto } from './dto/reporte-clientes-nuevos.dto';
+import type { ReporteClientesNuevos } from './reglas-clientes-nuevos';
+import { ReporteClientesNuevosService } from './reporte-clientes-nuevos.service';
 
-// T-50 y T-49. Kilometraje usa `reportes.ver`; Ventas, `reporte_ventas.ver`.
+// T-50, T-49 y T-51. Kilometraje usa `reportes.ver`; Ventas, `reporte_ventas.ver`.
 @Controller('reportes')
 export class ReportesController {
   constructor(
     private readonly kilometraje: ReporteKilometrajeService,
     private readonly ventasSrv: ReporteVentasService,
+    private readonly clientesNuevosSrv: ReporteClientesNuevosService,
   ) {}
 
   @Get('kilometraje')
@@ -33,5 +37,15 @@ export class ReportesController {
     @Query() q: ReporteVentasDto,
   ): Promise<ReporteVentas> {
     return this.ventasSrv.ventas(usuarioId, q);
+  }
+
+  // T-51. Seccion Informacion -> Reportes: `reportes.ver`, como Kilometraje.
+  @Get('clientes-nuevos')
+  @RequierePermiso('reportes.ver')
+  reporteClientesNuevos(
+    @UsuarioActual() usuarioId: string,
+    @Query() q: ReporteClientesNuevosDto,
+  ): Promise<ReporteClientesNuevos> {
+    return this.clientesNuevosSrv.clientesNuevos(usuarioId, q);
   }
 }
