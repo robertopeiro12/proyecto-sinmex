@@ -51,6 +51,7 @@ const venta = (extra: Partial<VentaNormalizada> = {}): VentaNormalizada => ({
       precioCentavos: 1350,
     },
   ],
+  regalos: [],
   ...extra,
 });
 
@@ -59,6 +60,7 @@ function montar(
     sinCliente?: boolean;
     pctComision?: string | null;
     precios?: Map<string, number | null>;
+    promocionesExistentes?: Set<string>;
   } = {},
 ) {
   const repo = {
@@ -72,6 +74,11 @@ function montar(
     ),
     insertarVenta: jest.fn().mockResolvedValue('venta-1'),
     insertarDetalle: jest.fn().mockResolvedValue(undefined),
+    promocionesExistentes: jest
+      .fn()
+      .mockResolvedValue(opciones.promocionesExistentes ?? new Set<string>()),
+    insertarRegalos: jest.fn().mockResolvedValue(undefined),
+    marcarPrimeraVenta: jest.fn().mockResolvedValue(undefined),
   };
   const precios = {
     presentacionesConPrecio: jest.fn().mockResolvedValue(
@@ -342,6 +349,86 @@ describe('VentasService.registrarVenta', () => {
       ),
     ).rejects.toMatchObject({ razon: 'precio-no-asignado' });
     expect(repo.insertarVenta).not.toHaveBeenCalled();
+  });
+
+  describe('regalos y primera venta (T-74)', () => {
+    const PROMO_VIVA = 'promocion-viva';
+    const PROMO_DESCONOCIDA = 'promocion-desconocida';
+
+    it('guarda los regalos con promocionId nulo cuando la promocion no existe', async () => {
+      const { servicio, repo } = montar({
+        promocionesExistentes: new Set([PROMO_VIVA]),
+      });
+
+      await servicio.registrarVenta(
+        venta({
+          regalos: [
+            {
+              promocionId: PROMO_VIVA,
+              presentacionId: PRE_A,
+              cantidad: 1,
+              texto: 'Por cada 10 Jawa, 1 Jawa gratis',
+            },
+            {
+              promocionId: PROMO_DESCONOCIDA,
+              presentacionId: PRE_A,
+              cantidad: 1,
+              texto: 'Por cada 12 Jawa, 1 Jawa gratis',
+            },
+          ],
+        }),
+        contexto(),
+        trx,
+      );
+
+      expect(repo.promocionesExistentes).toHaveBeenCalledWith(
+        [PROMO_VIVA, PROMO_DESCONOCIDA],
+        trx,
+      );
+      expect(repo.insertarRegalos).toHaveBeenCalledWith(
+        'venta-1',
+        [
+          {
+            promocionId: PROMO_VIVA,
+            presentacionId: PRE_A,
+            cantidad: 1,
+            texto: 'Por cada 10 Jawa, 1 Jawa gratis',
+          },
+          {
+            promocionId: null,
+            presentacionId: PRE_A,
+            cantidad: 1,
+            texto: 'Por cada 12 Jawa, 1 Jawa gratis',
+          },
+        ],
+        trx,
+      );
+    });
+
+    it('sin regalos no consulta promociones ni escribe trazabilidad', async () => {
+      const { servicio, repo } = montar();
+      await servicio.registrarVenta(venta(), contexto(), trx);
+      expect(repo.promocionesExistentes).not.toHaveBeenCalled();
+      expect(repo.insertarRegalos).not.toHaveBeenCalled();
+    });
+
+    it('marca la primera venta del cliente en toda venta', async () => {
+      const { servicio, repo } = montar();
+      await servicio.registrarVenta(venta(), contexto(), trx);
+      expect(repo.marcarPrimeraVenta).toHaveBeenCalledWith(CLIENTE, trx);
+
+      const portal = montar();
+      await portal.servicio.registrarVenta(venta(), contextoPortal(), trx);
+      expect(portal.repo.marcarPrimeraVenta).toHaveBeenCalledWith(CLIENTE, trx);
+    });
+
+    it('una venta rechazada no marca la primera venta', async () => {
+      const { servicio, repo } = montar({ sinCliente: true });
+      await expect(
+        servicio.registrarVenta(venta(), contexto(), trx),
+      ).rejects.toBeInstanceOf(VentaRechazada);
+      expect(repo.marcarPrimeraVenta).not.toHaveBeenCalled();
+    });
   });
 
   describe('desde el portal (T-17)', () => {

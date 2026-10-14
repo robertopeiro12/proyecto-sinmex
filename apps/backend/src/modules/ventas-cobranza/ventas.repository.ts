@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { Transaction } from 'kysely';
+import { sql, type Transaction } from 'kysely';
 import type { DB } from '../../database/schema';
 import type { FacturaVenta } from './datos-venta';
 import type { ContadoCredito, StatusInicial } from './reglas-venta';
@@ -36,6 +36,16 @@ export interface NuevoDetalleVenta {
   cantidadPromocion: number;
   /** Texto `numeric`, ya convertido con `aPesos`. */
   precio: string;
+}
+
+/** Una fila de trazabilidad de `venta_nota_promocion` (T-74, D12). */
+export interface NuevoRegaloVenta {
+  /** `null` si la promocion no existe en el servidor (D13). */
+  promocionId: string | null;
+  presentacionId: string;
+  cantidad: number;
+  /** La frase que vio el vendedor, congelada en la nota. */
+  texto: string;
 }
 
 /**
@@ -115,6 +125,58 @@ export class VentasRepository {
           precio: l.precio,
         })),
       )
+      .execute();
+  }
+
+  /** De una lista de ids de promocion, cuales existen (vivas o no: la trazabilidad sobrevive a la baja). */
+  async promocionesExistentes(
+    ids: readonly string[],
+    trx: Transaction<DB>,
+  ): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const filas = await trx
+      .selectFrom('promocion')
+      .select('id')
+      .where('id', 'in', [...ids])
+      .execute();
+    return new Set(filas.map((f) => f.id));
+  }
+
+  async insertarRegalos(
+    ventaNotaId: string,
+    regalos: readonly NuevoRegaloVenta[],
+    trx: Transaction<DB>,
+  ): Promise<void> {
+    if (regalos.length === 0) return;
+    await trx
+      .insertInto('venta_nota_promocion')
+      .values(
+        regalos.map((r) => ({
+          venta_nota_id: ventaNotaId,
+          promocion_id: r.promocionId,
+          presentacion_id: r.presentacionId,
+          cantidad: r.cantidad,
+          promocion_texto: r.texto,
+        })),
+      )
+      .execute();
+  }
+
+  /**
+   * D14 (T-74): la primera nota viva del cliente lo marca, y el trigger de
+   * `updated_at` hace que el pull incremental lo vuelva a bajar. Idempotente:
+   * solo escribe si aun no estaba marcado, asi una segunda venta no le mueve
+   * la fecha ni le toca `updated_at`.
+   */
+  async marcarPrimeraVenta(
+    clienteId: string,
+    trx: Transaction<DB>,
+  ): Promise<void> {
+    await trx
+      .updateTable('cliente')
+      .set({ primera_venta_en: sql`now()` })
+      .where('id', '=', clienteId)
+      .where('primera_venta_en', 'is', null)
       .execute();
   }
 }

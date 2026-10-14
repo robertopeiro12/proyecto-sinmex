@@ -168,6 +168,11 @@ export class VentasEdicionService {
           );
         }
 
+        // T-74 (D15): editar deja la nota en manos de la oficina, y los
+        // regalos que describio la tablet ya no la describen. Solo aqui:
+        // eliminar la venta conserva su trazabilidad junto al `deleted_at`.
+        await this.repo.borrarRegalos(id, trx);
+
         // §4.2 paso 8: el cobro de contado se reescribe siempre; una
         // promocion ($0) no se cobra. Fecha = la de la venta; cobrador = el
         // repartidor (null en Oficina).

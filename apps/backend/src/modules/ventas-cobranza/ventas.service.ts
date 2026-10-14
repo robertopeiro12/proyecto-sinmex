@@ -153,6 +153,28 @@ export class VentasService {
       trx,
     );
 
+    // T-74 (D12, D13): la trazabilidad de los regalos, con la frase congelada.
+    // Un id de promocion que el servidor no conoce no rechaza la venta (las
+    // piezas ya se dieron): se guarda sin promocion y con el texto.
+    if (venta.regalos.length > 0) {
+      const existentes = await this.repo.promocionesExistentes(
+        venta.regalos.map((r) => r.promocionId),
+        trx,
+      );
+      await this.repo.insertarRegalos(
+        id,
+        venta.regalos.map((r) => ({
+          promocionId: existentes.has(r.promocionId) ? r.promocionId : null,
+          presentacionId: r.presentacionId,
+          cantidad: r.cantidad,
+          texto: r.texto,
+        })),
+        trx,
+      );
+    }
+    // T-74 (D14): la primera nota del cliente, venga de la tablet o del portal.
+    await this.repo.marcarPrimeraVenta(venta.clienteId, trx);
+
     // T-20 (D2): una venta de contado ya se cobro. Deja su fila en
     // `cobranza_abono` para que corte y tesoreria sumen una sola tabla, marcada
     // `venta_contado` para poder desglosarla. Una promocion ($0) no se cobra.

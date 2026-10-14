@@ -47,6 +47,7 @@ describe('normalizarDatosVenta (D12)', () => {
             precioCentavos: 1350,
           },
         ],
+        regalos: [],
       },
     });
   });
@@ -264,5 +265,122 @@ describe('normalizarDatosVenta (D12)', () => {
       // tiene que decir que campo fallo.
       expect(r.motivo.startsWith(`${campo}: `)).toBe(true);
     });
+  });
+});
+
+describe('regalos (T-74)', () => {
+  const PROMO = '11111111-1111-4111-8111-111111111111';
+  const regalo = (extra: Record<string, unknown> = {}) => ({
+    promocion_id: PROMO,
+    presentacion_id: PRE_A,
+    cantidad: 2,
+    texto: 'Por cada 10 Jawa, 1 Jawa gratis',
+    ...extra,
+  });
+
+  it('sin regalos la venta entra como antes y regalos queda vacio', () => {
+    // La linea trae cantidad_promocion 2: una tablet anterior a T-74.
+    const r = normalizarDatosVenta(CLIENTE, datos());
+    expect(r.ok && r.venta.regalos).toEqual([]);
+  });
+
+  it('regalos que cuadran con cantidad_promocion entran, con ids en minusculas y texto recortado', () => {
+    const r = normalizarDatosVenta(
+      CLIENTE,
+      datos({
+        regalos: [
+          regalo({
+            texto: '  Por cada 10 Jawa, 1 Jawa gratis  ',
+            promocion_id: PROMO.toUpperCase(),
+            presentacion_id: PRE_A.toUpperCase(),
+          }),
+        ],
+      }),
+    );
+    expect(r.ok && r.venta.regalos).toEqual([
+      {
+        promocionId: PROMO,
+        presentacionId: PRE_A,
+        cantidad: 2,
+        texto: 'Por cada 10 Jawa, 1 Jawa gratis',
+      },
+    ]);
+  });
+
+  it('varios regalos a la misma presentacion cuadran si suman', () => {
+    const r = normalizarDatosVenta(
+      CLIENTE,
+      datos({
+        regalos: [
+          regalo({ cantidad: 1 }),
+          regalo({
+            cantidad: 1,
+            promocion_id: '22222222-2222-4222-8222-222222222222',
+          }),
+        ],
+      }),
+    );
+    expect(r.ok).toBe(true);
+  });
+
+  it('si la suma por presentacion no cuadra con cantidad_promocion es invalido', () => {
+    const r = normalizarDatosVenta(
+      CLIENTE,
+      datos({ regalos: [regalo({ cantidad: 1 })] }),
+    );
+    expect(r).toMatchObject({ ok: false, campo: 'regalos' });
+  });
+
+  it('una linea con cantidad_promocion y sin regalo es invalida cuando regalos viene', () => {
+    const r = normalizarDatosVenta(CLIENTE, datos({ regalos: [] }));
+    expect(r).toMatchObject({ ok: false, campo: 'regalos' });
+  });
+
+  it('un regalo a una presentacion que no esta en las lineas es invalido', () => {
+    const r = normalizarDatosVenta(
+      CLIENTE,
+      datos({
+        regalos: [
+          regalo({ presentacion_id: '33333333-3333-4333-8333-333333333333' }),
+        ],
+      }),
+    );
+    expect(r).toMatchObject({
+      ok: false,
+      campo: 'regalos[0].presentacion_id',
+    });
+  });
+
+  it('cantidad 0, promocion_id que no es uuid y texto vacio o de mas de 200 son invalidos', () => {
+    expect(
+      normalizarDatosVenta(
+        CLIENTE,
+        datos({ regalos: [regalo({ cantidad: 0 })] }),
+      ),
+    ).toMatchObject({ ok: false, campo: 'regalos[0].cantidad' });
+    expect(
+      normalizarDatosVenta(
+        CLIENTE,
+        datos({ regalos: [regalo({ promocion_id: 'x' })] }),
+      ),
+    ).toMatchObject({ ok: false, campo: 'regalos[0].promocion_id' });
+    expect(
+      normalizarDatosVenta(
+        CLIENTE,
+        datos({ regalos: [regalo({ texto: '  ' })] }),
+      ),
+    ).toMatchObject({ ok: false, campo: 'regalos[0].texto' });
+    expect(
+      normalizarDatosVenta(
+        CLIENTE,
+        datos({ regalos: [regalo({ texto: 'x'.repeat(201) })] }),
+      ),
+    ).toMatchObject({ ok: false, campo: 'regalos[0].texto' });
+  });
+
+  it('regalos que no es lista es invalido', () => {
+    expect(
+      normalizarDatosVenta(CLIENTE, datos({ regalos: 'no' })),
+    ).toMatchObject({ ok: false, campo: 'regalos' });
   });
 });

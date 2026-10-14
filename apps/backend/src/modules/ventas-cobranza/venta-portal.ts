@@ -75,6 +75,9 @@ export function armarVentaPortal(
     };
   }
 
+  // T-74 (D9): sin `regalos` a proposito. El portal no lleva trazabilidad de
+  // promociones y la venta sale con `regalos: []`; mandar una lista vacia
+  // haria que toda linea con `cantidad_promocion` no cuadrara (D13).
   const r = normalizarDatosVenta(entrada.clienteId, {
     num_nota: entrada.numNota,
     contado_credito: entrada.contadoCredito,
