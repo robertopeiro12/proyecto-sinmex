@@ -24,6 +24,11 @@ export function fuenteVentas(ventas: RepositorioVentas): FuenteOperaciones {
 
     pendientes(): OperacionSaliente[] {
       return ventas.pendientesDeSincronizar().map((v) => {
+        // T-74 (D13): solo cuando hay filas. Una venta anterior a la 012 llevaba
+        // piezas de promocion a mano y ninguna fila: mandar `regalos: []` haria
+        // que el servidor la rechazara por no cuadrar. Sin la clave, entra como
+        // siempre.
+        const regalos = ventas.regalosDe(v.id);
         const datos: DatosVenta = {
           num_nota: v.num_nota,
           contado_credito: v.contado_credito,
@@ -35,6 +40,16 @@ export function fuenteVentas(ventas: RepositorioVentas): FuenteOperaciones {
             cantidad_promocion: l.cantidad_promocion,
             precio_centavos: l.precio_centavos,
           })),
+          ...(regalos.length > 0
+            ? {
+                regalos: regalos.map((r) => ({
+                  promocion_id: r.promocion_id,
+                  presentacion_id: r.presentacion_id,
+                  cantidad: r.cantidad,
+                  texto: r.texto,
+                })),
+              }
+            : {}),
         };
 
         return {

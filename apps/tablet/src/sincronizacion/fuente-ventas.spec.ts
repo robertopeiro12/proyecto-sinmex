@@ -5,6 +5,11 @@ import { crearRepositorioVentas } from '@/datos/repositorios/ventas';
 
 import { fuenteVentas } from './fuente-ventas';
 
+const REGALOS = [
+  { promocionId: 'promo-general', presentacionId: 'pre-1', cantidad: 2, texto: 'Por cada 10 Jamaica, 1 Jamaica gratis' },
+  { promocionId: 'promo-prospecto', presentacionId: 'pre-2', cantidad: 3, texto: 'Bienvenida' },
+];
+
 function montar() {
   const deps = depsDePrueba();
   const catalogos = crearRepositorioCatalogos(deps);
@@ -36,6 +41,7 @@ describe('fuente de ventas (T-16)', () => {
         { presentacionId: 'pre-1', cantidad: 24, cantidadPromocion: 2 },
         { presentacionId: 'pre-2', cantidad: 0, cantidadPromocion: 3 },
       ],
+      regalos: REGALOS,
     });
 
     expect(fuente.pendientes()).toEqual([
@@ -57,9 +63,29 @@ describe('fuente de ventas (T-16)', () => {
             { presentacion_id: 'pre-1', cantidad: 24, cantidad_promocion: 2, precio_centavos: 2800 },
             { presentacion_id: 'pre-2', cantidad: 0, cantidad_promocion: 3, precio_centavos: 0 },
           ],
+          // T-74: solo viaja cuando la venta tiene filas.
+          regalos: [
+            { promocion_id: 'promo-general', presentacion_id: 'pre-1', cantidad: 2, texto: 'Por cada 10 Jamaica, 1 Jamaica gratis' },
+            { promocion_id: 'promo-prospecto', presentacion_id: 'pre-2', cantidad: 3, texto: 'Bienvenida' },
+          ],
         },
       },
     ]);
+  });
+
+  it('una venta sin regalos no manda la clave', () => {
+    const { ventas, fuente } = montar();
+    ventas.registrar({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      numNota: '2346',
+      contadoCredito: 'contado',
+      factura: 'N/A',
+      comentarios: null,
+      lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
+    });
+    const op = fuente.pendientes()[0];
+    expect(op?.datos).not.toHaveProperty('regalos');
   });
 
   it('una venta aceptada sale de la cola', () => {

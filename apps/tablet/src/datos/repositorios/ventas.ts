@@ -4,6 +4,7 @@ import type {
   FechaISO,
   Venta,
   VentaLinea,
+  VentaPromocion,
 } from '../tipos';
 import { problemasDeCaptura, resumirCaptura, type LineaCaptura } from '../ventas-reglas';
 import type { RepositorioCatalogos } from './catalogos';
@@ -26,6 +27,15 @@ export interface LineaRegistroVenta {
   cantidadPromocion: number;
 }
 
+/** Un regalo ya aplicado por la pantalla (T-74): lo que se graba en `venta_promocion`. */
+export interface RegaloRegistroVenta {
+  promocionId: string;
+  presentacionId: string;
+  cantidad: number;
+  /** La frase de la promocion tal como la vio el vendedor (D12). */
+  texto: string;
+}
+
 /**
  * Lo que captura la pantalla. **Sin precios, a proposito** (D15): el precio lo
  * pone este repositorio desde el catalogo local, asi que no hay forma de que un
@@ -40,6 +50,12 @@ export interface DatosRegistroVenta {
   factura: FacturaVenta;
   comentarios: string | null;
   lineas: LineaRegistroVenta[];
+  /**
+   * Los regalos que la pantalla ya aplico. El repositorio **vuelve a
+   * comprobar** que por presentacion suman `cantidadPromocion` (espejo de
+   * `datos-venta.ts` del servidor) y que ninguno viene incompleto.
+   */
+  regalos?: RegaloRegistroVenta[];
 }
 
 export type RepositorioVentas = ReturnType<typeof crearRepositorioVentas>;
@@ -130,6 +146,24 @@ export function crearRepositorioVentas(
       }
 
       const resumen = resumirCaptura(lineas);
+
+      // T-74 (D13): el servidor rechaza una venta cuyos regalos no cuadran con
+      // las piezas de promocion; se comprueba aqui antes de abrir la
+      // transaccion para no quemar folio ni dejar una venta que nunca subira.
+      const regalos = datos.regalos ?? [];
+      const regaladas = new Map<string, number>();
+      for (const r of regalos) {
+        if (!Number.isInteger(r.cantidad) || r.cantidad < 1 || r.texto.trim() === '') {
+          throw new ErrorVenta('Un regalo de promoción viene incompleto. Vuelve a capturar la venta.');
+        }
+        regaladas.set(r.presentacionId, (regaladas.get(r.presentacionId) ?? 0) + r.cantidad);
+      }
+      for (const l of resumen.lineas) {
+        if ((regaladas.get(l.presentacionId) ?? 0) !== l.cantidadPromocion) {
+          throw new ErrorVenta('Las piezas de promoción no cuadran con los regalos. Vuelve a capturar la venta.');
+        }
+      }
+
       const id = generarId();
       const ahora = reloj.ahora();
       const comentarios = datos.comentarios?.trim() ? datos.comentarios.trim() : null;
@@ -180,6 +214,21 @@ export function crearRepositorioVentas(
             },
           );
         }
+
+        for (const r of regalos) {
+          bd.runSync(
+            `insert into venta_promocion (id, venta_id, promocion_id, presentacion_id, cantidad, texto)
+             values ($id, $venta_id, $promocion_id, $presentacion_id, $cantidad, $texto)`,
+            {
+              $id: generarId(),
+              $venta_id: id,
+              $promocion_id: r.promocionId,
+              $presentacion_id: r.presentacionId,
+              $cantidad: r.cantidad,
+              $texto: r.texto.trim(),
+            },
+          );
+        }
       });
 
       const grabada = repo.porId(id);
@@ -196,6 +245,23 @@ export function crearRepositorioVentas(
       return bd.getAllSync<VentaLinea>(
         'select * from venta_linea where venta_id = $venta_id order by rowid',
         { $venta_id: ventaId },
+      );
+    },
+
+    /** Los regalos de una venta, en el orden en que se grabaron (T-74). */
+    regalosDe(ventaId: string): VentaPromocion[] {
+      return bd.getAllSync<VentaPromocion>(
+        'select * from venta_promocion where venta_id = $venta_id order by rowid',
+        { $venta_id: ventaId },
+      );
+    },
+
+    /** ¿Le hemos vendido alguna vez desde esta tablet? Decide la bienvenida al prospecto (D7). */
+    hayAlgunaDe(clienteId: string): boolean {
+      return (
+        (bd.getFirstSync<{ n: number }>('select count(*) as n from venta where cliente_id = $cliente_id', {
+          $cliente_id: clienteId,
+        })?.n ?? 0) > 0
       );
     },
 

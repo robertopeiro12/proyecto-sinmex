@@ -119,14 +119,14 @@ export function problemasDeCaptura(captura: CapturaVenta): string[] {
       problemas.push(`${l.etiqueta}: las cantidades son piezas enteras.`);
     } else if (l.cantidad > 0 && (l.precioCentavos === null || l.precioCentavos === 0)) {
       problemas.push(
-        `${l.etiqueta} no tiene precio para este cliente: solo se puede regalar como promoción.`,
+        `${l.etiqueta} no tiene precio para este cliente: solo puede ir como regalo de promoción.`,
       );
     }
   }
 
   const conAlgo = captura.lineas.filter(tieneAlgo).length;
   if (conAlgo === 0) {
-    problemas.push('Captura al menos una cantidad o una pieza de promoción.');
+    problemas.push('Captura al menos una cantidad.');
   }
   if (conAlgo > MAX_LINEAS_VENTA) {
     problemas.push(`Una venta lleva hasta ${MAX_LINEAS_VENTA} productos.`);

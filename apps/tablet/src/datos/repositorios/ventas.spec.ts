@@ -34,6 +34,8 @@ function montar(opciones: { sinSegmento?: boolean } = {}) {
   };
 }
 
+const TEXTO_GENERAL = 'Por cada 10 Jamaica, 1 Jamaica gratis';
+
 const venta = (extra: Partial<DatosRegistroVenta> = {}): DatosRegistroVenta => ({
   vendedorId: 'ven-1',
   clienteId: 'cli-1',
@@ -42,6 +44,8 @@ const venta = (extra: Partial<DatosRegistroVenta> = {}): DatosRegistroVenta => (
   factura: 'N/A',
   comentarios: null,
   lineas: [{ presentacionId: 'pre-1', cantidad: 24, cantidadPromocion: 2 }],
+  // T-74: las 2 piezas de promocion de la linea llegan como regalo aplicado.
+  regalos: [{ promocionId: 'promo-general', presentacionId: 'pre-1', cantidad: 2, texto: TEXTO_GENERAL }],
   ...extra,
 });
 
@@ -87,12 +91,71 @@ describe('repositorio de ventas (T-16)', () => {
     it('regalar piezas de una presentacion sin precio se graba con precio 0 y monto 0 (D13)', () => {
       const { ventas } = montar();
       const v = ventas.registrar(
-        venta({ lineas: [{ presentacionId: 'pre-2', cantidad: 0, cantidadPromocion: 3 }] }),
+        venta({
+          lineas: [{ presentacionId: 'pre-2', cantidad: 0, cantidadPromocion: 3 }],
+          regalos: [{ promocionId: 'promo-prospecto', presentacionId: 'pre-2', cantidad: 3, texto: 'Bienvenida' }],
+        }),
       );
       expect(v.monto_total_centavos).toBe(0);
       expect(ventas.lineasDe(v.id)).toEqual([
         { venta_id: v.id, presentacion_id: 'pre-2', cantidad: 0, cantidad_promocion: 3, precio_centavos: 0 },
       ]);
+    });
+
+    it('graba los regalos y regalosDe los devuelve', () => {
+      const { deps, ventas } = montar();
+      const v = ventas.registrar(
+        venta({
+          lineas: [{ presentacionId: 'pre-1', cantidad: 10, cantidadPromocion: 1 }],
+          regalos: [{ promocionId: 'promo-general', presentacionId: 'pre-1', cantidad: 1, texto: `  ${TEXTO_GENERAL} ` }],
+        }),
+      );
+      expect(ventas.regalosDe(v.id)).toEqual([
+        {
+          id: expect.any(String),
+          venta_id: v.id,
+          promocion_id: 'promo-general',
+          presentacion_id: 'pre-1',
+          cantidad: 1,
+          texto: TEXTO_GENERAL,
+        },
+      ]);
+      expect(deps.bd.getFirstSync<{ n: number }>('select count(*) as n from venta_promocion')?.n).toBe(1);
+    });
+
+    it('si los regalos no cuadran con las piezas de promocion, no graba ni quema folio', () => {
+      const { deps, folios, ventas } = montar();
+      const regalo = { promocionId: 'promo-general', presentacionId: 'pre-1', texto: TEXTO_GENERAL };
+      // Falta uno, sobra uno, uno incompleto y uno de otra presentacion.
+      for (const regalos of [
+        [{ ...regalo, cantidad: 1 }],
+        [{ ...regalo, cantidad: 3 }],
+        [{ ...regalo, cantidad: 2, texto: '  ' }],
+        [{ ...regalo, cantidad: 2, presentacionId: 'pre-2' }],
+        [],
+      ]) {
+        expect(() => ventas.registrar(venta({ regalos }))).toThrow(ErrorVenta);
+      }
+      expect(folios.consecutivoDe('ven-1')).toBe(0);
+      expect(cuantas(deps, 'folio_emitido')).toBe(0);
+      expect(cuantas(deps, 'venta')).toBe(0);
+      expect(deps.bd.getFirstSync<{ n: number }>('select count(*) as n from venta_promocion')?.n).toBe(0);
+    });
+
+    it('una venta sin regalos y sin piezas de promocion sigue entrando', () => {
+      const { ventas } = montar();
+      const v = ventas.registrar({
+        vendedorId: 'ven-1',
+        clienteId: 'cli-1',
+        numNota: '2346',
+        contadoCredito: 'contado',
+        factura: 'N/A',
+        comentarios: null,
+        lineas: [{ presentacionId: 'pre-1', cantidad: 3, cantidadPromocion: 0 }],
+      });
+      expect(ventas.regalosDe(v.id)).toEqual([]);
+      expect(ventas.hayAlgunaDe('cli-1')).toBe(true);
+      expect(ventas.hayAlgunaDe('cli-2')).toBe(false);
     });
 
     it('vender una presentacion sin precio no graba y NO consume folio (D15)', () => {
