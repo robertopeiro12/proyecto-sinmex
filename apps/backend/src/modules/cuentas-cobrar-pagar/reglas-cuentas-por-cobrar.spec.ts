@@ -10,6 +10,7 @@ const fila = (extra: Partial<FilaNotaPorCobrar>): FilaNotaPorCobrar => ({
   clienteId: 'c1',
   cliente: 'Cobach XXI',
   sucursalCodigo: 'TJ',
+  clienteDadoDeBaja: false,
   fecha: '2026-10-01',
   folio: 'TJ261001AP01',
   numNota: null,

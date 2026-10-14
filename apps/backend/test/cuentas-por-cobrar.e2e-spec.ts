@@ -376,6 +376,23 @@ describe('Cuentas por Cobrar (e2e)', () => {
       expect(c.saldoCentavos).toBe(10000 + 7000 + 10000 + 7500);
     });
 
+    it('un cliente dado de baja que aun debe aparece, marcado clienteDadoDeBaja', async () => {
+      const dadoDeBaja = await sembrarCliente('Dado de baja', null);
+      await sembrarNota(dadoDeBaja, '100.00', hoy);
+      await db
+        .updateTable('cliente')
+        .set({ deleted_at: new Date() })
+        .where('id', '=', dadoDeBaja)
+        .execute();
+      const r = await deQc();
+      expect(
+        r.clientes.find((x) => x.clienteId === dadoDeBaja)?.clienteDadoDeBaja,
+      ).toBe(true);
+      expect(
+        r.clientes.find((x) => x.clienteId === cliUniverso)?.clienteDadoDeBaja,
+      ).toBe(false);
+    });
+
     it('vencimiento contra el hoy de Tijuana (Review Focus 1 y 2)', async () => {
       const sinPlazo = await sembrarCliente('Sin plazo', null);
       const viejaSinPlazo = await sembrarNota(

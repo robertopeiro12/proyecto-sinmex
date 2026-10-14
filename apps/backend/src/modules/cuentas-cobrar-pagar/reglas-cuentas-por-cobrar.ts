@@ -13,6 +13,8 @@ export interface FilaNotaPorCobrar {
   clienteId: string;
   cliente: string;
   sucursalCodigo: string;
+  /** El cliente esta dado de baja (`deleted_at`) pero aun debe: no se le puede cobrar. */
+  clienteDadoDeBaja: boolean;
   fecha: string;
   folio: string;
   numNota: string | null;
@@ -42,6 +44,7 @@ export interface ClienteConDeuda {
   clienteId: string;
   cliente: string;
   sucursalCodigo: string;
+  clienteDadoDeBaja: boolean;
   saldoCentavos: number;
   vencidoCentavos: number;
   notas: NotaPorCobrar[];
@@ -82,6 +85,7 @@ export function armarCuentasPorCobrar(
         clienteId: f.clienteId,
         cliente: f.cliente,
         sucursalCodigo: f.sucursalCodigo,
+        clienteDadoDeBaja: f.clienteDadoDeBaja,
         saldoCentavos: 0,
         vencidoCentavos: 0,
         notas: [],

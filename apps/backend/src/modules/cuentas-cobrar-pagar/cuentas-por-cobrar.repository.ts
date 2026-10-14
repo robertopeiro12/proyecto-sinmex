@@ -36,6 +36,7 @@ export class CuentasPorCobrarRepository {
       cliente_id: string;
       cliente: string;
       sucursal_codigo: string;
+      cliente_dado_de_baja: boolean;
       fecha: string;
       folio: string;
       num_nota: string | null;
@@ -46,6 +47,7 @@ export class CuentasPorCobrarRepository {
       dias_atraso: number;
     }>`
       select vn.id, vn.cliente_id, c.nombre as cliente, s.codigo as sucursal_codigo,
+             c.deleted_at is not null as cliente_dado_de_baja,
              to_char(vn.fecha, 'YYYY-MM-DD') as fecha, vn.folio, vn.num_nota,
              vn.monto_total::text as monto_total,
              coalesce(a.abonado, 0)::text as abonado,
@@ -73,6 +75,7 @@ export class CuentasPorCobrarRepository {
       clienteId: f.cliente_id,
       cliente: f.cliente,
       sucursalCodigo: f.sucursal_codigo,
+      clienteDadoDeBaja: f.cliente_dado_de_baja,
       fecha: f.fecha,
       folio: f.folio,
       numNota: f.num_nota,
