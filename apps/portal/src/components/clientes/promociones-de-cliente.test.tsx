@@ -96,6 +96,26 @@ describe("PromocionesDeCliente", () => {
     expect(screen.getAllByRole("button", { name: "Editar" })).toHaveLength(1);
   });
 
+  it("la bienvenida de un prospecto se lista con las generales, sin Editar", async () => {
+    mockAuth(() => true);
+    const BIENVENIDA: Promocion = {
+      ...GENERAL,
+      id: "b1",
+      audiencia: "prospecto",
+      compraCantidad: 0,
+      seRepite: false,
+      texto: "Bienvenida al prospecto: 1 Jawa gratis en su primera venta",
+      desplazada: false,
+    };
+    vi.mocked(promocionesLib.listarPromociones).mockResolvedValue([BIENVENIDA]);
+    render(<PromocionesDeCliente clienteId="c1" clienteNombre="Abarrotes Lupita" />);
+
+    const fila = await screen.findByText("Bienvenida al prospecto: 1 Jawa gratis en su primera venta");
+    expect(fila.closest("li")).toHaveClass("opacity-60");
+    expect(screen.getByText("Generales de su sucursal")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Editar" })).not.toBeInTheDocument();
+  });
+
   it("Desactivar llama a editarPromocion con la regla completa y activo: false, y recarga", async () => {
     const usuario = userEvent.setup();
     mockAuth(() => true);

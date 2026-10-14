@@ -130,7 +130,8 @@ export function FormularioPromocion({ promocion, contexto, alGuardar, alCancelar
       regaloProductoId: regaloTipo === "producto" ? regaloProductoId || null : null,
       regaloPresentacionId: regaloTipo === "presentacion" ? regaloPresentacionId || null : null,
       regaloCantidad: regaloCantidad.trim() === "" ? NaN : Number(regaloCantidad),
-      seRepite,
+      // La de prospectos se da una sola vez: no se repite aunque la casilla (oculta) quedara marcada.
+      seRepite: audiencia === "prospecto" ? false : seRepite,
     }),
     [
       audiencia, promocion, deCliente, contexto, compraTipo, compraProductoId, compraPresentacionId,
@@ -346,15 +347,17 @@ export function FormularioPromocion({ promocion, contexto, alGuardar, alCancelar
         />
       </div>
 
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={seRepite}
-          disabled={enviando}
-          onChange={(e) => setSeRepite(e.target.checked)}
-        />
-        Se repite por bloques
-      </label>
+      {audiencia !== "prospecto" && (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={seRepite}
+            disabled={enviando}
+            onChange={(e) => setSeRepite(e.target.checked)}
+          />
+          Se repite por bloques
+        </label>
+      )}
 
       {!esAlta && (
         <label className="flex items-center gap-2 text-sm">

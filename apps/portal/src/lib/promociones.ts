@@ -152,6 +152,10 @@ export function problemaDeRegla(r: ReglaCompleta): string | null {
   if (r.audiencia !== "cliente" && r.clienteId) {
     return "Solo una promoción de un cliente lleva cliente.";
   }
+  // La bienvenida se da una sola vez: repetirla por bloques regalaria mas de lo que dice su frase.
+  if (r.audiencia === "prospecto" && r.seRepite) {
+    return "La promoción de prospectos se da una sola vez, en su primera venta.";
+  }
 
   if (r.compraTipo === "cualquiera" && (r.compraProductoId || r.compraPresentacionId)) {
     return "Una compra de cualquier producto no lleva producto ni presentación.";

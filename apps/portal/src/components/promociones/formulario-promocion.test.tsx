@@ -146,6 +146,21 @@ describe("FormularioPromocion", () => {
     expect(screen.getByRole("button", { name: "Guardar" })).toBeEnabled();
   });
 
+  it("con Prospectos se oculta 'Se repite por bloques' y se manda seRepite: false", async () => {
+    const usuario = userEvent.setup();
+    pintar();
+    await armarJawa10(usuario);
+    expect(screen.getByLabelText("Se repite por bloques")).toBeChecked();
+
+    await usuario.click(screen.getByLabelText("Prospectos, solo en su primera venta"));
+    expect(screen.queryByLabelText("Se repite por bloques")).not.toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(promocionesLib.crearPromocion).toHaveBeenCalledWith(
+      expect.objectContaining({ audiencia: "prospecto", seRepite: false }),
+    );
+  });
+
   it("un General elige sucursal o todas; un usuario atado no ve el selector", async () => {
     mockAuth(GENERAL);
     const usuario = userEvent.setup();

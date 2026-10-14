@@ -229,6 +229,7 @@ describe("problemaDeRegla (T-74)", () => {
       problemaDeRegla({
         ...base,
         audiencia: "prospecto",
+        seRepite: false,
         compraCantidad: 0,
         compraTipo: "cualquiera",
         compraProductoId: null,
@@ -240,6 +241,14 @@ describe("problemaDeRegla (T-74)", () => {
   it("se regala al menos una pieza, enteras", () => {
     expect(problemaDeRegla({ ...base, regaloCantidad: 0 })).toBe("Se regala al menos 1 pieza.");
     expect(problemaDeRegla({ ...base, regaloCantidad: 1.5 })).toBe("Se regala al menos 1 pieza.");
+  });
+  it("la de prospectos no se repite por bloques", () => {
+    expect(
+      problemaDeRegla({ ...base, audiencia: "prospecto", seRepite: true }),
+    ).toBe("La promoción de prospectos se da una sola vez, en su primera venta.");
+    expect(
+      problemaDeRegla({ ...base, audiencia: "prospecto", seRepite: false }),
+    ).toBeNull();
   });
   it("audiencia cliente exige el cliente, y las demas no lo admiten", () => {
     expect(problemaDeRegla({ ...base, audiencia: "cliente" })).toBe("Elige el cliente de la promoción.");

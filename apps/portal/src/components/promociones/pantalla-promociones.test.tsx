@@ -52,6 +52,7 @@ const PROSPECTO: Promocion = {
   audiencia: "prospecto",
   activo: false,
   compraCantidad: 0,
+  seRepite: false,
   texto: "Bienvenida al prospecto: 1 Jawa gratis en su primera venta",
 };
 

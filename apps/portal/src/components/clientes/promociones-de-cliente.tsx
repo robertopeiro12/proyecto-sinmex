@@ -88,7 +88,8 @@ export function PromocionesDeCliente({ clienteId, clienteNombre }: Props) {
   }
 
   const propias = promociones.filter((p) => p.audiencia === "cliente");
-  const generales = promociones.filter((p) => p.audiencia === "todos");
+  // Las de `todos` y, si es un prospecto sin primera venta, la de bienvenida (la API decide cuáles).
+  const generales = promociones.filter((p) => p.audiencia !== "cliente");
 
   return (
     <section className="mb-6 flex flex-col gap-4 rounded-md border p-4">
