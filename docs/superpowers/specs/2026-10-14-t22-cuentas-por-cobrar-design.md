@@ -44,8 +44,8 @@ Hoy Cobranza (T-21) ya calcula el saldo de cada nota, pero solo **busca** (por c
 - **Abonado** = suma de `cobranza_abono.monto` **vivos** (`deleted_at is null`) de la nota, sin importar el
   origen (`cobro` o `saldo_favor`: aplicar saldo a favor sí reduce la deuda). Un pago borrado con petición
   autorizada (T-34) ya no cuenta y la nota vuelve a sumar.
-- **Saldo** = `monto_total − abonado`. Todo en **centavos enteros** (`round(x * 100)::bigint` en SQL), igual
-  que Cobranza.
+- **Saldo** = `monto_total − abonado`. Todo en **centavos enteros** con `aCentavos` y `saldoDerivadoCentavos`,
+  igual que Cobranza. Una nota con saldo 0 (datos viejos con abonos de más) no se lista.
 - **Hoy** = fecha de **Tijuana**, calculada en Postgres: `(now() at time zone 'America/Tijuana')::date`.
   Nunca la del reloj del navegador ni la de UTC.
 - **Vence** = `fecha + plazo_credito_dias` del cliente. `plazo_credito_dias` null → `vence` null ("Sin plazo")
@@ -115,7 +115,8 @@ type NotaPorCobrar = {
   - vencimiento: sin plazo, plazo 0, el día exacto de `vence` (al corriente) y el día siguiente (1 día);
   - "solo vencidas" filtra notas y totales;
   - alcance: usuario TJ no ve MX, pedir MX → 403;
-  - sin `cuentas_cobrar.ver` → 403; con token de la app → 401/403 (guard).
+  - sin `cuentas_cobrar.ver` → 403 y con la excepción en `usuario_permiso` → 200; sin sesión → 401. (El token
+    de la app lo rechaza el guard global, ya probado en `auth-vendedor.e2e-spec.ts`.)
   - La fecha de Tijuana se prueba con ventas fechadas relativas a `hoy` que devuelve el propio endpoint, para
     no depender de la hora a la que corra la prueba.
 
