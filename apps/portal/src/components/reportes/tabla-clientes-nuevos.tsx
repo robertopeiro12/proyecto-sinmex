@@ -21,14 +21,14 @@ function Texto({ valor }: { valor: string | null }) {
 export function TablaClientesNuevos({ clientes }: { clientes: ClienteNuevo[] }) {
   return (
     <div className="w-0 min-w-full max-h-[70vh] overflow-auto rounded-md border">
-      <table aria-label="Clientes nuevos" className="w-full min-w-[57rem] table-fixed text-[13px]">
+      <table aria-label="Clientes nuevos" className="w-full min-w-[61rem] table-fixed text-[13px]">
         <colgroup>
           <col className="w-25" />
           <col />
           <col className="w-18" />
           <col className="w-28" />
           <col className="w-28" />
-          <col className="w-24" />
+          <col className="w-27" />
           <col className="w-28" />
           <col className="w-28" />
           <col className="w-28" />

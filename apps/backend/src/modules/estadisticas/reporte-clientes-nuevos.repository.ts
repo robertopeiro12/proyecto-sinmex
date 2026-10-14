@@ -56,7 +56,7 @@ export class ReporteClientesNuevosRepository {
              where so.tipo = 'prospecto'
                and so.entidad_tabla = 'cliente'
                and so.entidad_id = c.id
-             order by so.recibido_en
+             order by so.recibido_en, so.id
              limit 1
           ) p on true
          where c.tipo = 'cliente'
