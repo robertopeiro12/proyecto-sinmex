@@ -6,7 +6,6 @@ import { apiFetch, apiFetchBlob } from "./api";
 // `TipoFiltro` de ese archivo).
 export type TipoCliente = "cliente" | "prospecto";
 export type TipoFiltro = TipoCliente | "todos";
-export type Promocion = "ninguna" | "10+1" | "20+1";
 
 export interface ClienteResumen {
   id: string;
@@ -41,7 +40,6 @@ export interface ClienteDetalle {
   /** `null` en un prospecto de la app (T-40): el precio lo decide el administrador. */
   listaPrecioId: string | null;
   pctComision: number | null;
-  promocion: Promocion;
   plazoCreditoDias: number | null;
   lat: number | null;
   lng: number | null;
@@ -60,7 +58,8 @@ export interface ClienteDetalle {
   /** Cuándo la recibió el servidor, en ISO. `null` si no hay foto. */
   fotoSubidaEn: string | null;
   overridesPrecio: OverridePrecio[];
-  productosPromocion: string[];
+  /** Cuándo se hizo su primera venta (ISO), o `null` si aún no compra: de ahí depende la bienvenida (T-74). */
+  primeraVentaEn: string | null;
 }
 
 export function listarClientes(
@@ -104,8 +103,6 @@ export interface DatosClienteFormulario {
   tipoNegocioId?: string;
   listaPrecioId: string;
   pctComision?: number;
-  promocion: Promocion;
-  productosPromocion: string[];
   plazoCreditoDias?: number;
   lat?: number;
   lng?: number;

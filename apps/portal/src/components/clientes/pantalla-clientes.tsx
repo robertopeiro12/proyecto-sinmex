@@ -23,7 +23,7 @@ type Edicion = "nueva" | ClienteDetalle | null;
 
 /**
  * No usa PantallaCatalogo (D3 del spec): editar necesita el DETALLE completo
- * (overrides + promocion), que no viaja en la fila de la lista -- se pide
+ * (overrides de precio), que no viaja en la fila de la lista -- se pide
  * aparte con `obtenerCliente()` al abrir el formulario. `PantallaCatalogo`
  * asume que el item de la lista y el item del formulario son el mismo tipo.
  */
