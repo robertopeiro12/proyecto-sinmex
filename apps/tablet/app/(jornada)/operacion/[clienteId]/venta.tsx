@@ -462,6 +462,11 @@ export default function PantallaVenta() {
             const opciones = [...catalogoPromos.presentaciones].filter(
               ([, pres]) => pres.productoId === r.productoId,
             );
+            // D16: solo el regalo de producto completo con varias presentaciones se
+            // elige; la lista se queda visible para corregir un toque equivocado.
+            const elegible =
+              promociones.find((p) => p.id === r.promocionId)?.regalo_tipo === 'producto' &&
+              opciones.length > 1;
             return (
               <View key={r.promocionId} style={{ marginBottom: espacio.sm, gap: espacio.xs }}>
                 <Text
@@ -469,20 +474,19 @@ export default function PantallaVenta() {
                 >
                   <Cifra valor={r.cantidad} /> gratis · {r.texto}
                 </Text>
-                {/* D16: regalo de producto completo; el vendedor elige la presentacion. */}
-                {!descartado && r.presentacionId === null ? (
+                {!descartado && elegible ? (
                   <View style={estilos.rejilla}>
                     {opciones.map(([id, pres]) => (
                       <Opcion
                         key={id}
                         etiqueta={pres.etiqueta}
-                        seleccionada={false}
+                        seleccionada={id === r.presentacionId}
                         onPress={() => setElecciones((previas) => new Map(previas).set(r.promocionId, id))}
                       />
                     ))}
                   </View>
                 ) : null}
-                {!descartado && r.presentacionId !== null ? (
+                {!descartado && !elegible && r.presentacionId !== null ? (
                   <Text style={estilos.textoSuave}>
                     {catalogoPromos.presentaciones.get(r.presentacionId)?.etiqueta}
                   </Text>
