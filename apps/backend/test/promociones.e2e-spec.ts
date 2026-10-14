@@ -414,7 +414,7 @@ describe('Promociones del portal (e2e)', () => {
     await listar(cookieGeneral).expect(400);
   });
 
-  it('GET ?clienteId= marca como desplazadas las generales que comparten producto con una propia', async () => {
+  it('GET ?clienteId= desplaza las generales que comparten producto con una propia y solo una propia "cualquiera" desplaza la de lo que sea', async () => {
     const cliente = await sembrarCliente(tjId);
     const propia = (
       await crear(
@@ -449,8 +449,33 @@ describe('Promociones del portal (e2e)', () => {
     const por = (id: string) => lista.find((p) => p.id === id);
     expect(por(propia[0].id)).toBeDefined();
     expect(por(sobreA[0].id)?.desplazada).toBe(true);
-    expect(por(cualquiera[0].id)?.desplazada).toBe(true);
+    // Una propia de un producto NO desplaza la general "de lo que sea" (D5).
+    expect(por(cualquiera[0].id)?.desplazada).toBe(false);
     expect(por(sobreB[0].id)?.desplazada).toBe(false);
+
+    // Otro cliente con una propia "cualquiera": desplaza las dos generales.
+    const otro = await sembrarCliente(tjId);
+    const propiaOtro = await crear(
+      cookieTijuana,
+      regla({
+        audiencia: 'cliente',
+        clienteId: otro.id,
+        compraTipo: 'cualquiera',
+        compraProductoId: undefined,
+        compraCantidad: 20,
+        regaloTipo: 'producto',
+        regaloProductoId: productoB.id,
+      }),
+    );
+    expect(propiaOtro.status).toBe(201);
+    const listaOtro = (
+      await listar(cookieTijuana, { clienteId: otro.id }).expect(200)
+    ).body as Promocion[];
+    const deOtro = (id: string) => listaOtro.find((p) => p.id === id);
+    expect(deOtro(sobreA[0].id)?.desplazada).toBe(true);
+    expect(deOtro(cualquiera[0].id)?.desplazada).toBe(true);
+    expect(deOtro(sobreB[0].id)?.desplazada).toBe(true);
+
     // Solo la propia del cliente y las de `todos` de su sucursal.
     expect(
       lista.every(

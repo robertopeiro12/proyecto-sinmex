@@ -23,7 +23,7 @@ Lo que falta es la regla que une las dos: qué se regala, a quién, por cuánto 
 
 **D4 · Para quién: un cliente, todos, o prospectos.** Las de **todos** y las de **prospectos** son **por sucursal** (al crear se elige la sucursal o "todas", que crea una copia por sucursal). Las de **un cliente** quedan en la sucursal del cliente.
 
-**D5 · La propia del cliente desplaza a la general.** Si el cliente tiene una promoción propia que **coincide en al menos un producto** con una general, la general no se aplica. Entre las que quedan, **se aplican todas**: cada una se calcula por su lado sobre las mismas piezas compradas.
+**D5 · La propia del cliente desplaza a la general.** Una propia con compra `cualquiera` cubre todo producto y desplaza a **toda** general (de un producto o "de lo que sea"). Una propia de un producto desplaza a la general que **comparte ese producto**, pero **no** a la general "de lo que sea": esa solo la desplaza una propia "de lo que sea". Entre las que quedan, **se aplican todas**: cada una se calcula por su lado sobre las mismas piezas compradas.
 
 **D6 · El vendedor no regala fuera de promoción.** La app calcula las piezas gratis; el vendedor solo puede **quitarlas** ("el cliente no lo quiso"), nunca agregar ni subir. El campo libre "Promoción" de la captura desaparece de la tablet.
 
@@ -39,7 +39,7 @@ Lo que falta es la regla que une las dos: qué se regala, a quién, por cuánto 
 
 > [!note] Enmiendas de la ejecución (2026-10-14, controlador; detalle en el PR)
 > - **D2/D7:** la promoción de **prospecto nunca se repite por bloques**: el portal no ofrece la casilla y la API la rechaza con `se_repite`; la tablet la calcula como un solo bloque. Su frase "Bienvenida al prospecto: …" no decía "por cada", y repetirla haría que la nota congelara una frase que no describe lo que se dio.
-> - **D5:** una propia del cliente que coincide en producto desplaza **también** la de bienvenida al prospecto (portal y tablet por igual). Y, al pie de la letra de D5, una general "de lo que sea" coincide con todo producto: cualquier propia la desplaza (el paso 2 de la aceptación esperaba lo contrario; **a revisar por Mario**).
+> - **D5:** una propia del cliente que coincide en producto desplaza **también** la de bienvenida al prospecto (portal y tablet por igual). Y la regla es asimétrica (decidido por Mario el 2026-10-14): una general "de lo que sea" solo la desplaza una propia "de lo que sea"; una propia de un producto desplaza a las generales que comparten ese producto, no a la "de lo que sea" (`propiaDesplaza(propia, general)`). Así el paso 2 de la aceptación queda como se esperaba.
 > - **Portal, `GET /promociones?clienteId=`:** para un prospecto sin primera venta incluye además las de `prospecto` de su sucursal, con `desplazada`.
 > - **Prospectos en la app:** la bienvenida está construida, pero hoy la app no tiene camino hasta la ficha de un prospecto (no sale en "Todos los clientes" ni entra a la ruta); se alcanza solo por enlace directo. **Ticket de seguimiento.**
 > - **Despliegue:** tras el `db push` hay que limpiar o reinstalar las tablets de demo antes de crear promociones (el cursor del pull solo avanza).
@@ -235,7 +235,7 @@ La columna `cliente.promocion` local se queda (SQLite y "nunca se renumera una p
 - `catalogos.promocionesDe(clienteId): PromocionAplicable[]`: las activas de la sucursal del cliente, ya filtradas por D5 y D7 (usa `cliente.tipo`, `cliente.primera_venta_en` y `ventas.hayAlgunaDe(clienteId)`), cada una con su `texto`. Es la lista que ven la ficha y la venta.
 - `src/datos/promociones-reglas.ts` (pura, con spec):
   - `textoPromocion(p, nombres)`.
-  - `coincidenEnProducto(a, b, catalogo): boolean` (D5).
+  - `propiaDesplaza(propia, general): boolean` (D5, asimétrica).
   - `calcularRegalos(lineas: LineaCaptura[], promociones: PromocionAplicable[], catalogo): Regalo[]` donde `Regalo = { promocionId, texto, presentacionId: string | null, productoId: string | null, cantidad }`; `presentacionId` nulo y `productoId` lleno cuando falta elegir (D16).
   - `aplicarRegalos(lineas, regalos, descartados: Set<promocionId>, elecciones: Map<promocionId, presentacionId>): LineaCaptura[]` devuelve las líneas con `cantidadPromocion` rellenada y la lista final para `regalos`.
 - `problemasDeCaptura` cambia: ya no acepta `cantidadPromocion` capturada a mano; añade "Elige la presentación del regalo de «{texto}»" cuando falta elección. La regla "sin precio solo promoción" se conserva (un regalo puede caer en una presentación sin precio).
@@ -272,7 +272,7 @@ La columna `cliente.promocion` local se queda (SQLite y "nunca se renumera una p
 ## Aceptación manual en el emulador (contra Postgres local)
 
 1. En el portal, con `promocion.gestionar`, crear en la sucursal del vendedor: (a) general "por cada 10 Jawa, 1 Jawa gratis" que se repite; (b) general "por cada 20 piezas de lo que sea, 1 Horchata 1 L" sin repetir; (c) propia del cliente DEMO 1 "al comprar 5 Jawa 600 ml, 1 Jawa 600 ml (una vez)"; (d) de prospecto "bienvenida: 2 Jawa 600 ml". Verificar la frase de cada una en la lista.
-2. Sincronizar la tablet; la ficha de DEMO 1 muestra (b) y (c) y **no** (a) (desplazada, D5); la de DEMO 2 muestra (a) y (b).
+2. Sincronizar la tablet; la ficha de DEMO 1 muestra (b) y (c) y **no** (a) (desplazada, D5: la propia (c) es de Jawa; (b), "de lo que sea", sigue aplicando); la de DEMO 2 muestra (a) y (b).
 3. Venta a DEMO 2: 30 Jawa 600 ml → "+3 gratis"; añadir 20 piezas más de otro producto → aparece 1 Horchata 1 L, elegir presentación si (b) fuera por producto. Descartar un regalo y comprobar que la línea baja. Grabar; la revisión lista los regalos.
 4. Venta a DEMO 1: 5 Jawa 600 ml → 1 gratis; 10 → sigue 1 (una vez).
 5. Prospecto nuevo desde la app → **sincronizar** (un prospecto capturado vive en la tabla local `prospecto` hasta que el servidor lo acepta y el pull lo devuelve como cliente `tipo = 'prospecto'`; antes no es vendible — *enmienda del plan, 2026-10-14*) → su ficha muestra la de bienvenida; venta de solo 2 regalos graba con status `promocion`; segunda venta al mismo prospecto ya no la ofrece; tras sincronizar, `cliente.primera_venta_en` quedó marcado y `venta_nota_promocion` tiene 1 fila.

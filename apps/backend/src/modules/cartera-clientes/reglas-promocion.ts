@@ -92,9 +92,13 @@ export function problemaDeRegla(r: ReglaCompleta): string | null {
   return null;
 }
 
-/** D5: una propia desplaza a una general si coinciden en al menos un producto. */
-export function coincidenEnProducto(a: Cobertura, b: Cobertura): boolean {
-  if (a === 'todos' || b === 'todos') return true;
-  for (const p of a) if (b.has(p)) return true;
+/**
+ * D5 (asimetrica): una propia "de lo que sea" desplaza a toda general; una propia de
+ * productos desplaza a la general que comparte alguno, pero NO a la "de lo que sea".
+ */
+export function propiaDesplaza(propia: Cobertura, general: Cobertura): boolean {
+  if (general === 'todos') return propia === 'todos';
+  if (propia === 'todos') return true;
+  for (const p of propia) if (general.has(p)) return true;
   return false;
 }

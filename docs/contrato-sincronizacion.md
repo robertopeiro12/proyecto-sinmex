@@ -363,7 +363,7 @@ Colección **nueva y de nivel superior** (junto a `rutas`, no dentro de `catalog
 - **Incremental** por `updated_at > desde`. Sin `desde` bajan solo las vivas.
 - **Baja como bandera** (D8): una promoción desactivada o dada de baja viaja con `activo: 0`, nunca como ausencia. La tablet la **conserva** (una venta local puede referenciarla), pero no la aplica.
 - **La regla de aplicación vive en la tablet** (`src/datos/promociones-reglas.ts`); el servidor solo la transporta. Lo que decide la tablet:
-  - **D5:** la promoción propia de un cliente desplaza a la general que coincida con ella en algún producto; entre las que quedan, se aplican todas. Vale también para la de `prospecto` (bienvenida): una propia activa que coincide en producto la desplaza.
+  - **D5:** la promoción propia "de lo que sea" (`cualquiera`) desplaza a toda general; la propia de un producto desplaza a la general que comparte ese producto, pero no a la general "de lo que sea" (esa solo la desplaza una propia "de lo que sea"); entre las que quedan, se aplican todas. Vale también para la de `prospecto` (bienvenida) con la misma regla.
   - **D6:** el vendedor puede quitar un regalo, nunca agregarlo ni subirlo.
   - **D7:** una promoción de `prospecto` aplica solo mientras el cliente no tenga `primera_venta_en` ni ventas locales.
   - **D16:** el regalo "del mismo" por producto cae en la presentación que más compró; si empata, la primera del catálogo.

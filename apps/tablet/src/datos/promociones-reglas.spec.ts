@@ -2,7 +2,7 @@ import {
   aplicarRegalos,
   calcularRegalos,
   cobertura,
-  coincidenEnProducto,
+  propiaDesplaza,
   problemasDeRegalos,
   promocionesAplicables,
   textoPromocion,
@@ -115,7 +115,7 @@ describe('textoPromocion (T-74), las mismas frases que el backend', () => {
   });
 });
 
-describe('cobertura / coincidenEnProducto (D5)', () => {
+describe('cobertura / propiaDesplaza (D5)', () => {
   it('cualquiera cubre todos los productos', () => {
     expect(cobertura(promo({ compra_tipo: 'cualquiera', compra_producto_id: null }), catalogo)).toBe('todos');
   });
@@ -129,12 +129,13 @@ describe('cobertura / coincidenEnProducto (D5)', () => {
     expect(cobertura(p, catalogo)).toEqual(new Set(['pro-1']));
   });
 
-  it('coinciden si comparten producto o si alguna es todos', () => {
-    expect(coincidenEnProducto(new Set(['pro-1']), new Set(['pro-1']))).toBe(true);
-    expect(coincidenEnProducto(new Set(['pro-1']), new Set(['pro-2']))).toBe(false);
-    expect(coincidenEnProducto('todos', new Set(['pro-2']))).toBe(true);
-    expect(coincidenEnProducto(new Set(['pro-1']), 'todos')).toBe(true);
-    expect(coincidenEnProducto(new Set(), new Set(['pro-1']))).toBe(false);
+  it('desplaza si comparten producto; "todos" propia desplaza a toda general; producto propio no desplaza "todos"', () => {
+    expect(propiaDesplaza(new Set(['pro-1']), new Set(['pro-1']))).toBe(true);
+    expect(propiaDesplaza(new Set(['pro-1']), new Set(['pro-2']))).toBe(false);
+    expect(propiaDesplaza('todos', new Set(['pro-2']))).toBe(true);
+    expect(propiaDesplaza('todos', 'todos')).toBe(true);
+    expect(propiaDesplaza(new Set(['pro-1']), 'todos')).toBe(false);
+    expect(propiaDesplaza(new Set(), new Set(['pro-1']))).toBe(false);
   });
 });
 
@@ -175,6 +176,11 @@ describe('promocionesAplicables (D5, D7)', () => {
     expect(ids(aplicables([promo(), general2, p]))).toEqual(['promo-propia']);
   });
 
+  it('una propia de un producto NO desplaza la general de lo que sea', () => {
+    const generalCualquiera = promo({ id: 'promo-general-todo', compra_tipo: 'cualquiera', compra_producto_id: null });
+    expect(ids(aplicables([generalCualquiera, propia()]))).toEqual(['promo-propia', 'promo-general-todo']);
+  });
+
   it('una propia inactiva no desplaza ni aparece', () => {
     expect(ids(aplicables([promo(), propia({ activo: 0 })]))).toEqual(['promo-general']);
   });
@@ -213,8 +219,13 @@ describe('promocionesAplicables (D5, D7)', () => {
     const c = cliente({ tipo: 'prospecto' });
     const bienvenida = prospecto({ compra_tipo: 'producto', compra_producto_id: 'pro-1', compra_cantidad: 5 });
     expect(ids(aplicables([bienvenida, propia()], c))).toEqual(['promo-propia']);
-    // La bienvenida "cualquiera" de la semilla la desplaza cualquier propia activa.
-    expect(ids(aplicables([prospecto(), propia({ compra_producto_id: 'pro-2' })], c))).toEqual(['promo-propia']);
+    // La bienvenida "cualquiera" de la semilla solo la desplaza una propia "cualquiera".
+    expect(ids(aplicables([prospecto(), propia({ compra_producto_id: 'pro-2' })], c))).toEqual([
+      'promo-propia',
+      'promo-prospecto',
+    ]);
+    const cualquiera = propia({ compra_tipo: 'cualquiera', compra_producto_id: null });
+    expect(ids(aplicables([prospecto(), cualquiera], c))).toEqual(['promo-propia']);
   });
 
   it('una propia de otro producto no la desplaza', () => {
