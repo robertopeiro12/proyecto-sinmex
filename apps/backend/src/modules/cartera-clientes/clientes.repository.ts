@@ -4,11 +4,9 @@ import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import type { DB } from '../../database/schema';
 import { buscarSucursalUsuario } from '../sucursales/buscar-sucursal-usuario';
 import { aNumero } from '../sincronizacion/dinero';
-import type { PlanPromocionProductos } from './reconciliar-promocion-productos';
 
 export type TipoCliente = 'cliente' | 'prospecto';
 export type TipoFiltro = TipoCliente | 'todos';
-export type Promocion = 'ninguna' | '10+1' | '20+1';
 
 export interface ClienteResumen {
   id: string;
@@ -47,7 +45,6 @@ export interface ClienteDetalle {
    */
   listaPrecioId: string | null;
   pctComision: number | null;
-  promocion: Promocion;
   plazoCreditoDias: number | null;
   lat: number | null;
   lng: number | null;
@@ -67,7 +64,11 @@ export interface ClienteDetalle {
   /** Cuando la recibio el servidor, en ISO. `null` si no hay foto. */
   fotoSubidaEn: string | null;
   overridesPrecio: OverridePrecio[];
-  productosPromocion: string[];
+  /**
+   * T-74 (D14): ISO de la primera nota viva del cliente, `null` si nunca le
+   * han vendido. Lo fija el servidor al proyectar la venta.
+   */
+  primeraVentaEn: string | null;
 }
 
 /** Los campos de `cliente` que escriben `crear()`/`actualizar()`, en snake_case (columnas). */
@@ -80,7 +81,6 @@ export interface DatosClienteBase {
   tipo_negocio_id: string | null;
   lista_precio_id: string;
   pct_comision: number | null;
-  promocion: Promocion;
   plazo_credito_dias: number | null;
   lat: number | null;
   lng: number | null;
@@ -118,7 +118,6 @@ interface FilaDetalle {
   tipo_negocio_id: string | null;
   lista_precio_id: string | null;
   pct_comision: string | null;
-  promocion: string;
   plazo_credito_dias: number | null;
   lat: string | null;
   lng: string | null;
@@ -127,6 +126,7 @@ interface FilaDetalle {
   codigo: string;
   foto_archivo: string | null;
   foto_subida_en: Date | null;
+  primera_venta_en: Date | null;
 }
 
 interface FilaOverride {
@@ -138,7 +138,6 @@ interface FilaOverride {
 function aDetalle(
   fila: FilaDetalle,
   overrides: FilaOverride[],
-  productosPromocion: string[],
 ): ClienteDetalle {
   return {
     id: fila.id,
@@ -151,7 +150,6 @@ function aDetalle(
     tipoNegocioId: fila.tipo_negocio_id,
     listaPrecioId: fila.lista_precio_id,
     pctComision: aNumero(fila.pct_comision),
-    promocion: fila.promocion as Promocion,
     plazoCreditoDias: fila.plazo_credito_dias,
     lat: aNumero(fila.lat),
     lng: aNumero(fila.lng),
@@ -165,7 +163,7 @@ function aDetalle(
       precio: aNumero(o.precio) ?? 0,
       vigenteDesde: o.vigente_desde,
     })),
-    productosPromocion,
+    primeraVentaEn: fila.primera_venta_en?.toISOString() ?? null,
   };
 }
 
@@ -189,11 +187,11 @@ const COLUMNAS_DETALLE = [
   'cliente.tipo_negocio_id',
   'cliente.lista_precio_id',
   'cliente.pct_comision',
-  'cliente.promocion',
   'cliente.plazo_credito_dias',
   'cliente.lat',
   'cliente.lng',
   'cliente.comentarios',
+  'cliente.primera_venta_en',
   'cliente.sucursal_id',
   'sucursal.codigo',
   // T-40: no viajan al portal tal cual (`aDetalle` los convierte en `tieneFoto`
@@ -245,9 +243,9 @@ export class ClientesRepository {
   /**
    * El detalle completo: campos base + overrides VIGENTES (mismo `DISTINCT
    * ON` que `PreciosRepository.listarVigentes` de T-18, sin `sucursal_id`
-   * porque el cliente ya pertenece a una sola) + productos de promocion.
-   * Tres consultas en vez de un solo `LEFT JOIN` gigante: los overrides y la
-   * promocion son colecciones (0..N filas), y mezclarlas con la fila de
+   * porque el cliente ya pertenece a una sola) .
+   * Dos consultas en vez de un solo `LEFT JOIN` gigante: los overrides son
+   * una coleccion (0..N filas), y mezclarlas con la fila de
    * `cliente` en un solo `SELECT` obligaria a deduplicar en memoria.
    */
   async obtener(id: string): Promise<ClienteDetalle | undefined> {
@@ -271,18 +269,7 @@ export class ClientesRepository {
       order by presentacion_id, vigente_desde desc
     `.execute(this.db);
 
-    const productos = await this.db
-      .selectFrom('cliente_promocion_producto')
-      .select('producto_id')
-      .where('cliente_id', '=', id)
-      .where('deleted_at', 'is', null)
-      .execute();
-
-    return aDetalle(
-      fila,
-      overrides.rows,
-      productos.map((p) => p.producto_id),
-    );
+    return aDetalle(fila, overrides.rows);
   }
 
   /**
@@ -317,7 +304,7 @@ export class ClientesRepository {
    * del buzon de `sync_operacion` (ADR-0009 §2.3). Mismo patron que
    * `VentasRepository` de T-16.
    *
-   * Sin `domicilio`, sin `lista_precio_id`, sin `pct_comision`, sin `promocion`
+   * Sin `domicilio`, sin `lista_precio_id`, sin `pct_comision`
    * y sin `plazo_credito_dias`: son decisiones del administrador, no del
    * vendedor, y los dos primeros ahora aceptan nulo solo para un prospecto
    * (`ck_cliente_domicilio_obligatorio`, `ck_cliente_lista_precio_obligatoria`).
@@ -362,17 +349,15 @@ export class ClientesRepository {
   }
 
   /**
-   * Alta: cliente, productos de promocion y overrides de precio en una sola
+   * Alta: cliente y overrides de precio en una sola
    * transaccion (D4 del spec) -- mismo criterio que
    * `ProductosRepository.crear` de T-10 (producto + presentaciones juntos).
-   * `cliente_id` es nuevo en esta transaccion, asi que ni el unique de
-   * `cliente_promocion_producto` ni `uq_cliente_precio_vigencia` pueden
-   * chocar todavia: a diferencia de `actualizar()` (Task 7), aqui no hace
+   * `cliente_id` es nuevo en esta transaccion, asi que
+   * `uq_cliente_precio_vigencia` no puede chocar todavia: a diferencia de `actualizar()` (Task 7), aqui no hace
    * falta `on conflict`.
    */
   async crear(
     datos: DatosClienteBase & { tipo: TipoCliente; sucursal_id: string },
-    productosPromocion: string[],
     overridesPrecio: { presentacionId: string; precio: number }[],
     vigenteDesde: string,
   ): Promise<ClienteDetalle> {
@@ -389,7 +374,6 @@ export class ClientesRepository {
           tipo_negocio_id: datos.tipo_negocio_id,
           lista_precio_id: datos.lista_precio_id,
           pct_comision: datos.pct_comision?.toString() ?? null,
-          promocion: datos.promocion,
           plazo_credito_dias: datos.plazo_credito_dias,
           lat: datos.lat?.toString() ?? null,
           lng: datos.lng?.toString() ?? null,
@@ -398,18 +382,6 @@ export class ClientesRepository {
         })
         .returning('id')
         .executeTakeFirstOrThrow();
-
-      if (productosPromocion.length > 0) {
-        await trx
-          .insertInto('cliente_promocion_producto')
-          .values(
-            productosPromocion.map((producto_id) => ({
-              cliente_id: cliente.id,
-              producto_id,
-            })),
-          )
-          .execute();
-      }
 
       if (overridesPrecio.length > 0) {
         await trx
@@ -428,21 +400,19 @@ export class ClientesRepository {
       return cliente.id;
     });
 
-    // Fuera de la transaccion: `obtener()` ya sabe leer overrides+promocion,
+    // Fuera de la transaccion: `obtener()` ya sabe leer los overrides,
     // y reusarlo evita duplicar esa lectura dentro de la transaccion.
     return (await this.obtener(id))!;
   }
 
   /**
-   * Edición: datos base + productos de promocion + overrides, todo en una
-   * transaccion. A diferencia de `crear()`, aqui SI puede haber conflicto
-   * (el cliente ya existe), asi que las dos colecciones usan `on conflict`
-   * en vez de un `insert` liso.
+   * Edición: datos base + overrides, todo en una transaccion. A diferencia de
+   * `crear()`, aqui SI puede haber conflicto (el cliente ya existe), asi que
+   * los overrides usan `on conflict` en vez de un `insert` liso.
    */
   async actualizar(
     id: string,
     cambios: DatosClienteBase,
-    planPromocion: PlanPromocionProductos,
     overridesPrecio: { presentacionId: string; precio: number | null }[],
     vigenteDesde: string,
   ): Promise<ClienteDetalle> {
@@ -458,7 +428,6 @@ export class ClientesRepository {
           tipo_negocio_id: cambios.tipo_negocio_id,
           lista_precio_id: cambios.lista_precio_id,
           pct_comision: cambios.pct_comision?.toString() ?? null,
-          promocion: cambios.promocion,
           plazo_credito_dias: cambios.plazo_credito_dias,
           lat: cambios.lat?.toString() ?? null,
           lng: cambios.lng?.toString() ?? null,
@@ -466,38 +435,6 @@ export class ClientesRepository {
         })
         .where('id', '=', id)
         .executeTakeFirstOrThrow();
-
-      if (planPromocion.eliminar.length > 0) {
-        await trx
-          .updateTable('cliente_promocion_producto')
-          .set({ deleted_at: new Date() })
-          .where('cliente_id', '=', id)
-          .where('producto_id', 'in', planPromocion.eliminar)
-          .execute();
-      }
-
-      if (planPromocion.insertar.length > 0) {
-        // El unique (cliente_id, producto_id) de T-05 NO excluye
-        // `deleted_at` (a diferencia de uq_vehiculo_nombre_sucursal de
-        // T-11): una fila dada de baja sigue ocupando la combinacion. Un
-        // `insert` liso chocaria con 23505 al volver a agregar un producto
-        // que antes se habia quitado de la promocion -- revivir la fila con
-        // `on conflict ... do update` es obligatorio, no una optimizacion.
-        await trx
-          .insertInto('cliente_promocion_producto')
-          .values(
-            planPromocion.insertar.map((producto_id) => ({
-              cliente_id: id,
-              producto_id,
-            })),
-          )
-          .onConflict((oc) =>
-            oc
-              .columns(['cliente_id', 'producto_id'])
-              .doUpdateSet({ deleted_at: null }),
-          )
-          .execute();
-      }
 
       for (const override of overridesPrecio) {
         if (override.precio === null) {
@@ -539,8 +476,7 @@ export class ClientesRepository {
               // presentacion_id, vigente_desde). Sin resetear
               // `deleted_at` aqui, un alta-baja-alta el mismo dia deja el
               // precio nuevo invisible para `obtener()` aunque el PATCH
-              // responda 200 -- mismo gotcha que la revivida de
-              // cliente_promocion_producto un poco mas arriba.
+              // responda 200.
               deleted_at: null,
             }),
           )

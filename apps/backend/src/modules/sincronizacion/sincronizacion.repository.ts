@@ -218,7 +218,7 @@ export class SincronizacionRepository {
         'encargado',
         'tipo',
         'pct_comision',
-        'promocion',
+        'primera_venta_en',
         'plazo_credito_dias',
         'lat',
         'lng',
@@ -248,7 +248,9 @@ export class SincronizacionRepository {
       tipo: f.tipo as 'cliente' | 'prospecto',
       // numeric -> numero: es un porcentaje, no dinero.
       pct_comision: aNumero(f.pct_comision),
-      promocion: f.promocion as 'ninguna' | '10+1' | '20+1',
+      primera_venta_en: f.primera_venta_en
+        ? new Date(f.primera_venta_en).toISOString()
+        : null,
       plazo_credito_dias: f.plazo_credito_dias,
       lat: aNumero(f.lat),
       lng: aNumero(f.lng),

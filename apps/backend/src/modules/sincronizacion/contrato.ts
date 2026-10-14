@@ -564,7 +564,16 @@ export interface ClientePull extends FilaSincronizable {
   tipo: 'cliente' | 'prospecto';
   /** Numero puro ("5", no "5%"). Ver [[Cliente]]. */
   pct_comision: number | null;
-  promocion: 'ninguna' | '10+1' | '20+1';
+  /**
+   * T-74 (D14): cuando el servidor proyecto la primera nota viva de este
+   * cliente (ISO), o `null` si nunca le han vendido. La tablet lo usa para la
+   * promocion de prospecto, que solo aplica en su primera venta.
+   *
+   * > `promocion` ('ninguna' | '10+1' | '20+1') se QUITO aqui sin subir el
+   * > contrato (D17): mismo criterio que `domicilio` arriba. Las promociones
+   * > ahora bajan en la coleccion `promociones` (Tarea 2).
+   */
+  primera_venta_en: string | null;
   plazo_credito_dias: number | null;
   lat: number | null;
   lng: number | null;
