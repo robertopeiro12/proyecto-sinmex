@@ -24,6 +24,12 @@ Issue #49: "Como administrador, quiero un reporte de ventas por rango con column
 El tercer criterio habla de errores del **sistema viejo** del cliente ("Resultados por día"): en el nuevo se cumple con
 sumar el monto de **todas** las ventas, incluidas las del portal, y no mostrar inventario.
 
+La fuente más reciente del cliente (`Nuevo Sistema Jawa Sinmex Julio 2027`, módulo de Operación) lo resume así:
+
+> **Reporte de Ventas:** resultados **por vendedor y por día** (filtros por fecha, vendedor).
+
+Por eso el reporte trae **subtotales por día** y además un **resumen por repartidor** del rango.
+
 Mario (2026-09-17): los reportes van **por fechas** ("de tal día a tal día… por día, semana y mes"). Se resuelve con
 **atajos de rango** que solo llenan las fechas, más **subtotales por día**.
 
@@ -36,6 +42,7 @@ Mario (2026-09-17): los reportes van **por fechas** ("de tal día a tal día… 
 | Cantidad | **Dos columnas**: "Cantidad" (piezas vendidas) y "Promo" (piezas regaladas), cada una con su total |
 | Ubicación y permiso | **Operación → Reporte de Ventas** (la página reservada), con `reporte_ventas.ver` |
 | Filtros extra | **Atajos de rango** (Hoy / Esta semana / Este mes), **subtotales por día** y **filtro por repartidor** (incluye "Oficina") |
+| Resultados por vendedor | **Resumen por repartidor** del rango (agregado al revisar la fuente de julio: "resultados por vendedor y por día"; Roberto pidió "lo mejor para el proyecto y alineado a lo que ha dicho el cliente") |
 | Tabla | **Bien alineada y ordenada** (pedido explícito): una sola tabla, columnas de ancho fijo, números a la derecha, espacio entre columnas |
 | Lo que no entra | Filtro por status, gráficas, agrupar por semana o mes |
 
@@ -57,6 +64,9 @@ Mario (2026-09-17): los reportes van **por fechas** ("de tal día a tal día… 
   `vendedor_id is null`; sin el parámetro → todas. Cualquier otro valor → 400.
 - **Agrupado:** por `fecha` ascendente; dentro del día por `folio` ascendente. Cada día lleva su subtotal (cantidad,
   promo, monto y número de ventas). Los días sin ventas no aparecen. Al final, el **TOTAL** del rango.
+- **Resumen por repartidor:** una fila por repartidor que tenga ventas en el resultado (Oficina incluida, como `null`),
+  con ventas, cantidad, promo y monto. Orden: monto desc, luego nombre ("Oficina" al final en empate). Respeta los
+  mismos filtros (si se filtró un repartidor, el resumen tiene una sola fila). La suma del resumen = TOTAL.
 
 ## 4. Backend
 
@@ -71,8 +81,10 @@ Mario (2026-09-17): los reportes van **por fechas** ("de tal día a tal día… 
 type ReporteVentas = {
   desde: string; hasta: string;
   dias: DiaDeVentas[];
+  porRepartidor: RepartidorEnReporte[];
   total: TotalVentas;
 };
+type RepartidorEnReporte = { vendedorId: string | null; repartidor: string | null } & TotalVentas; // null = Oficina
 type DiaDeVentas = { fecha: string; ventas: VentaEnReporte[]; subtotal: TotalVentas };
 type TotalVentas = { ventas: number; cantidad: number; promocion: number; montoCentavos: number };
 type VentaEnReporte = {
@@ -87,13 +99,15 @@ type VentaEnReporte = {
 
 - **Repositorio:** una consulta con las ventas planas del rango (piezas sumadas en un `left join lateral` sobre
   líneas vivas, factura con `left join factura`), filtradas por alcance y repartidor.
-- **Reglas puras** (`reglas-reporte-ventas.ts`): agrupar por día, ordenar y sumar. Sin base de datos.
+- **Reglas puras** (`reglas-reporte-ventas.ts`): agrupar por día, ordenar, sumar y armar el resumen por repartidor.
+  Sin base de datos. (La fila plana del repositorio trae `vendedorId` para agrupar; `VentaEnReporte` no lo expone.)
 - **DTO:** `desde`/`hasta` con el mismo formato que Kilometraje; `sucursal` opcional; `repartidor` opcional, `IsUUID` o
   `'oficina'`.
 
 ### 4.2 Pruebas
 
-- Unitarias de las reglas: agrupado por día, orden por folio, subtotales, total, lista vacía.
+- Unitarias de las reglas: agrupado por día, orden por folio, subtotales, total, resumen por repartidor (Oficina,
+  orden, suma = total), lista vacía.
 - e2e contra Postgres local (sucursal propia de la suite, como T-22, para totales exactos):
   - todos los status entran; una venta eliminada no;
   - una línea borrada no suma piezas; una venta sin líneas vivas da 0;
@@ -133,6 +147,8 @@ type VentaEnReporte = {
 - **Encabezado fijo** (`sticky top-0`) al hacer scroll.
 - **Cliente** largo: `truncate` con el nombre completo en `title`.
 - **Resumen** arriba de la tabla: "N ventas · X piezas · Y promo · $Z".
+- **Resumen por repartidor**, entre el resumen y la tabla de ventas: una tabla chica con las mismas reglas de
+  alineación (Repartidor · Ventas · Cantidad · Promo · Monto), "Oficina" para `null`.
 - Fechas `dd/mm/aaaa`; Repartidor `null` → "Oficina"; # nota `null` → "—".
 
 ### 5.4 Estados
@@ -151,7 +167,10 @@ type VentaEnReporte = {
 - Título "Reporte de Ventas"; filtros: Rango (dd/mm/aaaa a dd/mm/aaaa), Sucursal (`etiquetaSucursal`), Repartidor
   ("Todos", "Oficina" o el nombre).
 - Las mismas 11 columnas; Fecha tipo `fecha`, Monto tipo `pesos`, Semana/Cantidad/Promo tipo `numero`.
-- Filas de venta; fila `subtotal` por día ("Total dd/mm/aaaa"); fila `total` ("TOTAL") al final.
+- Filas de venta; fila `subtotal` por día ("Total dd/mm/aaaa"); fila `total` ("TOTAL").
+- Después del TOTAL, una fila vacía, una fila `grupo` "Resumen por repartidor" y una fila por repartidor: en la columna
+  Cliente "<repartidor> (N ventas)" (u "Oficina (N ventas)"), y Cantidad, Promo y Monto en sus columnas, para que
+  cuadren con el TOTAL y se puedan sumar en Excel.
 - Archivo `reporte-ventas_<desde>_a_<hasta>`.
 
 ### 5.6 Pruebas de pantalla (T-65)
@@ -159,7 +178,7 @@ type VentaEnReporte = {
 - Atajos: "Esta semana" empieza en lunes (incluido un domingo y un cambio de mes), "Este mes" termina en el último día
   (incluido febrero).
 - Fechas invertidas → aviso y sin consulta.
-- Pinta ventas, subtotal por día y TOTAL; "Oficina" y "—".
+- Pinta ventas, subtotal por día, TOTAL y resumen por repartidor; "Oficina" y "—".
 - Repartidor elegido viaja en la consulta (`oficina` y uuid).
 - Respuesta vieja no pisa a la nueva; "Actualizando…" al reconsultar.
 - Excel recibe la definición de lo consultado.
@@ -178,5 +197,8 @@ nombres largos, montos de distintos tamaños, venta de mostrador, factura con n�
 
 ## 7. Fuera de alcance
 
-- Filtro por status, gráficas, agrupar por semana o mes, comparar contra otro periodo.
+- Filtro por status, gráficas, agrupar por semana o mes, comparar contra otro periodo, ventas por producto (la fuente
+  de la app lo menciona como idea: "por producto").
+- **Merma y promociones por producto y día** (sección del reporte viejo "Resultados por día"): la merma aún no existe
+  en el sistema (T-35). Cuando exista, se evalúa agregarla aquí mostrando solo productos con registro (petición v2.0).
 - Reporte de Clientes nuevos (#51), Análisis Cliente (#52), consolidación v2.0 del filtro (#59).
