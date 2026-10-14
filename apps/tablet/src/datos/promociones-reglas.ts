@@ -88,7 +88,9 @@ export function coincidenEnProducto(a: Cobertura, b: Cobertura): boolean {
  * Que promociones le tocan a este cliente hoy (D5, D7): sus propias, las
  * generales que ninguna propia desplaza, y la de bienvenida si es un prospecto
  * sin primera venta (ni en el servidor ni en esta tablet: la venta local aun
- * no subida no ha llenado `primera_venta_en`).
+ * no subida no ha llenado `primera_venta_en`). D5 vale tambien para la
+ * bienvenida: una propia activa que coincide en producto (o una propia
+ * "cualquiera") la desplaza, igual que el portal la marca `desplazada`.
  */
 export function promocionesAplicables({
   cliente,
@@ -104,13 +106,11 @@ export function promocionesAplicables({
   // Una inactiva se conserva en la base pero ni se aplica ni desplaza a nadie.
   const activas = promociones.filter((p) => p.activo === 1);
   const propias = activas.filter((p) => p.audiencia === 'cliente' && p.cliente_id === cliente.id);
-  const generales = activas.filter(
-    (p) =>
-      p.audiencia === 'todos' &&
-      !propias.some((q) => coincidenEnProducto(cobertura(q, catalogo), cobertura(p, catalogo))),
-  );
+  const desplazada = (p: Promocion) =>
+    propias.some((q) => coincidenEnProducto(cobertura(q, catalogo), cobertura(p, catalogo)));
+  const generales = activas.filter((p) => p.audiencia === 'todos' && !desplazada(p));
   const esPrimeraVenta = cliente.tipo === 'prospecto' && cliente.primera_venta_en === null && !tieneVentas;
-  const bienvenida = esPrimeraVenta ? activas.filter((p) => p.audiencia === 'prospecto') : [];
+  const bienvenida = esPrimeraVenta ? activas.filter((p) => p.audiencia === 'prospecto' && !desplazada(p)) : [];
   return [...propias, ...generales, ...bienvenida].map((p) => ({ ...p, texto: textoPromocion(p, catalogo) }));
 }
 

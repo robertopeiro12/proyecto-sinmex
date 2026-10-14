@@ -209,10 +209,31 @@ describe('promocionesAplicables (D5, D7)', () => {
     expect(ids(aplicables([prospecto({ activo: 0 })], cliente({ tipo: 'prospecto' })))).toEqual([]);
   });
 
+  it('una propia que coincide en producto desplaza también la bienvenida', () => {
+    const c = cliente({ tipo: 'prospecto' });
+    const bienvenida = prospecto({ compra_tipo: 'producto', compra_producto_id: 'pro-1', compra_cantidad: 5 });
+    expect(ids(aplicables([bienvenida, propia()], c))).toEqual(['promo-propia']);
+    // La bienvenida "cualquiera" de la semilla la desplaza cualquier propia activa.
+    expect(ids(aplicables([prospecto(), propia({ compra_producto_id: 'pro-2' })], c))).toEqual(['promo-propia']);
+  });
+
+  it('una propia de otro producto no la desplaza', () => {
+    const c = cliente({ tipo: 'prospecto' });
+    const bienvenida = prospecto({ compra_tipo: 'producto', compra_producto_id: 'pro-1', compra_cantidad: 5 });
+    expect(ids(aplicables([bienvenida, propia({ compra_producto_id: 'pro-2' })], c))).toEqual([
+      'promo-propia',
+      'promo-prospecto',
+    ]);
+    // Una propia inactiva tampoco.
+    expect(ids(aplicables([bienvenida, propia({ activo: 0 })], c))).toEqual(['promo-prospecto']);
+  });
+
   it('orden: propias, generales, prospecto; cada una con su texto', () => {
     const c = cliente({ tipo: 'prospecto' });
     const p = propia({ compra_producto_id: 'pro-2' });
-    const resultado = aplicables([prospecto(), promo(), p], c);
+    // Bienvenida sobre Jamaica: la propia de Horchata no la desplaza (D5).
+    const bienvenida = prospecto({ compra_tipo: 'producto', compra_producto_id: 'pro-1' });
+    const resultado = aplicables([bienvenida, promo(), p], c);
     expect(ids(resultado)).toEqual(['promo-propia', 'promo-general', 'promo-prospecto']);
     expect(resultado.map((r) => r.texto)).toEqual([
       'Por cada 5 Horchata, 1 Horchata gratis',
