@@ -162,6 +162,18 @@ describe("PantallaClientesNuevos", () => {
     expect(screen.queryByText("Actualizando…")).not.toBeInTheDocument();
   });
 
+  it("Teléfono largo se corta con truncate y title (no invade Encargado)", async () => {
+    mockAuth([PERMISO]);
+    const largo = "+52 (664) 123-4567 ext. 98765";
+    obtener.mockResolvedValue({ ...REPORTE, clientes: [{ ...REPORTE.clientes[0], telefono: largo }], total: 1 });
+    const u = userEvent.setup();
+    render(<PantallaClientesNuevos sucursal="TJ" />);
+    await u.click(screen.getByRole("button", { name: "Mostrar" }));
+    const celda = await screen.findByText(largo);
+    expect(celda).toHaveClass("truncate");
+    expect(celda).toHaveAttribute("title", largo);
+  });
+
   it("exporta lo consultado con la sucursal del usuario atado", async () => {
     mockAuth([PERMISO], "TJ");
     const u = userEvent.setup();
