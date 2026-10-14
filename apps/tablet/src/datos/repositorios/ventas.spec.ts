@@ -142,6 +142,23 @@ describe('repositorio de ventas (T-16)', () => {
       expect(deps.bd.getFirstSync<{ n: number }>('select count(*) as n from venta_promocion')?.n).toBe(0);
     });
 
+    it('un regalo de una presentacion sin linea, o con texto de mas de 200 caracteres, no graba ni quema folio', () => {
+      const { deps, folios, ventas } = montar();
+      const bueno = { promocionId: 'promo-general', presentacionId: 'pre-1', cantidad: 2, texto: TEXTO_GENERAL };
+      const intentos = [
+        // Las sumas de la linea cuadran, pero sobra un regalo de una presentacion sin linea.
+        [bueno, { ...bueno, presentacionId: 'pre-2', cantidad: 1 }],
+        [{ ...bueno, texto: 'x'.repeat(201) }],
+      ];
+      for (const regalos of intentos) {
+        expect(() => ventas.registrar(venta({ regalos }))).toThrow(ErrorVenta);
+      }
+      expect(folios.consecutivoDe('ven-1')).toBe(0);
+      expect(cuantas(deps, 'folio_emitido')).toBe(0);
+      expect(cuantas(deps, 'venta')).toBe(0);
+      expect(deps.bd.getFirstSync<{ n: number }>('select count(*) as n from venta_promocion')?.n).toBe(0);
+    });
+
     it('una venta sin regalos y sin piezas de promocion sigue entrando', () => {
       const { ventas } = montar();
       const v = ventas.registrar({

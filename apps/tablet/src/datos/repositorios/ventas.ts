@@ -21,6 +21,10 @@ export class ErrorVenta extends Error {
   }
 }
 
+/** Mismos topes que `datos-venta.ts` del servidor (T-74, D13). */
+export const MAX_REGALOS_VENTA = 50;
+export const LARGO_MAX_TEXTO_PROMOCION = 200;
+
 export interface LineaRegistroVenta {
   presentacionId: string;
   cantidad: number;
@@ -152,8 +156,19 @@ export function crearRepositorioVentas(
       // transaccion para no quemar folio ni dejar una venta que nunca subira.
       const regalos = datos.regalos ?? [];
       const regaladas = new Map<string, number>();
+      if (regalos.length > MAX_REGALOS_VENTA) {
+        throw new ErrorVenta('La venta trae demasiados regalos de promoción. Vuelve a capturar la venta.');
+      }
       for (const r of regalos) {
-        if (!Number.isInteger(r.cantidad) || r.cantidad < 1 || r.texto.trim() === '') {
+        const texto = r.texto.trim();
+        if (
+          !Number.isInteger(r.cantidad) ||
+          r.cantidad < 1 ||
+          r.promocionId.trim() === '' ||
+          r.presentacionId.trim() === '' ||
+          texto === '' ||
+          texto.length > LARGO_MAX_TEXTO_PROMOCION
+        ) {
           throw new ErrorVenta('Un regalo de promoción viene incompleto. Vuelve a capturar la venta.');
         }
         regaladas.set(r.presentacionId, (regaladas.get(r.presentacionId) ?? 0) + r.cantidad);
@@ -161,6 +176,13 @@ export function crearRepositorioVentas(
       for (const l of resumen.lineas) {
         if ((regaladas.get(l.presentacionId) ?? 0) !== l.cantidadPromocion) {
           throw new ErrorVenta('Las piezas de promoción no cuadran con los regalos. Vuelve a capturar la venta.');
+        }
+      }
+      // El servidor tambien rechaza un regalo de una presentacion que no es linea de la venta.
+      const conLinea = new Set(resumen.lineas.map((l) => l.presentacionId));
+      for (const presentacionId of regaladas.keys()) {
+        if (!conLinea.has(presentacionId)) {
+          throw new ErrorVenta('Un regalo de promoción no corresponde a ninguna línea de la venta. Vuelve a capturar la venta.');
         }
       }
 
