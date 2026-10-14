@@ -164,6 +164,7 @@ export class SincronizacionService {
       },
       notas_pendientes: notasPendientes,
       rutas,
+      promociones: [], // T-74: la consulta llega en la Tarea 4
     };
   }
 

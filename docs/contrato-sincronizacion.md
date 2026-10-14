@@ -191,7 +191,7 @@ nadie relacionaría con nada.
     "presentaciones": [{ "id": "…", "producto_id": "…", "volumen": "1 L", "activo": 1 }],
     "clientes":       [{ "id": "…", "nombre": "…", "domicilio": "…", "telefono": "…",
                          "encargado": null, "tipo": "cliente", "pct_comision": 3.5,
-                         "promocion": "10+1", "plazo_credito_dias": 7,
+                         "primera_venta_en": null, "plazo_credito_dias": 7,
                          "lat": 32.5149, "lng": -117.0382, "sucursal_id": "…",
                          "saldo_favor_centavos": 0, "activo": 1 }],
     "tipos_negocio":  [{ "id": "…", "nombre": "Abarrotes", "activo": 1 }],
@@ -206,7 +206,8 @@ nadie relacionaría con nada.
                                        "metodo_pago": "efectivo" }],
                           "activo": 1 }],
   "rutas": [{ "id": "…", "cliente_id": "…", "fecha": "2026-10-12", "orden": 1,
-              "origen": "oficina", "activo": 1 }]
+              "origen": "oficina", "activo": 1 }],
+  "promociones": [ /* filas: ver la seccion promociones, abajo */ ]
 }
 ```
 
@@ -240,6 +241,14 @@ La base local de la tablet relajó la misma columna (migración local
 `005-prospecto-campos-opcionales`). Sin eso, el `insert` del snapshot fallaría
 y, como se aplica todo en una transacción, **la tablet dejaría de sincronizar
 del todo** — y le pasaría a un compañero de sucursal que no dio de alta nada.
+
+### `primera_venta_en` sustituye a `promocion` en el cliente (T-74)
+
+`ClientePull` deja de traer `promocion` (`'ninguna' | '10+1' | '20+1'`) y trae `primera_venta_en`: el instante ISO en que el servidor proyectó la primera nota viva del cliente, o `null` si nunca le han vendido. La tablet lo usa para la promoción de prospecto, que solo aplica en su primera venta (D7, abajo en `promociones`).
+
+- El servidor lo fija al proyectar la primera `venta_nota` viva del cliente, venga de la tablet o del portal, y **toca `updated_at`** del cliente para que el pull incremental lo traiga (D14).
+- Quitar `promocion` **no sube `CONTRATO_ACTUAL`** (D17), con la misma justificación que `domicilio`: la app no se ha publicado y las dos mitades salen del mismo repo. Una tablet anterior que espere `promocion` no la recibirá; es el mismo riesgo de arriba, aceptado por el mismo motivo.
+- Al publicar la primera tablet hay que revisarlo, junto con `domicilio`.
 
 ### `num_nota` puede venir `null` en una nota pendiente (2026-10-06)
 
@@ -345,6 +354,32 @@ tablet vieja la ignora; la tablet nueva la trata como opcional.
 - `origen` dice quién puso al cliente: `oficina` (portal) o `vendedor` (un `ruta-alta` proyectado).
 - El orden que el vendedor arrastra en la tablet **no sube** (D4): vive en la tabla local `ruta_orden_local` y
   ningún pull lo pisa.
+
+### `promociones`: las reglas de regalo (T-74)
+
+Colección **nueva y de nivel superior** (junto a `rutas`, no dentro de `catalogos`). Aditiva: una tablet vieja la ignora; la tablet nueva la trata como opcional.
+
+- **Qué baja:** las promociones de la sucursal del vendedor: las de `audiencia = 'todos'`, las de `'prospecto'` y las de `'cliente'` cuyo `cliente_id` es de esa sucursal.
+- **Incremental** por `updated_at > desde`. Sin `desde` bajan solo las vivas.
+- **Baja como bandera** (D8): una promoción desactivada o dada de baja viaja con `activo: 0`, nunca como ausencia. La tablet la **conserva** (una venta local puede referenciarla), pero no la aplica.
+- **La regla de aplicación vive en la tablet** (`src/datos/promociones-reglas.ts`); el servidor solo la transporta. Lo que decide la tablet:
+  - **D5:** la promoción propia de un cliente desplaza a la general que coincida con ella en algún producto; entre las que quedan, se aplican todas.
+  - **D6:** el vendedor puede quitar un regalo, nunca agregarlo ni subirlo.
+  - **D7:** una promoción de `prospecto` aplica solo mientras el cliente no tenga `primera_venta_en` ni ventas locales.
+  - **D16:** el regalo "del mismo" por producto cae en la presentación que más compró; si empata, la primera del catálogo.
+
+Ejemplo de una fila:
+
+```jsonc
+{ "id": "…", "audiencia": "cliente", "cliente_id": "…",
+  "compra_tipo": "producto", "compra_producto_id": "…", "compra_presentacion_id": null, "compra_cantidad": 10,
+  "regalo_tipo": "presentacion", "regalo_producto_id": null, "regalo_presentacion_id": "…", "regalo_cantidad": 1,
+  "se_repite": true, "activo": 1 }
+```
+
+- `compra_tipo` (`cualquiera` / `producto` / `presentacion`) y `regalo_tipo` (`mismo` / `producto` / `presentacion`) dicen a qué apunta cada lado. El `*_producto_id` o `*_presentacion_id` que no aplica va en `null`. `regalo_tipo = 'mismo'` nunca viene con `compra_tipo = 'cualquiera'`.
+- `compra_cantidad` puede ser 0 solo en una promoción de `prospecto` (regalo sin compra, D7).
+- `se_repite`: si es `true`, por cada `compra_cantidad` piezas compradas se regala `regalo_cantidad`; si es `false`, una sola vez (D2).
 
 ---
 
@@ -454,6 +489,25 @@ T-27/T-33/T-39, y el servidor las guarda tal cual.
   block de papel, que solo se usa cuando falla el sistema; lo que identifica la venta es el
   `folio`. T-16 lo había hecho obligatorio y T-17 (#95) único por sucursal, con el código
   `num-nota-duplicada`: los dos se quitaron, junto con el código.
+
+#### `regalos` (T-74)
+
+Los regalos de la venta: qué promoción dio cuántas piezas de qué presentación. **Opcional y aditivo**: una tablet anterior no lo manda, y la venta del portal no lo lleva (D9).
+
+```jsonc
+"regalos": [                          // opcional; ausente = sin regalos
+  { "promocion_id": "uuid", "presentacion_id": "uuid", "cantidad": 2,
+    "texto": "Por cada 10 Jawa 600 ml, 1 gratis" }
+]
+```
+
+- `promocion_id` y `presentacion_id` son uuid; `cantidad` es entero ≥ 1; `texto` es de 1 a 200 caracteres: la frase de la promoción tal como la vio el vendedor.
+- La presentación tiene que estar en `lineas` de la misma venta.
+- Por cada presentación, la suma de `cantidad` de sus regalos tiene que ser igual a `cantidad_promocion` de su línea. Si no cuadra, es `datos-invalidos` y el `motivo` nombra el campo.
+- Un `promocion_id` desconocido **no** rechaza: la fila se guarda con `promocion_id` nulo y el texto que mandó la tablet.
+- El servidor valida la **forma**, no la regla de negocio (D13): las piezas ya se entregaron en la calle, y rechazar la venta no las recupera.
+- El texto se congela en la nota (D12): si la oficina edita la promoción después, la nota conserva la frase original.
+- Al proyectar la primera nota del cliente, el servidor marca `cliente.primera_venta_en` (D14); ver arriba.
 
 ### `tipo: "prospecto"` — el alta de un prospecto (T-40)
 
