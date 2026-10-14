@@ -321,6 +321,16 @@ usuario con sesion pasa.
   - **Todo reporte del portal exporta con `apps/portal/src/lib/excel/`** (`exportarExcel(definición)`), que carga
     `exceljs` solo al exportar. `uuid` de `exceljs` va forzado a `^11.1.1` con `overrides` en el `package.json`
     raíz (aviso de seguridad heredado).
+  - **Reporte de Ventas (T-49):** `GET /reportes/ventas`, mismo `ReportesController`, pero con **su propio permiso**
+    `reporte_ventas.ver` (no `reportes.ver`). Pantalla en *Operación → Reporte de Ventas*.
+    - Cuenta ventas vivas de **cualquier status**; la sucursal es **la de la venta** (`venta_nota.sucursal_id`), no la
+      del cliente como en Cuentas por Cobrar (T-22). Piezas = líneas **vivas** de `venta_nota_detalle`.
+    - Agrupa por día (subtotales) y trae `porRepartidor` ("resultados por vendedor y por día", fuente de julio).
+      `repartidor=oficina` filtra ventas de mostrador.
+  - **El portal se usa en computadora, no en celular.** Una tabla ancha tiene que caber desde **1366 px** de ventana
+    (≈1012 px de caja, por la barra lateral `w-64` y el `p-8`). Medir el texto en el navegador antes de fijar anchos
+    de columna: la primera versión de T-49 se desplazaba de lado incluso a 1440 px. Ver
+    `components/reporte-ventas/tabla-reporte-ventas.tsx` (`table-fixed`, `colgroup`, `min-w`, scroll en su caja).
 
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
 `--`: sin él, npm se come los argumentos).
