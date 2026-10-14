@@ -73,8 +73,8 @@ export function TablaCuentasPorCobrar({
                           <th className="py-1 text-right">Total</th>
                           <th className="py-1 text-right">Abonado</th>
                           <th className="py-1 text-right">Saldo</th>
-                          <th className="py-1">Status</th>
-                          <th className="py-1">Vence</th>
+                          <th className="py-1 pl-4">Status</th>
+                          <th className="py-1 pl-4">Vence</th>
                           {puedeCobrar && !c.clienteDadoDeBaja && <th className="py-1" />}
                         </tr>
                       </thead>
@@ -87,8 +87,8 @@ export function TablaCuentasPorCobrar({
                             <td className="py-1 text-right">{formatearPesos(n.montoCentavos)}</td>
                             <td className="py-1 text-right">{formatearPesos(n.abonadoCentavos)}</td>
                             <td className="py-1 text-right font-semibold">{formatearPesos(n.saldoCentavos)}</td>
-                            <td className="py-1">{ETIQUETA_STATUS[n.status]}</td>
-                            <td className={`py-1 ${n.diasAtraso > 0 ? "text-destructive" : ""}`}>{textoVence(n)}</td>
+                            <td className="py-1 pl-4">{ETIQUETA_STATUS[n.status]}</td>
+                            <td className={`py-1 pl-4 ${n.diasAtraso > 0 ? "text-destructive" : ""}`}>{textoVence(n)}</td>
                             {puedeCobrar && !c.clienteDadoDeBaja && (
                               <td className="py-1 text-right">
                                 <Link
