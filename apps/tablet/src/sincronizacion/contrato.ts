@@ -227,7 +227,7 @@ export interface ClientePull extends FilaSincronizable {
    *
    * > `promocion` ('ninguna' | '10+1' | '20+1') se QUITO aqui sin subir el
    * > contrato (D17): mismo criterio que `domicilio` arriba. Las promociones
-   * > ahora bajan en la coleccion `promociones` (Tarea 2).
+   * > ahora bajan en la coleccion `promociones` (T-74).
    */
   primera_venta_en: string | null;
   plazo_credito_dias: number | null;

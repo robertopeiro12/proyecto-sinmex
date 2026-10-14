@@ -495,7 +495,7 @@ T-27/T-33/T-39, y el servidor las guarda tal cual.
 Los regalos de la venta: qué promoción dio cuántas piezas de qué presentación. **Opcional y aditivo**: una tablet anterior no lo manda, y la venta del portal no lo lleva (D9).
 
 ```jsonc
-"regalos": [                          // opcional; ausente = sin regalos
+"regalos": [                          // opcional; ausente = sin regalos (la tablet lo omite si no hay filas)
   { "promocion_id": "uuid", "presentacion_id": "uuid", "cantidad": 2,
     "texto": "Por cada 10 Jawa 600 ml, 1 gratis" }
 ]
@@ -549,7 +549,7 @@ Los campos son los que **dictó el cliente** en agosto de 2026 (ver
 
 - **`domicilio`**: no se captura. Lo sustituye la ubicación, y en Postgres la
   columna dejó de ser obligatoria para un prospecto.
-- **`lista_precio_id`, `pct_comision`, `promocion`, `plazo_credito_dias`**: son
+- **`lista_precio_id`, `pct_comision`, `plazo_credito_dias`** (y, hasta T-74, `promocion`): son
   decisiones del administrador. El vendedor no puede dar de alta clientes
   justamente porque el control del precio no es suyo (cambio v2.0).
 

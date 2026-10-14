@@ -56,7 +56,8 @@ Todo vive en `src/datos/`:
 | `driver-node.ts` | Driver de **pruebas** (`better-sqlite3`). No importar desde la app |
 | `migraciones/motor.ts` | Motor de migraciones sobre `PRAGMA user_version` |
 | `migraciones/001-*.ts` | Esquema inicial |
-| `repositorios/` | Repositorios tipados (`catalogos`, `jornadas`) |
+| `repositorios/` | Repositorios tipados (`catalogos`, `jornadas`, `rutas`, `promociones`, ...) |
+| `promociones-reglas.ts` | Regla de promociones (T-74): puro, sin base; ver la seccion de abajo |
 | `reloj.ts` | Reloj inyectable (la fecha decide el corte de la jornada) |
 
 Nada de `src/datos/` importa React Native: habla contra `BaseDatos` y recibe sus
@@ -192,6 +193,23 @@ de vendedores es **T-62**).
   debe bajar en el pull siguiente a su creación.
 - **Tablet compartida:** el cursor de pull es global: las filas del vendedor anterior se quedan hasta la purga y las
   del nuevo vendedor anteriores al cursor no bajan; pendiente (reiniciar el cursor al cambiar de vendedor).
+
+## Promociones por regla (T-74)
+
+- **Migración 012**: tabla `promocion` (la escribe el pull, baja como bandera `activo`), tabla `venta_promocion`
+  (qué promoción regaló qué presentación en cada venta local, con la frase congelada) y `cliente.primera_venta_en`
+  (lo marca el servidor, D14). La columna vieja `cliente.promocion` se queda sin uso: SQLite no la quita sin
+  rehacer la tabla.
+- **La regla vive en `src/datos/promociones-reglas.ts`** (puro, con pruebas): `promocionesAplicables` (D5, D7),
+  `calcularRegalos` (D1-D3, D16, D18), `aplicarRegalos` (D6) y `textoPromocion`. El repositorio `promociones`
+  (`repositorios/promociones.ts`) solo lee de SQLite y arma el catálogo; `ventas` guarda los regalos en
+  `venta_promocion`.
+- **El campo libre "Promoción" de la captura de venta desapareció** (D6): la app calcula las piezas gratis y el
+  vendedor solo puede quitarlas. La ficha del cliente y la pantalla de venta muestran las promociones en lenguaje
+  llano.
+- **Sube como `regalos`** dentro de la venta (`fuente-ventas.ts`); si la venta no tiene filas en `venta_promocion`
+  el campo se **omite** (no se manda `[]`).
+- La frase está copiada en tres sitios (backend, esta app y portal) con pruebas compartidas; ver `CLAUDE.md`.
 
 ## Pruebas
 
