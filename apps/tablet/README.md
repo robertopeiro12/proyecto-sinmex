@@ -210,6 +210,10 @@ de vendedores es **T-62**).
 - **Sube como `regalos`** dentro de la venta (`fuente-ventas.ts`); si la venta no tiene filas en `venta_promocion`
   el campo se **omite** (no se manda `[]`).
 - La frase está copiada en tres sitios (backend, esta app y portal) con pruebas compartidas; ver `CLAUDE.md`.
+- **Despliegue:** tras el `db push` de la migración de promociones (`20261014130000_promociones.sql`) a
+  `sinmex dev`, reinstala o limpia las tablets de demo (`adb shell pm clear mx.jawa.tablet`) **antes** de que la
+  oficina cree promociones: el cursor del pull solo avanza, y una tablet que sincronizó entre el deploy y su
+  actualización no recibe las promociones creadas en esa ventana hasta que cada una se edite.
 
 ## Pruebas
 

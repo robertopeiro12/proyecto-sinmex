@@ -579,7 +579,7 @@ export interface ClientePull extends FilaSincronizable {
    *
    * > `promocion` ('ninguna' | '10+1' | '20+1') se QUITO aqui sin subir el
    * > contrato (D17): mismo criterio que `domicilio` arriba. Las promociones
-   * > ahora bajan en la coleccion `promociones` (Tarea 2).
+   * > ahora bajan en la coleccion `promociones` (T-74).
    */
   primera_venta_en: string | null;
   plazo_credito_dias: number | null;
@@ -766,8 +766,10 @@ export interface RespuestaPull {
   /** T-37. La ruta diaria del vendedor (ver {@link RutaPull}). Aditiva. */
   rutas: RutaPull[];
   /**
-   * T-74. Las promociones de la sucursal del vendedor: las de `todos` y
-   * `prospecto`, mas las de `cliente` de los clientes de esa sucursal (ver
+   * T-74. Las filas de `promocion` cuyo `sucursal_id` es la sucursal del
+   * vendedor: las de `todos`, las de `prospecto` y las de `cliente` creadas en
+   * esa sucursal (se crean en la del cliente). El filtro es la columna
+   * `sucursal_id` de la promocion, no la cartera de clientes (ver
    * {@link PromocionPull}). Aditiva: una tablet vieja la ignora.
    */
   promociones: PromocionPull[];

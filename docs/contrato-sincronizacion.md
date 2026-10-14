@@ -359,7 +359,7 @@ tablet vieja la ignora; la tablet nueva la trata como opcional.
 
 Colección **nueva y de nivel superior** (junto a `rutas`, no dentro de `catalogos`). Aditiva: una tablet vieja la ignora; la tablet nueva la trata como opcional.
 
-- **Qué baja:** las promociones de la sucursal del vendedor: las de `audiencia = 'todos'`, las de `'prospecto'` y las de `'cliente'` cuyo `cliente_id` es de esa sucursal.
+- **Qué baja:** las filas de `promocion` con `sucursal_id` = la sucursal del vendedor: las de `audiencia = 'todos'`, las de `'prospecto'` y las de `'cliente'` creadas en esa sucursal (una de cliente se crea en la sucursal del cliente). El filtro es la columna `sucursal_id` de la promoción, no la cartera de clientes del vendedor.
 - **Incremental** por `updated_at > desde`. Sin `desde` bajan solo las vivas.
 - **Baja como bandera** (D8): una promoción desactivada o dada de baja viaja con `activo: 0`, nunca como ausencia. La tablet la **conserva** (una venta local puede referenciarla), pero no la aplica.
 - **La regla de aplicación vive en la tablet** (`src/datos/promociones-reglas.ts`); el servidor solo la transporta. Lo que decide la tablet:

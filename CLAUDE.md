@@ -317,7 +317,8 @@ usuario con sesion pasa.
   `docs/superpowers/specs/2026-10-14-t-74-promociones-por-regla-design.md`.
   - Tabla `promocion`, una regla por fila: compra de N piezas de un producto, una presentación o lo que sea
     (D1, D3); regalo de M piezas del mismo, de un producto o de una presentación; `se_repite` (D2); audiencia
-    `todos` / `cliente` / `prospecto`, las dos primeras por sucursal (D4); la propia del cliente **desplaza** a la
+    `todos` / `cliente` / `prospecto`: `todos` y `prospecto` son de una sucursal, `cliente` sigue al cliente y se
+    crea en su sucursal (D4); la de prospecto nunca se repite por bloques; la propia del cliente **desplaza** a la
     general que coincide en algún producto y las demás se aplican **todas** (D5); el vendedor solo puede **quitar**
     un regalo (D6); la de prospecto aplica solo en su primera venta y puede regalar sin compra (D7); sin fechas,
     baja lógica y nunca se borra (D8).
@@ -340,6 +341,10 @@ usuario con sesion pasa.
   - **Pre-flight de D10 para quien empuje la migración a la nube:** la migración se niega a correr si hay datos del
     esquema viejo. Antes: `select count(*) from cliente where promocion <> 'ninguna'; select count(*) from
     cliente_promocion_producto;` → debe dar 0 y 0 (además del pre-flight del protocolo de arriba).
+  - **Orden del despliegue en `sinmex dev`:** después del `db push` de `20261014130000_promociones.sql`, las
+    tablets de demo se **reinstalan o se limpian** (`adb shell pm clear mx.jawa.tablet`) **antes** de que la oficina
+    dé de alta promociones. Una tablet que sincronizó entre el deploy y su propia actualización ya movió su cursor
+    de pull (`updated_at`, solo avanza) y no recibe las promociones creadas en esa ventana hasta que cada una se edite.
 
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
