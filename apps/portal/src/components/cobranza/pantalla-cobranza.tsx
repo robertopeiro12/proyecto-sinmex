@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { BuscarPorCobrar } from "./buscar-por-cobrar";
@@ -19,6 +20,7 @@ export function PantallaCobranza({
   clienteInicial?: string | null;
   notaInicial?: string | null;
 }) {
+  const router = useRouter();
   const { puede, cargando: cargandoSesion } = useAuth();
   const [vista, setVista] = useState<Vista>(() =>
     clienteInicial
@@ -59,7 +61,18 @@ export function PantallaCobranza({
       <CobranzaCliente
         clienteId={vista.clienteId}
         notaInicial={vista.notaId}
-        onVolver={() => setVista({ tipo: "buscar" })}
+        onVolver={() => {
+          setVista({ tipo: "buscar" });
+          // Si venía de Cuentas por Cobrar, ?cliente=&nota= seguiría en la dirección y
+          // cambiar de sucursal (o recargar) reabriría al cliente viejo: se quitan.
+          if (clienteInicial) {
+            router.replace(
+              sucursal
+                ? `/operacion/cobranza?${new URLSearchParams({ sucursal })}`
+                : "/operacion/cobranza",
+            );
+          }
+        }}
       />
     );
   }

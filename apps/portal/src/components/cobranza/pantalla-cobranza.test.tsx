@@ -18,6 +18,9 @@ vi.mock("@/lib/ventas", async (importOriginal) => {
   return { ...real, listarRepartidores: vi.fn() };
 });
 vi.mock("@/components/auth/auth-provider");
+// PantallaCobranza usa useRouter para limpiar ?cliente=&nota= al volver (jsdom no trae App Router).
+const replace = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
 
 const listarClientes = vi.mocked(clientesLib.listarClientes);
 const buscarPorCobrar = vi.mocked(cobranzasLib.buscarPorCobrar);
@@ -96,6 +99,19 @@ describe("PantallaCobranza", () => {
     expect(listarClientes).not.toHaveBeenCalled();
     await usuario.click(screen.getByRole("button", { name: /Volver/ }));
     expect(await screen.findByText("Buscar por fecha")).toBeInTheDocument();
+  });
+
+  it("Volver quita cliente y nota de la dirección (conserva la sucursal) para que un cambio de sucursal no reabra al cliente", async () => {
+    mockAuth(() => true);
+    const usuario = userEvent.setup();
+    const { unmount } = render(<PantallaCobranza sucursal="TJ" clienteInicial="c1" notaInicial="n1" />);
+    await usuario.click(await screen.findByRole("button", { name: /Volver/ }));
+    expect(replace).toHaveBeenCalledWith("/operacion/cobranza?sucursal=TJ");
+    unmount();
+    replace.mockClear();
+    render(<PantallaCobranza sucursal={null} clienteInicial="c1" notaInicial="n1" />);
+    await usuario.click(await screen.findByRole("button", { name: /Volver/ }));
+    expect(replace).toHaveBeenCalledWith("/operacion/cobranza");
   });
 
   it("sin cobranza.registrar no abre al cliente aunque venga en la dirección", () => {
