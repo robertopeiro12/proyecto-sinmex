@@ -247,6 +247,12 @@ describe('calcularRegalos (D2, D16, D18)', () => {
     expect(r?.cantidad).toBe(1);
   });
 
+  it('la de prospecto nunca se repite: compra 10, se_repite 1 y 30 piezas dan un solo bloque', () => {
+    const p = promo({ audiencia: 'prospecto', compra_cantidad: 10, se_repite: 1 });
+    const [r] = calcular([linea('pre-1', 30)], [p]);
+    expect(r?.cantidad).toBe(1);
+  });
+
   it('suma las presentaciones del producto y regala en la que mas compro', () => {
     expect(calcular([linea('pre-1', 6), linea('pre-2', 4)], [promo()])).toMatchObject([
       { presentacionId: 'pre-1', cantidad: 1 },

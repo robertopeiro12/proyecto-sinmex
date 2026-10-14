@@ -176,7 +176,10 @@ export function calcularRegalos(
       bloques = 1;
     } else {
       const n = compradas(p, lineas, catalogo);
-      bloques = p.se_repite === 1 ? Math.floor(n / p.compra_cantidad) : n >= p.compra_cantidad ? 1 : 0;
+      // La de prospecto se da una sola vez aunque llegue con `se_repite` (el servidor ya no lo
+      // admite; esto cubre una fila vieja o mal escrita): repetirla regalaria mas que su frase.
+      const repite = p.se_repite === 1 && p.audiencia !== 'prospecto';
+      bloques = repite ? Math.floor(n / p.compra_cantidad) : n >= p.compra_cantidad ? 1 : 0;
     }
     if (bloques === 0) continue;
 

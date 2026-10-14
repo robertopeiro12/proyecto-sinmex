@@ -376,8 +376,12 @@ export interface RespuestaPull {
    */
   rutas?: RutaPull[];
   /**
-   * T-74. Opcional: un servidor anterior a este ticket no la manda y la tablet
-   * trabaja sin promociones (la ficha dice "Sin promoción").
+   * T-74. Las filas de `promocion` cuyo `sucursal_id` es la sucursal del
+   * vendedor: las de `todos`, las de `prospecto` y las de `cliente` creadas en
+   * esa sucursal (se crean en la del cliente). El filtro es la columna
+   * `sucursal_id` de la promocion, no la cartera de clientes. Opcional: un
+   * servidor anterior a este ticket no la manda y la tablet trabaja sin
+   * promociones (la ficha dice "Sin promoción").
    */
   promociones?: PromocionPull[];
 }
