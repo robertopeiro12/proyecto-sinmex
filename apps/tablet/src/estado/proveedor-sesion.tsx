@@ -16,12 +16,8 @@ import { crearGestorSesion, type GestorSesion, type ResultadoEntrada } from '@/s
 import type { EstadoSesion, VendedorSesion } from '@/sesion/politica';
 import { crearClienteFotosExpo } from '@/fotos/expo';
 import { crearClienteSync } from '@/sincronizacion/api';
-import { fuenteCobranzas } from '@/sincronizacion/fuente-cobranzas';
 import { fuenteFotosProspectos } from '@/sincronizacion/fuente-fotos';
-import { fuenteJornadas } from '@/sincronizacion/fuente-jornadas';
-import { fuenteProspectos } from '@/sincronizacion/fuente-prospectos';
-import { fuenteRutas } from '@/sincronizacion/fuente-rutas';
-import { fuenteVentas } from '@/sincronizacion/fuente-ventas';
+import { fuentesDelPush } from '@/sincronizacion/fuentes';
 import {
   crearMotorSincronizacion,
   type MotorSincronizacion,
@@ -91,17 +87,8 @@ export function ProveedorSesion({
       api: crearClienteSync(),
       catalogos: datos.catalogos,
       sync: datos.sync,
-      // T-16: las ventas del dia suben despues de la jornada; T-40 suma los
-      // prospectos. Los cobros (T-20) van despues de las ventas, para no llegar
-      // nunca antes que una venta del mismo dia. Las altas de ruta (T-37) no
-      // dependen de nadie: van al final.
-      fuentes: [
-        fuenteJornadas(datos.jornadas),
-        fuenteVentas(datos.ventas),
-        fuenteProspectos(datos.prospectos),
-        fuenteCobranzas(datos.cobranzas),
-        fuenteRutas(datos.rutas),
-      ],
+      // Orden del push (T-16, T-40, T-20, T-37, T-75 D3): ver `fuentesDelPush`.
+      fuentes: fuentesDelPush(datos),
       // T-40: el canal de la foto, aparte del lote del push. Corre despues, y
       // solo para prospectos que el servidor ya acepto — antes no existe la fila
       // `cliente` a la que la foto pertenece.
