@@ -301,6 +301,11 @@ export type DatosVenta = {
  *   `cliente_id` (lo esta CREANDO) y no lleva folio, porque no es una nota que
  *   nadie firme. El servidor **rechaza** un prospecto que llegue con folio.
  *
+ * T-75 (D2): la `clave` de un prospecto **es el id** con el que el servidor
+ * crea el `cliente`. Debe ser uuid (la tablet manda `randomUUID()`); si no lo
+ * es, `datos-invalidos`. Asi una venta capturada sin red contra ese prospecto
+ * (que la tablet ya registro con ese id) encuentra a su cliente al subir.
+ *
  * Es `type` y no `interface` a proposito: la tablet lo asigna a
  * `OperacionSaliente.datos` (`Record<string, unknown>`), y una interface no tiene
  * la firma de indice implicita que eso exige.

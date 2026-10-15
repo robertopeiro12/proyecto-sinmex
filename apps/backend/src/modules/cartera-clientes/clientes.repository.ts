@@ -315,6 +315,7 @@ export class ClientesRepository {
    */
   async insertarProspecto(
     datos: {
+      id: string;
       nombre: string;
       telefono: string;
       encargado: string | null;
@@ -329,6 +330,7 @@ export class ClientesRepository {
     return trx
       .insertInto('cliente')
       .values({
+        id: datos.id,
         nombre: datos.nombre,
         domicilio: null,
         telefono: datos.telefono,

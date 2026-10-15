@@ -1,5 +1,6 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
@@ -91,7 +92,8 @@ describe('Prospectos desde la app (e2e)', () => {
 
   /** Un alta de prospecto valida, con clave unica por defecto. */
   const alta = (extra: Record<string, unknown> = {}) => ({
-    clave: `prosp-${SUFIJO}-${Math.random().toString(36).slice(2)}`,
+    // T-75: la clave es el id del cliente; la tablet manda uuid v4.
+    clave: randomUUID(),
     tipo: 'prospecto',
     fecha_operacion: '2026-09-14',
     ocurrido_en: '2026-09-14T18:03:22.000Z',
@@ -274,6 +276,9 @@ describe('Prospectos desde la app (e2e)', () => {
 
     const filas = await clientePorNombre(`${PREFIJO} Tacos Aaron`);
     expect(filas).toHaveLength(1);
+    // T-75 (D2): el servidor adopta la clave como id. Es lo que permite que una
+    // venta encolada sin red, que ya apunta a ese id, encuentre a su cliente.
+    expect(filas[0].id).toBe(op.clave);
     expect(filas[0]).toMatchObject({
       nombre: `${PREFIJO} Tacos Aaron`,
       telefono: '6641112233',
@@ -442,6 +447,56 @@ describe('Prospectos desde la app (e2e)', () => {
     expect(await clientePorNombre(`${PREFIJO} Con Cliente`)).toHaveLength(0);
   });
 
+  it('una clave que no es uuid se rechaza por operacion: es el id del cliente (T-75)', async () => {
+    const op = alta({
+      clave: `prosp-${SUFIJO}-texto`,
+      datos: { ...alta().datos, nombre: `${PREFIJO} Clave Texto` },
+    });
+    const cuerpo = (await push({ operaciones: [op] }).expect(200))
+      .body as RespuestaPush;
+    expect(cuerpo.resultados[0]).toMatchObject({
+      estado: 'rechazada',
+      codigo: 'datos-invalidos',
+    });
+    expect(cuerpo.resultados[0].motivo).toMatch(/clave/);
+    expect(await clientePorNombre(`${PREFIJO} Clave Texto`)).toHaveLength(0);
+  });
+
+  it('una clave igual al id de un cliente existente se rechaza con motivo, no con 500 (T-75)', async () => {
+    const existente = await db
+      .insertInto('cliente')
+      .values({
+        nombre: `${PREFIJO} Ya existia`,
+        domicilio: 'Calle 1',
+        telefono: '6640000000',
+        tipo: 'cliente',
+        lista_precio_id: listaId,
+        sucursal_id: sucursalId,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    const op = alta({
+      clave: existente.id,
+      datos: { ...alta().datos, nombre: `${PREFIJO} Choca` },
+    });
+    const cuerpo = (await push({ operaciones: [op] }).expect(200))
+      .body as RespuestaPush;
+    expect(cuerpo.resultados[0]).toMatchObject({
+      estado: 'rechazada',
+      codigo: 'datos-invalidos',
+    });
+    expect(cuerpo.resultados[0].motivo).toMatch(/id/);
+    // Una rechazada no deja fila: ni en cliente ni en el buzon.
+    expect(await clientePorNombre(`${PREFIJO} Choca`)).toHaveLength(0);
+    expect(
+      await db
+        .selectFrom('sync_operacion')
+        .select('id')
+        .where('clave_idempotencia', '=', op.clave)
+        .execute(),
+    ).toHaveLength(0);
+  });
+
   it('un tipo de negocio dado de baja se rechaza con su codigo propio', async () => {
     const op = alta({
       datos: {
@@ -478,6 +533,10 @@ describe('Prospectos desde la app (e2e)', () => {
       .body as RespuestaPush;
     expect(segunda.resultados[0]).toMatchObject({ estado: 'aplicada' });
     expect(await clientePorNombre(`${PREFIJO} Giro Borrado`)).toHaveLength(1);
+    // Review Focus 1: rechazada y reenviada con la misma clave entra con ese id.
+    expect((await clientePorNombre(`${PREFIJO} Giro Borrado`))[0].id).toBe(
+      op.clave,
+    );
   });
 
   it('un alta sin nombre de negocio se rechaza nombrando el campo', async () => {

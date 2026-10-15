@@ -2,6 +2,7 @@
 
 **Versión del contrato: `1`** · Implementado en T-07 · Ampliado con folios en T-14
 · Ampliado con el tipo `prospecto` y el catálogo de tipos de negocio en T-40
+· T-75: la clave del prospecto es el id del cliente
 · Última revisión: 2026-09-14
 
 Este documento es la referencia legible del contrato. Las definiciones
@@ -534,6 +535,12 @@ Es el **único** tipo que crea una fila de *catálogo* (`cliente` con
 }
 ```
 
+> [!info] T-75: la clave es el id del cliente
+> La `clave` de un prospecto **es el id** con el que el servidor crea el
+> `cliente`. Debe ser uuid (la tablet manda `randomUUID()`); si no lo es,
+> `datos-invalidos`. Así una venta capturada sin red contra ese prospecto (que la
+> tablet ya registró con ese id) encuentra a su cliente al subir.
+
 > [!note] T-69 volvió obligatorio `encargado` y NO subió la versión
 > Pasar un campo de nullable a obligatorio es el mismo tipo de cambio que el §3
 > manda versionar, y aun así no se subió, por el mismo motivo que la advertencia
@@ -553,12 +560,13 @@ Los campos son los que **dictó el cliente** en agosto de 2026 (ver
   decisiones del administrador. El vendedor no puede dar de alta clientes
   justamente porque el control del precio no es suyo (cambio v2.0).
 
-Tres reglas que se rechazan **por operación**, todas como `datos-invalidos`:
+Cuatro reglas que se rechazan **por operación**, todas como `datos-invalidos`:
 
 | Qué llega | Por qué se rechaza |
 |---|---|
 | Un `folio` | `sync_operacion.folio` tiene un `unique` **global**: un folio pegado a un prospecto consumiría un número del espacio de las ventas, y una venta legítima con ese número se rechazaría después como `folio-duplicado` — un fallo que aparece en otra operación, días después |
 | Un `cliente_id` | El prospecto **es** el cliente que se está creando |
+| Una clave que no es uuid | Es el id del `cliente` que se crea (T-75) |
 | Media coordenada | No ubica nada y en el portal se vería como un punto en el meridiano cero: parece un dato bueno |
 
 **Sin ubicación es un caso normal**, no un error: el vendedor pudo negar el
@@ -750,7 +758,7 @@ duplicada lo escondería.
 
 `clave` es el **`id` local de la fila en SQLite**: un uuid v4 generado en la
 tablet **al capturar** la operación. No cambia nunca — ni entre reintentos, ni
-entre versiones de la app.
+entre versiones de la app. Para un `prospecto`, además, la clave pasa a ser el `id` del `cliente` creado (T-75).
 
 La regla vive en un `unique (vendedor_id, clave_idempotencia)` de la tabla
 `sync_operacion`, **no** en una comprobación del servicio: entre el `SELECT` y el

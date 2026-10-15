@@ -17,6 +17,7 @@ const trx = {} as Transaction<DB>;
 const contexto = (
   extra: Partial<ContextoProspecto> = {},
 ): ContextoProspecto => ({
+  id: '7f2c0000-0000-4000-8000-000000000001',
   sucursalId: 'sucursal-tj',
   fechaOperacion: '2026-09-14',
   vendedorId: 'vendedor-1',
@@ -62,6 +63,7 @@ describe('ClientesService.crearProspecto', () => {
     expect(repo.insertarProspecto).toHaveBeenCalledTimes(1);
     expect(repo.insertarProspecto).toHaveBeenCalledWith(
       {
+        id: '7f2c0000-0000-4000-8000-000000000001',
         nombre: 'Tacos Aaron',
         telefono: '6641112233',
         encargado: 'Don Aaron',

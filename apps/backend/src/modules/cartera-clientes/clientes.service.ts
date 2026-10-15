@@ -14,6 +14,7 @@ import { ProspectoRechazado } from './prospecto-rechazado';
 import {
   esViolacionCheck,
   esViolacionFk,
+  esViolacionUnicidad,
   restriccionDelError,
 } from '../../database/errores-postgres';
 import type { CrearClienteDto } from './dto/crear-cliente.dto';
@@ -77,6 +78,13 @@ function unirEnEspanol(items: string[]): string {
  * `switch` y no cinco casos especiales.
  */
 export interface ContextoProspecto {
+  /**
+   * T-75 (D2): el id con el que nace el `cliente` = la clave de idempotencia
+   * de la operacion, ya validada como uuid por `prepararProspecto`. La tablet
+   * lo registro con ese id y su venta de bienvenida (encolada sin red) apunta
+   * a el; el servidor **no** inventa otro.
+   */
+  id: string;
   /** Sucursal donde nace el prospecto: la del vendedor del token. */
   sucursalId: string;
   /**
@@ -300,22 +308,37 @@ export class ClientesService {
       }
     }
 
-    return this.repo.insertarProspecto(
-      {
-        nombre: prospecto.nombre,
-        telefono: prospecto.telefono,
-        encargado: prospecto.encargado,
-        tipoNegocioId: prospecto.tipoNegocioId,
-        comentarios: prospecto.comentarios,
-        lat: prospecto.lat,
-        lng: prospecto.lng,
-        // La sucursal sale del alcance del vendedor del token, nunca del cuerpo:
-        // el prospecto nace en la sucursal de quien lo capturo (ADR-0009, y la
-        // doctrina de `resolverAlcance` de T-09 que el `push` ya aplico).
-        sucursalId: contexto.sucursalId,
-      },
-      trx,
-    );
+    try {
+      return await this.repo.insertarProspecto(
+        {
+          id: contexto.id,
+          nombre: prospecto.nombre,
+          telefono: prospecto.telefono,
+          encargado: prospecto.encargado,
+          tipoNegocioId: prospecto.tipoNegocioId,
+          comentarios: prospecto.comentarios,
+          lat: prospecto.lat,
+          lng: prospecto.lng,
+          // La sucursal sale del alcance del vendedor del token, nunca del cuerpo:
+          // el prospecto nace en la sucursal de quien lo capturo (ADR-0009, y la
+          // doctrina de `resolverAlcance` de T-09 que el `push` ya aplico).
+          sucursalId: contexto.sucursalId,
+        },
+        trx,
+      );
+    } catch (error) {
+      // Solo la llave primaria: otro `unique` seria otro bug y debe reventar.
+      if (
+        esViolacionUnicidad(error) &&
+        restriccionDelError(error) === 'cliente_pkey'
+      ) {
+        throw new ProspectoRechazado({
+          razon: 'id-ocupado',
+          motivo: `Ya existe un cliente con el id ${contexto.id}; la tablet mandó una clave que no es nueva.`,
+        });
+      }
+      throw error;
+    }
   }
 
   /**

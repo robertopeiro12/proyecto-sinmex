@@ -469,6 +469,8 @@ export class SincronizacionService {
         const { id } = await this.clientes.crearProspecto(
           proyeccion.prospecto,
           {
+            // T-75 (D2): la clave ES el id del cliente (uuid validado en prepararProspecto).
+            id: op.clave,
             // Nace en la sucursal del vendedor del token, nunca en la que diga
             // el cuerpo: `vendedorEnAlcance` ya paso por `resolverAlcance()`.
             sucursalId: vendedor.sucursal_id,
