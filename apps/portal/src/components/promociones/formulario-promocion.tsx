@@ -63,6 +63,9 @@ export function FormularioPromocion({ promocion, contexto, alGuardar, alCancelar
   const [regaloCantidad, setRegaloCantidad] = useState(String(promocion?.regaloCantidad ?? 1));
   const [seRepite, setSeRepite] = useState(promocion?.seRepite ?? true);
   const [activo, setActivo] = useState(promocion?.activo ?? true);
+  // Un alta nace incompleta (sin producto elegido): hasta que se toca algo, lo que falta es una
+  // indicación en gris, no un error en rojo.
+  const [tocado, setTocado] = useState(false);
 
   const [productos, setProductos] = useState<Producto[]>([]);
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
@@ -176,7 +179,11 @@ export function FormularioPromocion({ promocion, contexto, alGuardar, alCancelar
   }
 
   return (
-    <form onSubmit={alEnviar} className="mb-6 flex flex-col gap-4 rounded-md border p-4">
+    <form
+      onSubmit={alEnviar}
+      onChange={() => setTocado(true)}
+      className="mb-6 flex flex-col gap-4 rounded-md border p-4"
+    >
       <h2 className="text-sm font-semibold">{esAlta ? "Nueva promoción" : "Editar promoción"}</h2>
 
       {esAlta && !deCliente && (
@@ -374,7 +381,11 @@ export function FormularioPromocion({ promocion, contexto, alGuardar, alCancelar
       {/* La frase tal como la verá el vendedor (D11); si la regla no cuadra, en su lugar va el porqué. */}
       <p
         aria-live="polite"
-        className={problema ? "text-sm text-destructive" : "rounded-md bg-muted px-3 py-2 text-sm"}
+        className={
+          problema
+            ? `text-sm ${tocado ? "text-destructive" : "text-muted-foreground"}`
+            : "rounded-md bg-muted px-3 py-2 text-sm"
+        }
       >
         {problema ?? frase}
       </p>
