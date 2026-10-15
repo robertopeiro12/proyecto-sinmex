@@ -347,6 +347,22 @@ usuario con sesion pasa.
     dé de alta promociones. Una tablet que sincronizó entre el deploy y su propia actualización ya movió su cursor
     de pull (`updated_at`, solo avanza) y no recibe las promociones creadas en esa ventana hasta que cada una se edite.
 
+- **Tesorería (T-28).** *Finanzas → Tesorería* (`/finanzas/tesoreria`), backend en `modules/tesoreria/`
+  (`/tesoreria`). Permisos: `tesoreria.ver` (la vista) y `tesoreria.gestionar` (cuentas y saldos). Spec:
+  `docs/superpowers/specs/2026-10-15-t28-tesoreria-cuentas-saldo-inicial-design.md`.
+  - **Dos "tesorerías":** la del repartidor (`Cobranza − Gastos`) se cuenta **en persona** y no es de aquí; esto
+    son las **cuentas del negocio** (Efectivo, Caja Chica, bancos) que pidió el cliente.
+  - `tesoreria_cuenta`: de una sucursal o **general** (`sucursal_id` null); nombre único entre vivas
+    (`lower(btrim)`), en toda la empresa. Un usuario atado ve las suyas + las generales, pero las generales solo
+    las **modifica** un General (403). Otra sucursal = 404.
+  - `tesoreria_saldo`: saldo **fijado** de una cuenta en una fecha, uno vivo por cuenta y fecha (`PUT` en lote,
+    todo o nada, corrige en vez de duplicar, sin fechas futuras de Tijuana). Vale al **inicio** del día: los
+    movimientos de ese día van encima. El más antiguo es el saldo inicial; uno nuevo es el nuevo punto de partida.
+  - **El cálculo vive solo en `tesoreria/reglas-saldo.ts`** (`saldoDeCuenta`, `armarVista`). Sin saldo fijado →
+    `null` ("Sin saldo inicial"), nunca 0. El final de D no es "el inicio de D+1". T-29 agrega movimientos
+    (depósitos, retiros, traspasos, cobranza) alimentando `movimientos`, sin tocar la firma.
+  - Montos en **centavos enteros con signo** en la API (pueden ser negativos: sobregiro).
+
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
   - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).

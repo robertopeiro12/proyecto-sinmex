@@ -304,6 +304,27 @@ export interface SyncOperacion {
   vendedor_id: string;
 }
 
+export interface TesoreriaCuenta {
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  id: Generated<string>;
+  nombre: string;
+  sucursal_id: string | null;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface TesoreriaSaldo {
+  capturo_usuario_id: string;
+  comentario: string | null;
+  created_at: Generated<Timestamp>;
+  cuenta_id: string;
+  deleted_at: Timestamp | null;
+  fecha: Timestamp;
+  id: Generated<string>;
+  monto: Numeric;
+  updated_at: Generated<Timestamp>;
+}
+
 export interface TipoNegocio {
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -432,6 +453,8 @@ export interface DB {
   sesion_vendedor: SesionVendedor;
   sucursal: Sucursal;
   sync_operacion: SyncOperacion;
+  tesoreria_cuenta: TesoreriaCuenta;
+  tesoreria_saldo: TesoreriaSaldo;
   tipo_negocio: TipoNegocio;
   usuario: Usuario;
   usuario_permiso: UsuarioPermiso;
