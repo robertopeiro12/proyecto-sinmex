@@ -334,7 +334,9 @@ export class ClientesService {
       ) {
         throw new ProspectoRechazado({
           razon: 'id-ocupado',
-          motivo: `Ya existe un cliente con el id ${contexto.id}; la tablet mandó una clave que no es nueva.`,
+          // Neutro a proposito: no afirma que exista un cliente ni repite el id.
+          motivo:
+            'La clave de este prospecto no es nueva; vuelve a capturarlo en la tablet.',
         });
       }
       throw error;

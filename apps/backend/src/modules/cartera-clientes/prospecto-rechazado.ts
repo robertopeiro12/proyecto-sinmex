@@ -28,6 +28,10 @@ export type RazonRechazoProspecto =
    * pasar con una tablet sana (la clave es un uuid v4 recien generado y un
    * reenvio cae antes en `duplicada` por el buzon), asi que es un bug o una
    * clave inventada: se rechaza con motivo y **no** es un 500.
+   *
+   * El motivo es neutro a proposito: el uuid puede ser de un cliente de OTRA
+   * sucursal, y decir "ya existe un cliente con ese id" seria un oraculo de
+   * existencia entre sucursales. No afirma que exista nada ni repite el id.
    */
   | 'id-ocupado';
 

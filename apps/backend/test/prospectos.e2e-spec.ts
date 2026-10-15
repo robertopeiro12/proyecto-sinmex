@@ -485,7 +485,8 @@ describe('Prospectos desde la app (e2e)', () => {
       estado: 'rechazada',
       codigo: 'datos-invalidos',
     });
-    expect(cuerpo.resultados[0].motivo).toMatch(/id/);
+    expect(cuerpo.resultados[0].motivo).toMatch(/no es nueva/);
+    expect(cuerpo.resultados[0].motivo).not.toContain(existente.id);
     // Una rechazada no deja fila: ni en cliente ni en el buzon.
     expect(await clientePorNombre(`${PREFIJO} Choca`)).toHaveLength(0);
     expect(
