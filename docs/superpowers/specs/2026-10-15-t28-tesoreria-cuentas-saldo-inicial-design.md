@@ -78,8 +78,9 @@ Con `resolverAlcance` de T-09, como todo el portal:
   el existente (monto y comentario), no duplica.
 - El primero de una cuenta es su **saldo inicial**; los siguientes son "modificar saldo". No hay diferencia en
   la base: es solo el más antiguo.
-- Monto en pesos con 2 decimales (`numeric(14,2)`), puede ser negativo. En el servidor se opera en **centavos
-  enteros** (`aCentavos` de `sincronizacion/dinero.ts`), nunca con flotantes.
+- Monto en pesos con 2 decimales (`numeric(14,2)`), puede ser negativo. La API recibe y devuelve **centavos
+  enteros** (`montoCentavos`, como T-21/T-22); el servidor convierte con `aCentavos` / `aPesos` de
+  `sincronizacion/dinero.ts`, nunca con flotantes. Tope: ±999,999,999,999.99 (cabe en `numeric(14,2)`).
 - Comentario: opcional, hasta 200 caracteres; `null` si viene vacío (nunca `''`).
 - La fecha **no** puede ser futura respecto de **hoy en Tijuana** (`(now() at time zone
   'America/Tijuana')::date`, calculado en Postgres). Una fecha pasada sí: así se arranca con el saldo de un día
@@ -89,11 +90,14 @@ Con `resolverAlcance` de T-09, como todo el portal:
 
 ### 3.4 El cálculo (un solo lugar)
 
-Función pura `saldoAlInicioDe(fecha, saldosFijados, movimientos)` en el backend (`tesoreria/reglas-saldo.ts`):
+Función pura `saldoDeCuenta(cuentaId, fecha, momento, saldosFijados, movimientos)` (`momento` = `'inicio'` o
+`'final'`) en el backend (`tesoreria/reglas-saldo.ts`):
 
 - **Saldo al inicio del día D** = el saldo fijado vivo **más reciente con fecha ≤ D** + los movimientos con
   fecha en `[fecha_fijada, D)`.
-- **Saldo al final del día D** = saldo al inicio de `D + 1`.
+- **Saldo al final del día D** = el mismo saldo fijado (el más reciente con fecha ≤ D) + los movimientos con
+  fecha en `[fecha_fijada, D]`. (No es "el inicio de D + 1": un saldo fijado el día siguiente no debe colarse
+  en el cierre de D.)
 - Sin saldo fijado con fecha ≤ D → **`null`** ("Sin saldo inicial"), nunca $0.
 - En T-28 **no hay movimientos** (lista vacía): la firma ya los recibe para que T-29 solo los alimente.
 
@@ -103,7 +107,7 @@ Ejemplo: fijo $10,000 en *Efectivo TJ* el 01-oct y $9,500 el 10-oct.
 - (En T-29: un cobro de $500 el 10-oct deja el final del 10 en $10,000, porque el fijado es al inicio del día.)
 
 **Total Tesorería** (inicio y final) = suma de los saldos **no nulos** de las cuentas listadas. Si alguna
-cuenta no tiene saldo, el total lo dice ("3 de 4 cuentas con saldo"), para que un total bajo no se lea como
+cuenta no tiene saldo, el total lo dice ("3 de 4 cuentas con saldo", contado por separado al inicio y al final), para que un total bajo no se lea como
 dinero faltante. Este total es el que usará el Flujo de Efectivo (T-32).
 
 ### 3.5 Rango de la vista
@@ -156,12 +160,12 @@ plan los ajusta a lo que ya usa el repo.) Tablas nuevas y vacías: **sin pre-fli
 
 | Método y ruta | Permiso | Qué hace |
 |---|---|---|
-| `GET /tesoreria/cuentas?sucursal=` | `tesoreria.ver` | Cuentas vivas en alcance, por nombre |
+| `GET /tesoreria/cuentas?sucursal=` | `tesoreria.gestionar` | Cuentas vivas en alcance (generales primero, luego sucursal y nombre). La vista trae sus propias cuentas, así que `ver` no lo necesita |
 | `POST /tesoreria/cuentas` | `tesoreria.gestionar` | Alta. Cuerpo `{ nombre, sucursalId? }` (`sucursalId` solo lo usa un General; ausente = general) |
 | `PATCH /tesoreria/cuentas/:id` | `tesoreria.gestionar` | Cambia el nombre |
 | `DELETE /tesoreria/cuentas/:id` | `tesoreria.gestionar` | Baja lógica |
 | `GET /tesoreria/saldos?sucursal=&fecha=` | `tesoreria.gestionar` | Para la pestaña Saldos: cada cuenta en alcance con su saldo fijado **en esa fecha** (o `null`), más la lista de saldos fijados vivos (más recientes primero) |
-| `PUT /tesoreria/saldos` | `tesoreria.gestionar` | Lote de una fecha: `{ fecha, saldos: [{ cuentaId, monto, comentario? }] }`. Una transacción; `insert … on conflict (cuenta_id, fecha) where deleted_at is null do update`. Si una cuenta del lote está fuera de alcance o dada de baja, **todo** el lote se rechaza |
+| `PUT /tesoreria/saldos` | `tesoreria.gestionar` | Lote de una fecha: `{ fecha, saldos: [{ cuentaId, montoCentavos, comentario? }] }`. Una transacción; `insert … on conflict (cuenta_id, fecha) where deleted_at is null do update`. Si una cuenta del lote está fuera de alcance o dada de baja, **todo** el lote se rechaza |
 | `DELETE /tesoreria/saldos/:id` | `tesoreria.gestionar` | Baja lógica del saldo fijado |
 | `GET /tesoreria?sucursal=&desde=&hasta=` | `tesoreria.ver` | La vista (abajo) |
 
@@ -172,12 +176,13 @@ Respuesta de la vista:
   "desde": "2026-10-05", "hasta": "2026-10-12",
   "cuentas": [
     { "id": "…", "nombre": "Efectivo TJ", "sucursalCodigo": "TJ",
-      "saldoInicio": 10000.00, "saldoFinal": 9500.00 }
+      "saldoInicioCentavos": 1000000, "saldoFinalCentavos": 950000 }
   ],
-  "total": { "saldoInicio": 10000.00, "saldoFinal": 9500.00, "cuentasConSaldo": 1, "cuentas": 1 },
+  "total": { "saldoInicioCentavos": 1000000, "saldoFinalCentavos": 950000,
+             "cuentasConSaldoInicio": 1, "cuentasConSaldoFinal": 1, "cuentas": 1 },
   "eventos": [
-    { "tipo": "saldo-fijado", "fecha": "2026-10-10", "cuentaNombre": "Efectivo TJ",
-      "monto": 9500.00, "comentario": "Arqueo", "capturo": "Admin Local" }
+    { "tipo": "saldo-fijado", "id": "…", "fecha": "2026-10-10", "cuentaId": "…", "cuentaNombre": "Efectivo TJ",
+      "montoCentavos": 950000, "comentario": "Arqueo", "capturo": "Admin Local" }
   ]
 }
 ```
@@ -185,7 +190,7 @@ Respuesta de la vista:
 - `sucursalCodigo` `null` = general. Cuentas generales primero, luego por sucursal y nombre.
 - `eventos` = saldos fijados **dentro** del rango, por fecha y cuenta. `tipo` deja lugar a los movimientos de
   T-29 sin cambiar la forma.
-- El servicio lee los saldos fijados de las cuentas en alcance con fecha `≤ hasta + 1` y aplica §3.4; nada de
+- El servicio lee los saldos fijados de las cuentas en alcance con fecha `≤ hasta` y aplica §3.4; nada de
   cálculo en SQL salvo filtrar.
 - Errores: rango inválido / mayor a 366 días → 400; sucursal ajena → 403 (de `resolverAlcance`); fecha futura
   en `PUT` → 400; nombre repetido → 409 "Ya existe una cuenta con ese nombre."
@@ -219,7 +224,8 @@ Respuesta de la vista:
   saldos, "3 de 4 cuentas con saldo".
 - Debajo, **Saldos fijados en el rango**: Fecha · Cuenta · Monto · Comentario · Capturó. Vacío: "Sin
   movimientos en el rango."
-- **Exportar a Excel** con `exportarExcel` (T-15): hoja "Tesorería" (cuentas + total) y hoja "Movimientos".
+- **Exportar a Excel** con `exportarExcel` (T-15). La utilidad arma **una** hoja: arriba las cuentas y el Total
+  Tesorería; debajo, un bloque "Saldos fijados en el rango" (cuenta, fecha, monto, comentario, capturó).
 - La tabla tiene que caber desde **1366 px** (≈1012 px de caja): medirla en el navegador.
 
 ### 5.3 Pestaña Cuentas
