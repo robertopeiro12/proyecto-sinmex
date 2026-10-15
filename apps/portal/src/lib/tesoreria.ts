@@ -173,7 +173,11 @@ export function definicionExcelTesoreria(
   }));
   const t = vista.total;
   const conSaldo =
-    t.cuentasConSaldoFinal === t.cuentas ? `${t.cuentas} cuentas` : `${t.cuentasConSaldoFinal} de ${t.cuentas} con saldo`;
+    t.cuentasConSaldoInicio === t.cuentas && t.cuentasConSaldoFinal === t.cuentas
+      ? `${t.cuentas} cuentas`
+      : t.cuentasConSaldoInicio === t.cuentasConSaldoFinal
+        ? `${t.cuentasConSaldoFinal} de ${t.cuentas} con saldo`
+        : `Inicio: ${t.cuentasConSaldoInicio} de ${t.cuentas} · final: ${t.cuentasConSaldoFinal} de ${t.cuentas} con saldo`;
   filas.push({
     celdas: ["Total Tesorería", conSaldo, t.saldoInicioCentavos / 100, t.saldoFinalCentavos / 100, null],
     tipo: "total",

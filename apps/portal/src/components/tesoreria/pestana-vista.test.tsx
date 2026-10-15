@@ -53,7 +53,18 @@ describe("PestanaVista", () => {
   it("el total avisa cuántas cuentas tienen saldo", async () => {
     render(<PestanaVista sucursal={null} />);
     expect(await screen.findByText("Total Tesorería")).toBeInTheDocument();
-    expect(screen.getByText("1 de 2 cuentas con saldo")).toBeInTheDocument();
+    expect(screen.getAllByText("1 de 2 cuentas con saldo")).toHaveLength(2);
+  });
+
+  it("avisa por columna cuando inicio y final tienen distinto número de cuentas", async () => {
+    vi.mocked(lib.obtenerTesoreria).mockResolvedValue({
+      ...VISTA,
+      total: { ...VISTA.total, cuentasConSaldoInicio: 1, cuentasConSaldoFinal: 2, cuentas: 2 },
+    });
+    render(<PestanaVista sucursal={null} />);
+    await screen.findByText("Total Tesorería");
+    expect(screen.getAllByText("1 de 2 cuentas con saldo")).toHaveLength(1);
+    expect(screen.queryByText("2 de 2 cuentas con saldo")).not.toBeInTheDocument();
   });
 
   it("sin saldos fijados en el rango lo dice", async () => {

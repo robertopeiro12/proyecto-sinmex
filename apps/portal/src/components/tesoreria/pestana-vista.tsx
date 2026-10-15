@@ -165,14 +165,22 @@ export function PestanaVista({ sucursal }: { sucursal: string | null }) {
               <tfoot>
                 <tr className="border-t-2 font-semibold">
                   <td className="py-2 pr-4">Total Tesorería</td>
-                  <td className="py-2 pr-4 text-xs font-normal text-muted-foreground">
-                    {t.cuentasConSaldoFinal === t.cuentas ? "" : `${t.cuentasConSaldoFinal} de ${t.cuentas} cuentas con saldo`}
-                  </td>
+                  <td className="py-2 pr-4"></td>
                   <td className="whitespace-nowrap py-2 pr-4 text-right tabular-nums">
                     <Pesos centavos={t.saldoInicioCentavos} />
+                    {t.cuentasConSaldoInicio < t.cuentas && (
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        {t.cuentasConSaldoInicio} de {t.cuentas} cuentas con saldo
+                      </span>
+                    )}
                   </td>
                   <td className="whitespace-nowrap py-2 text-right tabular-nums">
                     <Pesos centavos={t.saldoFinalCentavos} />
+                    {t.cuentasConSaldoFinal < t.cuentas && (
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        {t.cuentasConSaldoFinal} de {t.cuentas} cuentas con saldo
+                      </span>
+                    )}
                   </td>
                 </tr>
               </tfoot>

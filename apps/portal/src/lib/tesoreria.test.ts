@@ -88,6 +88,15 @@ describe("definicionExcelTesoreria", () => {
     ],
   };
 
+  it("el total del Excel avisa por columna cuando los conteos difieren y 'N cuentas' cuando están completos", () => {
+    const con = (total: Partial<typeof vista.total>) =>
+      definicionExcelTesoreria({ ...vista, total: { ...vista.total, ...total } }, { sucursal: "TJ" }).filas.find(
+        (f) => f.celdas[0] === "Total Tesorería",
+      )!.celdas[1];
+    expect(con({ cuentasConSaldoInicio: 1, cuentasConSaldoFinal: 2, cuentas: 2 })).toBe("Inicio: 1 de 2 · final: 2 de 2 con saldo");
+    expect(con({ cuentasConSaldoInicio: 2, cuentasConSaldoFinal: 2, cuentas: 2 })).toBe("2 cuentas");
+  });
+
   it("una hoja: cuentas, total y el bloque de saldos fijados", () => {
     const def = definicionExcelTesoreria(vista, { sucursal: "TJ" });
     expect(def.titulo).toBe("Tesorería");
