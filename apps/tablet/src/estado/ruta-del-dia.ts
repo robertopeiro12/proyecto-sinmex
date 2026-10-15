@@ -247,6 +247,23 @@ export function atendidosFueraDeRuta(
   return filas.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 }
 
+const PREFIJO_CODIGO = /^([a-z][a-z0-9-]*): /;
+
+/**
+ * El detalle de un alta rechazada (T-75, D4). `sync_error` guarda `codigo: motivo`;
+ * se muestra el motivo sin el prefijo técnico. Solo `tipo-negocio-inexistente` se
+ * recupera solo (cuando la oficina reactive el giro); en cualquier otro caso hay que
+ * avisar a la oficina. En los dos, el vendedor no debe volver a capturar al prospecto.
+ */
+function detalleDeAltaRechazada(syncError: string | null): string {
+  const m = syncError ? PREFIJO_CODIGO.exec(syncError) : null;
+  const codigo = m ? m[1] : null;
+  const motivo = (m ? syncError!.slice(m[0].length) : syncError)?.trim() || 'El servidor rechazó el alta.';
+  return codigo === 'tipo-negocio-inexistente'
+    ? `${motivo} Su venta subirá cuando la oficina reactive el tipo de negocio. No lo vuelvas a capturar.`
+    : `${motivo} Avisa a la oficina; no lo vuelvas a capturar.`;
+}
+
 /** La pastilla del alta del prospecto en su ficha (T-75, D4). `null` si no es de esta tablet. */
 export function pastillaAlta(
   p: Pick<Prospecto, 'sync_estado' | 'sync_error'> | null,
@@ -263,7 +280,7 @@ export function pastillaAlta(
       return {
         texto: 'alta rechazada',
         estado: 'error',
-        detalle: `${p.sync_error ?? 'El servidor rechazó el alta.'} Su venta subirá cuando el alta entre.`,
+        detalle: detalleDeAltaRechazada(p.sync_error),
       };
   }
 }

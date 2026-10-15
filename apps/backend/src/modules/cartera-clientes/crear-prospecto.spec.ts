@@ -169,12 +169,15 @@ describe('ClientesService.crearProspecto', () => {
       expect(repo.insertarProspecto).not.toHaveBeenCalled();
     });
 
-    it('el motivo le dice al vendedor que sincronice, porque se recupera solo', async () => {
+    it('el motivo manda a la oficina a reactivar el tipo y no pide volver a capturar', async () => {
       const { servicio } = montar({ tipoNegocioVigente: false });
 
       await expect(
         servicio.crearProspecto(prospecto(), contexto(), trx),
-      ).rejects.toThrow(/[Ss]incroniza/);
+      ).rejects.toThrow(/Pide a la oficina que lo reactive/);
+      await expect(
+        servicio.crearProspecto(prospecto(), contexto(), trx),
+      ).rejects.not.toThrow(/vuelve a guardar|vuelve a capturar/);
     });
   });
 
@@ -190,7 +193,8 @@ describe('ClientesService.crearProspecto', () => {
       const r = servicio.crearProspecto(prospecto(), contexto(), trx);
       await expect(r).rejects.toBeInstanceOf(ProspectoRechazado);
       await expect(r).rejects.toMatchObject({ razon: 'id-ocupado' });
-      await expect(r).rejects.toThrow(/no es nueva/);
+      await expect(r).rejects.toThrow(/no es nueva; avisa a la oficina/);
+      await expect(r).rejects.not.toThrow(/vuelve a capturar/);
       await expect(r).rejects.not.toThrow(/7f2c0000/);
     });
 

@@ -3,7 +3,7 @@
 **Versión del contrato: `1`** · Implementado en T-07 · Ampliado con folios en T-14
 · Ampliado con el tipo `prospecto` y el catálogo de tipos de negocio en T-40
 · T-75: la clave del prospecto es el id del cliente
-· Última revisión: 2026-09-14
+· Última revisión: 2026-10-15
 
 Este documento es la referencia legible del contrato. Las definiciones
 normativas están en el código:
@@ -560,13 +560,14 @@ Los campos son los que **dictó el cliente** en agosto de 2026 (ver
   decisiones del administrador. El vendedor no puede dar de alta clientes
   justamente porque el control del precio no es suyo (cambio v2.0).
 
-Cuatro reglas que se rechazan **por operación**, todas como `datos-invalidos`:
+Cinco reglas que se rechazan **por operación**, todas como `datos-invalidos`:
 
 | Qué llega | Por qué se rechaza |
 |---|---|
 | Un `folio` | `sync_operacion.folio` tiene un `unique` **global**: un folio pegado a un prospecto consumiría un número del espacio de las ventas, y una venta legítima con ese número se rechazaría después como `folio-duplicado` — un fallo que aparece en otra operación, días después |
 | Un `cliente_id` | El prospecto **es** el cliente que se está creando |
 | Una clave que no es uuid | Es el id del `cliente` que se crea (T-75) |
+| Una clave que ya es el id de un `cliente` | La clave es el id del cliente que se crea y ese id está ocupado (T-75). Motivo neutro a propósito ("La clave de este prospecto no es nueva; avisa a la oficina."): no confirma que exista un cliente, que podría ser de otra sucursal |
 | Media coordenada | No ubica nada y en el portal se vería como un punto en el meridiano cero: parece un dato bueno |
 
 **Sin ubicación es un caso normal**, no un error: el vendedor pudo negar el
@@ -732,7 +733,7 @@ texto en español** si reintenta o si avisa al vendedor.
 | `folio-duplicado` | **Colisión de folios**: otra operación ya subió ese folio |
 | `presentacion-inactiva` | Una línea de venta nombra una presentación que no existe, está dada de baja o cuyo producto está inactivo. Se reintenta en la siguiente sincronización (T-16) |
 | `precio-no-asignado` | Una línea con cantidad > 0 y el cliente no tiene **ningún** precio para esa presentación vigente a `fecha_operacion` ni asignado después, hasta hoy. Comprueba existencia, nunca valor. Se recupera cuando el portal asigna el precio y la tablet vuelve a sincronizar (T-16) |
-| `tipo-negocio-inexistente` | El `tipo_negocio_id` de un alta de `prospecto` no existe o está dado de baja (T-40). **No es un bug de la tablet**: su catálogo se quedó viejo. Se reintenta solo en la siguiente sincronización, que además le baja el catálogo nuevo |
+| `tipo-negocio-inexistente` | El `tipo_negocio_id` de un alta de `prospecto` no existe o está dado de baja (T-40). **No es un bug de la tablet**: su catálogo se quedó viejo. Entra solo en la siguiente sincronización **después de que la oficina reactive el tipo de negocio** (la tablet reenvía el mismo id); mientras tanto el alta y su venta quedan en `error`, y el vendedor no debe volver a capturar al prospecto |
 | `nota-no-encontrada` | La nota que se cobra no existe, su cliente no es de la sucursal del vendedor, o no es del `cliente_id` del sobre. Una nota que ya está pagada, de cuenta perdida, de promoción o borrada **no** cae aquí: el cobro se acepta y va a otras notas o a saldo a favor. La tablet la reenvía en cada sincronización (T-20) |
 | `jornada-datos-invalidos` | `datos` de una jornada no tiene la forma del §6 (falta un campo, un km fuera de 0..999999999.9, un instante sin zona). El `motivo` nombra el campo. Bug de la tablet (T-38) |
 | `jornada-km-invalido` | `km_final` menor que `km_inicial`: el odómetro no retrocede (T-38) |
@@ -758,7 +759,8 @@ duplicada lo escondería.
 
 `clave` es el **`id` local de la fila en SQLite**: un uuid v4 generado en la
 tablet **al capturar** la operación. No cambia nunca — ni entre reintentos, ni
-entre versiones de la app. Para un `prospecto`, además, la clave pasa a ser el `id` del `cliente` creado (T-75).
+entre versiones de la app. Para un `prospecto`, además, la clave
+pasa a ser el `id` del `cliente` creado (T-75).
 
 La regla vive en un `unique (vendedor_id, clave_idempotencia)` de la tabla
 `sync_operacion`, **no** en una comprobación del servicio: entre el `SELECT` y el

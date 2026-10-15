@@ -303,7 +303,7 @@ export class ClientesService {
       if (!vigente) {
         throw new ProspectoRechazado({
           razon: 'tipo-negocio-inexistente',
-          motivo: `El tipo de negocio ${prospecto.tipoNegocioId} ya no existe. Sincroniza para bajar el catalogo nuevo y vuelve a guardar el prospecto.`,
+          motivo: `El tipo de negocio ${prospecto.tipoNegocioId} ya no existe. Pide a la oficina que lo reactive; el alta entrará sola en la siguiente sincronización.`,
         });
       }
     }
@@ -335,8 +335,7 @@ export class ClientesService {
         throw new ProspectoRechazado({
           razon: 'id-ocupado',
           // Neutro a proposito: no afirma que exista un cliente ni repite el id.
-          motivo:
-            'La clave de este prospecto no es nueva; vuelve a capturarlo en la tablet.',
+          motivo: 'La clave de este prospecto no es nueva; avisa a la oficina.',
         });
       }
       throw error;

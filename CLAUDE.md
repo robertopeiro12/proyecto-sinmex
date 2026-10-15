@@ -361,7 +361,9 @@ usuario con sesion pasa.
   - **El push sube prospectos antes que ventas** (D3, `apps/tablet/src/sincronizacion/fuentes.ts`, `fuentesDelPush`,
     con prueba): el servidor comprueba el alcance de los clientes **una vez por lote**, y la venta de bienvenida
     caería `cliente-fuera-de-alcance` si su alta no estuviera ya aplicada. No reordenes las fuentes. Un alta rechazada
-    arrastra a su venta (queda en `error`) y ambas se reintentan solas.
+    arrastra a su venta (queda en `error`): con `tipo-negocio-inexistente` ambas entran solas cuando la oficina reactive el
+    tipo de negocio; con otro rechazo hay que avisar a la oficina (la tablet no puede descartar ni corregir un alta) y el
+    vendedor no debe volver a capturar al prospecto.
   - **El prospecto no entra a la ruta** (D5, D7): se atiende desde su ficha (sin Cobrar), desde "Abrir su ficha" en
     Prospectos o la pestaña **Prospectos** de "Todos los clientes", y la sección **"Atendidos fuera de ruta"** de la
     jornada lo muestra con el estado de subida de sus ventas (puros en `src/estado/ruta-del-dia.ts`:

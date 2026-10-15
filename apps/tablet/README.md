@@ -196,6 +196,9 @@ de vendedores es **T-62**).
   debe bajar en el pull siguiente a su creación.
 - **Tablet compartida:** el cursor de pull es global: las filas del vendedor anterior se quedan hasta la purga y las
   del nuevo vendedor anteriores al cursor no bajan; pendiente (reiniciar el cursor al cambiar de vendedor).
+  Con T-75 hay un caso más: si el push del vendedor A se aplicó y la respuesta se perdió, y luego B reenvía desde la misma
+  tablet, el buzón (único por vendedor + clave) no da `duplicada`: choca con `cliente_pkey` y queda `id-ocupado`
+  permanente aunque el alta sí entró. Antes de T-75 duplicaba el prospecto.
 
 ## Promociones por regla (T-74)
 
@@ -237,8 +240,10 @@ Spec: `docs/superpowers/specs/2026-10-14-t-75-camino-prospecto-design.md`. Flujo
 - La foto se liga por id (`fotoLocalDe`), con respaldo por nombre + teléfono.
 - **Prospectos capturados antes de T-75** no tienen espejo local con su id: "Prospectos de hoy" los muestra sin
   enlace (`enlaceAFicha` da `null`) y se alcanzan por la pestaña Prospectos cuando el pull los baje.
-- Un alta rechazada (p. ej. tipo de negocio dado de baja) deja alta y venta en `error`; se reintentan solas al
-  corregir el catálogo, y la pastilla de la ficha muestra el motivo.
+- Un alta rechazada (p. ej. tipo de negocio dado de baja) deja alta y venta en `error`; con `tipo-negocio-inexistente` entran solas
+  cuando la oficina reactive el tipo de negocio (la tablet reenvía el mismo id); con cualquier otro rechazo hay que
+  avisar a la oficina: la tablet no tiene cómo descartar ni corregir un alta. El vendedor **no debe volver a capturar**
+  al prospecto (nacería un segundo espejo y la venta original seguiría en error). La pastilla de la ficha muestra el motivo.
 
 ## Pruebas
 

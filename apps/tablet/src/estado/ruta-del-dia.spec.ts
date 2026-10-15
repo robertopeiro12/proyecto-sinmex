@@ -244,10 +244,32 @@ describe('pastillaAlta (T-75, D4)', () => {
     expect(pastillaAlta({ sync_estado: 'pendiente', sync_error: null })).toEqual({ texto: 'alta por subir', estado: 'pendiente', detalle: null });
     expect(pastillaAlta({ sync_estado: 'enviando', sync_error: null })).toEqual({ texto: 'alta subiendo', estado: 'pendiente', detalle: null });
     expect(pastillaAlta({ sync_estado: 'sincronizado', sync_error: null })).toEqual({ texto: 'alta subida', estado: 'listo', detalle: null });
-    expect(pastillaAlta({ sync_estado: 'error', sync_error: 'Ese tipo de negocio ya no existe.' })).toEqual({
+  });
+  it('rechazo por tipo de negocio: motivo sin prefijo y a esperar a la oficina', () => {
+    expect(
+      pastillaAlta({ sync_estado: 'error', sync_error: 'tipo-negocio-inexistente: El tipo de negocio X ya no existe.' }),
+    ).toEqual({
       texto: 'alta rechazada',
       estado: 'error',
-      detalle: 'Ese tipo de negocio ya no existe. Su venta subirá cuando el alta entre.',
+      detalle:
+        'El tipo de negocio X ya no existe. Su venta subirá cuando la oficina reactive el tipo de negocio. No lo vuelvas a capturar.',
+    });
+  });
+  it('cualquier otro rechazo: avisar a la oficina, sin prometer la venta', () => {
+    expect(pastillaAlta({ sync_estado: 'error', sync_error: 'datos-invalidos: La clave de este prospecto no es nueva; avisa a la oficina.' })).toEqual({
+      texto: 'alta rechazada',
+      estado: 'error',
+      detalle: 'La clave de este prospecto no es nueva; avisa a la oficina. Avisa a la oficina; no lo vuelvas a capturar.',
+    });
+    expect(pastillaAlta({ sync_estado: 'error', sync_error: 'sin prefijo reconocible' })?.detalle).toBe(
+      'sin prefijo reconocible Avisa a la oficina; no lo vuelvas a capturar.',
+    );
+  });
+  it('sync_error null en error: texto genérico', () => {
+    expect(pastillaAlta({ sync_estado: 'error', sync_error: null })).toEqual({
+      texto: 'alta rechazada',
+      estado: 'error',
+      detalle: 'El servidor rechazó el alta. Avisa a la oficina; no lo vuelvas a capturar.',
     });
   });
 });

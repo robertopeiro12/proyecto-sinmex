@@ -503,7 +503,7 @@ export function FilaAtendidoFueraDeRuta({
     <Pressable
       onPress={() => onTocar(fila.cliente_id)}
       accessibilityRole="button"
-      accessibilityLabel={`${fila.nombre}, atendido fuera de ruta, ${pastilla}`}
+      accessibilityLabel={`${fila.nombre}, ${fila.esProspecto ? 'prospecto, ' : ''}atendido fuera de ruta, ${pastilla}`}
       style={({ pressed }) => [
         {
           flexDirection: 'row',
