@@ -58,6 +58,7 @@ Todo vive en `src/datos/`:
 | `migraciones/001-*.ts` | Esquema inicial |
 | `repositorios/` | Repositorios tipados (`catalogos`, `jornadas`, `rutas`, `promociones`, ...) |
 | `promociones-reglas.ts` | Regla de promociones (T-74): puro, sin base; ver la seccion de abajo |
+| `../sincronizacion/fuentes.ts` | Orden de las fuentes del push (T-75: prospectos antes que ventas), con prueba |
 | `reloj.ts` | Reloj inyectable (la fecha decide el corte de la jornada) |
 
 Nada de `src/datos/` importa React Native: habla contra `BaseDatos` y recibe sus
@@ -189,6 +190,8 @@ de vendedores es **T-62**).
 - La lógica de la pantalla vive en `src/estado/ruta-del-dia.ts` (puro, con pruebas). "Abrir el día" purga la ruta
   de hace más de 7 días (`rutas.purgar`), conservando las altas `pendiente` (las rechazadas en `error` de esos días
   sí se borran: si no, se reintentarían en cada sincronización).
+- **"Atendidos fuera de ruta"** (T-75): clientes y prospectos con venta del día en esta tablet que no están en la
+  ruta de hoy; ver la sección de Prospectos más abajo.
 - **El pull baja la ruta desde ayer en adelante**, sin tope (desde `current_date - 1` del servidor): una ruta futura
   debe bajar en el pull siguiente a su creación.
 - **Tablet compartida:** el cursor de pull es global: las filas del vendedor anterior se quedan hasta la purga y las
@@ -214,6 +217,28 @@ de vendedores es **T-62**).
   `sinmex dev`, reinstala o limpia las tablets de demo (`adb shell pm clear mx.jawa.tablet`) **antes** de que la
   oficina cree promociones: el cursor del pull solo avanza, y una tablet que sincronizó entre el deploy y su
   actualización no recibe las promociones creadas en esa ventana hasta que cada una se edite.
+
+## Prospectos: venderles desde que se capturan (T-75)
+
+Spec: `docs/superpowers/specs/2026-10-14-t-75-camino-prospecto-design.md`. Flujo:
+
+1. **Captura** (sin red): "Guardar prospecto" inserta la fila de `prospecto` **y** su espejo en `cliente` (mismo id,
+   `tipo = 'prospecto'`, sin precios) en una transacción (`repositorios/prospectos.ts`).
+2. **Ficha**: "Abrir su ficha" en la tarjeta "Listo", o la fila de "Prospectos de hoy", o la pestaña Prospectos de
+   "Todos los clientes" (`listarProspectos`). La ficha muestra la bienvenida y la pastilla del alta (`pastillaAlta`);
+   botones Vender y Visita, **sin Cobrar**.
+3. **Venta de solo regalo**: nota en $0 con folio y `venta_promocion`. Aparece en "Atendidos fuera de ruta" de la
+   jornada (`ventas.delDiaDelVendedor` + `atendidosFueraDeRuta`), con su estado de subida (`estadoSubida`).
+4. **Sincroniza**: `src/sincronizacion/fuentes.ts` (`fuentesDelPush`) sube **prospectos antes que ventas**; no lo
+   reordenes (el servidor comprueba el alcance una vez por lote). El servidor adopta el id de la tablet.
+5. **Pull**: baja el cliente con el mismo id y lo pisa sin duplicar; el prospecto sigue sin entrar a la ruta hasta que
+   el administrador lo convierta en el portal.
+
+- La foto se liga por id (`fotoLocalDe`), con respaldo por nombre + teléfono.
+- **Prospectos capturados antes de T-75** no tienen espejo local con su id: "Prospectos de hoy" los muestra sin
+  enlace (`enlaceAFicha` da `null`) y se alcanzan por la pestaña Prospectos cuando el pull los baje.
+- Un alta rechazada (p. ej. tipo de negocio dado de baja) deja alta y venta en `error`; se reintentan solas al
+  corregir el catálogo, y la pastilla de la ficha muestra el motivo.
 
 ## Pruebas
 

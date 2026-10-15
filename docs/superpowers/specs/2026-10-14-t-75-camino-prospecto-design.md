@@ -44,6 +44,16 @@ La ficha del prospecto, en cambio, **ya funciona**: muestra la bienvenida (T-74,
 
 **D10 · Sin migración local ni de servidor.** La tabla local `cliente` ya admite `domicilio` nulo (005) y `primera_venta_en` (012); `prospecto` no cambia. En el servidor no hay DDL: `cliente.id` ya es `uuid` y solo cambia quién lo elige.
 
+> [!note] Enmiendas de la ejecución (2026-10-15)
+> - **D2, motivo de `id-ocupado`:** el spec pedía un motivo "que lo diga". Se hizo **neutro a propósito**
+>   ("La clave de este prospecto no es nueva; vuelve a capturarlo en la tablet."): no afirma que exista un cliente ni
+>   repite el id, porque el choque podría ser con un cliente de otra sucursal. La razón interna es `id-ocupado` y
+>   el código del cable sigue siendo `datos-invalidos`.
+> - **D4, pastilla del alta:** `ruta-del-dia.ts` define su propio tipo `EstadoPastilla` (`'pendiente' | 'listo' |
+>   'error'`), subconjunto de `Estado` de `@/ui/pantalla`, porque un `.tsx` con React Native no corre en Jest/Node.
+> - **D3:** el orden vive en `src/sincronizacion/fuentes.ts` (`fuentesDelPush`), no en `proveedor-sesion.tsx`, para
+>   que tenga prueba.
+
 ## Flujo completo (aceptación)
 
 1. Con jornada abierta y sin red, el vendedor captura un prospecto y pulsa "Guardar prospecto". La tarjeta "Listo" ofrece "Abrir su ficha"; la fila de "Prospectos de hoy" también la abre.
