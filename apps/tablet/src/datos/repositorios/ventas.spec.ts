@@ -251,6 +251,21 @@ describe('repositorio de ventas (T-16)', () => {
       expect(ventas.delDiaDelVendedor(a.vendedor_id).map((v) => v.id)).toEqual([a.id, b.id]);
       expect(ventas.delDiaDelVendedor(a.vendedor_id, '2020-01-01')).toEqual([]);
     });
+
+    it('no incluye las ventas de otro vendedor del mismo dia', () => {
+      const { ventas, deps } = montar();
+      const mia = ventas.registrar(venta());
+      // Directo a la tabla: `registrar` exige jornada y segmento de folio del vendedor.
+      deps.bd.runSync(
+        `insert into venta (id, fecha, cliente_id, vendedor_id, sucursal_id, folio,
+           contado_credito, monto_total_centavos, grabada_en)
+         values ('venta-ajena', $fecha, 'cli-1', 'ven-2', 'suc-tj', 'F-AJENO',
+           'contado', 0, '2026-08-07T15:00:00.000Z')`,
+        { $fecha: mia.fecha },
+      );
+      expect(ventas.delDiaDelVendedor('ven-2').map((x) => x.id)).toEqual(['venta-ajena']);
+      expect(ventas.delDiaDelVendedor(mia.vendedor_id).map((x) => x.id)).toEqual([mia.id]);
+    });
   });
 
   describe('consultas y cola de sincronizacion', () => {

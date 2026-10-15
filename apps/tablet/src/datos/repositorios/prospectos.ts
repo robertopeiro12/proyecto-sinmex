@@ -63,8 +63,8 @@ export type RepositorioProspectos = ReturnType<typeof crearRepositorioProspectos
  * > [!info] No emite folio, y no es un olvido
  * > Un prospecto **no es una nota que el cliente firme**, asi que no consume un
  * > numero del contador del dia (ADR-0001). Por eso este repositorio no recibe
- * > `folios` y no abre transaccion: es un solo `insert`, y `enTransaccion` sin
- * > nada que coordinar seria ruido.
+ * > `folios`. Abre transaccion solo para que la fila de `prospecto` y su espejo
+ * > en `cliente` (T-75, D1) nazcan o fallen juntos; sigue sin folio.
  */
 export function crearRepositorioProspectos(
   { bd, reloj, generarId }: DepsRepositorio,
