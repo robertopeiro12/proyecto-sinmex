@@ -128,6 +128,21 @@ describe("FormularioPromocion", () => {
     ).toBeInTheDocument();
   });
 
+  it("al abrir el alta, lo que falta es una indicación y no un error hasta que se toca algo", async () => {
+    const usuario = userEvent.setup();
+    pintar();
+    await esperarProductos();
+
+    const aviso = screen.getByText("Elige el producto que se compra.");
+    expect(aviso).not.toHaveClass("text-destructive");
+    expect(screen.getByRole("button", { name: "Guardar" })).toBeDisabled();
+
+    await usuario.clear(screen.getByLabelText("Cantidad que regala"));
+    await usuario.type(screen.getByLabelText("Cantidad que regala"), "2");
+
+    expect(screen.getByText("Elige el producto que se compra.")).toHaveClass("text-destructive");
+  });
+
   it("comprar 0 solo con prospectos", async () => {
     const usuario = userEvent.setup();
     pintar();
