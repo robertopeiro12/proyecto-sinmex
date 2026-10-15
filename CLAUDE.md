@@ -347,6 +347,30 @@ usuario con sesion pasa.
     dé de alta promociones. Una tablet que sincronizó entre el deploy y su propia actualización ya movió su cursor
     de pull (`updated_at`, solo avanza) y no recibe las promociones creadas en esa ventana hasta que cada una se edite.
 
+- **Prospectos desde la app: venta desde que se capturan (T-75).** El vendedor no crea clientes, crea prospectos
+  (convertirlos sigue siendo del administrador en el portal), pero ya puede **venderle al prospecto en cuanto lo
+  captura**. Spec: `docs/superpowers/specs/2026-10-14-t-75-camino-prospecto-design.md`. Sin migración (local ni de
+  servidor) y **sin cambio del cable**: `CONTRATO_ACTUAL` sigue en 1.
+  - **La tablet crea el espejo en `cliente` con el mismo id** al guardar el alta (D1): `prospectos.registrar()`
+    inserta la fila de `prospecto` y la de `cliente` (`tipo = 'prospecto'`, sin precios) en una sola transacción. Desde
+    ese momento tiene ficha, bienvenida y venta de solo regalo, sin red. El pull posterior la pisa por id sin duplicar.
+  - **El servidor adopta la clave como `cliente.id`** (D2, `despacho-prospecto.ts`, `clientes.service.ts`): la clave
+    debe ser uuid (si no, `datos-invalidos`) y un id ya ocupado se rechaza con razón `id-ocupado` (código
+    `datos-invalidos`, nunca un 500). El motivo es **neutro a propósito**: no confirma que exista un cliente, que podría
+    ser de otra sucursal. La regla está en `contrato.ts` y en `docs/contrato-sincronizacion.md`.
+  - **El push sube prospectos antes que ventas** (D3, `apps/tablet/src/sincronizacion/fuentes.ts`, `fuentesDelPush`,
+    con prueba): el servidor comprueba el alcance de los clientes **una vez por lote**, y la venta de bienvenida
+    caería `cliente-fuera-de-alcance` si su alta no estuviera ya aplicada. No reordenes las fuentes. Un alta rechazada
+    arrastra a su venta (queda en `error`): con `tipo-negocio-inexistente` ambas entran solas cuando la oficina reactive el
+    tipo de negocio; con otro rechazo hay que avisar a la oficina (la tablet no puede descartar ni corregir un alta) y el
+    vendedor no debe volver a capturar al prospecto.
+  - **El prospecto no entra a la ruta** (D5, D7): se atiende desde su ficha (sin Cobrar), desde "Abrir su ficha" en
+    Prospectos o la pestaña **Prospectos** de "Todos los clientes", y la sección **"Atendidos fuera de ruta"** de la
+    jornada lo muestra con el estado de subida de sus ventas (puros en `src/estado/ruta-del-dia.ts`:
+    `atendidosFueraDeRuta`, `pastillaAlta`, `enlaceAFicha`, `estadoSubida`). Los prospectos capturados antes de T-75
+    no tienen espejo local: salen en "Prospectos de hoy" sin enlace. La foto se liga por id (`fotoLocalDe`, con respaldo
+    por nombre + teléfono). e2e: `apps/backend/test/prospecto-venta.e2e-spec.ts`.
+
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
   - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).

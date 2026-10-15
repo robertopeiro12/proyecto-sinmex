@@ -301,6 +301,16 @@ export function crearRepositorioVentas(
       );
     },
 
+    /** Ventas del vendedor en un dia (T-75, D7): "Atendidos fuera de ruta". */
+    delDiaDelVendedor(vendedorId: string, fecha: FechaISO = reloj.hoy()): Venta[] {
+      return bd.getAllSync<Venta>(
+        `select * from venta
+          where vendedor_id = $vendedor_id and fecha = $fecha
+          order by grabada_en, rowid`,
+        { $vendedor_id: vendedorId, $fecha: fecha },
+      );
+    },
+
     /**
      * Ventas que faltan por subir.
      *

@@ -1,6 +1,6 @@
 import type { Cliente, FechaISO, MomentoISO, Prospecto } from '../tipos';
 import type { RepositorioCatalogos } from './catalogos';
-import type { DepsRepositorio } from './deps';
+import { enTransaccion, type DepsRepositorio } from './deps';
 import { exigirJornadaAbierta } from './jornadas';
 
 /**
@@ -63,8 +63,8 @@ export type RepositorioProspectos = ReturnType<typeof crearRepositorioProspectos
  * > [!info] No emite folio, y no es un olvido
  * > Un prospecto **no es una nota que el cliente firme**, asi que no consume un
  * > numero del contador del dia (ADR-0001). Por eso este repositorio no recibe
- * > `folios` y no abre transaccion: es un solo `insert`, y `enTransaccion` sin
- * > nada que coordinar seria ruido.
+ * > `folios`. Abre transaccion solo para que la fila de `prospecto` y su espejo
+ * > en `cliente` (T-75, D1) nazcan o fallen juntos; sigue sin folio.
  */
 export function crearRepositorioProspectos(
   { bd, reloj, generarId }: DepsRepositorio,
@@ -147,36 +147,62 @@ export function crearRepositorioProspectos(
       const id = generarId();
       const ahora = reloj.ahora();
 
-      bd.runSync(
-        `insert into prospecto (
-           id, fecha, vendedor_id, sucursal_id, nombre, telefono, encargado,
-           tipo_negocio_id, comentarios, lat, lng, foto_uri, grabado_en, sync_estado
-         ) values (
-           $id, $fecha, $vendedor_id, $sucursal_id, $nombre, $telefono, $encargado,
-           $tipo_negocio_id, $comentarios, $lat, $lng, $foto_uri, $grabado_en, 'pendiente'
-         )`,
-        {
-          $id: id,
-          // `reloj.hoy()` es la fecha LOCAL de la tablet (Tijuana), la misma que
-          // viaja como `fecha_operacion`: el servidor no la re-deriva de UTC.
-          $fecha: reloj.hoy(),
-          $vendedor_id: datos.vendedorId,
-          $sucursal_id: datos.sucursalId,
-          $nombre: nombre,
-          $telefono: telefono,
-          $encargado: encargado,
-          $tipo_negocio_id: datos.tipoNegocioId,
-          $comentarios: comentarios,
-          $lat: datos.lat,
-          $lng: datos.lng,
-          // La foto, si la hubo. No se valida nada de ella aqui a proposito:
-          // todo lo que podia fallar (permiso, camara, compresion, tamano) ya
-          // fallo antes de llegar, y en ese caso esto vale `null`. Este `insert`
-          // **no puede** tener una forma de fracasar por la foto.
-          $foto_uri: datos.fotoUri ?? null,
-          $grabado_en: ahora,
-        },
-      );
+      enTransaccion(bd, () => {
+        bd.runSync(
+          `insert into prospecto (
+             id, fecha, vendedor_id, sucursal_id, nombre, telefono, encargado,
+             tipo_negocio_id, comentarios, lat, lng, foto_uri, grabado_en, sync_estado
+           ) values (
+             $id, $fecha, $vendedor_id, $sucursal_id, $nombre, $telefono, $encargado,
+             $tipo_negocio_id, $comentarios, $lat, $lng, $foto_uri, $grabado_en, 'pendiente'
+           )`,
+          {
+            $id: id,
+            // `reloj.hoy()` es la fecha LOCAL de la tablet (Tijuana), la misma que
+            // viaja como `fecha_operacion`: el servidor no la re-deriva de UTC.
+            $fecha: reloj.hoy(),
+            $vendedor_id: datos.vendedorId,
+            $sucursal_id: datos.sucursalId,
+            $nombre: nombre,
+            $telefono: telefono,
+            $encargado: encargado,
+            $tipo_negocio_id: datos.tipoNegocioId,
+            $comentarios: comentarios,
+            $lat: datos.lat,
+            $lng: datos.lng,
+            // La foto, si la hubo. No se valida nada de ella aqui a proposito:
+            // todo lo que podia fallar (permiso, camara, compresion, tamano) ya
+            // fallo antes de llegar, y en ese caso esto vale `null`. Este `insert`
+            // **no puede** tener una forma de fracasar por la foto.
+            $foto_uri: datos.fotoUri ?? null,
+            $grabado_en: ahora,
+          },
+        );
+
+        // T-75 (D1): el espejo local. Mismo id: el servidor lo adoptara (D2) y
+        // el pull pisara esta fila por id sin duplicar. Sin precios ni
+        // domicilio: la venta solo admite regalo y la conversion es del portal.
+        bd.runSync(
+          `insert into cliente (
+             id, nombre, domicilio, telefono, encargado, tipo, pct_comision,
+             plazo_credito_dias, primera_venta_en, lat, lng, sucursal_id, activo,
+             saldo_favor_centavos, sincronizado_en
+           ) values (
+             $id, $nombre, null, $telefono, $encargado, 'prospecto', null,
+             null, null, $lat, $lng, $sucursal_id, 1, 0, $sincronizado_en
+           )`,
+          {
+            $id: id,
+            $nombre: nombre,
+            $telefono: telefono,
+            $encargado: encargado,
+            $lat: datos.lat,
+            $lng: datos.lng,
+            $sucursal_id: datos.sucursalId,
+            $sincronizado_en: ahora,
+          },
+        );
+      });
 
       const grabado = repo.porId(id);
       if (!grabado) {
@@ -217,7 +243,15 @@ export function crearRepositorioProspectos(
      * coinciden. Es aceptable aqui porque los dos nombres salen del mismo
      * teclado de la tablet; no es un bug.
      */
-    fotoLocalDe(cliente: Pick<Cliente, 'nombre' | 'telefono'>): string | null {
+    fotoLocalDe(cliente: Pick<Cliente, 'id' | 'nombre' | 'telefono'>): string | null {
+      // T-75 (D9): desde esta version el prospecto y su cliente comparten id.
+      const porId = bd.getFirstSync<{ foto_uri: string }>(
+        'select foto_uri from prospecto where id = $id and foto_uri is not null',
+        { $id: cliente.id },
+      );
+      if (porId) return porId.foto_uri;
+      // Prospectos de antes de T-75: el servidor les dio otro id; se reconocen
+      // por nombre y telefono.
       const fila = bd.getFirstSync<{ foto_uri: string }>(
         `select foto_uri from prospecto
           where foto_uri is not null

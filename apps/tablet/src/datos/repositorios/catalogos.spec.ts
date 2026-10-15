@@ -31,6 +31,14 @@ describe('repositorio de catalogos', () => {
     expect(ids).not.toContain('cli-2');
   });
 
+  it('listarProspectos: solo tipo prospecto, activos, por nombre (T-75)', () => {
+    const { deps, catalogos } = conCatalogos();
+    expect(catalogos.listarProspectos('suc-tj').map((c) => c.id)).toEqual(['cli-2']);
+    expect(catalogos.listarProspectos('suc-mx')).toEqual([]);
+    deps.bd.runSync('update cliente set activo = 0 where id = $id', { $id: 'cli-2' });
+    expect(catalogos.listarProspectos('suc-tj')).toEqual([]);
+  });
+
   it('no lista vehiculos dados de baja', () => {
     const { catalogos } = conCatalogos();
     expect(catalogos.listarVehiculos('suc-tj').map((v) => v.id)).toEqual(['veh-1']);
