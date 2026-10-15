@@ -1,5 +1,5 @@
 import type { FilaRutaDelDia } from '@/datos/repositorios/rutas';
-import type { Cliente } from '@/datos/tipos';
+import type { Cliente, Prospecto, SyncEstado, Venta } from '@/datos/tipos';
 import { formatearMomento } from '@/ui/momento';
 
 /**
@@ -195,4 +195,80 @@ export function entradasMenu(diaCerrado: boolean): EntradaMenu[] {
       deshabilitada: false,
     },
   ];
+}
+
+/** Subconjunto de `Estado` de `@/ui/pantalla` (un .tsx con React Native no corre en Jest/Node). */
+export type EstadoPastilla = 'pendiente' | 'listo' | 'error';
+
+export type EstadoSubida = 'error' | 'pendiente' | 'listo';
+
+/** Lo mas grave manda (misma regla que "Ventas de hoy" en la ficha). `null` si no hay nada. */
+export function estadoSubida(estados: readonly SyncEstado[]): EstadoSubida | null {
+  if (estados.length === 0) return null;
+  if (estados.includes('error')) return 'error';
+  if (estados.some((e) => e === 'pendiente' || e === 'enviando')) return 'pendiente';
+  return 'listo';
+}
+
+export interface AtendidoFueraDeRuta {
+  cliente_id: string;
+  nombre: string;
+  esProspecto: boolean;
+  estado: EstadoSubida;
+}
+
+/**
+ * Clientes y prospectos con venta del dia en esta tablet que la ruta NO pinta
+ * (T-75, D7): ni vivos ni quitados-con-visita (esos ya salen en "Fuera de
+ * ruta"). Un quitado sin visita con venta local si sale: la venta es real y la
+ * ruta ya no lo muestra. Por nombre; uno por cliente, con el estado mas grave.
+ */
+export function atendidosFueraDeRuta(
+  filasRuta: readonly FilaAgrupable[],
+  ventas: readonly Pick<Venta, 'cliente_id' | 'sync_estado'>[],
+  cliente: (id: string) => Pick<Cliente, 'nombre' | 'tipo'> | null,
+): AtendidoFueraDeRuta[] {
+  const pintados = new Set(
+    filasRuta.filter((f) => f.activo === 1 || f.visitado).map((f) => f.cliente_id),
+  );
+  const porCliente = new Map<string, SyncEstado[]>();
+  for (const v of ventas) {
+    if (pintados.has(v.cliente_id)) continue;
+    porCliente.set(v.cliente_id, [...(porCliente.get(v.cliente_id) ?? []), v.sync_estado]);
+  }
+  const filas: AtendidoFueraDeRuta[] = [];
+  for (const [cliente_id, estados] of porCliente) {
+    const c = cliente(cliente_id);
+    if (!c) continue;
+    const estado = estadoSubida(estados);
+    if (!estado) continue;
+    filas.push({ cliente_id, nombre: c.nombre, esProspecto: c.tipo === 'prospecto', estado });
+  }
+  return filas.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+}
+
+/** La pastilla del alta del prospecto en su ficha (T-75, D4). `null` si no es de esta tablet. */
+export function pastillaAlta(
+  p: Pick<Prospecto, 'sync_estado' | 'sync_error'> | null,
+): { texto: string; estado: EstadoPastilla; detalle: string | null } | null {
+  if (!p) return null;
+  switch (p.sync_estado) {
+    case 'pendiente':
+      return { texto: 'alta por subir', estado: 'pendiente', detalle: null };
+    case 'enviando':
+      return { texto: 'alta subiendo', estado: 'pendiente', detalle: null };
+    case 'sincronizado':
+      return { texto: 'alta subida', estado: 'listo', detalle: null };
+    case 'error':
+      return {
+        texto: 'alta rechazada',
+        estado: 'error',
+        detalle: `${p.sync_error ?? 'El servidor rechazó el alta.'} Su venta subirá cuando el alta entre.`,
+      };
+  }
+}
+
+/** Id de la ficha a la que enlaza una fila de "Prospectos de hoy", o `null` (T-75, D6). */
+export function enlaceAFicha(prospectoId: string, existeCliente: (id: string) => boolean): string | null {
+  return existeCliente(prospectoId) ? prospectoId : null;
 }
