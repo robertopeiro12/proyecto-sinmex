@@ -28,6 +28,7 @@ const ORDEN_GRUPOS = [
   'Operacion Comercial',
   'Produccion/Almacen',
   'Informacion',
+  'Finanzas',
 ];
 
 @Injectable()

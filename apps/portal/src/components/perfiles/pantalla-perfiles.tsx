@@ -15,6 +15,7 @@ const ORDEN_GRUPOS = [
   "Operacion Comercial",
   "Produccion/Almacen",
   "Informacion",
+  "Finanzas",
 ];
 
 function TarjetaMensaje({ mensaje }: { mensaje: string }) {
