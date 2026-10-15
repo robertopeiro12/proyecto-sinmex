@@ -243,6 +243,16 @@ describe('repositorio de ventas (T-16)', () => {
     });
   });
 
+  describe('delDiaDelVendedor (T-75, D7)', () => {
+    it('las ventas del dia del vendedor, en orden de captura, sin las de otro dia', () => {
+      const { ventas } = montar();
+      const a = ventas.registrar(venta());
+      const b = ventas.registrar(venta({ numNota: '2347' }));
+      expect(ventas.delDiaDelVendedor(a.vendedor_id).map((v) => v.id)).toEqual([a.id, b.id]);
+      expect(ventas.delDiaDelVendedor(a.vendedor_id, '2020-01-01')).toEqual([]);
+    });
+  });
+
   describe('consultas y cola de sincronizacion', () => {
     it('delDia lista las ventas de ese cliente en ese dia, en el orden en que se grabaron', () => {
       const { deps, catalogos, ventas } = montar();

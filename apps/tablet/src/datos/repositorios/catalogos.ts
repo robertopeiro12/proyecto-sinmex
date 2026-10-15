@@ -327,6 +327,16 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
       );
     },
 
+    /** Prospectos activos de una sucursal (T-75, D6): la pestana "Prospectos". */
+    listarProspectos(sucursalId: string): Cliente[] {
+      return bd.getAllSync<Cliente>(
+        `select * from cliente
+         where sucursal_id = $sucursal_id and tipo = 'prospecto' and activo = 1
+         order by nombre`,
+        { $sucursal_id: sucursalId },
+      );
+    },
+
     /**
      * Notas por cobrar de un cliente, para la pantalla de cobranza/abono.
      *

@@ -28,6 +28,52 @@ const captura = (extra: Record<string, unknown> = {}) => ({
 
 describe('repositorio de prospectos', () => {
   describe('registrar', () => {
+    /**
+     * T-75 (D1): el prospecto nace tambien como `cliente` local con el MISMO id
+     * y `tipo = 'prospecto'`. Es lo que hace que tenga ficha, bienvenida y venta
+     * de solo regalo desde el momento en que se guarda, sin red. El servidor
+     * adoptara ese id (D2) y el pull pisara la fila por id sin duplicar.
+     */
+    it('crea su espejo en cliente, con el mismo id y tipo prospecto', () => {
+      const { prospectos, catalogos } = montar();
+
+      const p = prospectos.registrar(captura());
+
+      expect(catalogos.obtenerCliente(p.id)).toMatchObject({
+        id: p.id,
+        nombre: 'Tacos Aaron',
+        domicilio: null,
+        telefono: '6641112233',
+        encargado: 'Don Aaron',
+        tipo: 'prospecto',
+        pct_comision: null,
+        plazo_credito_dias: null,
+        primera_venta_en: null,
+        lat: 32.5149,
+        lng: -117.0382,
+        sucursal_id: SUCURSAL,
+        activo: 1,
+        saldo_favor_centavos: 0,
+        sincronizado_en: '2026-08-07T15:00:00.000Z',
+      });
+      // No es cliente de ruta: la lista de "Agregar a mi ruta" no lo ofrece (D5).
+      expect(catalogos.listarClientes(SUCURSAL).map((c) => c.id)).not.toContain(p.id);
+      expect(catalogos.listarProspectos(SUCURSAL).map((c) => c.id)).toContain(p.id);
+    });
+
+    it('si el espejo falla, tampoco queda el prospecto (una transaccion)', () => {
+      const { prospectos, deps } = montar();
+      // `depsDePrueba` genera ids `id-1`, `id-2`, …: el primer registrar va a pedir
+      // `id-1`. Un cliente que ya lo ocupa hace chocar el insert del espejo.
+      deps.bd.runSync(
+        `insert into cliente (id, nombre, domicilio, telefono, tipo, sucursal_id, activo, sincronizado_en)
+         values ('id-1', 'Ocupa', 'x', '1', 'cliente', $suc, 1, 'x')`,
+        { $suc: SUCURSAL },
+      );
+      expect(() => prospectos.registrar(captura())).toThrow();
+      expect(prospectos.pendientesDeSincronizar()).toEqual([]);
+    });
+
     it('graba los campos que dicto el cliente, pendiente de subir', () => {
       const { prospectos } = montar();
 
@@ -488,7 +534,7 @@ describe('repositorio de prospectos', () => {
       prospectos.registrar(captura({ fotoUri: 'file:///cache/foto-1.jpg' }));
 
       expect(
-        prospectos.fotoLocalDe({ nombre: '  tacos AARON ', telefono: '6641112233' }),
+        prospectos.fotoLocalDe({ id: 'otro-id', nombre: '  tacos AARON ', telefono: '6641112233' }),
       ).toBe('file:///cache/foto-1.jpg');
     });
 
@@ -497,8 +543,20 @@ describe('repositorio de prospectos', () => {
       prospectos.registrar(captura());
       prospectos.registrar(captura({ nombre: 'Otro', fotoUri: 'file:///cache/otro.jpg' }));
 
-      expect(prospectos.fotoLocalDe({ nombre: 'Tacos Aaron', telefono: '6641112233' })).toBeNull();
-      expect(prospectos.fotoLocalDe({ nombre: 'Otro', telefono: '0000000000' })).toBeNull();
+      expect(
+        prospectos.fotoLocalDe({ id: 'otro-id', nombre: 'Tacos Aaron', telefono: '6641112233' }),
+      ).toBeNull();
+      expect(
+        prospectos.fotoLocalDe({ id: 'otro-id', nombre: 'Otro', telefono: '0000000000' }),
+      ).toBeNull();
+    });
+
+    it('T-75 (D9): primero por id del prospecto, aunque el nombre no coincida', () => {
+      const { prospectos } = montar();
+      const p = prospectos.registrar(captura({ fotoUri: 'file:///cache/foto-id.jpg' }));
+      expect(
+        prospectos.fotoLocalDe({ id: p.id, nombre: 'Renombrado en el portal', telefono: '0' }),
+      ).toBe('file:///cache/foto-id.jpg');
     });
   });
 });
