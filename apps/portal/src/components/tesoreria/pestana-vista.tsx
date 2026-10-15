@@ -22,7 +22,7 @@ function Pesos({ centavos }: { centavos: number | null }) {
 }
 
 /** Mostrar Tesorería (spec §5.2): saldo al inicio y al final por cuenta, total y saldos fijados del rango. */
-export function PestanaVista({ sucursal }: { sucursal: string | null }) {
+export function PestanaVista({ sucursal, activa = true }: { sucursal: string | null; activa?: boolean }) {
   const { usuario } = useAuth();
   const hoy = hoyEnTijuana();
   const [desde, setDesde] = useState(hoy);
@@ -61,6 +61,15 @@ export function PestanaVista({ sucursal }: { sucursal: string | null }) {
     void consultar(hoy, hoy);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [consultar]);
+
+  // La pestaña se queda montada: al volver a ella se repite la ultima consulta (el rango tecleado,
+  // aun sin "Mostrar") para no ensenar numeros viejos tras guardar saldos en la pestaña Saldos.
+  const eraActiva = useRef(activa);
+  useEffect(() => {
+    if (activa && !eraActiva.current) void consultar(desde, hasta);
+    eraActiva.current = activa;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activa]);
 
   function aplicar(r: { desde: string; hasta: string }) {
     setDesde(r.desde);

@@ -103,8 +103,9 @@ export class TesoreriaService {
     const usuario = await this.usuario(usuarioId);
     // Atado: la suya, se ignora lo que mande. General: lo que mande, o general.
     const sucursalId = usuario.id ?? dto.sucursalId ?? null;
+    let cuenta: CuentaEnAlcance | undefined;
     try {
-      return await this.repo.crearCuenta(dto.nombre, sucursalId);
+      cuenta = await this.repo.crearCuenta(dto.nombre, sucursalId);
     } catch (error) {
       if (codigoPg(error) === '23505')
         throw new ConflictException(MENSAJE_DUPLICADA);
@@ -112,6 +113,8 @@ export class TesoreriaService {
         throw new BadRequestException('La sucursal no existe.');
       throw error;
     }
+    if (!cuenta) throw new NotFoundException('No existe esa cuenta.');
+    return cuenta;
   }
 
   async renombrarCuenta(
@@ -120,13 +123,16 @@ export class TesoreriaService {
     dto: RenombrarCuentaDto,
   ): Promise<CuentaEnAlcance> {
     await this.cuentaModificable(usuarioId, id);
+    let cuenta: CuentaEnAlcance | undefined;
     try {
-      return await this.repo.renombrarCuenta(id, dto.nombre);
+      cuenta = await this.repo.renombrarCuenta(id, dto.nombre);
     } catch (error) {
       if (codigoPg(error) === '23505')
         throw new ConflictException(MENSAJE_DUPLICADA);
       throw error;
     }
+    if (!cuenta) throw new NotFoundException('No existe esa cuenta.');
+    return cuenta;
   }
 
   async eliminarCuenta(usuarioId: string, id: string): Promise<void> {

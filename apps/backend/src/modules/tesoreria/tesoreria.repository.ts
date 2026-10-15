@@ -54,23 +54,28 @@ export class TesoreriaRepository {
   async crearCuenta(
     nombre: string,
     sucursalId: string | null,
-  ): Promise<CuentaEnAlcance> {
+  ): Promise<CuentaEnAlcance | undefined> {
     const { id } = await this.db
       .insertInto('tesoreria_cuenta')
       .values({ nombre, sucursal_id: sucursalId })
       .returning('id')
       .executeTakeFirstOrThrow();
-    return (await this.buscarCuenta(id))!;
+    // Puede ser undefined si la cuenta se dio de baja en medio.
+    return this.buscarCuenta(id);
   }
 
-  async renombrarCuenta(id: string, nombre: string): Promise<CuentaEnAlcance> {
+  async renombrarCuenta(
+    id: string,
+    nombre: string,
+  ): Promise<CuentaEnAlcance | undefined> {
     await this.db
       .updateTable('tesoreria_cuenta')
       .set({ nombre })
       .where('id', '=', id)
       .where('deleted_at', 'is', null)
       .execute();
-    return (await this.buscarCuenta(id))!;
+    // Puede ser undefined si la cuenta se dio de baja en medio.
+    return this.buscarCuenta(id);
   }
 
   async eliminarCuenta(id: string): Promise<void> {

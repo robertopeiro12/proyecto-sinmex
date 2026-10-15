@@ -80,7 +80,7 @@ export function PantallaTesoreria({
         {/* La vista se queda montada para no perder el rango; Cuentas y Saldos se montan al abrirse. */}
         {pestanas.map(({ clave }) => (
           <div key={clave} role="tabpanel" id={`panel-${clave}`} aria-labelledby={`pestana-${clave}`} hidden={actual !== clave}>
-            {clave === "tesoreria" && <PestanaVista sucursal={sucursal} />}
+            {clave === "tesoreria" && <PestanaVista sucursal={sucursal} activa={actual === "tesoreria"} />}
             {clave === "cuentas" && actual === clave && <PestanaCuentas sucursal={sucursal} />}
             {clave === "saldos" && actual === clave && <PestanaSaldos sucursal={sucursal} />}
           </div>
