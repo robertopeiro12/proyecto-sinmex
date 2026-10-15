@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
+import { router } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
 import { ErrorJornada, ErrorProspecto } from '@/datos';
 import type { Prospecto, TipoNegocio } from '@/datos/tipos';
 import { useJawa } from '@/estado/proveedor-jawa';
+import { enlaceAFicha } from '@/estado/ruta-del-dia';
 import { useSesion } from '@/estado/proveedor-sesion';
 import { OBJETIVO_BYTES, type FotoComprimida } from '@/fotos/comprimir';
 import { capturarFotoProspecto } from '@/fotos/expo';
@@ -64,7 +66,10 @@ export default function Prospectos() {
   const [encargado, setEncargado] = useState('');
   const [comentarios, setComentarios] = useState('');
   const [tipoElegido, setTipoElegido] = useState<string | null>(null);
-  const [ubicacion, setUbicacion] = useState<{ lat: number; lng: number } | null>(null);
+  const [ubicacion, setUbicacion] = useState<{
+    lat: number;
+    lng: number;
+  } | null>(null);
   const [avisoUbicacion, setAvisoUbicacion] = useState<string | null>(null);
   const [buscandoUbicacion, setBuscandoUbicacion] = useState(false);
   const [foto, setFoto] = useState<FotoComprimida | null>(null);
@@ -73,6 +78,7 @@ export default function Prospectos() {
   const [error, setError] = useState<string | null>(null);
   const [guardado, setGuardado] = useState<string | null>(null);
   const [refrescos, setRefrescos] = useState(0);
+  const [ultimoId, setUltimoId] = useState<string | null>(null);
 
   /**
    * El tipo seleccionado se **deriva** en vez de vivir solo en el estado: si el
@@ -161,6 +167,7 @@ export default function Prospectos() {
   function guardar() {
     setError(null);
     setGuardado(null);
+    setUltimoId(null);
     if (!vendedor || !sucursalId) {
       setError('No hay vendedor con sesión iniciada.');
       return;
@@ -197,6 +204,7 @@ export default function Prospectos() {
           ? `Guardado "${p.nombre}" sin ubicación. Queda pendiente de subir.`
           : `Guardado "${p.nombre}" con ubicación. Queda pendiente de subir.`,
       );
+      setUltimoId(p.id);
       setRefrescos((n) => n + 1);
     } catch (e) {
       setError(
@@ -274,13 +282,14 @@ export default function Prospectos() {
                     borderColor: seleccionado ? colores.primario : colores.borde,
                   },
                   seleccionado && { backgroundColor: colores.primarioTenue },
-                  pressed && { transform: [{ translateY: grosor.fuerte }], opacity: 0.9 },
+                  pressed && {
+                    transform: [{ translateY: grosor.fuerte }],
+                    opacity: 0.9,
+                  },
                 ]}
               >
                 <Text style={estilos.textoTarjeta}>{tipo.nombre}</Text>
-                {seleccionado ? (
-                  <Text style={estilos.textoSuave}>Seleccionado</Text>
-                ) : null}
+                {seleccionado ? <Text style={estilos.textoSuave}>Seleccionado</Text> : null}
               </Pressable>
             );
           })}
@@ -360,6 +369,21 @@ export default function Prospectos() {
           <Text style={estilos.textoSuave}>
             Sube solo con la sincronización, al volver al WiFi del negocio.
           </Text>
+          {/* T-75 (D6): venderle en cuanto se captura; la ficha ya existe porque
+              el alta creo su espejo en cliente. */}
+          {ultimoId !== null ? (
+            <Boton
+              etiqueta="Abrir su ficha"
+              tono="neutra"
+              onPress={() =>
+                router.push({
+                  pathname: '/(jornada)/operacion/[clienteId]',
+                  params: { clienteId: ultimoId },
+                })
+              }
+              estilo={{ marginTop: espacio.sm }}
+            />
+          ) : null}
         </Tarjeta>
       ) : null}
 
@@ -374,14 +398,10 @@ export default function Prospectos() {
 
       {prospectosDeHoy.length === 0 ? (
         <Tarjeta etiqueta="Sin registros">
-          <Text style={estilos.textoSuave}>
-            Todavía no has registrado prospectos hoy.
-          </Text>
+          <Text style={estilos.textoSuave}>Todavía no has registrado prospectos hoy.</Text>
         </Tarjeta>
       ) : (
-        prospectosDeHoy.map((p) => (
-          <FilaProspecto key={p.id} prospecto={p} />
-        ))
+        prospectosDeHoy.map((p) => <FilaProspecto key={p.id} prospecto={p} />)
       )}
     </Pantalla>
   );
@@ -423,30 +443,49 @@ function FilaProspecto({ prospecto }: { prospecto: Prospecto }) {
         // giro que el portal dio de baja despues de capturarse.
         datos.catalogos.obtenerTipoNegocio(prospecto.tipo_negocio_id);
 
-  return (
+  // Un prospecto anterior a T-75 no tiene espejo en `cliente`: sin ficha a donde
+  // ir, la fila queda como siempre en vez de llevar a una pantalla vacia.
+  const destino = enlaceAFicha(prospecto.id, (id) => datos.catalogos.obtenerCliente(id) !== null);
+
+  const tarjeta = (
     <Tarjeta estado={pastilla.estado} etiqueta={tipo?.nombre ?? 'Sin tipo de negocio'}>
       <Text style={estilos.textoTarjeta}>{prospecto.nombre}</Text>
       <Cifra valor={prospecto.telefono} tamano="menor" />
       <View style={{ flexDirection: 'row', gap: espacio.xs, marginTop: espacio.xs }}>
         <Pastilla texto={pastilla.texto} estado={pastilla.estado} />
-        {prospecto.lat === null ? (
-          <Pastilla texto="sin ubicación" estado="neutro" />
-        ) : null}
+        {prospecto.lat === null ? <Pastilla texto="sin ubicación" estado="neutro" /> : null}
         {/* La foto tiene su PROPIA pastilla, separada de la del prospecto. Es lo
             mismo que el diseno pide del modelo de datos: el estado de la foto no
             es el estado del prospecto, y mezclarlos en pantalla haria creer que
             un alta no entro cuando lo que no entro fue una foto opcional. */}
         {foto ? <Pastilla texto={foto.texto} estado={foto.estado} /> : null}
       </View>
-      {prospecto.sync_error ? (
-        <Text style={estilos.textoSuave}>{prospecto.sync_error}</Text>
-      ) : null}
+      {prospecto.sync_error ? <Text style={estilos.textoSuave}>{prospecto.sync_error}</Text> : null}
       {/* El motivo del fallo de la foto se muestra solo mientras siga importando:
           si ya subio, un error viejo en pantalla se lee como un fallo que no
           existe. */}
       {prospecto.foto_error && prospecto.foto_subida_en === null ? (
         <Text style={estilos.textoSuave}>Foto: {prospecto.foto_error}</Text>
       ) : null}
+      {destino !== null ? (
+        <Text style={estilos.textoSuave}>Toca para abrir su ficha y darle su bienvenida.</Text>
+      ) : null}
     </Tarjeta>
+  );
+
+  if (destino === null) return tarjeta;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${prospecto.nombre}, abrir ficha`}
+      onPress={() =>
+        router.push({
+          pathname: '/(jornada)/operacion/[clienteId]',
+          params: { clienteId: destino },
+        })
+      }
+    >
+      {tarjeta}
+    </Pressable>
   );
 }
