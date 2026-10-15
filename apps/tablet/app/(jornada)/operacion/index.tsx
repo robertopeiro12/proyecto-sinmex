@@ -10,7 +10,6 @@ import { formatearMomento } from '@/ui/momento';
 import { Opcion } from '@/ui/opcion';
 import { Pantalla, Tarjeta } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
-import { espacio } from '@/ui/tokens';
 
 /**
  * Todos los clientes de la sucursal (T-37: sale del menu hamburguesa; el camino
@@ -52,7 +51,7 @@ export default function ListaClientes() {
         </Text>
       }
     >
-      <View style={{ flexDirection: 'row', gap: espacio.sm }}>
+      <View style={estilos.rejilla}>
         <Opcion
           etiqueta="Clientes"
           seleccionada={pestana === 'clientes'}
