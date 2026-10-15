@@ -359,4 +359,236 @@ describe('Tesorería (e2e)', () => {
       }
     });
   });
+
+  describe('saldos', () => {
+    interface SaldosDelDia {
+      fecha: string;
+      cuentas: {
+        cuentaId: string;
+        nombre: string;
+        sucursalCodigo: string | null;
+        saldo: {
+          id: string;
+          montoCentavos: number;
+          comentario: string | null;
+        } | null;
+      }[];
+      saldos: {
+        id: string;
+        cuentaId: string;
+        fecha: string;
+        montoCentavos: number;
+        comentario: string | null;
+        capturo: string;
+      }[];
+    }
+
+    it('guarda en lote, corrige en vez de duplicar y acepta negativos', async () => {
+      const a = await sembrarCuenta('Saldo A', idTijuana);
+      const b = await sembrarCuenta('Saldo B', null);
+
+      await http()
+        .put('/tesoreria/saldos')
+        .set('Cookie', general)
+        .send({
+          fecha: '2026-10-01',
+          saldos: [
+            { cuentaId: a, montoCentavos: 1_000_000, comentario: ' Arranque ' },
+            { cuentaId: b, montoCentavos: -150_050 },
+          ],
+        })
+        .expect(200, { guardados: 2 });
+
+      await http()
+        .put('/tesoreria/saldos')
+        .set('Cookie', general)
+        .send({
+          fecha: '2026-10-01',
+          saldos: [{ cuentaId: a, montoCentavos: 999_900, comentario: '' }],
+        })
+        .expect(200, { guardados: 1 });
+
+      const r = await http()
+        .get('/tesoreria/saldos?fecha=2026-10-01')
+        .set('Cookie', general)
+        .expect(200);
+      const cuerpo = r.body as SaldosDelDia;
+      expect(cuerpo.fecha).toBe('2026-10-01');
+      expect(cuerpo.cuentas.find((c) => c.cuentaId === a)?.saldo).toEqual({
+        id: expect.any(String) as string,
+        montoCentavos: 999_900,
+        comentario: null,
+      });
+      expect(cuerpo.cuentas.find((c) => c.cuentaId === b)?.saldo).toMatchObject(
+        { montoCentavos: -150_050 },
+      );
+      expect(cuerpo.saldos.filter((s) => s.cuentaId === a)).toHaveLength(1);
+      expect(cuerpo.saldos.find((s) => s.cuentaId === a)).toMatchObject({
+        fecha: '2026-10-01',
+        capturo: LOGIN_GENERAL,
+      });
+    });
+
+    it('fecha futura es 400; fecha inexistente es 400', async () => {
+      const a = await sembrarCuenta('Futura', idTijuana);
+      const r = await http()
+        .put('/tesoreria/saldos')
+        .set('Cookie', general)
+        .send({
+          fecha: '2999-01-01',
+          saldos: [{ cuentaId: a, montoCentavos: 1 }],
+        })
+        .expect(400);
+      expect((r.body as { message: string }).message).toBe(
+        'No se puede fijar un saldo en una fecha futura.',
+      );
+      await http()
+        .put('/tesoreria/saldos')
+        .set('Cookie', general)
+        .send({
+          fecha: '2026-02-30',
+          saldos: [{ cuentaId: a, montoCentavos: 1 }],
+        })
+        .expect(400);
+    });
+
+    it('montos con decimales o la misma cuenta dos veces son 400', async () => {
+      const a = await sembrarCuenta('Forma', idTijuana);
+      await http()
+        .put('/tesoreria/saldos')
+        .set('Cookie', general)
+        .send({
+          fecha: '2026-10-02',
+          saldos: [{ cuentaId: a, montoCentavos: 10.5 }],
+        })
+        .expect(400);
+      const r = await http()
+        .put('/tesoreria/saldos')
+        .set('Cookie', general)
+        .send({
+          fecha: '2026-10-02',
+          saldos: [
+            { cuentaId: a, montoCentavos: 1 },
+            { cuentaId: a, montoCentavos: 2 },
+          ],
+        })
+        .expect(400);
+      expect((r.body as { message: string }).message).toBe(
+        'Una cuenta viene dos veces en el lote.',
+      );
+    });
+
+    it('el lote es todo o nada: una cuenta ajena o borrada tumba también las válidas', async () => {
+      const propia = await sembrarCuenta('Lote propia', idTijuana);
+      const ajena = await sembrarCuenta('Lote ajena', idMexicali);
+      await http()
+        .put('/tesoreria/saldos')
+        .set('Cookie', tijuana)
+        .send({
+          fecha: '2026-10-03',
+          saldos: [
+            { cuentaId: propia, montoCentavos: 100 },
+            { cuentaId: ajena, montoCentavos: 200 },
+          ],
+        })
+        .expect(404);
+
+      const borrada = await sembrarCuenta('Lote borrada', idTijuana);
+      await db
+        .updateTable('tesoreria_cuenta')
+        .set({ deleted_at: new Date() })
+        .where('id', '=', borrada)
+        .execute();
+      await http()
+        .put('/tesoreria/saldos')
+        .set('Cookie', tijuana)
+        .send({
+          fecha: '2026-10-03',
+          saldos: [
+            { cuentaId: propia, montoCentavos: 100 },
+            { cuentaId: borrada, montoCentavos: 200 },
+          ],
+        })
+        .expect(404);
+
+      const n = await db
+        .selectFrom('tesoreria_saldo')
+        .select(db.fn.countAll<string>().as('n'))
+        .where('cuenta_id', '=', propia)
+        .executeTakeFirstOrThrow();
+      expect(Number(n.n)).toBe(0);
+    });
+
+    it('Tijuana no fija saldo a una cuenta general (403) y la pestaña Saldos no se la ofrece', async () => {
+      const gen = await sembrarCuenta('Saldo general', null);
+      const r = await http()
+        .put('/tesoreria/saldos')
+        .set('Cookie', tijuana)
+        .send({
+          fecha: '2026-10-04',
+          saldos: [{ cuentaId: gen, montoCentavos: 1 }],
+        })
+        .expect(403);
+      expect((r.body as { message: string }).message).toBe(
+        'Las cuentas generales solo las administra un usuario General.',
+      );
+
+      const dia = await http()
+        .get('/tesoreria/saldos?fecha=2026-10-04')
+        .set('Cookie', tijuana)
+        .expect(200);
+      expect(
+        (dia.body as SaldosDelDia).cuentas.map((c) => c.cuentaId),
+      ).not.toContain(gen);
+    });
+
+    it('eliminar un saldo fijado: 200, luego 404; Tijuana no borra el de una general', async () => {
+      const a = await sembrarCuenta('Borrar saldo', idTijuana);
+      const gen = await sembrarCuenta('Borrar saldo general', null);
+      await http()
+        .put('/tesoreria/saldos')
+        .set('Cookie', general)
+        .send({
+          fecha: '2026-10-05',
+          saldos: [
+            { cuentaId: a, montoCentavos: 5 },
+            { cuentaId: gen, montoCentavos: 6 },
+          ],
+        })
+        .expect(200);
+      const dia = (
+        await http()
+          .get('/tesoreria/saldos?fecha=2026-10-05')
+          .set('Cookie', general)
+          .expect(200)
+      ).body as SaldosDelDia;
+      const idA = dia.cuentas.find((c) => c.cuentaId === a)!.saldo!.id;
+      const idGen = dia.cuentas.find((c) => c.cuentaId === gen)!.saldo!.id;
+
+      await http()
+        .delete(`/tesoreria/saldos/${idGen}`)
+        .set('Cookie', tijuana)
+        .expect(403);
+      await http()
+        .delete(`/tesoreria/saldos/${idA}`)
+        .set('Cookie', tijuana)
+        .expect(200, { id: idA });
+      await http()
+        .delete(`/tesoreria/saldos/${idA}`)
+        .set('Cookie', tijuana)
+        .expect(404);
+    });
+
+    it('sin tesoreria.gestionar los saldos son 403', async () => {
+      await http()
+        .get('/tesoreria/saldos?fecha=2026-10-01')
+        .set('Cookie', soloVer)
+        .expect(403);
+      await http()
+        .put('/tesoreria/saldos')
+        .set('Cookie', soloVer)
+        .send({ fecha: '2026-10-01', saldos: [] })
+        .expect(403);
+    });
+  });
 });

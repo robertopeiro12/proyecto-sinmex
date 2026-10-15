@@ -7,8 +7,16 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { resolverAlcance, type Alcance } from '../sucursales/alcance-sucursal';
-import type { CrearCuentaDto, RenombrarCuentaDto } from './dto/tesoreria.dto';
-import type { CuentaEnAlcance } from './reglas-saldo';
+import type {
+  CrearCuentaDto,
+  GuardarSaldosDto,
+  RenombrarCuentaDto,
+} from './dto/tesoreria.dto';
+import {
+  esFechaValida,
+  type CuentaEnAlcance,
+  type SaldoFijado,
+} from './reglas-saldo';
 import { TesoreriaRepository } from './tesoreria.repository';
 
 const MENSAJE_DUPLICADA = 'Ya existe una cuenta con ese nombre.';
@@ -21,6 +29,23 @@ function codigoPg(error: unknown): string | undefined {
     return undefined;
   const code = (error as { code?: unknown }).code;
   return typeof code === 'string' ? code : undefined;
+}
+
+export interface FilaSaldoDelDia {
+  cuentaId: string;
+  nombre: string;
+  sucursalCodigo: string | null;
+  saldo: {
+    id: string;
+    montoCentavos: number;
+    comentario: string | null;
+  } | null;
+}
+
+export interface SaldosDelDia {
+  fecha: string;
+  cuentas: FilaSaldoDelDia[];
+  saldos: SaldoFijado[];
 }
 
 interface UsuarioSucursal {
@@ -78,6 +103,94 @@ export class TesoreriaService {
   async eliminarCuenta(usuarioId: string, id: string): Promise<void> {
     await this.cuentaModificable(usuarioId, id);
     await this.repo.eliminarCuenta(id);
+  }
+
+  /**
+   * La pestaña Saldos: solo las cuentas que el usuario puede MODIFICAR (un usuario
+   * atado no ve aqui las generales), con su saldo fijado en `fecha`, y la lista
+   * de todos sus saldos fijados vivos (mas recientes primero).
+   */
+  async saldosDelDia(
+    usuarioId: string,
+    sucursalPedida: string | null,
+    fecha: string,
+  ): Promise<SaldosDelDia> {
+    if (!esFechaValida(fecha))
+      throw new BadRequestException('La fecha no es válida.');
+    const usuario = await this.usuario(usuarioId);
+    const alcance = resolverAlcance(usuario.codigo, sucursalPedida);
+    const visibles = await this.repo.listarCuentas(
+      alcance.tipo === 'todas' ? null : alcance.codigo,
+    );
+    const cuentas =
+      usuario.id === null
+        ? visibles
+        : visibles.filter((c) => c.sucursalId !== null);
+    const saldos = await this.repo.saldosDeCuentas(
+      cuentas.map((c) => c.id),
+      null,
+    );
+
+    return {
+      fecha,
+      cuentas: cuentas.map((c) => {
+        const delDia = saldos.find(
+          (s) => s.cuentaId === c.id && s.fecha === fecha,
+        );
+        return {
+          cuentaId: c.id,
+          nombre: c.nombre,
+          sucursalCodigo: c.sucursalCodigo,
+          saldo: delDia
+            ? {
+                id: delDia.id,
+                montoCentavos: delDia.montoCentavos,
+                comentario: delDia.comentario,
+              }
+            : null,
+        };
+      }),
+      saldos,
+    };
+  }
+
+  async guardarSaldos(
+    usuarioId: string,
+    dto: GuardarSaldosDto,
+  ): Promise<{ guardados: number }> {
+    if (!esFechaValida(dto.fecha))
+      throw new BadRequestException('La fecha no es válida.');
+    const ids = dto.saldos.map((s) => s.cuentaId);
+    if (new Set(ids).size !== ids.length) {
+      throw new BadRequestException('Una cuenta viene dos veces en el lote.');
+    }
+    if (dto.fecha > (await this.repo.hoyEnTijuana())) {
+      throw new BadRequestException(
+        'No se puede fijar un saldo en una fecha futura.',
+      );
+    }
+    // Antes de escribir nada: cualquier cuenta ajena (404) o general para un
+    // usuario atado (403) tumba el lote completo.
+    for (const id of ids) await this.cuentaModificable(usuarioId, id);
+
+    const ok = await this.repo.guardarSaldos(
+      dto.fecha,
+      dto.saldos.map((s) => ({
+        cuentaId: s.cuentaId,
+        montoCentavos: s.montoCentavos,
+        comentario: s.comentario ?? null,
+      })),
+      usuarioId,
+    );
+    if (!ok) throw new NotFoundException('Una de las cuentas ya no existe.');
+    return { guardados: dto.saldos.length };
+  }
+
+  async eliminarSaldo(usuarioId: string, id: string): Promise<void> {
+    const saldo = await this.repo.buscarSaldo(id);
+    if (!saldo) throw new NotFoundException('No existe ese saldo.');
+    await this.cuentaModificable(usuarioId, saldo.cuentaId);
+    await this.repo.eliminarSaldo(id);
   }
 
   /**
