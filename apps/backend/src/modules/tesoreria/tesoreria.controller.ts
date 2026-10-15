@@ -18,8 +18,9 @@ import {
   GuardarSaldosDto,
   RenombrarCuentaDto,
   SaldosDelDiaDto,
+  VistaTesoreriaDto,
 } from './dto/tesoreria.dto';
-import type { CuentaEnAlcance } from './reglas-saldo';
+import type { CuentaEnAlcance, VistaTesoreria } from './reglas-saldo';
 import { TesoreriaService, type SaldosDelDia } from './tesoreria.service';
 
 // T-28. `tesoreria.ver` consulta la vista; `tesoreria.gestionar` administra
@@ -28,6 +29,15 @@ import { TesoreriaService, type SaldosDelDia } from './tesoreria.service';
 @Controller('tesoreria')
 export class TesoreriaController {
   constructor(private readonly tesoreria: TesoreriaService) {}
+
+  @Get()
+  @RequierePermiso('tesoreria.ver')
+  vista(
+    @UsuarioActual() usuarioId: string,
+    @Query() q: VistaTesoreriaDto,
+  ): Promise<VistaTesoreria> {
+    return this.tesoreria.vista(usuarioId, q);
+  }
 
   @Get('cuentas')
   @RequierePermiso('tesoreria.gestionar')

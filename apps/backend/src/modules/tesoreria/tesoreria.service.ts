@@ -6,16 +6,24 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { resolverAlcance, type Alcance } from '../sucursales/alcance-sucursal';
+import { validarRango } from '../estadisticas/reglas-kilometraje';
+import {
+  normalizarSucursalPedida,
+  resolverAlcance,
+  type Alcance,
+} from '../sucursales/alcance-sucursal';
 import type {
   CrearCuentaDto,
   GuardarSaldosDto,
   RenombrarCuentaDto,
+  VistaTesoreriaDto,
 } from './dto/tesoreria.dto';
 import {
+  armarVista,
   esFechaValida,
   type CuentaEnAlcance,
   type SaldoFijado,
+  type VistaTesoreria,
 } from './reglas-saldo';
 import { TesoreriaRepository } from './tesoreria.repository';
 
@@ -56,6 +64,27 @@ interface UsuarioSucursal {
 @Injectable()
 export class TesoreriaService {
   constructor(private readonly repo: TesoreriaRepository) {}
+
+  /** La vista (spec §4): saldo al inicio y al final por cuenta, total y eventos del rango. */
+  async vista(
+    usuarioId: string,
+    q: VistaTesoreriaDto,
+  ): Promise<VistaTesoreria> {
+    const error = validarRango(q.desde, q.hasta);
+    if (error) throw new BadRequestException(error);
+    const alcance = await this.alcanceDe(
+      usuarioId,
+      normalizarSucursalPedida(q.sucursal),
+    );
+    const cuentas = await this.repo.listarCuentas(
+      alcance.tipo === 'todas' ? null : alcance.codigo,
+    );
+    const saldos = await this.repo.saldosDeCuentas(
+      cuentas.map((c) => c.id),
+      q.hasta,
+    );
+    return armarVista(q.desde, q.hasta, cuentas, saldos);
+  }
 
   async listarCuentas(
     usuarioId: string,

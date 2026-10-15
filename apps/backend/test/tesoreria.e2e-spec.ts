@@ -591,4 +591,135 @@ describe('Tesorería (e2e)', () => {
         .expect(403);
     });
   });
+
+  describe('vista', () => {
+    interface Vista {
+      desde: string;
+      hasta: string;
+      cuentas: {
+        id: string;
+        nombre: string;
+        sucursalCodigo: string | null;
+        saldoInicioCentavos: number | null;
+        saldoFinalCentavos: number | null;
+      }[];
+      total: {
+        saldoInicioCentavos: number;
+        saldoFinalCentavos: number;
+        cuentasConSaldoInicio: number;
+        cuentasConSaldoFinal: number;
+        cuentas: number;
+      };
+      eventos: {
+        tipo: string;
+        id: string;
+        fecha: string;
+        cuentaId: string;
+        montoCentavos: number;
+        comentario: string | null;
+        capturo: string;
+      }[];
+    }
+
+    it('el ejemplo del spec, y un saldo fijado al día siguiente no cambia el final', async () => {
+      const a = await sembrarCuenta('Vista A', idTijuana);
+      await http()
+        .put('/tesoreria/saldos')
+        .set('Cookie', general)
+        .send({
+          fecha: '2026-09-01',
+          saldos: [{ cuentaId: a, montoCentavos: 1_000_000 }],
+        })
+        .expect(200);
+      await http()
+        .put('/tesoreria/saldos')
+        .set('Cookie', general)
+        .send({
+          fecha: '2026-09-10',
+          saldos: [
+            { cuentaId: a, montoCentavos: 950_000, comentario: 'Arqueo' },
+          ],
+        })
+        .expect(200);
+      await http()
+        .put('/tesoreria/saldos')
+        .set('Cookie', general)
+        .send({
+          fecha: '2026-09-13',
+          saldos: [{ cuentaId: a, montoCentavos: 1 }],
+        })
+        .expect(200);
+
+      const r = await http()
+        .get('/tesoreria?desde=2026-09-05&hasta=2026-09-12&sucursal=TJ')
+        .set('Cookie', soloVer)
+        .expect(200);
+      const v = r.body as Vista;
+      expect(v.cuentas.find((c) => c.id === a)).toMatchObject({
+        saldoInicioCentavos: 1_000_000,
+        saldoFinalCentavos: 950_000,
+      });
+      const evento = v.eventos.find((e) => e.cuentaId === a);
+      expect(evento).toMatchObject({
+        tipo: 'saldo-fijado',
+        fecha: '2026-09-10',
+        montoCentavos: 950_000,
+        comentario: 'Arqueo',
+        capturo: LOGIN_GENERAL,
+      });
+      expect(v.eventos.filter((e) => e.cuentaId === a)).toHaveLength(1);
+      expect(v.total.cuentas).toBe(v.cuentas.length);
+    });
+
+    it('cuenta sin saldo antes del rango sale con null; las de Mexicali no salen en TJ', async () => {
+      const tj = await sembrarCuenta('Vista sin saldo', idTijuana);
+      const mx = await sembrarCuenta('Vista MX', idMexicali);
+      const r = await http()
+        .get('/tesoreria?desde=2026-09-01&hasta=2026-09-01')
+        .set('Cookie', tijuana)
+        .expect(200);
+      const v = r.body as Vista;
+      expect(v.cuentas.find((c) => c.id === tj)).toMatchObject({
+        saldoInicioCentavos: null,
+        saldoFinalCentavos: null,
+      });
+      expect(v.cuentas.map((c) => c.id)).not.toContain(mx);
+    });
+
+    it('una cuenta dada de baja no aparece', async () => {
+      const id = await sembrarCuenta('Vista baja', idTijuana);
+      await http()
+        .delete(`/tesoreria/cuentas/${id}`)
+        .set('Cookie', general)
+        .expect(200);
+      const r = await http()
+        .get('/tesoreria?desde=2026-09-01&hasta=2026-09-30')
+        .set('Cookie', general)
+        .expect(200);
+      expect((r.body as Vista).cuentas.map((c) => c.id)).not.toContain(id);
+    });
+
+    it('rango inválido o de más de un año es 400; sin permiso es 403; Tijuana pidiendo MX es 403', async () => {
+      await http()
+        .get('/tesoreria?desde=2026-09-10&hasta=2026-09-01')
+        .set('Cookie', general)
+        .expect(400);
+      await http()
+        .get('/tesoreria?desde=2025-01-01&hasta=2026-09-01')
+        .set('Cookie', general)
+        .expect(400);
+      await http()
+        .get('/tesoreria?desde=2026-09-01')
+        .set('Cookie', general)
+        .expect(400);
+      await http()
+        .get('/tesoreria?desde=2026-09-01&hasta=2026-09-01')
+        .set('Cookie', sin)
+        .expect(403);
+      await http()
+        .get('/tesoreria?desde=2026-09-01&hasta=2026-09-01&sucursal=MX')
+        .set('Cookie', tijuana)
+        .expect(403);
+    });
+  });
 });
