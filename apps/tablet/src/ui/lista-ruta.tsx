@@ -3,12 +3,14 @@ import { PanResponder, Pressable, Text, View } from 'react-native';
 
 import type { FilaRutaDelDia } from '@/datos/repositorios/rutas';
 import {
+  type AtendidoFueraDeRuta,
   indiceDestino,
   moverElemento,
   primeraLineaDomicilio,
   textoBurbuja,
 } from '@/estado/ruta-del-dia';
 
+import { Pastilla, type Estado } from './pantalla';
 import { useTema } from './tema';
 import { colores, espacio, fuente, grosor, radio, tipo } from './tokens';
 
@@ -481,6 +483,53 @@ function BotonChico({
       ]}
     >
       <Text style={{ fontFamily: fuente.cuerpoFuerte, color: colores.tinta }}>{etiqueta}</Text>
+    </Pressable>
+  );
+}
+
+/** Un cliente o prospecto con venta de hoy que no esta en la ruta (T-75, D7). */
+export function FilaAtendidoFueraDeRuta({
+  fila,
+  onTocar,
+}: {
+  fila: AtendidoFueraDeRuta;
+  onTocar: (clienteId: string) => void;
+}) {
+  const { t } = useTema();
+  const pastilla = { error: 'con error', pendiente: 'por subir', listo: 'subido' }[fila.estado];
+  // `EstadoSubida` es un subconjunto de `Estado`: la pastilla lo recibe tal cual.
+  const estado: Estado = fila.estado;
+  return (
+    <Pressable
+      onPress={() => onTocar(fila.cliente_id)}
+      accessibilityRole="button"
+      accessibilityLabel={`${fila.nombre}, atendido fuera de ruta, ${pastilla}`}
+      style={({ pressed }) => [
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: espacio.md,
+          padding: espacio.md,
+          borderRadius: radio.medio,
+          borderWidth: grosor.hairline,
+          borderColor: colores.borde,
+          backgroundColor: colores.superficieHundida,
+        },
+        pressed && { opacity: 0.6 },
+      ]}
+    >
+      <View style={{ flex: 1, gap: espacio.xs }}>
+        <Text
+          numberOfLines={1}
+          style={{ fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.destacado), color: colores.tinta }}
+        >
+          {fila.nombre}
+        </Text>
+        <View style={{ flexDirection: 'row', gap: espacio.xs }}>
+          {fila.esProspecto ? <Pastilla texto="prospecto" estado="neutro" /> : null}
+          <Pastilla texto={pastilla} estado={estado} />
+        </View>
+      </View>
     </Pressable>
   );
 }
