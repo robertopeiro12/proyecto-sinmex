@@ -37,7 +37,8 @@ export default function LayoutJornada() {
   // `title` son lo que lee el vendedor y si lo llevan.
   return (
     <Stack screenOptions={cabecera}>
-      <Stack.Screen name="index" options={{ title: 'Ruta del día' }} />
+      {/* La ruta dibuja su propia cabecera: se desliza con el menu lateral (2026-10-18). */}
+      <Stack.Screen name="index" options={{ title: 'Ruta del día', headerShown: false }} />
       <Stack.Screen name="operacion/index" options={{ title: 'Todos los clientes' }} />
       <Stack.Screen name="operacion/[clienteId]/index" options={{ title: 'Cliente' }} />
       <Stack.Screen name="operacion/[clienteId]/venta" options={{ title: 'Venta' }} />

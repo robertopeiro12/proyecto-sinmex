@@ -174,9 +174,14 @@ de vendedores es **T-62**).
 
 ## Ruta del día y pantalla principal (T-37)
 
-- **La jornada abre en la ruta del día** (`app/(jornada)/index.tsx`): barra con *Prospecto*, *Refrescar* (es el
-  "Sincronizar ahora" de siempre, con la pastilla de pendientes) y *Agregar a mi ruta*; menú hamburguesa en una
-  hoja modal (`src/ui/menu-hoja.tsx`, sin cajón: la app no trae gesture-handler ni reanimated).
+- **La jornada abre en la ruta del día** (`app/(jornada)/index.tsx`). Desde el rediseño del 2026-10-18 dibuja su
+  propia cabecera (la del Stack está oculta para esta pantalla): ☰ a la izquierda, el título centrado y, a la
+  derecha, **+** (registrar prospecto) y **↻** (Refrescar, el "Sincronizar ahora" de siempre, con una burbuja con
+  lo que falta por subir). *Agregar a mi ruta* es un botón a lo ancho debajo de la lista.
+- **Menú lateral que empuja la pantalla** (`src/ui/menu-lateral.tsx`): al tocar ☰ la pantalla entera se desliza a
+  la derecha el ancho del menu (`anchoMenuLateral`: 82% con tope de 320dp) y queda oscurecida; tocar la franja
+  oscura o "atrás" de Android lo cierra. Arriba del menú van el vendedor, la jornada y la pastilla "por subir".
+  Hecho con `Animated` de React Native (`useNativeDriver`), sin recompilar el APK.
 - **Dos tablas locales** (migración 011): `ruta` la escribe el pull con su regla de fusión
   (`aplicarSnapshotRutas` en `src/datos/repositorios/rutas.ts`) y `ruta_orden_local` solo el dedo del vendedor.
   Ningún pull toca el orden local, y el orden **no sube** al servidor.

@@ -1,6 +1,7 @@
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ErrorRuta } from '@/datos';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
@@ -16,11 +17,12 @@ import type { MotivoAbandono } from '@/sincronizacion/motor';
 import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 import { Boton } from '@/ui/boton';
 import { FilaAtendidoFueraDeRuta, FilaFueraDeRuta, ListaRuta } from '@/ui/lista-ruta';
-import { MenuHoja } from '@/ui/menu-hoja';
+import { BotonIcono } from '@/ui/boton-icono';
+import { MenuLateral } from '@/ui/menu-lateral';
 import { formatearMomento } from '@/ui/momento';
 import { Pastilla, Tarjeta } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
-import { colores, espacio, fuente, grosor, radio, tipo } from '@/ui/tokens';
+import { colores, espacio, fuente, grosor, tipo } from '@/ui/tokens';
 
 /**
  * Lo que se le dice al vendedor cuando la sincronizacion no sale.
@@ -48,6 +50,7 @@ export default function RutaDelDia() {
   const { jornada, datos, vendedor, versionCatalogos } = useJawa();
   const { salir, sincronizar, ultimaSincronizacion } = useSesion();
   const { estilos, t } = useTema();
+  const insets = useSafeAreaInsets();
   const [sincronizando, setSincronizando] = useState(false);
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [arrastrando, setArrastrando] = useState(false);
@@ -159,165 +162,176 @@ export default function RutaDelDia() {
     );
   }
 
+  const abrirMenu = useCallback(() => setMenuAbierto(true), []);
+  const cerrarMenu = useCallback(() => setMenuAbierto(false), []);
+
   return (
-    <View style={{ flex: 1, backgroundColor: colores.papel }}>
-      <ScrollView
-        style={estilos.pantalla}
-        contentContainerStyle={estilos.contenido}
-        scrollEnabled={!arrastrando}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Barra: tres acciones con icono y texto corto a la izquierda; menu a la derecha. */}
+    <MenuLateral
+      abierto={menuAbierto}
+      onCerrar={cerrarMenu}
+      entradas={entradasMenu(soloLectura)}
+      onElegir={(entrada) => {
+        setMenuAbierto(false);
+        router.push(entrada.destino as Href);
+      }}
+      encabezado={
+        <View style={{ gap: espacio.xs }}>
+          <Text style={estilos.textoTarjeta}>{vendedor?.nombre ?? 'Vendedor'}</Text>
+          <Text style={estilos.textoSuave}>Jornada del {jornada?.fecha}</Text>
+          {/* Lo que falta por subir tambien vive aqui, con su palabra: en la
+              cabecera solo queda la burbuja del boton de refrescar. */}
+          <View style={{ marginTop: espacio.sm }}>
+            <Pastilla
+              numero={pendientes}
+              texto="por subir"
+              estado={pendientes > 0 ? 'pendiente' : 'listo'}
+            />
+          </View>
+        </View>
+      }
+      pie={
+        <Boton
+          etiqueta="Cerrar sesión"
+          tono="peligro"
+          glifo="×"
+          onPress={() => {
+            setMenuAbierto(false);
+            confirmarSalida();
+          }}
+        />
+      }
+    >
+      <View style={{ flex: 1, backgroundColor: colores.papel }}>
+        {/* Cabecera propia (la del Stack se oculta para esta pantalla, ver el
+            layout): tiene que deslizarse junto con la ruta al abrir el menu. */}
         <View
           style={{
             flexDirection: 'row',
             alignItems: 'center',
-            flexWrap: 'wrap',
             gap: espacio.sm,
-            marginBottom: espacio.md,
+            paddingTop: insets.top + espacio.sm,
+            paddingBottom: espacio.sm,
+            paddingHorizontal: espacio.md,
+            backgroundColor: colores.superficie,
+            borderBottomWidth: grosor.hairline,
+            borderBottomColor: colores.borde,
           }}
         >
-          <Boton
-            etiqueta="Prospecto"
+          <BotonIcono glifo="☰" etiqueta="Abrir el menú" onPress={abrirMenu} />
+          {/* Mismo ancho que el segundo boton de la derecha: el titulo queda centrado. */}
+          <View style={{ width: 48 }} />
+          <Text
+            accessibilityRole="header"
+            numberOfLines={1}
+            style={{
+              flex: 1,
+              textAlign: 'center',
+              fontFamily: fuente.tituloMedio,
+              fontSize: t(tipo.subtitulo),
+              color: colores.tinta,
+            }}
+          >
+            Ruta del día
+          </Text>
+          <BotonIcono
             glifo="+"
-            tono="neutra"
-            ancho="ajustado"
+            etiqueta="Registrar prospecto"
             deshabilitado={soloLectura}
             onPress={() => router.push('/(jornada)/prospectos')}
           />
-          <Boton
-            etiqueta={sincronizando ? 'Refrescando…' : 'Refrescar'}
+          <BotonIcono
             glifo="↻"
-            tono="neutra"
-            ancho="ajustado"
+            etiqueta="Refrescar"
             ocupado={sincronizando}
+            numero={pendientes}
             onPress={() => void refrescar()}
           />
-          <Pastilla
-            numero={pendientes}
-            texto="por subir"
-            estado={pendientes > 0 ? 'pendiente' : 'listo'}
-          />
-          <Boton
-            etiqueta="Agregar a mi ruta"
-            glifo="+"
-            ancho="ajustado"
-            deshabilitado={soloLectura}
-            onPress={() => router.push('/(jornada)/agregar-a-ruta')}
-          />
-          <View style={{ flex: 1 }} />
-          <Pressable
-            onPress={() => setMenuAbierto(true)}
-            accessibilityRole="button"
-            accessibilityLabel="Abrir el menú"
-            hitSlop={espacio.xs}
-            style={({ pressed }) => [
-              {
-                minWidth: 48,
-                height: 48,
-                alignItems: 'center',
-                justifyContent: 'center',
-                borderRadius: radio.chico,
-                borderWidth: grosor.fuerte,
-                borderColor: colores.bordeFuerte,
-                backgroundColor: colores.superficie,
-              },
-              pressed && { opacity: 0.7 },
-            ]}
-          >
-            <Text style={{ fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.subtitulo), color: colores.tinta }}>
-              ☰
-            </Text>
-          </Pressable>
         </View>
 
-        <Text style={estilos.subtitulo}>
-          Jornada del {jornada?.fecha} · Catálogos bajados:{' '}
-          {formatearMomento(datos.catalogos.frescuraCatalogos())}
-        </Text>
+        <ScrollView
+          style={estilos.pantalla}
+          contentContainerStyle={estilos.contenido}
+          scrollEnabled={!arrastrando}
+          keyboardShouldPersistTaps="handled"
+        >
+          <Text style={estilos.subtitulo}>
+            Jornada del {jornada?.fecha} · Catálogos bajados:{' '}
+            {formatearMomento(datos.catalogos.frescuraCatalogos())}
+          </Text>
 
-        {ultimaSincronizacion && !ultimaSincronizacion.ok ? (
-          <Text style={estilos.error}>{MENSAJE[ultimaSincronizacion.motivo ?? 'sin-red']}</Text>
-        ) : null}
+          {ultimaSincronizacion && !ultimaSincronizacion.ok ? (
+            <Text style={estilos.error}>{MENSAJE[ultimaSincronizacion.motivo ?? 'sin-red']}</Text>
+          ) : null}
 
-        {menu.avisoDiaCerrado ? (
-          <Tarjeta estado="listo" etiqueta="Día cerrado">
-            <Text style={estilos.textoTarjeta}>{menu.avisoDiaCerrado}</Text>
-          </Tarjeta>
-        ) : null}
+          {menu.avisoDiaCerrado ? (
+            <Tarjeta estado="listo" etiqueta="Día cerrado">
+              <Text style={estilos.textoTarjeta}>{menu.avisoDiaCerrado}</Text>
+            </Tarjeta>
+          ) : null}
 
-        {sinRuta ? (
-          // D3: sin ruta asignada la tablet funciona igual.
-          <Tarjeta estado="pendiente" etiqueta="Sin ruta">
-            <Text style={estilos.textoTarjeta}>{textoAvisoSinRuta(datos.sync.leerCursor())}</Text>
-            <View style={estilos.filaAcciones}>
-              <Boton
-                etiqueta={sincronizando ? 'Sincronizando…' : 'Sincronizar'}
-                glifo="↻"
-                tono="neutra"
-                ancho="ajustado"
-                ocupado={sincronizando}
-                onPress={() => void refrescar()}
+          {sinRuta ? (
+            // D3: sin ruta asignada la tablet funciona igual.
+            <Tarjeta estado="pendiente" etiqueta="Sin ruta">
+              <Text style={estilos.textoTarjeta}>{textoAvisoSinRuta(datos.sync.leerCursor())}</Text>
+              <View style={estilos.filaAcciones}>
+                <Boton
+                  etiqueta={sincronizando ? 'Sincronizando…' : 'Sincronizar'}
+                  glifo="↻"
+                  tono="neutra"
+                  ancho="ajustado"
+                  ocupado={sincronizando}
+                  onPress={() => void refrescar()}
+                />
+                <Boton
+                  etiqueta="Agregar a mi ruta"
+                  glifo="+"
+                  ancho="ajustado"
+                  deshabilitado={soloLectura}
+                  onPress={() => router.push('/(jornada)/agregar-a-ruta')}
+                />
+              </View>
+            </Tarjeta>
+          ) : (
+            <>
+              <ListaRuta
+                filas={enRuta}
+                soloLectura={soloLectura}
+                onTocar={abrirCliente}
+                onReordenar={reordenar}
+                onQuitar={quitar}
+                onArrastrando={setArrastrando}
               />
+              {/* La accion principal de la pantalla, a lo ancho y al final de
+                  la ruta: es donde el vendedor la busca cuando ya recorrio la lista. */}
               <Boton
                 etiqueta="Agregar a mi ruta"
                 glifo="+"
-                ancho="ajustado"
                 deshabilitado={soloLectura}
                 onPress={() => router.push('/(jornada)/agregar-a-ruta')}
+                estilo={{ marginTop: espacio.sm }}
               />
+            </>
+          )}
+
+          {fueraDeRuta.length > 0 ? (
+            <View style={{ gap: espacio.sm, marginTop: espacio.lg }}>
+              <Text style={estilos.seccion}>Fuera de ruta</Text>
+              {fueraDeRuta.map((fila) => (
+                <FilaFueraDeRuta key={fila.id} fila={fila} onTocar={abrirCliente} />
+              ))}
             </View>
-          </Tarjeta>
-        ) : (
-          <ListaRuta
-            filas={enRuta}
-            soloLectura={soloLectura}
-            onTocar={abrirCliente}
-            onReordenar={reordenar}
-            onQuitar={quitar}
-            onArrastrando={setArrastrando}
-          />
-        )}
+          ) : null}
 
-        {fueraDeRuta.length > 0 ? (
-          <View style={{ gap: espacio.sm, marginTop: espacio.lg }}>
-            <Text style={estilos.seccion}>Fuera de ruta</Text>
-            {fueraDeRuta.map((fila) => (
-              <FilaFueraDeRuta key={fila.id} fila={fila} onTocar={abrirCliente} />
-            ))}
-          </View>
-        ) : null}
-
-        {atendidos.length > 0 ? (
-          <View style={{ gap: espacio.sm, marginTop: espacio.lg }}>
-            <Text style={estilos.seccion}>Atendidos fuera de ruta</Text>
-            {atendidos.map((a) => (
-              <FilaAtendidoFueraDeRuta key={a.cliente_id} fila={a} onTocar={abrirCliente} />
-            ))}
-          </View>
-        ) : null}
-      </ScrollView>
-
-      <MenuHoja
-        visible={menuAbierto}
-        entradas={entradasMenu(soloLectura)}
-        onElegir={(entrada) => {
-          setMenuAbierto(false);
-          router.push(entrada.destino as Href);
-        }}
-        onCerrar={() => setMenuAbierto(false)}
-        pie={
-          <Boton
-            etiqueta="Cerrar sesión"
-            tono="peligro"
-            glifo="×"
-            onPress={() => {
-              setMenuAbierto(false);
-              confirmarSalida();
-            }}
-          />
-        }
-      />
-    </View>
+          {atendidos.length > 0 ? (
+            <View style={{ gap: espacio.sm, marginTop: espacio.lg }}>
+              <Text style={estilos.seccion}>Atendidos fuera de ruta</Text>
+              {atendidos.map((a) => (
+                <FilaAtendidoFueraDeRuta key={a.cliente_id} fila={a} onTocar={abrirCliente} />
+              ))}
+            </View>
+          ) : null}
+        </ScrollView>
+      </View>
+    </MenuLateral>
   );
 }
