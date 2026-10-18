@@ -26,6 +26,8 @@ const EXPLICACION_PERMISO: Record<string, string> = {
   "merma.gestionar": "Puede registrar producto dañado o perdido (merma).",
   "peticiones.gestionar":
     "Puede aprobar o rechazar solicitudes para eliminar una venta o un cobro ya registrado.",
+  "motivo_visita.gestionar":
+    "Puede dar de alta, editar o dar de baja los motivos por los que un cliente no compró (visita sin venta).",
   "promocion.gestionar":
     "Puede crear, editar y desactivar las promociones (regalos por compra) para clientes, para todos o para prospectos.",
   "prospecto.gestionar":
