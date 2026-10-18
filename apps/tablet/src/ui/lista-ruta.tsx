@@ -5,10 +5,13 @@ import type { FilaRutaDelDia } from '@/datos/repositorios/rutas';
 import {
   type AtendidoFueraDeRuta,
   indiceDestino,
+  motivoDeRechazo,
   moverElemento,
   primeraLineaDomicilio,
   textoBurbuja,
+  textoUltimaVisita,
 } from '@/estado/ruta-del-dia';
+import { textoEstadoVisitas } from '@/estado/visita';
 
 import { Pastilla, type Estado } from './pantalla';
 import { useTema } from './tema';
@@ -503,7 +506,7 @@ export function FilaAtendidoFueraDeRuta({
     <Pressable
       onPress={() => onTocar(fila.cliente_id)}
       accessibilityRole="button"
-      accessibilityLabel={`${fila.nombre}, ${fila.esProspecto ? 'prospecto, ' : ''}atendido fuera de ruta, ${pastilla}`}
+      accessibilityLabel={`${fila.nombre}, ${fila.esProspecto ? 'prospecto, ' : ''}${fila.soloVisita ? 'visita, ' : ''}atendido fuera de ruta, ${pastilla}`}
       style={({ pressed }) => [
         {
           flexDirection: 'row',
@@ -527,9 +530,74 @@ export function FilaAtendidoFueraDeRuta({
         </Text>
         <View style={{ flexDirection: 'row', gap: espacio.xs }}>
           {fila.esProspecto ? <Pastilla texto="prospecto" estado="neutro" /> : null}
+          {/* T-39 (D8): solo se le visito, sin venta. */}
+          {fila.soloVisita ? <Pastilla texto="visita" estado="neutro" /> : null}
           <Pastilla texto={pastilla} estado={estado} />
         </View>
       </View>
+    </Pressable>
+  );
+}
+
+/**
+ * Un cliente de la ruta viva con visita hoy y sin venta ni cobro (T-39, D8):
+ * nombre, motivo y hora de la ULTIMA visita, y la subida de sus visitas
+ * (error > pendiente > listo). Tocarla abre la ficha, donde se le puede vender;
+ * al vender regresa a la ruta con su palomita.
+ */
+export function FilaVisitadoSinVenta({
+  fila,
+  onTocar,
+}: {
+  fila: FilaRutaDelDia;
+  onTocar: (clienteId: string) => void;
+}) {
+  const { t } = useTema();
+  const estado = fila.visitas_estado;
+  const textoEstado = estado ? textoEstadoVisitas(estado) : null;
+  const linea = textoUltimaVisita(fila.ultima_visita_motivo, fila.ultima_visita_en);
+  return (
+    <Pressable
+      onPress={() => onTocar(fila.cliente_id)}
+      accessibilityRole="button"
+      accessibilityLabel={`${fila.nombre}, visitado sin venta, ${linea}${textoEstado ? `, ${textoEstado}` : ''}`}
+      style={({ pressed }) => [
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: espacio.md,
+          padding: espacio.md,
+          borderRadius: radio.medio,
+          borderWidth: grosor.hairline,
+          borderColor: colores.borde,
+          backgroundColor: colores.superficieHundida,
+        },
+        pressed && { opacity: 0.6 },
+      ]}
+    >
+      <View style={{ flex: 1, gap: espacio.xs }}>
+        <Text
+          numberOfLines={1}
+          style={{ fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.destacado), color: colores.tinta }}
+        >
+          {fila.nombre}
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={{ fontFamily: fuente.cuerpo, fontSize: t(tipo.cuerpo), color: colores.tintaSuave }}
+        >
+          {linea}
+        </Text>
+        {estado === 'error' && fila.visita_error ? (
+          <Text
+            numberOfLines={2}
+            style={{ fontFamily: fuente.cuerpo, fontSize: t(tipo.cuerpo), color: colores.peligro }}
+          >
+            {motivoDeRechazo(fila.visita_error)}
+          </Text>
+        ) : null}
+      </View>
+      {estado && textoEstado ? <Pastilla texto={textoEstado} estado={estado} /> : null}
     </Pressable>
   );
 }
