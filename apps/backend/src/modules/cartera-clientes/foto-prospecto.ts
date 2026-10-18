@@ -34,7 +34,8 @@ export const TAMANO_MAX_FOTO_BYTES = 2 * 1024 * 1024;
  * una segunda barrera aqui es la que sigue en pie el dia que alguien llame a
  * esto desde otro sitio.
  *
- * El formato es el del uuid v4 que la tablet genera al grabar la fila
+ * El id que puede nombrar un archivo (el de `cliente` o `visita`, un
+ * uuid en minusculas). El formato es el del uuid v4 que la tablet genera al grabar la fila
  * (`expo-crypto.randomUUID`, ver `apps/tablet/src/datos/tipos.ts`) — el mismo
  * valor que viaja como `clave` en el push.
  */
@@ -45,26 +46,29 @@ export function claveNombrable(clave: string): boolean {
   return RE_CLAVE.test(clave);
 }
 
+/** A que fila pertenece una foto. El prefijo del archivo lo dice (T-78). */
+export type EntidadFoto = 'cliente' | 'visita';
+
 /**
- * `<clave>.jpg`.
+ * `<entidad>-<id>.jpg` (T-78).
  *
- * > [!info] La idempotencia es esto, no codigo que haya que mantener
- * > La clave de la URL es la misma llave de idempotencia que identifica la
- * > operacion del prospecto, asi que **reenviar escribe el mismo nombre**. No
- * > hace falta un contador, ni un identificador nuevo, ni una tabla de control:
- * > no hay duplicados posibles porque no hay dos nombres posibles.
+ * El nombre sale del **id de la fila** a la que pertenece la foto, nunca de la
+ * clave de idempotencia: asi el archivo se encuentra por lo que es (la foto del
+ * cliente X, la de la visita Y). Reenviar sigue escribiendo el mismo nombre, que
+ * es toda la idempotencia que hace falta. Los archivos de antes de T-78
+ * (`<clave>.jpg`) **no se migran**: `foto_archivo` guarda el nombre y el
+ * servidor siempre lee por esa columna.
  *
- * Lanza si la clave no es nombrable en vez de sanearla: "saneado" significaria
- * que dos claves distintas pueden acabar en el mismo archivo, y eso es
- * exactamente el duplicado silencioso que la propiedad de arriba evita.
+ * Lanza si el id no es nombrable en vez de sanearlo: "saneado" significaria
+ * que dos ids distintos pueden acabar en el mismo archivo.
  */
-export function nombreArchivoFoto(clave: string): string {
-  if (!claveNombrable(clave)) {
+export function nombreArchivoFoto(entidad: EntidadFoto, id: string): string {
+  if (!claveNombrable(id)) {
     throw new Error(
-      `clave no utilizable como nombre de archivo: ${JSON.stringify(clave)}`,
+      `id no utilizable como nombre de archivo: ${JSON.stringify(id)}`,
     );
   }
-  return `${clave}.jpg`;
+  return `${entidad}-${id}.jpg`;
 }
 
 /**

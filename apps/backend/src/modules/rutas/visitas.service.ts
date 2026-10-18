@@ -81,4 +81,14 @@ export class VisitasService {
     }
     return { tabla: 'visita', id };
   }
+
+  /** T-39 (D9): para el canal de fotos. */
+  existe(id: string): Promise<boolean> {
+    return this.repo.existe(id);
+  }
+
+  /** T-39 (D9): el archivo ya esta en disco; esto anota la columna. */
+  anotarFoto(id: string, archivo: string, subidaEn: Date): Promise<boolean> {
+    return this.repo.anotarFoto(id, archivo, subidaEn);
+  }
 }

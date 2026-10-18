@@ -1,5 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { Transaction } from 'kysely';
+import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import type { DB } from '../../database/schema';
 
 /** Una fila de `visita` lista para escribir. */
@@ -27,6 +28,36 @@ export interface NuevaVisita {
  */
 @Injectable()
 export class VisitasRepository {
+  constructor(@Inject(DB_CONNECTION) private readonly db: Database) {}
+
+  /** ¿Sigue existiendo esa visita? Antes de escribir su foto en disco. */
+  async existe(id: string): Promise<boolean> {
+    const fila = await this.db
+      .selectFrom('visita')
+      .select('id')
+      .where('id', '=', id)
+      .executeTakeFirst();
+    return fila !== undefined;
+  }
+
+  /**
+   * Anota la foto en la visita (nombre y fecha juntos, `ck_visita_foto_completa`).
+   * `false` si la fila ya no estaba.
+   */
+  async anotarFoto(
+    id: string,
+    archivo: string,
+    subidaEn: Date,
+  ): Promise<boolean> {
+    const fila = await this.db
+      .updateTable('visita')
+      .set({ foto_archivo: archivo, foto_subida_en: subidaEn })
+      .where('id', '=', id)
+      .returning('id')
+      .executeTakeFirst();
+    return fila !== undefined;
+  }
+
   /**
    * ¿Existe el motivo? **Sin mirar `deleted_at`** a proposito (D3): uno dado de
    * baja despues de que el vendedor lo eligio sin red se acepta.

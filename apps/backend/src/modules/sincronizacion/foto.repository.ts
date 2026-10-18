@@ -54,4 +54,15 @@ export class FotoRepository {
       entidadId: f.entidad_id,
     }));
   }
+
+  /** La sucursal del vendedor del token, para la descarga de fotos (T-39). `null` si no existe. */
+  async sucursalDeVendedor(vendedorId: string): Promise<string | null> {
+    const fila = await this.db
+      .selectFrom('vendedor')
+      .select('sucursal_id')
+      .where('id', '=', vendedorId)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    return fila?.sucursal_id ?? null;
+  }
 }

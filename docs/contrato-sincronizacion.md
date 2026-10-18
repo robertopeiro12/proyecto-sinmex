@@ -741,6 +741,24 @@ permiso o no haber señal, y eso no le impide registrar al prospecto.
   capturado sin red necesita que su alta ya haya entrado en un lote anterior (el alcance se comprueba una vez por
   lote, como la venta de bienvenida de T-75).
 
+### Fotos: subida y descarga (canal aparte del lote; T-40, T-39)
+
+La foto **no** viaja dentro de la operación: va por su propio request, sin `contrato` ni `resultados[]`, solo
+códigos HTTP. Así una imagen pesada o cortada nunca rechaza la operación a la que pertenece.
+
+- **`POST /sync/foto/:clave`** (`@SoloApp`, cuerpo = el JPEG crudo, máx. 2 MB). La `clave` es la de una operación
+  `prospecto` **o** `visita` del vendedor del token. 404 si nadie tiene esa clave (o la operación se rechazó: no dejó
+  fila) o si la fila ya no existe; 403 si es de otro vendedor; 409 si es de otro tipo o aún no está proyectada;
+  413 si pesa de más; 415 si no es un JPEG completo. Responde `200 { clave, subida_en }` también la primera vez.
+- **Nombre del archivo (T-78):** `cliente-<cliente.id>.jpg` y `visita-<visita.id>.jpg`, nunca la clave. Reenviar
+  escribe el mismo nombre: un solo archivo. Los archivos de antes (`<clave>.jpg`) no se migran; el servidor siempre
+  lee por `foto_archivo`.
+- La foto del prospecto se anota en `cliente.foto_archivo/foto_subida_en`; la de la visita, en
+  `visita.foto_archivo/foto_subida_en`.
+- **`GET /sync/foto/cliente/:clienteId`** (`@SoloApp`): el JPEG de la foto del cliente o prospecto si es de la
+  sucursal del vendedor y está vivo; **404** si no tiene foto o no está en su alcance (no 403: no confirma que
+  exista). La tablet lo pide cuando `foto_subida_en` (§5) es más nuevo que su copia. Las fotos de visitas **no** bajan.
+
 ### Respuesta `200` — parcial y honesta
 
 ```jsonc

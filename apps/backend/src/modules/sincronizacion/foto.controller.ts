@@ -1,11 +1,15 @@
+import { createReadStream } from 'node:fs';
 import {
   Controller,
+  Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
   Req,
+  StreamableFile,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { TAMANO_MAX_FOTO_BYTES } from '../cartera-clientes/foto-prospecto';
@@ -33,8 +37,9 @@ export class FotoController {
    * `POST /sync/foto/:clave` — el segundo de los "dos requests, un boton".
    *
    * La `clave` es **la misma llave de idempotencia** de la operacion del
-   * prospecto, y de ahi sale el nombre del archivo (`<clave>.jpg`). Por eso
-   * reenviar es gratis: escribe el mismo nombre y deja un solo archivo. No hay
+   * prospecto, y el archivo se nombra por el id de la fila (`cliente-<id>.jpg` o
+   * `visita-<id>.jpg`, T-78), asi que reenviar es gratis: escribe el mismo
+   * nombre y deja un solo archivo. No hay
    * contador, ni identificador nuevo, ni tabla de control que mantener.
    *
    * `ParseUUIDPipe` no es cosmetico: la clave acaba siendo un **nombre de
@@ -74,5 +79,26 @@ export class FotoController {
     // minusculas, pero una URL en mayusculas daria un 404 desconcertante — y el
     // nombre del archivo tiene que salir del MISMO valor con el que se busco.
     return this.foto.subir(vendedorId, clave.toLowerCase(), cuerpo);
+  }
+
+  /**
+   * `GET /sync/foto/cliente/:clienteId` (T-39, D9): la foto del cliente o
+   * prospecto para la ficha de la tablet. 404 si no tiene foto o no es de la
+   * sucursal del vendedor (no 403: no se confirma que exista).
+   *
+   * Las fotos de las visitas NO bajan: nadie las necesita en la tablet todavia.
+   */
+  @SoloApp()
+  @Get('foto/cliente/:clienteId')
+  @Header('Cache-Control', 'private, max-age=300')
+  async fotoDeCliente(
+    @VendedorActual() vendedorId: string,
+    @Param('clienteId', ParseUUIDPipe) clienteId: string,
+  ): Promise<StreamableFile> {
+    const ruta = await this.foto.rutaDeCliente(
+      vendedorId,
+      clienteId.toLowerCase(),
+    );
+    return new StreamableFile(createReadStream(ruta), { type: 'image/jpeg' });
   }
 }
