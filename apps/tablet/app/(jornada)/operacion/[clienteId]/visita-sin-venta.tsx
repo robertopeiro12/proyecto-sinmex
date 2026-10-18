@@ -52,6 +52,12 @@ export default function VisitaSinVenta() {
   const [ubicacion, setUbicacion] = useState<UbicacionVisita>({ estado: 'buscando' });
   const [error, setError] = useState<string | null>(null);
   const montada = useRef(true);
+  // Guardia contra doble toque: `registrar()` genera un id nuevo cada vez y
+  // `dismissTo` deja la pantalla montada durante la transicion, asi que un
+  // segundo toque en cola grabaria otra visita. El ref corta en el mismo tick;
+  // el estado deshabilita el boton.
+  const guardando = useRef(false);
+  const [guardada, setGuardada] = useState(false);
 
   // El motivo elegido se lee por id, activo o no: si el pull lo da de baja con la
   // pantalla abierta, la visita se guarda igual (D3, Review Focus 1).
@@ -129,12 +135,17 @@ export default function VisitaSinVenta() {
       return;
     }
     if (validacion.visita === null) return;
+    if (guardando.current) return;
+    guardando.current = true;
+    setGuardada(true);
     try {
       datos.visitas.registrar({ vendedorId: vendedor.id, clienteId, ...validacion.visita });
       avisar('Visita registrada');
       // D7.7: regresa a la ruta del dia, donde el cliente ya sale en "Visitados sin venta".
       router.dismissTo('/(jornada)');
     } catch (e) {
+      guardando.current = false;
+      setGuardada(false);
       setError(e instanceof ErrorVisita || e instanceof ErrorJornada ? e.message : 'No se pudo guardar la visita.');
     }
   }
@@ -254,7 +265,7 @@ export default function VisitaSinVenta() {
       <Boton
         etiqueta="Guardar visita"
         glifo="✓"
-        deshabilitado={validacion.visita === null || !menu.operacionesHabilitadas}
+        deshabilitado={validacion.visita === null || !menu.operacionesHabilitadas || guardada}
         onPress={guardar}
         estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
       />
