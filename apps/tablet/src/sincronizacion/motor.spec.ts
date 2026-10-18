@@ -1108,6 +1108,24 @@ describe('motor de sincronizacion', () => {
   });
 });
 
+describe('aSnapshot (T-39)', () => {
+  it('los motivos bajan con sus casillas booleanas como 0/1 de SQLite', () => {
+    const respuesta = respuestaPullDePrueba();
+    respuesta.catalogos.motivos_visita = [
+      { id: 'm1', nombre: 'Cerrado', exige_foto: true, exige_atendio: false, activo: 1 },
+    ];
+    expect(aSnapshot(respuesta).motivosVisita).toEqual([
+      { id: 'm1', nombre: 'Cerrado', exige_foto: 1, exige_atendio: 0, activo: 1 },
+    ]);
+    expect(aSnapshot(respuestaPullDePrueba()).motivosVisita).toBeUndefined();
+  });
+
+  it('un cliente sin foto_subida_en (servidor anterior) llega como null', () => {
+    const cliente = aSnapshot(respuestaPullDePrueba()).clientes?.[0];
+    expect(cliente?.foto_subida_en).toBeNull();
+  });
+});
+
 describe('aSnapshot (T-74)', () => {
   it('pasa las promociones con se_repite 0/1 y tolera que no vengan', () => {
     const base = {

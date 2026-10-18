@@ -61,6 +61,13 @@ export function snapshotDePrueba(): SnapshotCatalogos {
       // Dado de baja en el portal: baja igual, con la bandera, y no se ofrece.
       { id: 'tn-3', nombre: 'Ciber (baja)', activo: 0 },
     ],
+    motivosVisita: [
+      { id: 'mot-tenia', nombre: 'Tenía producto', exige_foto: 0, exige_atendio: 0, activo: 1 },
+      { id: 'mot-cerrado', nombre: 'Cerrado', exige_foto: 1, exige_atendio: 0, activo: 1 },
+      { id: 'mot-encargado', nombre: 'No estaba el encargado', exige_foto: 1, exige_atendio: 1, activo: 1 },
+      // Dado de baja en el portal: baja con la bandera y ya no se ofrece.
+      { id: 'mot-baja', nombre: 'Vacaciones', exige_foto: 0, exige_atendio: 0, activo: 0 },
+    ],
     presentaciones: [
       { id: 'pre-1', producto_id: 'pro-1', volumen: '1 L', activo: 1 },
       { id: 'pre-2', producto_id: 'pro-1', volumen: '500 ml', activo: 1 },

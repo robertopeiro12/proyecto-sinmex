@@ -82,6 +82,19 @@ export interface TipoNegocio {
   sincronizado_en: MomentoISO;
 }
 
+/** Motivo de una visita sin venta. Catalogo global que baja del pull (T-39). */
+export interface MotivoVisita {
+  id: string;
+  nombre: string;
+  /** `1` = la tablet no deja guardar la visita sin foto. */
+  exige_foto: Booleano;
+  /** `1` = la tablet no deja guardar la visita sin el nombre de quien atendio. */
+  exige_atendio: Booleano;
+  /** `0` = dado de baja en el portal: ya no se ofrece. */
+  activo: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
 export type TipoCliente = 'cliente' | 'prospecto';
 
 export interface Cliente {
@@ -120,6 +133,16 @@ export interface Cliente {
    * de los cobros locales. Solo se muestra; usarlo es del portal.
    */
   saldo_favor_centavos: number;
+  /**
+   * T-39 (D9): cuando el SERVIDOR recibio la foto del cliente, tal como baja en
+   * el pull. `null` = no tiene foto (o el servidor es anterior a T-39).
+   */
+  foto_subida_en: MomentoISO | null;
+  /**
+   * El `foto_subida_en` de la copia que esta tablet ya bajo a su cache (no viene
+   * del pull). Si es menor que `foto_subida_en`, la ficha la vuelve a bajar.
+   */
+  foto_cache_subida_en: MomentoISO | null;
   sincronizado_en: MomentoISO;
 }
 
@@ -397,3 +420,41 @@ export interface Prospecto {
   sync_error: string | null;
   sincronizado_en: MomentoISO | null;
 }
+
+/**
+ * Una visita sin venta grabada en la tablet (T-39). Ver `013-visitas.ts`.
+ *
+ * `id` es la clave de idempotencia y el id de la fila en el servidor. No se
+ * edita ni se borra, igual que la venta: solo cambia su sincronizacion y su foto.
+ */
+export interface Visita {
+  id: string;
+  /** Dia de trabajo (`reloj.hoy()`), el de `fecha_operacion`. */
+  fecha: FechaISO;
+  cliente_id: string;
+  vendedor_id: string;
+  sucursal_id: string;
+  motivo_visita_id: string;
+  /** Copia del nombre del motivo al guardar: se pinta sin join. */
+  motivo_nombre: string;
+  /** Cuando la guardo el vendedor. Viaja como `ocurrido_en` y `datos.visitada_en`. */
+  visitada_en: MomentoISO;
+  observaciones: string | null;
+  atendio: string | null;
+  /** Las dos o ninguna. Sin ellas, `direccion_texto` no es nula. */
+  lat: number | null;
+  lng: number | null;
+  precision_m: number | null;
+  direccion_texto: string | null;
+  /** Ruta local de la foto ya comprimida, o `null`. */
+  foto_local: string | null;
+  /** Cuando la recibio el SERVIDOR. `null` = todavia no esta arriba. */
+  foto_subida_en: MomentoISO | null;
+  foto_error: string | null;
+  /** `1` = no recuperable (413, 415, archivo perdido): no se reintenta. */
+  foto_descartada: Booleano;
+  sync_estado: SyncEstado;
+  sync_error: string | null;
+  sincronizado_en: MomentoISO | null;
+}
+   

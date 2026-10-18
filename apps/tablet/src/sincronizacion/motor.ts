@@ -474,12 +474,22 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
       saldo_favor_centavos: cliente.saldo_favor_centavos ?? 0,
       // T-74: un servidor anterior no lo manda.
       primera_venta_en: cliente.primera_venta_en ?? null,
+      // T-39: un servidor anterior no lo manda.
+      foto_subida_en: cliente.foto_subida_en ?? null,
     })),
     // T-40: un servidor anterior a este ticket no manda la coleccion. Se pasa
     // `undefined` y `guardarSnapshot` simplemente no escribe nada de esa tabla;
     // la pantalla de prospectos se queda sin desplegable y lo dice. Es lo que el
     // contrato §3 pide de un cambio aditivo: ignorar lo que no se conoce.
     tiposNegocio: c.tipos_negocio,
+    // T-39: un servidor anterior no manda la coleccion (`undefined` no escribe
+    // nada: la pantalla de visita dice que no hay catalogo). Las casillas llegan
+    // booleanas y SQLite guarda 0/1, como `se_repite`.
+    motivosVisita: c.motivos_visita?.map((mo) => ({
+      ...mo,
+      exige_foto: mo.exige_foto ? 1 : 0,
+      exige_atendio: mo.exige_atendio ? 1 : 0,
+    })),
     precios: c.precios,
     notas: respuesta.notas_pendientes.map(({ abonos, ...nota }) => ({
       ...nota,

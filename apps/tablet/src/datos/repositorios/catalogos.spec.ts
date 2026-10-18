@@ -475,3 +475,48 @@ describe('guardarSnapshot con la ruta del dia (T-37)', () => {
     expect(catalogos.version()).toBeGreaterThan(antes);
   });
 });
+
+describe('motivos de visita (T-39)', () => {
+  it('lista solo los activos, por nombre, con sus casillas', () => {
+    const { catalogos } = conCatalogos();
+    expect(catalogos.listarMotivosVisita().map((m) => [m.nombre, m.exige_foto, m.exige_atendio])).toEqual([
+      ['Cerrado', 1, 0],
+      ['No estaba el encargado', 1, 1],
+      ['Tenía producto', 0, 0],
+    ]);
+  });
+
+  it('obtenerMotivoVisita encuentra tambien uno dado de baja (una visita guardada lo nombra)', () => {
+    const { catalogos } = conCatalogos();
+    expect(catalogos.obtenerMotivoVisita('mot-baja')).toMatchObject({ nombre: 'Vacaciones', activo: 0 });
+    expect(catalogos.obtenerMotivoVisita('no-existe')).toBeNull();
+  });
+
+  it('la baja llega como bandera: el pull siguiente lo deja de ofrecer', () => {
+    const { catalogos } = conCatalogos();
+    catalogos.guardarSnapshot({
+      motivosVisita: [{ id: 'mot-cerrado', nombre: 'Cerrado', exige_foto: 1, exige_atendio: 0, activo: 0 }],
+    });
+    expect(catalogos.listarMotivosVisita().map((m) => m.id)).not.toContain('mot-cerrado');
+  });
+});
+
+describe('foto del cliente (T-39, D9)', () => {
+  it('el pull escribe foto_subida_en y no pisa la marca de la cache', () => {
+    const { catalogos } = conCatalogos();
+    const base = snapshotDePrueba().clientes![0]!;
+    catalogos.guardarSnapshot({ clientes: [{ ...base, foto_subida_en: '2026-10-17T19:00:00.000Z' }] });
+    catalogos.marcarFotoDescargada('cli-1', '2026-10-17T19:00:00.000Z');
+
+    catalogos.guardarSnapshot({ clientes: [{ ...base, foto_subida_en: '2026-10-18T09:00:00.000Z' }] });
+    expect(catalogos.obtenerCliente('cli-1')).toMatchObject({
+      foto_subida_en: '2026-10-18T09:00:00.000Z',
+      foto_cache_subida_en: '2026-10-17T19:00:00.000Z',
+    });
+  });
+
+  it('un servidor anterior a T-39 no manda foto_subida_en: queda null', () => {
+    const { catalogos } = conCatalogos();
+    expect(catalogos.obtenerCliente('cli-1')?.foto_subida_en).toBeNull();
+  });
+});
