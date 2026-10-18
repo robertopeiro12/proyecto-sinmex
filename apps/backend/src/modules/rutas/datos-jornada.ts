@@ -79,7 +79,7 @@ function esFechaReal(valor: string): boolean {
   );
 }
 
-function esInstante(valor: unknown): valor is string {
+export function esInstante(valor: unknown): valor is string {
   if (typeof valor !== 'string') return false;
   const partes = RE_INSTANTE.exec(valor);
   return (

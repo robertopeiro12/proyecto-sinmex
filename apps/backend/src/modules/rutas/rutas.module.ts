@@ -10,6 +10,8 @@ import { RutasDiariasService } from './rutas-diarias.service';
 import { VehiculosController } from './vehiculos.controller';
 import { VehiculosRepository } from './vehiculos.repository';
 import { VehiculosService } from './vehiculos.service';
+import { VisitasRepository } from './visitas.repository';
+import { VisitasService } from './visitas.service';
 
 // Vehiculos vive aqui y no en un `modules/vehiculos/` nuevo: el CLAUDE.md fija
 // que los modulos usan los slugs del vault, y `Vehículo.md` declara
@@ -21,6 +23,7 @@ import { VehiculosService } from './vehiculos.service';
 // `ruta-alta`.
 //
 // T-39: el catalogo de motivos de visita vive aqui porque la visita es de Rutas (ADR-0009).
+// T-39: `VisitasService` se exporta para que sincronizacion/ proyecte la visita.
 @Module({
   controllers: [
     VehiculosController,
@@ -36,7 +39,9 @@ import { VehiculosService } from './vehiculos.service';
     RutasDiariasRepository,
     MotivosVisitaService,
     MotivosVisitaRepository,
+    VisitasService,
+    VisitasRepository,
   ],
-  exports: [JornadasService, RutasDiariasService],
+  exports: [JornadasService, RutasDiariasService, VisitasService],
 })
 export class RutasModule {}

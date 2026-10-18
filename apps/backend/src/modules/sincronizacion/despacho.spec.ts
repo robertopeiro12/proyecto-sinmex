@@ -142,6 +142,29 @@ describe('prepararProyeccion', () => {
     ).toMatchObject({ ok: false, codigo: 'ruta-datos-invalidos' });
   });
 
+  it('una visita pasa por prepararVisita y sale como proyeccion de visita (T-39)', () => {
+    const r = prepararProyeccion(
+      op({
+        tipo: 'visita',
+        folio: null,
+        datos: {
+          motivo_visita_id: PRE_A,
+          visitada_en: '2026-09-14T18:32:05.000Z',
+          lat: 32.5,
+          lng: -117,
+        },
+      }),
+    );
+    expect(r).toMatchObject({
+      ok: true,
+      proyeccion: {
+        tipo: 'visita',
+        clienteId: CLIENTE,
+        visita: { motivoVisitaId: PRE_A },
+      },
+    });
+  });
+
   it('una venta valida se prepara para VentasService', () => {
     expect(prepararProyeccion(op())).toEqual({
       ok: true,

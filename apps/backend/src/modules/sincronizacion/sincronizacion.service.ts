@@ -17,6 +17,8 @@ import {
 import { JornadaRechazada } from '../rutas/jornada-rechazada';
 import { JornadasService } from '../rutas/jornadas.service';
 import { RutaRechazada } from '../rutas/ruta-rechazada';
+import { VisitaRechazada } from '../rutas/visita-rechazada';
+import { VisitasService } from '../rutas/visitas.service';
 import { RutasDiariasService } from '../rutas/rutas-diarias.service';
 import { CobranzaRechazada } from '../ventas-cobranza/cobranza-rechazada';
 import { CobranzasService } from '../ventas-cobranza/cobranzas.service';
@@ -39,6 +41,7 @@ import { CODIGO_POR_RAZON_COBRANZA } from './despacho-cobranza';
 import { CODIGO_POR_RAZON_JORNADA } from './despacho-jornada';
 import { CODIGO_POR_RAZON_PROSPECTO } from './despacho-prospecto';
 import { CODIGO_POR_RAZON_RUTA } from './despacho-ruta-alta';
+import { CODIGO_POR_RAZON_VISITA } from './despacho-visita';
 import type { PullDto, PushDto } from './dto/sincronizacion.dto';
 import { INTENTOS_ANTE_CONFLICTO, reintentarAnteConflicto } from './reintento';
 import {
@@ -84,6 +87,8 @@ export class SincronizacionService {
     private readonly jornadas: JornadasService,
     // T-37: Rutas tambien es la duena de la ruta diaria (`ruta-alta`).
     private readonly rutasDiarias: RutasDiariasService,
+    // T-39: Rutas tambien es la duena de la visita sin venta.
+    private readonly visitas: VisitasService,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -426,6 +431,16 @@ export class SincronizacionService {
           motivo: error.message,
         };
       }
+      // T-39: el rollback ya dejo sin fila tanto el buzon como la visita.
+      if (error instanceof VisitaRechazada) {
+        return {
+          clave: op.clave,
+          tipo: op.tipo,
+          estado: 'rechazada',
+          codigo: CODIGO_POR_RAZON_VISITA[error.razon],
+          motivo: error.message,
+        };
+      }
       if (esColisionDeFolio(error)) {
         return this.clasificarColision(vendedor, op);
       }
@@ -524,6 +539,21 @@ export class SincronizacionService {
             // Del token, nunca del cuerpo: el cliente se coteja contra ella.
             sucursalId: vendedor.sucursal_id,
             vendedorId: vendedor.id,
+            // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
+            fechaOperacion: op.fechaOperacion,
+          },
+          trx,
+        );
+      case 'visita':
+        // La entidad del buzon es la fila de `visita` (ADR-0009 §2.4, enmendado).
+        return this.visitas.registrarVisita(
+          proyeccion.visita,
+          {
+            // T-39 (D2): la clave ES el id de la visita (uuid validado en prepararVisita).
+            id: op.clave,
+            sucursalId: vendedor.sucursal_id,
+            vendedorId: vendedor.id,
+            clienteId: proyeccion.clienteId,
             // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
             fechaOperacion: op.fechaOperacion,
           },
