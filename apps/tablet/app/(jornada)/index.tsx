@@ -6,11 +6,16 @@ import { ErrorRuta } from '@/datos';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
-import { agruparRuta, entradasMenu, textoAvisoSinRuta } from '@/estado/ruta-del-dia';
+import {
+  agruparRuta,
+  atendidosFueraDeRuta,
+  entradasMenu,
+  textoAvisoSinRuta,
+} from '@/estado/ruta-del-dia';
 import type { MotivoAbandono } from '@/sincronizacion/motor';
 import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 import { Boton } from '@/ui/boton';
-import { FilaFueraDeRuta, ListaRuta } from '@/ui/lista-ruta';
+import { FilaAtendidoFueraDeRuta, FilaFueraDeRuta, ListaRuta } from '@/ui/lista-ruta';
 import { MenuHoja } from '@/ui/menu-hoja';
 import { formatearMomento } from '@/ui/momento';
 import { Pastilla, Tarjeta } from '@/ui/pantalla';
@@ -40,7 +45,7 @@ const MENSAJE: Record<MotivoAbandono, string> = {
  * (`src/estado/ruta-del-dia.ts`, `menu-jornada.ts`); aqui solo se pinta.
  */
 export default function RutaDelDia() {
-  const { jornada, datos, versionCatalogos } = useJawa();
+  const { jornada, datos, vendedor, versionCatalogos } = useJawa();
   const { salir, sincronizar, ultimaSincronizacion } = useSesion();
   const { estilos, t } = useTema();
   const [sincronizando, setSincronizando] = useState(false);
@@ -67,6 +72,17 @@ export default function RutaDelDia() {
   // Memoizado: un arreglo nuevo en cada render rehace el `PanResponder` de cada
   // fila (y reinicia su `dy`) en cuanto el arrastre cambia el estado de aqui.
   const { enRuta, fueraDeRuta } = useMemo(() => agruparRuta(filas), [filas]);
+
+  // T-75 (D7): a quien se le vendio hoy sin estar en la ruta (prospectos de bienvenida incluidos).
+  const atendidos = useMemo(() => {
+    void vueltas;
+    void versionCatalogos;
+    void ultimaSincronizacion;
+    if (!vendedor) return [];
+    return atendidosFueraDeRuta(filas, datos.ventas.delDiaDelVendedor(vendedor.id), (id) =>
+      datos.catalogos.obtenerCliente(id),
+    );
+  }, [datos, filas, vendedor, vueltas, versionCatalogos, ultimaSincronizacion]);
 
   // Suma las cinco fuentes del push, altas de ruta incluidas (T-37).
   const pendientes = useMemo(() => {
@@ -268,6 +284,15 @@ export default function RutaDelDia() {
             <Text style={estilos.seccion}>Fuera de ruta</Text>
             {fueraDeRuta.map((fila) => (
               <FilaFueraDeRuta key={fila.id} fila={fila} onTocar={abrirCliente} />
+            ))}
+          </View>
+        ) : null}
+
+        {atendidos.length > 0 ? (
+          <View style={{ gap: espacio.sm, marginTop: espacio.lg }}>
+            <Text style={estilos.seccion}>Atendidos fuera de ruta</Text>
+            {atendidos.map((a) => (
+              <FilaAtendidoFueraDeRuta key={a.cliente_id} fila={a} onTocar={abrirCliente} />
             ))}
           </View>
         ) : null}

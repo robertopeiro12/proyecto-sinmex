@@ -713,9 +713,10 @@ describe('Foto del prospecto (e2e)', () => {
       expect(detalle.tieneFoto).toBe(true);
       expect(detalle.fotoSubidaEn).not.toBeNull();
 
-      // El nombre del archivo NO viaja al portal: es la clave de idempotencia de
-      // la sincronizacion y el portal no tiene por que conocerla.
-      expect(JSON.stringify(detalle)).not.toContain(clave);
+      // El nombre del archivo NO viaja al portal. T-75: la clave ya es el `id` del
+      // cliente (que el detalle si lleva), asi que lo que no debe salir es el
+      // nombre del archivo en disco, `<clave>.jpg`.
+      expect(JSON.stringify(detalle)).not.toContain(`${clave}.jpg`);
 
       // Y el de al lado, sin foto, sigue diciendo que no tiene.
       const otro = await request(app.getHttpServer())

@@ -17,6 +17,7 @@ const trx = {} as Transaction<DB>;
 const contexto = (
   extra: Partial<ContextoProspecto> = {},
 ): ContextoProspecto => ({
+  id: '7f2c0000-0000-4000-8000-000000000001',
   sucursalId: 'sucursal-tj',
   fechaOperacion: '2026-09-14',
   vendedorId: 'vendedor-1',
@@ -62,6 +63,7 @@ describe('ClientesService.crearProspecto', () => {
     expect(repo.insertarProspecto).toHaveBeenCalledTimes(1);
     expect(repo.insertarProspecto).toHaveBeenCalledWith(
       {
+        id: '7f2c0000-0000-4000-8000-000000000001',
         nombre: 'Tacos Aaron',
         telefono: '6641112233',
         encargado: 'Don Aaron',
@@ -167,12 +169,43 @@ describe('ClientesService.crearProspecto', () => {
       expect(repo.insertarProspecto).not.toHaveBeenCalled();
     });
 
-    it('el motivo le dice al vendedor que sincronice, porque se recupera solo', async () => {
+    it('el motivo manda a la oficina a reactivar el tipo y no pide volver a capturar', async () => {
       const { servicio } = montar({ tipoNegocioVigente: false });
 
       await expect(
         servicio.crearProspecto(prospecto(), contexto(), trx),
-      ).rejects.toThrow(/[Ss]incroniza/);
+      ).rejects.toThrow(/Pide a la oficina que lo reactive/);
+      await expect(
+        servicio.crearProspecto(prospecto(), contexto(), trx),
+      ).rejects.not.toThrow(/vuelve a guardar|vuelve a capturar/);
+    });
+  });
+
+  /** T-75 (D2): el insert lleva el id de la clave; si choca, se traduce. */
+  describe('id ocupado', () => {
+    const errorUnico = (constraint: string) =>
+      Object.assign(new Error('duplicate key'), { code: '23505', constraint });
+
+    it('un choque con cliente_pkey es id-ocupado, con motivo neutro', async () => {
+      const { servicio, repo } = montar();
+      repo.insertarProspecto.mockRejectedValue(errorUnico('cliente_pkey'));
+
+      const r = servicio.crearProspecto(prospecto(), contexto(), trx);
+      await expect(r).rejects.toBeInstanceOf(ProspectoRechazado);
+      await expect(r).rejects.toMatchObject({ razon: 'id-ocupado' });
+      await expect(r).rejects.toThrow(/no es nueva; avisa a la oficina/);
+      await expect(r).rejects.not.toThrow(/vuelve a capturar/);
+      await expect(r).rejects.not.toThrow(/7f2c0000/);
+    });
+
+    it('otro unique se relanza tal cual: seria otro bug', async () => {
+      const { servicio, repo } = montar();
+      const otro = errorUnico('uq_otra_cosa');
+      repo.insertarProspecto.mockRejectedValue(otro);
+
+      await expect(
+        servicio.crearProspecto(prospecto(), contexto(), trx),
+      ).rejects.toBe(otro);
     });
   });
 });

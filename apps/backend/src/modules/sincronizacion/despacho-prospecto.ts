@@ -20,6 +20,9 @@ import type { OperacionNormalizada, Rechazo } from './operaciones';
  * `ClientesService.crearProspecto` dentro de la transaccion.
  */
 
+const RE_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export type PreparacionProspecto =
   { ok: true; prospecto: ProspectoNormalizado } | ({ ok: false } & Rechazo);
 
@@ -62,6 +65,23 @@ export function prepararProspecto(
     };
   }
 
+  /**
+   * T-75 (D2): la clave **es** el id del cliente que se va a crear. La tablet
+   * registro el prospecto localmente con ese id y puede tener ya una venta
+   * encolada que apunta a el; si el servidor inventara otro id, esa venta
+   * nunca encontraria a su cliente. `cliente.id` es `uuid`, asi que la clave
+   * tiene que serlo: una que no lo sea es un bug de la tablet (la app siempre
+   * manda `randomUUID()`), no un catalogo viejo — `datos-invalidos`.
+   */
+  if (!RE_UUID.test(op.clave)) {
+    return {
+      ok: false,
+      codigo: 'datos-invalidos',
+      motivo:
+        'clave: la clave de un prospecto debe ser un uuid; es el id con el que la tablet ya lo registró.',
+    };
+  }
+
   const r = normalizarDatosProspecto(op.datos);
   if (!r.ok) {
     return { ok: false, codigo: 'datos-invalidos', motivo: r.motivo };
@@ -83,4 +103,5 @@ export const CODIGO_POR_RAZON_PROSPECTO: Record<
   CodigoRechazo
 > = {
   'tipo-negocio-inexistente': 'tipo-negocio-inexistente',
+  'id-ocupado': 'datos-invalidos',
 };

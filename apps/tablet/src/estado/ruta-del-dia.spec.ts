@@ -1,5 +1,9 @@
 import {
   agruparRuta,
+  atendidosFueraDeRuta,
+  enlaceAFicha,
+  estadoSubida,
+  pastillaAlta,
   entradasMenu,
   esSeccionPendiente,
   filtrarParaAgregar,
@@ -178,5 +182,101 @@ describe('menu hamburguesa (D9, D16)', () => {
       }
     }
     expect(esSeccionPendiente('otra')).toBe(false);
+  });
+});
+
+describe('estadoSubida (T-75)', () => {
+  it('lo mas grave manda: error > pendiente > listo; vacio es null', () => {
+    expect(estadoSubida([])).toBeNull();
+    expect(estadoSubida(['sincronizado'])).toBe('listo');
+    expect(estadoSubida(['sincronizado', 'pendiente'])).toBe('pendiente');
+    expect(estadoSubida(['enviando'])).toBe('pendiente');
+    expect(estadoSubida(['pendiente', 'error', 'sincronizado'])).toBe('error');
+  });
+});
+
+describe('atendidosFueraDeRuta (T-75, D7)', () => {
+  const cliente = (id: string) =>
+    ({
+      a: { nombre: 'Abarrotes', tipo: 'cliente' as const },
+      p: { nombre: 'Prospecto Z', tipo: 'prospecto' as const },
+      z: { nombre: 'Zapateria', tipo: 'cliente' as const },
+    })[id] ?? null;
+  const venta = (cliente_id: string, sync_estado: 'pendiente' | 'enviando' | 'sincronizado' | 'error' = 'pendiente') => ({ cliente_id, sync_estado });
+
+  it('una venta a un cliente que no esta en la ruta lo lista; el prospecto va marcado', () => {
+    const r = atendidosFueraDeRuta([], [venta('z', 'sincronizado'), venta('p')], cliente);
+    expect(r).toEqual([
+      { cliente_id: 'p', nombre: 'Prospecto Z', esProspecto: true, estado: 'pendiente' },
+      { cliente_id: 'z', nombre: 'Zapateria', esProspecto: false, estado: 'listo' },
+    ]);
+  });
+
+  it('en la ruta viva, o quitado con visita, NO sale: ya lo pinta la ruta (Review Focus 5)', () => {
+    const r = atendidosFueraDeRuta(
+      [fila('a', 1, false), fila('z', 0, true)],
+      [venta('a'), venta('z')],
+      cliente,
+    );
+    expect(r).toEqual([]);
+  });
+
+  it('quitado SIN visita y con venta local: sale (la ruta no lo pinta)', () => {
+    const r = atendidosFueraDeRuta([fila('a', 0, false)], [venta('a')], cliente);
+    expect(r.map((x) => x.cliente_id)).toEqual(['a']);
+  });
+
+  it('dos ventas al mismo cliente: una fila con el estado mas grave (Review Focus 4)', () => {
+    const r = atendidosFueraDeRuta([], [venta('a', 'sincronizado'), venta('a', 'error')], cliente);
+    expect(r).toEqual([{ cliente_id: 'a', nombre: 'Abarrotes', esProspecto: false, estado: 'error' }]);
+  });
+
+  it('un cliente que ya no esta en el catalogo local se omite sin tronar', () => {
+    expect(atendidosFueraDeRuta([], [venta('fantasma')], cliente)).toEqual([]);
+  });
+});
+
+describe('pastillaAlta (T-75, D4)', () => {
+  it('sin fila de prospecto (bajo de otra tablet) no hay pastilla', () => {
+    expect(pastillaAlta(null)).toBeNull();
+  });
+  it('por subir / subiendo / subido / rechazado con motivo', () => {
+    expect(pastillaAlta({ sync_estado: 'pendiente', sync_error: null })).toEqual({ texto: 'alta por subir', estado: 'pendiente', detalle: null });
+    expect(pastillaAlta({ sync_estado: 'enviando', sync_error: null })).toEqual({ texto: 'alta subiendo', estado: 'pendiente', detalle: null });
+    expect(pastillaAlta({ sync_estado: 'sincronizado', sync_error: null })).toEqual({ texto: 'alta subida', estado: 'listo', detalle: null });
+  });
+  it('rechazo por tipo de negocio: motivo sin prefijo y a esperar a la oficina', () => {
+    expect(
+      pastillaAlta({ sync_estado: 'error', sync_error: 'tipo-negocio-inexistente: El tipo de negocio X ya no existe.' }),
+    ).toEqual({
+      texto: 'alta rechazada',
+      estado: 'error',
+      detalle:
+        'El tipo de negocio X ya no existe. Su venta subirá cuando la oficina reactive el tipo de negocio. No lo vuelvas a capturar.',
+    });
+  });
+  it('cualquier otro rechazo: avisar a la oficina, sin prometer la venta', () => {
+    expect(pastillaAlta({ sync_estado: 'error', sync_error: 'datos-invalidos: La clave de este prospecto no es nueva; avisa a la oficina.' })).toEqual({
+      texto: 'alta rechazada',
+      estado: 'error',
+      detalle: 'La clave de este prospecto no es nueva; avisa a la oficina. Avisa a la oficina; no lo vuelvas a capturar.',
+    });
+    expect(pastillaAlta({ sync_estado: 'error', sync_error: 'sin prefijo reconocible' })?.detalle).toBe(
+      'sin prefijo reconocible Avisa a la oficina; no lo vuelvas a capturar.',
+    );
+  });
+  it('sync_error null en error: texto genérico', () => {
+    expect(pastillaAlta({ sync_estado: 'error', sync_error: null })).toEqual({
+      texto: 'alta rechazada',
+      estado: 'error',
+      detalle: 'El servidor rechazó el alta. Avisa a la oficina; no lo vuelvas a capturar.',
+    });
+  });
+});
+
+describe('enlaceAFicha (T-75, D6; Review Focus 2)', () => {
+  it('solo si existe el cliente local con ese id (prospectos de antes de T-75 no enlazan)', () => {
+    expect(enlaceAFicha('p1', (id) => id === 'p1')).toBe('p1');
+    expect(enlaceAFicha('viejo', () => false)).toBeNull();
   });
 });

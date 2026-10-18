@@ -6,7 +6,7 @@ import type { SyncEstado } from '@/datos/tipos';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
-import { urlMapa, urlTelefono } from '@/estado/ruta-del-dia';
+import { pastillaAlta, urlMapa, urlTelefono } from '@/estado/ruta-del-dia';
 import { Boton } from '@/ui/boton';
 import { BotonMenu } from '@/ui/boton-menu';
 import { Cifra, pesos } from '@/ui/cifra';
@@ -68,6 +68,8 @@ export default function FichaCliente() {
       notas: datos.catalogos.notasPendientesDe(clienteId).filter((n) => n.saldo_centavos > 0),
       // Con las mismas dependencias: una venta recien grabada apaga la bienvenida del prospecto.
       promociones: datos.promociones.aplicablesPara(clienteId),
+      // T-75 (D4): el estado del alta cambia cuando el push termina (`ultimaSincronizacion`).
+      alta: pastillaAlta(datos.prospectos.porId(clienteId)),
     };
   }, [datos, clienteId, vueltas, ultimaSincronizacion, versionCatalogos]);
 
@@ -83,6 +85,8 @@ export default function FichaCliente() {
     );
   }
 
+  const esProspecto = cliente.tipo === 'prospecto';
+  const alta = esProspecto ? hoy.alta : null;
   const telefono = urlTelefono(cliente.telefono);
   const mapa = urlMapa(cliente);
   // D8: solo la foto que tomo ESTA tablet; la del servidor llega en la pieza 3.
@@ -136,7 +140,9 @@ export default function FichaCliente() {
   return (
     <Pantalla
       titulo={cliente.nombre}
-      subtitulo={cliente.encargado ? `Atiende ${cliente.encargado}` : 'Sin encargado registrado'}
+      subtitulo={`${esProspecto ? 'Prospecto · ' : ''}${
+        cliente.encargado ? `Atiende ${cliente.encargado}` : 'Sin encargado registrado'
+      }`}
     >
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: espacio.sm }}>
         {datoTocable(
@@ -155,17 +161,24 @@ export default function FichaCliente() {
       <View style={[estilos.rejilla, { marginTop: espacio.md }]}>
         <BotonMenu
           titulo="Vender"
-          descripcion="Capturar cantidades; el total se calcula con el precio del cliente"
+          descripcion={
+            esProspecto
+              ? 'Solo regalo de bienvenida: el prospecto no tiene lista de precios'
+              : 'Capturar cantidades; el total se calcula con el precio del cliente'
+          }
           destino={{ pathname: '/(jornada)/operacion/[clienteId]/venta', params }}
           deshabilitado={!menu.operacionesHabilitadas}
           destacada
         />
-        <BotonMenu
-          titulo="Cobrar"
-          descripcion="Cobrar o abonar una nota pendiente"
-          destino={{ pathname: '/(jornada)/operacion/[clienteId]/cobranza', params }}
-          deshabilitado={!menu.operacionesHabilitadas}
-        />
+        {/* T-75 (D6): un prospecto no tiene notas ni inventario que ajustar; la conversion es del portal. */}
+        {esProspecto ? null : (
+          <BotonMenu
+            titulo="Cobrar"
+            descripcion="Cobrar o abonar una nota pendiente"
+            destino={{ pathname: '/(jornada)/operacion/[clienteId]/cobranza', params }}
+            deshabilitado={!menu.operacionesHabilitadas}
+          />
+        )}
         <BotonMenu
           titulo="Visita"
           descripcion="Visita sin venta (pendiente T-39)"
@@ -176,14 +189,16 @@ export default function FichaCliente() {
 
       {/* Secundario: sigue aqui hasta que T-27/T-31 den a la entrada del menu una
           pantalla real (hoy abre un "pendiente"); entonces se quita. */}
-      <View style={[estilos.rejilla, { marginTop: espacio.sm }]}>
-        <BotonMenu
-          titulo="Merma, promoción, consumo y gasto"
-          descripcion="Registros de campo que afectan el inventario y el corte"
-          destino={{ pathname: '/(jornada)/operacion/[clienteId]/registros', params }}
-          deshabilitado={!menu.operacionesHabilitadas}
-        />
-      </View>
+      {esProspecto ? null : (
+        <View style={[estilos.rejilla, { marginTop: espacio.sm }]}>
+          <BotonMenu
+            titulo="Merma, promoción, consumo y gasto"
+            descripcion="Registros de campo que afectan el inventario y el corte"
+            destino={{ pathname: '/(jornada)/operacion/[clienteId]/registros', params }}
+            deshabilitado={!menu.operacionesHabilitadas}
+          />
+        </View>
+      )}
 
       {menu.avisoDiaCerrado ? (
         <Tarjeta estado="listo" etiqueta="Día cerrado">
@@ -211,19 +226,27 @@ export default function FichaCliente() {
             </Text>
           ))
         )}
+        {alta !== null ? (
+          <>
+            <Pastilla texto={alta.texto} estado={alta.estado} />
+            {alta.detalle ? <Text style={estilos.textoSuave}>{alta.detalle}</Text> : null}
+          </>
+        ) : null}
       </Tarjeta>
 
-      <Tarjeta estado={hoy.notas.length > 0 ? 'pendiente' : 'neutro'} etiqueta="Notas pendientes">
-        {hoy.notas.length === 0 ? (
-          <Text style={estilos.textoSuave}>No debe nada.</Text>
-        ) : (
-          hoy.notas.map((n) => (
-            <Text key={n.id} style={estilos.textoTarjeta}>
-              <Cifra valor={n.folio} /> · {n.fecha} · debe <Cifra valor={pesos(n.saldo_centavos)} />
-            </Text>
-          ))
-        )}
-      </Tarjeta>
+      {esProspecto ? null : (
+        <Tarjeta estado={hoy.notas.length > 0 ? 'pendiente' : 'neutro'} etiqueta="Notas pendientes">
+          {hoy.notas.length === 0 ? (
+            <Text style={estilos.textoSuave}>No debe nada.</Text>
+          ) : (
+            hoy.notas.map((n) => (
+              <Text key={n.id} style={estilos.textoTarjeta}>
+                <Cifra valor={n.folio} /> · {n.fecha} · debe <Cifra valor={pesos(n.saldo_centavos)} />
+              </Text>
+            ))
+          )}
+        </Tarjeta>
+      )}
 
       <Tarjeta estado={estadoVentas} etiqueta="Ventas de hoy">
         {hoy.ventas.length === 0 ? (
@@ -244,23 +267,25 @@ export default function FichaCliente() {
         )}
       </Tarjeta>
 
-      <Tarjeta etiqueta="Cobros de hoy">
-        {hoy.cobros.length === 0 ? (
-          <Text style={estilos.textoSuave}>Todavía no le has cobrado hoy.</Text>
-        ) : (
-          hoy.cobros.map((c) => (
-            <View key={c.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
-              <Text style={estilos.textoTarjeta}>
-                <Cifra valor={pesos(c.monto_centavos)} /> · {c.metodo_pago}
-              </Text>
-              <Pastilla texto={ETIQUETA_SYNC[c.sync_estado]} estado={ESTADO_SYNC[c.sync_estado]} />
-              {c.sync_estado === 'error' && c.sync_error ? (
-                <Text style={estilos.error}>{c.sync_error}</Text>
-              ) : null}
-            </View>
-          ))
-        )}
-      </Tarjeta>
+      {esProspecto ? null : (
+        <Tarjeta etiqueta="Cobros de hoy">
+          {hoy.cobros.length === 0 ? (
+            <Text style={estilos.textoSuave}>Todavía no le has cobrado hoy.</Text>
+          ) : (
+            hoy.cobros.map((c) => (
+              <View key={c.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
+                <Text style={estilos.textoTarjeta}>
+                  <Cifra valor={pesos(c.monto_centavos)} /> · {c.metodo_pago}
+                </Text>
+                <Pastilla texto={ETIQUETA_SYNC[c.sync_estado]} estado={ESTADO_SYNC[c.sync_estado]} />
+                {c.sync_estado === 'error' && c.sync_error ? (
+                  <Text style={estilos.error}>{c.sync_error}</Text>
+                ) : null}
+              </View>
+            ))
+          )}
+        </Tarjeta>
+      )}
 
       {foto ? (
         <Modal visible={verFoto} transparent animationType="fade" onRequestClose={() => setVerFoto(false)}>

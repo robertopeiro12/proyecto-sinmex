@@ -63,6 +63,28 @@ describe('prepararProspecto', () => {
     expect(r.motivo).toMatch(/cliente_id/);
   });
 
+  /**
+   * T-75 (D2): la clave del prospecto pasa a ser el `id` del `cliente` que se
+   * crea (la tablet ya lo registro localmente con ese id). `cliente.id` es
+   * `uuid`, asi que una clave que no lo sea no puede entrar — y es un bug de la
+   * tablet, no un catalogo viejo: `datos-invalidos`.
+   */
+  it('rechaza un prospecto cuya clave no es un uuid: es el id del cliente', () => {
+    const r = prepararProspecto(operacion({ clave: 'prosp-123-abc' }));
+
+    expect(r).toMatchObject({ ok: false, codigo: 'datos-invalidos' });
+    if (r.ok) return;
+    expect(r.motivo).toMatch(/clave/);
+    expect(r.motivo).toMatch(/uuid/i);
+  });
+
+  it('acepta la clave en mayusculas: Postgres compara uuid sin importar mayusculas', () => {
+    const r = prepararProspecto(
+      operacion({ clave: '7F2C0000-0000-4000-8000-000000000001' }),
+    );
+    expect(r.ok).toBe(true);
+  });
+
   it('traduce un problema de forma a datos-invalidos, nombrando el campo', () => {
     const r = prepararProspecto(operacion({ datos: { telefono: '664' } }));
 
@@ -88,6 +110,7 @@ describe('CODIGO_POR_RAZON_PROSPECTO', () => {
   it('traduce cada razon de dominio a un codigo del contrato', () => {
     expect(CODIGO_POR_RAZON_PROSPECTO).toEqual({
       'tipo-negocio-inexistente': 'tipo-negocio-inexistente',
+      'id-ocupado': 'datos-invalidos',
     });
   });
 
