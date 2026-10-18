@@ -135,6 +135,16 @@ export interface ListaPrecio {
   updated_at: Generated<Timestamp>;
 }
 
+export interface MotivoVisita {
+  actualizado_en: Generated<Timestamp>;
+  creado_en: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  exige_atendio: Generated<boolean>;
+  exige_foto: Generated<boolean>;
+  id: Generated<string>;
+  nombre: string;
+}
+
 export interface Perfil {
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -430,6 +440,25 @@ export interface VentaNotaPromocion {
   venta_nota_id: string;
 }
 
+export interface Visita {
+  atendio: string | null;
+  cliente_id: string;
+  creado_en: Generated<Timestamp>;
+  direccion_texto: string | null;
+  fecha: Timestamp;
+  foto_archivo: string | null;
+  foto_subida_en: Timestamp | null;
+  id: string;
+  lat: Numeric | null;
+  lng: Numeric | null;
+  motivo_visita_id: string;
+  observaciones: string | null;
+  precision_m: Numeric | null;
+  sucursal_id: string;
+  vendedor_id: string;
+  visitada_en: Timestamp;
+}
+
 export interface DB {
   cliente: Cliente;
   cliente_precio: ClientePrecio;
@@ -439,6 +468,7 @@ export interface DB {
   folio_oficina_contador: FolioOficinaContador;
   jornada: Jornada;
   lista_precio: ListaPrecio;
+  motivo_visita: MotivoVisita;
   perfil: Perfil;
   perfil_permiso: PerfilPermiso;
   permiso: Permiso;
@@ -463,4 +493,5 @@ export interface DB {
   venta_nota: VentaNota;
   venta_nota_detalle: VentaNotaDetalle;
   venta_nota_promocion: VentaNotaPromocion;
+  visita: Visita;
 }
