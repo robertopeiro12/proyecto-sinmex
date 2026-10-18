@@ -38,18 +38,26 @@ export function PantallaPromociones({ sucursal }: { sucursal: string | null }) {
       cargar={() => listarPromociones({ sucursal })}
       // La lista es de una sucursal: cambia con el selector global.
       deps={[sucursal]}
+      // La frase llega a 200 caracteres: sin `whitespace-nowrap` una frase larga parte
+      // "Para quién" en dos renglones. Medido a 1366 px.
       columnas={[
         { encabezado: "Promoción", celda: (p) => p.texto },
         {
           encabezado: "Para quién",
           celda: (p) =>
             p.audiencia === "todos" ? "Todos los clientes" : "Prospectos (primera venta)",
+          className: "whitespace-nowrap",
         },
-        { encabezado: "Sucursal", celda: (p) => p.sucursalCodigo, className: "font-mono" },
+        {
+          encabezado: "Sucursal",
+          celda: (p) => p.sucursalCodigo,
+          className: "whitespace-nowrap font-mono",
+        },
         {
           encabezado: "Estado",
           celda: (p) =>
             p.activo ? "Activa" : <span className="text-muted-foreground">Inactiva</span>,
+          className: "whitespace-nowrap",
         },
       ]}
       formulario={(item, alGuardar, alCancelar) => (
