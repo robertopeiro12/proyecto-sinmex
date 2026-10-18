@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { JornadasRepository } from './jornadas.repository';
 import { JornadasService } from './jornadas.service';
+import { MotivosVisitaController } from './motivos-visita.controller';
+import { MotivosVisitaRepository } from './motivos-visita.repository';
+import { MotivosVisitaService } from './motivos-visita.service';
 import { RutasDiariasController } from './rutas-diarias.controller';
 import { RutasDiariasRepository } from './rutas-diarias.repository';
 import { RutasDiariasService } from './rutas-diarias.service';
@@ -16,8 +19,14 @@ import { VehiculosService } from './vehiculos.service';
 // que sube la tablet (ADR-0009); la dependencia va de sincronizacion hacia
 // aqui, nunca al reves. T-37 hace lo mismo con `RutasDiariasService` y el
 // `ruta-alta`.
+//
+// T-39: el catalogo de motivos de visita vive aqui porque la visita es de Rutas (ADR-0009).
 @Module({
-  controllers: [VehiculosController, RutasDiariasController],
+  controllers: [
+    VehiculosController,
+    RutasDiariasController,
+    MotivosVisitaController,
+  ],
   providers: [
     VehiculosService,
     VehiculosRepository,
@@ -25,6 +34,8 @@ import { VehiculosService } from './vehiculos.service';
     JornadasRepository,
     RutasDiariasService,
     RutasDiariasRepository,
+    MotivosVisitaService,
+    MotivosVisitaRepository,
   ],
   exports: [JornadasService, RutasDiariasService],
 })
