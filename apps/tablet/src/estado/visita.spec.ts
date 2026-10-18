@@ -100,27 +100,39 @@ describe('validarVisita (T-39, D7)', () => {
 });
 
 describe('validarVisita: coordenadas', () => {
-  it.each([
+  const invalidas = [
     [{ ...GPS, lat: 91 }],
     [{ ...GPS, lat: -90.5 }],
     [{ ...GPS, lng: 180.1 }],
     [{ ...GPS, lng: -181 }],
     [{ ...GPS, lat: Number.NaN }],
     [{ ...GPS, lng: Number.POSITIVE_INFINITY }],
-    [{ ...GPS, precisionM: Number.NaN }],
-  ])('%o no se guarda', (ubicacion) => {
+  ];
+
+  it.each(invalidas)('%o con direccion escrita: se guarda como sin GPS', (ubicacion) => {
+    const r = validarVisita(entrada({ ubicacion, direccionTexto: 'Frente al parque' }));
+    expect(r.faltantes).toEqual([]);
+    expect(r.visita).toMatchObject({ lat: null, lng: null, precisionM: null, direccionTexto: 'Frente al parque' });
+  });
+
+  it.each(invalidas)('%o sin direccion: el campo aparece y no se guarda', (ubicacion) => {
     const r = validarVisita(entrada({ ubicacion }));
+    expect(r.pedirDireccion).toBe(true);
     expect(r.visita).toBeNull();
-    expect(r.faltantes).toEqual(['La ubicación tomada no es válida: vuelve a intentar.']);
+    expect(r.faltantes).toEqual(['Sin GPS: escribe la dirección o una referencia del lugar.']);
   });
 
-  it('los limites exactos si valen', () => {
-    expect(validarVisita(entrada({ ubicacion: { ...GPS, lat: -90, lng: 180 } })).visita).not.toBeNull();
-  });
+  it.each([[-1], [Number.NaN], [Number.POSITIVE_INFINITY]])(
+    'precision %p: se descarta la precision y se conserva la coordenada',
+    (precisionM) => {
+      const r = validarVisita(entrada({ ubicacion: { ...GPS, precisionM } }));
+      expect(r.visita).toMatchObject({ lat: 32.5149, lng: -117.0382, precisionM: null });
+    },
+  );
 
-  it('con coordenada invalida y direccion escrita tampoco se guarda (no se mezcla basura con texto)', () => {
-    const r = validarVisita(entrada({ ubicacion: { ...GPS, lat: 99 }, direccionTexto: 'Frente al parque' }));
-    expect(r.visita).toBeNull();
+  it('los limites exactos y precision 0 si valen', () => {
+    const r = validarVisita(entrada({ ubicacion: { ...GPS, lat: -90, lng: 180, precisionM: 0 } }));
+    expect(r.visita).toMatchObject({ lat: -90, lng: 180, precisionM: 0 });
   });
 
   it('los largos se miden en unidades UTF-16 (String.length), como el servidor', () => {

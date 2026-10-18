@@ -63,7 +63,8 @@ export function validarVisita(e: EntradaVisita): ValidacionVisita {
   const atendio = limpio(e.atendio);
   const direccion = limpio(e.direccionTexto);
   const u = e.ubicacion;
-  // El repositorio no revisa el rango: lo hace esta funcion (NaN, fuera de rango o una sola mitad).
+  // El repositorio no revisa el rango: lo hace esta funcion. Una coordenada invalida (NaN, fuera
+  // de rango) es "sin GPS": nunca bloquea si hay direccion, y sin ella se pide como en `fallo`.
   const coordenadasValidas =
     u.estado === 'ok' &&
     Number.isFinite(u.lat) &&
@@ -71,11 +72,14 @@ export function validarVisita(e: EntradaVisita): ValidacionVisita {
     u.lat >= -90 &&
     u.lat <= 90 &&
     u.lng >= -180 &&
-    u.lng <= 180 &&
-    (u.precisionM === null || Number.isFinite(u.precisionM));
+    u.lng <= 180;
   const gps = u.estado === 'ok' && coordenadasValidas ? u : null;
-  const pedirDireccion = e.ubicacion.estado === 'fallo' || direccion !== null;
-
+  // El servidor exige precision >= 0: una negativa o no finita se descarta, la coordenada se queda.
+  const precisionM =
+    gps !== null && gps.precisionM !== null && Number.isFinite(gps.precisionM) && gps.precisionM >= 0
+      ? gps.precisionM
+      : null;
+  const pedirDireccion = u.estado === 'fallo' || (u.estado === 'ok' && gps === null) || direccion !== null;
 
   if (e.motivo === null) faltantes.push('Elige el motivo de la visita.');
   if (observaciones !== null && observaciones.length > LARGO_MAX_OBSERVACIONES_VISITA) {
@@ -91,9 +95,7 @@ export function validarVisita(e: EntradaVisita): ValidacionVisita {
   if (direccion !== null && direccion.length > LARGO_MAX_DIRECCION) {
     faltantes.push(`La dirección no puede pasar de ${LARGO_MAX_DIRECCION} caracteres.`);
   }
-  if (u.estado === 'ok' && !coordenadasValidas) {
-    faltantes.push('La ubicación tomada no es válida: vuelve a intentar.');
-  } else if (gps === null && direccion === null) {
+  if (gps === null && direccion === null) {
     faltantes.push(
       u.estado === 'buscando'
         ? 'Esperando la ubicación…'
@@ -114,7 +116,7 @@ export function validarVisita(e: EntradaVisita): ValidacionVisita {
             atendio,
             lat: gps?.lat ?? null,
             lng: gps?.lng ?? null,
-            precisionM: gps?.precisionM ?? null,
+            precisionM,
             direccionTexto: direccion,
             fotoUri: e.fotoUri,
           }
