@@ -1,5 +1,6 @@
 import {
   agruparRuta,
+  anchoMenuLateral,
   atendidosFueraDeRuta,
   enlaceAFicha,
   estadoSubida,
@@ -278,5 +279,19 @@ describe('enlaceAFicha (T-75, D6; Review Focus 2)', () => {
   it('solo si existe el cliente local con ese id (prospectos de antes de T-75 no enlazan)', () => {
     expect(enlaceAFicha('p1', (id) => id === 'p1')).toBe('p1');
     expect(enlaceAFicha('viejo', () => false)).toBeNull();
+  });
+});
+
+describe('anchoMenuLateral (menu lateral, 2026-10-18)', () => {
+  it('en el celular toma el 82% y deja una franja de la ruta para cerrar', () => {
+    expect(anchoMenuLateral(360)).toBe(295);
+    expect(anchoMenuLateral(360)).toBeLessThan(360);
+  });
+  it('en pantallas anchas no pasa de 320', () => {
+    expect(anchoMenuLateral(412)).toBe(320);
+    expect(anchoMenuLateral(1280)).toBe(320);
+  });
+  it('un ancho invalido no da negativo', () => {
+    expect(anchoMenuLateral(-10)).toBe(0);
   });
 });
