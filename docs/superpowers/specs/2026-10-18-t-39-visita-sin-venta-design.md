@@ -105,7 +105,7 @@ export type DatosVisita = {
   - `POST /motivos-visita`;
   - `PATCH /motivos-visita/:id`;
   - `DELETE /motivos-visita/:id`, que pone `deleted_at`.
-- Permiso nuevo **`motivo-visita.gestionar`** (grupo Catálogo), sembrado en la migración, para escribir. Leer requiere sesión del portal.
+- Permiso nuevo **`motivo_visita.gestionar`** (grupo General, como los demás catálogos), sembrado en la migración, para escribir. Leer requiere sesión del portal.
 - Los nombres duplicados entre vivos se rechazan con 409 y un mensaje que lo diga.
 - Patrón a copiar: la pestaña de cuentas de Tesorería (baja lógica) y la pantalla genérica de catálogo.
 - Se agrega al menú, en el grupo Catálogo de `nav-config.ts`.

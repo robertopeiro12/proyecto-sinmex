@@ -95,7 +95,7 @@ Lo que el spec implica y ninguna prueba cubriría si no se añade aquí; cada l�
 - Produces: tablas `motivo_visita` (`id, nombre, exige_foto, exige_atendio, deleted_at, creado_en, actualizado_en`)
   y `visita` (`id, vendedor_id, sucursal_id, cliente_id, motivo_visita_id, fecha, visitada_en, observaciones,
   atendio, lat, lng, precision_m, direccion_texto, foto_archivo, foto_subida_en, creado_en`); función
-  `set_actualizado_en()`; índice `uq_motivo_visita_nombre`; permiso `motivo-visita.gestionar` (grupo `Catálogo`);
+  `set_actualizado_en()`; índice `uq_motivo_visita_nombre`; permiso `motivo_visita.gestionar` (grupo `General`);
   interfaces Kysely `MotivoVisita` y `Visita` en `DB` (`'motivo_visita'`, `'visita'`).
 
 > Las columnas de tiempo del catálogo se llaman `creado_en`/`actualizado_en` **porque así lo fija el spec (D1)**.
@@ -155,8 +155,8 @@ select lives_ok(
   'dar de baja un motivo libera su nombre');
 
 select is(
-  (select count(*)::int from permiso where clave = 'motivo-visita.gestionar' and grupo = 'Catálogo'),
-  1, 'existe el permiso motivo-visita.gestionar en el grupo Catálogo');
+  (select count(*)::int from permiso where clave = 'motivo_visita.gestionar' and grupo = 'General'),
+  1, 'existe el permiso motivo_visita.gestionar en el grupo General');
 
 -- Fixtures propias de la visita: un vendedor y un prospecto de TJ (un prospecto
 -- no exige domicilio ni lista de precios). Todo se va con el rollback.
@@ -305,7 +305,7 @@ create index idx_visita_vendedor_fecha on visita (vendedor_id, fecha);
 -- El perfil `Administrador General` lo recibe solo (PERFIL_MAESTRO). Leer el
 -- catalogo solo pide sesion del portal (D5).
 insert into permiso (clave, grupo, descripcion) values
-  ('motivo-visita.gestionar', 'Catálogo', 'Motivos de visita: alta, edición y baja')
+  ('motivo_visita.gestionar', 'General', 'Motivos de visita: alta, edición y baja')
 on conflict (clave) do nothing;
 ```
 
@@ -335,7 +335,7 @@ ajenas (migraciones de otra rama aplicadas al Supabase compartido), deja solo lo
 ```bash
 npm run build --workspace=apps/backend
 git add supabase/migrations/20261018120000_visita_sin_venta.sql supabase/tests/99_visita_test.sql apps/backend/src/database/schema.d.ts
-git commit -m "T-39: migración de motivo_visita, visita y el permiso motivo-visita.gestionar
+git commit -m "T-39: migración de motivo_visita, visita y el permiso motivo_visita.gestionar
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -356,7 +356,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: tabla `motivo_visita` (Tarea 1); `RequierePermiso`, `esViolacionUnicidad`.
 - Produces: `GET /motivos-visita` (sesión), `POST /motivos-visita`, `PATCH /motivos-visita/:id`,
-  `DELETE /motivos-visita/:id` (los tres con `motivo-visita.gestionar`). Respuesta en camelCase:
+  `DELETE /motivos-visita/:id` (los tres con `motivo_visita.gestionar`). Respuesta en camelCase:
   `interface MotivoVisita { id: string; nombre: string; exigeFoto: boolean; exigeAtendio: boolean }`. Cuerpo
   `{ nombre, exigeFoto?, exigeAtendio? }`; `DELETE` responde `{ id }`. Duplicado entre vivos → 409
   `Ya existe un motivo de visita llamado "<nombre>".`; inexistente o dado de baja → 404
@@ -720,7 +720,7 @@ import {
 import type { MotivoVisita } from './motivos-visita.repository';
 import { MotivosVisitaService } from './motivos-visita.service';
 
-// T-39 (D5). Leer pide solo sesion del portal; escribir, `motivo-visita.gestionar`.
+// T-39 (D5). Leer pide solo sesion del portal; escribir, `motivo_visita.gestionar`.
 // La tablet no usa estos endpoints: el catalogo le baja en el pull.
 @Controller('motivos-visita')
 export class MotivosVisitaController {
@@ -732,13 +732,13 @@ export class MotivosVisitaController {
   }
 
   @Post()
-  @RequierePermiso('motivo-visita.gestionar')
+  @RequierePermiso('motivo_visita.gestionar')
   crear(@Body() dto: CrearMotivoVisitaDto): Promise<MotivoVisita> {
     return this.motivos.crear(dto);
   }
 
   @Patch(':id')
-  @RequierePermiso('motivo-visita.gestionar')
+  @RequierePermiso('motivo_visita.gestionar')
   editar(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: EditarMotivoVisitaDto,
@@ -747,7 +747,7 @@ export class MotivosVisitaController {
   }
 
   @Delete(':id')
-  @RequierePermiso('motivo-visita.gestionar')
+  @RequierePermiso('motivo_visita.gestionar')
   async eliminar(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<{ id: string }> {
@@ -818,7 +818,7 @@ describe('POST /motivos-visita', () => {
     expect((res.body as { message: string }).message).toContain('Ya existe un motivo de visita');
   });
 
-  it('sin motivo-visita.gestionar es 403', async () => {
+  it('sin motivo_visita.gestionar es 403', async () => {
     await http().post('/motivos-visita').set('Cookie', cookieSinPermiso).send({ nombre: `${PREFIJO} X` }).expect(403);
   });
 
@@ -3033,7 +3033,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Interfaces:**
 - Consumes: los endpoints de la Tarea 2; `useCatalogo`, `TablaCatalogo`, `useEnvioFormulario`, `useAuth().puede`,
   `apiFetch`, `mensajeDe`, `ErrorApi`.
-- Produces: `PERMISO_MOTIVOS_VISITA = "motivo-visita.gestionar"`; `interface MotivoVisita { id; nombre; exigeFoto;
+- Produces: `PERMISO_MOTIVOS_VISITA = "motivo_visita.gestionar"`; `interface MotivoVisita { id; nombre; exigeFoto;
   exigeAtendio }`; `listarMotivosVisita()`, `crearMotivoVisita(datos)`, `editarMotivoVisita(id, datos)`,
   `eliminarMotivoVisita(id)`; la página `/catalogo/motivos-de-visita`.
 
@@ -3094,7 +3094,7 @@ describe("PantallaMotivosVisita", () => {
     expect(screen.getByRole("button", { name: "Nuevo motivo" })).toBeInTheDocument();
   });
 
-  it("sin motivo-visita.gestionar solo se lee: sin alta ni botones por fila", async () => {
+  it("sin motivo_visita.gestionar solo se lee: sin alta ni botones por fila", async () => {
     sesion(false);
     render(<PantallaMotivosVisita />);
     const fila = (await screen.findByText("Cerrado")).closest("tr")!;
@@ -3173,7 +3173,7 @@ import { apiFetch } from "./api";
 // Copia de `MotivoVisita` de apps/backend/src/modules/rutas/motivos-visita.repository.ts
 // (el portal no puede importar del backend). T-39, D5.
 
-export const PERMISO_MOTIVOS_VISITA = "motivo-visita.gestionar";
+export const PERMISO_MOTIVOS_VISITA = "motivo_visita.gestionar";
 
 export interface MotivoVisita {
   id: string;
@@ -3315,7 +3315,7 @@ const siNo = (valor: boolean) => (valor ? "Sí" : "No");
 /**
  * Catálogo › Motivos de visita (T-39, D5): por qué un cliente no compró. Leer pide
  * sesión; dar de alta, editar y dar de baja (lógica, con confirmación) pide
- * `motivo-visita.gestionar`. Mismo patrón que la pestaña de cuentas de Tesorería.
+ * `motivo_visita.gestionar`. Mismo patrón que la pestaña de cuentas de Tesorería.
  */
 export function PantallaMotivosVisita() {
   const { puede } = useAuth();
@@ -6224,7 +6224,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
   - **Catálogo `motivo_visita`** global (como `tipo_negocio`), con `exige_foto`/`exige_atendio`, baja lógica y nombre
     único entre vivos (`uq_motivo_visita_nombre`). Sus tiempos se llaman `creado_en`/`actualizado_en`; un trigger
     `set_actualizado_en()` mueve el segundo. Portal: *Catálogo → Motivos de visita* (`rutas/motivos-visita.*`,
-    `/motivos-visita`, permiso `motivo-visita.gestionar`, grupo Catálogo). Baja en el pull como `motivos_visita`.
+    `/motivos-visita`, permiso `motivo_visita.gestionar`, grupo General). Baja en el pull como `motivos_visita`.
   - **Operación `visita`** en el push (no `ruta`), sin subir `CONTRATO_ACTUAL`. La clave **es** `visita.id` (uuid,
     como el prospecto de T-75); `cliente_id` va en el sobre. `prepararVisita` valida la forma (ubicación obligatoria)
     y `rutas/visitas.service.ts` proyecta. Rechazos nuevos: `motivo-visita-inexistente` (uno **dado de baja sí
