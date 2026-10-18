@@ -1,8 +1,9 @@
 import { depsDePrueba, snapshotDePrueba } from '@/datos/pruebas-apoyo';
 import { crearRepositorioCatalogos } from '@/datos/repositorios/catalogos';
 import { crearRepositorioProspectos } from '@/datos/repositorios/prospectos';
+import { crearRepositorioVisitas } from '@/datos/repositorios/visitas';
 
-import { fuenteFotosProspectos } from './fuente-fotos';
+import { combinarFuentesFotos, fuenteFotosProspectos, fuenteFotosVisitas } from './fuente-fotos';
 
 function montar() {
   const deps = depsDePrueba();
@@ -80,5 +81,59 @@ describe('fuente de fotos de prospectos', () => {
     fuente.descartar(permanente.id, 'La foto pesa mas de lo que el servidor acepta.');
 
     expect(fuente.pendientes().map((f) => f.clave)).toEqual([temporal.id]);
+  });
+});
+
+describe('fotos de visitas y cola combinada (T-39, D9)', () => {
+  function montarAmbas() {
+    const deps = depsDePrueba();
+    const catalogos = crearRepositorioCatalogos(deps);
+    catalogos.guardarSnapshot(snapshotDePrueba());
+    const prospectos = crearRepositorioProspectos(deps, { catalogos });
+    const visitas = crearRepositorioVisitas(deps, { catalogos });
+    const fuente = combinarFuentesFotos([fuenteFotosProspectos(prospectos), fuenteFotosVisitas(visitas)]);
+    return { prospectos, visitas, fuente };
+  }
+
+  const visitaCon = (fotoUri: string | null) => ({
+    vendedorId: 'ven-1',
+    clienteId: 'cli-1',
+    motivoVisitaId: 'mot-cerrado',
+    observaciones: null,
+    atendio: null,
+    lat: 32.5,
+    lng: -117,
+    precisionM: null,
+    direccionTexto: null,
+    fotoUri,
+  });
+
+  it('la foto de una visita sale solo cuando la visita ya esta sincronizada', () => {
+    const { visitas, fuente } = montarAmbas();
+    const v = visitas.registrar(visitaCon('file:///cache/v.jpg'));
+    expect(fuente.pendientes()).toEqual([]);
+    visitas.marcarSincronizada(v.id);
+    expect(fuente.pendientes()).toEqual([{ clave: v.id, uri: 'file:///cache/v.jpg' }]);
+  });
+
+  it('prospectos primero, visitas despues, y cada resultado vuelve a SU repositorio', () => {
+    const { prospectos, visitas, fuente } = montarAmbas();
+    const p = prospectos.registrar(captura('file:///cache/p.jpg'));
+    prospectos.marcarSincronizado(p.id);
+    const v = visitas.registrar(visitaCon('file:///cache/v.jpg'));
+    visitas.marcarSincronizada(v.id);
+
+    expect(fuente.pendientes().map((f) => f.clave)).toEqual([p.id, v.id]);
+    fuente.marcarSubida(v.id, '2026-08-07T16:00:00.000Z');
+    fuente.descartar(p.id, 'La foto pesa demasiado');
+
+    expect(visitas.porId(v.id)?.foto_subida_en).toBe('2026-08-07T16:00:00.000Z');
+    expect(prospectos.porId(p.id)).toMatchObject({ foto_descartada: 1, foto_subida_en: null });
+    expect(visitas.porId(v.id)?.foto_descartada).toBe(0);
+  });
+
+  it('un resultado de una clave que no salio de pendientes() es un bug y truena', () => {
+    const { fuente } = montarAmbas();
+    expect(() => fuente.anotarError('nadie', 'x')).toThrow(/no salio de pendientes/);
   });
 });
