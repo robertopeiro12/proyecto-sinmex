@@ -34,7 +34,7 @@ export function TablaCatalogo<T extends { id: string }>({
       <thead>
         <tr className="border-b text-left text-muted-foreground">
           {columnas.map((columna) => (
-            <th key={columna.encabezado} className="py-2 font-medium">
+            <th key={columna.encabezado} className="py-2 pr-4 font-medium">
               {columna.encabezado}
             </th>
           ))}
@@ -49,7 +49,7 @@ export function TablaCatalogo<T extends { id: string }>({
         {items.map((item) => (
           <tr key={item.id} className="border-b last:border-0">
             {columnas.map((columna) => (
-              <td key={columna.encabezado} className={`py-2 ${columna.className ?? ""}`}>
+              <td key={columna.encabezado} className={`py-2 pr-4 ${columna.className ?? ""}`}>
                 {columna.celda(item)}
               </td>
             ))}

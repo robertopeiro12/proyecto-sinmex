@@ -21,6 +21,10 @@ export const navSections: NavSection[] = [
     ],
   },
   {
+    label: "Finanzas",
+    items: [{ label: "Tesorería", href: "/finanzas/tesoreria" }],
+  },
+  {
     label: "Catálogo",
     items: [
       { label: "Sucursales", href: "/catalogo/sucursales" },
