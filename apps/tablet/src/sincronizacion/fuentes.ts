@@ -4,6 +4,7 @@ import { fuenteJornadas } from './fuente-jornadas';
 import { fuenteProspectos } from './fuente-prospectos';
 import { fuenteRutas } from './fuente-rutas';
 import { fuenteVentas } from './fuente-ventas';
+import { fuenteVisitas } from './fuente-visitas';
 import type { FuentesConPendientes } from './pendientes';
 
 /**
@@ -19,6 +20,8 @@ import type { FuentesConPendientes } from './pendientes';
  *   caeria `cliente-fuera-de-alcance` y entraria hasta la siguiente
  *   sincronizacion.
  * - Cobranzas despues de ventas (T-20): nunca antes que una venta del dia.
+ * - Visitas despues de cobranzas (T-39): la visita a un prospecto capturado sin red necesita
+ *   su alta ya aplicada (el alcance se comprueba una vez por lote, como la venta de bienvenida de T-75).
  * - Altas de ruta (T-37) no dependen de nadie: al final.
  *
  * Vive aqui y no en `proveedor-sesion.tsx` para que el orden tenga prueba.
@@ -29,6 +32,7 @@ export function fuentesDelPush(datos: FuentesConPendientes): FuenteOperaciones[]
     fuenteProspectos(datos.prospectos),
     fuenteVentas(datos.ventas),
     fuenteCobranzas(datos.cobranzas),
+    fuenteVisitas(datos.visitas),
     fuenteRutas(datos.rutas),
   ];
 }
