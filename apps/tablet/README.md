@@ -183,8 +183,10 @@ de vendedores es **T-62**).
 - **Las altas del vendedor suben como `ruta-alta`** (`src/sincronizacion/fuente-rutas.ts`). `ruta-duplicada` no es
   error: la fila queda sincronizada y el pull posterior la funde con la del servidor. Un alta rechazada por otro
   motivo se ve en rojo bajo la fila y el vendedor la puede quitar (`quitarRechazada`).
-- **"Visitado" se deriva** (venta o cobro de hoy en la tablet) y la **burbuja** cuenta las notas con saldo; los dos
-  salen de `rutas.delDia()`. Una fila que la oficina quitó se queda en "Fuera de ruta" solo si hoy tuvo actividad.
+- **"Visitado" se deriva** (venta, cobro **o visita** de hoy en la tablet; T-39) y la **burbuja** cuenta las notas con saldo; los dos
+  salen de `rutas.delDia()`.
+- **"Visitados sin venta"** (T-39): el cliente de la ruta viva con visita hoy y sin venta ni cobro sale de la lista y
+  aparece después de ella, con el motivo y la hora de la última visita y la subida de sus visitas (`agruparRuta`). Una fila que la oficina quitó se queda en "Fuera de ruta" solo si hoy tuvo actividad.
 - **Reordenar**: mantener presionado y arrastrar (`PanResponder`, `src/ui/lista-ruta.tsx`), con ▲/▼ siempre como
   respaldo. Si el arrastre resulta frágil en un equipo, `ARRASTRE_HABILITADO = false` deja solo los botones.
 - La lógica de la pantalla vive en `src/estado/ruta-del-dia.ts` (puro, con pruebas). "Abrir el día" purga la ruta
@@ -244,6 +246,30 @@ Spec: `docs/superpowers/specs/2026-10-14-t-75-camino-prospecto-design.md`. Flujo
   cuando la oficina reactive el tipo de negocio (la tablet reenvía el mismo id); con cualquier otro rechazo hay que
   avisar a la oficina: la tablet no tiene cómo descartar ni corregir un alta. El vendedor **no debe volver a capturar**
   al prospecto (nacería un segundo espejo y la venta original seguiría en error). La pastilla de la ficha muestra el motivo.
+
+## Visita sin venta (T-39)
+
+Spec: `docs/superpowers/specs/2026-10-18-t-39-visita-sin-venta-design.md`. Pantalla:
+`app/(jornada)/operacion/[clienteId]/visita-sin-venta.tsx`, desde el botón Visita de la ficha (cliente o prospecto).
+
+- **Guardar** (sin red): `visitas.registrar` inserta la fila de `visita` (migración 013) en una transacción, con
+  `motivo_nombre` copiado para pintar sin join. Toda la validación vive en `validarVisita` (`src/estado/visita.ts`,
+  pura y con pruebas): el motivo debe estar vivo en el catálogo local, la foto y quién atendió se exigen según el
+  motivo, y la ubicación es GPS **o** dirección escrita. Una coordenada inválida (fuera de rango o no finita) cuenta
+  como "sin GPS" (se pide la dirección y se guarda con `lat`/`lng` null) y una `precisionM` negativa se descarta.
+  La pantalla ignora un segundo toque mientras guarda.
+- **Catálogo**: `motivo_visita` baja con el pull (`catalogos.ts`); si lo dan de baja con la pantalla abierta, la
+  visita se guarda igual y el servidor la acepta.
+- **Foto de la visita**: `foto_local`, `foto_subida_en`, `foto_error` y `foto_descartada` (no hay `foto_estado`),
+  y entra a la cola combinada de fotos junto con las de prospectos.
+- **Sincroniza**: `fuente-visitas.ts` sube **visitas después de cobranzas y antes de rutas** (`fuentesDelPush`).
+  La visita a un prospecto necesita que su alta ya esté en el servidor: el alcance se comprueba una vez por lote,
+  así que alta y visita deben ir en lotes distintos (el motor los manda así).
+- **Foto del cliente en la ficha**: se baja con `descargarFotoCliente` y se cachea por `cliente.foto_subida_en`
+  (`foto_cache_subida_en`). **Nunca renueva la sesión** (la rotación del refresh token con detección de reuso podría
+  revocar las sesiones del vendedor si chocara con una sincronización): un 401 deja "sin foto" hasta la siguiente
+  sincronización. La URI lleva `?v=<foto_subida_en>` para que Android no reuse la imagen anterior (`uriFotoCliente`).
+- **Ruta**: "Visitados sin venta" y "Visitas de hoy" en la ficha; ver la sección de la ruta del día.
 
 ## Pruebas
 

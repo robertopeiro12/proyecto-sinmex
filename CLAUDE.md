@@ -298,7 +298,7 @@ usuario con sesion pasa.
     (`exigirJornadaAbierta`); no hay reabrir.
 - **Ruta diaria (T-37).** La oficina arma la ruta del día en el portal (`PUT /rutas/diaria`, permiso
   `ruta_diaria.gestionar`) y el vendedor la complementa desde la tablet con la operación **`ruta-alta`** (no `ruta`,
-  que queda para la visita de T-39). Todo en `rutas/rutas-diarias.*`.
+  que sigue guardada sin proyectar; la visita de T-39 usa su propia operación `visita`). Todo en `rutas/rutas-diarias.*`.
   - `ruta.origen` (`oficina`/`vendedor`) y un único vivo por vendedor, fecha y cliente en la diaria
     (`uq_ruta_diaria_vendedor_fecha_cliente`, parcial; la semanal de T-36 no entra). El alta usa `on conflict … do
     nothing` y, si no insertó, rechaza `ruta-duplicada`, que **la tablet trata como aplicada**.
@@ -386,6 +386,40 @@ usuario con sesion pasa.
     `null` ("Sin saldo inicial"), nunca 0. El final de D no es "el inicio de D+1". T-29 agrega movimientos
     (depósitos, retiros, traspasos, cobranza) alimentando `movimientos`, sin tocar la firma.
   - Montos en **centavos enteros con signo** en la API (pueden ser negativos: sobregiro).
+
+- **Visita sin venta (T-39).** El vendedor deja constancia, sin red, de por qué un cliente no compró: motivo del
+  catálogo, hora, quién atendió, ubicación (GPS o dirección escrita) y foto si el motivo la exige. Spec:
+  `docs/superpowers/specs/2026-10-18-t-39-visita-sin-venta-design.md`. Absorbe T-78 (#129).
+  - **Catálogo `motivo_visita`** global (como `tipo_negocio`), con `exige_foto`/`exige_atendio`, baja lógica y nombre
+    único entre vivos (`uq_motivo_visita_nombre`). Sus tiempos se llaman `creado_en`/`actualizado_en`; un trigger
+    `set_actualizado_en()` mueve el segundo. Backend: `rutas/motivos-visita.*` (`/motivos-visita`, permiso
+    `motivo_visita.gestionar`, grupo General). Portal: *Catálogo → Motivos de visita*
+    (`/catalogo/motivos-de-visita`). Baja en el pull como `motivos_visita`.
+  - **Operación `visita`** en el push (no `ruta`), sin subir `CONTRATO_ACTUAL`. La clave **es** `visita.id` (uuid,
+    como el prospecto de T-75); `cliente_id` va en el sobre. `prepararVisita` (`rutas/datos-visita.ts`) valida la
+    forma (ubicación obligatoria) y `rutas/visitas.service.ts` proyecta. Rechazos nuevos:
+    `motivo-visita-inexistente` (uno **dado de baja sí entra**) y `visita-id-ocupado` (motivo neutro). **El servidor
+    no revisa "exige foto/nombre"**: lo exige la tablet (`src/estado/visita.ts`, `validarVisita`).
+  - **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → rutas` (`fuentesDelPush`, con
+    prueba). El alcance se comprueba **una vez por lote**: una visita a un prospecto cuya alta viaja en el mismo
+    lote cae `cliente-fuera-de-alcance`; la tablet sube alta y visita en lotes consecutivos de una sincronización.
+  - **GPS**: una coordenada inválida (fuera de rango o no finita) es "sin GPS" (se pide la dirección y se guarda con
+    `lat`/`lng` null); una `precisionM` negativa o no finita se descarta a null.
+  - **Fotos**: `POST /sync/foto/:clave` acepta prospectos y visitas; los archivos nuevos se llaman `cliente-<id>.jpg`
+    y `visita-<id>.jpg` (T-78; los viejos `<clave>.jpg` no se migran, siempre se lee `foto_archivo`).
+    `GET /sync/foto/cliente/:clienteId` (`@SoloApp`) baja la foto del cliente de la sucursal del vendedor (404 si no
+    tiene o no es suya); la ficha de la tablet la cachea por `cliente.foto_subida_en`, que ahora baja en el pull.
+    **Esa descarga nunca renueva la sesión** (la rotación del refresh token con detección de reuso podría revocar
+    todas las sesiones del vendedor si chocara con una sincronización): un 401 se ve como "sin foto" hasta la
+    siguiente sincronización. La URI que se pinta lleva `?v=<foto_subida_en>` (caché de imágenes de Android).
+  - **Tablet** (migración local 013): `motivo_visita`, `visita` (la foto usa `foto_local`/`foto_subida_en`/
+    `foto_error`/`foto_descartada`, como la del prospecto; **no** hay `foto_estado`) y
+    `cliente.foto_subida_en`/`foto_cache_subida_en`. El cliente de la ruta visitado sin venta pasa a
+    **"Visitados sin venta"**; si después compra, regresa a la ruta con su palomita (atendido gana a visitado). La
+    lógica vive en `src/estado/ruta-del-dia.ts` y `src/estado/visita.ts`, con pruebas. Sin pantalla de visitas en el
+    portal (T-55 y reportes leen la tabla `visita`).
+  - **Nube**: la migración `20261018120000_visita_sin_venta.sql` debe subirse a `sinmex dev` después del merge,
+    siguiendo el protocolo de push de migraciones (pre-flight: solo tablas nuevas).
 
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.

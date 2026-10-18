@@ -114,7 +114,7 @@ export type DatosVisita = {
 - La tabla `motivo_visita` replica el pull: `id`, `nombre`, `exige_foto`, `exige_atendio`, `activo`.
 - La tabla `visita` lleva:
   - los campos de D2, más `motivo_nombre`, copia del nombre al guardar, para pintar sin join aunque el motivo cambie;
-  - `foto_local` (ruta en el teléfono), `foto_estado`, con el mismo esquema que la foto del prospecto;
+  - `foto_local` (ruta en el teléfono), `foto_subida_en`, `foto_error` y `foto_descartada`, con el mismo esquema que la foto del prospecto (migración 007). *Enmienda de la ejecución: no hay `foto_estado`.*
   - `sync_estado` y `sync_error`, con el patrón de `venta`/`cobranza`.
 - El id es la clave.
 - Repositorio nuevo `visitas.ts` con:
@@ -191,7 +191,7 @@ export type DatosVisita = {
 - **Backend unit**: `prepararVisita` (cada regla de forma), `VisitasService` y la ruta de la foto (prospecto, visita, ajena, tipo equivocado y sin proyectar).
 - **Backend e2e** (`test/visita.e2e-spec.ts`):
   - push de una visita con GPS y otra sin GPS con dirección;
-  - visita a un prospecto subido en el mismo push;
+  - visita a un prospecto subido en la misma sincronización, pero en **lotes distintos** (alta y luego visita); en el mismo lote la visita se rechaza `cliente-fuera-de-alcance` por la comprobación de alcance por lote;
   - motivo dado de baja aceptado e inexistente rechazado;
   - id ocupado;
   - foto de visita subida y foto de cliente descargada (de su sucursal; ajena da 404);
