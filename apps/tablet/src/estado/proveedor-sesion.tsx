@@ -236,19 +236,23 @@ export function ProveedorSesion({
       // sacarlo de la app. Solo se usa el token de acceso actual; cualquier fallo
       // (401 incluido) deja "sin foto" hasta la siguiente sincronizacion, que
       // renueva por su camino normal.
-      const token = gestor.sesionGuardada()?.tokenAcceso ?? null;
-      if (token === null) return null;
-      const destino = rutaCacheFotoCliente(clienteId);
-      const r = await descargarFoto({
-        bajar: bajarFotoExpo,
-        base: URL_API,
-        tokenAcceso: token,
-        clienteId,
-        destino,
-      });
-      if (r !== 'ok') return null;
-      datos.catalogos.marcarFotoDescargada(clienteId, fotoSubidaEn);
-      return uriFotoCliente(destino, fotoSubidaEn);
+      try {
+        const token = gestor.sesionGuardada()?.tokenAcceso ?? null;
+        if (token === null) return null;
+        const destino = rutaCacheFotoCliente(clienteId);
+        const r = await descargarFoto({
+          bajar: bajarFotoExpo,
+          base: URL_API,
+          tokenAcceso: token,
+          clienteId,
+          destino,
+        });
+        if (r !== 'ok') return null;
+        datos.catalogos.marcarFotoDescargada(clienteId, fotoSubidaEn);
+        return uriFotoCliente(destino, fotoSubidaEn);
+      } catch {
+        return null;
+      }
     },
     [gestor, datos],
   );

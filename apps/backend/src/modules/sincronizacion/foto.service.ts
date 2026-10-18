@@ -29,11 +29,11 @@ export interface RespuestaFoto {
  * >
  * > De ahi que aqui no haya ni `contrato:`, ni codigos de `CODIGOS_RECHAZO`, ni
  * > `resultados[]`: le bastan los codigos HTTP. Un fallo de la foto se anota en
- * > los campos de foto y **el estado del prospecto no se toca**.
+ * > los campos de foto y **el estado del prospecto o la visita no se toca**.
  *
  * El orden obligatorio es el otro lado de la misma moneda: la foto solo puede
- * subir **despues** de que el prospecto fue aceptado, porque antes no existe la
- * fila `cliente` a la que pertenece.
+ * subir **despues** de que el prospecto o la visita fue aceptado, porque antes
+ * no existe la fila `cliente` o `visita` a la que pertenece.
  */
 @Injectable()
 export class FotoService {
@@ -61,11 +61,11 @@ export class FotoService {
      * una clave que el servidor no conoce (el `push` del prospecto todavia no
      * paso) y una operacion **rechazada**, que por el contrato §7 **no deja
      * fila**. En ambos la foto se queda pendiente y se vuelve a intentar cuando
-     * el prospecto entre.
+     * el prospecto o la visita entre.
      */
     if (operaciones.length === 0) {
       throw new NotFoundException(
-        'No hay ninguna operacion con esa clave. Sincroniza el prospecto antes de subir su foto.',
+        'No hay ninguna operacion con esa clave. Sincroniza el prospecto o la visita antes de subir su foto.',
       );
     }
 
@@ -79,7 +79,7 @@ export class FotoService {
     const mia = operaciones.find((o) => o.vendedorId === vendedorId);
     if (!mia) {
       throw new ForbiddenException(
-        'Esa operacion no es tuya: la foto solo la puede subir el vendedor que registro el prospecto.',
+        'Esa operacion no es tuya: la foto solo la puede subir el vendedor que registro el prospecto o la visita.',
       );
     }
 

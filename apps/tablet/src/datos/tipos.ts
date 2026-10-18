@@ -457,4 +457,3 @@ export interface Visita {
   sync_error: string | null;
   sincronizado_en: MomentoISO | null;
 }
-   

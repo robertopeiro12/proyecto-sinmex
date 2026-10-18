@@ -110,9 +110,13 @@ export default function FichaCliente() {
     if (!decision.descargar || subidaEnServidor === null) return;
     if (fotoPedida.current === subidaEnServidor) return;
     fotoPedida.current = subidaEnServidor;
-    void descargarFotoCliente(clienteId, subidaEnServidor).then((uri) => {
-      if (montada.current && uri) setFotoBajada(uri);
-    });
+    void descargarFotoCliente(clienteId, subidaEnServidor)
+      .then((uri) => {
+        if (montada.current && uri) setFotoBajada(uri);
+      })
+      .catch(() => {
+        // Cualquier fallo de la descarga se queda como "sin foto".
+      });
   }, [clienteId, subidaEnServidor, decision.descargar, descargarFotoCliente]);
 
   if (!cliente) {

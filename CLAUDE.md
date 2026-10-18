@@ -396,7 +396,7 @@ usuario con sesion pasa.
     `motivo_visita.gestionar`, grupo General). Portal: *Catálogo → Motivos de visita*
     (`/catalogo/motivos-de-visita`). Baja en el pull como `motivos_visita`.
   - **Operación `visita`** en el push (no `ruta`), sin subir `CONTRATO_ACTUAL`. La clave **es** `visita.id` (uuid,
-    como el prospecto de T-75); `cliente_id` va en el sobre. `prepararVisita` (`rutas/datos-visita.ts`) valida la
+    como el prospecto de T-75); `cliente_id` va en el sobre. `prepararVisita` (`sincronizacion/despacho-visita.ts`) valida la
     forma (ubicación obligatoria) y `rutas/visitas.service.ts` proyecta. Rechazos nuevos:
     `motivo-visita-inexistente` (uno **dado de baja sí entra**) y `visita-id-ocupado` (motivo neutro). **El servidor
     no revisa "exige foto/nombre"**: lo exige la tablet (`src/estado/visita.ts`, `validarVisita`).

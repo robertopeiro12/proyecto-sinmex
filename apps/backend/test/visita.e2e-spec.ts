@@ -555,6 +555,8 @@ describe('Visita sin venta (e2e)', () => {
 
       const res = await bajarFoto(alta.clave).expect(200);
       expect(res.headers['content-type']).toMatch(/image\/jpeg/);
+      // Sin cache HTTP: el fetch de Android no debe servir una foto (o un 404) viejo.
+      expect(res.headers['cache-control']).toBe('no-store');
       expect(res.body).toEqual(bytes);
     });
 

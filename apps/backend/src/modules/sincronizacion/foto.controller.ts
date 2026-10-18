@@ -19,7 +19,8 @@ import { leerCuerpoLimitado } from './cuerpo-crudo';
 import { FotoService, type RespuestaFoto } from './foto.service';
 
 /**
- * La foto del prospecto que sube la tablet (T-40).
+ * La foto del prospecto (T-40) o de la visita (T-39) que sube la tablet, y la
+ * del cliente que baja (T-39).
  *
  * Controller aparte de `SincronizacionController` porque es un canal aparte: no
  * lleva la version del contrato, no responde con `resultados[]` y no comparte ni
@@ -37,7 +38,7 @@ export class FotoController {
    * `POST /sync/foto/:clave` — el segundo de los "dos requests, un boton".
    *
    * La `clave` es **la misma llave de idempotencia** de la operacion del
-   * prospecto, y el archivo se nombra por el id de la fila (`cliente-<id>.jpg` o
+   * prospecto o la visita, y el archivo se nombra por el id de la fila (`cliente-<id>.jpg` o
    * `visita-<id>.jpg`, T-78), asi que reenviar es gratis: escribe el mismo
    * nombre y deja un solo archivo. No hay
    * contador, ni identificador nuevo, ni tabla de control que mantener.
@@ -90,7 +91,7 @@ export class FotoController {
    */
   @SoloApp()
   @Get('foto/cliente/:clienteId')
-  @Header('Cache-Control', 'private, max-age=300')
+  @Header('Cache-Control', 'no-store')
   async fotoDeCliente(
     @VendedorActual() vendedorId: string,
     @Param('clienteId', ParseUUIDPipe) clienteId: string,

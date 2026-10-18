@@ -254,7 +254,7 @@ Spec: `docs/superpowers/specs/2026-10-18-t-39-visita-sin-venta-design.md`. Panta
 
 - **Guardar** (sin red): `visitas.registrar` inserta la fila de `visita` (migración 013) en una transacción, con
   `motivo_nombre` copiado para pintar sin join. Toda la validación vive en `validarVisita` (`src/estado/visita.ts`,
-  pura y con pruebas): el motivo debe estar vivo en el catálogo local, la foto y quién atendió se exigen según el
+  pura y con pruebas): el motivo se guarda aunque el catálogo lo haya dado de baja (no se revisa), la foto y quién atendió se exigen según el
   motivo, y la ubicación es GPS **o** dirección escrita. Una coordenada inválida (fuera de rango o no finita) cuenta
   como "sin GPS" (se pide la dirección y se guarda con `lat`/`lng` null) y una `precisionM` negativa se descarta.
   La pantalla ignora un segundo toque mientras guarda.
@@ -301,5 +301,5 @@ solo cuando el portal suba a React 19.2.x, que no es alcance de T-04.
   implementar la sincronizacion. T-07 debe llamar a `gestor.renovar()` al
   conectarse: es lo que corre hacia adelante la ventana offline de la tablet.
 - **T-14** — folios (ver `ADR-0001`).
-- **T-20 / T-27 / T-31 / T-33 / T-39 / T-41** — módulos de la jornada que todavía son placeholders (gastos,
-  inventario, merma, visita sin venta, Ruta y GPS).
+- **T-20 / T-27 / T-31 / T-33 / T-41** — módulos de la jornada que todavía son placeholders (gastos,
+  inventario, merma, Ruta y GPS).

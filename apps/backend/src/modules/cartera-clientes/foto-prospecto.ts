@@ -1,5 +1,6 @@
 /**
- * Reglas puras de la foto del prospecto (T-40): tamano, formato y nombre.
+ * Reglas puras de la foto del prospecto (T-40) y de la visita (T-39): tamano,
+ * formato y nombre.
  *
  * Sin base de datos y sin disco, por lo mismo que `datos-prospecto.ts`: son las
  * decisiones que hay que poder probar de una en una, sin levantar nada.
