@@ -230,18 +230,22 @@ export function ProveedorSesion({
 
   const descargarFotoCliente = useCallback(
     async (clienteId: string, fotoSubidaEn: string): Promise<string | null> => {
-      const destino = rutaCacheFotoCliente(clienteId);
-      const intentar = (token: string) =>
-        descargarFoto({ bajar: bajarFotoExpo, base: URL_API, tokenAcceso: token, clienteId, destino });
+      // Nunca renueva la sesion: el refresh token rota y el servidor trata un
+      // refresh reutilizado como ataque (revoca TODAS las sesiones del vendedor),
+      // asi que una descarga de la ficha en carrera con `sincronizar()` podria
+      // sacarlo de la app. Solo se usa el token de acceso actual; cualquier fallo
+      // (401 incluido) deja "sin foto" hasta la siguiente sincronizacion, que
+      // renueva por su camino normal.
       const token = gestor.sesionGuardada()?.tokenAcceso ?? null;
       if (token === null) return null;
-      let r = await intentar(token);
-      if (r === 'fallo') {
-        // Un 401 (token vencido) llega aqui como "fallo": se renueva una vez y se
-        // reintenta. Sin red `renovar()` devuelve false y no se reintenta.
-        const nuevo = (await gestor.renovar()) ? (gestor.sesionGuardada()?.tokenAcceso ?? null) : null;
-        if (nuevo !== null) r = await intentar(nuevo);
-      }
+      const destino = rutaCacheFotoCliente(clienteId);
+      const r = await descargarFoto({
+        bajar: bajarFotoExpo,
+        base: URL_API,
+        tokenAcceso: token,
+        clienteId,
+        destino,
+      });
       if (r !== 'ok') return null;
       datos.catalogos.marcarFotoDescargada(clienteId, fotoSubidaEn);
       return uriFotoCliente(destino, fotoSubidaEn);
