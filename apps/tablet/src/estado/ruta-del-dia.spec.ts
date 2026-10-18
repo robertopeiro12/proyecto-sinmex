@@ -9,19 +9,23 @@ import {
   filtrarParaAgregar,
   indiceDestino,
   moverElemento,
+  motivoDeRechazo,
   primeraLineaDomicilio,
+  sinRutaAsignada,
   SECCIONES_PENDIENTES,
   textoAgregado,
   textoAvisoSinRuta,
   textoBurbuja,
+  textoUltimaVisita,
   urlMapa,
   urlTelefono,
 } from './ruta-del-dia';
 
-const fila = (cliente_id: string, activo: 0 | 1, visitado: boolean) => ({
+const fila = (cliente_id: string, activo: 0 | 1, visitado: boolean, visita_sin_venta = false) => ({
   cliente_id,
   activo,
   visitado,
+  visita_sin_venta,
 });
 
 describe('agruparRuta (D5, D16)', () => {
@@ -32,7 +36,7 @@ describe('agruparRuta (D5, D16)', () => {
   });
 
   it('una baja SIN actividad hoy desaparece', () => {
-    expect(agruparRuta([fila('a', 0, false)])).toEqual({ enRuta: [], fueraDeRuta: [] });
+    expect(agruparRuta([fila('a', 0, false)])).toEqual({ enRuta: [], visitadosSinVenta: [], fueraDeRuta: [] });
   });
 
   it('una baja CON actividad hoy va a "Fuera de ruta"', () => {
@@ -193,46 +197,107 @@ describe('estadoSubida (T-75)', () => {
     expect(estadoSubida(['enviando'])).toBe('pendiente');
     expect(estadoSubida(['pendiente', 'error', 'sincronizado'])).toBe('error');
   });
+
+  it('T-39: la viva visitada sin venta sale de la lista y va a "Visitados sin venta", en su orden', () => {
+    const r = agruparRuta([fila('a', 1, true, true), fila('b', 1, false), fila('c', 1, true, true)]);
+    expect(r.enRuta.map((f) => f.cliente_id)).toEqual(['b']);
+    expect(r.visitadosSinVenta.map((f) => f.cliente_id)).toEqual(['a', 'c']);
+  });
+
+  it('T-39: visitada CON venta sigue en la ruta con su palomita (Review Focus 3)', () => {
+    const r = agruparRuta([fila('a', 1, true, false)]);
+    expect(r.enRuta.map((f) => f.cliente_id)).toEqual(['a']);
+    expect(r.visitadosSinVenta).toEqual([]);
+  });
+
+  it('T-39: una baja que solo fue visitada va a "Fuera de ruta"', () => {
+    const r = agruparRuta([fila('a', 0, true, true)]);
+    expect(r.fueraDeRuta.map((f) => f.cliente_id)).toEqual(['a']);
+    expect(r.visitadosSinVenta).toEqual([]);
+  });
 });
 
-describe('atendidosFueraDeRuta (T-75, D7)', () => {
+describe('sinRutaAsignada (T-39)', () => {
+  it('solo sin ninguna fila en las tres secciones', () => {
+    expect(sinRutaAsignada({ enRuta: [], visitadosSinVenta: [], fueraDeRuta: [] })).toBe(true);
+    // Todos visitados sin venta: hay ruta, aunque la lista quede vacia (Review Focus 3).
+    expect(sinRutaAsignada({ enRuta: [], visitadosSinVenta: [fila('a', 1, true, true)], fueraDeRuta: [] })).toBe(false);
+    expect(sinRutaAsignada({ enRuta: [], visitadosSinVenta: [], fueraDeRuta: [fila('b', 0, true)] })).toBe(false);
+  });
+});
+
+describe('textoUltimaVisita y motivoDeRechazo (T-39)', () => {
+  it('motivo y hora local', () => {
+    expect(textoUltimaVisita('Cerrado', new Date(2026, 9, 17, 10, 42).toISOString())).toBe('Cerrado · 10:42');
+    expect(textoUltimaVisita(null, null)).toBe('Visita · --:--');
+  });
+
+  it('el motivo sin el codigo tecnico', () => {
+    expect(motivoDeRechazo('visita-id-ocupado: El id de esta visita ya está ocupado.')).toBe(
+      'El id de esta visita ya está ocupado.',
+    );
+    expect(motivoDeRechazo('texto sin codigo')).toBe('texto sin codigo');
+    expect(motivoDeRechazo(null)).toBe('El servidor la rechazó.');
+  });
+});
+
+describe('atendidosFueraDeRuta (T-75, D7; T-39)', () => {
   const cliente = (id: string) =>
     ({
       a: { nombre: 'Abarrotes', tipo: 'cliente' as const },
       p: { nombre: 'Prospecto Z', tipo: 'prospecto' as const },
       z: { nombre: 'Zapateria', tipo: 'cliente' as const },
     })[id] ?? null;
-  const venta = (cliente_id: string, sync_estado: 'pendiente' | 'enviando' | 'sincronizado' | 'error' = 'pendiente') => ({ cliente_id, sync_estado });
+  type Sync = 'pendiente' | 'enviando' | 'sincronizado' | 'error';
+  const venta = (cliente_id: string, sync_estado: Sync = 'pendiente') => ({ cliente_id, sync_estado });
+  const visita = venta;
 
   it('una venta a un cliente que no esta en la ruta lo lista; el prospecto va marcado', () => {
-    const r = atendidosFueraDeRuta([], [venta('z', 'sincronizado'), venta('p')], cliente);
+    const r = atendidosFueraDeRuta([], [venta('z', 'sincronizado'), venta('p')], [], cliente);
     expect(r).toEqual([
-      { cliente_id: 'p', nombre: 'Prospecto Z', esProspecto: true, estado: 'pendiente' },
-      { cliente_id: 'z', nombre: 'Zapateria', esProspecto: false, estado: 'listo' },
+      { cliente_id: 'p', nombre: 'Prospecto Z', esProspecto: true, estado: 'pendiente', soloVisita: false },
+      { cliente_id: 'z', nombre: 'Zapateria', esProspecto: false, estado: 'listo', soloVisita: false },
     ]);
   });
 
-  it('en la ruta viva, o quitado con visita, NO sale: ya lo pinta la ruta (Review Focus 5)', () => {
+  it('en la ruta viva, o quitado con visita, NO sale: ya lo pinta la ruta (Review Focus 5 de T-75)', () => {
     const r = atendidosFueraDeRuta(
       [fila('a', 1, false), fila('z', 0, true)],
       [venta('a'), venta('z')],
+      [visita('a'), visita('z')],
       cliente,
     );
     expect(r).toEqual([]);
   });
 
   it('quitado SIN visita y con venta local: sale (la ruta no lo pinta)', () => {
-    const r = atendidosFueraDeRuta([fila('a', 0, false)], [venta('a')], cliente);
+    const r = atendidosFueraDeRuta([fila('a', 0, false)], [venta('a')], [], cliente);
     expect(r.map((x) => x.cliente_id)).toEqual(['a']);
   });
 
-  it('dos ventas al mismo cliente: una fila con el estado mas grave (Review Focus 4)', () => {
-    const r = atendidosFueraDeRuta([], [venta('a', 'sincronizado'), venta('a', 'error')], cliente);
-    expect(r).toEqual([{ cliente_id: 'a', nombre: 'Abarrotes', esProspecto: false, estado: 'error' }]);
+  it('dos ventas al mismo cliente: una fila con el estado mas grave (Review Focus 4 de T-75)', () => {
+    const r = atendidosFueraDeRuta([], [venta('a', 'sincronizado'), venta('a', 'error')], [], cliente);
+    expect(r).toEqual([
+      { cliente_id: 'a', nombre: 'Abarrotes', esProspecto: false, estado: 'error', soloVisita: false },
+    ]);
   });
 
   it('un cliente que ya no esta en el catalogo local se omite sin tronar', () => {
-    expect(atendidosFueraDeRuta([], [venta('fantasma')], cliente)).toEqual([]);
+    expect(atendidosFueraDeRuta([], [venta('fantasma')], [visita('fantasma')], cliente)).toEqual([]);
+  });
+
+  it('T-39: solo visitado fuera de ruta sale con soloVisita (la etiqueta "visita")', () => {
+    const r = atendidosFueraDeRuta([], [], [visita('p', 'sincronizado')], cliente);
+    expect(r).toEqual([
+      { cliente_id: 'p', nombre: 'Prospecto Z', esProspecto: true, estado: 'listo', soloVisita: true },
+    ]);
+  });
+
+  it('T-39: con venta y visita es una fila, sin soloVisita, con el estado mas grave de las dos', () => {
+    const r = atendidosFueraDeRuta([], [venta('a', 'sincronizado')], [visita('a', 'error')], cliente);
+    expect(r).toEqual([
+      { cliente_id: 'a', nombre: 'Abarrotes', esProspecto: false, estado: 'error', soloVisita: false },
+    ]);
   });
 });
 

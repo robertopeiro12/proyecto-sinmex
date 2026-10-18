@@ -9,6 +9,7 @@ import { useSesion } from '@/estado/proveedor-sesion';
 import {
   agruparRuta,
   atendidosFueraDeRuta,
+  sinRutaAsignada,
   entradasMenu,
   textoAvisoSinRuta,
 } from '@/estado/ruta-del-dia';
@@ -71,7 +72,7 @@ export default function RutaDelDia() {
   }, [datos, vueltas, versionCatalogos, ultimaSincronizacion]);
   // Memoizado: un arreglo nuevo en cada render rehace el `PanResponder` de cada
   // fila (y reinicia su `dy`) en cuanto el arrastre cambia el estado de aqui.
-  const { enRuta, fueraDeRuta } = useMemo(() => agruparRuta(filas), [filas]);
+  const { enRuta, visitadosSinVenta, fueraDeRuta } = useMemo(() => agruparRuta(filas), [filas]);
 
   // T-75 (D7): a quien se le vendio hoy sin estar en la ruta (prospectos de bienvenida incluidos).
   const atendidos = useMemo(() => {
@@ -79,8 +80,11 @@ export default function RutaDelDia() {
     void versionCatalogos;
     void ultimaSincronizacion;
     if (!vendedor) return [];
-    return atendidosFueraDeRuta(filas, datos.ventas.delDiaDelVendedor(vendedor.id), (id) =>
-      datos.catalogos.obtenerCliente(id),
+    return atendidosFueraDeRuta(
+      filas,
+      datos.ventas.delDiaDelVendedor(vendedor.id),
+      datos.visitas.delDiaDelVendedor(vendedor.id),
+      (id) => datos.catalogos.obtenerCliente(id),
     );
   }, [datos, filas, vendedor, vueltas, versionCatalogos, ultimaSincronizacion]);
 
@@ -95,7 +99,7 @@ export default function RutaDelDia() {
   // T-38 (D6 capa 2): con el dia cerrado, la lista queda en solo lectura.
   const menu = estadoMenuJornada(jornada);
   const soloLectura = !menu.operacionesHabilitadas;
-  const sinRuta = enRuta.length === 0 && fueraDeRuta.length === 0;
+  const sinRuta = sinRutaAsignada({ enRuta, visitadosSinVenta, fueraDeRuta });
 
   /**
    * "Refrescar" es el "Sincronizar ahora" de siempre (D6): pull, push, fotos y

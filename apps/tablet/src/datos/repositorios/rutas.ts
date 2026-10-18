@@ -43,8 +43,22 @@ export interface FilaRutaDelDia {
   posicion: number | null;
   /** Notas con saldo del cliente: la burbuja. Baja al cobrar sin red. */
   notas_pendientes: number;
-  /** Hoy tiene venta o cobro en esta tablet (D5). Se deriva, no se guarda. */
+  /** Hoy tiene venta, cobro o visita en esta tablet (D5; T-39). Se deriva, no se guarda. */
   visitado: boolean;
+  /** T-39 (D8): hoy tiene visita y NO tiene venta ni cobro: va a "Visitados sin venta". */
+  visita_sin_venta: boolean;
+  /** Motivo de la ultima visita de hoy (la copia `motivo_nombre`), o `null`. */
+  ultima_visita_motivo: string | null;
+  /** Hora de la ultima visita de hoy, o `null`. */
+  ultima_visita_en: MomentoISO | null;
+  /**
+   * Subida de las visitas de hoy, con la regla de las ventas (error > pendiente >
+   * listo). Mismo vocabulario que `EstadoSubida` de `src/estado/ruta-del-dia.ts`
+   * (la capa de datos no importa de ahi). `null` sin visitas.
+   */
+  visitas_estado: 'error' | 'pendiente' | 'listo' | null;
+  /** `sync_error` de la ultima visita rechazada de hoy, o `null`. */
+  visita_error: string | null;
 }
 
 /** Quien agrega: el vendedor con sesion y su sucursal. */
@@ -166,13 +180,19 @@ export function crearRepositorioRutas(
      * sin ella, el orden del servidor (al final). Trae tambien las filas que la
      * oficina quito (`activo = 0`): `agruparRuta` decide si se ven.
      *
-     * `visitado` es el mismo predicado que `ventas.delDia(cliente).length > 0 ||
+     * `visitado` es venta, cobro **o visita** de hoy (T-39); `visita_sin_venta` es visita
+     * sin venta ni cobro (D8). La ultima visita, su estado y su error salen de subconsultas
+     * con el mismo estilo. Venta y cobro: el mismo predicado que `ventas.delDia(cliente).length > 0 ||
      * cobranzas.delDia(cliente).length > 0` (D5), en la misma consulta. La
      * burbuja es la misma consulta que `catalogos.notasPendientesDe` mas
      * `saldo_centavos > 0`.
      */
     delDia(fecha: FechaISO = reloj.hoy()): FilaRutaDelDia[] {
-      const filas = bd.getAllSync<Omit<FilaRutaDelDia, 'visitado'> & { visitado: number }>(
+      type FilaCruda = Omit<FilaRutaDelDia, 'visitado' | 'visita_sin_venta'> & {
+        atendido: number;
+        con_visita: number;
+      };
+      const filas = bd.getAllSync<FilaCruda>(
         `select r.id, r.cliente_id, r.fecha, r.orden, r.origen, r.activo,
                 r.sync_estado, r.sync_error,
                 c.nombre, c.domicilio,
@@ -183,7 +203,28 @@ export function crearRepositorioRutas(
                 (exists (select 1 from venta v
                           where v.cliente_id = r.cliente_id and v.fecha = r.fecha)
                  or exists (select 1 from cobranza k
-                             where k.cliente_id = r.cliente_id and k.fecha = r.fecha)) as visitado
+                             where k.cliente_id = r.cliente_id and k.fecha = r.fecha)) as atendido,
+                exists (select 1 from visita w
+                         where w.cliente_id = r.cliente_id and w.fecha = r.fecha) as con_visita,
+                (select w.motivo_nombre from visita w
+                  where w.cliente_id = r.cliente_id and w.fecha = r.fecha
+                  order by w.visitada_en desc, w.rowid desc limit 1) as ultima_visita_motivo,
+                (select w.visitada_en from visita w
+                  where w.cliente_id = r.cliente_id and w.fecha = r.fecha
+                  order by w.visitada_en desc, w.rowid desc limit 1) as ultima_visita_en,
+                case
+                  when exists (select 1 from visita w
+                                where w.cliente_id = r.cliente_id and w.fecha = r.fecha
+                                  and w.sync_estado = 'error') then 'error'
+                  when exists (select 1 from visita w
+                                where w.cliente_id = r.cliente_id and w.fecha = r.fecha
+                                  and w.sync_estado in ('pendiente', 'enviando')) then 'pendiente'
+                  when exists (select 1 from visita w
+                                where w.cliente_id = r.cliente_id and w.fecha = r.fecha) then 'listo'
+                end as visitas_estado,
+                (select w.sync_error from visita w
+                  where w.cliente_id = r.cliente_id and w.fecha = r.fecha and w.sync_estado = 'error'
+                  order by w.visitada_en desc, w.rowid desc limit 1) as visita_error
            from ruta r
            join cliente c on c.id = r.cliente_id
            left join ruta_orden_local o
@@ -192,7 +233,12 @@ export function crearRepositorioRutas(
           order by coalesce(o.posicion, 1000000000 + r.orden), r.orden, c.nombre`,
         { $fecha: fecha },
       );
-      return filas.map((f) => ({ ...f, visitado: f.visitado === 1 }));
+      // Atendido (venta o cobro) gana a visitado (D8): con venta, sigue en la ruta.
+      return filas.map(({ atendido, con_visita, ...f }) => ({
+        ...f,
+        visitado: atendido === 1 || con_visita === 1,
+        visita_sin_venta: con_visita === 1 && atendido !== 1,
+      }));
     },
 
     /**
