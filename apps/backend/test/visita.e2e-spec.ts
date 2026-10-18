@@ -14,6 +14,7 @@ import {
 import { PasswordService } from './../src/modules/auth/password.service';
 import {
   CONTRATO_ACTUAL,
+  type RespuestaPull,
   type RespuestaPush,
 } from './../src/modules/sincronizacion/contrato';
 
@@ -64,6 +65,16 @@ describe('Visita sin venta (e2e)', () => {
       .send({ contrato: CONTRATO_ACTUAL, operaciones })
       .expect(200);
     return res.body as RespuestaPush;
+  };
+
+  const pull = async (desde?: string) => {
+    const params = new URLSearchParams({ contrato: String(CONTRATO_ACTUAL) });
+    if (desde) params.set('desde', desde);
+    const res = await request(app.getHttpServer())
+      .get(`/sync/pull?${params.toString()}`)
+      .set('Authorization', `Bearer ${bearer}`)
+      .expect(200);
+    return res.body as RespuestaPull;
   };
 
   const visita = (
@@ -380,5 +391,57 @@ describe('Visita sin venta (e2e)', () => {
       codigo: 'cliente-fuera-de-alcance',
     });
     expect((await push([op])).resultados[0].estado).toBe('aplicada');
+  });
+
+  describe('pull (D4)', () => {
+    it('el pull completo trae los motivos con sus casillas, la semilla y la baja como activo 0', async () => {
+      const { catalogos } = await pull();
+      const porNombre = new Map(
+        catalogos.motivos_visita.map((m) => [m.nombre, m]),
+      );
+      expect(porNombre.get('Cerrado')).toMatchObject({
+        exige_foto: true,
+        exige_atendio: false,
+        activo: 1,
+      });
+      expect(porNombre.get(`${PREFIJO} Cerrado`)).toMatchObject({
+        id: motivoId,
+        exige_foto: true,
+        exige_atendio: true,
+        activo: 1,
+      });
+      expect(porNombre.get(`${PREFIJO} Vacaciones`)).toMatchObject({
+        id: motivoBorradoId,
+        activo: 0,
+      });
+    });
+
+    it('dar de baja un motivo lo hace bajar en el pull incremental con activo 0', async () => {
+      const { id } = await db
+        .insertInto('motivo_visita')
+        .values({ nombre: `${PREFIJO} Remodelacion` })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const { cursor } = await pull();
+
+      // El trigger `set_actualizado_en` mueve la columna por la que corta el pull.
+      await db
+        .updateTable('motivo_visita')
+        .set({ deleted_at: new Date() })
+        .where('id', '=', id)
+        .execute();
+
+      const incremental = await pull(cursor);
+      expect(
+        incremental.catalogos.motivos_visita.find((m) => m.id === id),
+      ).toMatchObject({ activo: 0 });
+    });
+
+    it('los clientes traen foto_subida_en: null sin foto', async () => {
+      const { catalogos } = await pull();
+      expect(catalogos.clientes.find((c) => c.id === clienteId)).toMatchObject({
+        foto_subida_en: null,
+      });
+    });
   });
 });

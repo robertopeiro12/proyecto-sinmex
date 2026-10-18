@@ -588,6 +588,21 @@ export interface TipoNegocioPull extends FilaSincronizable {
   nombre: string;
 }
 
+/**
+ * Un motivo de visita sin venta (T-39, D4): el catalogo de la pantalla
+ * "Visita sin venta". Global (no cuelga de sucursal), como `tipos_negocio`.
+ * Coleccion nueva = aditiva. Incremental por `actualizado_en`; la baja logica
+ * viaja como `activo: 0` y la tablet deja de ofrecerlo (una visita ya guardada
+ * con el sigue subiendo: el push lo acepta).
+ */
+export interface MotivoVisitaPull extends FilaSincronizable {
+  nombre: string;
+  /** La tablet no deja guardar la visita sin foto. */
+  exige_foto: boolean;
+  /** La tablet no deja guardar la visita sin el nombre de quien atendio. */
+  exige_atendio: boolean;
+}
+
 export interface ProductoPull extends FilaSincronizable {
   nombre: string;
 }
@@ -647,6 +662,12 @@ export interface ClientePull extends FilaSincronizable {
    * portal. Aditivo: una tablet vieja lo ignora.
    */
   saldo_favor_centavos: number;
+  /**
+   * T-39 (D9): cuando el servidor recibio la foto del cliente (ISO), o `null`
+   * si no tiene. La ficha de la tablet la baja de `GET /sync/foto/cliente/:id`
+   * cuando no la tiene o la tiene mas vieja. Aditivo: una tablet vieja lo ignora.
+   */
+  foto_subida_en: string | null;
 }
 
 /**
@@ -808,6 +829,8 @@ export interface RespuestaPull {
     clientes: ClientePull[];
     /** T-40. Aditiva: una tablet vieja la ignora. */
     tipos_negocio: TipoNegocioPull[];
+    /** T-39. Aditiva: una tablet vieja la ignora. */
+    motivos_visita: MotivoVisitaPull[];
     /**
      * **Siempre completo o vacio**, nunca parcial. El precio efectivo depende
      * de tres tablas (`precio`, `cliente_precio` y la lista asignada al

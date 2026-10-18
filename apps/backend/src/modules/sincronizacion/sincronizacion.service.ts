@@ -113,6 +113,7 @@ export class SincronizacionService {
       presentaciones,
       clientes,
       tiposNegocio,
+      motivosVisita,
       notasPendientes,
       rutas,
       promociones,
@@ -125,6 +126,8 @@ export class SincronizacionService {
       this.repo.clientes(vendedor.sucursal_id, desde),
       // T-40: el desplegable de la pantalla de prospectos. No lleva sucursal.
       this.repo.tiposNegocio(desde),
+      // T-39: el catalogo de la pantalla de visita. No lleva sucursal.
+      this.repo.motivosVisita(desde),
       this.repo.notasPendientes(vendedor.sucursal_id, desde),
       // T-37: la ruta diaria. Por VENDEDOR, no por sucursal.
       this.repo.rutas(vendedor.id, desde),
@@ -168,6 +171,7 @@ export class SincronizacionService {
         presentaciones,
         clientes,
         tipos_negocio: tiposNegocio,
+        motivos_visita: motivosVisita,
         precios,
       },
       notas_pendientes: notasPendientes,

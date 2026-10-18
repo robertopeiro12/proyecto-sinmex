@@ -192,6 +192,13 @@ export interface TipoNegocioPull extends FilaSincronizable {
   nombre: string;
 }
 
+/** Copia del backend (T-39). */
+export interface MotivoVisitaPull extends FilaSincronizable {
+  nombre: string;
+  exige_foto: boolean;
+  exige_atendio: boolean;
+}
+
 export interface ProductoPull extends FilaSincronizable {
   nombre: string;
 }
@@ -246,6 +253,11 @@ export interface ClientePull extends FilaSincronizable {
   sucursal_id: string;
   /** T-20: suma de los movimientos vivos de saldo a favor, en centavos. Solo se muestra. */
   saldo_favor_centavos: number;
+  /**
+   * T-39. **Opcional en la copia de la tablet**: un servidor anterior no lo
+   * manda (`aSnapshot` lo vuelve `null`).
+   */
+  foto_subida_en?: string | null;
 }
 
 export interface PrecioPull extends FilaSincronizable {
@@ -375,6 +387,12 @@ export interface RespuestaPull {
      * y lo dice, nada mas.
      */
     tipos_negocio?: TipoNegocioPull[];
+    /**
+     * T-39. **Opcional en la copia de la tablet, obligatoria en el servidor**,
+     * por la misma razon que `tipos_negocio`: sin la coleccion la pantalla de
+     * visita dice que no hay catalogo y no deja guardar.
+     */
+    motivos_visita?: MotivoVisitaPull[];
     precios: PrecioPull[];
   };
   notas_pendientes: NotaPendientePull[];

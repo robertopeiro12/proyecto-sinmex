@@ -194,8 +194,10 @@ nadie relacionaría con nada.
                          "encargado": null, "tipo": "cliente", "pct_comision": 3.5,
                          "primera_venta_en": null, "plazo_credito_dias": 7,
                          "lat": 32.5149, "lng": -117.0382, "sucursal_id": "…",
-                         "saldo_favor_centavos": 0, "activo": 1 }],
+                         "saldo_favor_centavos": 0, "foto_subida_en": null, "activo": 1 }],
     "tipos_negocio":  [{ "id": "…", "nombre": "Abarrotes", "activo": 1 }],
+    "motivos_visita": [{ "id": "…", "nombre": "Cerrado", "exige_foto": true,
+                         "exige_atendio": false, "activo": 1 }],
     "precios":        [{ "id": "<clienteId>:<presentacionId>", "cliente_id": "…",
                          "presentacion_id": "…", "precio_centavos": 800,
                          "vigente_desde": "2026-02-01", "activo": 1 }]
@@ -277,6 +279,21 @@ lo que T-12 evitó al resolverlo con un catálogo.
 
 Una tablet vieja la ignora y sigue funcionando: es lo que el §3 pide de un
 cambio aditivo.
+
+### `motivos_visita`: el catálogo de la visita sin venta (T-39)
+
+Colección **nueva** y aditiva (§3). Baja completa (no por sucursal: es un catálogo de la empresa, como
+`tipos_negocio`) e incremental por **`actualizado_en`** (así se llaman las columnas de tiempo de
+`motivo_visita`; un trigger la mueve en cualquier cambio, la baja lógica incluida). La baja viaja como
+`activo: 0`: la tablet deja de ofrecer el motivo, y una visita ya guardada con él sube igual (el push lo acepta,
+§6). `exige_foto` y `exige_atendio` son booleanos JSON; **los exige la tablet**, el servidor no los revisa.
+
+### `foto_subida_en` del cliente (T-39)
+
+Campo **nuevo** y aditivo en `clientes`: cuándo recibió el servidor la foto del cliente o prospecto, o `null`.
+La ficha de la tablet lo compara con su copia en caché y, si no la tiene o es más vieja, la baja de
+`GET /sync/foto/cliente/:clienteId` (§6, "Fotos"). Subir una foto toca `cliente.updated_at`, así que el cliente
+vuelve a bajar en el pull incremental con el valor nuevo.
 
 ### La baja viaja como bandera, nunca como ausencia
 
