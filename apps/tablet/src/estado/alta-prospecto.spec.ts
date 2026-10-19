@@ -3,6 +3,7 @@ import {
   avisoUbicacionAlta,
   ayudaDomicilio,
   ubicacionAltaDe,
+  ubicacionRecibida,
   validarAltaProspecto,
   type EntradaAltaProspecto,
   type UbicacionAlta,
@@ -129,6 +130,23 @@ describe('ubicacionAltaDe', () => {
       estado: 'fallo',
       permisoNegado: false,
     });
+  });
+});
+
+describe('ubicacionRecibida (lectura tardia del GPS)', () => {
+  const lectura = { estado: 'ok' as const, lat: 32.5, lng: -117, precisionM: 12 };
+
+  it('con el mismo formulario se pinta la lectura', () => {
+    expect(ubicacionRecibida(3, 3, lectura)).toEqual({ estado: 'ok', lat: 32.5, lng: -117 });
+    expect(ubicacionRecibida(3, 3, { estado: 'permiso-negado' })).toEqual({
+      estado: 'fallo',
+      permisoNegado: true,
+    });
+  });
+
+  it('si se guardo mientras buscaba, la lectura es del negocio anterior y se descarta', () => {
+    expect(ubicacionRecibida(3, 4, lectura)).toBeNull();
+    expect(ubicacionRecibida(3, 4, { estado: 'sin-senal', detalle: 'tiempo' })).toBeNull();
   });
 });
 

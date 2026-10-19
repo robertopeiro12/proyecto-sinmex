@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { etiquetaOrigenUbicacion, muestraBotonUbicar } from "./ubicacion-cliente";
+import {
+  coordenadaAEnviar,
+  domicilioSinGuardar,
+  etiquetaOrigenUbicacion,
+  muestraBotonUbicar,
+} from "./ubicacion-cliente";
 
 const GOOGLE = { lat: 32.5251, lng: -117.0213, origen: "geocodificada" as const };
 const NADA = { lat: null, lng: null, origen: null };
@@ -35,5 +40,39 @@ describe("muestraBotonUbicar (T-72, D6)", () => {
     expect(muestraBotonUbicar("32.5", "-117", "Av. Revolución 1234")).toBe(false);
     expect(muestraBotonUbicar("", "", null)).toBe(false);
     expect(muestraBotonUbicar("", "", "   ")).toBe(false);
+  });
+});
+
+describe("domicilioSinGuardar (T-72)", () => {
+  it("el campo igual al guardado (sin contar espacios) está guardado", () => {
+    expect(domicilioSinGuardar("Av. Revolución 1234", "Av. Revolución 1234")).toBe(false);
+    expect(domicilioSinGuardar(" Av. Revolución 1234 ", "Av. Revolución 1234")).toBe(false);
+  });
+
+  it("un domicilio escrito y no guardado, no", () => {
+    expect(domicilioSinGuardar("Av. Revolución 1250", "Av. Revolución 1234")).toBe(true);
+    expect(domicilioSinGuardar("Av. Revolución 1234", null)).toBe(true);
+  });
+});
+
+describe("coordenadaAEnviar (T-72)", () => {
+  const VACIOS = { lat: "", lng: "" };
+
+  it("alta: el número, u omitida si está vacía", () => {
+    expect(coordenadaAEnviar({ lat: "32.5", lng: "-117" }, null)).toEqual({ lat: 32.5, lng: -117 });
+    expect(coordenadaAEnviar(VACIOS, null)).toEqual({ lat: undefined, lng: undefined });
+  });
+
+  it("edición sin tocar los campos: se omite, aunque estuvieran vacíos", () => {
+    expect(coordenadaAEnviar(VACIOS, VACIOS)).toEqual({});
+    expect(coordenadaAEnviar({ lat: "32.5", lng: "-117" }, { lat: "32.5", lng: "-117" })).toEqual({});
+  });
+
+  it("edición con cambios: las dos, y vaciarla manda null para borrarla", () => {
+    expect(coordenadaAEnviar({ lat: "32.53", lng: "-117" }, { lat: "32.5", lng: "-117" })).toEqual({
+      lat: 32.53,
+      lng: -117,
+    });
+    expect(coordenadaAEnviar(VACIOS, { lat: "32.5", lng: "-117" })).toEqual({ lat: null, lng: null });
   });
 });

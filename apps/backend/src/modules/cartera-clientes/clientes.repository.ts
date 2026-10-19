@@ -95,6 +95,13 @@ export interface DatosClienteBase {
   comentarios: string | null;
 }
 
+/**
+ * Lo que escribe `actualizar()`. T-72: sin `lat`/`lng`/`ubicacion_origen`, la
+ * coordenada de la fila no se toca (el formulario no la cambio).
+ */
+export type CambiosCliente =
+  DatosClienteBase | Omit<DatosClienteBase, 'lat' | 'lng' | 'ubicacion_origen'>;
+
 interface FilaResumen {
   id: string;
   nombre: string;
@@ -441,7 +448,7 @@ export class ClientesRepository {
    */
   async actualizar(
     id: string,
-    cambios: DatosClienteBase,
+    cambios: CambiosCliente,
     overridesPrecio: { presentacionId: string; precio: number | null }[],
     vigenteDesde: string,
   ): Promise<ClienteDetalle> {
@@ -458,9 +465,13 @@ export class ClientesRepository {
           lista_precio_id: cambios.lista_precio_id,
           pct_comision: cambios.pct_comision?.toString() ?? null,
           plazo_credito_dias: cambios.plazo_credito_dias,
-          lat: cambios.lat?.toString() ?? null,
-          lng: cambios.lng?.toString() ?? null,
-          ubicacion_origen: cambios.ubicacion_origen,
+          ...('lat' in cambios
+            ? {
+                lat: cambios.lat?.toString() ?? null,
+                lng: cambios.lng?.toString() ?? null,
+                ubicacion_origen: cambios.ubicacion_origen,
+              }
+            : {}),
           comentarios: cambios.comentarios,
         })
         .where('id', '=', id)

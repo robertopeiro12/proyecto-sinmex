@@ -84,17 +84,19 @@ export class EditarClienteDto {
   })
   plazoCreditoDias?: number;
 
+  // T-72: a diferencia del resto, omitir `lat` y `lng` conserva la coordenada
+  // (el formulario los manda solo si la oficina los cambio); `null` la borra.
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 6 })
   @Min(-90)
   @Max(90)
-  lat?: number;
+  lat?: number | null;
 
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 6 })
   @Min(-180)
   @Max(180)
-  lng?: number;
+  lng?: number | null;
 
   @IsOptional()
   @Transform(recortar)

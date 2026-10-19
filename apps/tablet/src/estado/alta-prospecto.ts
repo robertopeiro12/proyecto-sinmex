@@ -92,6 +92,22 @@ export function ubicacionAltaDe(r: ResultadoUbicacion): UbicacionAlta {
     : { estado: 'fallo', permisoNegado: r.estado === 'permiso-negado' };
 }
 
+/**
+ * La lectura del GPS que llega cuando el formulario ya es otro. `ubicar()` toma
+ * el numero de formulario al pedir la ubicacion y lo compara al recibirla:
+ * `guardar()` lo incrementa al limpiar el formulario. Si cambio, la lectura es
+ * del negocio anterior y se descarta (`null`); si no, se pinta como de costumbre.
+ * Sin esto, un GPS lento cae en el formulario ya limpio y el siguiente
+ * prospecto se guarda con la coordenada del negocio anterior.
+ */
+export function ubicacionRecibida(
+  formularioAlPedir: number,
+  formularioAhora: number,
+  r: ResultadoUbicacion,
+): UbicacionAlta | null {
+  return formularioAlPedir === formularioAhora ? ubicacionAltaDe(r) : null;
+}
+
 /** Que hacer cuando la ubicacion no sirve, en palabras del vendedor; `null` si no hay nada que decir. */
 export function avisoUbicacionAlta(u: UbicacionAlta): string | null {
   if (u.estado === 'fallo') {

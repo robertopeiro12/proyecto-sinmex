@@ -252,13 +252,20 @@ export class ClientesService {
           lista_precio_id: dto.listaPrecioId,
           pct_comision: dto.pctComision ?? null,
           plazo_credito_dias: dto.plazoCreditoDias ?? null,
-          lat: dto.lat ?? null,
-          lng: dto.lng ?? null,
-          // T-72 (D3): la misma coordenada conserva su origen; otra es 'manual'.
-          ubicacion_origen: origenAlGuardar(
-            { lat: dto.lat ?? null, lng: dto.lng ?? null },
-            cliente,
-          ),
+          // T-72: sin `lat` ni `lng` la coordenada no se toca (el formulario
+          // no la cambio); `null` la borra. Asi un formulario abierto antes de
+          // que Google respondiera no borra la coordenada que llego mientras.
+          ...(dto.lat !== undefined || dto.lng !== undefined
+            ? {
+                lat: dto.lat ?? null,
+                lng: dto.lng ?? null,
+                // T-72 (D3): la misma coordenada conserva su origen; otra es 'manual'.
+                ubicacion_origen: origenAlGuardar(
+                  { lat: dto.lat ?? null, lng: dto.lng ?? null },
+                  cliente,
+                ),
+              }
+            : {}),
           comentarios: dto.comentarios ?? null,
         },
         dto.overridesPrecio,

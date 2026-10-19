@@ -15,8 +15,11 @@ import {
 } from "@/lib/clientes";
 import { mensajeDe } from "@/lib/api";
 import {
+  coordenadaAEnviar,
+  domicilioSinGuardar,
   etiquetaOrigenUbicacion,
   muestraBotonUbicar,
+  type CamposCoordenada,
   type UbicacionReferencia,
 } from "@/lib/ubicacion-cliente";
 import { FotoProspecto } from "./foto-prospecto";
@@ -70,6 +73,12 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
   );
   const [lat, setLat] = useState(cliente?.lat?.toString() ?? "");
   const [lng, setLng] = useState(cliente?.lng?.toString() ?? "");
+  // T-72: los campos como se cargaron (null en un alta). Si siguen así al
+  // guardar, la coordenada no viaja y el servidor conserva la que tenga
+  // (ver `coordenadaAEnviar`). Mismo motivo de `useState` que `overridesIniciales`.
+  const [coordenadaCargada] = useState<CamposCoordenada | null>(() =>
+    cliente ? { lat: cliente.lat?.toString() ?? "", lng: cliente.lng?.toString() ?? "" } : null,
+  );
   // T-72 (D6): la coordenada guardada (o la que acaba de dar Google) y su
   // origen. La etiqueta compara los campos contra esto.
   const [referencia, setReferencia] = useState<UbicacionReferencia>({
@@ -201,8 +210,7 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
       pctComision: pctComision.trim() === "" ? undefined : Number(pctComision),
       plazoCreditoDias:
         plazoCreditoDias.trim() === "" ? undefined : Number(plazoCreditoDias),
-      lat: lat.trim() === "" ? undefined : Number(lat),
-      lng: lng.trim() === "" ? undefined : Number(lng),
+      ...coordenadaAEnviar({ lat, lng }, coordenadaCargada),
       comentarios: comentarios.trim() === "" ? undefined : comentarios,
       overridesPrecio,
     };
@@ -514,12 +522,20 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
               type="button"
               variant="outline"
               size="sm"
-              disabled={enviando || ubicando}
+              disabled={enviando || ubicando || domicilioSinGuardar(domicilio, cliente.domicilio)}
               onClick={ubicarConDireccion}
             >
               {ubicando ? "Ubicando…" : "Ubicar con la dirección"}
             </Button>
           )}
+          {/* El servidor geocodifica el domicilio GUARDADO, no el del campo. */}
+          {!esAlta &&
+            muestraBotonUbicar(lat, lng, cliente.domicilio) &&
+            domicilioSinGuardar(domicilio, cliente.domicilio) && (
+              <p className="text-xs text-muted-foreground">
+                Guarda el domicilio antes de ubicarlo.
+              </p>
+            )}
         </div>
         {avisoUbicar && (
           <p role="status" className="text-sm text-destructive">

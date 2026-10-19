@@ -109,8 +109,9 @@ export interface DatosClienteFormulario {
   listaPrecioId: string;
   pctComision?: number;
   plazoCreditoDias?: number;
-  lat?: number;
-  lng?: number;
+  /** Al editar, omitidas conservan la coordenada y `null` la borra (T-72). */
+  lat?: number | null;
+  lng?: number | null;
   comentarios?: string;
   overridesPrecio: { presentacionId: string; precio: number | null }[];
 }

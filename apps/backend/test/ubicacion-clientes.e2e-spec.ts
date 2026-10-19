@@ -407,10 +407,25 @@ describe('Ubicación de clientes desde el portal (e2e)', () => {
       await editar(id, edicion(domicilio, { lat: 32.53, lng: -117.0213 }));
       expect((await fila(id)).ubicacion_origen).toBe('manual');
 
-      await editar(id, edicion(domicilio));
+      await editar(id, edicion(domicilio, { lat: null, lng: null }));
       const f = await fila(id);
       expect(f.lat).toBeNull();
       expect(f.ubicacion_origen).toBeNull();
+    });
+
+    it('un guardado sin lat ni lng no toca la coordenada (formulario abierto antes de que Google respondiera)', async () => {
+      const domicilio = direccion('Sin tocar');
+      const id = await sembrar({
+        domicilio,
+        coordenada: { lat: 32.5251, lng: -117.0213, origen: 'geocodificada' },
+      });
+
+      await editar(id, edicion(domicilio));
+      const f = await fila(id);
+      expect(f.domicilio).toBe(domicilio);
+      expect(Number(f.lat)).toBe(32.5251);
+      expect(Number(f.lng)).toBe(-117.0213);
+      expect(f.ubicacion_origen).toBe('geocodificada');
     });
 
     it('acepta un domicilio de 300 caracteres (el de la tablet) y rechaza uno de 301', async () => {

@@ -52,3 +52,41 @@ export function muestraBotonUbicar(
     (domicilioGuardado ?? "").trim() !== ""
   );
 }
+
+/**
+ * ¿El campo Domicilio es distinto del GUARDADO? Entonces "Ubicar con la
+ * dirección" geocodificaría el viejo, y su coordenada quedaría junto al domicilio
+ * nuevo como "Ubicada por Google": el botón se deshabilita hasta guardar (y
+ * guardar ya intenta ubicar el domicilio nuevo en segundo plano).
+ */
+export function domicilioSinGuardar(campo: string, guardado: string | null): boolean {
+  return campo.trim() !== (guardado ?? "").trim();
+}
+
+/** Los campos Latitud y Longitud, tal cual. */
+export interface CamposCoordenada {
+  lat: string;
+  lng: string;
+}
+
+/**
+ * La coordenada que manda el formulario al guardar (T-72). Va en pareja: el
+ * servidor decide con las dos.
+ *
+ * - Alta (`cargados` es `null`): el número, u omitida si el campo está vacío.
+ * - Edición sin cambios en los campos: se omite y el servidor conserva la que
+ *   tenga. Así un formulario abierto antes de que Google respondiera no borra
+ *   la coordenada que llegó mientras.
+ * - Edición con cambios: el número, o `null` para borrarla.
+ */
+export function coordenadaAEnviar(
+  campos: CamposCoordenada,
+  cargados: CamposCoordenada | null,
+): { lat?: number | null; lng?: number | null } {
+  const numero = (texto: string) => (texto.trim() === "" ? null : Number(texto));
+  if (cargados === null) {
+    return { lat: numero(campos.lat) ?? undefined, lng: numero(campos.lng) ?? undefined };
+  }
+  if (campos.lat === cargados.lat && campos.lng === cargados.lng) return {};
+  return { lat: numero(campos.lat), lng: numero(campos.lng) };
+}

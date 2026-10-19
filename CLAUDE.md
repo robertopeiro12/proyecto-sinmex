@@ -448,6 +448,9 @@ usuario con sesion pasa.
     ni cron.
   - `cliente.ubicacion_origen` (`gps`/`geocodificada`/`manual`; nula ⇔ `lat` nula, por check; backfill `manual`).
     El portal conserva el origen si reenvía la misma coordenada y pone `manual` si cambia (`ubicacion-origen.ts`).
+    En `PATCH /clientes/:id`, **omitir `lat` y `lng` conserva la coordenada y `null` la borra**: el formulario solo las
+    manda si la oficina tocó los campos (`coordenadaAEnviar`), para no borrar la que Google puso con el formulario
+    abierto. "Ubicar con la dirección" se deshabilita mientras el domicilio del campo no esté guardado.
     Baja en el pull; la tablet la guarda (migración local 014, junto con `prospecto.domicilio`, sin check para que un
     origen nuevo del servidor no tumbe el pull) y todavía no la muestra.
   - Portal: "Ubicar con la dirección" → `POST /clientes/:id/ubicar` (permiso `cliente.gestionar`, espera ≤ 5 s):
@@ -456,9 +459,11 @@ usuario con sesion pasa.
     igual que la tablet.
   - `DatosProspecto.domicilio` (≤ 300) es aditivo: `CONTRATO_ACTUAL` sigue en 1.
   - **Nube**: `20261019120000_cliente_ubicacion_origen.sql` se sube a `sinmex dev` después del merge, con el protocolo
-    de push (su comentario trae el pre-flight: los dos checks nuevos los satisface el backfill, así que el conteo de
-    violaciones debe dar 0; el backfill mueve `updated_at` de los clientes con coordenada a propósito, para que las
-    tablets reciban el origen).
+    de push (su comentario trae el pre-flight: `select count(*) from cliente where lat is not null` cuenta las filas
+    que el backfill va a marcar `manual`, para el comentario del PR; los dos checks nuevos no pueden fallar porque el
+    backfill corre antes de crearlos. Después de migrar,
+    `select count(*) from cliente where (ubicacion_origen is null) <> (lat is null)` debe dar 0. El backfill mueve
+    `updated_at` de los clientes con coordenada a propósito, para que las tablets reciban el origen).
 
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.

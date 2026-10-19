@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
@@ -9,7 +9,7 @@ import {
   ayudaDomicilio,
   avisoUbicacionAlta,
   ETIQUETA_DOMICILIO,
-  ubicacionAltaDe,
+  ubicacionRecibida,
   validarAltaProspecto,
   type UbicacionAlta,
 } from '@/estado/alta-prospecto';
@@ -118,10 +118,18 @@ export default function Prospectos() {
   );
   const puedeGuardar = vendedor !== null && sucursalId !== null && validacion.ubicacion !== null;
 
+  // Numero del formulario en curso: `guardar()` lo incrementa al limpiarlo, y
+  // `ubicar()` descarta una lectura que llega despues (ver `ubicacionRecibida`).
+  const formulario = useRef(0);
+
   async function ubicar() {
+    const alPedir = formulario.current;
     setUbicacion({ estado: 'buscando' });
     // `obtenerUbicacion` nunca lanza: permiso negado y sin senal llegan como estado.
-    setUbicacion(ubicacionAltaDe(await obtenerUbicacion()));
+    const r = await obtenerUbicacion();
+    // `formulario.current` se lee despues del `await`: es el formulario de ahora.
+    const u = ubicacionRecibida(alPedir, formulario.current, r);
+    if (u !== null) setUbicacion(u);
   }
 
   /**
@@ -191,6 +199,7 @@ export default function Prospectos() {
 
       // Se limpia el formulario, no se navega: lo normal es registrar varios
       // prospectos seguidos en la misma calle.
+      formulario.current += 1;
       setNombre('');
       setTelefono('');
       setEncargado('');

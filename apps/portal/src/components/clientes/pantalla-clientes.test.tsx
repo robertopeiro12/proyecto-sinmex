@@ -446,6 +446,50 @@ describe("PantallaClientes · ubicación (T-72, D6)", () => {
     expect(await screen.findByText("Origen de la ubicación: Ubicada por Google")).toBeInTheDocument();
   });
 
+  it("con el domicilio cambiado y sin guardar, «Ubicar» se deshabilita y pide guardarlo", async () => {
+    const usuario = await abrirEdicion(DETALLE);
+    const domicilio = screen.getByLabelText("Domicilio / referencia");
+
+    await usuario.type(domicilio, " interior 4");
+
+    expect(screen.getByRole("button", UBICAR)).toBeDisabled();
+    expect(screen.getByText("Guarda el domicilio antes de ubicarlo.")).toBeInTheDocument();
+
+    await usuario.clear(domicilio);
+    await usuario.type(domicilio, "Calle Falsa 123");
+    expect(screen.getByRole("button", UBICAR)).toBeEnabled();
+    expect(screen.queryByText("Guarda el domicilio antes de ubicarlo.")).not.toBeInTheDocument();
+  });
+
+  it("guardar sin tocar la coordenada no la manda (no borra la que Google puso mientras)", async () => {
+    editarCliente.mockResolvedValue(DETALLE);
+    const usuario = await abrirEdicion(DETALLE);
+
+    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(editarCliente).toHaveBeenCalledTimes(1));
+    const datos = editarCliente.mock.calls[0][1];
+    expect(datos).not.toHaveProperty("lat");
+    expect(datos).not.toHaveProperty("lng");
+  });
+
+  it("vaciar una coordenada guardada manda null para borrarla", async () => {
+    editarCliente.mockResolvedValue(DETALLE);
+    const usuario = await abrirEdicion({
+      ...DETALLE,
+      lat: 32.5251,
+      lng: -117.0213,
+      ubicacionOrigen: "geocodificada",
+    });
+
+    await usuario.clear(screen.getByLabelText("Latitud"));
+    await usuario.clear(screen.getByLabelText("Longitud"));
+    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(editarCliente).toHaveBeenCalledTimes(1));
+    expect(editarCliente.mock.calls[0][1]).toMatchObject({ lat: null, lng: null });
+  });
+
   it("un prospecto sin domicilio no ofrece ubicar", async () => {
     await abrirEdicion({ ...DETALLE, tipo: "prospecto", domicilio: null, listaPrecioId: null });
     expect(screen.queryByRole("button", UBICAR)).not.toBeInTheDocument();
