@@ -111,6 +111,12 @@ Si el pull trajo migraciones y prefieres partir limpio, `npm run supabase -- db 
 Siempre con el `--`: `npm run supabase migration up --local` sin él se come `--local` en silencio
 y aplica al destino equivocado. Es el mismo aviso de más abajo, repetido a propósito.
 
+**Cada migración necesita una versión (el timestamp del nombre) única.** Supabase registra las migraciones por
+versión: si dos archivos comparten timestamp, la segunda nunca se aplica (`migration up`/`db push` la dan por
+hecha) y CI no lo detecta porque aplica los archivos uno por uno. Pasó el 2026-10-19 con T-29 y T-72 (los dos con
+`20261019120000`); la de T-72 se renombró a `20261019130000`. Antes de crear una, revisa `ls supabase/migrations`
+y la rama de tu compañero.
+
 **La nube (`sinmex dev`) refleja `main`, nunca una rama — decidido el 2026-09-14.** Las migraciones
 de un PR **no** se suben hasta que el PR se mergea. El motivo: si el PR cambia en revisión, la nube
 queda con un esquema que `main` nunca tuvo, y una migración *correctiva* encima es peor que
@@ -470,7 +476,7 @@ usuario con sesion pasa.
     de clientes, que contestan 403: no confirma que el cliente exista). El domicilio admite 300 caracteres (antes 200),
     igual que la tablet.
   - `DatosProspecto.domicilio` (≤ 300) es aditivo: `CONTRATO_ACTUAL` sigue en 1.
-  - **Nube**: `20261019120000_cliente_ubicacion_origen.sql` se sube a `sinmex dev` después del merge, con el protocolo
+  - **Nube**: `20261019130000_cliente_ubicacion_origen.sql` se sube a `sinmex dev` después del merge, con el protocolo
     de push (su comentario trae el pre-flight: `select count(*) from cliente where lat is not null` cuenta las filas
     que el backfill va a marcar `manual`, para el comentario del PR; los dos checks nuevos no pueden fallar porque el
     backfill corre antes de crearlos. Después de migrar,

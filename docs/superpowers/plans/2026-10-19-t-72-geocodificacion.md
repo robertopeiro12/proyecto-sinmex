@@ -106,7 +106,7 @@ Lo que el spec implica y ninguna prueba cubriría si no se añade aquí; cada l�
 
 | Archivo | Responsabilidad | Tarea |
 |---|---|---|
-| `supabase/migrations/20261019120000_cliente_ubicacion_origen.sql` | Columna, backfill y checks | 1 |
+| `supabase/migrations/20261019130000_cliente_ubicacion_origen.sql` | Columna, backfill y checks | 1 |
 | `supabase/tests/99_cliente_ubicacion_origen_test.sql` | pgTAP de la columna | 1 |
 | `apps/backend/src/modules/cartera-clientes/ubicacion-origen.ts` | Reglas puras de origen y de "¿geocodificar al guardar?" | 1, 4 |
 | `apps/backend/src/modules/integraciones/geocodificacion/geocodificador.ts` | Interfaz, resultado y token | 2 |
@@ -129,7 +129,7 @@ Lo que el spec implica y ninguna prueba cubriría si no se añade aquí; cada l�
 
 **Files:**
 - Create: `supabase/tests/99_cliente_ubicacion_origen_test.sql`
-- Create: `supabase/migrations/20261019120000_cliente_ubicacion_origen.sql`
+- Create: `supabase/migrations/20261019130000_cliente_ubicacion_origen.sql`
 - Modify (generado): `apps/backend/src/database/schema.d.ts`
 - Create: `apps/backend/src/modules/cartera-clientes/ubicacion-origen.ts`
 - Create: `apps/backend/src/modules/cartera-clientes/ubicacion-origen.spec.ts`
@@ -225,7 +225,7 @@ existe). Las demás suites siguen como estaban.
 
 - [ ] **Paso 3: la migración**
 
-`supabase/migrations/20261019120000_cliente_ubicacion_origen.sql`:
+`supabase/migrations/20261019130000_cliente_ubicacion_origen.sql`:
 
 ```sql
 -- T-72: de donde salio la coordenada actual del cliente (D3).
@@ -269,7 +269,7 @@ alter table cliente add constraint ck_cliente_ubicacion_origen_con_lat
 - [ ] **Paso 4: aplicar y ver pasar**
 
 ```bash
-npm run supabase -- migration list --local     # 20261019120000 aparece sin aplicar
+npm run supabase -- migration list --local     # 20261019130000 aparece sin aplicar
 npm run supabase -- migration up --local       # aplica solo las pendientes; NUNCA db reset
 npm run supabase -- test db --local            # 99_cliente_ubicacion_origen_test.sql: 11/11
 ```
@@ -507,7 +507,7 @@ resultado: ninguno escribe `lat` sin pasar por el repositorio salvo el fixture d
 - [ ] **Paso 12: commit**
 
 ```bash
-git add supabase/migrations/20261019120000_cliente_ubicacion_origen.sql supabase/tests/99_cliente_ubicacion_origen_test.sql apps/backend/src/database/schema.d.ts apps/backend/src/modules/cartera-clientes/ubicacion-origen.ts apps/backend/src/modules/cartera-clientes/ubicacion-origen.spec.ts apps/backend/src/modules/cartera-clientes/clientes.repository.ts apps/backend/src/modules/cartera-clientes/clientes.service.ts apps/backend/test/sincronizacion.e2e-spec.ts
+git add supabase/migrations/20261019130000_cliente_ubicacion_origen.sql supabase/tests/99_cliente_ubicacion_origen_test.sql apps/backend/src/database/schema.d.ts apps/backend/src/modules/cartera-clientes/ubicacion-origen.ts apps/backend/src/modules/cartera-clientes/ubicacion-origen.spec.ts apps/backend/src/modules/cartera-clientes/clientes.repository.ts apps/backend/src/modules/cartera-clientes/clientes.service.ts apps/backend/test/sincronizacion.e2e-spec.ts
 git commit -m "T-72: cliente.ubicacion_origen (migración, pgTAP y origen al guardar)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
@@ -4716,7 +4716,7 @@ Busca que no quede ninguna referencia vieja: `grep -n "avisoUbicacion\b\|buscand
     **404**, espera ≤ 5 s): 200 con la coordenada, 409/502 con el motivo en español. El domicilio admite 300
     caracteres (antes 200), igual que la tablet.
   - `DatosProspecto.domicilio` (≤ 300) es aditivo: `CONTRATO_ACTUAL` sigue en 1.
-  - **Nube**: `20261019120000_cliente_ubicacion_origen.sql` se sube a `sinmex dev` después del merge, con el protocolo
+  - **Nube**: `20261019130000_cliente_ubicacion_origen.sql` se sube a `sinmex dev` después del merge, con el protocolo
     de push (su comentario trae el pre-flight; el backfill mueve `updated_at` de los clientes con coordenada a
     propósito).
 ```
