@@ -48,7 +48,7 @@ export function claveNombrable(clave: string): boolean {
 }
 
 /** A que fila pertenece una foto. El prefijo del archivo lo dice (T-78). */
-export type EntidadFoto = 'cliente' | 'visita';
+export type EntidadFoto = 'cliente' | 'visita' | 'gasto';
 
 /**
  * `<entidad>-<id>.jpg` (T-78).

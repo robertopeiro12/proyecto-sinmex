@@ -7,6 +7,7 @@ import {
 import { nombreArchivoFoto } from '../cartera-clientes/foto-prospecto';
 import { FotosService } from '../cartera-clientes/fotos.service';
 import { VisitasService } from '../rutas/visitas.service';
+import { GastosService } from '../compras-egresos/gastos.service';
 import { FotoRepository } from './foto.repository';
 
 /** Lo que devuelve la subida. Confirma; no hay nada que la tablet tenga que guardar. */
@@ -17,7 +18,7 @@ export interface RespuestaFoto {
 }
 
 /**
- * `POST /sync/foto/:clave`: resolver la clave (prospecto o visita, T-39) y
+ * `POST /sync/foto/:clave`: resolver la clave (prospecto, visita o gasto; T-39, T-30) y
  * despachar al dueño de la fila (T-40).
  *
  * > [!danger] Esto NO es el contrato del `push`, y es el punto del diseno
@@ -45,6 +46,8 @@ export class FotoService {
     private readonly fotos: FotosService,
     // T-39: Rutas es la duena de `visita` y de sus dos columnas de foto.
     private readonly visitas: VisitasService,
+    // T-30: Compras y Egresos es la duena de `gasto` y de sus columnas de foto.
+    private readonly gastos: GastosService,
   ) {}
 
   async subir(
@@ -65,7 +68,7 @@ export class FotoService {
      */
     if (operaciones.length === 0) {
       throw new NotFoundException(
-        'No hay ninguna operacion con esa clave. Sincroniza el prospecto o la visita antes de subir su foto.',
+        'No hay ninguna operacion con esa clave. Sincroniza el prospecto, la visita o el gasto antes de subir su foto.',
       );
     }
 
@@ -79,7 +82,7 @@ export class FotoService {
     const mia = operaciones.find((o) => o.vendedorId === vendedorId);
     if (!mia) {
       throw new ForbiddenException(
-        'Esa operacion no es tuya: la foto solo la puede subir el vendedor que registro el prospecto o la visita.',
+        'Esa operacion no es tuya: la foto solo la puede subir el vendedor que registro el prospecto, la visita o el gasto.',
       );
     }
 
@@ -111,10 +114,21 @@ export class FotoService {
       return { clave, subida_en: subidaEn.toISOString() };
     }
 
+    if (mia.tipo === 'gasto') {
+      // Mismo 409 que la visita: la tablet la deja pendiente y reintenta.
+      if (mia.entidadTabla !== 'gasto' || mia.entidadId === null) {
+        throw new ConflictException(
+          'Ese gasto todavia no esta proyectado. Reintenta en la siguiente sincronizacion.',
+        );
+      }
+      const subidaEn = await this.guardarDeGasto(mia.entidadId, cuerpo);
+      return { clave, subida_en: subidaEn.toISOString() };
+    }
+
     // Una venta (o cualquier otro tipo) no tiene foto. `409` y no `400`: la
     // peticion esta bien formada, lo que no encaja es el estado del servidor.
     throw new ConflictException(
-      `La operacion ${clave} es de tipo "${mia.tipo}", y solo un prospecto o una visita lleva foto.`,
+      `La operacion ${clave} es de tipo "${mia.tipo}", y solo un prospecto, una visita o un gasto lleva foto.`,
     );
   }
 
@@ -136,6 +150,25 @@ export class FotoService {
     const subidaEn = new Date();
     if (!(await this.visitas.anotarFoto(visitaId, archivo, subidaEn))) {
       throw new NotFoundException('Esa visita ya no existe.');
+    }
+    return subidaEn;
+  }
+
+  /**
+   * La foto del ticket de un gasto (T-30, D8): las mismas reglas de bytes, el
+   * mismo disco y el mismo orden que la de la visita — el archivo primero, la
+   * columna despues. Reenviar escribe el mismo `gasto-<id>.jpg`.
+   */
+  private async guardarDeGasto(gastoId: string, cuerpo: Buffer): Promise<Date> {
+    this.fotos.validarFoto(cuerpo);
+    if (!(await this.gastos.existe(gastoId))) {
+      throw new NotFoundException('Ese gasto ya no existe.');
+    }
+    const archivo = nombreArchivoFoto('gasto', gastoId);
+    await this.fotos.escribirArchivo(archivo, cuerpo);
+    const subidaEn = new Date();
+    if (!(await this.gastos.anotarFoto(gastoId, archivo, subidaEn))) {
+      throw new NotFoundException('Ese gasto ya no existe.');
     }
     return subidaEn;
   }

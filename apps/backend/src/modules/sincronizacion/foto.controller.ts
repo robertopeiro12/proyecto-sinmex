@@ -19,7 +19,7 @@ import { leerCuerpoLimitado } from './cuerpo-crudo';
 import { FotoService, type RespuestaFoto } from './foto.service';
 
 /**
- * La foto del prospecto (T-40) o de la visita (T-39) que sube la tablet, y la
+ * La foto del prospecto (T-40), de la visita (T-39) o del gasto (T-30) que sube la tablet, y la
  * del cliente que baja (T-39).
  *
  * Controller aparte de `SincronizacionController` porque es un canal aparte: no
@@ -38,8 +38,8 @@ export class FotoController {
    * `POST /sync/foto/:clave` — el segundo de los "dos requests, un boton".
    *
    * La `clave` es **la misma llave de idempotencia** de la operacion del
-   * prospecto o la visita, y el archivo se nombra por el id de la fila (`cliente-<id>.jpg` o
-   * `visita-<id>.jpg`, T-78), asi que reenviar es gratis: escribe el mismo
+   * prospecto o la visita, y el archivo se nombra por el id de la fila (`cliente-<id>.jpg`,
+   * `visita-<id>.jpg` o `gasto-<id>.jpg`, T-78/T-30), asi que reenviar es gratis: escribe el mismo
    * nombre y deja un solo archivo. No hay
    * contador, ni identificador nuevo, ni tabla de control que mantener.
    *
@@ -87,7 +87,7 @@ export class FotoController {
    * prospecto para la ficha de la tablet. 404 si no tiene foto o no es de la
    * sucursal del vendedor (no 403: no se confirma que exista).
    *
-   * Las fotos de las visitas NO bajan: nadie las necesita en la tablet todavia.
+   * Las fotos de las visitas y de los gastos NO bajan: nadie las necesita en la tablet todavia.
    */
   @SoloApp()
   @Get('foto/cliente/:clienteId')

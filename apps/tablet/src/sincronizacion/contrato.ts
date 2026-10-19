@@ -206,6 +206,13 @@ export interface MotivoVisitaPull extends FilaSincronizable {
   exige_atendio: boolean;
 }
 
+/** Copia del backend (T-30). */
+export interface CampoEgresoPull extends FilaSincronizable {
+  nombre: string;
+  tipo: 'produccion' | 'operacion' | 'financiero';
+  se_usa_en_app: boolean;
+}
+
 export interface ProductoPull extends FilaSincronizable {
   nombre: string;
 }
@@ -405,6 +412,12 @@ export interface RespuestaPull {
      * visita dice que no hay catalogo y no deja guardar.
      */
     motivos_visita?: MotivoVisitaPull[];
+    /**
+     * T-30. **Opcional en la copia de la tablet, obligatoria en el servidor**,
+     * por la misma razon que `tipos_negocio`: sin la coleccion la pantalla de
+     * gastos dice que no hay catalogo y no deja registrar.
+     */
+    campos_egreso?: CampoEgresoPull[];
     precios: PrecioPull[];
   };
   notas_pendientes: NotaPendientePull[];

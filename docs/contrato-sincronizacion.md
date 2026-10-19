@@ -198,6 +198,8 @@ nadie relacionaría con nada.
     "tipos_negocio":  [{ "id": "…", "nombre": "Abarrotes", "activo": 1 }],
     "motivos_visita": [{ "id": "…", "nombre": "Cerrado", "exige_foto": true,
                          "exige_atendio": false, "activo": 1 }],
+    "campos_egreso":  [{ "id": "…", "nombre": "Gasolina", "tipo": "operacion",
+                         "se_usa_en_app": true, "activo": 1 }],
     "precios":        [{ "id": "<clienteId>:<presentacionId>", "cliente_id": "…",
                          "presentacion_id": "…", "precio_centavos": 800,
                          "vigente_desde": "2026-02-01", "activo": 1 }]
@@ -287,6 +289,16 @@ Colección **nueva** y aditiva (§3). Baja completa (no por sucursal: es un cat�
 `motivo_visita`; un trigger la mueve en cualquier cambio, la baja lógica incluida). La baja viaja como
 `activo: 0`: la tablet deja de ofrecer el motivo, y una visita ya guardada con él sube igual (el push lo acepta,
 §6). `exige_foto` y `exige_atendio` son booleanos JSON; **los exige la tablet**, el servidor no los revisa.
+
+### `campos_egreso`: el catálogo de los gastos de la ruta (T-30)
+
+Colección **nueva** y aditiva (§3). Baja completa (no por sucursal: es un catálogo de la empresa, como
+`motivos_visita`) e incremental por **`actualizado_en`** (un trigger la mueve en cualquier cambio, la baja lógica
+incluida). La baja viaja como `activo: 0`. `tipo` es `produccion`, `operacion` o `financiero` (fijos, D1).
+
+La tablet ofrece en "Registrar gasto" solo los campos con `activo: 1` **y** `se_usa_en_app: true`. Si la oficina
+apaga la casilla o da de baja el campo mientras la tablet está sin red, el gasto ya capturado sube igual: el
+servidor **no** revisa la casilla (§6, `gasto`), y el siguiente pull quita el campo de la lista.
 
 ### `foto_subida_en` del cliente (T-39)
 
@@ -791,23 +803,25 @@ permiso o no haber señal, y eso no le impide registrar al prospecto.
 - Las operaciones `gasto` que llegaron antes de T-30/T-31 (ninguna tablet las mandaba) se quedan en el buzón sin
   proyectar y sin relleno.
 
-### Fotos: subida y descarga (canal aparte del lote; T-40, T-39)
+### Fotos: subida y descarga (canal aparte del lote; T-40, T-39, T-30)
 
 La foto **no** viaja dentro de la operación: va por su propio request, sin `contrato` ni `resultados[]`, solo
 códigos HTTP. Así una imagen pesada o cortada nunca rechaza la operación a la que pertenece.
 
 - **`POST /sync/foto/:clave`** (`@SoloApp`, cuerpo = el JPEG crudo, máx. 2 MB). La `clave` es la de una operación
-  `prospecto` **o** `visita` del vendedor del token. 404 si nadie tiene esa clave (o la operación se rechazó: no dejó
+  `prospecto`, `visita` **o** `gasto` del vendedor del token. 404 si nadie tiene esa clave (o la operación se rechazó: no dejó
   fila) o si la fila ya no existe; 403 si es de otro vendedor; 409 si es de otro tipo o aún no está proyectada;
   413 si pesa de más; 415 si no es un JPEG completo. Responde `200 { clave, subida_en }` también la primera vez.
-- **Nombre del archivo (T-78):** `cliente-<cliente.id>.jpg` y `visita-<visita.id>.jpg`, nunca la clave. Reenviar
+- **Nombre del archivo (T-78):** `cliente-<cliente.id>.jpg`, `visita-<visita.id>.jpg` y `gasto-<gasto.id>.jpg` (T-30), nunca la clave. Reenviar
   escribe el mismo nombre: un solo archivo. Los archivos de antes (`<clave>.jpg`) no se migran; el servidor siempre
   lee por `foto_archivo`.
 - La foto del prospecto se anota en `cliente.foto_archivo/foto_subida_en`; la de la visita, en
-  `visita.foto_archivo/foto_subida_en`.
+  `visita.foto_archivo/foto_subida_en`; la del gasto (el ticket, opcional), en
+  `gasto.foto_archivo/foto_subida_en`.
 - **`GET /sync/foto/cliente/:clienteId`** (`@SoloApp`): el JPEG de la foto del cliente o prospecto si es de la
   sucursal del vendedor y está vivo; **404** si no tiene foto o no está en su alcance (no 403: no confirma que
-  exista). La tablet lo pide cuando `foto_subida_en` (§5) es más nuevo que su copia. Las fotos de visitas **no** bajan.
+  exista). La tablet lo pide cuando `foto_subida_en` (§5) es más nuevo que su copia. Las fotos de visitas y de gastos **no**
+  bajan a la tablet; la del gasto la ve el portal en `GET /gastos/:id/foto`.
 
 ### Respuesta `200` — parcial y honesta
 

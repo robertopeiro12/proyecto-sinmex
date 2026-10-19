@@ -84,4 +84,14 @@ export class GastosService {
     }
     return { tabla: 'gasto', id };
   }
+
+  /** T-30 (D8): para el canal de fotos. */
+  existe(id: string): Promise<boolean> {
+    return this.repo.existe(id);
+  }
+
+  /** T-30 (D8): el archivo ya esta en disco; esto anota la columna. */
+  anotarFoto(id: string, archivo: string, subidaEn: Date): Promise<boolean> {
+    return this.repo.anotarFoto(id, archivo, subidaEn);
+  }
 }

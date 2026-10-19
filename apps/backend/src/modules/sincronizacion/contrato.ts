@@ -654,6 +654,23 @@ export interface MotivoVisitaPull extends FilaSincronizable {
   exige_atendio: boolean;
 }
 
+/**
+ * Un campo de egreso (T-30, D6): el catalogo de la pantalla "Gastos" de la
+ * tablet. Global (no cuelga de sucursal), como `motivos_visita`. Coleccion
+ * nueva = aditiva. Incremental por `actualizado_en`; la baja logica viaja como
+ * `activo: 0`.
+ *
+ * La tablet ofrece solo los que tienen `activo: 1` y `se_usa_en_app: true`. Un
+ * gasto ya guardado con un campo que despues se apago o se dio de baja sube
+ * igual: el servidor no revisa la casilla (D5).
+ */
+export interface CampoEgresoPull extends FilaSincronizable {
+  nombre: string;
+  tipo: 'produccion' | 'operacion' | 'financiero';
+  /** "Se usa en la app": la tablet solo ofrece los que la tienen. */
+  se_usa_en_app: boolean;
+}
+
 export interface ProductoPull extends FilaSincronizable {
   nombre: string;
 }
@@ -890,6 +907,8 @@ export interface RespuestaPull {
     tipos_negocio: TipoNegocioPull[];
     /** T-39. Aditiva: una tablet vieja la ignora. */
     motivos_visita: MotivoVisitaPull[];
+    /** T-30. Aditiva: una tablet vieja la ignora. */
+    campos_egreso: CampoEgresoPull[];
     /**
      * **Siempre completo o vacio**, nunca parcial. El precio efectivo depende
      * de tres tablas (`precio`, `cliente_precio` y la lista asignada al

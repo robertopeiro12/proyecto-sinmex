@@ -98,4 +98,34 @@ export class GastosRepository {
       .executeTakeFirst();
     return fila?.id ?? null;
   }
+
+  /** ¿Sigue existiendo ese gasto (vivo)? Antes de escribir su foto en disco. */
+  async existe(id: string): Promise<boolean> {
+    const fila = await this.db
+      .selectFrom('gasto')
+      .select('id')
+      .where('id', '=', id)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    return fila !== undefined;
+  }
+
+  /**
+   * Anota la foto del ticket (nombre y fecha juntos, `ck_gasto_foto_completa`).
+   * `false` si la fila ya no estaba o se dio de baja.
+   */
+  async anotarFoto(
+    id: string,
+    archivo: string,
+    subidaEn: Date,
+  ): Promise<boolean> {
+    const fila = await this.db
+      .updateTable('gasto')
+      .set({ foto_archivo: archivo, foto_subida_en: subidaEn })
+      .where('id', '=', id)
+      .where('deleted_at', 'is', null)
+      .returning('id')
+      .executeTakeFirst();
+    return fila !== undefined;
+  }
 }
