@@ -396,7 +396,10 @@ describe('Flujo de Efectivo (e2e)', () => {
       cuentasConSaldoFinal: number;
       cuentas: number;
     };
-    // Rango de 2000: ninguna suite escribe ahí, así que no hay carrera.
+    // Rango de 2000: ninguna suite escribe saldos ni movimientos ahí. La LISTA
+    // de cuentas no depende de la fecha y tesoreria.e2e crea y borra cuentas en
+    // paralelo, así que el número total de cuentas solo se compara por forma;
+    // una cuenta nueva o borrada no tiene saldo en 2000 y no mueve lo demás.
     const r = await flujo(general, '2000-01-01', '2000-01-31');
     const { total } = (
       await http()
@@ -406,7 +409,10 @@ describe('Flujo de Efectivo (e2e)', () => {
     ).body as { total: Total };
     expect(r.totalTesoreriaCentavos).toBe(total.saldoFinalCentavos);
     expect(r.tesoreriaCuentasConSaldo).toBe(total.cuentasConSaldoFinal);
-    expect(r.tesoreriaCuentas).toBe(total.cuentas);
+    expect(r.tesoreriaCuentas).toBeGreaterThanOrEqual(
+      r.tesoreriaCuentasConSaldo,
+    );
+    expect(r.tesoreriaCuentas).toBeGreaterThan(0);
   });
 
   it('errores: sin hasta 400, rango de más de un año 400, sin permiso 403, otra sucursal 403', async () => {
