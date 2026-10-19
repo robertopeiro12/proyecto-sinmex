@@ -125,7 +125,8 @@ export type DatosGasto = {
 - Cada grupo es un movimiento **negativo** en la cuenta destino vigente de `(sucursal, 'efectivo')` en esa fecha, la misma regla `destinoDe` de la cobranza (T-29).
 - Se **lee** de la tabla `gasto` y no se copia nada, como hace T-29 con la cobranza.
 - Si no hay cuenta destino, el gasto entra a una lista **"sin cuenta"** paralela a la de cobranza sin destino, y la vista lo avisa igual.
-- Hay un evento nuevo en `EventoTesoreria`: `{ tipo: 'gasto-ruta', fecha, cuentaId, monto, sucursal }`, con la etiqueta "Gastos de ruta". Agrupa el total del día, no cada gasto.
+- Hay un evento nuevo en `EventoTesoreria`: `{ tipo: 'gasto-ruta', id, fecha, cuentaId, cuentaNombre, sucursalCodigo, cantidad, montoCentavos }` (la forma del evento de cobranza; enmienda 2026-10-20), con la etiqueta "Gastos de ruta". Agrupa el total del día, no cada gasto.
+- Los gastos sin destino van a `gastosSinCuenta` (lista aparte de `sinDestino`; enmienda 2026-10-20).
 - La firma de `armarVista` gana `gastos` dentro de `extras`, sin romper a quien no lo pase.
 
 **D8 · Tablet: datos locales (migración 015).**
