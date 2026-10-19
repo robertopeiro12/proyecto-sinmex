@@ -3,14 +3,21 @@ import { nombreFirmaValido } from '@/datos/reglas-firma';
 import {
   ANCHO_MAX_FIRMA_PX,
   conLimiteDeTiempo,
+  crearGrabadorVenta,
   ErrorFirma,
+  FIRMA_VACIA,
+  firmaPorSubir,
   hayFirma,
   LARGO_MAX_NOMBRE_FIRMA,
   anchoDestinoFirma,
   nombreArchivoFirma,
+  MENSAJE_FALLO_FIRMA,
   normalizarNombreFirma,
+  puedeGrabarVenta,
   quitarPrefijoDataUrl,
+  textoFirmada,
   trazoAPath,
+  type PasosGrabarVenta,
 } from './firma';
 
 /**
@@ -119,5 +126,124 @@ describe('conLimiteDeTiempo', () => {
     const resultado = conLimiteDeTiempo(nunca, 1000, 'La firma tardó demasiado en guardarse.');
     jest.advanceTimersByTime(1000);
     await expect(resultado).rejects.toThrow(ErrorFirma);
+  });
+});
+
+describe('puedeGrabarVenta (D1)', () => {
+  const UN_TRAZO = [[{ x: 1, y: 1 }]];
+
+  it('con pago elegido, firma y sin estar grabando, si', () => {
+    expect(puedeGrabarVenta({ contadoCredito: 'contado', trazos: UN_TRAZO, grabando: false })).toBe(true);
+    expect(puedeGrabarVenta({ contadoCredito: 'credito', trazos: UN_TRAZO, grabando: false })).toBe(true);
+  });
+
+  it('sin firma no, ni de contado ni a credito', () => {
+    expect(puedeGrabarVenta({ contadoCredito: 'contado', trazos: [], grabando: false })).toBe(false);
+    expect(puedeGrabarVenta({ contadoCredito: 'credito', trazos: [[]], grabando: false })).toBe(false);
+  });
+
+  it('sin pago elegido o mientras graba, no', () => {
+    expect(puedeGrabarVenta({ contadoCredito: null, trazos: UN_TRAZO, grabando: false })).toBe(false);
+    expect(puedeGrabarVenta({ contadoCredito: 'contado', trazos: UN_TRAZO, grabando: true })).toBe(false);
+  });
+
+  it('volver a captura deja Grabar deshabilitado: la firma vacia no sobrevive (D4, Review Focus 2)', () => {
+    expect(FIRMA_VACIA).toEqual({ trazos: [], nombre: '' });
+    expect(puedeGrabarVenta({ contadoCredito: 'contado', trazos: FIRMA_VACIA.trazos, grabando: false })).toBe(false);
+  });
+});
+
+describe('crearGrabadorVenta', () => {
+  const pasosQue = (cambios: Partial<PasosGrabarVenta<{ id: string }>> = {}) => {
+    const pasos = {
+      exportarPng: jest.fn(async () => 'iVBORw0KGgo='),
+      guardarJpg: jest.fn(async () => 'file:///documentos/firmas/firma-v.jpg'),
+      registrar: jest.fn((_uri: string) => ({ id: 'v' })),
+      ...cambios,
+    };
+    return pasos;
+  };
+
+  it('exporta, convierte y graba con la ruta del JPG', async () => {
+    const pasos = pasosQue();
+    const r = await crearGrabadorVenta<{ id: string }>().grabar(pasos);
+    expect(r).toEqual({ estado: 'grabada', venta: { id: 'v' } });
+    expect(pasos.guardarJpg).toHaveBeenCalledWith('iVBORw0KGgo=');
+    expect(pasos.registrar).toHaveBeenCalledWith('file:///documentos/firmas/firma-v.jpg');
+  });
+
+  it('si exportar falla no graba (no se quema folio) y deja reintentar', async () => {
+    const grabador = crearGrabadorVenta<{ id: string }>();
+    const fallida = pasosQue({ exportarPng: jest.fn(async () => Promise.reject(new Error('sin PNG'))) });
+    await expect(grabador.grabar(fallida)).resolves.toEqual({ estado: 'sin-firma', mensaje: MENSAJE_FALLO_FIRMA });
+    expect(fallida.registrar).not.toHaveBeenCalled();
+
+    const buena = pasosQue();
+    await expect(grabador.grabar(buena)).resolves.toMatchObject({ estado: 'grabada' });
+  });
+
+  it('si convertir a JPG falla tampoco graba', async () => {
+    const pasos = pasosQue({ guardarJpg: jest.fn(async () => Promise.reject(new Error('disco'))) });
+    await expect(crearGrabadorVenta<{ id: string }>().grabar(pasos)).resolves.toEqual({
+      estado: 'sin-firma',
+      mensaje: MENSAJE_FALLO_FIRMA,
+    });
+    expect(pasos.registrar).not.toHaveBeenCalled();
+  });
+
+  it('si registrar lanza, devuelve el error y deja reintentar', async () => {
+    const grabador = crearGrabadorVenta<{ id: string }>();
+    const error = new Error('Sin segmento de folio');
+    const fallida = pasosQue({
+      registrar: jest.fn(() => {
+        throw error;
+      }),
+    });
+    await expect(grabador.grabar(fallida)).resolves.toEqual({ estado: 'error', error });
+    await expect(grabador.grabar(pasosQue())).resolves.toMatchObject({ estado: 'grabada' });
+  });
+
+  it('un segundo toque mientras exporta se ignora: una sola venta, un solo folio (Review Focus 3)', async () => {
+    let soltarPng: (png: string) => void = () => {};
+    const pasos = pasosQue({
+      exportarPng: jest.fn(
+        () =>
+          new Promise<string>((resolve) => {
+            soltarPng = resolve;
+          }),
+      ),
+    });
+    const grabador = crearGrabadorVenta<{ id: string }>();
+
+    const primero = grabador.grabar(pasos);
+    await expect(grabador.grabar(pasos)).resolves.toBeNull();
+    soltarPng('iVBORw0KGgo=');
+
+    await expect(primero).resolves.toEqual({ estado: 'grabada', venta: { id: 'v' } });
+    expect(pasos.exportarPng).toHaveBeenCalledTimes(1);
+    expect(pasos.registrar).toHaveBeenCalledTimes(1);
+  });
+
+  it('despues de grabar no se suelta: un toque tardio no graba otra venta', async () => {
+    const pasos = pasosQue();
+    const grabador = crearGrabadorVenta<{ id: string }>();
+    await grabador.grabar(pasos);
+    await expect(grabador.grabar(pasos)).resolves.toBeNull();
+    expect(pasos.registrar).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('textos de la firma', () => {
+  it('"Firmada por {nombre}" o "Firmada"', () => {
+    expect(textoFirmada('Doña Lupe')).toBe('Firmada por Doña Lupe');
+    expect(textoFirmada(null)).toBe('Firmada');
+  });
+
+  it('firma por subir: con firma local, sin subir y no descartada', () => {
+    const base = { firma_local: 'file:///documentos/firmas/firma-v.jpg', firma_subida_en: null, firma_descartada: 0 as const };
+    expect(firmaPorSubir(base)).toBe(true);
+    expect(firmaPorSubir({ ...base, firma_subida_en: '2026-08-07T16:00:00.000Z' })).toBe(false);
+    expect(firmaPorSubir({ ...base, firma_descartada: 1 })).toBe(false);
+    expect(firmaPorSubir({ ...base, firma_local: null })).toBe(false);
   });
 });

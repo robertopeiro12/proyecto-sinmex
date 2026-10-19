@@ -4,6 +4,7 @@ import { Alert, Image, Linking, Modal, Pressable, Text, View } from 'react-nativ
 
 import type { SyncEstado } from '@/datos/tipos';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
+import { firmaPorSubir } from '@/estado/firma';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import { estadoSubida, pastillaAlta, urlMapa, urlTelefono } from '@/estado/ruta-del-dia';
@@ -305,6 +306,8 @@ export default function FichaCliente() {
                 {v.contado_credito === 'contado' ? 'contado' : 'crédito'}
               </Text>
               <Pastilla texto={ETIQUETA_SYNC[v.sync_estado]} estado={ESTADO_SYNC[v.sync_estado]} />
+              {/* T-73: la firma sube aparte, cuando la venta ya esta arriba. */}
+              {firmaPorSubir(v) ? <Pastilla texto="Firma por subir" estado="pendiente" /> : null}
               {v.sync_estado === 'error' && v.sync_error ? (
                 <Text style={estilos.error}>{v.sync_error}</Text>
               ) : null}

@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import {
@@ -19,12 +19,26 @@ import {
   type LineaCaptura,
   type Venta,
 } from '@/datos';
+import {
+  crearGrabadorVenta,
+  ErrorFirma,
+  FIRMA_VACIA,
+  hayFirma,
+  LARGO_MAX_NOMBRE_FIRMA,
+  MENSAJE_FALLO_FIRMA,
+  normalizarNombreFirma,
+  puedeGrabarVenta,
+  textoFirmada,
+  type EstadoFirma,
+} from '@/estado/firma';
 import { useJawa } from '@/estado/proveedor-jawa';
+import { guardarFirmaJpg } from '@/fotos/firma-expo';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
 import { Cifra, pesos } from '@/ui/cifra';
 import { Opcion } from '@/ui/opcion';
 import { Pantalla, Tarjeta } from '@/ui/pantalla';
+import { RecuadroFirma, type ControlFirma } from '@/ui/recuadro-firma';
 import { useTema } from '@/ui/tema';
 import { espacio } from '@/ui/tokens';
 
@@ -50,6 +64,7 @@ interface CapturaTexto {
  * **muestran** pero no se envian: `datos.ventas.registrar()` los pone desde el
  * catalogo local (D15), asi que un error de esta pantalla no puede grabar un
  * precio distinto al del catalogo.
+ * T-73: la revision pide la firma del cliente (obligatoria) y "Corregir" la borra (D4).
  */
 export default function PantallaVenta() {
   const { clienteId } = useLocalSearchParams<{ clienteId: string }>();
@@ -100,6 +115,19 @@ export default function PantallaVenta() {
   const [descartados, setDescartados] = useState<Set<string>>(new Set());
   /** promocion_id -> presentacion elegida para un regalo de producto completo (D16). */
   const [elecciones, setElecciones] = useState<Map<string, string>>(new Map());
+  /** T-73: la firma del cliente (trazos y nombre), capturada en la revision (D3). */
+  const [firma, setFirma] = useState<EstadoFirma>(FIRMA_VACIA);
+  /** Mientras el dedo esta en el recuadro, la pantalla no se desplaza. */
+  const [dibujando, setDibujando] = useState(false);
+  const recuadro = useRef<ControlFirma>(null);
+  /**
+   * T-73: el id de la venta se genera ANTES de grabar, porque nombra el archivo
+   * de la firma. Se conserva mientras la pantalla siga abierta: un reintento
+   * sobrescribe el mismo `firma-<id>.jpg` en vez de dejar huerfanos.
+   */
+  const [ventaId] = useState(() => datos.deps.generarId());
+  /** Guardia de doble toque: exportar, convertir y grabar es asincrono (Review Focus 3). */
+  const [grabador] = useState(() => crearGrabadorVenta<Venta>());
 
   // Todas las presentaciones van como base, aunque no se compren: un regalo a
   // una presentacion que el vendedor no capturo necesita su linea.
@@ -179,51 +207,86 @@ export default function PantallaVenta() {
     if (encontrados.length === 0) setPaso('revision');
   }
 
-  function grabar() {
+  function volverACaptura() {
+    // D4: el cliente firmo un total; si cambian las cantidades, firma otra vez.
+    // Los trazos los vacia el propio recuadro con su `borrar` (la misma funcion
+    // que "Borrar firma", ruling F7); si no estuviera montado, FIRMA_VACIA basta:
+    // al volver a la revision se monta de nuevo con esos trazos vacios.
+    recuadro.current?.borrar();
+    setFirma(FIRMA_VACIA);
+    setProblemas([]);
+    setPaso('captura');
+  }
+
+  async function grabar() {
     // `revisar` no deja llegar aqui sin elegir; la comprobacion es para el tipo.
     if (contadoCredito === null) return;
-    // Guardia contra doble toque: `registrar()` emite folio, y un segundo toque
-    // mientras el primero corre no debe emitir un segundo.
-    if (grabando) return;
-    setGrabando(true);
+    const pago = contadoCredito;
+    let nombre: string | null = null;
     try {
-      const venta = datos.ventas.registrar({
-        vendedorId,
-        clienteId,
-        numNota,
-        contadoCredito,
-        factura,
-        comentarios: comentarios.trim() === '' ? null : comentarios,
-        // Sin precios: los pone el repositorio (D15).
-        lineas: resumen.lineas.map((l) => ({
-          presentacionId: l.presentacionId,
-          cantidad: l.cantidad,
-          cantidadPromocion: l.cantidadPromocion,
-        })),
-        // Solo los regalos con presentacion: `revisar` ya exigio elegirla, y el
-        // repositorio vuelve a comprobar que cuadran con `cantidadPromocion`.
-        regalos: regalos
-          .filter((r) => r.presentacionId !== null)
-          .map((r) => ({
-            promocionId: r.promocionId,
-            presentacionId: r.presentacionId as string,
-            cantidad: r.cantidad,
-            texto: r.texto,
-          })),
-        firma: { uri: '', nombre: null }, // T-73: la pone la Tarea 7
-      });
-      setProblemas([]);
-      setGrabada(venta);
-      setPaso('grabada');
+      nombre = normalizarNombreFirma(firma.nombre);
     } catch (e) {
-      setProblemas([
-        e instanceof ErrorVenta || e instanceof ErrorFolio || e instanceof ErrorJornada
-          ? e.message
-          : 'No se pudo grabar la venta. No se consumió ningún folio; intenta de nuevo.',
-      ]);
-    } finally {
-      setGrabando(false);
+      setProblemas([e instanceof ErrorFirma ? e.message : MENSAJE_FALLO_FIRMA]);
+      return;
     }
+    setGrabando(true);
+    const resultado = await grabador.grabar({
+      exportarPng: () => {
+        const control = recuadro.current;
+        return control
+          ? control.exportarPng()
+          : Promise.reject(new ErrorFirma('El recuadro de firma no está en pantalla.'));
+      },
+      guardarJpg: (png) => guardarFirmaJpg(ventaId, png),
+      registrar: (firmaUri) =>
+        datos.ventas.registrar({
+          id: ventaId,
+          vendedorId,
+          clienteId,
+          numNota,
+          contadoCredito: pago,
+          factura,
+          comentarios: comentarios.trim() === '' ? null : comentarios,
+          // Sin precios: los pone el repositorio (D15).
+          lineas: resumen.lineas.map((l) => ({
+            presentacionId: l.presentacionId,
+            cantidad: l.cantidad,
+            cantidadPromocion: l.cantidadPromocion,
+          })),
+          // Solo los regalos con presentacion: `revisar` ya exigio elegirla, y el
+          // repositorio vuelve a comprobar que cuadran con `cantidadPromocion`.
+          regalos: regalos
+            .filter((r) => r.presentacionId !== null)
+            .map((r) => ({
+              promocionId: r.promocionId,
+              presentacionId: r.presentacionId as string,
+              cantidad: r.cantidad,
+              texto: r.texto,
+            })),
+          // T-73: misma transaccion que la venta, sus lineas y su folio.
+          firma: { uri: firmaUri, nombre },
+        }),
+    });
+    // Segundo toque mientras el primero corre: el primero se encarga de todo.
+    if (resultado === null) return;
+    setGrabando(false);
+    if (resultado.estado === 'grabada') {
+      setProblemas([]);
+      setGrabada(resultado.venta);
+      setPaso('grabada');
+      return;
+    }
+    if (resultado.estado === 'sin-firma') {
+      // No se llamo a `registrar`: ni venta ni folio. La firma sigue en el recuadro.
+      setProblemas([resultado.mensaje]);
+      return;
+    }
+    const e = resultado.error;
+    setProblemas([
+      e instanceof ErrorVenta || e instanceof ErrorFolio || e instanceof ErrorJornada
+        ? e.message
+        : 'No se pudo grabar la venta. No se consumió ningún folio; intenta de nuevo.',
+    ]);
   }
 
   /* ---------------------------------------------------------------- */
@@ -247,6 +310,7 @@ export default function PantallaVenta() {
             ) : null}
             {grabada.contado_credito === 'contado' ? 'de contado' : 'a crédito'}
           </Text>
+          <Text style={estilos.textoTarjeta}>{textoFirmada(grabada.firma_nombre)}</Text>
           <Text style={estilos.textoSuave}>
             Quedó guardada en la tablet y sube sola al sincronizar. Una venta grabada no se edita:
             si hay un error, se corrige desde el portal.
@@ -296,6 +360,7 @@ export default function PantallaVenta() {
       <Pantalla
         titulo="Revisa la venta"
         subtitulo={`${nombreCliente} · una vez grabada no se puede editar.`}
+        desplazable={!dibujando}
       >
         <Tarjeta etiqueta="Productos">
           {resumen.lineas.map((l) => (
@@ -352,6 +417,28 @@ export default function PantallaVenta() {
           ) : null}
         </Tarjeta>
 
+        {/*
+          T-73 (D1, D3): la firma se captura aqui, antes de grabar, y se guarda en
+          la misma transaccion. Sin firma, "Grabar venta" no se habilita.
+        */}
+        <Tarjeta estado={hayFirma(firma.trazos) ? 'listo' : 'pendiente'} etiqueta="Firma del cliente">
+          <Text style={estilos.textoSuave}>Pide al cliente que firme con el dedo.</Text>
+          <RecuadroFirma
+            ref={recuadro}
+            trazos={firma.trazos}
+            alCambiar={(trazos) => setFirma((previa) => ({ ...previa, trazos }))}
+            alDibujar={setDibujando}
+            deshabilitado={grabando}
+          />
+          <Campo
+            etiqueta="Nombre de quien firma (opcional)"
+            value={firma.nombre}
+            onChangeText={(nombre) => setFirma((previa) => ({ ...previa, nombre }))}
+            maxLength={LARGO_MAX_NOMBRE_FIRMA}
+            editable={!grabando}
+          />
+        </Tarjeta>
+
         {problemas.map((p) => (
           <Text key={p} style={estilos.error}>
             {p}
@@ -363,8 +450,20 @@ export default function PantallaVenta() {
           ✓; Corregir es contorno neutro con ←. Grabar es la unica primaria.
         */}
         <View style={estilos.filaAcciones}>
-          <Boton etiqueta="Corregir" tono="neutra" glifo="←" onPress={() => setPaso('captura')} />
-          <Boton etiqueta="Grabar venta" glifo="✓" onPress={grabar} ocupado={grabando} />
+          <Boton
+            etiqueta="Corregir"
+            tono="neutra"
+            glifo="←"
+            onPress={volverACaptura}
+            deshabilitado={grabando}
+          />
+          <Boton
+            etiqueta="Grabar venta"
+            glifo="✓"
+            onPress={() => void grabar()}
+            ocupado={grabando}
+            deshabilitado={!puedeGrabarVenta({ contadoCredito, trazos: firma.trazos, grabando })}
+          />
         </View>
       </Pantalla>
     );

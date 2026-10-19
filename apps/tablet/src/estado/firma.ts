@@ -1,4 +1,5 @@
 import { LARGO_MAX_NOMBRE_FIRMA } from '@/datos/reglas-firma';
+import type { ContadoCredito, Venta } from '@/datos/tipos';
 
 export { LARGO_MAX_NOMBRE_FIRMA };
 
@@ -120,4 +121,95 @@ export function conLimiteDeTiempo<T>(promesa: Promise<T>, ms: number, mensaje: s
       },
     );
   });
+}
+
+/** Lo que la pantalla de venta guarda de la firma mientras esta en revision. */
+export interface EstadoFirma {
+  trazos: Punto[][];
+  /** El texto del campo tal cual; se normaliza al grabar (`normalizarNombreFirma`). */
+  nombre: string;
+}
+
+/** Como empieza la revision y como queda al volver a captura (D4): el cliente firmo un total. */
+export const FIRMA_VACIA: EstadoFirma = { trazos: [], nombre: '' };
+
+/** Si exportar o convertir la firma falla: no se graba la venta ni se quema folio. */
+export const MENSAJE_FALLO_FIRMA = 'No se pudo guardar la firma. Intenta de nuevo.';
+
+/**
+ * "Grabar venta" se habilita con las condiciones de siempre (el pago elegido,
+ * no estar grabando) **y** la firma del cliente (D1: obligatoria, contado y
+ * credito por igual).
+ */
+export function puedeGrabarVenta(e: {
+  contadoCredito: ContadoCredito | null;
+  trazos: readonly (readonly Punto[])[];
+  grabando: boolean;
+}): boolean {
+  return e.contadoCredito !== null && !e.grabando && hayFirma(e.trazos);
+}
+
+export type ResultadoGrabarVenta<V> =
+  | { estado: 'grabada'; venta: V }
+  /** Exportar o convertir fallo: `registrar` no se llamo, no hay folio quemado. */
+  | { estado: 'sin-firma'; mensaje: string }
+  /** `registrar` lanzo (regla de negocio, folio, jornada o SQLite): la transaccion ya hizo rollback. */
+  | { estado: 'error'; error: unknown };
+
+/** Los tres pasos de grabar, inyectados para poder probar el orden y la guardia sin pantalla. */
+export interface PasosGrabarVenta<V> {
+  exportarPng(): Promise<string>;
+  guardarJpg(pngBase64: string): Promise<string>;
+  registrar(firmaUri: string): V;
+}
+
+export interface GrabadorVenta<V> {
+  /** `null` = se ignoro: ya hay una grabacion en curso (o ya se grabo). */
+  grabar(pasos: PasosGrabarVenta<V>): Promise<ResultadoGrabarVenta<V> | null>;
+}
+
+/**
+ * Grabar con firma (T-73): exportar el PNG, convertirlo a JPG y solo entonces
+ * `registrar` (spec, pantalla de venta pasos 1-4). Con la **guardia de doble
+ * toque** dentro: la exportacion es asincrona, y un segundo toque en ese hueco
+ * no debe emitir un segundo folio (Review Focus 3).
+ *
+ * El candado se suelta solo si algo fallo (para reintentar con la firma
+ * intacta). Tras grabar se queda cerrado: la pantalla ya paso a "Venta grabada" y
+ * un toque que llegara tarde no puede grabar otra venta.
+ */
+export function crearGrabadorVenta<V>(): GrabadorVenta<V> {
+  let cerrado = false;
+  return {
+    async grabar(pasos) {
+      if (cerrado) return null;
+      cerrado = true;
+      let uri: string;
+      try {
+        const png = await pasos.exportarPng();
+        uri = await pasos.guardarJpg(png);
+      } catch {
+        cerrado = false;
+        return { estado: 'sin-firma', mensaje: MENSAJE_FALLO_FIRMA };
+      }
+      try {
+        return { estado: 'grabada', venta: pasos.registrar(uri) };
+      } catch (error) {
+        cerrado = false;
+        return { estado: 'error', error };
+      }
+    },
+  };
+}
+
+/** La linea de la pantalla "Venta grabada". */
+export function textoFirmada(nombre: string | null): string {
+  return nombre ? `Firmada por ${nombre}` : 'Firmada';
+}
+
+/** "Firma por subir" en la ficha: hay firma, el servidor aun no la tiene y no se dio por perdida. */
+export function firmaPorSubir(
+  v: Pick<Venta, 'firma_local' | 'firma_subida_en' | 'firma_descartada'>,
+): boolean {
+  return v.firma_local !== null && v.firma_subida_en === null && v.firma_descartada === 0;
 }
