@@ -439,6 +439,26 @@ describe('Tesorería — movimientos, destinos y cobranza (e2e)', () => {
         .expect(400);
     });
 
+    it('PATCH recorta el comentario antes de validar su largo', async () => {
+      const a = await sembrarCuenta('Trim A', idTijuana);
+      const dep = await http()
+        .post('/tesoreria/movimientos')
+        .set('Cookie', tijuana)
+        .send({
+          tipo: 'deposito',
+          fecha: '2026-10-07',
+          montoCentavos: 100,
+          cuentaId: a,
+        })
+        .expect(201);
+      const r = await http()
+        .patch(`/tesoreria/movimientos/${(dep.body as Movimiento).id}`)
+        .set('Cookie', tijuana)
+        .send({ comentario: '  ' + 'x'.repeat(200) + '  ' })
+        .expect(200);
+      expect((r.body as Movimiento).comentario).toBe('x'.repeat(200));
+    });
+
     it('corregir y eliminar; el tipo no cambia', async () => {
       const a = await sembrarCuenta('Edit A', idTijuana);
       const b = await sembrarCuenta('Edit B', idTijuana);

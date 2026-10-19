@@ -78,6 +78,9 @@ export class EditarMovimientoDto {
   cuentaDestinoId?: string;
 
   @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString()
   @MaxLength(200, {
     message: 'El comentario no puede pasar de 200 caracteres.',
@@ -97,9 +100,6 @@ export class ListarMovimientosDto {
   hasta!: string;
 
   @IsOptional()
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim() : value,
-  )
   @IsString()
   sucursal?: string;
 }
