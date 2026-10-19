@@ -4,6 +4,7 @@ import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import type { DB } from '../../database/schema';
 import { buscarSucursalUsuario } from '../sucursales/buscar-sucursal-usuario';
 import { aNumero } from '../sincronizacion/dinero';
+import type { OrigenUbicacion } from './ubicacion-origen';
 
 export type TipoCliente = 'cliente' | 'prospecto';
 export type TipoFiltro = TipoCliente | 'todos';
@@ -48,6 +49,11 @@ export interface ClienteDetalle {
   plazoCreditoDias: number | null;
   lat: number | null;
   lng: number | null;
+  /**
+   * T-72 (D3): de donde salio la coordenada (`'gps'`, `'geocodificada'`,
+   * `'manual'`), o `null` si no hay. El portal pinta la etiqueta con esto.
+   */
+  ubicacionOrigen: OrigenUbicacion | null;
   comentarios: string | null;
   sucursalId: string;
   sucursalCodigo: string;
@@ -84,6 +90,8 @@ export interface DatosClienteBase {
   plazo_credito_dias: number | null;
   lat: number | null;
   lng: number | null;
+  /** T-72: lo calcula `origenAlGuardar`; la base exige nulo si y solo si `lat` es nula. */
+  ubicacion_origen: OrigenUbicacion | null;
   comentarios: string | null;
 }
 
@@ -121,6 +129,7 @@ interface FilaDetalle {
   plazo_credito_dias: number | null;
   lat: string | null;
   lng: string | null;
+  ubicacion_origen: string | null;
   comentarios: string | null;
   sucursal_id: string;
   codigo: string;
@@ -153,6 +162,8 @@ function aDetalle(
     plazoCreditoDias: fila.plazo_credito_dias,
     lat: aNumero(fila.lat),
     lng: aNumero(fila.lng),
+    // El check de la base garantiza que solo llega uno de los tres o null.
+    ubicacionOrigen: fila.ubicacion_origen as OrigenUbicacion | null,
     comentarios: fila.comentarios,
     sucursalId: fila.sucursal_id,
     sucursalCodigo: fila.codigo,
@@ -190,6 +201,7 @@ const COLUMNAS_DETALLE = [
   'cliente.plazo_credito_dias',
   'cliente.lat',
   'cliente.lng',
+  'cliente.ubicacion_origen',
   'cliente.comentarios',
   'cliente.primera_venta_en',
   'cliente.sucursal_id',
@@ -344,6 +356,8 @@ export class ClientesRepository {
         comentarios: datos.comentarios,
         lat: datos.lat?.toString() ?? null,
         lng: datos.lng?.toString() ?? null,
+        // T-72 (D2): la coordenada de un alta de la app solo puede ser del GPS.
+        ubicacion_origen: datos.lat !== null ? 'gps' : null,
         sucursal_id: datos.sucursalId,
       })
       .returning('id')
@@ -383,6 +397,7 @@ export class ClientesRepository {
           plazo_credito_dias: datos.plazo_credito_dias,
           lat: datos.lat?.toString() ?? null,
           lng: datos.lng?.toString() ?? null,
+          ubicacion_origen: datos.ubicacion_origen,
           comentarios: datos.comentarios,
           sucursal_id: datos.sucursal_id,
           // T-51: solo un CLIENTE tiene alta; un prospecto la tendra al convertirse.
@@ -441,6 +456,7 @@ export class ClientesRepository {
           plazo_credito_dias: cambios.plazo_credito_dias,
           lat: cambios.lat?.toString() ?? null,
           lng: cambios.lng?.toString() ?? null,
+          ubicacion_origen: cambios.ubicacion_origen,
           comentarios: cambios.comentarios,
         })
         .where('id', '=', id)

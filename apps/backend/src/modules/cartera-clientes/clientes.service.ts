@@ -25,6 +25,7 @@ import {
   type ClienteResumen,
   type TipoFiltro,
 } from './clientes.repository';
+import { origenAlGuardar } from './ubicacion-origen';
 
 /** Cualquier valor que no sea 'cliente'/'prospecto' se trata como "todos" (D7 del spec): es un filtro de exhibicion, sin implicacion de seguridad. */
 export function normalizarTipoPedido(crudo: string | undefined): TipoFiltro {
@@ -182,6 +183,11 @@ export class ClientesService {
           plazo_credito_dias: dto.plazoCreditoDias ?? null,
           lat: dto.lat ?? null,
           lng: dto.lng ?? null,
+          // T-72 (D3): un alta del portal con coordenada la capturo la oficina.
+          ubicacion_origen: origenAlGuardar(
+            { lat: dto.lat ?? null, lng: dto.lng ?? null },
+            null,
+          ),
           comentarios: dto.comentarios ?? null,
           sucursal_id: sucursalId,
           altaUsuarioId: usuarioId,
@@ -234,6 +240,11 @@ export class ClientesService {
           plazo_credito_dias: dto.plazoCreditoDias ?? null,
           lat: dto.lat ?? null,
           lng: dto.lng ?? null,
+          // T-72 (D3): la misma coordenada conserva su origen; otra es 'manual'.
+          ubicacion_origen: origenAlGuardar(
+            { lat: dto.lat ?? null, lng: dto.lng ?? null },
+            cliente,
+          ),
           comentarios: dto.comentarios ?? null,
         },
         dto.overridesPrecio,

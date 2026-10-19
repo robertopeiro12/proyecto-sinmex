@@ -48,6 +48,7 @@ export interface Cliente {
   telefono: string;
   tipo: string;
   tipo_negocio_id: string | null;
+  ubicacion_origen: string | null;
   updated_at: Generated<Timestamp>;
 }
 
