@@ -79,7 +79,7 @@ export class MovimientosService {
     const comentario =
       dto.comentario === undefined
         ? actual.comentario
-        : dto.comentario.trim() || null;
+        : dto.comentario?.trim() || null;
     const datos: DatosMovimiento = {
       tipo: actual.tipo,
       fecha: dto.fecha ?? actual.fecha,
