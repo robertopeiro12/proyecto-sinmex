@@ -40,9 +40,11 @@ export function SeccionDestinos({ sucursal, cuentas }: { sucursal: string | null
     }
   }, [sucursal]);
 
+  // Se recarga también si cambian las cuentas (p. ej. se renombró una en esta misma pestaña).
+  const llaveCuentas = cuentas.map((c) => `${c.id}:${c.nombre}`).join("|");
   useEffect(() => {
     void cargar();
-  }, [cargar]);
+  }, [cargar, llaveCuentas]);
 
   async function guardarFila(s: DestinosSucursal) {
     const cambios = METODOS.filter((m) => {
@@ -52,8 +54,10 @@ export function SeccionDestinos({ sucursal, cuentas }: { sucursal: string | null
     if (cambios.length === 0) return;
     setGuardando(s.sucursalId);
     setError(null);
+    let actual: MetodoCobranza | null = null;
     try {
       for (const m of cambios) {
+        actual = m;
         await guardarDestino({
           sucursalId: s.sucursalId,
           metodo: m,
@@ -61,10 +65,12 @@ export function SeccionDestinos({ sucursal, cuentas }: { sucursal: string | null
           desde: desde[s.sucursalId] ?? hoy,
         });
       }
-      await cargar();
     } catch (err) {
-      setError(mensajeDe(err, "No se pudo guardar."));
+      const que = actual ? `${ETIQUETA_METODO[actual].toLowerCase()} de ${s.sucursalCodigo}` : s.sucursalCodigo;
+      setError(`No se pudo guardar ${que}: ${mensajeDe(err, "error desconocido.")}`);
     } finally {
+      // Aunque falle uno, lo que ya se guardó en el servidor debe verse.
+      await cargar();
       setGuardando(null);
     }
   }
@@ -104,7 +110,10 @@ export function SeccionDestinos({ sucursal, cuentas }: { sucursal: string | null
                       value={eleccion[`${s.sucursalId}:${m}`] ?? ""}
                       onChange={(e) => setEleccion((p) => ({ ...p, [`${s.sucursalId}:${m}`]: e.target.value }))}
                     >
-                      <option value="">Sin cuenta</option>
+                      {!s.vigentes[m] && <option value="">Sin cuenta</option>}
+                      {s.vigentes[m] && !opciones.some((c) => c.id === s.vigentes[m]!.cuentaId) && (
+                        <option value={s.vigentes[m]!.cuentaId}>{s.vigentes[m]!.cuentaNombre}</option>
+                      )}
                       {opciones.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.sucursalId === null ? `${c.nombre} · General` : c.nombre}

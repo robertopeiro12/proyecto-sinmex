@@ -44,7 +44,7 @@ describe("SeccionDestinos", () => {
     const efectivo = within(fila).getByLabelText("Efectivo de TJ") as HTMLSelectElement;
     expect(efectivo.value).toBe("ef");
     const opciones = [...efectivo.options].map((o) => o.textContent);
-    expect(opciones).toEqual(["Sin cuenta", "Efectivo TJ", "ScotiaFiscal · General"]);
+    expect(opciones).toEqual(["Efectivo TJ", "ScotiaFiscal · General"]);
     expect(within(fila).getByLabelText("Transferencia de TJ")).toHaveValue("");
   });
 
@@ -56,6 +56,24 @@ describe("SeccionDestinos", () => {
     expect(lib.guardarDestino).toHaveBeenCalledTimes(1);
     expect(lib.guardarDestino).toHaveBeenCalledWith({ sucursalId: "s-tj", metodo: "transferencia", cuentaId: "sc", desde: HOY });
     expect(lib.obtenerDestinos).toHaveBeenCalledTimes(2);
+  });
+
+  it("si un método falla tras guardar otro, recarga y nombra el que falló", async () => {
+    vi.mocked(lib.guardarDestino).mockResolvedValueOnce(DESTINOS[0].historial[0]).mockRejectedValueOnce(new Error("Cuenta inválida"));
+    render(<SeccionDestinos sucursal={null} cuentas={CUENTAS} />);
+    const fila = (await screen.findByText("TJ · Tijuana")).closest("tr")!;
+    await userEvent.selectOptions(within(fila).getByLabelText("Transferencia de TJ"), "sc");
+    await userEvent.selectOptions(within(fila).getByLabelText("Cheque de TJ"), "sc");
+    await userEvent.click(within(fila).getByRole("button", { name: "Guardar" }));
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent("No se pudo guardar cheque de TJ");
+    expect(lib.obtenerDestinos).toHaveBeenCalledTimes(2);
+  });
+
+  it("muestra el destino vigente aunque su cuenta no esté en la lista", async () => {
+    render(<SeccionDestinos sucursal={null} cuentas={[CUENTAS[2]]} />);
+    const fila = (await screen.findByText("TJ · Tijuana")).closest("tr")!;
+    expect(within(fila).getByLabelText("Efectivo de TJ")).toHaveValue("ef");
   });
 
   it("muestra el historial de cambios", async () => {
