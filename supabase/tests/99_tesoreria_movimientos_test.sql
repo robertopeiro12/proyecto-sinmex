@@ -1,5 +1,5 @@
 begin;
-select plan(10);
+select plan(13);
 
 -- T-29: lo que la BASE garantiza de los movimientos y destinos de Tesoreria.
 -- Prefijo `ZZ-pgtap-T29`.
@@ -43,18 +43,36 @@ select throws_ok(
 
 select lives_ok(
   $$insert into tesoreria_destino_cobranza (sucursal_id, metodo, cuenta_id, desde, capturo_usuario_id)
-    select tj, 'efectivo', a, date '2026-10-01', usuario from _t29$$,
+    select tj, 'efectivo', a, date '2001-01-01', usuario from _t29$$,
   'un destino de cobranza entra');
 
 select throws_ok(
   $$insert into tesoreria_destino_cobranza (sucursal_id, metodo, cuenta_id, desde, capturo_usuario_id)
-    select tj, 'efectivo', b, date '2026-10-01', usuario from _t29$$,
+    select tj, 'efectivo', b, date '2001-01-01', usuario from _t29$$,
   '23505', null, 'una vigencia viva por sucursal, metodo y desde');
 
 select throws_ok(
   $$insert into tesoreria_destino_cobranza (sucursal_id, metodo, cuenta_id, desde, capturo_usuario_id)
-    select tj, 'saldo_favor', a, date '2026-10-02', usuario from _t29$$,
+    select tj, 'saldo_favor', a, date '2001-01-02', usuario from _t29$$,
   '23514', null, 'el metodo es efectivo, transferencia o cheque');
+
+select throws_ok(
+  $$insert into tesoreria_movimiento (tipo, fecha, monto, cuenta_id, capturo_usuario_id)
+    select 'otro', date '2001-01-01', 10, a, usuario from _t29$$,
+  '23514', null, 'el tipo es deposito, retiro o traspaso');
+
+select throws_ok(
+  $$insert into tesoreria_movimiento (tipo, fecha, monto, cuenta_id, comentario, capturo_usuario_id)
+    select 'deposito', date '2001-01-01', 10, a, '', usuario from _t29$$,
+  '23514', null, 'el comentario no puede ser cadena vacia');
+
+update tesoreria_destino_cobranza set deleted_at = now()
+  where sucursal_id = (select tj from _t29) and metodo = 'efectivo' and desde = date '2001-01-01';
+
+select lives_ok(
+  $$insert into tesoreria_destino_cobranza (sucursal_id, metodo, cuenta_id, desde, capturo_usuario_id)
+    select tj, 'efectivo', b, date '2001-01-01', usuario from _t29$$,
+  'dado de baja un destino, otro con la misma sucursal, metodo y desde entra');
 
 select * from finish();
 rollback;

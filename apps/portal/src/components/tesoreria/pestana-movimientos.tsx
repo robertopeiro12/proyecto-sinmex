@@ -57,6 +57,7 @@ export function PestanaMovimientos({ sucursal }: { sucursal: string | null }) {
     if (!window.confirm(`¿Eliminar el ${ETIQUETA_TIPO[m.tipo].toLowerCase()} de ${formatearPesos(m.montoCentavos)} del ${formatearFecha(m.fecha)}?`)) return;
     try {
       await eliminarMovimiento(m.id);
+      if (editando?.id === m.id) setEditando(null);
       void cargar();
     } catch (err) {
       setError(mensajeDe(err, "No se pudo eliminar el movimiento."));
@@ -117,10 +118,12 @@ export function PestanaMovimientos({ sucursal }: { sucursal: string | null }) {
                 <td className="py-2 pr-4">{m.comentario ?? "—"}</td>
                 <td className="py-2 pr-4">{m.capturo}</td>
                 <td className="whitespace-nowrap py-2 text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setEditando(m)}>Editar</Button>
-                    <Button variant="outline" size="sm" onClick={() => void alEliminar(m)}>Eliminar</Button>
-                  </div>
+                  {m.editable && (
+                    <div className="flex justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setEditando(m)}>Editar</Button>
+                      <Button variant="outline" size="sm" onClick={() => void alEliminar(m)}>Eliminar</Button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}

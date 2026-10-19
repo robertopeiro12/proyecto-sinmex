@@ -25,7 +25,7 @@ const CUENTAS = [
 ];
 const MOV: MovimientoManual = {
   id: "m1", tipo: "traspaso", fecha: HOY, montoCentavos: 500_000, cuentaId: "a", cuentaNombre: "Efectivo TJ",
-  cuentaDestinoId: "b", cuentaDestinoNombre: "ScotiaFiscal", comentario: "Depósito al banco", capturo: "Ana",
+  cuentaDestinoId: "b", cuentaDestinoNombre: "ScotiaFiscal", comentario: "Depósito al banco", capturo: "Ana", editable: true,
 };
 
 describe("PestanaMovimientos", () => {
@@ -81,6 +81,26 @@ describe("PestanaMovimientos", () => {
     await userEvent.click(screen.getByRole("button", { name: "Cancelar" }));
     await userEvent.click(within(lista).getByRole("button", { name: "Eliminar" }));
     expect(lib.eliminarMovimiento).toHaveBeenCalledWith("m1");
+  });
+
+  it("un movimiento no editable no muestra Editar ni Eliminar", async () => {
+    vi.mocked(lib.listarMovimientos).mockResolvedValue([{ ...MOV, editable: false }]);
+    render(<PestanaMovimientos sucursal={null} />);
+    const lista = await screen.findByRole("table", { name: "Movimientos registrados" });
+    expect(within(lista).queryByRole("button", { name: "Editar" })).not.toBeInTheDocument();
+    expect(within(lista).queryByRole("button", { name: "Eliminar" })).not.toBeInTheDocument();
+  });
+
+  it("eliminar el movimiento que se está editando cierra el formulario", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.mocked(lib.eliminarMovimiento).mockResolvedValue({ id: "m1" });
+    render(<PestanaMovimientos sucursal={null} />);
+    const lista = await screen.findByRole("table", { name: "Movimientos registrados" });
+    await userEvent.click(within(lista).getByRole("button", { name: "Editar" }));
+    expect(screen.getByRole("button", { name: "Cancelar" })).toBeInTheDocument();
+    await userEvent.click(within(lista).getByRole("button", { name: "Eliminar" }));
+    expect(await screen.findByRole("button", { name: "Registrar" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
   });
 
   it("editar con cuentas fuera de la lista las muestra y solo manda lo cambiado", async () => {

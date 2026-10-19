@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import * as lib from "@/lib/tesoreria";
 import type { DestinosSucursal } from "@/lib/tesoreria";
@@ -56,6 +56,17 @@ describe("SeccionDestinos", () => {
     expect(lib.guardarDestino).toHaveBeenCalledTimes(1);
     expect(lib.guardarDestino).toHaveBeenCalledWith({ sucursalId: "s-tj", metodo: "transferencia", cuentaId: "sc", desde: HOY });
     expect(lib.obtenerDestinos).toHaveBeenCalledTimes(2);
+  });
+
+  it("guardar con un 'desde' anterior al vigente avisa que hoy sigue rigiendo el actual", async () => {
+    render(<SeccionDestinos sucursal={null} cuentas={CUENTAS} />);
+    const fila = (await screen.findByText("TJ · Tijuana")).closest("tr")!;
+    await userEvent.selectOptions(within(fila).getByLabelText("Efectivo de TJ"), "sc");
+    fireEvent.change(within(fila).getByLabelText("Desde, TJ"), { target: { value: "2026-09-15" } });
+    await userEvent.click(within(fila).getByRole("button", { name: "Guardar" }));
+    const aviso = await screen.findByRole("status");
+    expect(aviso).toHaveTextContent("Guardado desde 15/09/2026; hoy sigue vigente Efectivo TJ desde 01/10/2026.");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("si un método falla tras guardar otro, recarga y nombra el que falló", async () => {

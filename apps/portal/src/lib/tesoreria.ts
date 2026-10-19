@@ -2,6 +2,7 @@ import { apiFetch } from "./api";
 import { textoMonto } from "./cobranzas";
 import type { DefinicionExcel, FilaExcel } from "./excel/definicion";
 import { formatearFecha } from "./reportes";
+import { formatearPesos } from "./ventas";
 
 // Copia de las formas de apps/backend/src/modules/tesoreria/ (reglas-saldo.ts y
 // tesoreria.service.ts): el portal no puede importar del backend. Dinero en
@@ -69,6 +70,8 @@ export interface MovimientoManual {
   cuentaDestinoNombre: string | null;
   comentario: string | null;
   capturo: string;
+  /** El usuario ve las dos cuentas: puede corregirlo o eliminarlo. */
+  editable: boolean;
 }
 
 export interface DestinoCobranza {
@@ -340,7 +343,7 @@ export function definicionExcelTesoreria(vista: VistaTesoreria, filtros: { sucur
   if (vista.sinCuenta.length > 0) {
     filas.push({ celdas: ["Cobranza sin cuenta asignada", null, null, null, null, null, null], tipo: "grupo" });
     for (const s of vista.sinCuenta) {
-      filas.push({ celdas: [`${s.sucursalCodigo} · ${ETIQUETA_METODO[s.metodo]}`, null, null, s.montoCentavos / 100, null, null, null] });
+      filas.push({ celdas: [`${s.sucursalCodigo} · ${ETIQUETA_METODO[s.metodo]}`, null, null, null, null, null, `${formatearPesos(s.montoCentavos)} sin cuenta asignada`] });
     }
   }
   if (vista.eventos.length > 0) {

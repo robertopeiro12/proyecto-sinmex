@@ -149,7 +149,7 @@ describe("definicionExcelTesoreria", () => {
       { celdas: ["Efectivo TJ", "TJ", 10000, 200, 700, 9500, null] },
       { celdas: ["Total Tesorería", "1 cuentas", 10000, 200, 700, 9500, null], tipo: "total" },
       { celdas: ["Cobranza sin cuenta asignada", null, null, null, null, null, null], tipo: "grupo" },
-      { celdas: ["MX · Transferencia", null, null, 3250, null, null, null] },
+      { celdas: ["MX · Transferencia", null, null, null, null, null, "$3,250.00 sin cuenta asignada"] },
       { celdas: ["Movimientos del rango", "Fecha", "Concepto", "Entra", "Sale", null, "Comentario"], tipo: "grupo" },
       { celdas: ["Efectivo TJ", "06/10/2026", "Cobranza en efectivo · 2 cobros · TJ", 200, null, null, null] },
       { celdas: ["Efectivo TJ", "07/10/2026", "Retiro", null, 700, null, "Banco · Capturó: Ana"] },

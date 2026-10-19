@@ -372,7 +372,7 @@ usuario con sesion pasa.
     por nombre + teléfono). e2e: `apps/backend/test/prospecto-venta.e2e-spec.ts`.
 
 - **Tesorería (T-28 / T-29).** *Finanzas → Tesorería* (`/finanzas/tesoreria`), backend en `modules/tesoreria/`
-  (`/tesoreria`). Permisos: `tesoreria.ver` (la vista) y `tesoreria.gestionar` (cuentas y saldos). Spec:
+  (`/tesoreria`). Permisos: `tesoreria.ver` (la vista) y `tesoreria.gestionar` (cuentas, saldos, movimientos y destinos de la cobranza). Spec:
   `docs/superpowers/specs/2026-10-15-t28-tesoreria-cuentas-saldo-inicial-design.md`.
   - **Dos "tesorerías":** la del repartidor (`Cobranza − Gastos`) se cuenta **en persona** y no es de aquí; esto
     son las **cuentas del negocio** (Efectivo, Caja Chica, bancos) que pidió el cliente.

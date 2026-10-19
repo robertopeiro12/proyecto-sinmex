@@ -27,6 +27,7 @@ export function SeccionDestinos({ sucursal, cuentas }: { sucursal: string | null
   const [desde, setDesde] = useState<Record<string, string>>({});
   const [guardando, setGuardando] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
 
   const cargar = useCallback(async () => {
     try {
@@ -54,6 +55,7 @@ export function SeccionDestinos({ sucursal, cuentas }: { sucursal: string | null
     if (cambios.length === 0) return;
     setGuardando(s.sucursalId);
     setError(null);
+    setAviso(null);
     let actual: MetodoCobranza | null = null;
     try {
       for (const m of cambios) {
@@ -65,6 +67,15 @@ export function SeccionDestinos({ sucursal, cuentas }: { sucursal: string | null
           desde: desde[s.sucursalId] ?? hoy,
         });
       }
+      // Un "desde" anterior al vigente se guarda, pero no cambia lo que rige hoy: que no parezca que falló.
+      const elegida = desde[s.sucursalId] ?? hoy;
+      const avisos = cambios.flatMap((m) => {
+        const vigente = s.vigentes[m];
+        return vigente && elegida < vigente.desde
+          ? [`Guardado desde ${formatearFecha(elegida)}; hoy sigue vigente ${vigente.cuentaNombre} desde ${formatearFecha(vigente.desde)}.`]
+          : [];
+      });
+      if (avisos.length > 0) setAviso(avisos.join(" "));
     } catch (err) {
       const que = actual ? `${ETIQUETA_METODO[actual].toLowerCase()} de ${s.sucursalCodigo}` : s.sucursalCodigo;
       setError(`No se pudo guardar ${que}: ${mensajeDe(err, "error desconocido.")}`);
@@ -85,6 +96,7 @@ export function SeccionDestinos({ sucursal, cuentas }: { sucursal: string | null
         cómo se pagaron. Un cambio cuenta desde la fecha que elijas; lo anterior no se mueve.
       </p>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {aviso && <p role="status" className="text-sm text-muted-foreground">{aviso}</p>}
       <table className="w-full text-sm" aria-label="Destinos de la cobranza">
         <thead>
           <tr className="border-b text-left text-muted-foreground">

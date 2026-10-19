@@ -18,6 +18,9 @@ import { esFechaValida, type MovimientoManual } from './reglas-saldo';
 import { TesoreriaRepository } from './tesoreria.repository';
 import { TesoreriaService } from './tesoreria.service';
 
+/** El movimiento y si quien lo pide puede corregirlo o eliminarlo. */
+export type MovimientoListado = MovimientoManual & { editable: boolean };
+
 @Injectable()
 export class MovimientosService {
   constructor(
@@ -29,24 +32,34 @@ export class MovimientosService {
   async listar(
     usuarioId: string,
     q: ListarMovimientosDto,
-  ): Promise<MovimientoManual[]> {
+  ): Promise<MovimientoListado[]> {
     const error = validarRango(q.desde, q.hasta);
     if (error) throw new BadRequestException(error);
     const cuentas = await this.tesoreria.listarCuentas(
       usuarioId,
       normalizarSucursalPedida(q.sucursal),
     );
-    return this.repo.listar(
+    const movimientos = await this.repo.listar(
       cuentas.map((c) => c.id),
       q.desde,
       q.hasta,
     );
+    // Editable = ve (y siguen vivas) las DOS cuentas, sin importar el filtro de sucursal.
+    const propias = new Set(
+      (await this.tesoreria.listarCuentas(usuarioId, null)).map((c) => c.id),
+    );
+    return movimientos.map((m) => ({
+      ...m,
+      editable:
+        propias.has(m.cuentaId) &&
+        (m.cuentaDestinoId === null || propias.has(m.cuentaDestinoId)),
+    }));
   }
 
   async crear(
     usuarioId: string,
     dto: CrearMovimientoDto,
-  ): Promise<MovimientoManual> {
+  ): Promise<MovimientoListado> {
     const datos: DatosMovimiento = {
       tipo: dto.tipo,
       fecha: dto.fecha,
@@ -64,7 +77,7 @@ export class MovimientosService {
     usuarioId: string,
     id: string,
     dto: EditarMovimientoDto,
-  ): Promise<MovimientoManual> {
+  ): Promise<MovimientoListado> {
     // null en fecha/monto/cuentas = "no enviado"; en comentario, null o '' lo borra.
     if (
       dto.fecha == null &&
@@ -151,9 +164,10 @@ export class MovimientosService {
       await this.tesoreria.cuentaVisible(usuarioId, d.cuentaDestinoId);
   }
 
-  private async encontrado(id: string): Promise<MovimientoManual> {
+  /** Solo se llama tras validar las cuentas del usuario: editable siempre. */
+  private async encontrado(id: string): Promise<MovimientoListado> {
     const m = await this.repo.buscar(id);
     if (!m) throw new NotFoundException('No existe ese movimiento.');
-    return m;
+    return { ...m, editable: true };
   }
 }

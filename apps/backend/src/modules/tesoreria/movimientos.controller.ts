@@ -16,8 +16,10 @@ import {
   EditarMovimientoDto,
   ListarMovimientosDto,
 } from './dto/movimientos.dto';
-import { MovimientosService } from './movimientos.service';
-import type { MovimientoManual } from './reglas-saldo';
+import {
+  MovimientosService,
+  type MovimientoListado,
+} from './movimientos.service';
 
 // T-29: registrar operacion (depositos, retiros, traspasos). Todo con
 // `tesoreria.gestionar`; la vista los muestra con `tesoreria.ver`.
@@ -30,7 +32,7 @@ export class MovimientosController {
   listar(
     @UsuarioActual() usuarioId: string,
     @Query() q: ListarMovimientosDto,
-  ): Promise<MovimientoManual[]> {
+  ): Promise<MovimientoListado[]> {
     return this.movimientos.listar(usuarioId, q);
   }
 
@@ -39,7 +41,7 @@ export class MovimientosController {
   crear(
     @UsuarioActual() usuarioId: string,
     @Body() dto: CrearMovimientoDto,
-  ): Promise<MovimientoManual> {
+  ): Promise<MovimientoListado> {
     return this.movimientos.crear(usuarioId, dto);
   }
 
@@ -49,7 +51,7 @@ export class MovimientosController {
     @UsuarioActual() usuarioId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: EditarMovimientoDto,
-  ): Promise<MovimientoManual> {
+  ): Promise<MovimientoListado> {
     return this.movimientos.editar(usuarioId, id, dto);
   }
 

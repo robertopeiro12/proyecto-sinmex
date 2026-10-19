@@ -23,6 +23,7 @@ interface Movimiento {
   cuentaDestinoNombre: string | null;
   comentario: string | null;
   capturo: string;
+  editable: boolean;
 }
 
 const SUFIJO = `${Date.now()}-${process.pid}`;
@@ -387,7 +388,16 @@ describe('Tesorería — movimientos, destinos y cobranza (e2e)', () => {
       expect(visto).toMatchObject({
         cuentaNombre: `${PREFIJO} Ver TJ`,
         cuentaDestinoNombre: `${PREFIJO} Ver General`,
+        editable: false,
       });
+      // El mismo movimiento, visto por quien ve las dos cuentas (Tijuana), si es editable.
+      const propia = await http()
+        .get('/tesoreria/movimientos?desde=2026-10-06&hasta=2026-10-06')
+        .set('Cookie', tijuana)
+        .expect(200);
+      expect(
+        (propia.body as Movimiento[]).find((m) => m.id === body.id),
+      ).toMatchObject({ editable: true });
       // …pero no puede corregirlo ni eliminarlo: no ve la cuenta de salida.
       await http()
         .delete(`/tesoreria/movimientos/${body.id}`)
@@ -737,6 +747,7 @@ describe('Tesorería — movimientos, destinos y cobranza (e2e)', () => {
       eventos: {
         tipo: string;
         cuentaId: string;
+        cuentaDestinoId?: string;
         metodo?: string;
         cantidad?: number;
         montoCentavos: number;
@@ -943,6 +954,68 @@ describe('Tesorería — movimientos, destinos y cobranza (e2e)', () => {
       expect(
         despues.cuentas.find((c) => c.id === cuenta)?.entradasCentavos,
       ).toBe(0);
+    });
+
+    it('una cuenta general ve la cobranza y el traspaso de otra sucursal aunque se mire una sola', async () => {
+      const general_ = await sembrarCuenta('Cruce General', null);
+      const cuentaMx = await sembrarCuenta('Cruce MX', idMexicali);
+      for (const sucursalId of [idTijuana, idMexicali]) {
+        await http()
+          .put('/tesoreria/destinos')
+          .set('Cookie', general)
+          .send({
+            sucursalId,
+            metodo: 'efectivo',
+            cuentaId: general_,
+            desde: '2019-06-01',
+          })
+          .expect(200);
+      }
+      const clienteTj = await sembrarCliente('Cruce cliente TJ', idTijuana);
+      const clienteMx = await sembrarCliente('Cruce cliente MX', idMexicali);
+      await sembrarCobro(db, {
+        clienteId: clienteTj,
+        vendedorId: null,
+        monto: '10.00',
+        fecha: '2019-06-10',
+        metodoPago: 'efectivo',
+      });
+      await sembrarCobro(db, {
+        clienteId: clienteMx,
+        vendedorId: null,
+        monto: '20.00',
+        fecha: '2019-06-10',
+        metodoPago: 'efectivo',
+      });
+      await http()
+        .post('/tesoreria/movimientos')
+        .set('Cookie', mexicali)
+        .send({
+          tipo: 'traspaso',
+          fecha: '2019-06-10',
+          montoCentavos: 5_000,
+          cuentaId: cuentaMx,
+          cuentaDestinoId: general_,
+        })
+        .expect(201);
+      const v = (
+        await http()
+          .get('/tesoreria?desde=2019-06-10&hasta=2019-06-10&sucursal=TJ')
+          .set('Cookie', general)
+          .expect(200)
+      ).body as Vista;
+      expect(v.cuentas.find((c) => c.id === general_)).toMatchObject({
+        entradasCentavos: 1_000 + 2_000 + 5_000,
+      });
+      const ev = v.eventos.filter(
+        (e) => e.cuentaId === general_ || e.cuentaDestinoId === general_,
+      );
+      expect(ev.map((e) => e.tipo).sort()).toEqual([
+        'cobranza',
+        'cobranza',
+        'traspaso',
+      ]);
+      expect(v.sinCuenta.some((s) => s.sucursalCodigo === 'MX')).toBe(false);
     });
 
     it('cambiar el destino con desde no mueve lo anterior', async () => {
