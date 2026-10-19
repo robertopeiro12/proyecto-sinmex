@@ -137,12 +137,6 @@ export function filtrarParaAgregar<T extends Pick<Cliente, 'id' | 'nombre' | 'ti
 
 /** Las secciones del menu que todavia no existen, con el ticket que las trae. */
 export const SECCIONES_PENDIENTES = {
-  gastos: {
-    titulo: 'Gastos',
-    ticket: 'pieza 6 del rediseño (T-30/T-31)',
-    descripcion:
-      'Gastos de la ruta con su tipo (catálogo del portal), monto y comprobante.',
-  },
   inventario: {
     titulo: 'Inventario',
     ticket: 'T-27',
@@ -183,7 +177,7 @@ export interface EntradaMenu {
 
 /**
  * Las entradas del menu, en el orden del spec (D16). Con el dia cerrado se
- * deshabilita solo lo que captura (gastos, inventario, merma); lo que consulta
+ * deshabilita solo lo que captura (gastos, inventario, merma; T-30/T-31 dio a Gastos su pantalla); lo que consulta
  * se sigue viendo. Ruta y GPS es la pantalla pendiente de T-41 que ya existe.
  */
 export function entradasMenu(diaCerrado: boolean): EntradaMenu[] {
@@ -202,7 +196,14 @@ export function entradasMenu(diaCerrado: boolean): EntradaMenu[] {
       destino: '/(jornada)/prospectos',
       deshabilitada: false,
     },
-    ...(['gastos', 'inventario', 'merma'] as const).map((clave) => ({
+    {
+      clave: 'gastos',
+      titulo: 'Gastos',
+      descripcion: 'Lo que pagaste hoy con la cobranza',
+      destino: '/(jornada)/gastos',
+      deshabilitada: diaCerrado,
+    },
+    ...(['inventario', 'merma'] as const).map((clave) => ({
       clave,
       titulo: SECCIONES_PENDIENTES[clave].titulo,
       descripcion: `Pendiente: ${SECCIONES_PENDIENTES[clave].ticket}`,
