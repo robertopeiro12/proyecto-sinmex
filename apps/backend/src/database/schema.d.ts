@@ -323,6 +323,32 @@ export interface TesoreriaCuenta {
   updated_at: Generated<Timestamp>;
 }
 
+export interface TesoreriaDestinoCobranza {
+  capturo_usuario_id: string;
+  created_at: Generated<Timestamp>;
+  cuenta_id: string;
+  deleted_at: Timestamp | null;
+  desde: Timestamp;
+  id: Generated<string>;
+  metodo: string;
+  sucursal_id: string;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface TesoreriaMovimiento {
+  capturo_usuario_id: string;
+  comentario: string | null;
+  created_at: Generated<Timestamp>;
+  cuenta_destino_id: string | null;
+  cuenta_id: string;
+  deleted_at: Timestamp | null;
+  fecha: Timestamp;
+  id: Generated<string>;
+  monto: Numeric;
+  tipo: string;
+  updated_at: Generated<Timestamp>;
+}
+
 export interface TesoreriaSaldo {
   capturo_usuario_id: string;
   comentario: string | null;
@@ -484,6 +510,8 @@ export interface DB {
   sucursal: Sucursal;
   sync_operacion: SyncOperacion;
   tesoreria_cuenta: TesoreriaCuenta;
+  tesoreria_destino_cobranza: TesoreriaDestinoCobranza;
+  tesoreria_movimiento: TesoreriaMovimiento;
   tesoreria_saldo: TesoreriaSaldo;
   tipo_negocio: TipoNegocio;
   usuario: Usuario;
