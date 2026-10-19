@@ -162,6 +162,16 @@ export function esSeccionPendiente(seccion: string): seccion is SeccionPendiente
   return Object.prototype.hasOwnProperty.call(SECCIONES_PENDIENTES, seccion);
 }
 
+/**
+ * Ancho del menu lateral (rediseno del menu, 2026-10-18): el 82% de la pantalla
+ * con tope de 320dp. En el celular deja ver una franja de la ruta oscurecida
+ * (la que cierra el menu al tocarla); en la tablet no se come media pantalla.
+ */
+export const ANCHO_MAXIMO_MENU = 320;
+export function anchoMenuLateral(anchoPantalla: number): number {
+  return Math.round(Math.min(ANCHO_MAXIMO_MENU, Math.max(0, anchoPantalla) * 0.82));
+}
+
 /** Una entrada del menu hamburguesa (D9). `destino` es una ruta de expo-router. */
 export interface EntradaMenu {
   clave: string;
