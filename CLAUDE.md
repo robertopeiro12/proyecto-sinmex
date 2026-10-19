@@ -509,7 +509,7 @@ usuario con sesion pasa.
   - **Fotos**: `POST /sync/foto/:clave` acepta gastos (`gasto-<id>.jpg`, opcional). El portal la sirve en
     `GET /gastos/:id/foto` (permiso `gasto.ver`; otra sucursal = 404).
   - **Portal** *Finanzas → Gastos* (`/finanzas/gastos`): `GET /gastos?desde&hasta&sucursal&vendedor&campo` (permiso
-    `gasto.ver`, grupo Finanzas; alcance de sucursal; máximo 366 días), con total. Cabe en 1366 px.
+    `gasto.ver`, grupo Finanzas; alcance de sucursal; máximo 366 días), con total. Diseñada para 1366 px (`table-fixed` + `colgroup`, 736 px fijos y Comentario flexible); medir en navegador.
   - **Tablet** (migración local 015): `campo_egreso` y `gasto` (foto con el esquema derivado de la visita). Pantallas
     `app/(jornada)/gastos/index.tsx` (lista del día, entrada Gastos del menú) y `registrar.tsx`; la lista se refresca
     con `versionCatalogos`/`ultimaSincronizacion` (no al enfocar). Los topes compartidos viven en

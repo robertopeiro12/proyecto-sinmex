@@ -109,6 +109,7 @@ describe('Gastos — consulta del portal (e2e)', () => {
     registradoEn: string;
     monto: string;
     comentario?: string;
+    quien?: string;
   }): Promise<string> => {
     const id = randomUUID();
     await db
@@ -126,6 +127,7 @@ describe('Gastos — consulta del portal (e2e)', () => {
         metodo: 'efectivo_cobranza_dia',
         origen: 'app',
         comentario: g.comentario ?? null,
+        quien: g.quien ?? null,
       })
       .execute();
     return id;
@@ -280,6 +282,8 @@ describe('Gastos — consulta del portal (e2e)', () => {
       registradoEn: '2016-02-03T17:00:00.000Z',
       monto: '100.00',
       comentario: 'Tanque lleno',
+      // La copia del nombre al registrar: distinta del nombre actual del vendedor.
+      quien: `${PREFIJO} Nombre al registrar`,
     });
     gastoMxConFoto = await sembrarGasto({
       vendedorId: vendedorMx,
@@ -372,7 +376,7 @@ describe('Gastos — consulta del portal (e2e)', () => {
         registradoEn: '2016-02-03T17:00:00.000Z',
         sucursalCodigo: 'TJ',
         vendedorId: vendedorTj,
-        vendedorNombre: `${PREFIJO} Vendedor TJ`,
+        vendedorNombre: `${PREFIJO} Nombre al registrar`,
         campoEgresoId: campoA,
         campoNombre: `${PREFIJO} Gasolina`,
         tipo: 'operacion',

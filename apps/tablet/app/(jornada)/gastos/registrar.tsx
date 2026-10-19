@@ -4,7 +4,13 @@ import { Alert, Linking, Platform, Text, ToastAndroid } from 'react-native';
 
 import { ErrorGasto, ErrorJornada, LARGO_MAX_COMENTARIO_GASTO } from '@/datos';
 import type { CampoEgreso } from '@/datos/tipos';
-import { camposParaGasto, faltantesVisiblesGasto, TEXTO_METODO_GASTO, validarGasto } from '@/estado/gasto';
+import {
+  camposParaGasto,
+  faltantesVisiblesGasto,
+  puedeGuardarGasto,
+  TEXTO_METODO_GASTO,
+  validarGasto,
+} from '@/estado/gasto';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
 import { useJawa } from '@/estado/proveedor-jawa';
 import type { FotoComprimida } from '@/fotos/comprimir';
@@ -99,7 +105,7 @@ export default function RegistrarGasto() {
       setError('No hay vendedor con sesión iniciada.');
       return;
     }
-    if (validacion.gasto === null) return;
+    if (validacion.gasto === null || tomandoFoto) return;
     if (guardando.current) return;
     guardando.current = true;
     setGuardado(true);
@@ -187,7 +193,15 @@ export default function RegistrarGasto() {
       <Boton
         etiqueta="Guardar"
         glifo="✓"
-        deshabilitado={validacion.gasto === null || campos.length === 0 || !menu.operacionesHabilitadas || guardado}
+        deshabilitado={
+          !puedeGuardarGasto({
+            gastoValido: validacion.gasto !== null,
+            hayCampos: campos.length > 0,
+            diaAbierto: menu.operacionesHabilitadas,
+            guardado,
+            tomandoFoto,
+          })
+        }
         onPress={guardar}
         estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
       />

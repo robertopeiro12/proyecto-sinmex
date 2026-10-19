@@ -165,7 +165,8 @@ export class GastosRepository {
 
   /**
    * Los gastos vivos del rango para el portal (D10). La sucursal es la del
-   * GASTO (la del vendedor al proyectar), no la actual del vendedor.
+   * GASTO (la del vendedor al proyectar), no la actual del vendedor; el nombre
+   * es la copia `quien` guardada al proyectar, no el nombre actual.
    */
   async listar(f: FiltroGastos): Promise<GastoListado[]> {
     const condiciones = [
@@ -195,13 +196,12 @@ export class GastosRepository {
     }>`
       select g.id, to_char(g.fecha, 'YYYY-MM-DD') as fecha, g.registrado_en,
              s.codigo, g.vendedor_id,
-             coalesce(v.nombre, g.quien) as vendedor_nombre,
+             g.quien as vendedor_nombre,
              g.campo_egreso_id, g.campo_nombre, g.tipo,
              g.monto::text as monto, g.comentario,
              (g.foto_archivo is not null) as tiene_foto
         from gasto g
         join sucursal s on s.id = g.sucursal_id
-        left join vendedor v on v.id = g.vendedor_id
        where ${sql.join(condiciones, sql` and `)}
        order by g.fecha, g.registrado_en, g.id
     `.execute(this.db);

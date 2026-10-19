@@ -115,3 +115,18 @@ export function pastillaGasto(
       return { texto: 'rechazado', estado: 'error', detalle: motivoDeRechazo(g.sync_error) };
   }
 }
+
+/**
+ * Si "Guardar" queda habilitado: gasto valido, con catalogo, dia abierto, sin un
+ * guardado ya en curso y sin la foto del ticket tomandose/comprimiendose (un
+ * toque en ese momento guardaria el gasto sin foto).
+ */
+export function puedeGuardarGasto(e: {
+  gastoValido: boolean;
+  hayCampos: boolean;
+  diaAbierto: boolean;
+  guardado: boolean;
+  tomandoFoto: boolean;
+}): boolean {
+  return e.gastoValido && e.hayCampos && e.diaAbierto && !e.guardado && !e.tomandoFoto;
+}

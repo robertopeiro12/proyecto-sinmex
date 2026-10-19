@@ -5,6 +5,7 @@ import {
   faltantesVisiblesGasto,
   montoACentavos,
   pastillaGasto,
+  puedeGuardarGasto,
   puedeRegistrarGasto,
   TEXTO_METODO_GASTO,
   validarGasto,
@@ -195,5 +196,24 @@ describe('puedeRegistrarGasto (D9)', () => {
   it('sin catalogo o con el dia cerrado no (como la entrada del menu)', () => {
     expect(puedeRegistrarGasto({ camposDisponibles: 0, diaCerrado: false })).toBe(false);
     expect(puedeRegistrarGasto({ camposDisponibles: 3, diaCerrado: true })).toBe(false);
+  });
+});
+
+describe('puedeGuardarGasto', () => {
+  const base = { gastoValido: true, hayCampos: true, diaAbierto: true, guardado: false, tomandoFoto: false };
+
+  it('con todo en orden se puede guardar', () => {
+    expect(puedeGuardarGasto(base)).toBe(true);
+  });
+
+  it('mientras se toma o comprime la foto no (guardaria sin ticket)', () => {
+    expect(puedeGuardarGasto({ ...base, tomandoFoto: true })).toBe(false);
+  });
+
+  it('gasto invalido, sin catalogo, dia cerrado o ya guardado tampoco', () => {
+    expect(puedeGuardarGasto({ ...base, gastoValido: false })).toBe(false);
+    expect(puedeGuardarGasto({ ...base, hayCampos: false })).toBe(false);
+    expect(puedeGuardarGasto({ ...base, diaAbierto: false })).toBe(false);
+    expect(puedeGuardarGasto({ ...base, guardado: true })).toBe(false);
   });
 });
