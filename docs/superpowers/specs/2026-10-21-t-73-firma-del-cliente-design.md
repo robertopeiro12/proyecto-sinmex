@@ -22,6 +22,15 @@ Que el cliente firme en la tablet cada venta, para que el negocio tenga evidenci
 
 **D6 · Respaldo si `toDataURL` no funciona.** La Tarea 1 del plan lo comprueba en el emulador antes de construir nada más. Si falla, se para y se replantea con la opción B (trazos como JSON dentro de la operación de venta); no se improvisa.
 
+**Enmiendas de implementación (2026-10-21, aprobadas por el controlador).**
+
+- El `origen` de las ventas del portal es `'portal'` (no `'oficina'`); es el valor real del código.
+- La imagen de la firma de una venta de otra sucursal responde **403**, con el mismo alcance que el detalle de la venta.
+- Las columnas de firma de `venta_nota` son de `FirmasVentaService`/`FirmasVentaRepository` (`ventas-cobranza`), no de métodos sueltos de `VentasService`.
+- `editada` también pasa a `true` al asignar una factura o marcar una cuenta incobrable, no solo al editar la nota.
+- El portal carga la imagen con la sesión (`fetch` + URL `blob:`), no con un `<img src>` directo.
+- Las fuentes de fotos de la tablet ganan un `fallaDefinitiva` opcional: solo las firmas tratan el 404 como definitivo; las demás fuentes lo siguen reintentando.
+
 ## Tablet
 
 ### Componente de firma (`src/ui/recuadro-firma.tsx`)
@@ -78,7 +87,7 @@ Que el cliente firme en la tablet cada venta, para que el negocio tenga evidenci
   ```
   pgTAP `99_venta_firma_test.sql`: columnas, default, los dos checks.
 - **Normalización** (`datos-venta.ts`): `VentaNormalizada.firma: { nombre: string | null } | null`.
-- **Proyección** (`registrarVenta`): guarda `firma_esperada = firma !== null` y `firma_nombre`. Las ventas del portal (`origen = 'oficina'`) siguen con `firma_esperada = false`.
+- **Proyección** (`registrarVenta`): guarda `firma_esperada = firma !== null` y `firma_nombre`. Las ventas del portal (`origen = 'portal'`) siguen con `firma_esperada = false`.
 - **Canal de fotos** (`foto.service.ts`): rama `mia.tipo === 'venta'`:
   - `entidadTabla !== 'venta_nota' || entidadId === null` → 409 (no proyectada; la tablet reintenta).
   - `validarFoto(cuerpo)`; la venta debe existir y no estar eliminada → si no, 404.

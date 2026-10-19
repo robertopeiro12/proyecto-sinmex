@@ -18,6 +18,9 @@ npm test          --workspace=apps/tablet   # pruebas de la capa de datos
 npm run export    --workspace=apps/tablet   # bundle de Metro (sin SDK de Android)
 ```
 
+**Dependencias nativas.** `react-native-svg` (T-73, la firma del cliente) es nativa: después de instalarla o
+actualizarla hace falta un APK nuevo (`expo prebuild -p android --clean` y `expo run:android`); Metro solo no basta.
+
 ## Estructura
 
 ```
@@ -302,6 +305,26 @@ Spec: `docs/superpowers/specs/2026-10-20-t-30-31-gastos-de-ruta-design.md`. Pant
 - **Sincroniza**: `fuente-gastos.ts` sube la operación `gasto` (sin `cliente_id` ni folio; clave = id) **después de
   visitas y antes de rutas** (`fuentesDelPush`). La foto sube por la cola combinada de fotos (`fuenteFotosGastos`)
   cuando el gasto ya está sincronizado; el servidor la guarda como `gasto-<id>.jpg`.
+
+## Firma del cliente en la venta (T-73)
+
+Spec: `docs/superpowers/specs/2026-10-21-t-73-firma-del-cliente-design.md`.
+
+- **Revisión de la venta** (`app/(jornada)/operacion/[clienteId]/venta.tsx`): tarjeta "Firma del cliente" con el
+  recuadro (`src/ui/recuadro-firma.tsx`), "Borrar firma" y "Nombre de quien firma (opcional)". "Grabar venta" solo se
+  habilita con firma (`puedeGrabarVenta`); "Corregir" vuelve a captura y **borra** la firma (el cliente firmó un total).
+  Mientras el dedo está en el recuadro la pantalla no se desplaza (`Pantalla desplazable`).
+- **Al grabar** (`crearGrabadorVenta`, ignora el segundo toque): `exportarPng()` (`toDataURL`) → `guardarFirmaJpg`
+  (`src/fotos/firma-expo.ts`: JPG 0.8, ≤ 1000 px, en `documentDirectory/firmas/firma-<id>.jpg`) → `ventas.registrar`
+  con el id generado antes y `firma: { uri, nombre }`, en la misma transacción que la venta y su folio. Si la firma no
+  se pudo guardar, la venta no se graba, no se quema folio y la pantalla sigue en revisión con la firma.
+- **"Venta grabada"** dice "Firmada por {nombre}" o "Firmada"; la ficha marca "Firma por subir" mientras el servidor no
+  tenga la imagen (`firmaPorSubir`).
+- **Datos** (migración 016): `venta.firma_local`, `firma_nombre`, `firma_subida_en`, `firma_error`,
+  `firma_descartada` (esquema derivado como la foto de la visita y del gasto; no tocan `sync_estado`).
+- **Sincroniza**: la operación `venta` lleva `firma: { nombre }`; la imagen sube por la cola de fotos
+  (`fuenteFirmasVentas`, después de los gastos) cuando la venta ya está sincronizada. Un 404 (la venta se eliminó en el
+  portal) la descarta (`fallaDefinitiva`); un 409 se reintenta.
 
 ## Pruebas
 
