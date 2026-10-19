@@ -1,18 +1,22 @@
+import { createReadStream } from 'node:fs';
 import {
   Body,
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  StreamableFile,
 } from '@nestjs/common';
 import { RequierePermiso } from '../auth/requiere-permiso.decorator';
 import { UsuarioActual } from '../auth/usuario-actual.decorator';
 import { BuscarVentasDto } from './dto/buscar-ventas.dto';
 import { EditarVentaDto } from './dto/editar-venta.dto';
+import { FirmasVentaService } from './firmas-venta.service';
 import { RegistrarVentaDto } from './dto/registrar-venta.dto';
 import {
   VentasConsultaService,
@@ -38,6 +42,8 @@ export class VentasController {
     private readonly consulta: VentasConsultaService,
     // T-17 parte 2: editar, eliminar y cuenta perdida.
     private readonly edicion: VentasEdicionService,
+    // T-73: la imagen de la firma del cliente.
+    private readonly firmas: FirmasVentaService,
   ) {}
 
   @Get('catalogo')
@@ -81,6 +87,22 @@ export class VentasController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<VentaDetalle> {
     return this.consulta.detalle(usuarioId, id);
+  }
+
+  /**
+   * T-73: la imagen de la firma del cliente. Mismo alcance que el detalle (solo
+   * sesion; otra sucursal 403) y mismo patron que `GET /gastos/:id/foto`:
+   * `rutaFirma` ya comprobo que el archivo se puede leer, asi que el stream no
+   * falla a media respuesta. Sin cache: la firma es un documento del cliente.
+   */
+  @Get(':id/firma')
+  @Header('Cache-Control', 'private, no-store')
+  async firma(
+    @UsuarioActual() usuarioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<StreamableFile> {
+    const ruta = await this.firmas.rutaFirma(usuarioId, id.toLowerCase());
+    return new StreamableFile(createReadStream(ruta), { type: 'image/jpeg' });
   }
 
   @Patch(':id')

@@ -821,25 +821,27 @@ permiso o no haber señal, y eso no le impide registrar al prospecto.
 - Las operaciones `gasto` que llegaron antes de T-30/T-31 (ninguna tablet las mandaba) se quedan en el buzón sin
   proyectar y sin relleno.
 
-### Fotos: subida y descarga (canal aparte del lote; T-40, T-39, T-30)
+### Fotos: subida y descarga (canal aparte del lote; T-40, T-39, T-30, T-73)
 
 La foto **no** viaja dentro de la operación: va por su propio request, sin `contrato` ni `resultados[]`, solo
 códigos HTTP. Así una imagen pesada o cortada nunca rechaza la operación a la que pertenece.
 
 - **`POST /sync/foto/:clave`** (`@SoloApp`, cuerpo = el JPEG crudo, máx. 2 MB). La `clave` es la de una operación
-  `prospecto`, `visita` **o** `gasto` del vendedor del token. 404 si nadie tiene esa clave (o la operación se rechazó: no dejó
-  fila) o si la fila ya no existe; 403 si es de otro vendedor; 409 si es de otro tipo o aún no está proyectada;
-  413 si pesa de más; 415 si no es un JPEG completo. Responde `200 { clave, subida_en }` también la primera vez.
-- **Nombre del archivo (T-78):** `cliente-<cliente.id>.jpg`, `visita-<visita.id>.jpg` y `gasto-<gasto.id>.jpg` (T-30), nunca la clave. Reenviar
-  escribe el mismo nombre: un solo archivo. Los archivos de antes (`<clave>.jpg`) no se migran; el servidor siempre
-  lee por `foto_archivo`.
+  `prospecto`, `visita`, `gasto` **o** `venta` (la firma del cliente, T-73) del vendedor del token. 404 si nadie tiene
+  esa clave (o la operación se rechazó: no dejó fila) o si la fila ya no existe (una venta eliminada en el portal);
+  403 si es de otro vendedor; 409 si es de otro tipo, aún no está proyectada o es una venta que no espera firma
+  ("Esa venta no espera firma."); 413 si pesa de más; 415 si no es un JPEG completo. Responde
+  `200 { clave, subida_en }` también la primera vez.
+- **Nombre del archivo (T-78):** `cliente-<cliente.id>.jpg`, `visita-<visita.id>.jpg`, `gasto-<gasto.id>.jpg` (T-30) y
+  `venta-<venta_nota.id>-firma.jpg` (T-73), nunca la clave. Reenviar escribe el mismo nombre: un solo archivo. Los
+  archivos de antes (`<clave>.jpg`) no se migran; el servidor siempre lee por `foto_archivo` / `firma_archivo`.
 - La foto del prospecto se anota en `cliente.foto_archivo/foto_subida_en`; la de la visita, en
   `visita.foto_archivo/foto_subida_en`; la del gasto (el ticket, opcional), en
-  `gasto.foto_archivo/foto_subida_en`.
+  `gasto.foto_archivo/foto_subida_en`; la firma de la venta, en `venta_nota.firma_archivo/firma_subida_en` (solo si `firma_esperada`).
 - **`GET /sync/foto/cliente/:clienteId`** (`@SoloApp`): el JPEG de la foto del cliente o prospecto si es de la
   sucursal del vendedor y está vivo; **404** si no tiene foto o no está en su alcance (no 403: no confirma que
   exista). La tablet lo pide cuando `foto_subida_en` (§5) es más nuevo que su copia. Las fotos de visitas y de gastos **no**
-  bajan a la tablet; la del gasto la ve el portal en `GET /gastos/:id/foto`.
+  bajan a la tablet; la del gasto la ve el portal en `GET /gastos/:id/foto`. La firma de la venta tampoco baja; el portal la ve en `GET /ventas/:id/firma`.
 
 ### Respuesta `200` — parcial y honesta
 

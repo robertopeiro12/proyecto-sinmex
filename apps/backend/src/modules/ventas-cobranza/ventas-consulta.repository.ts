@@ -35,6 +35,15 @@ export interface VentaEncontrada {
   saldoCentavos: number;
 }
 
+/** La firma del cliente (T-73), como la ve el portal. */
+export interface FirmaDeVenta {
+  /** La tablet la mando con firma: la imagen llega (o llego) por el canal de fotos. */
+  esperada: boolean;
+  nombre: string | null;
+  /** Cuando llego la imagen, en ISO; `null` = todavia no (o no se espera). */
+  subidaEn: string | null;
+}
+
 export interface CabeceraVenta {
   id: string;
   folio: string;
@@ -54,6 +63,14 @@ export interface CabeceraVenta {
   montoCentavos: number;
   status: string;
   origen: OrigenVenta;
+  /** T-73. */
+  firma: FirmaDeVenta;
+  /**
+   * T-73: el portal toco la nota despues de grabarse
+   * (`actualizado_por_usuario_id is not null`): la firma corresponde a la
+   * version original.
+   */
+  editada: boolean;
 }
 
 export interface LineaDeVenta {
@@ -184,13 +201,19 @@ export class VentasConsultaRepository {
       monto_total: string;
       status: string;
       origen: string;
+      firma_esperada: boolean;
+      firma_nombre: string | null;
+      firma_subida_en: Date | string | null;
+      editada: boolean;
     }>`
       select vn.id, vn.folio, to_char(vn.fecha, 'YYYY-MM-DD') as fecha,
              vn.cliente_id, c.nombre as cliente, vn.sucursal_id,
              s.codigo as sucursal_codigo, vn.vendedor_id,
              v.nombre as repartidor, vn.num_nota, vn.contado_credito,
              vn.factura, f.numero as factura_numero, vn.comentarios,
-             vn.monto_total, vn.status, vn.origen
+             vn.monto_total, vn.status, vn.origen,
+             vn.firma_esperada, vn.firma_nombre, vn.firma_subida_en,
+             (vn.actualizado_por_usuario_id is not null) as editada
         from venta_nota vn
         join cliente c on c.id = vn.cliente_id
         join sucursal s on s.id = vn.sucursal_id
@@ -220,6 +243,15 @@ export class VentasConsultaRepository {
       montoCentavos: aCentavos(f.monto_total),
       status: f.status,
       origen: f.origen as OrigenVenta,
+      firma: {
+        esperada: f.firma_esperada,
+        nombre: f.firma_nombre,
+        subidaEn:
+          f.firma_subida_en === null
+            ? null
+            : new Date(f.firma_subida_en).toISOString(),
+      },
+      editada: f.editada,
     };
   }
 

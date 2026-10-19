@@ -883,6 +883,9 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
         montoCentavos: 27000,
         status: 'pagada',
         origen: 'portal',
+        // T-73: la venta del portal no espera firma y no se ha editado.
+        firma: { esperada: false, nombre: null, subidaEn: null },
+        editada: false,
         saldoCentavos: 0,
         lineas: [
           {

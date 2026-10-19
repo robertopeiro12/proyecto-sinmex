@@ -486,8 +486,8 @@ describe('Foto del prospecto (e2e)', () => {
 
   it('una operacion que no es un prospecto es 409', async () => {
     // Se siembra a mano: lo que se prueba es la comprobacion de `tipo`, y armar
-    // una venta completa por el push traeria folios, lineas y precios a una
-    // prueba que no habla de nada de eso.
+    // una cobranza completa por el push traeria notas y abonos a una prueba que
+    // no habla de nada de eso. T-73: ya no sirve una venta, que lleva firma.
     const clave = randomUUID();
     await db
       .insertInto('sync_operacion')
@@ -495,12 +495,12 @@ describe('Foto del prospecto (e2e)', () => {
         vendedor_id: vendedorId,
         sucursal_id: sucursalId,
         clave_idempotencia: clave,
-        tipo: 'venta',
+        tipo: 'cobranza',
         contrato: CONTRATO_ACTUAL,
         fecha_operacion: '2026-09-18',
         ocurrido_en: new Date(),
         datos: JSON.stringify({}),
-        entidad_tabla: 'venta_nota',
+        entidad_tabla: 'cobro',
         entidad_id: randomUUID(),
       })
       .execute();
