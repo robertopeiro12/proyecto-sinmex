@@ -289,8 +289,14 @@ describe('Flujo de Efectivo (e2e)', () => {
     expect(despues.ventasTotalesCentavos - antes.ventasTotalesCentavos).toBe(
       120_000,
     );
-    // Suma de este caso: 700 cobrados de 1,200 vendidos (58.3 %).
-    expect(Math.round((70_000 * 1000) / 120_000) / 10).toBe(58.3);
+    const d = despues.dias.find((x) => x.fecha === dia);
+    expect(d?.ventasCentavos).toBeGreaterThan(0);
+    expect(d?.porcentajeCobro).toBe(
+      Math.round(
+        ((d!.cobradoRepartidorCentavos + d!.cobradoOficinaCentavos) * 1000) /
+          d!.ventasCentavos,
+      ) / 10,
+    );
     expect(despues.gastosDisponibles).toBe(false);
     expect(despues.dias.map((d) => d.fecha)).toContain(dia);
   });
@@ -390,22 +396,14 @@ describe('Flujo de Efectivo (e2e)', () => {
       cuentasConSaldoFinal: number;
       cuentas: number;
     };
-    // Otras suites mueven la Tesorería en paralelo: se compara en una
-    // lectura sin cambios entre las dos consultas (se reintenta unas veces).
-    let r!: FlujoEfectivo;
-    let total!: Total;
-    for (let i = 0; i < 5; i++) {
-      r = await flujo(general, '2018-11-01', '2018-11-30');
-      total = (
-        (
-          await http()
-            .get('/tesoreria?desde=2018-11-01&hasta=2018-11-30&sucursal=TJ')
-            .set('Cookie', general)
-            .expect(200)
-        ).body as { total: Total }
-      ).total;
-      if (r.totalTesoreriaCentavos === total.saldoFinalCentavos) break;
-    }
+    // Rango de 2000: ninguna suite escribe ahí, así que no hay carrera.
+    const r = await flujo(general, '2000-01-01', '2000-01-31');
+    const { total } = (
+      await http()
+        .get('/tesoreria?desde=2000-01-01&hasta=2000-01-31&sucursal=TJ')
+        .set('Cookie', general)
+        .expect(200)
+    ).body as { total: Total };
     expect(r.totalTesoreriaCentavos).toBe(total.saldoFinalCentavos);
     expect(r.tesoreriaCuentasConSaldo).toBe(total.cuentasConSaldoFinal);
     expect(r.tesoreriaCuentas).toBe(total.cuentas);
