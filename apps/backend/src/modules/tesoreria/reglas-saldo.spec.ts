@@ -6,6 +6,7 @@ import {
   saldoDeCuenta,
   type BaseSaldo,
   type CuentaEnAlcance,
+  type GastoDia,
   type MovimientoManual,
   type MovimientoSaldo,
   type SaldoFijado,
@@ -303,6 +304,19 @@ const destino = (
   desde,
 });
 
+const gasto = (
+  fecha: string,
+  montoCentavos: number,
+  cantidad = 1,
+  sucursal = 'tj',
+): GastoDia => ({
+  fecha,
+  sucursalId: sucursal,
+  sucursalCodigo: sucursal === 'tj' ? 'TJ' : 'MX',
+  cantidad,
+  montoCentavos,
+});
+
 describe('movimientosDeSaldo', () => {
   it('depósito suma, retiro resta, traspaso resta en la de salida y suma en la de entrada', () => {
     const { movimientos } = movimientosDeSaldo(
@@ -472,5 +486,180 @@ describe('armarVista con movimientos (T-29)', () => {
     });
     expect(v.sinCuenta).toEqual([]);
     expect(v.total).toMatchObject({ entradasCentavos: 0, salidasCentavos: 0 });
+  });
+});
+
+describe('movimientosDeSaldo con gastos de la ruta (T-30/T-31, D7)', () => {
+  it('el gasto resta de la cuenta destino del EFECTIVO de su sucursal; el destino de cheque no cuenta', () => {
+    const { movimientos, gastosSinCuenta } = movimientosDeSaldo(
+      [],
+      [],
+      [
+        destino('efectivo', 'a', '2026-10-01'),
+        destino('cheque', 'b', '2026-10-01'),
+      ],
+      [gasto('2026-10-05', 33_050, 2)],
+    );
+    expect(movimientos).toEqual([
+      { cuentaId: 'a', fecha: '2026-10-05', montoCentavos: -33_050 },
+    ]);
+    expect(gastosSinCuenta).toEqual([]);
+  });
+
+  it('sin destino de efectivo vigente, el gasto va a gastosSinCuenta y no se pierde', () => {
+    const { movimientos, gastosSinCuenta } = movimientosDeSaldo(
+      [],
+      [],
+      [destino('efectivo', 'a', '2026-10-10')],
+      [gasto('2026-10-05', 1_234), gasto('2026-10-05', 500, 1, 'mx')],
+    );
+    expect(movimientos).toEqual([]);
+    expect(gastosSinCuenta).toEqual([
+      gasto('2026-10-05', 1_234),
+      gasto('2026-10-05', 500, 1, 'mx'),
+    ]);
+  });
+
+  it('varios dias y un cambio de destino: cada dia va a la cuenta vigente en su fecha', () => {
+    const { movimientos } = movimientosDeSaldo(
+      [],
+      [],
+      [
+        destino('efectivo', 'a', '2026-10-01'),
+        destino('efectivo', 'b', '2026-10-15'),
+      ],
+      [gasto('2026-10-14', 100), gasto('2026-10-15', 200)],
+    );
+    expect(movimientos).toEqual([
+      { cuentaId: 'a', fecha: '2026-10-14', montoCentavos: -100 },
+      { cuentaId: 'b', fecha: '2026-10-15', montoCentavos: -200 },
+    ]);
+  });
+
+  it('sin el cuarto argumento se comporta como T-29', () => {
+    const r = movimientosDeSaldo([], [], []);
+    expect(r).toEqual({ movimientos: [], sinDestino: [], gastosSinCuenta: [] });
+  });
+});
+
+describe('armarVista con gastos de la ruta (T-30/T-31, D7)', () => {
+  const cuentas: CuentaEnAlcance[] = [
+    {
+      id: 'a',
+      nombre: 'Efectivo TJ',
+      sucursalId: 's-tj',
+      sucursalCodigo: 'TJ',
+    },
+    { id: 'b', nombre: 'ScotiaFiscal', sucursalId: null, sucursalCodigo: null },
+  ];
+  const saldosBase = [
+    fijado('s1', 'a', '2026-10-01', 100_000),
+    fijado('s2', 'b', '2026-10-01', 500_000),
+  ];
+
+  it('el gasto es salida de la cuenta de efectivo, resta del saldo final y la cobranza sigue sumando', () => {
+    const v = armarVista('2026-10-02', '2026-10-31', cuentas, saldosBase, {
+      cobranza: [cobranza('2026-10-05', 'efectivo', 50_000, 3)],
+      destinos: [destino('efectivo', 'a', '2026-10-01')],
+      gastos: [gasto('2026-10-05', 33_050, 2), gasto('2026-10-06', 1_000)],
+    });
+    expect(v.cuentas.find((c) => c.id === 'a')).toMatchObject({
+      saldoInicioCentavos: 100_000,
+      entradasCentavos: 50_000,
+      salidasCentavos: 34_050,
+      saldoFinalCentavos: 115_950,
+    });
+    expect(v.total).toMatchObject({
+      entradasCentavos: 50_000,
+      salidasCentavos: 34_050,
+    });
+    expect(v.gastosSinCuenta).toEqual([]);
+  });
+
+  it('un gasto anterior al rango cuenta en el saldo al inicio, no en las salidas', () => {
+    const v = armarVista('2026-10-10', '2026-10-31', cuentas, saldosBase, {
+      destinos: [destino('efectivo', 'a', '2026-10-01')],
+      gastos: [gasto('2026-10-05', 20_000)],
+    });
+    expect(v.cuentas.find((c) => c.id === 'a')).toMatchObject({
+      saldoInicioCentavos: 80_000,
+      salidasCentavos: 0,
+      saldoFinalCentavos: 80_000,
+    });
+    expect(v.eventos.some((e) => e.tipo === 'gasto-ruta')).toBe(false);
+  });
+
+  it('el evento "gasto-ruta" agrupa el dia y la sucursal, con monto positivo', () => {
+    const v = armarVista('2026-10-02', '2026-10-31', cuentas, saldosBase, {
+      destinos: [destino('efectivo', 'a', '2026-10-01')],
+      gastos: [gasto('2026-10-05', 33_050, 2)],
+    });
+    expect(v.eventos).toEqual([
+      {
+        tipo: 'gasto-ruta',
+        id: 'gasto-ruta:2026-10-05:a:tj',
+        fecha: '2026-10-05',
+        cuentaId: 'a',
+        cuentaNombre: 'Efectivo TJ',
+        sucursalCodigo: 'TJ',
+        cantidad: 2,
+        montoCentavos: 33_050,
+      },
+    ]);
+  });
+
+  it('si la cuenta destino no esta en alcance no hay evento, pero tampoco es "sin cuenta"', () => {
+    const v = armarVista(
+      '2026-10-02',
+      '2026-10-31',
+      [cuentas[1]],
+      [saldosBase[1]],
+      {
+        destinos: [destino('efectivo', 'a', '2026-10-01')],
+        gastos: [gasto('2026-10-05', 33_050, 2)],
+      },
+    );
+    expect(v.eventos).toEqual([]);
+    expect(v.gastosSinCuenta).toEqual([]);
+  });
+
+  it('gastos sin cuenta: solo del rango y de sucursales en alcance, sumados por sucursal', () => {
+    const v = armarVista('2026-10-02', '2026-10-31', cuentas, saldosBase, {
+      destinos: [],
+      gastos: [
+        gasto('2026-10-03', 25_050),
+        gasto('2026-10-04', 8_000),
+        gasto('2026-09-30', 999),
+        gasto('2026-10-04', 1_234, 1, 'mx'),
+      ],
+      sucursalesEnAlcance: ['TJ'],
+    });
+    expect(v.gastosSinCuenta).toEqual([
+      { sucursalCodigo: 'TJ', montoCentavos: 33_050 },
+    ]);
+    expect(v.cuentas.find((c) => c.id === 'a')?.salidasCentavos).toBe(0);
+  });
+
+  it('un General (sin filtro de sucursales) ve los gastos sin cuenta de todas, ordenados por codigo', () => {
+    const v = armarVista('2026-10-02', '2026-10-31', cuentas, saldosBase, {
+      gastos: [gasto('2026-10-04', 1_234, 1, 'mx'), gasto('2026-10-04', 100)],
+    });
+    expect(v.gastosSinCuenta).toEqual([
+      { sucursalCodigo: 'MX', montoCentavos: 1_234 },
+      { sucursalCodigo: 'TJ', montoCentavos: 100 },
+    ]);
+  });
+
+  it('sin gastos, gastosSinCuenta es [] y no hay eventos de gasto', () => {
+    const v = armarVista('2026-10-02', '2026-10-31', cuentas, saldosBase, {
+      cobranza: [cobranza('2026-10-05', 'efectivo', 1_000)],
+      destinos: [destino('efectivo', 'a', '2026-10-01')],
+    });
+    expect(v.gastosSinCuenta).toEqual([]);
+    expect(v.eventos.map((e) => e.tipo)).toEqual(['cobranza']);
+    expect(
+      armarVista('2026-10-02', '2026-10-31', cuentas, saldosBase)
+        .gastosSinCuenta,
+    ).toEqual([]);
   });
 });
