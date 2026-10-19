@@ -85,6 +85,40 @@ describe("PestanaVista", () => {
     expect(await screen.findByText("Sin movimientos en el rango.")).toBeInTheDocument();
   });
 
+  it("columnas Entradas y Salidas, marca de saldo fijado y aviso de cobranza sin cuenta", async () => {
+    vi.mocked(lib.obtenerTesoreria).mockResolvedValue({
+      ...VISTA,
+      cuentas: [
+        { id: "a", nombre: "Efectivo TJ", sucursalCodigo: "TJ", saldoInicioCentavos: 100_000, saldoFinalCentavos: 120_000, entradasCentavos: 30_000, salidasCentavos: 10_000, saldoFijadoEnRango: "2026-10-10" },
+      ],
+      sinCuenta: [{ sucursalCodigo: "MX", metodo: "transferencia", montoCentavos: 325_000 }],
+    });
+    render(<PestanaVista sucursal={null} />);
+    const tabla = await screen.findByRole("table", { name: "Tesorería por cuenta" });
+    expect(within(tabla).getAllByRole("columnheader").map((th) => th.textContent)).toEqual([
+      "Cuenta", "Sucursal", "Saldo al inicio", "Entradas", "Salidas", "Saldo al final",
+    ]);
+    const fila = within(tabla).getByText("Efectivo TJ").closest("tr")!;
+    expect(within(fila).getByText("$300.00")).toBeInTheDocument();
+    expect(within(fila).getByText("$100.00")).toBeInTheDocument();
+    expect(within(fila).getByText("saldo fijado el 10/10/2026")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("$3,250.00 de cobranza de MX (transferencia) sin cuenta asignada");
+  });
+
+  it("movimientos del rango con concepto y cuenta de cada tipo", async () => {
+    vi.mocked(lib.obtenerTesoreria).mockResolvedValue({
+      ...VISTA,
+      eventos: [
+        { tipo: "cobranza", id: "c", fecha: HOY, cuentaId: "a", cuentaNombre: "Efectivo TJ", sucursalCodigo: "TJ", metodo: "efectivo", cantidad: 12, montoCentavos: 840_000 },
+        { tipo: "traspaso", id: "t", fecha: HOY, cuentaId: "a", cuentaNombre: "Efectivo TJ", cuentaDestinoId: "b", cuentaDestinoNombre: "ScotiaFiscal", montoCentavos: 500_000, comentario: null, capturo: "Ana" },
+      ],
+    });
+    render(<PestanaVista sucursal={null} />);
+    const tabla = await screen.findByRole("table", { name: "Movimientos del rango" });
+    expect(within(tabla).getByText("Cobranza en efectivo · 12 cobros · TJ")).toBeInTheDocument();
+    expect(within(tabla).getByText("Efectivo TJ → ScotiaFiscal")).toBeInTheDocument();
+  });
+
   it("Ayer consulta el día anterior", async () => {
     render(<PestanaVista sucursal={null} />);
     await screen.findByText("ScotiaFiscal");

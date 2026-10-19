@@ -10,6 +10,8 @@ import { etiquetaSucursal, formatearFecha } from "@/lib/reportes";
 import {
   definicionExcelTesoreria,
   diaAnterior,
+  describirEvento,
+  ETIQUETA_METODO,
   etiquetaSucursalCuenta,
   obtenerTesoreria,
   type VistaTesoreria,
@@ -145,6 +147,16 @@ export function PestanaVista({ sucursal, activa = true }: { sucursal: string | n
           <p className="text-sm text-muted-foreground">
             Del {formatearFecha(vista.desde)} al {formatearFecha(vista.hasta)}
           </p>
+          {vista.sinCuenta.length > 0 && (
+            <div role="status" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              {vista.sinCuenta.map((s) => (
+                <p key={`${s.sucursalCodigo}:${s.metodo}`}>
+                  {formatearPesos(s.montoCentavos)} de cobranza de {s.sucursalCodigo} ({ETIQUETA_METODO[s.metodo].toLowerCase()}) sin cuenta asignada
+                </p>
+              ))}
+              <p className="text-xs">Configúrala en Cuentas → ¿A qué cuenta entra la cobranza?</p>
+            </div>
+          )}
           {vista.cuentas.length === 0 ? (
             <p className="text-sm text-muted-foreground">No hay cuentas. Dalas de alta en la pestaña Cuentas.</p>
           ) : (
@@ -154,6 +166,8 @@ export function PestanaVista({ sucursal, activa = true }: { sucursal: string | n
                   <th className="py-2 pr-4 font-medium">Cuenta</th>
                   <th className="py-2 pr-4 font-medium">Sucursal</th>
                   <th className="py-2 pr-4 text-right font-medium">Saldo al inicio</th>
+                  <th className="py-2 pr-4 text-right font-medium">Entradas</th>
+                  <th className="py-2 pr-4 text-right font-medium">Salidas</th>
                   <th className="py-2 text-right font-medium">Saldo al final</th>
                 </tr>
               </thead>
@@ -165,8 +179,13 @@ export function PestanaVista({ sucursal, activa = true }: { sucursal: string | n
                     <td className="whitespace-nowrap py-2 pr-4 text-right tabular-nums">
                       <Pesos centavos={c.saldoInicioCentavos} />
                     </td>
+                    <td className="whitespace-nowrap py-2 pr-4 text-right tabular-nums">{formatearPesos(c.entradasCentavos)}</td>
+                    <td className="whitespace-nowrap py-2 pr-4 text-right tabular-nums">{formatearPesos(c.salidasCentavos)}</td>
                     <td className="whitespace-nowrap py-2 text-right tabular-nums">
                       <Pesos centavos={c.saldoFinalCentavos} />
+                      {c.saldoFijadoEnRango && (
+                        <span className="block text-xs text-muted-foreground">saldo fijado el {formatearFecha(c.saldoFijadoEnRango)}</span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -183,6 +202,8 @@ export function PestanaVista({ sucursal, activa = true }: { sucursal: string | n
                       </span>
                     )}
                   </td>
+                  <td className="whitespace-nowrap py-2 pr-4 text-right tabular-nums">{formatearPesos(t.entradasCentavos)}</td>
+                  <td className="whitespace-nowrap py-2 pr-4 text-right tabular-nums">{formatearPesos(t.salidasCentavos)}</td>
                   <td className="whitespace-nowrap py-2 text-right tabular-nums">
                     <Pesos centavos={t.saldoFinalCentavos} />
                     {t.cuentasConSaldoFinal < t.cuentas && (
@@ -197,14 +218,15 @@ export function PestanaVista({ sucursal, activa = true }: { sucursal: string | n
           )}
 
           <div className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold">Saldos fijados en el rango</h3>
+            <h3 className="text-sm font-semibold">Movimientos del rango</h3>
             {vista.eventos.length === 0 ? (
               <p className="text-sm text-muted-foreground">Sin movimientos en el rango.</p>
             ) : (
-              <table className="w-full text-sm" aria-label="Saldos fijados en el rango">
+              <table className="w-full text-sm" aria-label="Movimientos del rango">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
                     <th className="py-2 pr-4 font-medium">Fecha</th>
+                    <th className="py-2 pr-4 font-medium">Concepto</th>
                     <th className="py-2 pr-4 font-medium">Cuenta</th>
                     <th className="py-2 pr-4 text-right font-medium">Monto</th>
                     <th className="py-2 pr-4 font-medium">Comentario</th>
@@ -212,17 +234,21 @@ export function PestanaVista({ sucursal, activa = true }: { sucursal: string | n
                   </tr>
                 </thead>
                 <tbody>
-                  {vista.eventos.map((e) => (
-                    <tr key={e.id} className="border-b last:border-0">
-                      <td className="whitespace-nowrap py-2 pr-4">{formatearFecha(e.fecha)}</td>
-                      <td className="py-2 pr-4">{e.cuentaNombre}</td>
-                      <td className="whitespace-nowrap py-2 pr-4 text-right tabular-nums">
-                        <Pesos centavos={e.montoCentavos} />
-                      </td>
-                      <td className="py-2 pr-4">{"comentario" in e ? (e.comentario ?? "—") : "—"}</td>
-                      <td className="py-2">{"capturo" in e ? e.capturo : "—"}</td>
-                    </tr>
-                  ))}
+                  {vista.eventos.map((e) => {
+                    const { concepto, cuenta, signo } = describirEvento(e);
+                    return (
+                      <tr key={e.id} className="border-b last:border-0">
+                        <td className="whitespace-nowrap py-2 pr-4">{formatearFecha(e.fecha)}</td>
+                        <td className="py-2 pr-4">{concepto}</td>
+                        <td className="py-2 pr-4">{cuenta}</td>
+                        <td className="whitespace-nowrap py-2 pr-4 text-right tabular-nums">
+                          <Pesos centavos={signo === -1 ? -e.montoCentavos : e.montoCentavos} />
+                        </td>
+                        <td className="py-2 pr-4">{e.tipo === "cobranza" ? "—" : (e.comentario ?? "—")}</td>
+                        <td className="py-2">{e.tipo === "cobranza" ? "—" : e.capturo}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             )}
