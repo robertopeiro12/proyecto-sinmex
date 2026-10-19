@@ -10,6 +10,7 @@ import type { Transaction } from 'kysely';
 import type { DB } from '../../database/schema';
 import { ClientesService } from '../cartera-clientes/clientes.service';
 import { ProspectoRechazado } from '../cartera-clientes/prospecto-rechazado';
+import { UbicacionClientesService } from '../cartera-clientes/ubicacion-clientes.service';
 import {
   normalizarSucursalPedida,
   resolverAlcance,
@@ -39,7 +40,10 @@ import {
 } from './despacho';
 import { CODIGO_POR_RAZON_COBRANZA } from './despacho-cobranza';
 import { CODIGO_POR_RAZON_JORNADA } from './despacho-jornada';
-import { CODIGO_POR_RAZON_PROSPECTO } from './despacho-prospecto';
+import {
+  CODIGO_POR_RAZON_PROSPECTO,
+  pideGeocodificacion,
+} from './despacho-prospecto';
 import { CODIGO_POR_RAZON_RUTA } from './despacho-ruta-alta';
 import { CODIGO_POR_RAZON_VISITA } from './despacho-visita';
 import type { PullDto, PushDto } from './dto/sincronizacion.dto';
@@ -89,6 +93,8 @@ export class SincronizacionService {
     private readonly rutasDiarias: RutasDiariasService,
     // T-39: Rutas tambien es la duena de la visita sin venta.
     private readonly visitas: VisitasService,
+    // T-72: geocodificar el domicilio de un prospecto sin GPS, DESPUES del commit.
+    private readonly ubicacion: UbicacionClientesService,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -374,6 +380,19 @@ export class SincronizacionService {
             `push: la operacion ${op.clave} choco con ${codigo} en el intento ${intento} de ${INTENTOS_ANTE_CONFLICTO}; se repite su transaccion`,
           ),
       );
+
+      // T-72 (D5): aqui la transaccion ya hizo commit (`enTransaccion` resolvio)
+      // y el intento se dispara SIN esperarlo: el push no espera a Google. Solo
+      // un alta recien aplicada; un reenvio `duplicada` no repite el intento, y
+      // una rechazada nunca llega a esta linea (sale por el `catch`).
+      if (
+        !guardado.duplicada &&
+        proyeccion?.tipo === 'prospecto' &&
+        pideGeocodificacion(proyeccion.prospecto)
+      ) {
+        // T-75: la clave del prospecto ES el id del cliente.
+        void this.ubicacion.geocodificarEnSegundoPlano(op.clave);
+      }
 
       return {
         clave: op.clave,

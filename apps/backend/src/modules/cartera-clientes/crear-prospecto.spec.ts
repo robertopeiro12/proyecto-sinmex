@@ -37,6 +37,7 @@ const prospecto = (
   encargado: 'Don Aaron',
   tipoNegocioId: TIPO_NEGOCIO,
   comentarios: 'Quiere probar jamaica',
+  domicilio: null,
   lat: 32.5149,
   lng: -117.0382,
   ...extra,
@@ -74,6 +75,7 @@ describe('ClientesService.crearProspecto', () => {
         encargado: 'Don Aaron',
         tipoNegocioId: TIPO_NEGOCIO,
         comentarios: 'Quiere probar jamaica',
+        domicilio: null,
         lat: 32.5149,
         lng: -117.0382,
         sucursalId: 'sucursal-tj',
@@ -143,6 +145,25 @@ describe('ClientesService.crearProspecto', () => {
 
     expect(repo.insertarProspecto).toHaveBeenCalledWith(
       expect.objectContaining({ lat: null, lng: null }),
+      trx,
+    );
+  });
+
+  it('guarda la direccion que escribio el vendedor (T-72, D2)', async () => {
+    const { servicio, repo } = montar();
+
+    await servicio.crearProspecto(
+      prospecto({ domicilio: 'Av. Revolución 1234', lat: null, lng: null }),
+      contexto(),
+      trx,
+    );
+
+    expect(repo.insertarProspecto).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domicilio: 'Av. Revolución 1234',
+        lat: null,
+        lng: null,
+      }),
       trx,
     );
   });

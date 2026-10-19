@@ -250,6 +250,11 @@ export interface ClientePull extends FilaSincronizable {
   plazo_credito_dias: number | null;
   lat: number | null;
   lng: number | null;
+  /**
+   * T-72 (D3). **Opcional en la copia de la tablet**: un servidor anterior no lo
+   * manda (`aSnapshot` lo vuelve `null`). Se guarda; aun no se muestra.
+   */
+  ubicacion_origen?: 'gps' | 'geocodificada' | 'manual' | null;
   sucursal_id: string;
   /** T-20: suma de los movimientos vivos de saldo a favor, en centavos. Solo se muestra. */
   saldo_favor_centavos: number;
@@ -511,8 +516,6 @@ export type DatosVenta = {
  *
  * Lo que NO viaja, y por que:
  *
- * - **`domicilio`**: no se captura. Lo sustituye la ubicacion, y en Postgres la
- *   columna dejo de ser obligatoria para un prospecto.
  * - **`lista_precio_id`, `pct_comision`, `promocion`, `plazo_credito_dias`**: son
  *   decisiones del administrador. El vendedor no puede dar de alta clientes
  *   justamente porque el control del precio no es suyo.
@@ -538,6 +541,12 @@ export type DatosProspecto = {
   /** Del catalogo `tipos_negocio` que baja en el `pull`. */
   tipo_negocio_id: string | null;
   comentarios: string | null;
+  /**
+   * T-72 (D2): "Dirección del negocio", hasta 300. Obligatoria al capturar sin
+   * GPS (`validarAltaProspecto`); el servidor la geocodifica despues del commit.
+   * Opcional en el cable.
+   */
+  domicilio?: string | null;
   /**
    * Ubicacion del dispositivo. **Las dos o ninguna**: media coordenada no ubica
    * nada y en el portal se veria como un punto en el meridiano cero, que es peor

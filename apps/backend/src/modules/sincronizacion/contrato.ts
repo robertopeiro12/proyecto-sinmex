@@ -309,8 +309,6 @@ export type DatosVenta = {
  *
  * Lo que NO viaja, y por que:
  *
- * - **`domicilio`**: no se captura. Lo sustituye la ubicacion, y en Postgres la
- *   columna dejo de ser obligatoria para un prospecto.
  * - **`lista_precio_id`, `pct_comision`, `promocion`, `plazo_credito_dias`**: son
  *   decisiones del administrador. El vendedor no puede dar de alta clientes
  *   justamente porque el control del precio no es suyo.
@@ -341,6 +339,18 @@ export type DatosProspecto = {
   /** Del catalogo `tipos_negocio` que baja en el `pull`. */
   tipo_negocio_id: string | null;
   comentarios: string | null;
+  /**
+   * T-72 (D2): la direccion del negocio que escribio el vendedor. Hasta 300
+   * caracteres; se recorta y un texto vacio cuenta como `null`. La tablet la
+   * exige cuando no hay GPS; el servidor solo valida la forma (mas de 300 o no
+   * texto = `datos-invalidos`, motivo `domicilio: …`). Se guarda en
+   * `cliente.domicilio` y, sin `lat`/`lng`, el servidor la geocodifica despues
+   * del commit, sin que el push espere.
+   *
+   * Opcional: una tablet anterior no la manda. Aditivo, `CONTRATO_ACTUAL` sigue
+   * en 1.
+   */
+  domicilio?: string | null;
   /**
    * Ubicacion del dispositivo. **Las dos o ninguna**: media coordenada no ubica
    * nada y en el portal se veria como un punto en el meridiano cero, que es peor
@@ -655,6 +665,14 @@ export interface ClientePull extends FilaSincronizable {
   plazo_credito_dias: number | null;
   lat: number | null;
   lng: number | null;
+  /**
+   * T-72 (D3): de donde salio la coordenada: `'gps'` (la tablet al dar de alta
+   * el prospecto), `'geocodificada'` (el servidor, con Google) o `'manual'` (la
+   * oficina en el portal); `null` sin coordenada. Cuando el servidor geocodifica
+   * le toca `updated_at`, asi que coordenada y origen bajan solos en el pull
+   * incremental. Aditivo: una tablet anterior lo ignora.
+   */
+  ubicacion_origen: 'gps' | 'geocodificada' | 'manual' | null;
   sucursal_id: string;
   /**
    * Saldo a favor del cliente, en centavos: la suma de sus movimientos vivos de

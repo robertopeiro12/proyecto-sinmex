@@ -1,5 +1,6 @@
 import {
   CODIGO_POR_RAZON_PROSPECTO,
+  pideGeocodificacion,
   prepararProspecto,
 } from './despacho-prospecto';
 import type { OperacionNormalizada } from './operaciones';
@@ -124,5 +125,48 @@ describe('CODIGO_POR_RAZON_PROSPECTO', () => {
     for (const codigo of Object.values(CODIGO_POR_RAZON_PROSPECTO)) {
       expect(codigo).not.toMatch(/fallida|generico|desconocido/);
     }
+  });
+});
+
+describe('pideGeocodificacion (T-72, D5)', () => {
+  const normalizado = (datos: Record<string, unknown>) => {
+    const r = prepararProspecto(
+      operacion({
+        datos: {
+          nombre: 'Tacos Aaron',
+          telefono: '6641112233',
+          encargado: 'Don Aaron',
+          ...datos,
+        },
+      }),
+    );
+    if (!r.ok) throw new Error(r.motivo);
+    return r.prospecto;
+  };
+
+  it('con direccion y sin GPS si', () => {
+    expect(
+      pideGeocodificacion(
+        normalizado({ domicilio: 'Av. Revolución 1234', lat: null, lng: null }),
+      ),
+    ).toBe(true);
+  });
+
+  it('con GPS no, aunque traiga direccion: gana la coordenada del GPS', () => {
+    expect(
+      pideGeocodificacion(
+        normalizado({
+          domicilio: 'Av. Revolución 1234',
+          lat: 32.5149,
+          lng: -117.0382,
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it('sin direccion no (una tablet anterior)', () => {
+    expect(pideGeocodificacion(normalizado({ lat: null, lng: null }))).toBe(
+      false,
+    );
   });
 });

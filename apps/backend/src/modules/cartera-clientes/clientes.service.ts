@@ -348,6 +348,7 @@ export class ClientesService {
           encargado: prospecto.encargado,
           tipoNegocioId: prospecto.tipoNegocioId,
           comentarios: prospecto.comentarios,
+          domicilio: prospecto.domicilio,
           lat: prospecto.lat,
           lng: prospecto.lng,
           // La sucursal sale del alcance del vendedor del token, nunca del cuerpo:

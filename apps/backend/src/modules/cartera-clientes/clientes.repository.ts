@@ -316,10 +316,12 @@ export class ClientesRepository {
    * del buzon de `sync_operacion` (ADR-0009 §2.3). Mismo patron que
    * `VentasRepository` de T-16.
    *
-   * Sin `domicilio`, sin `lista_precio_id`, sin `pct_comision`
+   * Sin `lista_precio_id`, sin `pct_comision`
    * y sin `plazo_credito_dias`: son decisiones del administrador, no del
    * vendedor, y los dos primeros ahora aceptan nulo solo para un prospecto
    * (`ck_cliente_domicilio_obligatorio`, `ck_cliente_lista_precio_obligatoria`).
+   * El `domicilio` llega desde T-72 cuando el vendedor lo escribio (obligatorio
+   * en la tablet sin GPS).
    *
    * `lat`/`lng` van como texto y no como numero, igual que en `crear()`: el
    * driver `pg` quiere `numeric` en texto y pasar por un `number` es la puerta a
@@ -333,6 +335,7 @@ export class ClientesRepository {
       encargado: string | null;
       tipoNegocioId: string | null;
       comentarios: string | null;
+      domicilio: string | null;
       lat: number | null;
       lng: number | null;
       sucursalId: string;
@@ -344,7 +347,8 @@ export class ClientesRepository {
       .values({
         id: datos.id,
         nombre: datos.nombre,
-        domicilio: null,
+        // T-72 (D2): la direccion que escribio el vendedor, o null.
+        domicilio: datos.domicilio,
         telefono: datos.telefono,
         encargado: datos.encargado,
         // El default de la columna es `false`, pero se escribe explicito: que un
