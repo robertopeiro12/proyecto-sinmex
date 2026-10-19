@@ -1,4 +1,5 @@
 import { esViolacionUnicidad } from '../../database/errores-postgres';
+import type { GastoNormalizado } from '../compras-egresos/datos-gasto';
 import type { ProspectoNormalizado } from '../cartera-clientes/datos-prospecto';
 import {
   normalizarDatosVenta,
@@ -11,6 +12,7 @@ import type { CobranzaNormalizada } from '../ventas-cobranza/datos-cobranza';
 import type { RazonRechazoVenta } from '../ventas-cobranza/venta-rechazada';
 import type { CodigoRechazo } from './contrato';
 import { prepararCobranza } from './despacho-cobranza';
+import { prepararGasto } from './despacho-gasto';
 import { prepararJornada } from './despacho-jornada';
 import { prepararProspecto } from './despacho-prospecto';
 import { prepararRutaAlta } from './despacho-ruta-alta';
@@ -27,10 +29,10 @@ import type { OperacionNormalizada, Rechazo } from './operaciones';
 /**
  * Lo que un modulo de dominio tiene que proyectar para una operacion.
  *
- * Un `tipo` sin modulo todavia (`gasto`, `merma`, `ruta`) no tiene proyeccion:
+ * Un `tipo` sin modulo todavia (`merma`, `ruta`) no tiene proyeccion:
  * se guarda en el buzon y queda `aplicada`, como desde T-07.
  * Orden acordado entre tickets: `venta`, `prospecto` (T-40), `cobranza` (T-20),
- * `jornada` (T-38), `ruta-alta` (T-37), `visita` (T-39).
+ * `jornada` (T-38), `ruta-alta` (T-37), `visita` (T-39), `gasto` (T-30/T-31).
  */
 export type Proyeccion =
   // T-17: el folio viaja con la proyeccion. Aqui ya se comprobo que no es null,
@@ -45,7 +47,9 @@ export type Proyeccion =
   // T-37. La fila es de `ruta`; vendedor, sucursal y fecha van en el contexto.
   | { tipo: 'ruta-alta'; alta: RutaAltaNormalizada }
   // T-39. La fila es de `visita` con id = clave; el cliente es el del sobre.
-  | { tipo: 'visita'; visita: VisitaNormalizada; clienteId: string };
+  | { tipo: 'visita'; visita: VisitaNormalizada; clienteId: string }
+  // T-30/T-31. La fila es de `gasto` con id = clave; sin cliente.
+  | { tipo: 'gasto'; gasto: GastoNormalizado };
 
 export type ResultadoPreparacion =
   { ok: true; proyeccion: Proyeccion | null } | ({ ok: false } & Rechazo);
@@ -110,7 +114,13 @@ export function prepararProyeccion(
         proyeccion: { tipo: 'jornada', jornada: r.jornada },
       };
     }
-    case 'gasto':
+    case 'gasto': {
+      // T-30/T-31. La forma la revisa `despacho-gasto.ts`; el campo y el id
+      // ocupado, `GastosService` dentro de la transaccion.
+      const r = prepararGasto(op);
+      if (!r.ok) return r;
+      return { ok: true, proyeccion: { tipo: 'gasto', gasto: r.gasto } };
+    }
     case 'merma':
     case 'ruta':
       return { ok: true, proyeccion: null };

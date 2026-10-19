@@ -468,8 +468,9 @@ no hacer.
 `datos` lo fija el ticket de cada módulo, y fijarlo es un cambio **aditivo** que
 no sube la versión del contrato. Hoy tienen forma fija **`venta`** (T-16),
 **`prospecto`** (T-40), **`cobranza`** (T-20), **`jornada`** (T-38),
-**`ruta-alta`** (T-37) y **`visita`** (T-39), los seis abajo; gastos, merma y ruta
-(reservada, sin forma) siguen libres hasta T-27/T-33, y el servidor las guarda tal cual.
+**`ruta-alta`** (T-37), **`visita`** (T-39) y **`gasto`** (T-30/T-31), los siete
+abajo; merma y ruta (reservada, sin forma) siguen libres hasta T-33, y el servidor
+las guarda tal cual.
 
 ### `datos` de una venta (T-16)
 
@@ -754,9 +755,41 @@ permiso o no haber señal, y eso no le impide registrar al prospecto.
 - **El servidor no revisa "exige foto" ni "exige nombre"**: lo exige la tablet al guardar.
 - Se guarda en `visita` con `id = clave` y `fecha = fecha_operacion`; el buzón apunta a esa fila
   (`entidad_tabla = 'visita'`). Puede haber varias visitas al día por cliente, y se puede visitar a un prospecto.
-- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → rutas`. La visita a un prospecto
+- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → gastos → rutas`. La visita a un prospecto
   capturado sin red necesita que su alta ya haya entrado en un lote anterior (el alcance se comprueba una vez por
   lote, como la venta de bienvenida de T-75).
+
+### `datos` de un gasto de la ruta (T-30/T-31)
+
+```jsonc
+{
+  "clave": "uuid de la fila local",     // ES el id del gasto en el servidor: debe ser uuid
+  "tipo": "gasto",
+  "fecha_operacion": "2026-10-20",      // el día al que cuenta el gasto (Tesorería y el corte)
+  "ocurrido_en": "2026-10-20T18:40:00.000Z",
+  // sin "cliente_id" y sin "folio": un gasto no es de un cliente ni es una nota
+  "datos": {
+    "campo_egreso_id": "uuid",          // del catálogo campos_egreso (vivo o dado de baja)
+    "monto_centavos": 25050,            // entero, 1..999 999 999 999
+    "registrado_en": "2026-10-20T11:40:00-07:00",
+    "comentario": "Ticket de la gasolinera" // opcional, <= 200
+  }
+}
+```
+
+- La forma se valida **antes** de la transacción (`prepararGasto`): clave no uuid, folio o `cliente_id` en el
+  sobre, o `datos` mal formado es `datos-invalidos` con un motivo que nombra el campo. El comentario se recorta y uno
+  vacío se guarda como `null`.
+- Dentro de la transacción (`GastosService.registrarGasto`, `modules/compras-egresos/`): un campo que no existe es
+  `campo-egreso-inexistente`; **uno dado de baja sí se acepta**, y el servidor **no** revisa "se usa en la app". Un
+  id que ya ocupa otro gasto es `gasto-id-ocupado`, con motivo neutro. La misma clave reenviada es `duplicada`.
+- Se guarda en `gasto` con `id = clave`, `fecha = fecha_operacion` (nunca re-derivada de `registrado_en`),
+  `metodo = 'efectivo_cobranza_dia'`, `origen = 'app'`, `quien` = el nombre del vendedor y una copia del nombre y
+  el tipo del campo. El buzón apunta a esa fila (`entidad_tabla = 'gasto'`).
+- Tesorería **lee** la tabla `gasto` (no copia nada) y resta el gasto de la cuenta de efectivo de la sucursal.
+- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → gastos → rutas`.
+- Las operaciones `gasto` que llegaron antes de T-30/T-31 (ninguna tablet las mandaba) se quedan en el buzón sin
+  proyectar y sin relleno.
 
 ### Fotos: subida y descarga (canal aparte del lote; T-40, T-39)
 
@@ -830,6 +863,8 @@ texto en español** si reintenta o si avisa al vendedor.
 | `ruta-duplicada` | Ya había una fila viva de ese vendedor, fecha y cliente con **otra** clave. **La tablet la trata como aplicada** (T-37) |
 | `motivo-visita-inexistente` | El `motivo_visita_id` de una visita no existe. Uno dado de baja **sí** se acepta. Se reintenta (T-39) |
 | `visita-id-ocupado` | El id (la clave) de la visita ya lo ocupa otro registro. Motivo neutro; avisar a la oficina (T-39) |
+| `campo-egreso-inexistente` | El `campo_egreso_id` de un gasto no existe. Uno dado de baja **sí** se acepta y "se usa en la app" no se revisa. Se reintenta (T-30/T-31) |
+| `gasto-id-ocupado` | El id (la clave) del gasto ya lo ocupa otro registro. Motivo neutro; avisar a la oficina (T-30/T-31) |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo
@@ -873,7 +908,7 @@ El rechazo se recalcula en cada intento: es determinista y no necesita memoria.
 ### Una transacción por operación (T-16, ADR-0009)
 
 Cuando un `tipo` tiene un módulo de dominio que lo proyecta (hoy `venta`,
-`cobranza`, `prospecto`, `jornada`, `ruta-alta` y `visita`), cada operación del lote se aplica **en su
+`cobranza`, `prospecto`, `jornada`, `ruta-alta`, `visita` y `gasto`), cada operación del lote se aplica **en su
 propia transacción**:
 
 1. `INSERT` en `sync_operacion` con `on conflict (vendedor_id, clave_idempotencia) do nothing`.
@@ -897,11 +932,14 @@ propia transacción**:
    - `VisitasService.registrarVisita` (T-39) → comprueba que el motivo exista (**aunque esté dado de baja**) e
      inserta en `visita` con `id = clave` y `on conflict (id) do nothing`; si no insertó, `visita-id-ocupado`.
      La entidad es la fila de `visita`.
+   - `GastosService.registrarGasto` (T-30/T-31) → comprueba que el campo exista (**aunque esté dado de baja**),
+     copia su nombre y su tipo e inserta en `gasto` con `id = clave` y `on conflict (id) do nothing`; si no
+     insertó, `gasto-id-ocupado`. La entidad es la fila de `gasto`.
 3. `commit` → `aplicada`. Si el dominio rechaza (`presentacion-inactiva`,
-   `precio-no-asignado`, `nota-no-encontrada`, `vehiculo-inexistente`, `jornada-duplicada`, `cliente-inexistente`, `ruta-duplicada`, `motivo-visita-inexistente`, `visita-id-ocupado`),
+   `precio-no-asignado`, `nota-no-encontrada`, `vehiculo-inexistente`, `jornada-duplicada`, `cliente-inexistente`, `ruta-duplicada`, `motivo-visita-inexistente`, `visita-id-ocupado`, `campo-egreso-inexistente`, `gasto-id-ocupado`),
    `rollback`: no queda **ni** la fila de negocio **ni** la del buzón.
 
-Los tipos sin módulo todavía (`gasto`, `merma`, `ruta`) se guardan en el buzón y
+Los tipos sin módulo todavía (`merma`, `ruta`) se guardan en el buzón y
 quedan `aplicada` con `entidad_id` nulo, como hasta ahora.
 Las operaciones se aplican **en el orden del lote**, y un error inesperado a mitad
 de lote deja comprometidas las anteriores (cada una tuvo su `commit`): el reintento
@@ -1035,8 +1073,8 @@ sincronizar.
 | Resolución de conflictos (portal y tablet tocan lo mismo) | **T-43** |
 | Subir el orden en que el vendedor arrastró su ruta (hoy se queda en la tablet, D4) | Futuro, aditivo |
 | Sincronización automática 11:00/14:00 | **T-44** |
-| Forma de `datos` para gasto / merma (la de `ruta` sigue reservada sin forma; la visita es `visita`, §6) | **T-27 / T-33** |
-| Proyección de `gasto` y `merma` a sus tablas de negocio (las de `venta`, `cobranza`, `jornada`, `ruta-alta` y `visita` ya existen, §7) | Los mismos |
+| Forma de `datos` para merma (la de `ruta` sigue reservada sin forma; la visita es `visita` y el gasto `gasto`, §6) | **T-33** |
+| Proyección de `merma` a su tabla de negocio (las de `venta`, `cobranza`, `jornada`, `ruta-alta`, `visita` y `gasto` ya existen, §7) | El mismo |
 | Reporte de Kilometraje del portal (lee `jornada`) y reproceso de las jornadas que llegaron antes de T-38 | Portal (siguiente paso de T-38) |
 | Eliminar una cobranza con autorización (el saldo a favor y la cobranza desde el portal ya están: T-21) | **T-34** |
 | Permisos granulares en estos endpoints | **T-8** |

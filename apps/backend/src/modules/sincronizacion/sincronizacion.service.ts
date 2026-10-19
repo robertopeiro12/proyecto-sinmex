@@ -15,6 +15,8 @@ import {
   normalizarSucursalPedida,
   resolverAlcance,
 } from '../sucursales/alcance-sucursal';
+import { GastoRechazado } from '../compras-egresos/gasto-rechazado';
+import { GastosService } from '../compras-egresos/gastos.service';
 import { JornadaRechazada } from '../rutas/jornada-rechazada';
 import { JornadasService } from '../rutas/jornadas.service';
 import { RutaRechazada } from '../rutas/ruta-rechazada';
@@ -45,6 +47,7 @@ import {
   pideGeocodificacion,
 } from './despacho-prospecto';
 import { CODIGO_POR_RAZON_RUTA } from './despacho-ruta-alta';
+import { CODIGO_POR_RAZON_GASTO } from './despacho-gasto';
 import { CODIGO_POR_RAZON_VISITA } from './despacho-visita';
 import type { PullDto, PushDto } from './dto/sincronizacion.dto';
 import { INTENTOS_ANTE_CONFLICTO, reintentarAnteConflicto } from './reintento';
@@ -95,6 +98,8 @@ export class SincronizacionService {
     private readonly visitas: VisitasService,
     // T-72: geocodificar el domicilio de un prospecto sin GPS, DESPUES del commit.
     private readonly ubicacion: UbicacionClientesService,
+    // T-30/T-31: Compras y Egresos es la duena del gasto de la ruta.
+    private readonly gastos: GastosService,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -464,6 +469,16 @@ export class SincronizacionService {
           motivo: error.message,
         };
       }
+      // T-30/T-31: el rollback ya dejo sin fila tanto el buzon como el gasto.
+      if (error instanceof GastoRechazado) {
+        return {
+          clave: op.clave,
+          tipo: op.tipo,
+          estado: 'rechazada',
+          codigo: CODIGO_POR_RAZON_GASTO[error.razon],
+          motivo: error.message,
+        };
+      }
       if (esColisionDeFolio(error)) {
         return this.clasificarColision(vendedor, op);
       }
@@ -577,6 +592,21 @@ export class SincronizacionService {
             sucursalId: vendedor.sucursal_id,
             vendedorId: vendedor.id,
             clienteId: proyeccion.clienteId,
+            // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
+            fechaOperacion: op.fechaOperacion,
+          },
+          trx,
+        );
+      case 'gasto':
+        // La entidad del buzon es la fila de `gasto` (ADR-0009 §2.4, enmendado).
+        return this.gastos.registrarGasto(
+          proyeccion.gasto,
+          {
+            // T-30/T-31 (D4): la clave ES el id del gasto (uuid validado en prepararGasto).
+            id: op.clave,
+            // Del token, nunca del cuerpo.
+            sucursalId: vendedor.sucursal_id,
+            vendedorId: vendedor.id,
             // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
             fechaOperacion: op.fechaOperacion,
           },

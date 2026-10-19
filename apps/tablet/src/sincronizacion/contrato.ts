@@ -132,6 +132,13 @@ export const CODIGOS_RECHAZO = [
   'motivo-visita-inexistente',
   /** T-39: el id de la visita ya lo ocupa otro registro. Motivo neutro. */
   'visita-id-ocupado',
+  /**
+   * T-30/T-31: el campo del gasto no existe en el servidor (un id que nunca
+   * existio; uno dado de baja se acepta). El gasto queda en `error`.
+   */
+  'campo-egreso-inexistente',
+  /** T-30/T-31: el id del gasto ya lo ocupa otro registro. Motivo neutro. */
+  'gasto-id-ocupado',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -637,6 +644,21 @@ export type DatosVisita = {
   precision_m?: number | null;
   /** Hasta 300; obligatoria (no vacia) si no hay lat/lng. */
   direccion_texto?: string | null;
+};
+
+/**
+ * `datos` de una operacion `tipo: "gasto"` (T-30/T-31). Copia del tipo del
+ * backend: sin `cliente_id` ni folio en el sobre; la clave es el id del gasto.
+ */
+export type DatosGasto = {
+  /** uuid de `campo_egreso` (vivo o dado de baja). */
+  campo_egreso_id: string;
+  /** Entero, de 1 a 999_999_999_999. */
+  monto_centavos: number;
+  /** Instante ISO-8601 con zona en que el vendedor lo guardo. */
+  registrado_en: string;
+  /** Hasta 200 caracteres. */
+  comentario?: string | null;
 };
 
 export interface ResultadoOperacion {

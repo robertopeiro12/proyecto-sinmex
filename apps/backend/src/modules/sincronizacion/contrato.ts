@@ -64,7 +64,10 @@ export const MAX_BYTES_POR_LOTE = 1_000_000;
  *
  * Hecho: T-16 — `venta` (cabecera + lineas, ver {@link DatosVenta} y [[Venta-Nota]]).
  * Hecho: T-20 — `cobranza` (abono/liquidacion sobre una nota, ver {@link DatosCobranza} y [[Cobranza-Abono]]).
- * TODO: T-27 — `gasto` (hielo, gasolina, reparacion, adelanto).
+ * Hecho: T-30/T-31 — `gasto`, un gasto de la ruta pagado con el efectivo
+ *        cobrado (ver {@link DatosGasto}); se proyecta a la tabla `gasto` con
+ *        `id = clave`. El tipo ya existia: fijar su forma es aditivo y no sube
+ *        la version.
  * TODO: T-33 — `merma` (los 3 tipos de merma del documento de julio 2026).
  * Hecho: T-39 — `visita`, una visita sin venta con su motivo (ver
  *        {@link DatosVisita}); se proyecta a la tabla `visita` con `id = clave`.
@@ -244,6 +247,18 @@ export const CODIGOS_RECHAZO = [
    * neutro a proposito: no confirma que hay detras del id.
    */
   'visita-id-ocupado',
+  /**
+   * El `campo_egreso_id` de un gasto no existe en el catalogo. T-30/T-31. Un
+   * campo **dado de baja si se acepta**, y tampoco se mira "se usa en la app":
+   * la oficina pudo cambiarlo mientras la tablet estaba sin red. Esto solo cae
+   * con un id que nunca existio (bug de la tablet).
+   */
+  'campo-egreso-inexistente',
+  /**
+   * El id del gasto (su clave) ya esta ocupado por otro registro. T-30/T-31. El
+   * mismo vendedor con la misma clave es `duplicada`, no esto. Motivo neutro.
+   */
+  'gasto-id-ocupado',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -487,6 +502,32 @@ export type DatosVisita = {
   precision_m?: number | null;
   /** Hasta 300; obligatoria (no vacia) si no hay lat/lng. */
   direccion_texto?: string | null;
+};
+
+/**
+ * `datos` de una operacion `tipo: "gasto"` (T-30/T-31): un gasto de la ruta
+ * (hielo, gasolina, reparacion del vehiculo, adelanto de sueldo) que el
+ * vendedor pago con el efectivo que cobro.
+ *
+ * El sobre **no** lleva `cliente_id` (un gasto no es de un cliente) ni folio.
+ * La `clave` **es el id** de la fila `gasto`: debe ser uuid. El dia al que
+ * cuenta es `fecha_operacion`, nunca re-derivado de `registrado_en`. El metodo
+ * no viaja: en la app siempre es efectivo de la cobranza del dia.
+ *
+ * El servidor **no** revisa `se_usa_en_app` del campo, y uno dado de baja se
+ * acepta.
+ *
+ * Es `type` y no `interface` por la misma razon que {@link DatosVenta}.
+ */
+export type DatosGasto = {
+  /** uuid de `campo_egreso` (vivo o dado de baja). */
+  campo_egreso_id: string;
+  /** Entero, de 1 a 999_999_999_999. */
+  monto_centavos: number;
+  /** Instante ISO-8601 con zona en que el vendedor lo guardo. */
+  registrado_en: string;
+  /** Hasta 200 caracteres; se recorta y uno vacio es `null`. */
+  comentario?: string | null;
 };
 
 export interface ResultadoOperacion {
