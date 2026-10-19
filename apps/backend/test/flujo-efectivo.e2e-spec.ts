@@ -385,22 +385,30 @@ describe('Flujo de Efectivo (e2e)', () => {
   });
 
   it('Total Tesorería coincide con GET /tesoreria', async () => {
-    const r = await flujo(general, '2018-11-01', '2018-11-30');
-    const t = (
-      await http()
-        .get('/tesoreria?desde=2018-11-01&hasta=2018-11-30&sucursal=TJ')
-        .set('Cookie', general)
-        .expect(200)
-    ).body as {
-      total: {
-        saldoFinalCentavos: number;
-        cuentasConSaldoFinal: number;
-        cuentas: number;
-      };
+    type Total = {
+      saldoFinalCentavos: number;
+      cuentasConSaldoFinal: number;
+      cuentas: number;
     };
-    expect(r.totalTesoreriaCentavos).toBe(t.total.saldoFinalCentavos);
-    expect(r.tesoreriaCuentasConSaldo).toBe(t.total.cuentasConSaldoFinal);
-    expect(r.tesoreriaCuentas).toBe(t.total.cuentas);
+    // Otras suites mueven la Tesorería en paralelo: se compara en una
+    // lectura sin cambios entre las dos consultas (se reintenta unas veces).
+    let r!: FlujoEfectivo;
+    let total!: Total;
+    for (let i = 0; i < 5; i++) {
+      r = await flujo(general, '2018-11-01', '2018-11-30');
+      total = (
+        (
+          await http()
+            .get('/tesoreria?desde=2018-11-01&hasta=2018-11-30&sucursal=TJ')
+            .set('Cookie', general)
+            .expect(200)
+        ).body as { total: Total }
+      ).total;
+      if (r.totalTesoreriaCentavos === total.saldoFinalCentavos) break;
+    }
+    expect(r.totalTesoreriaCentavos).toBe(total.saldoFinalCentavos);
+    expect(r.tesoreriaCuentasConSaldo).toBe(total.cuentasConSaldoFinal);
+    expect(r.tesoreriaCuentas).toBe(total.cuentas);
   });
 
   it('errores: sin hasta 400, rango de más de un año 400, sin permiso 403, otra sucursal 403', async () => {
