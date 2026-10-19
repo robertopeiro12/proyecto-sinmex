@@ -1,6 +1,6 @@
 import { abrirBaseDatosNode } from '../driver-node';
 import type { BaseDatos } from '../base-datos';
-import { migraciones, versionEsquema } from './index';
+import { migraciones } from './index';
 import { ejecutarMigraciones } from './motor';
 
 /**
@@ -28,11 +28,9 @@ function insertarCliente(bd: BaseDatos, id: string) {
 }
 
 describe('migracion 012: promociones por regla (T-74)', () => {
-  it('la 012 es la ultima y deja versionEsquema en 12', () => {
+  it('la 012 es promociones y deja de ser la ultima con la 013 (T-39)', () => {
     expect(migraciones[11]?.nombre).toBe('promociones');
     expect(migraciones[11]?.version).toBe(12);
-    expect(migraciones).toHaveLength(12);
-    expect(versionEsquema(baseAlDia())).toBe(12);
   });
 
   it('existe promocion con sus columnas', () => {

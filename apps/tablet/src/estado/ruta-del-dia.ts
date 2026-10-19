@@ -1,6 +1,6 @@
 import type { FilaRutaDelDia } from '@/datos/repositorios/rutas';
-import type { Cliente, Prospecto, SyncEstado, Venta } from '@/datos/tipos';
-import { formatearMomento } from '@/ui/momento';
+import type { Cliente, Prospecto, SyncEstado, Venta, Visita } from '@/datos/tipos';
+import { formatearHora, formatearMomento } from '@/ui/momento';
 
 /**
  * Lo que la pantalla principal decide (T-37, D16), sin React: la tablet no tiene
@@ -9,26 +9,45 @@ import { formatearMomento } from '@/ui/momento';
  */
 
 /** Lo minimo que `agruparRuta` necesita de una fila. */
-export type FilaAgrupable = Pick<FilaRutaDelDia, 'cliente_id' | 'activo' | 'visitado'>;
+export type FilaAgrupable = Pick<FilaRutaDelDia, 'cliente_id' | 'activo' | 'visitado' | 'visita_sin_venta'>;
 
 /**
- * Reparte las filas del dia (ya ordenadas por `rutas.delDia`) entre la ruta y
- * "Fuera de ruta" (D5, D16):
+ * Reparte las filas del dia (ya ordenadas por `rutas.delDia`) entre la ruta,
+ * "Visitados sin venta" y "Fuera de ruta" (D5, D16; T-39 D8):
  *
- * - Viva → en la ruta, visitada o no (la palomita no la saca de la lista).
- * - Quitada por la oficina **con** actividad hoy → "Fuera de ruta": el vendedor
- *   fue, y eso es informacion para la efectividad.
+ * - Viva sin visita-sin-venta → en la ruta, visitada o no (la palomita no la saca).
+ * - Viva con visita y SIN venta ni cobro → "Visitados sin venta". Si despues
+ *   compra, `visita_sin_venta` pasa a `false` y regresa a la ruta con su palomita.
+ * - Quitada por la oficina **con** actividad hoy (venta, cobro o visita) → "Fuera de ruta".
  * - Quitada **sin** actividad → desaparece.
  * - Si el cliente quitado volvio a la ruta (otra fila viva), no se pinta dos veces.
  */
 export function agruparRuta<T extends FilaAgrupable>(
   filas: readonly T[],
-): { enRuta: T[]; fueraDeRuta: T[] } {
+): { enRuta: T[]; visitadosSinVenta: T[]; fueraDeRuta: T[] } {
   const vivos = new Set(filas.filter((f) => f.activo === 1).map((f) => f.cliente_id));
   return {
-    enRuta: filas.filter((f) => f.activo === 1),
+    enRuta: filas.filter((f) => f.activo === 1 && !f.visita_sin_venta),
+    visitadosSinVenta: filas.filter((f) => f.activo === 1 && f.visita_sin_venta),
     fueraDeRuta: filas.filter((f) => f.activo === 0 && f.visitado && !vivos.has(f.cliente_id)),
   };
+}
+
+/**
+ * ¿La oficina no asigno ruta hoy? Solo si las TRES secciones estan vacias: con
+ * todos los clientes visitados sin venta la lista queda vacia, pero si hay ruta.
+ */
+export function sinRutaAsignada(grupos: {
+  enRuta: readonly unknown[];
+  visitadosSinVenta: readonly unknown[];
+  fueraDeRuta: readonly unknown[];
+}): boolean {
+  return grupos.enRuta.length === 0 && grupos.visitadosSinVenta.length === 0 && grupos.fueraDeRuta.length === 0;
+}
+
+/** La linea de la fila de "Visitados sin venta": "Cerrado · 10:42". */
+export function textoUltimaVisita(motivo: string | null, en: string | null): string {
+  return `${motivo ?? 'Visita'} · ${formatearHora(en)}`;
 }
 
 /** El aviso de la lista vacia (D3), con la hora de la ultima sincronizacion. */
@@ -225,39 +244,75 @@ export interface AtendidoFueraDeRuta {
   nombre: string;
   esProspecto: boolean;
   estado: EstadoSubida;
+  /** T-39: solo se le visito (sin venta): la fila lleva la etiqueta "visita". */
+  soloVisita: boolean;
 }
 
 /**
- * Clientes y prospectos con venta del dia en esta tablet que la ruta NO pinta
- * (T-75, D7): ni vivos ni quitados-con-visita (esos ya salen en "Fuera de
- * ruta"). Un quitado sin visita con venta local si sale: la venta es real y la
- * ruta ya no lo muestra. Por nombre; uno por cliente, con el estado mas grave.
+ * Clientes y prospectos con venta **o visita** del dia en esta tablet que la
+ * ruta NO pinta (T-75, D7; T-39 D8): ni vivos ni quitados-con-actividad (esos ya
+ * salen en "Fuera de ruta" o "Visitados sin venta"). Uno por cliente, con el
+ * estado mas grave de sus ventas y visitas; `soloVisita` si no tiene venta.
  */
 export function atendidosFueraDeRuta(
   filasRuta: readonly FilaAgrupable[],
   ventas: readonly Pick<Venta, 'cliente_id' | 'sync_estado'>[],
+  visitas: readonly Pick<Visita, 'cliente_id' | 'sync_estado'>[],
   cliente: (id: string) => Pick<Cliente, 'nombre' | 'tipo'> | null,
 ): AtendidoFueraDeRuta[] {
   const pintados = new Set(
     filasRuta.filter((f) => f.activo === 1 || f.visitado).map((f) => f.cliente_id),
   );
-  const porCliente = new Map<string, SyncEstado[]>();
-  for (const v of ventas) {
-    if (pintados.has(v.cliente_id)) continue;
-    porCliente.set(v.cliente_id, [...(porCliente.get(v.cliente_id) ?? []), v.sync_estado]);
-  }
+  const porCliente = new Map<string, { estados: SyncEstado[]; ventas: number }>();
+  const anotar = (clienteId: string, estado: SyncEstado, esVenta: boolean) => {
+    if (pintados.has(clienteId)) return;
+    const actual = porCliente.get(clienteId) ?? { estados: [], ventas: 0 };
+    porCliente.set(clienteId, {
+      estados: [...actual.estados, estado],
+      ventas: actual.ventas + (esVenta ? 1 : 0),
+    });
+  };
+  for (const v of ventas) anotar(v.cliente_id, v.sync_estado, true);
+  for (const w of visitas) anotar(w.cliente_id, w.sync_estado, false);
+
   const filas: AtendidoFueraDeRuta[] = [];
-  for (const [cliente_id, estados] of porCliente) {
+  for (const [cliente_id, { estados, ventas: cuantas }] of porCliente) {
     const c = cliente(cliente_id);
     if (!c) continue;
     const estado = estadoSubida(estados);
     if (!estado) continue;
-    filas.push({ cliente_id, nombre: c.nombre, esProspecto: c.tipo === 'prospecto', estado });
+    filas.push({
+      cliente_id,
+      nombre: c.nombre,
+      esProspecto: c.tipo === 'prospecto',
+      estado,
+      soloVisita: cuantas === 0,
+    });
   }
   return filas.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 }
 
 const PREFIJO_CODIGO = /^([a-z][a-z0-9-]*): /;
+
+/**
+ * Parte un `sync_error` (`codigo: motivo`) en el codigo tecnico y el motivo legible.
+ * Sin prefijo, `codigo` es `null`; sin texto, el motivo es el `respaldo`. Una sola regla
+ * para el alta de T-75 y la visita de T-39.
+ */
+function sinPrefijoDeCodigo(
+  syncError: string | null,
+  respaldo: string,
+): { codigo: string | null; motivo: string } {
+  const m = syncError ? PREFIJO_CODIGO.exec(syncError) : null;
+  const codigo = m ? m[1]! : null;
+  const motivo = (m ? syncError!.slice(m[0].length) : syncError)?.trim() || respaldo;
+  return { codigo, motivo };
+}
+
+/** El motivo de un rechazo sin el prefijo técnico `codigo: ` (T-39; lo usaba ya el alta de T-75). */
+export function motivoDeRechazo(syncError: string | null): string {
+  return sinPrefijoDeCodigo(syncError, 'El servidor la rechazó.').motivo;
+}
 
 /**
  * El detalle de un alta rechazada (T-75, D4). `sync_error` guarda `codigo: motivo`;
@@ -266,9 +321,7 @@ const PREFIJO_CODIGO = /^([a-z][a-z0-9-]*): /;
  * avisar a la oficina. En los dos, el vendedor no debe volver a capturar al prospecto.
  */
 function detalleDeAltaRechazada(syncError: string | null): string {
-  const m = syncError ? PREFIJO_CODIGO.exec(syncError) : null;
-  const codigo = m ? m[1] : null;
-  const motivo = (m ? syncError!.slice(m[0].length) : syncError)?.trim() || 'El servidor rechazó el alta.';
+  const { codigo, motivo } = sinPrefijoDeCodigo(syncError, 'El servidor rechazó el alta.');
   return codigo === 'tipo-negocio-inexistente'
     ? `${motivo} Su venta subirá cuando la oficina reactive el tipo de negocio. No lo vuelvas a capturar.`
     : `${motivo} Avisa a la oficina; no lo vuelvas a capturar.`;

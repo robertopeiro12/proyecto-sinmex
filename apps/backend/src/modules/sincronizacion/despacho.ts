@@ -5,6 +5,7 @@ import {
   type VentaNormalizada,
 } from '../ventas-cobranza/datos-venta';
 import type { JornadaNormalizada } from '../rutas/datos-jornada';
+import type { VisitaNormalizada } from '../rutas/datos-visita';
 import type { RutaAltaNormalizada } from '../rutas/datos-ruta-alta';
 import type { CobranzaNormalizada } from '../ventas-cobranza/datos-cobranza';
 import type { RazonRechazoVenta } from '../ventas-cobranza/venta-rechazada';
@@ -13,6 +14,7 @@ import { prepararCobranza } from './despacho-cobranza';
 import { prepararJornada } from './despacho-jornada';
 import { prepararProspecto } from './despacho-prospecto';
 import { prepararRutaAlta } from './despacho-ruta-alta';
+import { prepararVisita } from './despacho-visita';
 import type { OperacionNormalizada, Rechazo } from './operaciones';
 
 /**
@@ -28,7 +30,7 @@ import type { OperacionNormalizada, Rechazo } from './operaciones';
  * Un `tipo` sin modulo todavia (`gasto`, `merma`, `ruta`) no tiene proyeccion:
  * se guarda en el buzon y queda `aplicada`, como desde T-07.
  * Orden acordado entre tickets: `venta`, `prospecto` (T-40), `cobranza` (T-20),
- * `jornada` (T-38), `ruta-alta` (T-37).
+ * `jornada` (T-38), `ruta-alta` (T-37), `visita` (T-39).
  */
 export type Proyeccion =
   // T-17: el folio viaja con la proyeccion. Aqui ya se comprobo que no es null,
@@ -41,7 +43,9 @@ export type Proyeccion =
   // T-38. La fila es de `jornada`; vendedor, sucursal y fecha van en el contexto.
   | { tipo: 'jornada'; jornada: JornadaNormalizada }
   // T-37. La fila es de `ruta`; vendedor, sucursal y fecha van en el contexto.
-  | { tipo: 'ruta-alta'; alta: RutaAltaNormalizada };
+  | { tipo: 'ruta-alta'; alta: RutaAltaNormalizada }
+  // T-39. La fila es de `visita` con id = clave; el cliente es el del sobre.
+  | { tipo: 'visita'; visita: VisitaNormalizada; clienteId: string };
 
 export type ResultadoPreparacion =
   { ok: true; proyeccion: Proyeccion | null } | ({ ok: false } & Rechazo);
@@ -49,7 +53,7 @@ export type ResultadoPreparacion =
 /**
  * Valida la FORMA de `datos` segun el `tipo`, antes de abrir la transaccion.
  *
- * Un rechazo aqui no toca la base. El `switch` enumera los seis tipos a
+ * Un rechazo aqui no toca la base. El `switch` enumera todos los tipos a
  * proposito: cuando el contrato sume uno, TypeScript obliga a decidir aqui si
  * tiene proyeccion.
  */
@@ -116,6 +120,20 @@ export function prepararProyeccion(
       const r = prepararRutaAlta(op);
       if (!r.ok) return r;
       return { ok: true, proyeccion: { tipo: 'ruta-alta', alta: r.alta } };
+    }
+    case 'visita': {
+      // T-39. La forma la revisa `despacho-visita.ts`; el motivo y el id
+      // ocupado, `VisitasService` dentro de la transaccion.
+      const r = prepararVisita(op);
+      if (!r.ok) return r;
+      return {
+        ok: true,
+        proyeccion: {
+          tipo: 'visita',
+          visita: r.visita,
+          clienteId: r.clienteId,
+        },
+      };
     }
   }
 }

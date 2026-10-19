@@ -5,6 +5,8 @@ import type {
   Cliente,
   ClientePrecio,
   FechaISO,
+  MomentoISO,
+  MotivoVisita,
   NotaPendiente,
   Presentacion,
   Promocion,
@@ -31,9 +33,16 @@ export interface SnapshotCatalogos {
   vehiculos?: Omit<Vehiculo, 'sincronizado_en'>[];
   productos?: Omit<Producto, 'sincronizado_en'>[];
   presentaciones?: Omit<Presentacion, 'sincronizado_en'>[];
-  clientes?: Omit<Cliente, 'sincronizado_en'>[];
+  /**
+   * `foto_subida_en` es opcional aqui (un servidor anterior a T-39 no lo manda;
+   * el upsert escribe `null`) y `foto_cache_subida_en` no viene nunca del pull.
+   */
+  clientes?: (Omit<Cliente, 'sincronizado_en' | 'foto_subida_en' | 'foto_cache_subida_en'> &
+    Partial<Pick<Cliente, 'foto_subida_en'>>)[];
   /** T-40. Coleccion nueva del `pull`: el desplegable de la pantalla de prospectos. */
   tiposNegocio?: Omit<TipoNegocio, 'sincronizado_en'>[];
+  /** T-39. Coleccion nueva del pull: el catalogo de la pantalla de visita. Baja como bandera. */
+  motivosVisita?: Omit<MotivoVisita, 'sincronizado_en'>[];
   precios?: Omit<ClientePrecio, 'sincronizado_en'>[];
   notas?: Omit<NotaPendiente, 'sincronizado_en'>[];
   /**
@@ -71,6 +80,7 @@ const COLUMNAS = {
   vehiculo: ['id', 'nombre', 'sucursal_id', 'activo'],
   producto: ['id', 'nombre', 'activo'],
   tipo_negocio: ['id', 'nombre', 'activo'],
+  motivo_visita: ['id', 'nombre', 'exige_foto', 'exige_atendio', 'activo'],
   presentacion: ['id', 'producto_id', 'volumen', 'activo'],
   cliente: [
     'id',
@@ -88,6 +98,8 @@ const COLUMNAS = {
     'activo',
     // T-20 (D5): solo se muestra.
     'saldo_favor_centavos',
+    // T-39 (D9): cuando el servidor recibio su foto. `foto_cache_subida_en` NO va: es de la tablet.
+    'foto_subida_en',
   ],
   promocion: [
     'id', 'audiencia', 'cliente_id',
@@ -238,8 +250,8 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
      *
      * ### Y avisa de que cambio
      *
-     * Es la **unica** escritura del repositorio, asi que es el unico sitio que
-     * tiene que publicar la senal. Ver el comentario de `version` arriba.
+     * Es la unica escritura del catalogo que publica la senal
+     * (`marcarFotoDescargada`, T-39, no cambia nada que otra pantalla lea). Ver el comentario de `version` arriba.
      */
     guardarSnapshot(snapshot: SnapshotCatalogos): void {
       const ahora = reloj.ahora();
@@ -256,6 +268,8 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
           // Sin llaves foraneas hacia nadie, asi que su sitio en el orden es
           // indiferente; va junto a los demas catalogos de empresa.
           upsert(bd, 'tipo_negocio', COLUMNAS.tipo_negocio, snapshot.tiposNegocio, ahora) +
+          // T-39: sin llaves foraneas hacia nadie; catalogo de empresa como tipo_negocio.
+          upsert(bd, 'motivo_visita', COLUMNAS.motivo_visita, snapshot.motivosVisita, ahora) +
           upsert(bd, 'presentacion', COLUMNAS.presentacion, snapshot.presentaciones, ahora) +
           upsert(bd, 'cliente', COLUMNAS.cliente, snapshot.clientes, ahora) +
           // T-37: despues de `cliente`, porque la fila de ruta lo referencia y un
@@ -305,6 +319,34 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
         'select * from tipo_negocio where id = $id',
         { $id: id },
       );
+    },
+
+    /** Motivos de visita **activos**, por nombre: las opciones de la pantalla (T-39). */
+    listarMotivosVisita(): MotivoVisita[] {
+      return bd.getAllSync<MotivoVisita>(
+        'select * from motivo_visita where activo = 1 order by nombre',
+      );
+    },
+
+    /**
+     * Un motivo por id, activo o no. Uno dado de baja despues de elegirlo sigue
+     * sirviendo para guardar la visita (D3: el servidor lo acepta).
+     */
+    obtenerMotivoVisita(id: string): MotivoVisita | null {
+      return bd.getFirstSync<MotivoVisita>('select * from motivo_visita where id = $id', { $id: id });
+    },
+
+    /**
+     * La ficha ya bajo la foto del servidor a su cache (T-39, D9). Guarda el
+     * `foto_subida_en` de esa copia: si el servidor recibe otra mas nueva, el
+     * pull lo sube y la ficha vuelve a bajarla. No publica cambio: solo lo lee
+     * la ficha que la bajo.
+     */
+    marcarFotoDescargada(clienteId: string, subidaEn: MomentoISO): void {
+      bd.runSync('update cliente set foto_cache_subida_en = $subida where id = $id', {
+        $subida: subidaEn,
+        $id: clienteId,
+      });
     },
 
     /** Vehiculos activos de una sucursal, para la pantalla de abrir el dia. */

@@ -21,7 +21,8 @@ import * as Location from 'expo-location';
  */
 
 export type ResultadoUbicacion =
-  | { estado: 'ok'; lat: number; lng: number }
+  /** `precisionM`: radio de error en metros que reporta el aparato (T-39 la guarda con la visita); `null` si no lo da. */
+  | { estado: 'ok'; lat: number; lng: number; precisionM: number | null }
   /** El vendedor dijo no. Se guarda sin coordenadas y se le avisa. */
   | { estado: 'permiso-negado' }
   /**
@@ -59,6 +60,7 @@ export async function obtenerUbicacion(): Promise<ResultadoUbicacion> {
       estado: 'ok',
       lat: posicion.coords.latitude,
       lng: posicion.coords.longitude,
+      precisionM: posicion.coords.accuracy ?? null,
     };
   } catch (error) {
     return {

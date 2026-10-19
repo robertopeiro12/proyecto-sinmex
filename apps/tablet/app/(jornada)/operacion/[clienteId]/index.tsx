@@ -1,15 +1,19 @@
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Image, Linking, Modal, Pressable, Text, View } from 'react-native';
 
 import type { SyncEstado } from '@/datos/tipos';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
-import { pastillaAlta, urlMapa, urlTelefono } from '@/estado/ruta-del-dia';
+import { estadoSubida, pastillaAlta, urlMapa, urlTelefono } from '@/estado/ruta-del-dia';
+import { pastillaVisita } from '@/estado/visita';
+import { fotoParaFicha, uriFotoCliente } from '@/fotos/descarga';
+import { rutaCacheFotoCliente } from '@/fotos/expo';
 import { Boton } from '@/ui/boton';
 import { BotonMenu } from '@/ui/boton-menu';
 import { Cifra, pesos } from '@/ui/cifra';
+import { formatearHora } from '@/ui/momento';
 import { Pantalla, Pastilla, Tarjeta, type Estado } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
 import { colores, espacio, fuente, grosor, radio, tipo } from '@/ui/tokens';
@@ -44,7 +48,7 @@ function abrir(url: string | null, queAbre: string) {
 export default function FichaCliente() {
   const { clienteId } = useLocalSearchParams<{ clienteId: string }>();
   const { datos, jornada, versionCatalogos } = useJawa();
-  const { ultimaSincronizacion } = useSesion();
+  const { ultimaSincronizacion, descargarFotoCliente } = useSesion();
   const { estilos, t } = useTema();
   const [verFoto, setVerFoto] = useState(false);
   const menu = estadoMenuJornada(jornada);
@@ -65,6 +69,7 @@ export default function FichaCliente() {
     return {
       ventas: datos.ventas.delDia(clienteId),
       cobros: datos.cobranzas.delDia(clienteId),
+      visitas: datos.visitas.delDia(clienteId),
       notas: datos.catalogos.notasPendientesDe(clienteId).filter((n) => n.saldo_centavos > 0),
       // Con las mismas dependencias: una venta recien grabada apaga la bienvenida del prospecto.
       promociones: datos.promociones.aplicablesPara(clienteId),
@@ -74,6 +79,45 @@ export default function FichaCliente() {
   }, [datos, clienteId, vueltas, ultimaSincronizacion, versionCatalogos]);
 
   const cliente = datos.catalogos.obtenerCliente(clienteId);
+
+  // T-39 (D9): la foto del servidor. La de ESTA tablet gana; si no, la copia en
+  // cache, y si falta o es mas vieja que `foto_subida_en` se baja UNA vez por
+  // apertura. Sin red sigue diciendo "sin foto", como antes. (Los hooks van
+  // antes del `return` de "Cliente no encontrado".)
+  const rutaCache = useMemo(() => rutaCacheFotoCliente(clienteId), [clienteId]);
+  const cacheSubidaEn = cliente?.foto_cache_subida_en ?? null;
+  const subidaEnServidor = cliente?.foto_subida_en ?? null;
+  const decision = fotoParaFicha({
+    fotoLocal: cliente ? datos.prospectos.fotoLocalDe(cliente) : null,
+    fotoSubidaEn: subidaEnServidor,
+    cacheSubidaEn,
+    // Con `?v=`: la foto nueva cae en la misma ruta y la cache de imagenes de
+    // Android se indexa por URI; sin version seguiria pintando la vieja.
+    uriCache: cacheSubidaEn !== null ? uriFotoCliente(rutaCache, cacheSubidaEn) : rutaCache,
+  });
+  const [fotoBajada, setFotoBajada] = useState<string | null>(null);
+  // Que version ya se pidio en esta apertura: un fallo (sin red, 401) no se
+  // reintenta en cada render ni al volver de vender; espera a la siguiente apertura.
+  const fotoPedida = useRef<string | null>(null);
+  const montada = useRef(true);
+  useEffect(() => {
+    montada.current = true;
+    return () => {
+      montada.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!decision.descargar || subidaEnServidor === null) return;
+    if (fotoPedida.current === subidaEnServidor) return;
+    fotoPedida.current = subidaEnServidor;
+    void descargarFotoCliente(clienteId, subidaEnServidor)
+      .then((uri) => {
+        if (montada.current && uri) setFotoBajada(uri);
+      })
+      .catch(() => {
+        // Cualquier fallo de la descarga se queda como "sin foto".
+      });
+  }, [clienteId, subidaEnServidor, decision.descargar, descargarFotoCliente]);
 
   if (!cliente) {
     return (
@@ -89,8 +133,7 @@ export default function FichaCliente() {
   const alta = esProspecto ? hoy.alta : null;
   const telefono = urlTelefono(cliente.telefono);
   const mapa = urlMapa(cliente);
-  // D8: solo la foto que tomo ESTA tablet; la del servidor llega en la pieza 3.
-  const foto = datos.prospectos.fotoLocalDe(cliente);
+  const foto = fotoBajada ?? decision.uri;
   const params = { clienteId };
 
   // Lo mas grave manda: un error sobre "falta subir", y "falta subir" sobre "todo subido".
@@ -101,6 +144,8 @@ export default function FichaCliente() {
       : hoy.ventas.length > 0
         ? 'listo'
         : 'neutro';
+  // Lo mas grave manda, como en "Ventas de hoy" (T-39, D8).
+  const estadoVisitas: Estado = estadoSubida(hoy.visitas.map((v) => v.sync_estado)) ?? 'neutro';
 
   const datoTocable = (etiqueta: string, valor: string, onPress: (() => void) | null) => (
     <Pressable
@@ -181,7 +226,7 @@ export default function FichaCliente() {
         )}
         <BotonMenu
           titulo="Visita"
-          descripcion="Visita sin venta (pendiente T-39)"
+          descripcion="Visita sin venta: por qué no compró, con hora y ubicación"
           destino={{ pathname: '/(jornada)/operacion/[clienteId]/visita-sin-venta', params }}
           deshabilitado={!menu.operacionesHabilitadas}
         />
@@ -264,6 +309,26 @@ export default function FichaCliente() {
               ) : null}
             </View>
           ))
+        )}
+      </Tarjeta>
+
+      {/* T-39 (D8): cada visita con su motivo, hora y subida. La rechazada trae su motivo. */}
+      <Tarjeta estado={estadoVisitas} etiqueta="Visitas de hoy">
+        {hoy.visitas.length === 0 ? (
+          <Text style={estilos.textoSuave}>Sin visitas registradas hoy.</Text>
+        ) : (
+          hoy.visitas.map((v) => {
+            const p = pastillaVisita(v);
+            return (
+              <View key={v.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
+                <Text style={estilos.textoTarjeta}>
+                  {v.motivo_nombre} · <Cifra valor={formatearHora(v.visitada_en)} />
+                </Text>
+                <Pastilla texto={p.texto} estado={p.estado} />
+                {p.detalle ? <Text style={estilos.error}>{p.detalle}</Text> : null}
+              </View>
+            );
+          })
         )}
       </Tarjeta>
 

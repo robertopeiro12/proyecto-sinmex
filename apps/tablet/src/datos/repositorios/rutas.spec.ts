@@ -5,6 +5,7 @@ import { crearRepositorioFolios } from './folios';
 import { crearRepositorioJornadas, ErrorJornada, MENSAJE_DIA_CERRADO } from './jornadas';
 import { crearRepositorioRutas, ErrorRuta, type FilaRutaPull } from './rutas';
 import { crearRepositorioVentas } from './ventas';
+import { crearRepositorioVisitas } from './visitas';
 
 /**
  * La ruta del dia en la tablet (T-37, D15). Lo que hay que fijar: la regla de
@@ -49,6 +50,7 @@ function montar() {
     jornadas: crearRepositorioJornadas(deps),
     ventas: crearRepositorioVentas(deps, { catalogos, folios: crearRepositorioFolios(deps) }),
     cobranzas: crearRepositorioCobranzas(deps, { catalogos }),
+    visitas: crearRepositorioVisitas(deps, { catalogos }),
   };
 }
 
@@ -445,5 +447,84 @@ describe('purgar', () => {
 
     expect(rutas.porId(rechazada.id)).toBeNull();
     expect(rutas.pendientesDeSincronizar()).toEqual([]);
+  });
+});
+
+function visitarA(
+  visitas: ReturnType<typeof montar>['visitas'],
+  motivoVisitaId = 'mot-tenia',
+  clienteId = 'cli-1',
+) {
+  return visitas.registrar({
+    vendedorId: 'ven-1',
+    clienteId,
+    motivoVisitaId,
+    observaciones: null,
+    atendio: null,
+    lat: 32.5,
+    lng: -117,
+    precisionM: null,
+    direccionTexto: null,
+    fotoUri: null,
+  });
+}
+
+describe('delDia con visitas (T-39, D8)', () => {
+  it('una visita sin venta marca visitado y visita_sin_venta, con la ultima visita (Review Focus 4)', () => {
+    const { rutas, visitas } = montar();
+    rutas.aplicarSnapshot([delServidor()]);
+    visitarA(visitas, 'mot-tenia');
+    visitarA(visitas, 'mot-cerrado');
+
+    expect(rutas.delDia()[0]).toMatchObject({
+      visitado: true,
+      visita_sin_venta: true,
+      ultima_visita_motivo: 'Cerrado',
+      ultima_visita_en: MOMENTO,
+      visitas_estado: 'pendiente',
+      visita_error: null,
+    });
+  });
+
+  it('visita y venta el mismo dia: atendido gana, no es visita_sin_venta (Review Focus 3)', () => {
+    const { rutas, visitas, ventas } = montar();
+    rutas.aplicarSnapshot([delServidor()]);
+    visitarA(visitas);
+    venderA(ventas);
+    expect(rutas.delDia()[0]).toMatchObject({ visitado: true, visita_sin_venta: false });
+  });
+
+  it('el estado de las visitas es el mas grave: error > pendiente > listo, con el motivo del error', () => {
+    const { rutas, visitas } = montar();
+    rutas.aplicarSnapshot([delServidor()]);
+    const a = visitarA(visitas);
+    const b = visitarA(visitas);
+    visitas.marcarSincronizada(a.id);
+    visitas.marcarSincronizada(b.id);
+    expect(rutas.delDia()[0]!.visitas_estado).toBe('listo');
+
+    visitas.marcarError(b.id, 'motivo-visita-inexistente: El motivo no existe.');
+    expect(rutas.delDia()[0]).toMatchObject({
+      visitas_estado: 'error',
+      visita_error: 'motivo-visita-inexistente: El motivo no existe.',
+    });
+  });
+
+  it('sin visitas: todo en null y false', () => {
+    const { rutas } = montar();
+    rutas.aplicarSnapshot([delServidor()]);
+    expect(rutas.delDia()[0]).toMatchObject({
+      visita_sin_venta: false,
+      ultima_visita_motivo: null,
+      ultima_visita_en: null,
+      visitas_estado: null,
+    });
+  });
+
+  it('una baja de la oficina que solo fue visitada cuenta como visitado (va a "Fuera de ruta")', () => {
+    const { rutas, visitas } = montar();
+    rutas.aplicarSnapshot([delServidor({ activo: 0 })]);
+    visitarA(visitas);
+    expect(rutas.delDia()).toMatchObject([{ activo: 0, visitado: true }]);
   });
 });

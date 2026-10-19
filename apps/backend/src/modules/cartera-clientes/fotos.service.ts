@@ -81,7 +81,7 @@ export class FotosService implements OnModuleInit {
    */
   async onModuleInit(): Promise<void> {
     await fs.mkdir(this.directorio, { recursive: true });
-    this.logger.log(`Fotos de prospectos en ${this.directorio}`);
+    this.logger.log(`Fotos de prospectos y visitas en ${this.directorio}`);
   }
 
   /**
@@ -91,21 +91,8 @@ export class FotosService implements OnModuleInit {
    * deja ni archivo ni columna. Es lo que hace que **una foto que falla no se
    * lleve el prospecto** — el fallo que este diseno existe para prevenir.
    */
-  async guardar(
-    clienteId: string,
-    clave: string,
-    cuerpo: Buffer,
-  ): Promise<FotoGuardada> {
-    if (cuerpo.length > TAMANO_MAX_FOTO_BYTES) {
-      throw new PayloadTooLargeException(
-        `La foto pesa ${cuerpo.length} bytes y el maximo es ${TAMANO_MAX_FOTO_BYTES}. Comprimela mas en el equipo antes de subirla.`,
-      );
-    }
-    if (!esJpeg(cuerpo)) {
-      throw new UnsupportedMediaTypeException(
-        'El contenido no es un JPEG completo. Vuelve a tomar la foto: la anterior llego corrupta o a medias.',
-      );
-    }
+  async guardar(clienteId: string, cuerpo: Buffer): Promise<FotoGuardada> {
+    this.validarFoto(cuerpo);
 
     // Antes de escribir: que el prospecto siga ahi. Un archivo para una fila que
     // no existe es basura que nadie va a buscar nunca.
@@ -113,8 +100,9 @@ export class FotosService implements OnModuleInit {
       throw new NotFoundException('Ese prospecto ya no existe.');
     }
 
-    const archivo = nombreArchivoFoto(clave);
-    await this.escribirAtomico(archivo, cuerpo);
+    // T-78: el archivo se llama por el id del cliente, no por la clave.
+    const archivo = nombreArchivoFoto('cliente', clienteId);
+    await this.escribirArchivo(archivo, cuerpo);
 
     const subidaEn = new Date();
     if (!(await this.repo.anotar(clienteId, archivo, subidaEn))) {
@@ -127,6 +115,24 @@ export class FotosService implements OnModuleInit {
   }
 
   /**
+   * 413 si pasa de 2 MB, 415 si el contenido no es un JPEG completo. Publico
+   * porque la foto de la visita (T-39) pasa por las mismas reglas: lo llama
+   * `sincronizacion/foto.service.ts` ANTES de tocar disco o base.
+   */
+  validarFoto(cuerpo: Buffer): void {
+    if (cuerpo.length > TAMANO_MAX_FOTO_BYTES) {
+      throw new PayloadTooLargeException(
+        `La foto pesa ${cuerpo.length} bytes y el maximo es ${TAMANO_MAX_FOTO_BYTES}. Comprimela mas en el equipo antes de subirla.`,
+      );
+    }
+    if (!esJpeg(cuerpo)) {
+      throw new UnsupportedMediaTypeException(
+        'El contenido no es un JPEG completo. Vuelve a tomar la foto: la anterior llego corrupta o a medias.',
+      );
+    }
+  }
+
+  /**
    * La ruta del archivo a servir en el portal, con el alcance ya comprobado.
    *
    * `ClientesService.obtener` es quien decide el 404 (no existe) y el 403 (no es
@@ -134,13 +140,31 @@ export class FotosService implements OnModuleInit {
    */
   async rutaParaPortal(usuarioId: string, clienteId: string): Promise<string> {
     await this.clientes.obtener(usuarioId, clienteId);
-
     const foto = await this.repo.foto(clienteId);
-    if (!foto) {
-      throw new NotFoundException('Ese cliente no tiene foto.');
-    }
+    if (!foto) throw new NotFoundException('Ese cliente no tiene foto.');
+    return this.rutaLegible(foto.archivo, clienteId);
+  }
 
-    const ruta = join(this.directorio, foto.archivo);
+  /**
+   * La foto de un cliente para la TABLET (T-39, D9): solo si es de la sucursal
+   * del vendedor y no esta dado de baja. Fuera de alcance es 404 y no 403, a
+   * proposito: la tablet no tiene por que saber si ese cliente existe.
+   */
+  async rutaParaVendedor(
+    sucursalId: string,
+    clienteId: string,
+  ): Promise<string> {
+    const foto = await this.repo.fotoEnSucursal(clienteId, sucursalId);
+    if (!foto) throw new NotFoundException('Ese cliente no tiene foto.');
+    return this.rutaLegible(foto.archivo, clienteId);
+  }
+
+  /** La ruta absoluta del archivo, o 404 si la columna apunta a algo que ya no esta en disco. */
+  private async rutaLegible(
+    archivo: string,
+    clienteId: string,
+  ): Promise<string> {
+    const ruta = join(this.directorio, archivo);
     try {
       await fs.access(ruta, FS.R_OK);
     } catch {
@@ -160,16 +184,16 @@ export class FotosService implements OnModuleInit {
   /**
    * Escribe a un temporal unico y renombra.
    *
+   * Publico desde T-39: la foto de la visita usa el mismo disco y la misma
+   * escritura atomica; su fila la anota Rutas, no este modulo.
+   *
    * `rename` dentro del mismo sistema de archivos es atomico, asi que el portal
-   * nunca ve un `<clave>.jpg` a medio escribir; y el temporal lleva un sufijo
+   * nunca ve un `cliente-<id>.jpg` a medio escribir; y el temporal lleva un sufijo
    * unico para que dos subidas simultaneas de la misma clave no se entrelacen
    * los bytes. La ultima gana, y queda **un solo archivo** — la idempotencia
    * sigue siendo "asi se llama", no codigo que la vigile.
    */
-  private async escribirAtomico(
-    archivo: string,
-    cuerpo: Buffer,
-  ): Promise<void> {
+  async escribirArchivo(archivo: string, cuerpo: Buffer): Promise<void> {
     // Idempotente: el directorio puede haber desaparecido con un remontaje del
     // volumen desde que arranco el proceso.
     await fs.mkdir(this.directorio, { recursive: true });

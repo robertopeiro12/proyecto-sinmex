@@ -3,6 +3,7 @@ import type { RepositorioJornadas } from '@/datos/repositorios/jornadas';
 import type { RepositorioProspectos } from '@/datos/repositorios/prospectos';
 import type { RepositorioRutas } from '@/datos/repositorios/rutas';
 import type { RepositorioVentas } from '@/datos/repositorios/ventas';
+import type { RepositorioVisitas } from '@/datos/repositorios/visitas';
 
 /**
  * Las fuentes del push cuyos pendientes cuentan como "registros por subir".
@@ -19,13 +20,15 @@ export interface FuentesConPendientes {
   ventas: RepositorioVentas;
   prospectos: RepositorioProspectos;
   cobranzas: RepositorioCobranzas;
+  /** T-39: las visitas sin venta. */
+  visitas: RepositorioVisitas;
   /** T-37: las altas de ruta del vendedor. */
   rutas: RepositorioRutas;
 }
 
 /**
- * Cuenta lo que falta por subir, sumando las 5 fuentes del push de hoy (T-07,
- * T-16, T-40, T-20, T-37): jornada, venta, prospecto, cobranza y alta de ruta.
+ * Cuenta lo que falta por subir, sumando las 6 fuentes del push de hoy (T-07,
+ * T-16, T-40, T-20, T-39, T-37): jornada, venta, prospecto, cobranza, visita y alta de ruta.
  *
  * Si una fuente se queda fuera de esta suma, el menu de la jornada y "cerrar
  * el dia" pueden decir "listo" con datos todavia sin subir (I-1, PR #90) — por
@@ -38,6 +41,7 @@ export function contarPendientesDeSubir(datos: FuentesConPendientes): number {
     datos.ventas.pendientesDeSincronizar().length +
     datos.prospectos.pendientesDeSincronizar().length +
     datos.cobranzas.pendientesDeSincronizar().length +
+    datos.visitas.pendientesDeSincronizar().length +
     datos.rutas.pendientesDeSincronizar().length
   );
 }

@@ -1,4 +1,5 @@
 import type { RepositorioProspectos } from '@/datos/repositorios/prospectos';
+import type { RepositorioVisitas } from '@/datos/repositorios/visitas';
 import type { MomentoISO } from '@/datos/tipos';
 
 /**
@@ -28,11 +29,12 @@ export interface FuenteFotos {
 
 export interface FotoPorSubir {
   /**
-   * La clave de idempotencia de la operacion del prospecto — el `id` de la fila.
+   * La clave de idempotencia de la operacion del prospecto **o de la visita** —
+   * el `id` de la fila.
    *
    * No es un identificador nuevo, y ahi esta toda la idempotencia de la foto: el
-   * servidor nombra el archivo `<clave>.jpg`, asi que **reenviar escribe el mismo
-   * nombre** y no hay duplicados posibles. Sin contador, sin tabla de control.
+   * servidor nombra el archivo por ese id (`cliente-<id>.jpg`, `visita-<id>.jpg`,
+   * T-78), asi que **reenviar escribe el mismo nombre** y no hay duplicados posibles. Sin contador, sin tabla de control.
    */
   clave: string;
   /** Ruta del archivo local, ya comprimido. */
@@ -65,5 +67,58 @@ export function fuenteFotosProspectos(
     marcarSubida: (clave, subidaEn) => prospectos.marcarFotoSubida(clave, subidaEn),
     anotarError: (clave, motivo) => prospectos.anotarErrorFoto(clave, motivo),
     descartar: (clave, motivo) => prospectos.descartarFoto(clave, motivo),
+  };
+}
+
+/**
+ * Las fotos de las visitas sin venta (T-39, D9). `pendientesDeSubirFoto()` ya
+ * exige `sync_estado = 'sincronizado'`: antes de que el servidor acepte la
+ * visita no existe la fila a la que la foto pertenece (el canal responde 404/409).
+ */
+export function fuenteFotosVisitas(visitas: RepositorioVisitas): FuenteFotos {
+  return {
+    tipo: 'visita',
+    pendientes(): FotoPorSubir[] {
+      return visitas
+        .pendientesDeSubirFoto()
+        .flatMap((v) => (v.foto_local === null ? [] : [{ clave: v.id, uri: v.foto_local }]));
+    },
+    marcarSubida: (clave, subidaEn) => visitas.marcarFotoSubida(clave, subidaEn),
+    anotarError: (clave, motivo) => visitas.anotarErrorFoto(clave, motivo),
+    descartar: (clave, motivo) => visitas.descartarFoto(clave, motivo),
+  };
+}
+
+/**
+ * Varias fuentes de fotos vistas como una sola (T-39): el motor sigue hablando
+ * con UNA `FuenteFotos` y no cambia. `pendientes()` las concatena en el orden
+ * recibido y recuerda de quien es cada clave, para que `marcarSubida`,
+ * `anotarError` y `descartar` vuelvan a SU repositorio. Una clave que no salio
+ * del ultimo `pendientes()` es un bug del llamador y truena en vez de anotarse
+ * en el sitio equivocado.
+ */
+export function combinarFuentesFotos(fuentes: readonly FuenteFotos[]): FuenteFotos {
+  const duenas = new Map<string, FuenteFotos>();
+  const duenaDe = (clave: string): FuenteFotos => {
+    const fuente = duenas.get(clave);
+    if (!fuente) {
+      throw new Error(`La foto ${clave} no salio de pendientes(): no se sabe de que fuente es.`);
+    }
+    return fuente;
+  };
+  return {
+    tipo: fuentes.map((f) => f.tipo).join('+'),
+    pendientes(): FotoPorSubir[] {
+      duenas.clear();
+      return fuentes.flatMap((fuente) =>
+        fuente.pendientes().map((foto) => {
+          duenas.set(foto.clave, fuente);
+          return foto;
+        }),
+      );
+    },
+    marcarSubida: (clave, subidaEn) => duenaDe(clave).marcarSubida(clave, subidaEn),
+    anotarError: (clave, motivo) => duenaDe(clave).anotarError(clave, motivo),
+    descartar: (clave, motivo) => duenaDe(clave).descartar(clave, motivo),
   };
 }

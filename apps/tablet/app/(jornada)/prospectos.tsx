@@ -8,7 +8,7 @@ import { useJawa } from '@/estado/proveedor-jawa';
 import { enlaceAFicha } from '@/estado/ruta-del-dia';
 import { useSesion } from '@/estado/proveedor-sesion';
 import { OBJETIVO_BYTES, type FotoComprimida } from '@/fotos/comprimir';
-import { capturarFotoProspecto } from '@/fotos/expo';
+import { capturarFoto } from '@/fotos/expo';
 import { obtenerUbicacion } from '@/ubicacion/obtener';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
@@ -134,7 +134,7 @@ export default function Prospectos() {
   /**
    * Toma la foto y la comprime, sin tocar nada del formulario.
    *
-   * `capturarFotoProspecto` no lanza nunca (ver su doc): todo llega como estado,
+   * `capturarFoto` no lanza nunca (ver su doc): todo llega como estado,
    * y el peor de ellos deja `foto` en `null` y un aviso. Asi no hay ningun camino
    * por el que la camara pueda impedir el alta.
    */
@@ -142,7 +142,7 @@ export default function Prospectos() {
     setAvisoFoto(null);
     setTomandoFoto(true);
     try {
-      const r = await capturarFotoProspecto();
+      const r = await capturarFoto('prospecto');
       if (r.estado === 'ok') {
         setFoto(r.foto);
         if (!r.foto.objetivoAlcanzado) {

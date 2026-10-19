@@ -66,11 +66,15 @@ export const MAX_BYTES_POR_LOTE = 1_000_000;
  * Hecho: T-20 — `cobranza` (abono/liquidacion sobre una nota, ver {@link DatosCobranza} y [[Cobranza-Abono]]).
  * TODO: T-27 — `gasto` (hielo, gasolina, reparacion, adelanto).
  * TODO: T-33 — `merma` (los 3 tipos de merma del documento de julio 2026).
- * TODO: T-39 — `ruta` (visitas, orden real, tiempos y GPS).
+ * Hecho: T-39 — `visita`, una visita sin venta con su motivo (ver
+ *        {@link DatosVisita}); se proyecta a la tabla `visita` con `id = clave`.
+ *        **No** reutiliza `ruta`, que sigue reservado y se guarda sin proyectar.
+ *        Tipo nuevo = cambio aditivo: no sube la version.
  * Hecho: T-37 — `ruta-alta`, un cliente que el vendedor agrego a su ruta del
  *        dia (ver {@link DatosRutaAlta}); se proyecta a la tabla `ruta` con
  *        `origen = 'vendedor'`. **No** reutiliza `ruta`, que queda reservado a
- *        la visita de T-39. Tipo nuevo = cambio aditivo: no sube la version.
+ *        la visita (que usa `visita`, T-39), y se guarda sin proyectar. Tipo
+ *        nuevo = cambio aditivo: no sube la version.
  * Hecho: T-38 — `jornada` (vehiculo + kilometraje inicial/final del dia ya
  *        cerrado, ver {@link DatosJornada}); se proyecta a la tabla `jornada`.
  *
@@ -87,6 +91,7 @@ export const TIPOS_OPERACION = [
   'ruta',
   'prospecto',
   'ruta-alta',
+  'visita',
 ] as const;
 
 export type TipoOperacion = (typeof TIPOS_OPERACION)[number];
@@ -227,6 +232,18 @@ export const CODIGOS_RECHAZO = [
    * trata como aplicada**: no es un error del vendedor.
    */
   'ruta-duplicada',
+  /**
+   * El `motivo_visita_id` de una visita no existe en el catalogo. T-39. Un
+   * motivo **dado de baja si se acepta**: el vendedor lo eligio sin red cuando
+   * estaba vivo. Esto solo cae con un id que nunca existio (bug de la tablet).
+   */
+  'motivo-visita-inexistente',
+  /**
+   * El id de la visita (su clave) ya esta ocupado por otro registro. T-39. El
+   * mismo vendedor con la misma clave es `duplicada`, no esto. El motivo es
+   * neutro a proposito: no confirma que hay detras del id.
+   */
+  'visita-id-ocupado',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -429,6 +446,39 @@ export type DatosRutaAlta = {
   cliente_id: string;
 };
 
+/**
+ * `datos` de una operacion `tipo: "visita"` (T-39): una visita sin venta.
+ *
+ * `cliente_id` va en el **sobre** (se comprueba con el alcance normal del
+ * lote) y no lleva folio. La `clave` **es el id** de la fila `visita`: debe ser
+ * uuid. Los textos se recortan y uno vacio se guarda como `null`.
+ *
+ * Ubicacion: `lat`/`lng` van las dos o ninguna; sin ellas, `direccion_texto` es
+ * obligatoria (no vacia). El servidor **no** revisa si el motivo exige foto o
+ * nombre: lo exige la tablet al guardar (la oficina pudo cambiar las casillas
+ * mientras la tablet estaba sin red).
+ *
+ * Es `type` y no `interface` por la misma razon que {@link DatosVenta}.
+ */
+export type DatosVisita = {
+  /** uuid de `motivo_visita` (vivo o dado de baja). */
+  motivo_visita_id: string;
+  /** Instante ISO-8601 con zona en que el vendedor la guardo. */
+  visitada_en: string;
+  /** Hasta 500 caracteres. */
+  observaciones?: string | null;
+  /** Quien atendio; hasta 120 caracteres. */
+  atendio?: string | null;
+  /** -90..90; las dos o ninguna. */
+  lat?: number | null;
+  /** -180..180. */
+  lng?: number | null;
+  /** Precision del GPS en metros, >= 0. */
+  precision_m?: number | null;
+  /** Hasta 300; obligatoria (no vacia) si no hay lat/lng. */
+  direccion_texto?: string | null;
+};
+
 export interface ResultadoOperacion {
   clave: string;
   tipo: string;
@@ -538,6 +588,21 @@ export interface TipoNegocioPull extends FilaSincronizable {
   nombre: string;
 }
 
+/**
+ * Un motivo de visita sin venta (T-39, D4): el catalogo de la pantalla
+ * "Visita sin venta". Global (no cuelga de sucursal), como `tipos_negocio`.
+ * Coleccion nueva = aditiva. Incremental por `actualizado_en`; la baja logica
+ * viaja como `activo: 0` y la tablet deja de ofrecerlo (una visita ya guardada
+ * con el sigue subiendo: el push lo acepta).
+ */
+export interface MotivoVisitaPull extends FilaSincronizable {
+  nombre: string;
+  /** La tablet no deja guardar la visita sin foto. */
+  exige_foto: boolean;
+  /** La tablet no deja guardar la visita sin el nombre de quien atendio. */
+  exige_atendio: boolean;
+}
+
 export interface ProductoPull extends FilaSincronizable {
   nombre: string;
 }
@@ -597,6 +662,12 @@ export interface ClientePull extends FilaSincronizable {
    * portal. Aditivo: una tablet vieja lo ignora.
    */
   saldo_favor_centavos: number;
+  /**
+   * T-39 (D9): cuando el servidor recibio la foto del cliente (ISO), o `null`
+   * si no tiene. La ficha de la tablet la baja de `GET /sync/foto/cliente/:id`
+   * cuando no la tiene o la tiene mas vieja. Aditivo: una tablet vieja lo ignora.
+   */
+  foto_subida_en: string | null;
 }
 
 /**
@@ -758,6 +829,8 @@ export interface RespuestaPull {
     clientes: ClientePull[];
     /** T-40. Aditiva: una tablet vieja la ignora. */
     tipos_negocio: TipoNegocioPull[];
+    /** T-39. Aditiva: una tablet vieja la ignora. */
+    motivos_visita: MotivoVisitaPull[];
     /**
      * **Siempre completo o vacio**, nunca parcial. El precio efectivo depende
      * de tres tablas (`precio`, `cliente_precio` y la lista asignada al

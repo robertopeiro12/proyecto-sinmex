@@ -1,6 +1,7 @@
 import { depsDePrueba, snapshotDePrueba } from '@/datos/pruebas-apoyo';
 import { crearRepositorioCatalogos } from '@/datos/repositorios/catalogos';
 import { crearRepositorioCobranzas } from '@/datos/repositorios/cobranzas';
+import { crearRepositorioVisitas } from '@/datos/repositorios/visitas';
 import { crearRepositorioFolios } from '@/datos/repositorios/folios';
 import { crearRepositorioJornadas } from '@/datos/repositorios/jornadas';
 import { crearRepositorioProspectos } from '@/datos/repositorios/prospectos';
@@ -19,6 +20,7 @@ function montar() {
     ventas: crearRepositorioVentas(deps, { catalogos, folios }),
     prospectos: crearRepositorioProspectos(deps, { catalogos }),
     cobranzas: crearRepositorioCobranzas(deps, { catalogos }),
+    visitas: crearRepositorioVisitas(deps, { catalogos }),
     rutas: crearRepositorioRutas(deps, { catalogos }),
   };
 }
@@ -30,13 +32,13 @@ describe('contarPendientesDeSubir', () => {
   });
 
   /**
-   * Las 5 fuentes del push de hoy (T-07, T-16, T-40, T-20, T-37). Si se olvida
+   * Las 6 fuentes del push de hoy (T-07, T-16, T-40, T-20, T-39, T-37). Si se olvida
    * una aqui, el menu de la jornada y "cerrar el dia" dicen "listo" con datos
    * sin subir (I-1, PR #90).
    */
-  it('suma jornada, venta, prospecto, cobranza y alta de ruta pendientes', () => {
+  it('suma jornada, venta, prospecto, cobranza, visita y alta de ruta pendientes', () => {
     const fuentes = montar();
-    const { jornadas, ventas, prospectos, cobranzas, rutas } = fuentes;
+    const { jornadas, ventas, prospectos, cobranzas, visitas, rutas } = fuentes;
 
     const jornada = jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
     ventas.registrar({
@@ -68,13 +70,25 @@ describe('contarPendientesDeSubir', () => {
       metodoPago: 'efectivo',
       fechaPago: '2026-08-07',
     });
+    visitas.registrar({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      motivoVisitaId: 'mot-tenia',
+      observaciones: null,
+      atendio: null,
+      lat: 32.5,
+      lng: -117,
+      precisionM: null,
+      direccionTexto: null,
+      fotoUri: null,
+    });
     rutas.agregar('cli-1', { vendedorId: 'ven-1', sucursalId: 'suc-tj' });
 
     // La jornada cuenta solo cerrada (D7). Se cierra al final: con el dia
     // cerrado ya no se puede registrar nada (D6).
     jornadas.cerrar(jornada.id, 20);
 
-    expect(contarPendientesDeSubir(fuentes)).toBe(5);
+    expect(contarPendientesDeSubir(fuentes)).toBe(6);
   });
 
   it('una jornada abierta no cuenta; al cerrarla, si (T-38, D7)', () => {

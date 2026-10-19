@@ -1,4 +1,4 @@
-import { formatearMomento } from './momento';
+import { formatearHora, formatearMomento } from './momento';
 
 /**
  * Las fechas se construyen con componentes LOCALES (`new Date(2026, 9, 10, 11, 2)`)
@@ -29,5 +29,16 @@ describe('formatearMomento', () => {
 
   it('una cadena que no es fecha dice "nunca" y no "NaN-NaN-NaN"', () => {
     expect(formatearMomento('basura')).toBe('nunca');
+  });
+});
+
+describe('formatearHora (T-39)', () => {
+  it('es la hora LOCAL HH:mm', () => {
+    expect(formatearHora(new Date(2026, 9, 17, 9, 5).toISOString())).toBe('09:05');
+  });
+
+  it('sin hora o con basura dice --:--', () => {
+    expect(formatearHora(null)).toBe('--:--');
+    expect(formatearHora('no es fecha')).toBe('--:--');
   });
 });

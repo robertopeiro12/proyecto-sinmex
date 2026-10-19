@@ -66,14 +66,17 @@ describe('esJpeg', () => {
   });
 });
 
-describe('nombreArchivoFoto', () => {
-  const clave = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
+describe('nombreArchivoFoto (T-78)', () => {
+  const id = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
 
-  it('es <clave>.jpg, que es toda la idempotencia que hace falta', () => {
+  it('es <entidad>-<id>.jpg: el nombre sale del id de la fila, no de la clave del push', () => {
     // Reenviar escribe el MISMO nombre: no hay duplicado posible porque no hay
     // dos nombres posibles. Ni contador, ni tabla de control.
-    expect(nombreArchivoFoto(clave)).toBe(`${clave}.jpg`);
-    expect(nombreArchivoFoto(clave)).toBe(nombreArchivoFoto(clave));
+    expect(nombreArchivoFoto('cliente', id)).toBe(`cliente-${id}.jpg`);
+    expect(nombreArchivoFoto('visita', id)).toBe(`visita-${id}.jpg`);
+    expect(nombreArchivoFoto('visita', id)).toBe(
+      nombreArchivoFoto('visita', id),
+    );
   });
 
   it.each([
@@ -83,16 +86,13 @@ describe('nombreArchivoFoto', () => {
     ['', 'vacia'],
     ['no-es-un-uuid', 'no tiene la forma'],
     ['3F2504E0-4F89-41D3-9A0C-0305E82C3301', 'en mayusculas'],
-  ])('lanza con una clave que %s', (mala) => {
-    // `clave_idempotencia` es texto libre que escribe la TABLET: nada en la base
-    // impide un `../..`. Como el nombre del archivo sale de la clave, esto es lo
-    // que separa "escribo en FOTOS_DIR" de "escribo donde me digan".
-    expect(() => nombreArchivoFoto(mala)).toThrow(/clave no utilizable/);
+  ])('lanza con un id (%s) que %s', (malo) => {
+    expect(() => nombreArchivoFoto('cliente', malo)).toThrow(
+      /id no utilizable/,
+    );
   });
 
-  it('no sanea: una clave mala lanza en vez de convertirse en otra', () => {
-    // Sanear significaria que dos claves distintas pueden acabar en el mismo
-    // archivo, que es justo el duplicado silencioso que el nombre evita.
-    expect(claveNombrable('../' + clave)).toBe(false);
+  it('no sanea: un id malo lanza en vez de convertirse en otro', () => {
+    expect(claveNombrable('../' + id)).toBe(false);
   });
 });

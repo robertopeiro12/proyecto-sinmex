@@ -10,13 +10,18 @@ import { getRandomBytes } from 'expo-crypto';
 
 import type { CapaDatos } from '@/datos/inicializar';
 import { relojSistema } from '@/datos/reloj';
-import { crearClienteAuthApp } from '@/sesion/api';
+import { crearClienteAuthApp, URL_API } from '@/sesion/api';
 import { almacenSecureStore } from '@/sesion/almacen-secure-store';
 import { crearGestorSesion, type GestorSesion, type ResultadoEntrada } from '@/sesion/gestor';
 import type { EstadoSesion, VendedorSesion } from '@/sesion/politica';
-import { crearClienteFotosExpo } from '@/fotos/expo';
+import { bajarFotoExpo, crearClienteFotosExpo, rutaCacheFotoCliente } from '@/fotos/expo';
+import { descargarFotoCliente as descargarFoto, uriFotoCliente } from '@/fotos/descarga';
 import { crearClienteSync } from '@/sincronizacion/api';
-import { fuenteFotosProspectos } from '@/sincronizacion/fuente-fotos';
+import {
+  combinarFuentesFotos,
+  fuenteFotosProspectos,
+  fuenteFotosVisitas,
+} from '@/sincronizacion/fuente-fotos';
 import { fuentesDelPush } from '@/sincronizacion/fuentes';
 import {
   crearMotorSincronizacion,
@@ -47,6 +52,13 @@ export interface ContextoSesion {
   sincronizar: () => Promise<ResultadoSincronizacion>;
   /** Resultado de la ultima sincronizacion, para poder mostrarlo. */
   ultimaSincronizacion: ResultadoSincronizacion | null;
+  /**
+   * T-39 (D9): baja la foto del servidor de un cliente a la cache y devuelve la
+   * URI para pintarla (con `?v=<fotoSubidaEn>`, para que Android no reuse la
+   * imagen vieja del mismo archivo), o `null` sin red, sin sesion o sin foto.
+   * Nunca lanza.
+   */
+  descargarFotoCliente: (clienteId: string, fotoSubidaEn: string) => Promise<string | null>;
 }
 
 const Contexto = createContext<ContextoSesion | null>(null);
@@ -89,11 +101,14 @@ export function ProveedorSesion({
       sync: datos.sync,
       // Orden del push (T-16, T-40, T-20, T-37, T-75 D3): ver `fuentesDelPush`.
       fuentes: fuentesDelPush(datos),
-      // T-40: el canal de la foto, aparte del lote del push. Corre despues, y
-      // solo para prospectos que el servidor ya acepto — antes no existe la fila
-      // `cliente` a la que la foto pertenece.
+      // T-40 / T-39: el canal de la foto, aparte del lote del push. Corre despues,
+      // y solo para prospectos y visitas que el servidor ya acepto — antes no existe
+      // la fila a la que la foto pertenece. Una cola, varias fuentes.
       fotos: {
-        fuente: fuenteFotosProspectos(datos.prospectos),
+        fuente: combinarFuentesFotos([
+          fuenteFotosProspectos(datos.prospectos),
+          fuenteFotosVisitas(datos.visitas),
+        ]),
         api: crearClienteFotosExpo(),
       },
       sesion: {
@@ -213,6 +228,35 @@ export function ProveedorSesion({
     return ok;
   }, [gestor]);
 
+  const descargarFotoCliente = useCallback(
+    async (clienteId: string, fotoSubidaEn: string): Promise<string | null> => {
+      // Nunca renueva la sesion: el refresh token rota y el servidor trata un
+      // refresh reutilizado como ataque (revoca TODAS las sesiones del vendedor),
+      // asi que una descarga de la ficha en carrera con `sincronizar()` podria
+      // sacarlo de la app. Solo se usa el token de acceso actual; cualquier fallo
+      // (401 incluido) deja "sin foto" hasta la siguiente sincronizacion, que
+      // renueva por su camino normal.
+      try {
+        const token = gestor.sesionGuardada()?.tokenAcceso ?? null;
+        if (token === null) return null;
+        const destino = rutaCacheFotoCliente(clienteId);
+        const r = await descargarFoto({
+          bajar: bajarFotoExpo,
+          base: URL_API,
+          tokenAcceso: token,
+          clienteId,
+          destino,
+        });
+        if (r !== 'ok') return null;
+        datos.catalogos.marcarFotoDescargada(clienteId, fotoSubidaEn);
+        return uriFotoCliente(destino, fotoSubidaEn);
+      } catch {
+        return null;
+      }
+    },
+    [gestor, datos],
+  );
+
   const valor = useMemo<ContextoSesion>(
     () => ({
       vendedor,
@@ -222,8 +266,9 @@ export function ProveedorSesion({
       renovar,
       sincronizar,
       ultimaSincronizacion,
+      descargarFotoCliente,
     }),
-    [vendedor, material, entrar, salir, renovar, sincronizar, ultimaSincronizacion],
+    [vendedor, material, entrar, salir, renovar, sincronizar, ultimaSincronizacion, descargarFotoCliente],
   );
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;

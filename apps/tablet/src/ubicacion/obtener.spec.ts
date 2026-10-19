@@ -39,7 +39,16 @@ describe('obtenerUbicacion', () => {
       estado: 'ok',
       lat: 32.5149,
       lng: -117.0382,
+      precisionM: null,
     });
+  });
+
+  it('trae la precision del aparato en metros cuando la reporta (T-39)', async () => {
+    pedirPermiso.mockResolvedValue({ granted: true });
+    leerPosicion.mockResolvedValue({
+      coords: { latitude: 32.5, longitude: -117, accuracy: 18.4 },
+    });
+    await expect(obtenerUbicacion()).resolves.toMatchObject({ estado: 'ok', precisionM: 18.4 });
   });
 
   it('pide SOLO el permiso de primer plano', async () => {
