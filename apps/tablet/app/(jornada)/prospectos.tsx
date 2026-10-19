@@ -3,7 +3,16 @@ import { router } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
 import { ErrorJornada, ErrorProspecto } from '@/datos';
+import { LARGO_MAX_DOMICILIO } from '@/datos/repositorios/prospectos';
 import type { Prospecto, TipoNegocio } from '@/datos/tipos';
+import {
+  ayudaDomicilio,
+  avisoUbicacionAlta,
+  ETIQUETA_DOMICILIO,
+  ubicacionAltaDe,
+  validarAltaProspecto,
+  type UbicacionAlta,
+} from '@/estado/alta-prospecto';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { enlaceAFicha } from '@/estado/ruta-del-dia';
 import { useSesion } from '@/estado/proveedor-sesion';
@@ -35,11 +44,12 @@ import { colores, espacio, grosor } from '@/ui/tokens';
  * > **jamas dentro del alta**, porque entonces una foto que falla se llevaria al
  * > cliente potencial. Ver `src/fotos/` y el spec de T-40.
  *
- * > [!warning] La ubicacion NO bloquea el alta
- * > Si el vendedor niega el permiso o no hay senal, el prospecto se guarda sin
- * > coordenadas y la pantalla lo dice. Bloquearlo seria peor: el vendedor esta
- * > parado enfrente del negocio, y la alternativa real no es "vuelve con
- * > permiso", es que no lo registre.
+ * > [!warning] Sin GPS, la direccion es obligatoria (T-72, D1)
+ * > Si el vendedor niega el permiso, no hay senal o no toca "Usar mi
+ * > ubicación", el prospecto se guarda sin coordenadas **pero con la "Dirección
+ * > del negocio"**: es lo que el servidor convierte en coordenada (Google) para
+ * > rutearlo. Es la misma regla que la visita de T-39. La regla vive en
+ * > `validarAltaProspecto` (`src/estado/alta-prospecto.ts`), con pruebas.
  *
  * Sistema de diseno: una sola accion primaria (*Guardar prospecto*); el boton de
  * ubicacion es `neutra` porque solo prepara un dato. El estado de la ubicacion y
@@ -66,12 +76,10 @@ export default function Prospectos() {
   const [encargado, setEncargado] = useState('');
   const [comentarios, setComentarios] = useState('');
   const [tipoElegido, setTipoElegido] = useState<string | null>(null);
-  const [ubicacion, setUbicacion] = useState<{
-    lat: number;
-    lng: number;
-  } | null>(null);
-  const [avisoUbicacion, setAvisoUbicacion] = useState<string | null>(null);
-  const [buscandoUbicacion, setBuscandoUbicacion] = useState(false);
+  // T-72 (D1): la ubicacion como estado de `validarAltaProspecto`. `sin-tomar`
+  // tambien es "sin GPS": sin tocar "Usar mi ubicación" se exige la direccion.
+  const [ubicacion, setUbicacion] = useState<UbicacionAlta>({ estado: 'sin-tomar' });
+  const [domicilio, setDomicilio] = useState('');
   const [foto, setFoto] = useState<FotoComprimida | null>(null);
   const [avisoFoto, setAvisoFoto] = useState<string | null>(null);
   const [tomandoFoto, setTomandoFoto] = useState(false);
@@ -101,34 +109,19 @@ export default function Prospectos() {
     return vendedor ? datos.prospectos.delDia(vendedor.id) : [];
   }, [datos, vendedor, refrescos, versionCatalogos, ultimaSincronizacion]);
 
-  // La foto **no** aparece aqui a proposito, ni siquiera mientras la camara esta
-  // abierta: lo que habilita el boton son los tres campos obligatorios que dicto el cliente (nombre, telefono y encargado).
-  // Un prospecto sin foto es un prospecto completo.
-  const puedeGuardar =
-    vendedor !== null &&
-    sucursalId !== null &&
-    nombre.trim() !== '' &&
-    telefono.trim() !== '' &&
-    encargado.trim() !== '';
+  // Toda la regla del alta vive en `validarAltaProspecto` (T-72): los tres
+  // obligatorios que dicto el cliente y la direccion cuando no hay GPS. La foto
+  // **no** aparece: un prospecto sin foto es un prospecto completo.
+  const validacion = useMemo(
+    () => validarAltaProspecto({ nombre, telefono, encargado, ubicacion, domicilio }),
+    [nombre, telefono, encargado, ubicacion, domicilio],
+  );
+  const puedeGuardar = vendedor !== null && sucursalId !== null && validacion.ubicacion !== null;
 
   async function ubicar() {
-    setAvisoUbicacion(null);
-    setBuscandoUbicacion(true);
-    try {
-      const r = await obtenerUbicacion();
-      if (r.estado === 'ok') {
-        setUbicacion({ lat: r.lat, lng: r.lng });
-        return;
-      }
-      setUbicacion(null);
-      setAvisoUbicacion(
-        r.estado === 'permiso-negado'
-          ? 'Sin permiso de ubicación. Puedes guardar el prospecto igual; la oficina la capturará después.'
-          : 'No se pudo leer la ubicación (sin señal de GPS). Puedes guardar el prospecto igual e intentarlo afuera del local.',
-      );
-    } finally {
-      setBuscandoUbicacion(false);
-    }
+    setUbicacion({ estado: 'buscando' });
+    // `obtenerUbicacion` nunca lanza: permiso negado y sin senal llegan como estado.
+    setUbicacion(ubicacionAltaDe(await obtenerUbicacion()));
   }
 
   /**
@@ -172,6 +165,11 @@ export default function Prospectos() {
       setError('No hay vendedor con sesión iniciada.');
       return;
     }
+    const datosUbicacion = validacion.ubicacion;
+    if (datosUbicacion === null) {
+      setError(validacion.faltantes.join(' '));
+      return;
+    }
     try {
       const p = datos.prospectos.registrar({
         vendedorId: vendedor.id,
@@ -181,8 +179,11 @@ export default function Prospectos() {
         encargado: encargado.trim(),
         tipoNegocioId,
         comentarios: comentarios.trim() === '' ? null : comentarios,
-        lat: ubicacion?.lat ?? null,
-        lng: ubicacion?.lng ?? null,
+        // Una lectura invalida del GPS ya llega como null (T-39 D7).
+        lat: datosUbicacion.lat,
+        lng: datosUbicacion.lng,
+        // T-72 (D1): obligatoria sin GPS; va al prospecto y a su espejo de cliente.
+        domicilio: datosUbicacion.domicilio,
         // Ya comprimida y medida. Si no hubo foto esto es `null` y el alta sigue
         // exactamente igual que antes de T-40.
         fotoUri: foto?.uri ?? null,
@@ -195,13 +196,13 @@ export default function Prospectos() {
       setEncargado('');
       setComentarios('');
       setTipoElegido(null);
-      setUbicacion(null);
-      setAvisoUbicacion(null);
+      setUbicacion({ estado: 'sin-tomar' });
+      setDomicilio('');
       setFoto(null);
       setAvisoFoto(null);
       setGuardado(
         p.lat === null
-          ? `Guardado "${p.nombre}" sin ubicación. Queda pendiente de subir.`
+          ? `Guardado "${p.nombre}" sin GPS, con su dirección: la oficina lo ubicará con ella. Queda pendiente de subir.`
           : `Guardado "${p.nombre}" con ubicación. Queda pendiente de subir.`,
       );
       setUltimoId(p.id);
@@ -304,8 +305,11 @@ export default function Prospectos() {
         multiline
       />
 
-      <Tarjeta estado={ubicacion ? 'listo' : 'neutro'} etiqueta="Ubicación del negocio">
-        {ubicacion ? (
+      <Tarjeta
+        estado={ubicacion.estado === 'ok' && !validacion.domicilioObligatorio ? 'listo' : 'neutro'}
+        etiqueta="Ubicación del negocio"
+      >
+        {ubicacion.estado === 'ok' && !validacion.domicilioObligatorio ? (
           <>
             <Pastilla texto="ubicación capturada" estado="listo" />
             {/* Toda cifra que el vendedor lea va en monoespaciada (regla 3). */}
@@ -313,21 +317,35 @@ export default function Prospectos() {
           </>
         ) : (
           <Text style={estilos.textoSuave}>
-            Sin ubicación. No es obligatoria: si no la tomas, la oficina la capturará después.
+            Sin ubicación. Si no hay GPS, escribe abajo la dirección del negocio: la oficina lo ubicará con ella.
           </Text>
         )}
 
         <Boton
-          etiqueta={ubicacion ? 'Volver a ubicar' : 'Usar mi ubicación'}
+          etiqueta={ubicacion.estado === 'ok' ? 'Volver a ubicar' : 'Usar mi ubicación'}
           tono="neutra"
           glifo="⌖"
           onPress={ubicar}
-          ocupado={buscandoUbicacion}
+          ocupado={ubicacion.estado === 'buscando'}
           estilo={{ marginTop: espacio.sm }}
         />
 
-        {avisoUbicacion ? <Text style={estilos.textoSuave}>{avisoUbicacion}</Text> : null}
+        {avisoUbicacionAlta(ubicacion) ? (
+          <Text style={estilos.textoSuave}>{avisoUbicacionAlta(ubicacion)}</Text>
+        ) : null}
       </Tarjeta>
+
+      {/* T-72 (D1): siempre visible; obligatoria sin GPS. Si el GPS llega despues
+          de escribirla, se guardan las dos cosas. */}
+      <Campo
+        etiqueta={ETIQUETA_DOMICILIO}
+        ayuda={ayudaDomicilio(validacion.domicilioObligatorio)}
+        value={domicilio}
+        onChangeText={setDomicilio}
+        placeholder="Calle, número y colonia"
+        maxLength={LARGO_MAX_DOMICILIO}
+        multiline
+      />
 
       <Tarjeta estado={foto ? 'listo' : 'neutro'} etiqueta="Foto del lugar">
         {foto ? (
@@ -393,6 +411,10 @@ export default function Prospectos() {
         deshabilitado={!puedeGuardar}
         estilo={{ marginTop: espacio.md }}
       />
+
+      {validacion.faltantes.length > 0 ? (
+        <Text style={estilos.textoSuave}>{validacion.faltantes.join(' ')}</Text>
+      ) : null}
 
       <Text style={estilos.seccion}>Prospectos de hoy</Text>
 
