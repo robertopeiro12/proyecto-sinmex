@@ -229,6 +229,28 @@ export class TesoreriaService {
   }
 
   /**
+   * La cuenta viva que el usuario VE (T-29, movimientos): la de su sucursal o una
+   * general; un General, cualquiera. Otra sucursal o borrada -> 404. A diferencia
+   * de `cuentaModificable`, una general SI pasa para un usuario atado.
+   */
+  async cuentaVisible(
+    usuarioId: string,
+    cuentaId: string,
+  ): Promise<CuentaEnAlcance> {
+    const usuario = await this.usuario(usuarioId);
+    const cuenta = await this.repo.buscarCuenta(cuentaId);
+    if (!cuenta) throw new NotFoundException('No existe esa cuenta.');
+    if (
+      usuario.id !== null &&
+      cuenta.sucursalId !== null &&
+      cuenta.sucursalId !== usuario.id
+    ) {
+      throw new NotFoundException('No existe esa cuenta.');
+    }
+    return cuenta;
+  }
+
+  /**
    * La cuenta viva que el usuario puede MODIFICAR (spec §3.2):
    *   - no existe / dada de baja / de otra sucursal -> 404 (no se revela)
    *   - general y el usuario esta atado a una sucursal -> 403
@@ -249,7 +271,7 @@ export class TesoreriaService {
     return cuenta;
   }
 
-  protected async usuario(usuarioId: string): Promise<UsuarioSucursal> {
+  async usuario(usuarioId: string): Promise<UsuarioSucursal> {
     // El guard valido la FIRMA del token, no que el usuario siga existiendo.
     const fila = await this.repo.buscarSucursalUsuario(usuarioId);
     if (!fila) throw new UnauthorizedException('Sesion invalida.');
