@@ -97,6 +97,9 @@ export interface MotivoVisita {
 
 export type TipoCliente = 'cliente' | 'prospecto';
 
+/** De donde salio la coordenada del cliente (T-72, D3). Baja en el pull; la tablet aun no la muestra. */
+export type OrigenUbicacion = 'gps' | 'geocodificada' | 'manual';
+
 export interface Cliente {
   id: string;
   nombre: string;
@@ -138,6 +141,12 @@ export interface Cliente {
    * el pull. `null` = no tiene foto (o el servidor es anterior a T-39).
    */
   foto_subida_en: MomentoISO | null;
+  /**
+   * T-72 (D3): de donde salio la coordenada, tal como baja en el pull. `null`
+   * sin coordenada o con un servidor anterior. El espejo local de un prospecto
+   * con GPS nace en `'gps'`.
+   */
+  ubicacion_origen: OrigenUbicacion | null;
   /**
    * El `foto_subida_en` de la copia que esta tablet ya bajo a su cache (no viene
    * del pull). Si es menor que `foto_subida_en`, la ficha la vuelve a bajar.
@@ -385,6 +394,12 @@ export interface Prospecto {
   /** Las dos o ninguna. `null` si el vendedor nego el permiso o no hubo GPS. */
   lat: number | null;
   lng: number | null;
+  /**
+   * T-72 (D1): la "Dirección del negocio". Obligatoria al capturar sin GPS
+   * (`validarAltaProspecto`); `null` con GPS si no se escribio, y en filas
+   * anteriores a la migracion 014.
+   */
+  domicilio: string | null;
   /**
    * Ruta local de la foto del lugar, ya comprimida. `null` si el vendedor no
    * tomo foto — que es un prospecto **completo**, no uno a medias.

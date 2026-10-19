@@ -477,6 +477,8 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
       primera_venta_en: cliente.primera_venta_en ?? null,
       // T-39: un servidor anterior no lo manda.
       foto_subida_en: cliente.foto_subida_en ?? null,
+      // T-72: un servidor anterior no lo manda.
+      ubicacion_origen: cliente.ubicacion_origen ?? null,
     })),
     // T-40: un servidor anterior a este ticket no manda la coleccion. Se pasa
     // `undefined` y `guardarSnapshot` simplemente no escribe nada de esa tabla;

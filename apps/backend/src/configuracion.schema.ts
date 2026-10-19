@@ -105,4 +105,13 @@ export const configuracionSchema = Joi.object({
   // .env copiado) sea un fallo de arranque y no una carpeta llamada "" creada
   // en la raiz del disco.
   FOTOS_DIR: Joi.string().min(1).default('var/fotos'),
+
+  // T-72: clave de la Geocoding API de Google. OPCIONAL a proposito (respuesta
+  // 1 de Mario, 2026-10-19): sin ella nada falla, los clientes se quedan sin
+  // coordenada y el portal avisa que falta. Admite la linea en blanco del
+  // .env.example; `GeocodificadorGoogle` trata el blanco como "sin configurar".
+  GOOGLE_MAPS_API_KEY: Joi.string().allow('').optional(),
+  // T-72, solo desarrollo: '1' ubica toda direccion en el centro de Tijuana
+  // sin llamar a Google (aceptacion en el emulador). Se ignora en produccion.
+  GEOCODIFICADOR_FALSO: Joi.string().valid('0', '1').default('0'),
 });

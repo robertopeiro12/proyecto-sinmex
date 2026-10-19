@@ -3,6 +3,7 @@ import type { DB } from '../../database/schema';
 import type { ClientesRepository } from './clientes.repository';
 import { ClientesService, type ContextoProspecto } from './clientes.service';
 import type { ProspectoNormalizado } from './datos-prospecto';
+import type { UbicacionClientesService } from './ubicacion-clientes.service';
 import { ProspectoRechazado } from './prospecto-rechazado';
 
 const TIPO_NEGOCIO = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
@@ -36,6 +37,7 @@ const prospecto = (
   encargado: 'Don Aaron',
   tipoNegocioId: TIPO_NEGOCIO,
   comentarios: 'Quiere probar jamaica',
+  domicilio: null,
   lat: 32.5149,
   lng: -117.0382,
   ...extra,
@@ -48,7 +50,11 @@ function montar(opciones: { tipoNegocioVigente?: boolean } = {}) {
       .mockResolvedValue(opciones.tipoNegocioVigente ?? true),
     insertarProspecto: jest.fn().mockResolvedValue({ id: 'cliente-nuevo' }),
   };
-  const servicio = new ClientesService(repo as unknown as ClientesRepository);
+  const ubicacion = { geocodificarEnSegundoPlano: jest.fn() };
+  const servicio = new ClientesService(
+    repo as unknown as ClientesRepository,
+    ubicacion as unknown as UbicacionClientesService,
+  );
   return { servicio, repo };
 }
 
@@ -69,6 +75,7 @@ describe('ClientesService.crearProspecto', () => {
         encargado: 'Don Aaron',
         tipoNegocioId: TIPO_NEGOCIO,
         comentarios: 'Quiere probar jamaica',
+        domicilio: null,
         lat: 32.5149,
         lng: -117.0382,
         sucursalId: 'sucursal-tj',
@@ -138,6 +145,25 @@ describe('ClientesService.crearProspecto', () => {
 
     expect(repo.insertarProspecto).toHaveBeenCalledWith(
       expect.objectContaining({ lat: null, lng: null }),
+      trx,
+    );
+  });
+
+  it('guarda la direccion que escribio el vendedor (T-72, D2)', async () => {
+    const { servicio, repo } = montar();
+
+    await servicio.crearProspecto(
+      prospecto({ domicilio: 'Av. Revolución 1234', lat: null, lng: null }),
+      contexto(),
+      trx,
+    );
+
+    expect(repo.insertarProspecto).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domicilio: 'Av. Revolución 1234',
+        lat: null,
+        lng: null,
+      }),
       trx,
     );
   });

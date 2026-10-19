@@ -31,6 +31,7 @@ describe('normalizarDatosProspecto', () => {
       encargado: 'Don Aaron',
       tipoNegocioId: null,
       comentarios: null,
+      domicilio: null,
       lat: null,
       lng: null,
     });
@@ -54,6 +55,7 @@ describe('normalizarDatosProspecto', () => {
       // En minusculas: Postgres compara uuid sin importar mayusculas.
       tipoNegocioId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
       comentarios: 'Quiere probar jamaica',
+      domicilio: null,
       lat: 32.5149,
       lng: -117.0382,
     });
@@ -218,6 +220,40 @@ describe('normalizarDatosProspecto', () => {
 
     it('rechaza una coordenada que viaja como texto: el contrato manda numeros', () => {
       malo({ ...minimo, lat: '32.5149', lng: '-117.0382' }, 'lat');
+    });
+  });
+
+  describe('domicilio (T-72, D2)', () => {
+    it('se recorta y viaja', () => {
+      expect(
+        bueno({ ...minimo, domicilio: '  Av. Revolución 1234, Zona Centro  ' })
+          .domicilio,
+      ).toBe('Av. Revolución 1234, Zona Centro');
+    });
+
+    it('ausente, null y vacio son null: una tablet anterior no lo manda', () => {
+      for (const domicilio of [undefined, null, '', '   ']) {
+        expect(bueno({ ...minimo, domicilio }).domicilio).toBeNull();
+      }
+    });
+
+    it('acepta 300 caracteres y rechaza 301 con un motivo que lo dice', () => {
+      expect(
+        bueno({ ...minimo, domicilio: 'x'.repeat(300) }).domicilio,
+      ).toHaveLength(300);
+      const r = normalizarDatosProspecto({
+        ...minimo,
+        domicilio: 'x'.repeat(301),
+      });
+      expect(r).toEqual({
+        ok: false,
+        campo: 'domicilio',
+        motivo: 'domicilio: no puede pasar de 300 caracteres.',
+      });
+    });
+
+    it('un tipo que no es texto se rechaza en vez de convertirse', () => {
+      malo({ ...minimo, domicilio: 1234 }, 'domicilio');
     });
   });
 });

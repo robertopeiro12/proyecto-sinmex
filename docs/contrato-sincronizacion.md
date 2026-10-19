@@ -193,7 +193,7 @@ nadie relacionaría con nada.
     "clientes":       [{ "id": "…", "nombre": "…", "domicilio": "…", "telefono": "…",
                          "encargado": null, "tipo": "cliente", "pct_comision": 3.5,
                          "primera_venta_en": null, "plazo_credito_dias": 7,
-                         "lat": 32.5149, "lng": -117.0382, "sucursal_id": "…",
+                         "lat": 32.5149, "lng": -117.0382, "ubicacion_origen": "manual", "sucursal_id": "…",
                          "saldo_favor_centavos": 0, "foto_subida_en": null, "activo": 1 }],
     "tipos_negocio":  [{ "id": "…", "nombre": "Abarrotes", "activo": 1 }],
     "motivos_visita": [{ "id": "…", "nombre": "Cerrado", "exige_foto": true,
@@ -294,6 +294,16 @@ Campo **nuevo** y aditivo en `clientes`: cuándo recibió el servidor la foto de
 La ficha de la tablet lo compara con su copia en caché y, si no la tiene o es más vieja, la baja de
 `GET /sync/foto/cliente/:clienteId` (§6, "Fotos"). Subir una foto toca `cliente.updated_at`, así que el cliente
 vuelve a bajar en el pull incremental con el valor nuevo.
+
+### `ubicacion_origen` del cliente (T-72)
+
+Campo **nuevo** y aditivo en `clientes`: de dónde salió la coordenada actual. `"gps"` (la tablet al dar de alta el
+prospecto), `"geocodificada"` (el servidor, con Google, a partir del domicilio) o `"manual"` (la oficina en el
+portal); `null` cuando no hay coordenada (la base exige nulo si y solo si `lat` es nula). Las coordenadas anteriores
+a T-72 bajan como `"manual"`.
+
+Cuando el servidor geocodifica un prospecto después de su alta, le toca `updated_at`: la coordenada y
+`"geocodificada"` bajan solas en el siguiente pull incremental. La tablet guarda el campo y todavía no lo muestra.
 
 ### La baja viaja como bandera, nunca como ausencia
 
@@ -546,6 +556,7 @@ Es el **único** tipo que crea una fila de *catálogo* (`cliente` con
     "encargado": "Don Aarón",          // obligatorio
     "tipo_negocio_id": "…",            // del catálogo `tipos_negocio`, o null
     "comentarios": "Quiere probar jamaica",  // o null
+    "domicilio": "Av. Revolución 1234, Zona Centro",  // T-72: hasta 300; null o ausente si no hay
     "lat": 32.514900, "lng": -117.038200,    // las dos o las dos null
     "foto": null                       // reservado, siempre null por ahora
   }
@@ -571,13 +582,18 @@ Es el **único** tipo que crea una fila de *catálogo* (`cliente` con
 Los campos son los que **dictó el cliente** en agosto de 2026 (ver
 `10-Dominio/Entidades/Cliente.md` en el vault). Lo que **no** viaja:
 
-- **`domicilio`**: no se captura. Lo sustituye la ubicación, y en Postgres la
-  columna dejó de ser obligatoria para un prospecto.
 - **`lista_precio_id`, `pct_comision`, `plazo_credito_dias`** (y, hasta T-74, `promocion`): son
   decisiones del administrador. El vendedor no puede dar de alta clientes
   justamente porque el control del precio no es suyo (cambio v2.0).
 
-Cinco reglas que se rechazan **por operación**, todas como `datos-invalidos`:
+> [!info] T-72: `domicilio` sí viaja, opcional
+> La "Dirección del negocio" que escribió el vendedor, recortada y de hasta 300 caracteres (vacía = `null`). La
+> tablet la exige cuando no hay GPS; el servidor solo valida la forma y la guarda en `cliente.domicilio`. Si el alta
+> llega **sin** `lat`/`lng` y **con** `domicilio`, el servidor la geocodifica **después del commit** y sin que el push
+> espere (un reenvío `duplicada` o un alta rechazada no disparan nada). Una tablet anterior no la manda y no pasa
+> nada: `CONTRATO_ACTUAL` sigue en 1.
+
+Seis reglas que se rechazan **por operación**, todas como `datos-invalidos`:
 
 | Qué llega | Por qué se rechaza |
 |---|---|
@@ -586,6 +602,7 @@ Cinco reglas que se rechazan **por operación**, todas como `datos-invalidos`:
 | Una clave que no es uuid | Es el id del `cliente` que se crea (T-75) |
 | Una clave que ya es el id de un `cliente` | La clave es el id del cliente que se crea y ese id está ocupado (T-75). Motivo neutro a propósito ("La clave de este prospecto no es nueva; avisa a la oficina."): no confirma que exista un cliente, que podría ser de otra sucursal |
 | Media coordenada | No ubica nada y en el portal se vería como un punto en el meridiano cero: parece un dato bueno |
+| Un `domicilio` de más de 300 caracteres, o que no es texto | El motivo empieza por `domicilio:` y dice el tope (T-72) |
 
 **Sin ubicación es un caso normal**, no un error: el vendedor pudo negar el
 permiso o no haber señal, y eso no le impide registrar al prospecto.

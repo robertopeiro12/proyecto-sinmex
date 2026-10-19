@@ -245,6 +245,12 @@ Spec: `docs/superpowers/specs/2026-10-14-t-75-camino-prospecto-design.md`. Flujo
    el administrador lo convierta en el portal.
 
 - La foto se liga por id (`fotoLocalDe`), con respaldo por nombre + teléfono.
+- **Dirección del negocio (T-72)**: campo del alta, obligatorio cuando no hay coordenada válida (no se tomó, permiso
+  negado, sin señal o lectura fuera de rango). La regla es `validarAltaProspecto` (`src/estado/alta-prospecto.ts`, con
+  pruebas) y comparte con la visita `esCoordenadaValida` (`src/estado/coordenada.ts`). Se guarda en
+  `prospecto.domicilio` y en el espejo (`cliente.domicilio`; migración 014), sube como `domicilio` en la operación y
+  el servidor la geocodifica después del commit, sin que el push espere; la coordenada baja en el pull con
+  `ubicacion_origen` (se guarda, no se muestra).
 - **Prospectos capturados antes de T-75** no tienen espejo local con su id: "Prospectos de hoy" los muestra sin
   enlace (`enlaceAFicha` da `null`) y se alcanzan por la pestaña Prospectos cuando el pull los baje.
 - Un alta rechazada (p. ej. tipo de negocio dado de baja) deja alta y venta en `error`; con `tipo-negocio-inexistente` entran solas

@@ -235,6 +235,14 @@ describe('aSnapshot (T-37)', () => {
   });
 });
 
+describe('aSnapshot (T-72)', () => {
+  it('pasa ubicacion_origen y tolera un servidor que todavia no lo manda', () => {
+    const respuesta = respuestaPullDePrueba();
+    respuesta.catalogos.clientes[0] = { ...respuesta.catalogos.clientes[0]!, ubicacion_origen: 'gps' };
+    expect(aSnapshot(respuesta).clientes?.map((c) => c.ubicacion_origen)).toEqual(['gps', null]);
+  });
+});
+
 describe('motor de sincronizacion', () => {
   describe('renovar la sesion es el PRIMER paso', () => {
     it('llama a renovar() antes que a pull o push', async () => {

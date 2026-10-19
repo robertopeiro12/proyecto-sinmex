@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   Header,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -20,6 +21,10 @@ import { CrearClienteDto } from './dto/crear-cliente.dto';
 import { EditarClienteDto } from './dto/editar-cliente.dto';
 import type { ClienteDetalle, ClienteResumen } from './clientes.repository';
 import { FotosService } from './fotos.service';
+import {
+  UbicacionClientesService,
+  type UbicacionGeocodificada,
+} from './ubicacion-clientes.service';
 
 // Sin @Publico(): el guard global protege todo por defecto. Ni listar ni
 // leer el detalle exigen cliente.gestionar (D2 del spec): el candado va
@@ -32,6 +37,8 @@ export class ClientesController {
     // T-40: la foto del prospecto. Es un archivo del disco del backend, no una
     // columna, asi que tiene su propio servicio.
     private readonly fotos: FotosService,
+    // T-72: "Ubicar con la dirección" (espera a Google, como mucho 5 s).
+    private readonly ubicacion: UbicacionClientesService,
   ) {}
 
   @Get()
@@ -125,5 +132,24 @@ export class ClientesController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<ClienteDetalle> {
     return this.clientes.convertirACliente(usuarioId, id);
+  }
+
+  /**
+   * "Ubicar con la dirección" (T-72, D5): geocodifica el domicilio guardado y,
+   * si Google da una coordenada precisa, la anota con origen `geocodificada`.
+   *
+   * A diferencia del intento en segundo plano, **espera** (Google tiene 5 s) y
+   * responde el resultado: 200 con la coordenada, 409 con el motivo en espanol
+   * o 502 si Google no respondio. `cliente.gestionar`, como editar la ficha;
+   * otra sucursal es 404. 200 y no 201: no crea nada.
+   */
+  @Post(':id/ubicar')
+  @HttpCode(200)
+  @RequierePermiso('cliente.gestionar')
+  async ubicar(
+    @UsuarioActual() usuarioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<UbicacionGeocodificada> {
+    return this.ubicacion.ubicar(usuarioId, id);
   }
 }

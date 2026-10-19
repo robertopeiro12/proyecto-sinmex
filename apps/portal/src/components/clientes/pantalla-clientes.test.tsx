@@ -36,6 +36,7 @@ const crearCliente = vi.mocked(clientesLib.crearCliente);
 const editarCliente = vi.mocked(clientesLib.editarCliente);
 const eliminarCliente = vi.mocked(clientesLib.eliminarCliente);
 const convertirACliente = vi.mocked(clientesLib.convertirACliente);
+const ubicarCliente = vi.mocked(clientesLib.ubicarCliente);
 const usarAuthMock = vi.mocked(useAuth);
 
 function mockAuth(puede: (clave: string) => boolean) {
@@ -79,6 +80,7 @@ const DETALLE: ClienteDetalle = {
   plazoCreditoDias: null,
   lat: null,
   lng: null,
+  ubicacionOrigen: null,
   comentarios: null,
   sucursalId: "suc-1",
   sucursalCodigo: "TJ",
@@ -356,5 +358,153 @@ describe("PantallaClientes", () => {
     await usuario.click(screen.getByRole("button", { name: "Convertir a Cliente" }));
 
     expect(convertirACliente).not.toHaveBeenCalled();
+  });
+});
+
+describe("PantallaClientes · ubicación (T-72, D6)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(tiposNegocioLib.listarTiposNegocio).mockResolvedValue([]);
+    vi.mocked(productosLib.listarProductos).mockResolvedValue([]);
+    vi.mocked(preciosLib.listarListasPrecio).mockResolvedValue([
+      { id: "lista-1", nombre: "Lista 1" },
+    ]);
+    vi.mocked(sucursalesLib.listarSucursales).mockResolvedValue([]);
+    vi.mocked(promocionesLib.listarPromociones).mockResolvedValue([]);
+  });
+
+  /** Abre la edición del cliente con este detalle y espera al formulario. */
+  async function abrirEdicion(detalle: ClienteDetalle) {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    listarClientes.mockResolvedValue([RESUMEN]);
+    obtenerCliente.mockResolvedValue(detalle);
+    render(<PantallaClientes sucursal={null} tipo="todos" />);
+    await screen.findByText("Abarrotes Lupita");
+    await usuario.click(screen.getByRole("button", { name: "Editar" }));
+    await screen.findByLabelText("Latitud");
+    return usuario;
+  }
+
+  const UBICAR = { name: "Ubicar con la dirección" };
+
+  it.each<[NonNullable<ClienteDetalle["ubicacionOrigen"]>, string]>([
+    ["gps", "GPS de la tablet"],
+    ["geocodificada", "Ubicada por Google"],
+    ["manual", "Capturada a mano"],
+  ])("con origen %s dice «%s» y no ofrece ubicar", async (origen, texto) => {
+    await abrirEdicion({ ...DETALLE, lat: 32.5251, lng: -117.0213, ubicacionOrigen: origen });
+    expect(screen.getByText(`Origen de la ubicación: ${texto}`)).toBeInTheDocument();
+    expect(screen.queryByRole("button", UBICAR)).not.toBeInTheDocument();
+  });
+
+  it("sin coordenada y con domicilio: «Sin ubicación», y el botón pinta la coordenada de Google", async () => {
+    ubicarCliente.mockResolvedValue({ lat: 32.5251, lng: -117.0213, ubicacionOrigen: "geocodificada" });
+    const usuario = await abrirEdicion(DETALLE);
+    expect(screen.getByText("Origen de la ubicación: Sin ubicación")).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("button", UBICAR));
+
+    expect(await screen.findByText("Origen de la ubicación: Ubicada por Google")).toBeInTheDocument();
+    expect(ubicarCliente).toHaveBeenCalledWith("1");
+    expect((screen.getByLabelText("Latitud") as HTMLInputElement).value).toBe("32.5251");
+    expect((screen.getByLabelText("Longitud") as HTMLInputElement).value).toBe("-117.0213");
+    expect(screen.queryByRole("button", UBICAR)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [409, "El cliente no tiene domicilio."],
+    [409, "Ya tiene ubicación; bórrala primero para volver a ubicarlo."],
+    [409, "Google solo encontró la colonia o la ciudad: agrega calle y número."],
+    [409, "Google no encontró esa dirección."],
+    [409, "Falta configurar la clave de Google en el servidor."],
+    [502, "Google no respondió; intenta en un momento."],
+  ])("un %i pinta «%s» y deja la ubicación vacía", async (status, motivo) => {
+    ubicarCliente.mockRejectedValue(new ErrorApi("Error de la API", status, motivo));
+    const usuario = await abrirEdicion(DETALLE);
+
+    await usuario.click(screen.getByRole("button", UBICAR));
+
+    expect(await screen.findByText(motivo)).toBeInTheDocument();
+    expect((screen.getByLabelText("Latitud") as HTMLInputElement).value).toBe("");
+    expect(screen.getByRole("button", UBICAR)).toBeEnabled();
+  });
+
+  it("mientras espera a Google el botón dice «Ubicando…» y no se puede repetir", async () => {
+    let responder: (r: clientesLib.UbicacionGeocodificada) => void = () => {};
+    ubicarCliente.mockReturnValue(
+      new Promise((resolver) => {
+        responder = resolver;
+      }),
+    );
+    const usuario = await abrirEdicion(DETALLE);
+
+    await usuario.click(screen.getByRole("button", UBICAR));
+
+    expect(screen.getByRole("button", { name: "Ubicando…" })).toBeDisabled();
+    responder({ lat: 32.5251, lng: -117.0213, ubicacionOrigen: "geocodificada" });
+    expect(await screen.findByText("Origen de la ubicación: Ubicada por Google")).toBeInTheDocument();
+  });
+
+  it("con el domicilio cambiado y sin guardar, «Ubicar» se deshabilita y pide guardarlo", async () => {
+    const usuario = await abrirEdicion(DETALLE);
+    const domicilio = screen.getByLabelText("Domicilio / referencia");
+
+    await usuario.type(domicilio, " interior 4");
+
+    expect(screen.getByRole("button", UBICAR)).toBeDisabled();
+    expect(screen.getByText("Guarda el domicilio antes de ubicarlo.")).toBeInTheDocument();
+
+    await usuario.clear(domicilio);
+    await usuario.type(domicilio, "Calle Falsa 123");
+    expect(screen.getByRole("button", UBICAR)).toBeEnabled();
+    expect(screen.queryByText("Guarda el domicilio antes de ubicarlo.")).not.toBeInTheDocument();
+  });
+
+  it("guardar sin tocar la coordenada no la manda (no borra la que Google puso mientras)", async () => {
+    editarCliente.mockResolvedValue(DETALLE);
+    const usuario = await abrirEdicion(DETALLE);
+
+    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(editarCliente).toHaveBeenCalledTimes(1));
+    const datos = editarCliente.mock.calls[0][1];
+    expect(datos).not.toHaveProperty("lat");
+    expect(datos).not.toHaveProperty("lng");
+  });
+
+  it("vaciar una coordenada guardada manda null para borrarla", async () => {
+    editarCliente.mockResolvedValue(DETALLE);
+    const usuario = await abrirEdicion({
+      ...DETALLE,
+      lat: 32.5251,
+      lng: -117.0213,
+      ubicacionOrigen: "geocodificada",
+    });
+
+    await usuario.clear(screen.getByLabelText("Latitud"));
+    await usuario.clear(screen.getByLabelText("Longitud"));
+    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(editarCliente).toHaveBeenCalledTimes(1));
+    expect(editarCliente.mock.calls[0][1]).toMatchObject({ lat: null, lng: null });
+  });
+
+  it("un prospecto sin domicilio no ofrece ubicar", async () => {
+    await abrirEdicion({ ...DETALLE, tipo: "prospecto", domicilio: null, listaPrecioId: null });
+    expect(screen.queryByRole("button", UBICAR)).not.toBeInTheDocument();
+  });
+
+  it("cambiar a mano una coordenada de Google la marca «Capturada a mano»", async () => {
+    const usuario = await abrirEdicion({
+      ...DETALLE,
+      lat: 32.5251,
+      lng: -117.0213,
+      ubicacionOrigen: "geocodificada",
+    });
+    const latitud = screen.getByLabelText("Latitud");
+    await usuario.clear(latitud);
+    await usuario.type(latitud, "32.53");
+    expect(screen.getByText("Origen de la ubicación: Capturada a mano")).toBeInTheDocument();
   });
 });

@@ -702,6 +702,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
           plazo_credito_dias: 7,
           lat: '32.514900',
           lng: '-117.038200',
+          // T-72: con coordenada, el origen es obligatorio (ck_cliente_ubicacion_origen_con_lat).
+          ubicacion_origen: 'manual',
           sucursal_id: sucursalId,
         })
         .returning('id')

@@ -34,11 +34,15 @@ export interface SnapshotCatalogos {
   productos?: Omit<Producto, 'sincronizado_en'>[];
   presentaciones?: Omit<Presentacion, 'sincronizado_en'>[];
   /**
-   * `foto_subida_en` es opcional aqui (un servidor anterior a T-39 no lo manda;
-   * el upsert escribe `null`) y `foto_cache_subida_en` no viene nunca del pull.
+   * `foto_subida_en` (T-39) y `ubicacion_origen` (T-72) son opcionales aqui (un
+   * servidor anterior no los manda; el upsert escribe `null`) y
+   * `foto_cache_subida_en` no viene nunca del pull.
    */
-  clientes?: (Omit<Cliente, 'sincronizado_en' | 'foto_subida_en' | 'foto_cache_subida_en'> &
-    Partial<Pick<Cliente, 'foto_subida_en'>>)[];
+  clientes?: (Omit<
+    Cliente,
+    'sincronizado_en' | 'foto_subida_en' | 'foto_cache_subida_en' | 'ubicacion_origen'
+  > &
+    Partial<Pick<Cliente, 'foto_subida_en' | 'ubicacion_origen'>>)[];
   /** T-40. Coleccion nueva del `pull`: el desplegable de la pantalla de prospectos. */
   tiposNegocio?: Omit<TipoNegocio, 'sincronizado_en'>[];
   /** T-39. Coleccion nueva del pull: el catalogo de la pantalla de visita. Baja como bandera. */
@@ -100,6 +104,8 @@ const COLUMNAS = {
     'saldo_favor_centavos',
     // T-39 (D9): cuando el servidor recibio su foto. `foto_cache_subida_en` NO va: es de la tablet.
     'foto_subida_en',
+    // T-72 (D3): de donde salio la coordenada. Se guarda; aun no se muestra.
+    'ubicacion_origen',
   ],
   promocion: [
     'id', 'audiencia', 'cliente_id',

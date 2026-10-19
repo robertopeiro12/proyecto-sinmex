@@ -520,3 +520,17 @@ describe('foto del cliente (T-39, D9)', () => {
     expect(catalogos.obtenerCliente('cli-1')?.foto_subida_en).toBeNull();
   });
 });
+
+describe('origen de la ubicacion del cliente (T-72, D3)', () => {
+  it('el pull lo guarda', () => {
+    const { catalogos } = conCatalogos();
+    const base = snapshotDePrueba().clientes![0]!;
+    catalogos.guardarSnapshot({ clientes: [{ ...base, ubicacion_origen: 'geocodificada' }] });
+    expect(catalogos.obtenerCliente('cli-1')?.ubicacion_origen).toBe('geocodificada');
+  });
+
+  it('un servidor anterior a T-72 no lo manda: queda null', () => {
+    const { catalogos } = conCatalogos();
+    expect(catalogos.obtenerCliente('cli-1')?.ubicacion_origen).toBeNull();
+  });
+});

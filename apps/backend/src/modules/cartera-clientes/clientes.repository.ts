@@ -4,6 +4,7 @@ import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import type { DB } from '../../database/schema';
 import { buscarSucursalUsuario } from '../sucursales/buscar-sucursal-usuario';
 import { aNumero } from '../sincronizacion/dinero';
+import type { OrigenUbicacion } from './ubicacion-origen';
 
 export type TipoCliente = 'cliente' | 'prospecto';
 export type TipoFiltro = TipoCliente | 'todos';
@@ -48,6 +49,11 @@ export interface ClienteDetalle {
   plazoCreditoDias: number | null;
   lat: number | null;
   lng: number | null;
+  /**
+   * T-72 (D3): de donde salio la coordenada (`'gps'`, `'geocodificada'`,
+   * `'manual'`), o `null` si no hay. El portal pinta la etiqueta con esto.
+   */
+  ubicacionOrigen: OrigenUbicacion | null;
   comentarios: string | null;
   sucursalId: string;
   sucursalCodigo: string;
@@ -84,8 +90,17 @@ export interface DatosClienteBase {
   plazo_credito_dias: number | null;
   lat: number | null;
   lng: number | null;
+  /** T-72: lo calcula `origenAlGuardar`; la base exige nulo si y solo si `lat` es nula. */
+  ubicacion_origen: OrigenUbicacion | null;
   comentarios: string | null;
 }
+
+/**
+ * Lo que escribe `actualizar()`. T-72: sin `lat`/`lng`/`ubicacion_origen`, la
+ * coordenada de la fila no se toca (el formulario no la cambio).
+ */
+export type CambiosCliente =
+  DatosClienteBase | Omit<DatosClienteBase, 'lat' | 'lng' | 'ubicacion_origen'>;
 
 interface FilaResumen {
   id: string;
@@ -121,6 +136,7 @@ interface FilaDetalle {
   plazo_credito_dias: number | null;
   lat: string | null;
   lng: string | null;
+  ubicacion_origen: string | null;
   comentarios: string | null;
   sucursal_id: string;
   codigo: string;
@@ -153,6 +169,8 @@ function aDetalle(
     plazoCreditoDias: fila.plazo_credito_dias,
     lat: aNumero(fila.lat),
     lng: aNumero(fila.lng),
+    // El check de la base garantiza que solo llega uno de los tres o null.
+    ubicacionOrigen: fila.ubicacion_origen as OrigenUbicacion | null,
     comentarios: fila.comentarios,
     sucursalId: fila.sucursal_id,
     sucursalCodigo: fila.codigo,
@@ -190,6 +208,7 @@ const COLUMNAS_DETALLE = [
   'cliente.plazo_credito_dias',
   'cliente.lat',
   'cliente.lng',
+  'cliente.ubicacion_origen',
   'cliente.comentarios',
   'cliente.primera_venta_en',
   'cliente.sucursal_id',
@@ -304,10 +323,12 @@ export class ClientesRepository {
    * del buzon de `sync_operacion` (ADR-0009 §2.3). Mismo patron que
    * `VentasRepository` de T-16.
    *
-   * Sin `domicilio`, sin `lista_precio_id`, sin `pct_comision`
+   * Sin `lista_precio_id`, sin `pct_comision`
    * y sin `plazo_credito_dias`: son decisiones del administrador, no del
    * vendedor, y los dos primeros ahora aceptan nulo solo para un prospecto
    * (`ck_cliente_domicilio_obligatorio`, `ck_cliente_lista_precio_obligatoria`).
+   * El `domicilio` llega desde T-72 cuando el vendedor lo escribio (obligatorio
+   * en la tablet sin GPS).
    *
    * `lat`/`lng` van como texto y no como numero, igual que en `crear()`: el
    * driver `pg` quiere `numeric` en texto y pasar por un `number` es la puerta a
@@ -321,6 +342,7 @@ export class ClientesRepository {
       encargado: string | null;
       tipoNegocioId: string | null;
       comentarios: string | null;
+      domicilio: string | null;
       lat: number | null;
       lng: number | null;
       sucursalId: string;
@@ -332,7 +354,8 @@ export class ClientesRepository {
       .values({
         id: datos.id,
         nombre: datos.nombre,
-        domicilio: null,
+        // T-72 (D2): la direccion que escribio el vendedor, o null.
+        domicilio: datos.domicilio,
         telefono: datos.telefono,
         encargado: datos.encargado,
         // El default de la columna es `false`, pero se escribe explicito: que un
@@ -344,6 +367,8 @@ export class ClientesRepository {
         comentarios: datos.comentarios,
         lat: datos.lat?.toString() ?? null,
         lng: datos.lng?.toString() ?? null,
+        // T-72 (D2): la coordenada de un alta de la app solo puede ser del GPS.
+        ubicacion_origen: datos.lat !== null ? 'gps' : null,
         sucursal_id: datos.sucursalId,
       })
       .returning('id')
@@ -383,6 +408,7 @@ export class ClientesRepository {
           plazo_credito_dias: datos.plazo_credito_dias,
           lat: datos.lat?.toString() ?? null,
           lng: datos.lng?.toString() ?? null,
+          ubicacion_origen: datos.ubicacion_origen,
           comentarios: datos.comentarios,
           sucursal_id: datos.sucursal_id,
           // T-51: solo un CLIENTE tiene alta; un prospecto la tendra al convertirse.
@@ -422,7 +448,7 @@ export class ClientesRepository {
    */
   async actualizar(
     id: string,
-    cambios: DatosClienteBase,
+    cambios: CambiosCliente,
     overridesPrecio: { presentacionId: string; precio: number | null }[],
     vigenteDesde: string,
   ): Promise<ClienteDetalle> {
@@ -439,8 +465,13 @@ export class ClientesRepository {
           lista_precio_id: cambios.lista_precio_id,
           pct_comision: cambios.pct_comision?.toString() ?? null,
           plazo_credito_dias: cambios.plazo_credito_dias,
-          lat: cambios.lat?.toString() ?? null,
-          lng: cambios.lng?.toString() ?? null,
+          ...('lat' in cambios
+            ? {
+                lat: cambios.lat?.toString() ?? null,
+                lng: cambios.lng?.toString() ?? null,
+                ubicacion_origen: cambios.ubicacion_origen,
+              }
+            : {}),
           comentarios: cambios.comentarios,
         })
         .where('id', '=', id)
@@ -529,6 +560,62 @@ export class ClientesRepository {
 
     if (Number(res.numUpdatedRows) === 0) return null;
     return (await this.obtener(id))!;
+  }
+
+  /**
+   * Lo minimo para geocodificar (T-72): domicilio, si ya tiene coordenada y de
+   * que sucursal es (para el alcance del portal). `undefined` si no existe o
+   * esta dado de baja.
+   */
+  async ubicacionDe(
+    id: string,
+  ): Promise<
+    | { domicilio: string | null; lat: number | null; sucursalCodigo: string }
+    | undefined
+  > {
+    const fila = await this.db
+      .selectFrom('cliente')
+      .innerJoin('sucursal', 'sucursal.id', 'cliente.sucursal_id')
+      .select(['cliente.domicilio', 'cliente.lat', 'sucursal.codigo'])
+      .where('cliente.id', '=', id)
+      .where('cliente.deleted_at', 'is', null)
+      .executeTakeFirst();
+    if (!fila) return undefined;
+    return {
+      domicilio: fila.domicilio,
+      lat: aNumero(fila.lat),
+      sucursalCodigo: fila.codigo,
+    };
+  }
+
+  /**
+   * Anota la coordenada que dio Google (T-72, D5). Devuelve `false` si no
+   * escribio nada.
+   *
+   * - `where lat is null`: si la oficina capturo una coordenada mientras Google
+   *   respondia, gana la de la oficina. Es la unica proteccion contra esa
+   *   carrera, y por eso vive en el `where` y no en una lectura previa.
+   * - `updated_at = now()` explicito (el trigger tambien lo haria): es lo que
+   *   hace que la coordenada baje sola en el siguiente pull incremental.
+   */
+  async guardarGeocodificada(
+    id: string,
+    lat: number,
+    lng: number,
+  ): Promise<boolean> {
+    const res = await this.db
+      .updateTable('cliente')
+      .set({
+        lat: lat.toString(),
+        lng: lng.toString(),
+        ubicacion_origen: 'geocodificada',
+        updated_at: sql<Date>`now()`,
+      })
+      .where('id', '=', id)
+      .where('lat', 'is', null)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    return Number(res.numUpdatedRows) > 0;
   }
 
   /** Delegado al helper compartido (D9 del plan, Task 2). */

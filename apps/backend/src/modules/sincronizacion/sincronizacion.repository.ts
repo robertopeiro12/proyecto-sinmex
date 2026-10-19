@@ -247,6 +247,7 @@ export class SincronizacionRepository {
         'plazo_credito_dias',
         'lat',
         'lng',
+        'ubicacion_origen',
         'sucursal_id',
         'foto_subida_en',
         'deleted_at',
@@ -280,6 +281,8 @@ export class SincronizacionRepository {
       plazo_credito_dias: f.plazo_credito_dias,
       lat: aNumero(f.lat),
       lng: aNumero(f.lng),
+      // T-72 (D3): de donde salio la coordenada. La tablet la guarda.
+      ubicacion_origen: f.ubicacion_origen as ClientePull['ubicacion_origen'],
       sucursal_id: f.sucursal_id,
       saldo_favor_centavos: aCentavos(f.saldo_favor),
       // T-39 (D9): la ficha de la tablet decide con esto si baja la foto.

@@ -354,6 +354,8 @@ usuario con sesion pasa.
   - **La tablet crea el espejo en `cliente` con el mismo id** al guardar el alta (D1): `prospectos.registrar()`
     inserta la fila de `prospecto` y la de `cliente` (`tipo = 'prospecto'`, sin precios) en una sola transacción. Desde
     ese momento tiene ficha, bienvenida y venta de solo regalo, sin red. El pull posterior la pisa por id sin duplicar.
+  - **T-72**: el alta gana "Dirección del negocio" (obligatoria sin GPS) y el espejo la guarda en `cliente.domicilio`,
+    así que la ficha abre Maps por domicilio mientras el servidor no la geocodifique. Ver el bloque de T-72.
   - **El servidor adopta la clave como `cliente.id`** (D2, `despacho-prospecto.ts`, `clientes.service.ts`): la clave
     debe ser uuid (si no, `datos-invalidos`) y un id ya ocupado se rechaza con razón `id-ocupado` (código
     `datos-invalidos`, nunca un 500). El motivo es **neutro a propósito**: no confirma que exista un cliente, que podría
@@ -432,6 +434,48 @@ usuario con sesion pasa.
     portal (T-55 y reportes leen la tabla `visita`).
   - **Nube**: la migración `20261018120000_visita_sin_venta.sql` debe subirse a `sinmex dev` después del merge,
     siguiendo el protocolo de push de migraciones (pre-flight: solo tablas nuevas).
+
+- **Geocodificación de prospectos (T-72).** El alta de prospecto de la tablet gana "Dirección del negocio" (obligatoria
+  sin GPS válido; una coordenada inválida cuenta como sin GPS, con la misma `esCoordenadaValida` de la visita de T-39) y
+  el servidor convierte direcciones en coordenadas con la Geocoding API de Google. Spec:
+  `docs/superpowers/specs/2026-10-19-t-72-geocodificacion-design.md`.
+  - **`GOOGLE_MAPS_API_KEY`** (opcional, solo en el servidor; ver `.env.example`). Sin ella nada falla: el intento da
+    `sin-configurar` (se loguea una vez por arranque) y el portal lo dice. La clave **nunca** se loguea ni sale en
+    respuestas; se loguea el `status` de Google o el código HTTP, nunca la URL.
+  - **`GEOCODIFICADOR_FALSO=1`** (solo desarrollo) ubica toda dirección en el centro de Tijuana sin llamar a Google. Se
+    **ignora si `NODE_ENV=production`** (se usa Google y se loguea un `warn`). Ojo: esa guarda solo funciona si el
+    despliegue **fija `NODE_ENV=production`**; hoy nada en el repo lo fija (el backend solo lo lee para elegir el
+    `.env.<entorno>` y para `/health`), así que quien despliegue debe ponerlo.
+  - Módulo `modules/integraciones/geocodificacion/` (token `GEOCODIFICADOR`, `fetch` nativo, **5 s** con
+    `AbortController`; solo `ROOFTOP`/`RANGE_INTERPOLATED`/`GEOMETRIC_CENTER`, `APPROXIMATE` = `imprecisa`). **Bajo
+    `NODE_ENV=test` la fábrica siempre da un geocodificador `sin-configurar`**: ninguna prueba puede llamar a Google
+    aunque haya clave en el `.env`. Los e2e que necesitan geocodificar sustituyen el proveedor
+    (`overrideProvider(GEOCODIFICADOR)`) con el falso compartido de `apps/backend/test/apoyo-geocodificador.ts`
+    (`retener` mantiene una respuesta en espera para probar las carreras).
+  - **Después del commit y sin bloquear**: `SincronizacionService` dispara
+    `UbicacionClientesService.geocodificarEnSegundoPlano` tras aplicar un prospecto con `domicilio` y sin GPS (nunca en
+    `duplicada` ni `rechazada`) y **no lo espera**; `ClientesService` lo dispara al guardar desde el portal si el
+    domicilio cambió y no hay coordenada. Nunca dentro de una transacción. La escritura es `… where lat is null` con
+    `updated_at = now()`: no pisa una coordenada capturada mientras tanto y baja sola en el pull. Sin reintentos, cola
+    ni cron.
+  - `cliente.ubicacion_origen` (`gps`/`geocodificada`/`manual`; nula ⇔ `lat` nula, por check; backfill `manual`).
+    El portal conserva el origen si reenvía la misma coordenada y pone `manual` si cambia (`ubicacion-origen.ts`).
+    En `PATCH /clientes/:id`, **omitir `lat` y `lng` conserva la coordenada y `null` la borra**: el formulario solo las
+    manda si la oficina tocó los campos (`coordenadaAEnviar`), para no borrar la que Google puso con el formulario
+    abierto. "Ubicar con la dirección" se deshabilita mientras el domicilio del campo no esté guardado.
+    Baja en el pull; la tablet la guarda (migración local 014, junto con `prospecto.domicilio`, sin check para que un
+    origen nuevo del servidor no tumbe el pull) y todavía no la muestra.
+  - Portal: "Ubicar con la dirección" → `POST /clientes/:id/ubicar` (permiso `cliente.gestionar`, espera ≤ 5 s):
+    200 con la coordenada, 409/502 con el motivo en español. **Otra sucursal = 404** (a diferencia de otros endpoints
+    de clientes, que contestan 403: no confirma que el cliente exista). El domicilio admite 300 caracteres (antes 200),
+    igual que la tablet.
+  - `DatosProspecto.domicilio` (≤ 300) es aditivo: `CONTRATO_ACTUAL` sigue en 1.
+  - **Nube**: `20261019120000_cliente_ubicacion_origen.sql` se sube a `sinmex dev` después del merge, con el protocolo
+    de push (su comentario trae el pre-flight: `select count(*) from cliente where lat is not null` cuenta las filas
+    que el backfill va a marcar `manual`, para el comentario del PR; los dos checks nuevos no pueden fallar porque el
+    backfill corre antes de crearlos. Después de migrar,
+    `select count(*) from cliente where (ubicacion_origen is null) <> (lat is null)` debe dar 0. El backfill mueve
+    `updated_at` de los clientes con coordenada a propósito, para que las tablets reciban el origen).
 
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
