@@ -22,5 +22,6 @@ import { TesoreriaService } from './tesoreria.service';
     DestinosRepository,
     CobranzaTesoreriaRepository,
   ],
+  exports: [TesoreriaService],
 })
 export class TesoreriaModule {}
