@@ -324,8 +324,23 @@ describe('Ubicación de clientes desde el portal (e2e)', () => {
     it('editar el domicilio sin coordenada dispara el intento, sin esperarlo', async () => {
       const id = await sembrar();
       const nuevo = direccion('Domicilio nuevo');
+      const liberar = falso.retener(nuevo, {
+        estado: 'ok',
+        ...COORDENADA_FALSA,
+      });
 
+      // El guardado responde aunque Google siga sin contestar.
       await editar(id, edicion(nuevo));
+      const mientras = await fila(id);
+      expect(mientras.domicilio).toBe(nuevo);
+      expect(mientras.lat).toBeNull();
+
+      await esperarHasta(
+        () => Promise.resolve(falso.vecesCon(nuevo)),
+        (veces) => veces >= 1,
+      );
+      expect((await fila(id)).lat).toBeNull();
+      liberar();
 
       const despues = await esperarHasta(
         () => fila(id),
@@ -422,12 +437,22 @@ describe('Ubicación de clientes desde el portal (e2e)', () => {
 
     it('ubicar: gana la coordenada de la oficina, 409 y la fila intacta', async () => {
       const domicilio = direccion('Carrera ubicar');
-      falso.responder(domicilio, { estado: 'ok', lat: 1, lng: 2 }, 500);
+      const liberar = falso.retener(domicilio, {
+        estado: 'ok',
+        lat: 1,
+        lng: 2,
+      });
       const id = await sembrar({ domicilio });
 
       const respuesta = ubicar(id).then((r) => r);
-      await pausa(150);
+      // Google ya fue consultado y sigue "pensando": ahora la oficina captura.
+      await esperarHasta(
+        () => Promise.resolve(falso.vecesCon(domicilio)),
+        (veces) => veces >= 1,
+      );
+      expect(falso.vecesCon(domicilio)).toBe(1);
       await capturarAMano(id);
+      liberar();
       const res = await respuesta;
 
       expect(res.status).toBe(409);
@@ -443,17 +468,31 @@ describe('Ubicación de clientes desde el portal (e2e)', () => {
     it('al guardar (segundo plano): el intento no pisa la coordenada de la oficina', async () => {
       const id = await sembrar();
       const nuevo = direccion('Carrera guardar');
-      falso.responder(nuevo, { estado: 'ok', lat: 1, lng: 2 }, 500);
-
-      await editar(id, edicion(nuevo));
-      await pausa(150);
-      await capturarAMano(id);
-      // Esperar a que el falso haya contestado y el intento haya terminado.
-      await esperarHasta(
-        () => Promise.resolve(falso.vecesCon(nuevo)),
-        (veces) => veces >= 1,
+      const liberar = falso.retener(nuevo, { estado: 'ok', lat: 1, lng: 2 });
+      const espia = jest.spyOn(
+        app.get(ClientesRepository),
+        'guardarGeocodificada',
       );
-      await pausa(800);
+
+      try {
+        await editar(id, edicion(nuevo));
+        await esperarHasta(
+          () => Promise.resolve(falso.vecesCon(nuevo)),
+          (veces) => veces >= 1,
+        );
+        expect(falso.vecesCon(nuevo)).toBe(1);
+        await capturarAMano(id);
+        liberar();
+        await esperarHasta(
+          () => Promise.resolve(espia.mock.calls.length),
+          (veces) => veces >= 1,
+        );
+        // El intento llego a escribir y el `where lat is null` lo rechazo.
+        expect(espia).toHaveBeenCalledTimes(1);
+        await expect(espia.mock.results[0].value).resolves.toBe(false);
+      } finally {
+        espia.mockRestore();
+      }
 
       const f = await fila(id);
       expect(Number(f.lat)).toBe(32.6);

@@ -20,12 +20,29 @@ export class GeocodificadorDePrueba implements Geocodificador {
     { resultado: ResultadoGeocodificacion; demoraMs: number }
   >();
 
+  private readonly compuertas = new Map<string, Promise<void>>();
+
   responder(
     direccion: string,
     resultado: ResultadoGeocodificacion,
     demoraMs = 0,
   ): void {
     this.respuestas.set(direccion, { resultado, demoraMs });
+  }
+
+  /**
+   * Como `responder`, pero el falso no contesta hasta que la prueba llame a lo
+   * que devuelve: deja afirmar que algo ocurrio mientras Google "tardaba", sin
+   * depender de pausas fijas.
+   */
+  retener(direccion: string, resultado: ResultadoGeocodificacion): () => void {
+    let liberar!: () => void;
+    const compuerta = new Promise<void>((resolver) => {
+      liberar = resolver;
+    });
+    this.compuertas.set(direccion, compuerta);
+    this.respuestas.set(direccion, { resultado, demoraMs: 0 });
+    return liberar;
   }
 
   vecesCon(direccion: string): number {
@@ -39,6 +56,8 @@ export class GeocodificadorDePrueba implements Geocodificador {
       estado: 'ok',
       ...COORDENADA_FALSA,
     };
+    const compuerta = this.compuertas.get(direccion);
+    if (compuerta) return compuerta.then(() => resultado);
     return new Promise((resolver) =>
       setTimeout(() => resolver(resultado), r?.demoraMs ?? 0),
     );
