@@ -527,4 +527,195 @@ describe('Tesorería — movimientos, destinos y cobranza (e2e)', () => {
         .expect(403);
     });
   });
+
+  describe('destinos', () => {
+    interface Destino {
+      sucursalCodigo: string;
+      metodo: string;
+      cuentaId: string;
+      desde: string;
+    }
+    interface DestinosSucursal {
+      sucursalCodigo: string;
+      vigentes: Record<string, Destino | null>;
+      historial: Destino[];
+    }
+
+    it('un General configura TJ; la vigencia nueva no borra la anterior y la misma desde la corrige', async () => {
+      const ef = await sembrarCuenta('Dest Ef TJ', idTijuana);
+      const caja = await sembrarCuenta('Dest Caja TJ', idTijuana);
+      await http()
+        .put('/tesoreria/destinos')
+        .set('Cookie', general)
+        .send({
+          sucursalId: idTijuana,
+          metodo: 'cheque',
+          cuentaId: ef,
+          desde: '2019-02-01',
+        })
+        .expect(200);
+      await http()
+        .put('/tesoreria/destinos')
+        .set('Cookie', general)
+        .send({
+          sucursalId: idTijuana,
+          metodo: 'cheque',
+          cuentaId: caja,
+          desde: '2019-02-10',
+        })
+        .expect(200);
+      await http()
+        .put('/tesoreria/destinos')
+        .set('Cookie', general)
+        .send({
+          sucursalId: idTijuana,
+          metodo: 'cheque',
+          cuentaId: ef,
+          desde: '2019-02-10',
+        })
+        .expect(200);
+      const r = await http()
+        .get('/tesoreria/destinos?sucursal=TJ')
+        .set('Cookie', general)
+        .expect(200);
+      const tj = (r.body as DestinosSucursal[]).find(
+        (s) => s.sucursalCodigo === 'TJ',
+      )!;
+      const cheques = tj.historial.filter(
+        (d) =>
+          d.metodo === 'cheque' && (d.cuentaId === ef || d.cuentaId === caja),
+      );
+      expect(cheques.map((d) => [d.desde, d.cuentaId])).toEqual([
+        ['2019-02-10', ef],
+        ['2019-02-01', ef],
+      ]);
+    });
+
+    it('reglas: desde futura 400; método inválido 400; cuenta de otra sucursal 400; cuenta borrada 404', async () => {
+      const ef = await sembrarCuenta('Dest Reglas TJ', idTijuana);
+      const mx = await sembrarCuenta('Dest Reglas MX', idMexicali);
+      await http()
+        .put('/tesoreria/destinos')
+        .set('Cookie', general)
+        .send({
+          sucursalId: idTijuana,
+          metodo: 'efectivo',
+          cuentaId: ef,
+          desde: '2999-01-01',
+        })
+        .expect(400);
+      await http()
+        .put('/tesoreria/destinos')
+        .set('Cookie', general)
+        .send({
+          sucursalId: idTijuana,
+          metodo: 'saldo_favor',
+          cuentaId: ef,
+          desde: '2019-01-01',
+        })
+        .expect(400);
+      const otra = await http()
+        .put('/tesoreria/destinos')
+        .set('Cookie', general)
+        .send({
+          sucursalId: idTijuana,
+          metodo: 'efectivo',
+          cuentaId: mx,
+          desde: '2019-01-01',
+        })
+        .expect(400);
+      expect((otra.body as { message: string }).message).toBe(
+        'La cuenta tiene que ser de esa sucursal o general.',
+      );
+      await db
+        .updateTable('tesoreria_cuenta')
+        .set({ deleted_at: new Date() })
+        .where('id', '=', ef)
+        .execute();
+      await http()
+        .put('/tesoreria/destinos')
+        .set('Cookie', general)
+        .send({
+          sucursalId: idTijuana,
+          metodo: 'efectivo',
+          cuentaId: ef,
+          desde: '2019-01-01',
+        })
+        .expect(404);
+    });
+
+    it('Tijuana configura su sucursal con una cuenta general, pero no Mexicali (403); y solo ve TJ', async () => {
+      const gen = await sembrarCuenta('Dest General', null);
+      await http()
+        .put('/tesoreria/destinos')
+        .set('Cookie', tijuana)
+        .send({
+          sucursalId: idTijuana,
+          metodo: 'transferencia',
+          cuentaId: gen,
+          desde: '2019-01-05',
+        })
+        .expect(200);
+      await http()
+        .put('/tesoreria/destinos')
+        .set('Cookie', tijuana)
+        .send({
+          sucursalId: idMexicali,
+          metodo: 'transferencia',
+          cuentaId: gen,
+          desde: '2019-01-05',
+        })
+        .expect(403);
+      const r = await http()
+        .get('/tesoreria/destinos')
+        .set('Cookie', tijuana)
+        .expect(200);
+      expect(
+        (r.body as DestinosSucursal[]).map((s) => s.sucursalCodigo),
+      ).toEqual(['TJ']);
+    });
+
+    it('eliminar una cuenta que hoy recibe la cobranza: 409; si solo fue destino en el pasado, se elimina', async () => {
+      const vieja = await sembrarCuenta('Dest Vieja MX', idMexicali);
+      const nueva = await sembrarCuenta('Dest Nueva MX', idMexicali);
+      await http()
+        .put('/tesoreria/destinos')
+        .set('Cookie', general)
+        .send({
+          sucursalId: idMexicali,
+          metodo: 'cheque',
+          cuentaId: vieja,
+          desde: '2019-03-01',
+        })
+        .expect(200);
+      const r = await http()
+        .delete(`/tesoreria/cuentas/${vieja}`)
+        .set('Cookie', general)
+        .expect(409);
+      expect((r.body as { message: string }).message).toBe(
+        'Esta cuenta recibe la cobranza de MX (cheque). Cambia ese destino antes de eliminarla.',
+      );
+      await http()
+        .put('/tesoreria/destinos')
+        .set('Cookie', general)
+        .send({
+          sucursalId: idMexicali,
+          metodo: 'cheque',
+          cuentaId: nueva,
+          desde: '2019-03-02',
+        })
+        .expect(200);
+      await http()
+        .delete(`/tesoreria/cuentas/${vieja}`)
+        .set('Cookie', general)
+        .expect(200);
+    });
+
+    it('sin gestionar, destinos es 403', async () => {
+      await http()
+        .get('/tesoreria/destinos')
+        .set('Cookie', soloVer)
+        .expect(403);
+    });
+  });
 });

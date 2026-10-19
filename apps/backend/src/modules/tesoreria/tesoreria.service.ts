@@ -25,6 +25,8 @@ import {
   type SaldoFijado,
   type VistaTesoreria,
 } from './reglas-saldo';
+import { DestinosRepository } from './destinos.repository';
+import { METODOS_COBRANZA, destinoDe } from './reglas-destino';
 import { TesoreriaRepository } from './tesoreria.repository';
 
 const MENSAJE_DUPLICADA = 'Ya existe una cuenta con ese nombre.';
@@ -63,7 +65,10 @@ interface UsuarioSucursal {
 
 @Injectable()
 export class TesoreriaService {
-  constructor(private readonly repo: TesoreriaRepository) {}
+  constructor(
+    private readonly repo: TesoreriaRepository,
+    private readonly destinos: DestinosRepository,
+  ) {}
 
   /** La vista (spec §4): saldo al inicio y al final por cuenta, total y eventos del rango. */
   async vista(
@@ -137,6 +142,22 @@ export class TesoreriaService {
 
   async eliminarCuenta(usuarioId: string, id: string): Promise<void> {
     await this.cuentaModificable(usuarioId, id);
+    // No se elimina la cuenta que HOY recibe la cobranza de alguna sucursal:
+    // el dinero quedaria sin cuenta (spec §3.3). Si solo fue destino en el
+    // pasado, si se puede.
+    const destinos = await this.destinos.listar(null);
+    const hoy = await this.repo.hoyEnTijuana();
+    const sucursales = [...new Set(destinos.map((d) => d.sucursalId))];
+    for (const sucursalId of sucursales) {
+      for (const metodo of METODOS_COBRANZA) {
+        const vigente = destinoDe(sucursalId, metodo, hoy, destinos);
+        if (vigente?.cuentaId === id) {
+          throw new ConflictException(
+            `Esta cuenta recibe la cobranza de ${vigente.sucursalCodigo} (${metodo}). Cambia ese destino antes de eliminarla.`,
+          );
+        }
+      }
+    }
     await this.repo.eliminarCuenta(id);
   }
 

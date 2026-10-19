@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { DestinosController } from './destinos.controller';
+import { DestinosRepository } from './destinos.repository';
+import { DestinosService } from './destinos.service';
 import { MovimientosController } from './movimientos.controller';
 import { MovimientosRepository } from './movimientos.repository';
 import { MovimientosService } from './movimientos.service';
@@ -8,12 +11,14 @@ import { TesoreriaService } from './tesoreria.service';
 
 // T-28: cuentas y saldos fijados. T-29: movimientos manuales (depositos, retiros, traspasos).
 @Module({
-  controllers: [TesoreriaController, MovimientosController],
+  controllers: [TesoreriaController, MovimientosController, DestinosController],
   providers: [
     TesoreriaService,
     TesoreriaRepository,
     MovimientosService,
     MovimientosRepository,
+    DestinosService,
+    DestinosRepository,
   ],
 })
 export class TesoreriaModule {}
