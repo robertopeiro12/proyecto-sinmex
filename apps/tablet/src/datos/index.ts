@@ -93,6 +93,14 @@ export type {
 export { crearRepositorioCobranzas, ErrorCobranza } from './repositorios/cobranzas';
 export type { DatosRegistroCobranza, RepositorioCobranzas } from './repositorios/cobranzas';
 export {
+  crearRepositorioVisitas,
+  ErrorVisita,
+  LARGO_MAX_ATENDIO,
+  LARGO_MAX_DIRECCION,
+  LARGO_MAX_OBSERVACIONES_VISITA,
+} from './repositorios/visitas';
+export type { DatosRegistroVisita, RepositorioVisitas } from './repositorios/visitas';
+export {
   leerAbonos,
   leerMontoCentavos,
   MAX_CENTAVOS_COBRO,

@@ -10,6 +10,7 @@ import { numNotaOpcional } from './009-num-nota-opcional';
 import { cobranzaSinFolio } from './010-cobranza-sin-folio';
 import { ruta } from './011-ruta';
 import { promociones } from './012-promociones';
+import { visitas } from './013-visitas';
 import type { Migracion } from './motor';
 
 /**
@@ -34,6 +35,7 @@ export const migraciones: readonly Migracion[] = [
   cobranzaSinFolio,
   ruta,
   promociones,
+  visitas,
 ];
 
 export { ejecutarMigraciones, versionEsquema } from './motor';

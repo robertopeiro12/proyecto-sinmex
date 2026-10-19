@@ -3,7 +3,7 @@ import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 
 /** Lo que Postgres guarda de la foto: su nombre de archivo y cuando llego. */
 export interface FotoDeCliente {
-  /** Nombre dentro de `FOTOS_DIR` (`<clave>.jpg`), nunca una ruta absoluta. */
+  /** Nombre dentro de `FOTOS_DIR` (`cliente-<id>.jpg`, o `<clave>.jpg` si llego antes de T-78), nunca una ruta absoluta. */
   archivo: string;
   /** Cuando la recibio el SERVIDOR, no cuando el vendedor la tomo. */
   subidaEn: Date;
@@ -76,6 +76,25 @@ export class FotosRepository {
     // Las dos columnas se escriben juntas y siempre, asi que en la practica van
     // de la mano; se exige `foto_archivo` porque es la unica que la lectura
     // necesita y la que decide si hay archivo que servir.
+    if (!fila?.foto_archivo) return null;
+    return {
+      archivo: fila.foto_archivo,
+      subidaEn: fila.foto_subida_en ?? new Date(0),
+    };
+  }
+
+  /** La foto de ese cliente si es de esa sucursal y esta vivo; si no, `null` (T-39). */
+  async fotoEnSucursal(
+    clienteId: string,
+    sucursalId: string,
+  ): Promise<FotoDeCliente | null> {
+    const fila = await this.db
+      .selectFrom('cliente')
+      .select(['foto_archivo', 'foto_subida_en'])
+      .where('id', '=', clienteId)
+      .where('sucursal_id', '=', sucursalId)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
     if (!fila?.foto_archivo) return null;
     return {
       archivo: fila.foto_archivo,

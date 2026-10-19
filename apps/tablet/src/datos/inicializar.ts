@@ -5,6 +5,7 @@ import { ejecutarMigraciones, migraciones } from './migraciones';
 import { relojSistema } from './reloj';
 import { crearRepositorioCatalogos, type RepositorioCatalogos } from './repositorios/catalogos';
 import { crearRepositorioCobranzas, type RepositorioCobranzas } from './repositorios/cobranzas';
+import { crearRepositorioVisitas, type RepositorioVisitas } from './repositorios/visitas';
 import { crearRepositorioRutas, type RepositorioRutas } from './repositorios/rutas';
 import { crearRepositorioFolios, type RepositorioFolios } from './repositorios/folios';
 import { crearRepositorioJornadas, type RepositorioJornadas } from './repositorios/jornadas';
@@ -35,6 +36,8 @@ export interface CapaDatos {
   prospectos: RepositorioProspectos;
   /** Cobros y abonos capturados en ruta (T-20). */
   cobranzas: RepositorioCobranzas;
+  /** Visitas sin venta capturadas en ruta (T-39). */
+  visitas: RepositorioVisitas;
   /** La ruta del dia: lo que baja del portal y lo que agrega el vendedor (T-37). */
   rutas: RepositorioRutas;
   /** Que promociones aplican hoy a un cliente y como se llaman (T-74). */
@@ -76,6 +79,7 @@ export function inicializarCapaDatos(): CapaDatos {
     // elegido sigue vivo en el catalogo local.
     prospectos: crearRepositorioProspectos(deps, { catalogos }),
     cobranzas: crearRepositorioCobranzas(deps, { catalogos }),
+    visitas: crearRepositorioVisitas(deps, { catalogos }),
     // El MISMO `catalogos`: es quien publica la version que observa la
     // pantalla principal, y la ruta se aplica dentro de su `guardarSnapshot`.
     rutas: crearRepositorioRutas(deps, { catalogos }),

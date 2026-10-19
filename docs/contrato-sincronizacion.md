@@ -194,8 +194,10 @@ nadie relacionaría con nada.
                          "encargado": null, "tipo": "cliente", "pct_comision": 3.5,
                          "primera_venta_en": null, "plazo_credito_dias": 7,
                          "lat": 32.5149, "lng": -117.0382, "sucursal_id": "…",
-                         "saldo_favor_centavos": 0, "activo": 1 }],
+                         "saldo_favor_centavos": 0, "foto_subida_en": null, "activo": 1 }],
     "tipos_negocio":  [{ "id": "…", "nombre": "Abarrotes", "activo": 1 }],
+    "motivos_visita": [{ "id": "…", "nombre": "Cerrado", "exige_foto": true,
+                         "exige_atendio": false, "activo": 1 }],
     "precios":        [{ "id": "<clienteId>:<presentacionId>", "cliente_id": "…",
                          "presentacion_id": "…", "precio_centavos": 800,
                          "vigente_desde": "2026-02-01", "activo": 1 }]
@@ -277,6 +279,21 @@ lo que T-12 evitó al resolverlo con un catálogo.
 
 Una tablet vieja la ignora y sigue funcionando: es lo que el §3 pide de un
 cambio aditivo.
+
+### `motivos_visita`: el catálogo de la visita sin venta (T-39)
+
+Colección **nueva** y aditiva (§3). Baja completa (no por sucursal: es un catálogo de la empresa, como
+`tipos_negocio`) e incremental por **`actualizado_en`** (así se llaman las columnas de tiempo de
+`motivo_visita`; un trigger la mueve en cualquier cambio, la baja lógica incluida). La baja viaja como
+`activo: 0`: la tablet deja de ofrecer el motivo, y una visita ya guardada con él sube igual (el push lo acepta,
+§6). `exige_foto` y `exige_atendio` son booleanos JSON; **los exige la tablet**, el servidor no los revisa.
+
+### `foto_subida_en` del cliente (T-39)
+
+Campo **nuevo** y aditivo en `clientes`: cuándo recibió el servidor la foto del cliente o prospecto, o `null`.
+La ficha de la tablet lo compara con su copia en caché y, si no la tiene o es más vieja, la baja de
+`GET /sync/foto/cliente/:clienteId` (§6, "Fotos"). Subir una foto toca `cliente.updated_at`, así que el cliente
+vuelve a bajar en el pull incremental con el valor nuevo.
 
 ### La baja viaja como bandera, nunca como ausencia
 
@@ -396,7 +413,7 @@ Ejemplo de una fila:
   "operaciones": [
     {
       "clave": "9e0b…-4a1f",             // OBLIGATORIA. Ver idempotencia
-      "tipo": "jornada",                  // jornada|venta|cobranza|gasto|merma|ruta|prospecto|ruta-alta
+      "tipo": "jornada",                  // jornada|venta|cobranza|gasto|merma|ruta|prospecto|ruta-alta|visita
       "fecha_operacion": "2026-08-07",   // día de trabajo (§4)
       "ocurrido_en": "2026-08-07T14:03:22.000-07:00",
       "cliente_id": "…",                  // opcional; se valida el alcance
@@ -440,9 +457,9 @@ no hacer.
 
 `datos` lo fija el ticket de cada módulo, y fijarlo es un cambio **aditivo** que
 no sube la versión del contrato. Hoy tienen forma fija **`venta`** (T-16),
-**`prospecto`** (T-40), **`cobranza`** (T-20), **`jornada`** (T-38) y
-**`ruta-alta`** (T-37), los cinco abajo; gastos, merma y ruta siguen libres hasta
-T-27/T-33/T-39, y el servidor las guarda tal cual.
+**`prospecto`** (T-40), **`cobranza`** (T-20), **`jornada`** (T-38),
+**`ruta-alta`** (T-37) y **`visita`** (T-39), los seis abajo; gastos, merma y ruta
+(reservada, sin forma) siguen libres hasta T-27/T-33, y el servidor las guarda tal cual.
 
 ### `datos` de una venta (T-16)
 
@@ -671,7 +688,7 @@ permiso o no haber señal, y eso no le impide registrar al prospecto.
 ```jsonc
 {
   "clave": "uuid de la fila local",
-  "tipo": "ruta-alta",                 // NO "ruta": ese tipo queda para la visita de T-39
+  "tipo": "ruta-alta",                 // NO "ruta": ese tipo sigue reservado (la visita de T-39 es "visita")
   "fecha_operacion": "2026-10-12",     // el día de la ruta; se guarda tal cual
   "ocurrido_en": "2026-10-12T16:05:00.000Z",
   // sin "cliente_id" en el sobre (si viene y no coincide con datos, ruta-datos-invalidos) y SIN "folio"
@@ -689,6 +706,58 @@ permiso o no haber señal, y eso no le impide registrar al prospecto.
 - Se guarda en `ruta` con `fecha = fecha_operacion`, `origen = 'vendedor'`, `tipo = 'diaria'` y `orden = max + 1`
   entre las vivas de ese vendedor y día. El buzón apunta a esa fila (`entidad_tabla = 'ruta'`) y conserva el
   `cliente_id` en su `datos`.
+
+### `datos` de una visita sin venta (T-39)
+
+```jsonc
+{
+  "clave": "uuid de la fila local",     // ES el id de la visita en el servidor: debe ser uuid
+  "tipo": "visita",
+  "fecha_operacion": "2026-10-17",      // el día al que cuenta la visita
+  "ocurrido_en": "2026-10-17T18:40:00.000Z",
+  "cliente_id": "uuid",                 // en el SOBRE: pasa por el alcance del lote. Sin "folio"
+  "datos": {
+    "motivo_visita_id": "uuid",         // del catálogo motivos_visita (vivo o dado de baja)
+    "visitada_en": "2026-10-17T11:40:00-07:00",
+    "observaciones": "Cortina abajo",   // opcional, <= 500
+    "atendio": null,                    // opcional, <= 120
+    "lat": null, "lng": null,           // las dos o ninguna
+    "precision_m": null,                // >= 0
+    "direccion_texto": "Frente al parque" // <= 300; obligatoria si no hay lat/lng
+  }
+}
+```
+
+- La forma se valida **antes** de la transacción (`prepararVisita`): clave no uuid, folio en el sobre, sin
+  `cliente_id`, o `datos` mal formado (incluida la falta de ubicación) es `datos-invalidos` con un motivo que
+  nombra el campo. Los textos se recortan y un texto vacío se guarda como `null`.
+- Dentro de la transacción (`VisitasService.registrarVisita`): un motivo que no existe es
+  `motivo-visita-inexistente`; **uno dado de baja sí se acepta** (el vendedor lo eligió sin red). Un id que ya
+  ocupa otra visita es `visita-id-ocupado`, con motivo neutro. La misma clave reenviada es `duplicada`.
+- **El servidor no revisa "exige foto" ni "exige nombre"**: lo exige la tablet al guardar.
+- Se guarda en `visita` con `id = clave` y `fecha = fecha_operacion`; el buzón apunta a esa fila
+  (`entidad_tabla = 'visita'`). Puede haber varias visitas al día por cliente, y se puede visitar a un prospecto.
+- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → rutas`. La visita a un prospecto
+  capturado sin red necesita que su alta ya haya entrado en un lote anterior (el alcance se comprueba una vez por
+  lote, como la venta de bienvenida de T-75).
+
+### Fotos: subida y descarga (canal aparte del lote; T-40, T-39)
+
+La foto **no** viaja dentro de la operación: va por su propio request, sin `contrato` ni `resultados[]`, solo
+códigos HTTP. Así una imagen pesada o cortada nunca rechaza la operación a la que pertenece.
+
+- **`POST /sync/foto/:clave`** (`@SoloApp`, cuerpo = el JPEG crudo, máx. 2 MB). La `clave` es la de una operación
+  `prospecto` **o** `visita` del vendedor del token. 404 si nadie tiene esa clave (o la operación se rechazó: no dejó
+  fila) o si la fila ya no existe; 403 si es de otro vendedor; 409 si es de otro tipo o aún no está proyectada;
+  413 si pesa de más; 415 si no es un JPEG completo. Responde `200 { clave, subida_en }` también la primera vez.
+- **Nombre del archivo (T-78):** `cliente-<cliente.id>.jpg` y `visita-<visita.id>.jpg`, nunca la clave. Reenviar
+  escribe el mismo nombre: un solo archivo. Los archivos de antes (`<clave>.jpg`) no se migran; el servidor siempre
+  lee por `foto_archivo`.
+- La foto del prospecto se anota en `cliente.foto_archivo/foto_subida_en`; la de la visita, en
+  `visita.foto_archivo/foto_subida_en`.
+- **`GET /sync/foto/cliente/:clienteId`** (`@SoloApp`): el JPEG de la foto del cliente o prospecto si es de la
+  sucursal del vendedor y está vivo; **404** si no tiene foto o no está en su alcance (no 403: no confirma que
+  exista). La tablet lo pide cuando `foto_subida_en` (§5) es más nuevo que su copia. Las fotos de visitas **no** bajan.
 
 ### Respuesta `200` — parcial y honesta
 
@@ -742,6 +811,8 @@ texto en español** si reintenta o si avisa al vendedor.
 | `ruta-datos-invalidos` | `datos.cliente_id` de un `ruta-alta` falta o no es uuid, el sobre trae folio, o el `cliente_id` del sobre no coincide con el de `datos`. Bug de la tablet (T-37) |
 | `cliente-inexistente` | El cliente de un `ruta-alta` no existe, está dado de baja, es de otra sucursal o es prospecto. Se reintenta; el vendedor puede quitar la fila (T-37) |
 | `ruta-duplicada` | Ya había una fila viva de ese vendedor, fecha y cliente con **otra** clave. **La tablet la trata como aplicada** (T-37) |
+| `motivo-visita-inexistente` | El `motivo_visita_id` de una visita no existe. Uno dado de baja **sí** se acepta. Se reintenta (T-39) |
+| `visita-id-ocupado` | El id (la clave) de la visita ya lo ocupa otro registro. Motivo neutro; avisar a la oficina (T-39) |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo
@@ -785,7 +856,7 @@ El rechazo se recalcula en cada intento: es determinista y no necesita memoria.
 ### Una transacción por operación (T-16, ADR-0009)
 
 Cuando un `tipo` tiene un módulo de dominio que lo proyecta (hoy `venta`,
-`cobranza`, `prospecto`, `jornada` y `ruta-alta`), cada operación del lote se aplica **en su
+`cobranza`, `prospecto`, `jornada`, `ruta-alta` y `visita`), cada operación del lote se aplica **en su
 propia transacción**:
 
 1. `INSERT` en `sync_operacion` con `on conflict (vendedor_id, clave_idempotencia) do nothing`.
@@ -806,8 +877,11 @@ propia transacción**:
      bloquea la fila del vendedor (`for no key update`, para serializar con el portal), calcula el orden siguiente
      e inserta en `ruta` con `on conflict (vendedor_id, fecha, cliente_id) where deleted_at is null and tipo =
      'diaria' do nothing`; si no insertó, `ruta-duplicada`. La entidad es la fila de `ruta`.
+   - `VisitasService.registrarVisita` (T-39) → comprueba que el motivo exista (**aunque esté dado de baja**) e
+     inserta en `visita` con `id = clave` y `on conflict (id) do nothing`; si no insertó, `visita-id-ocupado`.
+     La entidad es la fila de `visita`.
 3. `commit` → `aplicada`. Si el dominio rechaza (`presentacion-inactiva`,
-   `precio-no-asignado`, `nota-no-encontrada`, `vehiculo-inexistente`, `jornada-duplicada`, `cliente-inexistente`, `ruta-duplicada`),
+   `precio-no-asignado`, `nota-no-encontrada`, `vehiculo-inexistente`, `jornada-duplicada`, `cliente-inexistente`, `ruta-duplicada`, `motivo-visita-inexistente`, `visita-id-ocupado`),
    `rollback`: no queda **ni** la fila de negocio **ni** la del buzón.
 
 Los tipos sin módulo todavía (`gasto`, `merma`, `ruta`) se guardan en el buzón y
@@ -944,8 +1018,8 @@ sincronizar.
 | Resolución de conflictos (portal y tablet tocan lo mismo) | **T-43** |
 | Subir el orden en que el vendedor arrastró su ruta (hoy se queda en la tablet, D4) | Futuro, aditivo |
 | Sincronización automática 11:00/14:00 | **T-44** |
-| Forma de `datos` para gasto / merma / ruta (las de venta, cobranza y jornada ya están, §6) | **T-27 / T-33 / T-39** |
-| Proyección de `gasto`, `merma` y `ruta` a sus tablas de negocio (las de `venta`, `cobranza` y `jornada` ya existen, §7) | Los mismos |
+| Forma de `datos` para gasto / merma (la de `ruta` sigue reservada sin forma; la visita es `visita`, §6) | **T-27 / T-33** |
+| Proyección de `gasto` y `merma` a sus tablas de negocio (las de `venta`, `cobranza`, `jornada`, `ruta-alta` y `visita` ya existen, §7) | Los mismos |
 | Reporte de Kilometraje del portal (lee `jornada`) y reproceso de las jornadas que llegaron antes de T-38 | Portal (siguiente paso de T-38) |
 | Eliminar una cobranza con autorización (el saldo a favor y la cobranza desde el portal ya están: T-21) | **T-34** |
 | Permisos granulares en estos endpoints | **T-8** |

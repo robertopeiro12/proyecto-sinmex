@@ -34,7 +34,7 @@ import { TAMANO_MAX_FOTO_BYTES } from './../src/modules/cartera-clientes/foto-pr
  *
  * Y la segunda en importancia, el bloque 1: **subir dos veces la misma clave
  * deja un solo archivo**. La idempotencia de este canal no es codigo, es como se
- * nombra el archivo (`<clave>.jpg`); esta prueba es lo que impide que alguien
+ * nombra el archivo (`cliente-<id>.jpg`, T-78); esta prueba es lo que impide que alguien
  * meta un timestamp o un contador en el nombre y lo rompa sin darse cuenta.
  *
  * Archivo propio y no dentro de `prospectos.e2e-spec.ts` porque el canal es otro
@@ -185,9 +185,9 @@ describe('Foto del prospecto (e2e)', () => {
       .where('id', '=', id)
       .executeTakeFirstOrThrow();
 
-  /** Todo lo que hay en FOTOS_DIR cuyo nombre empiece por esa clave. */
+  /** Todo lo que hay en FOTOS_DIR cuyo nombre contenga esa clave. */
   const archivosDe = async (clave: string): Promise<string[]> =>
-    (await fs.readdir(FOTOS_DIR_PRUEBA)).filter((n) => n.startsWith(clave));
+    (await fs.readdir(FOTOS_DIR_PRUEBA)).filter((n) => n.includes(clave));
 
   const contenido = (archivo: string): Promise<Buffer> =>
     fs.readFile(join(FOTOS_DIR_PRUEBA, archivo));
@@ -357,13 +357,13 @@ describe('Foto del prospecto (e2e)', () => {
     ).toBeGreaterThan(0);
 
     // El archivo, con el nombre que sale de la clave y los bytes exactos.
-    expect(await archivosDe(clave)).toEqual([`${clave}.jpg`]);
-    expect(await contenido(`${clave}.jpg`)).toEqual(bytes);
+    expect(await archivosDe(clave)).toEqual([`cliente-${clave}.jpg`]);
+    expect(await contenido(`cliente-${clave}.jpg`)).toEqual(bytes);
 
     // Y las dos columnas. `foto_archivo` es el NOMBRE, no una ruta: la ruta es
     // configuracion del despliegue y cambia con el hosting.
     const fila = await filaCliente(clienteId);
-    expect(fila.foto_archivo).toBe(`${clave}.jpg`);
+    expect(fila.foto_archivo).toBe(`cliente-${clave}.jpg`);
     expect(fila.foto_subida_en).not.toBeNull();
   });
 
@@ -386,8 +386,8 @@ describe('Foto del prospecto (e2e)', () => {
 
     // Un solo archivo, y es el segundo contenido. Tampoco quedan temporales
     // `.parcial` sueltos.
-    expect(await archivosDe(clave)).toEqual([`${clave}.jpg`]);
-    expect(await contenido(`${clave}.jpg`)).toEqual(segunda);
+    expect(await archivosDe(clave)).toEqual([`cliente-${clave}.jpg`]);
+    expect(await contenido(`cliente-${clave}.jpg`)).toEqual(segunda);
 
     // Y un solo cliente: el reenvio de la foto no toca la cartera.
     expect(
@@ -397,7 +397,9 @@ describe('Foto del prospecto (e2e)', () => {
         .where('nombre', '=', `${PREFIJO} Reenviada`)
         .execute(),
     ).toHaveLength(1);
-    expect((await filaCliente(clienteId)).foto_archivo).toBe(`${clave}.jpg`);
+    expect((await filaCliente(clienteId)).foto_archivo).toBe(
+      `cliente-${clave}.jpg`,
+    );
   });
 
   /* ---------------------------------------------------------------- */
@@ -454,7 +456,7 @@ describe('Foto del prospecto (e2e)', () => {
     const ok = (await push([alta]).expect(200)).body as RespuestaPush;
     expect(ok.resultados[0].estado).toBe('aplicada');
     await subirFoto(clave, jpeg('por fin')).expect(200);
-    expect(await archivosDe(clave)).toEqual([`${clave}.jpg`]);
+    expect(await archivosDe(clave)).toEqual([`cliente-${clave}.jpg`]);
   });
 
   it('una clave que no es un uuid es 400, y no toca el disco', async () => {
@@ -642,8 +644,8 @@ describe('Foto del prospecto (e2e)', () => {
     await subirFoto(clave, buena).expect(200);
     const final = await filaCliente(clienteId);
     expect(final.id).toBe(antes.id);
-    expect(final.foto_archivo).toBe(`${clave}.jpg`);
-    expect(await contenido(`${clave}.jpg`)).toEqual(buena);
+    expect(final.foto_archivo).toBe(`cliente-${clave}.jpg`);
+    expect(await contenido(`cliente-${clave}.jpg`)).toEqual(buena);
   });
 
   /* ---------------------------------------------------------------- */
@@ -715,8 +717,8 @@ describe('Foto del prospecto (e2e)', () => {
 
       // El nombre del archivo NO viaja al portal. T-75: la clave ya es el `id` del
       // cliente (que el detalle si lleva), asi que lo que no debe salir es el
-      // nombre del archivo en disco, `<clave>.jpg`.
-      expect(JSON.stringify(detalle)).not.toContain(`${clave}.jpg`);
+      // nombre del archivo en disco, `cliente-<id>.jpg`.
+      expect(JSON.stringify(detalle)).not.toContain(`cliente-${clave}.jpg`);
 
       // Y el de al lado, sin foto, sigue diciendo que no tiene.
       const otro = await request(app.getHttpServer())
@@ -741,7 +743,7 @@ describe('Foto del prospecto (e2e)', () => {
       // mitad de la respuesta.
       const { clave, clienteId } = await altaProspecto('Archivo Perdido');
       await subirFoto(clave, jpeg()).expect(200);
-      await fs.rm(join(FOTOS_DIR_PRUEBA, `${clave}.jpg`));
+      await fs.rm(join(FOTOS_DIR_PRUEBA, `cliente-${clave}.jpg`));
 
       await request(app.getHttpServer())
         .get(`/clientes/${clienteId}/foto`)

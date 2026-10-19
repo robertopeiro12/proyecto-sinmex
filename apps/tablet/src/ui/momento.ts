@@ -23,3 +23,12 @@ export function formatearMomento(iso: string | null): string {
   const fecha = `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
   return `${fecha} ${dos(d.getHours())}:${dos(d.getMinutes())}`;
 }
+
+/** Solo la hora LOCAL, `HH:mm`, para "Cerrado · 10:42" (T-39). `--:--` si no hay. */
+export function formatearHora(iso: string | null): string {
+  if (iso === null) return '--:--';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '--:--';
+  const dos = (n: number) => `${n}`.padStart(2, '0');
+  return `${dos(d.getHours())}:${dos(d.getMinutes())}`;
+}

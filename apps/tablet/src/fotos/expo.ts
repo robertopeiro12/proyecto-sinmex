@@ -8,7 +8,7 @@
  * `@/sincronizacion/api-foto.ts`, y lo de aqui solo traduce a la API de Expo.
  * Mismo reparto que `sesion/almacen-secure-store.ts` frente a `sesion/politica.ts`.
  */
-import { UploadType, File } from 'expo-file-system';
+import { Directory, File, Paths, UploadType } from 'expo-file-system';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { SinRedError, URL_API } from '@/sesion/api';
@@ -25,6 +25,7 @@ import {
   type FotoComprimida,
   type Manipulador,
 } from './comprimir';
+import type { BajarFoto } from './descarga';
 
 /**
  * `expo-image-manipulator` + el tamano real del archivo.
@@ -68,10 +69,11 @@ export type ResultadoCaptura =
   | { estado: 'fallo'; motivo: string };
 
 /**
- * Pide una foto del lugar y la devuelve **ya comprimida**.
+ * Pide una foto (del lugar del prospecto o de la visita, T-39) y la devuelve
+ * **ya comprimida**.
  *
  * > [!danger] Esta funcion no lanza nunca, y eso es el requisito
- * > Quien la llama es el alta del prospecto. Cualquier excepcion que se escapara
+ * > Quien la llama es el alta del prospecto o la visita sin venta. Cualquier excepcion que se escapara
  * > de aqui —permiso, camara, disco, compresion— podria acabar impidiendo el
  * > alta, y **perder un cliente potencial por no poder tomar una foto opcional**
  * > es exactamente el fallo que este diseno existe para prevenir. Todo sale como
@@ -81,7 +83,10 @@ export type ResultadoCaptura =
  * nosotros) pierde detalle sin ahorrar nada, porque el tamano final lo fija el
  * bucle de `comprimirParaSubir` midiendo.
  */
-export async function capturarFotoProspecto(): Promise<ResultadoCaptura> {
+/** Para que es la foto: cambia el texto del fallo, no la compresion (T-39, D9). */
+export type DestinoFoto = 'prospecto' | 'visita';
+
+export async function capturarFoto(destino: DestinoFoto): Promise<ResultadoCaptura> {
   try {
     const permiso = await ImagePicker.requestCameraPermissionsAsync();
     if (!permiso.granted) return { estado: 'permiso-negado' };
@@ -120,7 +125,7 @@ export async function capturarFotoProspecto(): Promise<ResultadoCaptura> {
       motivo:
         error instanceof ErrorCompresion
           ? error.message
-          : `No se pudo tomar la foto: ${error instanceof Error ? error.message : String(error)}`,
+          : `No se pudo tomar la foto ${destino === 'visita' ? 'de la visita' : 'del lugar'}: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }
@@ -181,3 +186,24 @@ export const enviarFotoExpo: EnviarFoto = async (url, tokenAcceso, uri) => {
 export function crearClienteFotosExpo(base: string = URL_API): ClienteFotos {
   return crearClienteFotos(enviarFotoExpo, base);
 }
+
+/** Donde vive la copia en cache de la foto de un cliente: documentos, por id (T-39, D9). */
+export function rutaCacheFotoCliente(clienteId: string): string {
+  return new File(Paths.document, 'fotos-clientes', `${clienteId}.jpg`).uri;
+}
+
+/**
+ * Baja la foto del cliente con `fetch` y la escribe en `destino` SOLO con un
+ * 2xx (con un 404 no se toca la copia vieja). `fetch` y no `File.downloadFileAsync`
+ * porque aqui hace falta el `status` exacto para distinguir "sin foto" de "fallo".
+ * Si no hay respuesta, `fetch` lanza y `descargarFotoCliente` lo vuelve "fallo".
+ */
+export const bajarFotoExpo: BajarFoto = async (url, tokenAcceso, destino) => {
+  const respuesta = await fetch(url, { headers: { Authorization: `Bearer ${tokenAcceso}` } });
+  if (!respuesta.ok) return respuesta.status;
+  const bytes = new Uint8Array(await respuesta.arrayBuffer());
+  const archivo = new File(destino);
+  new Directory(archivo.parentDirectory.uri).create({ intermediates: true, idempotent: true });
+  archivo.write(bytes);
+  return respuesta.status;
+};

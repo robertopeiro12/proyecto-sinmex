@@ -50,7 +50,9 @@ export type TipoOperacion =
   /** T-40. Un alta de prospecto: el servidor la proyecta a `cliente`. */
   | 'prospecto'
   /** T-37. Un cliente que el vendedor agrego a su ruta del dia. */
-  | 'ruta-alta';
+  | 'ruta-alta'
+  /** T-39. Una visita sin venta: el servidor la proyecta a `visita` con id = clave. */
+  | 'visita';
 
 export type EstadoOperacion = 'aplicada' | 'duplicada' | 'rechazada';
 
@@ -122,6 +124,14 @@ export const CODIGOS_RECHAZO = [
    * funde con la fila del servidor.
    */
   'ruta-duplicada',
+  /**
+   * T-39: el motivo de la visita no existe en el servidor (un id que nunca
+   * existio; uno dado de baja se acepta). La visita queda en `error` y se
+   * reintenta.
+   */
+  'motivo-visita-inexistente',
+  /** T-39: el id de la visita ya lo ocupa otro registro. Motivo neutro. */
+  'visita-id-ocupado',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -182,6 +192,13 @@ export interface TipoNegocioPull extends FilaSincronizable {
   nombre: string;
 }
 
+/** Copia del backend (T-39). */
+export interface MotivoVisitaPull extends FilaSincronizable {
+  nombre: string;
+  exige_foto: boolean;
+  exige_atendio: boolean;
+}
+
 export interface ProductoPull extends FilaSincronizable {
   nombre: string;
 }
@@ -236,6 +253,11 @@ export interface ClientePull extends FilaSincronizable {
   sucursal_id: string;
   /** T-20: suma de los movimientos vivos de saldo a favor, en centavos. Solo se muestra. */
   saldo_favor_centavos: number;
+  /**
+   * T-39. **Opcional en la copia de la tablet**: un servidor anterior no lo
+   * manda (`aSnapshot` lo vuelve `null`).
+   */
+  foto_subida_en?: string | null;
 }
 
 export interface PrecioPull extends FilaSincronizable {
@@ -365,6 +387,12 @@ export interface RespuestaPull {
      * y lo dice, nada mas.
      */
     tipos_negocio?: TipoNegocioPull[];
+    /**
+     * T-39. **Opcional en la copia de la tablet, obligatoria en el servidor**,
+     * por la misma razon que `tipos_negocio`: sin la coleccion la pantalla de
+     * visita dice que no hay catalogo y no deja guardar.
+     */
+    motivos_visita?: MotivoVisitaPull[];
     precios: PrecioPull[];
   };
   notas_pendientes: NotaPendientePull[];
@@ -578,6 +606,28 @@ export type DatosJornada = {
  */
 export type DatosRutaAlta = {
   cliente_id: string;
+};
+
+/**
+ * `datos` de una operacion `tipo: "visita"` (T-39). Copia del tipo del backend.
+ */
+export type DatosVisita = {
+  /** uuid de `motivo_visita` (vivo o dado de baja). */
+  motivo_visita_id: string;
+  /** Instante ISO-8601 con zona en que el vendedor la guardo. */
+  visitada_en: string;
+  /** Hasta 500 caracteres. */
+  observaciones?: string | null;
+  /** Quien atendio; hasta 120 caracteres. */
+  atendio?: string | null;
+  /** -90..90; las dos o ninguna. */
+  lat?: number | null;
+  /** -180..180. */
+  lng?: number | null;
+  /** Precision del GPS en metros, >= 0. */
+  precision_m?: number | null;
+  /** Hasta 300; obligatoria (no vacia) si no hay lat/lng. */
+  direccion_texto?: string | null;
 };
 
 export interface ResultadoOperacion {

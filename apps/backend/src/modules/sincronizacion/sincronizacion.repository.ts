@@ -13,6 +13,7 @@ import type {
   RutaPull,
   SucursalPull,
   TipoNegocioPull,
+  MotivoVisitaPull,
   VehiculoPull,
   VendedorPull,
 } from './contrato';
@@ -190,6 +191,29 @@ export class SincronizacionRepository {
     }));
   }
 
+  /**
+   * Motivos de visita (T-39, D4): catalogo global, como los tipos de negocio.
+   *
+   * Corta por `actualizado_en` y no por `updated_at`: el spec de T-39 nombra asi
+   * las columnas de tiempo, y el trigger `set_actualizado_en` la mueve en
+   * cualquier update (la baja logica incluida). Sin `desde` bajan todas, las
+   * dadas de baja con `activo: 0`, igual que `tipos_negocio`.
+   */
+  async motivosVisita(desde: Date | null): Promise<MotivoVisitaPull[]> {
+    let q = this.db
+      .selectFrom('motivo_visita')
+      .select(['id', 'nombre', 'exige_foto', 'exige_atendio', 'deleted_at']);
+    if (desde) q = q.where('actualizado_en', '>', desde);
+
+    return (await q.orderBy('nombre').execute()).map((f) => ({
+      id: f.id,
+      nombre: f.nombre,
+      exige_foto: f.exige_foto,
+      exige_atendio: f.exige_atendio,
+      activo: bandera(true, f.deleted_at),
+    }));
+  }
+
   async presentaciones(desde: Date | null): Promise<PresentacionPull[]> {
     let q = this.db
       .selectFrom('presentacion')
@@ -224,6 +248,7 @@ export class SincronizacionRepository {
         'lat',
         'lng',
         'sucursal_id',
+        'foto_subida_en',
         'deleted_at',
       ])
       // T-20 (D5): el saldo a favor es la suma de los movimientos vivos. Con
@@ -257,6 +282,10 @@ export class SincronizacionRepository {
       lng: aNumero(f.lng),
       sucursal_id: f.sucursal_id,
       saldo_favor_centavos: aCentavos(f.saldo_favor),
+      // T-39 (D9): la ficha de la tablet decide con esto si baja la foto.
+      foto_subida_en: f.foto_subida_en
+        ? new Date(f.foto_subida_en).toISOString()
+        : null,
       activo: bandera(true, f.deleted_at),
     }));
   }
