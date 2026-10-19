@@ -25,6 +25,7 @@ D1…D7 **no se renegocian**. Si este plan lo contradice, manda el spec: para y 
 
 ## Global Constraints
 
+- **`GEOCODIFICADOR_FALSO=1` se ignora si `NODE_ENV === 'production'`** (se usa Google o `sin-configurar`, y se loguea un `warn`): un falso que ubica todo en el centro de Tijuana nunca debe llegar a producción. Con prueba unitaria en la Tarea 2.
 Copiadas del spec y del repo. Cada tarea las incluye:
 
 - Rama `feature/t-72-geocodificacion`. Todos los comandos **desde la raíz del worktree**
