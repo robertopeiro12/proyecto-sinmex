@@ -10,8 +10,15 @@ import { listarListasPrecio, type ListaPrecio } from "@/lib/precios";
 import {
   crearCliente,
   editarCliente,
+  ubicarCliente,
   type ClienteDetalle,
 } from "@/lib/clientes";
+import { mensajeDe } from "@/lib/api";
+import {
+  etiquetaOrigenUbicacion,
+  muestraBotonUbicar,
+  type UbicacionReferencia,
+} from "@/lib/ubicacion-cliente";
 import { FotoProspecto } from "./foto-prospecto";
 import { PromocionesDeCliente } from "./promociones-de-cliente";
 import { SelectorTipoNegocio } from "./selector-tipo-negocio";
@@ -63,6 +70,15 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
   );
   const [lat, setLat] = useState(cliente?.lat?.toString() ?? "");
   const [lng, setLng] = useState(cliente?.lng?.toString() ?? "");
+  // T-72 (D6): la coordenada guardada (o la que acaba de dar Google) y su
+  // origen. La etiqueta compara los campos contra esto.
+  const [referencia, setReferencia] = useState<UbicacionReferencia>({
+    lat: cliente?.lat ?? null,
+    lng: cliente?.lng ?? null,
+    origen: cliente?.ubicacionOrigen ?? null,
+  });
+  const [ubicando, setUbicando] = useState(false);
+  const [avisoUbicar, setAvisoUbicar] = useState<string | null>(null);
   const [comentarios, setComentarios] = useState(cliente?.comentarios ?? "");
   const [sucursalId, setSucursalId] = useState("");
 
@@ -112,6 +128,28 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
       vigente = false;
     };
   }, []);
+
+  /**
+   * "Ubicar con la dirección" (T-72, D5): el servidor espera a Google (≤ 5 s).
+   * Con éxito, la coordenada ya quedó guardada: se pinta en los campos y en la
+   * referencia, así que la etiqueta dice "Ubicada por Google" y guardar después
+   * no la vuelve "a mano". Un 409/502 trae el motivo en español.
+   */
+  async function ubicarConDireccion() {
+    if (!cliente) return;
+    setAvisoUbicar(null);
+    setUbicando(true);
+    try {
+      const r = await ubicarCliente(cliente.id);
+      setLat(r.lat.toString());
+      setLng(r.lng.toString());
+      setReferencia({ lat: r.lat, lng: r.lng, origen: r.ubicacionOrigen });
+    } catch (err) {
+      setAvisoUbicar(mensajeDe(err, "No se pudo ubicar al cliente."));
+    } finally {
+      setUbicando(false);
+    }
+  }
 
   function cambiarOverride(presentacionId: string, texto: string) {
     setOverrides((previos) => {
@@ -214,7 +252,7 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
             <input
               id="domicilio"
               required
-              maxLength={200}
+              maxLength={300}
               disabled={enviando}
               value={domicilio}
               onChange={(e) => setDomicilio(e.target.value)}
@@ -467,6 +505,27 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
             />
           </div>
         </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-muted-foreground">
+            Origen de la ubicación: {etiquetaOrigenUbicacion(lat, lng, referencia)}
+          </p>
+          {!esAlta && muestraBotonUbicar(lat, lng, cliente.domicilio) && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={enviando || ubicando}
+              onClick={ubicarConDireccion}
+            >
+              {ubicando ? "Ubicando…" : "Ubicar con la dirección"}
+            </Button>
+          )}
+        </div>
+        {avisoUbicar && (
+          <p role="status" className="text-sm text-destructive">
+            {avisoUbicar}
+          </p>
+        )}
         <div className="flex flex-col gap-1.5">
           <label htmlFor="comentarios" className="text-sm font-medium">
             Comentarios
