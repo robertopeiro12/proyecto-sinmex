@@ -503,7 +503,8 @@ las guarda tal cual.
       { "presentacion_id": "uuid", "cantidad": 24, "cantidad_promocion": 2, "precio_centavos": 1350 }
       // enteros ≥ 0; cantidad + cantidad_promocion > 0;
       // precio_centavos siempre presente, > 0 si cantidad > 0 (0 solo en líneas de pura promoción)
-    ]
+    ],
+    "firma": { "nombre": "Doña Lupe" } // T-73, opcional: presente = espera la imagen de la firma
   }
 }
 ```
@@ -549,6 +550,23 @@ Los regalos de la venta: qué promoción dio cuántas piezas de qué presentaci�
 - El servidor valida la **forma**, no la regla de negocio (D13): las piezas ya se entregaron en la calle, y rechazar la venta no las recupera.
 - El texto se congela en la nota (D12): si la oficina edita la promoción después, la nota conserva la frase original.
 - Al proyectar la primera nota del cliente, el servidor marca `cliente.primera_venta_en` (D14); ver arriba.
+
+#### `firma` (T-73)
+
+La firma del cliente en la nota. **Opcional y aditivo** (`CONTRATO_ACTUAL` sigue en 1): la tablet desde T-73 la manda
+en toda venta (la firma es obligatoria en la app); una tablet anterior no la manda y la venta del portal no la lleva.
+
+```jsonc
+"firma": { "nombre": "Doña Lupe" }    // opcional; ausente o null = la venta no espera firma
+```
+
+- **Presencia = la venta espera una imagen.** El servidor guarda `venta_nota.firma_esperada = true` y el nombre; la
+  imagen llega aparte por `POST /sync/foto/:clave` con la clave de esta venta (ver "Fotos"). Ausente o `null`:
+  `firma_esperada = false` y el portal la muestra como "Sin firma".
+- `nombre`: texto que se recorta, de 1 a 80 caracteres; en blanco o `null` es firma sin nombre. Otro tipo o más de 80
+  → `datos-invalidos` con motivo `firma.nombre: …`. `firma` que no es objeto → `datos-invalidos` (`firma: …`).
+- Editar la venta en el portal no borra la firma ni la vuelve a pedir: el portal avisa que la firma corresponde a la
+  versión original.
 
 ### `tipo: "prospecto"` — el alta de un prospecto (T-40)
 

@@ -138,6 +138,11 @@ export class VentasService {
         pctComision: contexto.vendedorId === null ? null : cliente.pctComision,
         origen: contexto.origen,
         capturoUsuarioId: contexto.usuarioId,
+        // T-73: la firma la captura la tablet antes de grabar; aqui solo se
+        // anota que la imagen llegara por el canal de fotos. El portal nunca la
+        // manda (`normalizarDatosVenta` sin `firma` → null).
+        firmaEsperada: venta.firma !== null,
+        firmaNombre: venta.firma?.nombre ?? null,
       },
       trx,
     );

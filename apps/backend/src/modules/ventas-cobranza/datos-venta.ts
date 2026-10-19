@@ -38,6 +38,12 @@ export interface RegaloNormalizado {
   texto: string;
 }
 
+/** La firma del cliente (T-73): solo el nombre; la imagen va por el canal de fotos. */
+export interface FirmaNormalizada {
+  /** Recortado, de 1 a 80; `null` si no dijo su nombre. */
+  nombre: string | null;
+}
+
 /** La venta ya validada. El folio no va aqui: viaja en el `contexto` de `registrarVenta`. */
 export interface VentaNormalizada {
   clienteId: string;
@@ -49,6 +55,11 @@ export interface VentaNormalizada {
   lineas: LineaVentaNormalizada[];
   /** T-74 (D13). Vacio si la tablet no mando regalos. */
   regalos: RegaloNormalizado[];
+  /**
+   * T-73. `null` = la venta no espera firma (tablet anterior a T-73 o venta del
+   * portal). Presente = la imagen llegara por el canal de fotos.
+   */
+  firma: FirmaNormalizada | null;
 }
 
 export type ResultadoDatosVenta =
@@ -66,6 +77,9 @@ export const LARGO_MAX_NUM_NOTA = 30;
 export const LARGO_MAX_COMENTARIOS = 500;
 export const MAX_REGALOS_VENTA = 50;
 export const LARGO_MAX_TEXTO_PROMOCION = 200;
+
+/** Mismo tope que el check de `venta_nota.firma_nombre` y que `reglas-firma.ts` de la tablet. */
+export const LARGO_MAX_NOMBRE_FIRMA = 80;
 
 /** `integer` de Postgres: lo que cabe en `cantidad` y `cantidad_promocion`. */
 const MAX_ENTERO_POSTGRES = 2_147_483_647;
@@ -324,6 +338,35 @@ export function normalizarDatosVenta(
     }
   }
 
+  // T-73: opcional y aditivo. Presente = la venta espera la imagen de la firma
+  // por el canal de fotos; ausente o null = tablet anterior, venta sin firma.
+  let firma: FirmaNormalizada | null = null;
+  const firmaCruda = datos.firma;
+  if (firmaCruda !== undefined && firmaCruda !== null) {
+    if (typeof firmaCruda !== 'object' || Array.isArray(firmaCruda)) {
+      return invalido(
+        'firma',
+        'debe ser un objeto con el nombre de quien firmo.',
+      );
+    }
+    const nombreCrudo = (firmaCruda as Record<string, unknown>).nombre;
+    let nombre: string | null = null;
+    if (nombreCrudo !== undefined && nombreCrudo !== null) {
+      if (typeof nombreCrudo !== 'string') {
+        return invalido('firma.nombre', 'debe ser texto o null.');
+      }
+      const recortado = nombreCrudo.trim();
+      if (recortado.length > LARGO_MAX_NOMBRE_FIRMA) {
+        return invalido(
+          'firma.nombre',
+          `no puede pasar de ${LARGO_MAX_NOMBRE_FIRMA} caracteres.`,
+        );
+      }
+      nombre = recortado === '' ? null : recortado;
+    }
+    firma = { nombre };
+  }
+
   if (montoTotalCentavos(lineas) > MAX_CENTAVOS) {
     return invalido(
       'lineas',
@@ -341,6 +384,7 @@ export function normalizarDatosVenta(
       comentarios,
       lineas,
       regalos,
+      firma,
     },
   };
 }
