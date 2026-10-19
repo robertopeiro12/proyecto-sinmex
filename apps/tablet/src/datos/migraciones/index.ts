@@ -12,6 +12,7 @@ import { ruta } from './011-ruta';
 import { promociones } from './012-promociones';
 import { visitas } from './013-visitas';
 import { prospectoDomicilio } from './014-prospecto-domicilio';
+import { gastos } from './015-gastos';
 import type { Migracion } from './motor';
 
 /**
@@ -38,6 +39,7 @@ export const migraciones: readonly Migracion[] = [
   promociones,
   visitas,
   prospectoDomicilio,
+  gastos,
 ];
 
 export { ejecutarMigraciones, versionEsquema } from './motor';

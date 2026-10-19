@@ -3,6 +3,7 @@ import type { RepositorioJornadas } from '@/datos/repositorios/jornadas';
 import type { RepositorioProspectos } from '@/datos/repositorios/prospectos';
 import type { RepositorioRutas } from '@/datos/repositorios/rutas';
 import type { RepositorioVentas } from '@/datos/repositorios/ventas';
+import type { RepositorioGastos } from '@/datos/repositorios/gastos';
 import type { RepositorioVisitas } from '@/datos/repositorios/visitas';
 
 /**
@@ -22,6 +23,8 @@ export interface FuentesConPendientes {
   cobranzas: RepositorioCobranzas;
   /** T-39: las visitas sin venta. */
   visitas: RepositorioVisitas;
+  /** T-30/T-31: los gastos de la ruta. */
+  gastos: RepositorioGastos;
   /** T-37: las altas de ruta del vendedor. */
   rutas: RepositorioRutas;
 }
@@ -42,6 +45,7 @@ export function contarPendientesDeSubir(datos: FuentesConPendientes): number {
     datos.prospectos.pendientesDeSincronizar().length +
     datos.cobranzas.pendientesDeSincronizar().length +
     datos.visitas.pendientesDeSincronizar().length +
+    datos.gastos.pendientesDeSincronizar().length +
     datos.rutas.pendientesDeSincronizar().length
   );
 }

@@ -1,4 +1,5 @@
 import type { RepositorioProspectos } from '@/datos/repositorios/prospectos';
+import type { RepositorioGastos } from '@/datos/repositorios/gastos';
 import type { RepositorioVisitas } from '@/datos/repositorios/visitas';
 import type { MomentoISO } from '@/datos/tipos';
 
@@ -29,11 +30,12 @@ export interface FuenteFotos {
 
 export interface FotoPorSubir {
   /**
-   * La clave de idempotencia de la operacion del prospecto **o de la visita** —
+   * La clave de idempotencia de la operacion del prospecto, de la visita **o del gasto** —
    * el `id` de la fila.
    *
    * No es un identificador nuevo, y ahi esta toda la idempotencia de la foto: el
    * servidor nombra el archivo por ese id (`cliente-<id>.jpg`, `visita-<id>.jpg`,
+   * `gasto-<id>.jpg` en T-30/T-31,
    * T-78), asi que **reenviar escribe el mismo nombre** y no hay duplicados posibles. Sin contador, sin tabla de control.
    */
   clave: string;
@@ -86,6 +88,26 @@ export function fuenteFotosVisitas(visitas: RepositorioVisitas): FuenteFotos {
     marcarSubida: (clave, subidaEn) => visitas.marcarFotoSubida(clave, subidaEn),
     anotarError: (clave, motivo) => visitas.anotarErrorFoto(clave, motivo),
     descartar: (clave, motivo) => visitas.descartarFoto(clave, motivo),
+  };
+}
+
+/**
+ * Las fotos de los tickets de gasto (T-30/T-31, D8). Opcionales: un gasto sin
+ * foto nunca aparece. `pendientesDeSubirFoto()` ya exige
+ * `sync_estado = 'sincronizado'`: antes de que el servidor acepte el gasto no
+ * existe la fila a la que la foto pertenece (el canal responde 404/409).
+ */
+export function fuenteFotosGastos(gastos: RepositorioGastos): FuenteFotos {
+  return {
+    tipo: 'gasto',
+    pendientes(): FotoPorSubir[] {
+      return gastos
+        .pendientesDeSubirFoto()
+        .flatMap((g) => (g.foto_local === null ? [] : [{ clave: g.id, uri: g.foto_local }]));
+    },
+    marcarSubida: (clave, subidaEn) => gastos.marcarFotoSubida(clave, subidaEn),
+    anotarError: (clave, motivo) => gastos.anotarErrorFoto(clave, motivo),
+    descartar: (clave, motivo) => gastos.descartarFoto(clave, motivo),
   };
 }
 

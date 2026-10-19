@@ -95,6 +95,22 @@ export interface MotivoVisita {
   sincronizado_en: MomentoISO;
 }
 
+/**
+ * Un campo de egreso (T-30, D6): el catalogo de la pantalla Gastos. Baja en el
+ * pull como `campos_egreso`; la baja viaja como `activo: 0`.
+ */
+export interface CampoEgreso {
+  id: string;
+  nombre: string;
+  /** `produccion` | `operacion` | `financiero` (D1). Sin check local: ver la migracion 015. */
+  tipo: string;
+  /** `1` = la pantalla Gastos lo ofrece ("Se usa en la app"). */
+  se_usa_en_app: Booleano;
+  /** `0` = dado de baja en el portal: ya no se ofrece. */
+  activo: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
 export type TipoCliente = 'cliente' | 'prospecto';
 
 /** De donde salio la coordenada del cliente (T-72, D3). Baja en el pull; la tablet aun no la muestra. */
@@ -462,6 +478,33 @@ export interface Visita {
   precision_m: number | null;
   direccion_texto: string | null;
   /** Ruta local de la foto ya comprimida, o `null`. */
+  foto_local: string | null;
+  /** Cuando la recibio el SERVIDOR. `null` = todavia no esta arriba. */
+  foto_subida_en: MomentoISO | null;
+  foto_error: string | null;
+  /** `1` = no recuperable (413, 415, archivo perdido): no se reintenta. */
+  foto_descartada: Booleano;
+  sync_estado: SyncEstado;
+  sync_error: string | null;
+  sincronizado_en: MomentoISO | null;
+}
+
+/** Un gasto de la ruta (T-30/T-31, D8): lo que el vendedor pago con la cobranza del dia. */
+export interface Gasto {
+  id: string;
+  /** Dia de trabajo (`reloj.hoy()`), el de `fecha_operacion`. */
+  fecha: FechaISO;
+  vendedor_id: string;
+  sucursal_id: string;
+  campo_egreso_id: string;
+  /** Copia del nombre del campo al guardar: se pinta sin join. */
+  campo_nombre: string;
+  /** Entero > 0. */
+  monto_centavos: number;
+  comentario: string | null;
+  /** Cuando lo guardo el vendedor. Viaja como `ocurrido_en` y `datos.registrado_en`. */
+  registrado_en: MomentoISO;
+  /** Ruta local de la foto del ticket ya comprimida, o `null`. */
   foto_local: string | null;
   /** Cuando la recibio el SERVIDOR. `null` = todavia no esta arriba. */
   foto_subida_en: MomentoISO | null;

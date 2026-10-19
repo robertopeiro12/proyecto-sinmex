@@ -68,6 +68,14 @@ export function snapshotDePrueba(): SnapshotCatalogos {
       // Dado de baja en el portal: baja con la bandera y ya no se ofrece.
       { id: 'mot-baja', nombre: 'Vacaciones', exige_foto: 0, exige_atendio: 0, activo: 0 },
     ],
+    camposEgreso: [
+      { id: 'ce-gasolina', nombre: 'Gasolina', tipo: 'operacion', se_usa_en_app: 1, activo: 1 },
+      { id: 'ce-hielo', nombre: 'Hielo', tipo: 'operacion', se_usa_en_app: 1, activo: 1 },
+      // De la oficina: vivo pero sin "Se usa en la app"; la pantalla no lo ofrece.
+      { id: 'ce-envases', nombre: 'Envases', tipo: 'produccion', se_usa_en_app: 0, activo: 1 },
+      // Dado de baja en el portal: baja con la bandera.
+      { id: 'ce-baja', nombre: 'Celular', tipo: 'operacion', se_usa_en_app: 1, activo: 0 },
+    ],
     presentaciones: [
       { id: 'pre-1', producto_id: 'pro-1', volumen: '1 L', activo: 1 },
       { id: 'pre-2', producto_id: 'pro-1', volumen: '500 ml', activo: 1 },

@@ -19,6 +19,7 @@ import { descargarFotoCliente as descargarFoto, uriFotoCliente } from '@/fotos/d
 import { crearClienteSync } from '@/sincronizacion/api';
 import {
   combinarFuentesFotos,
+  fuenteFotosGastos,
   fuenteFotosProspectos,
   fuenteFotosVisitas,
 } from '@/sincronizacion/fuente-fotos';
@@ -108,6 +109,7 @@ export function ProveedorSesion({
         fuente: combinarFuentesFotos([
           fuenteFotosProspectos(datos.prospectos),
           fuenteFotosVisitas(datos.visitas),
+          fuenteFotosGastos(datos.gastos),
         ]),
         api: crearClienteFotosExpo(),
       },

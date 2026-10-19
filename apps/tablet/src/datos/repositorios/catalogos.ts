@@ -2,6 +2,7 @@ import type { BaseDatos, ValorSQL } from '../base-datos';
 import type { DepsRepositorio } from './deps';
 import { enTransaccion } from './deps';
 import type {
+  CampoEgreso,
   Cliente,
   ClientePrecio,
   FechaISO,
@@ -47,6 +48,8 @@ export interface SnapshotCatalogos {
   tiposNegocio?: Omit<TipoNegocio, 'sincronizado_en'>[];
   /** T-39. Coleccion nueva del pull: el catalogo de la pantalla de visita. Baja como bandera. */
   motivosVisita?: Omit<MotivoVisita, 'sincronizado_en'>[];
+  /** T-30/T-31. Coleccion nueva del pull: el catalogo de la pantalla Gastos. Baja como bandera. */
+  camposEgreso?: Omit<CampoEgreso, 'sincronizado_en'>[];
   precios?: Omit<ClientePrecio, 'sincronizado_en'>[];
   notas?: Omit<NotaPendiente, 'sincronizado_en'>[];
   /**
@@ -85,6 +88,7 @@ const COLUMNAS = {
   producto: ['id', 'nombre', 'activo'],
   tipo_negocio: ['id', 'nombre', 'activo'],
   motivo_visita: ['id', 'nombre', 'exige_foto', 'exige_atendio', 'activo'],
+  campo_egreso: ['id', 'nombre', 'tipo', 'se_usa_en_app', 'activo'],
   presentacion: ['id', 'producto_id', 'volumen', 'activo'],
   cliente: [
     'id',
@@ -276,6 +280,8 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
           upsert(bd, 'tipo_negocio', COLUMNAS.tipo_negocio, snapshot.tiposNegocio, ahora) +
           // T-39: sin llaves foraneas hacia nadie; catalogo de empresa como tipo_negocio.
           upsert(bd, 'motivo_visita', COLUMNAS.motivo_visita, snapshot.motivosVisita, ahora) +
+          // T-30/T-31: sin llaves foraneas hacia nadie; catalogo de empresa como motivo_visita.
+          upsert(bd, 'campo_egreso', COLUMNAS.campo_egreso, snapshot.camposEgreso, ahora) +
           upsert(bd, 'presentacion', COLUMNAS.presentacion, snapshot.presentaciones, ahora) +
           upsert(bd, 'cliente', COLUMNAS.cliente, snapshot.clientes, ahora) +
           // T-37: despues de `cliente`, porque la fila de ruta lo referencia y un
@@ -340,6 +346,23 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
      */
     obtenerMotivoVisita(id: string): MotivoVisita | null {
       return bd.getFirstSync<MotivoVisita>('select * from motivo_visita where id = $id', { $id: id });
+    },
+
+    /**
+     * Campos de egreso **activos**, por nombre (T-30/T-31). Trae tambien los que
+     * no tienen "Se usa en la app": filtrar es de `camposParaGasto`
+     * (`src/estado/gasto.ts`), que es la regla con prueba.
+     */
+    listarCamposEgreso(): CampoEgreso[] {
+      return bd.getAllSync<CampoEgreso>('select * from campo_egreso where activo = 1 order by nombre');
+    },
+
+    /**
+     * Un campo por id, activo o no. Uno dado de baja (o sin la casilla) despues de
+     * elegirlo sigue sirviendo para guardar el gasto (D5: el servidor lo acepta).
+     */
+    obtenerCampoEgreso(id: string): CampoEgreso | null {
+      return bd.getFirstSync<CampoEgreso>('select * from campo_egreso where id = $id', { $id: id });
     },
 
     /**
