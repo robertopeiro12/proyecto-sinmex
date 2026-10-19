@@ -42,3 +42,21 @@ export function origenAlGuardar(
   }
   return 'manual';
 }
+
+/**
+ * ¿Intentar geocodificar despues de guardar desde el portal? (T-72, D5)
+ *
+ * Solo si el cliente quedo con domicilio, sin coordenada, y el domicilio es
+ * nuevo (un alta, `domicilioAntes === undefined`) o cambio. Reintentar el mismo
+ * domicilio en cada guardado gastaria una consulta por edicion para obtener la
+ * misma respuesta; para eso esta el boton "Ubicar con la dirección".
+ */
+export function pideGeocodificarAlGuardar(
+  domicilioAntes: string | null | undefined,
+  guardado: { domicilio: string | null; lat: number | null },
+): boolean {
+  const despues = guardado.domicilio?.trim() ?? '';
+  if (despues === '' || guardado.lat !== null) return false;
+  if (domicilioAntes === undefined) return true;
+  return (domicilioAntes?.trim() ?? '') !== despues;
+}

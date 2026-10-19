@@ -1,4 +1,4 @@
-import { origenAlGuardar } from './ubicacion-origen';
+import { origenAlGuardar, pideGeocodificarAlGuardar } from './ubicacion-origen';
 
 const GOOGLE = {
   lat: 32.5251,
@@ -47,5 +47,43 @@ describe('origenAlGuardar (T-72, D3)', () => {
         { lat: null, lng: null, ubicacionOrigen: null },
       ),
     ).toBe('manual');
+  });
+});
+
+describe('pideGeocodificarAlGuardar (T-72, D5)', () => {
+  const SIN = { domicilio: 'Av. Revolución 1234', lat: null };
+
+  it('un alta con domicilio y sin coordenada si', () => {
+    expect(pideGeocodificarAlGuardar(undefined, SIN)).toBe(true);
+  });
+
+  it('una edicion que cambio el domicilio, sin coordenada, si', () => {
+    expect(pideGeocodificarAlGuardar('Calle vieja 1', SIN)).toBe(true);
+    expect(pideGeocodificarAlGuardar(null, SIN)).toBe(true);
+  });
+
+  it('una edicion que no cambio el domicilio no (solo espacios no es un cambio)', () => {
+    expect(pideGeocodificarAlGuardar('Av. Revolución 1234', SIN)).toBe(false);
+    expect(pideGeocodificarAlGuardar('  Av. Revolución 1234 ', SIN)).toBe(
+      false,
+    );
+  });
+
+  it('con coordenada nunca', () => {
+    expect(
+      pideGeocodificarAlGuardar(undefined, { domicilio: 'Calle 1', lat: 32.5 }),
+    ).toBe(false);
+    expect(
+      pideGeocodificarAlGuardar('Otra', { domicilio: 'Calle 1', lat: 32.5 }),
+    ).toBe(false);
+  });
+
+  it('sin domicilio nunca', () => {
+    expect(
+      pideGeocodificarAlGuardar(undefined, { domicilio: null, lat: null }),
+    ).toBe(false);
+    expect(
+      pideGeocodificarAlGuardar('Calle 1', { domicilio: '  ', lat: null }),
+    ).toBe(false);
   });
 });

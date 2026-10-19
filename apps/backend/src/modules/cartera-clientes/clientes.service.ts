@@ -25,7 +25,8 @@ import {
   type ClienteResumen,
   type TipoFiltro,
 } from './clientes.repository';
-import { origenAlGuardar } from './ubicacion-origen';
+import { origenAlGuardar, pideGeocodificarAlGuardar } from './ubicacion-origen';
+import { UbicacionClientesService } from './ubicacion-clientes.service';
 
 /** Cualquier valor que no sea 'cliente'/'prospecto' se trata como "todos" (D7 del spec): es un filtro de exhibicion, sin implicacion de seguridad. */
 export function normalizarTipoPedido(crudo: string | undefined): TipoFiltro {
@@ -110,7 +111,11 @@ export interface ContextoProspecto {
 
 @Injectable()
 export class ClientesService {
-  constructor(private readonly repo: ClientesRepository) {}
+  constructor(
+    private readonly repo: ClientesRepository,
+    // T-72: el intento de geocodificar despues de guardar (sin esperarlo).
+    private readonly ubicacion: UbicacionClientesService,
+  ) {}
 
   async listar(
     usuarioId: string,
@@ -168,8 +173,9 @@ export class ClientesService {
       ).values(),
     ];
 
+    let creado: ClienteDetalle;
     try {
-      return await this.repo.crear(
+      creado = await this.repo.crear(
         {
           nombre: dto.nombre,
           domicilio: dto.domicilio,
@@ -207,6 +213,13 @@ export class ClientesService {
       }
       throw error;
     }
+
+    // T-72 (D5): despues de la transaccion del alta y SIN esperar a Google; el
+    // resultado se ve al recargar la ficha.
+    if (pideGeocodificarAlGuardar(undefined, creado)) {
+      void this.ubicacion.geocodificarEnSegundoPlano(creado.id);
+    }
+    return creado;
   }
 
   async editar(
@@ -224,8 +237,9 @@ export class ClientesService {
       throw new ForbiddenException('No tienes acceso a esa sucursal.');
     }
 
+    let editado: ClienteDetalle;
     try {
-      return await this.repo.actualizar(
+      editado = await this.repo.actualizar(
         id,
         {
           nombre: dto.nombre,
@@ -256,6 +270,12 @@ export class ClientesService {
       }
       throw error;
     }
+
+    // T-72 (D5): solo si el domicilio cambio y no hay coordenada.
+    if (pideGeocodificarAlGuardar(cliente.domicilio, editado)) {
+      void this.ubicacion.geocodificarEnSegundoPlano(id);
+    }
+    return editado;
   }
 
   async eliminar(usuarioId: string, id: string): Promise<void> {

@@ -30,7 +30,9 @@ export class CrearClienteDto {
   @Transform(recortar)
   @IsString()
   @MinLength(1, { message: 'El domicilio es obligatorio.' })
-  @MaxLength(200, { message: 'El domicilio no puede pasar de 200 caracteres.' })
+  // T-72: 300, igual que la "Dirección del negocio" de la tablet; con 200 un
+  // prospecto que llego de la app no se podria volver a guardar.
+  @MaxLength(300, { message: 'El domicilio no puede pasar de 300 caracteres.' })
   domicilio!: string;
 
   @Transform(recortar)
