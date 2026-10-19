@@ -238,11 +238,15 @@ describe('Geocodificación de prospectos por el push (e2e)', () => {
 
   it('un reenvio duplicada no vuelve a intentar', async () => {
     const domicilio = direccion('Reenviada');
+    // Sin coordenada tras el primer intento: si el reenvio volviera a disparar
+    // el hook, el servicio de fondo NO lo frenaria por `lat` y el falso veria
+    // una segunda llamada. Asi la prueba fija la guarda `!duplicada`.
+    falso.responder(domicilio, { estado: 'no-encontrada' });
     const op = alta({ domicilio });
     await push([op]);
     await esperarHasta(
-      () => fila(op.clave),
-      (x) => x.lat !== null,
+      () => Promise.resolve(falso.vecesCon(domicilio)),
+      (veces) => veces === 1,
     );
 
     const r = await push([op]);
