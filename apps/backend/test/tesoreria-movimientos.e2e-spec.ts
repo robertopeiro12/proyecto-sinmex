@@ -5,7 +5,7 @@ import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
 import { OPCIONES_NEST, configurarApp } from './../src/configurar-app';
 import { iniciarEnLocal } from './apoyo-servidor';
-import { borrarCobrosDe } from './apoyo-cobros';
+import { borrarCobrosDe, sembrarCobro } from './apoyo-cobros';
 import {
   DB_CONNECTION,
   type Database,
@@ -716,6 +716,390 @@ describe('Tesorería — movimientos, destinos y cobranza (e2e)', () => {
         .get('/tesoreria/destinos')
         .set('Cookie', soloVer)
         .expect(403);
+    });
+  });
+
+  describe('vista con cobranza', () => {
+    interface Vista {
+      cuentas: {
+        id: string;
+        saldoInicioCentavos: number | null;
+        saldoFinalCentavos: number | null;
+        entradasCentavos: number;
+        salidasCentavos: number;
+        saldoFijadoEnRango: string | null;
+      }[];
+      sinCuenta: {
+        sucursalCodigo: string;
+        metodo: string;
+        montoCentavos: number;
+      }[];
+      eventos: {
+        tipo: string;
+        cuentaId: string;
+        metodo?: string;
+        cantidad?: number;
+        montoCentavos: number;
+        fecha: string;
+      }[];
+    }
+
+    /** Un cliente propio de la suite en esa sucursal. */
+    const sembrarCliente = async (
+      nombre: string,
+      sucursalId: string,
+    ): Promise<string> => {
+      const { id: listaId } = await db
+        .selectFrom('lista_precio')
+        .select('id')
+        .where('nombre', '=', 'Lista 1')
+        .executeTakeFirstOrThrow();
+      const { id } = await db
+        .insertInto('cliente')
+        .values({
+          nombre: `${PREFIJO} ${nombre}`,
+          domicilio: 'Domicilio',
+          telefono: '000',
+          tipo: 'cliente',
+          lista_precio_id: listaId,
+          sucursal_id: sucursalId,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      clienteIds.push(id);
+      return id;
+    };
+
+    /** Una venta de contado viva con su abono de contado (como la deja VentasService). */
+    const sembrarContado = async (
+      clienteId: string,
+      sucursalId: string,
+      fecha: string,
+      monto: string,
+      metodo: 'efectivo' | 'transferencia' | 'cheque' = 'efectivo',
+    ): Promise<string> => {
+      const { id } = await db
+        .insertInto('venta_nota')
+        .values({
+          folio: `ZZT29${Math.random().toString(36).slice(2, 9)}`.slice(0, 30),
+          fecha,
+          cliente_id: clienteId,
+          vendedor_id: null,
+          monto_total: monto,
+          num_nota: null,
+          contado_credito: 'contado',
+          semana: 1,
+          mes: 1,
+          status: 'pagada',
+          sucursal_id: sucursalId,
+          origen: 'portal',
+          capturo_usuario_id: usuarioIds[0],
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      await db
+        .insertInto('cobranza_abono')
+        .values({
+          venta_nota_id: id,
+          fecha_pago: fecha,
+          fecha_operacion: fecha,
+          vendedor_id: null,
+          monto,
+          tipo: 'cobranza',
+          saldo_pendiente: '0',
+          metodo_pago: metodo,
+          origen: 'venta_contado',
+          capturo_usuario_id: usuarioIds[0],
+        })
+        .execute();
+      return id;
+    };
+
+    it('cobros y contado suman a la cuenta destino; saldo a favor no; un cobro borrado deja de sumar', async () => {
+      const cuenta = await sembrarCuenta('Vista Ef TJ', idTijuana);
+      await db
+        .insertInto('tesoreria_saldo')
+        .values({
+          cuenta_id: cuenta,
+          fecha: '2019-03-01',
+          monto: '1000.00',
+          capturo_usuario_id: usuarioIds[0],
+        })
+        .execute();
+      await http()
+        .put('/tesoreria/destinos')
+        .set('Cookie', general)
+        .send({
+          sucursalId: idTijuana,
+          metodo: 'efectivo',
+          cuentaId: cuenta,
+          desde: '2019-03-01',
+        })
+        .expect(200);
+      const cliente = await sembrarCliente('Cliente vista', idTijuana);
+      await sembrarCobro(db, {
+        clienteId: cliente,
+        vendedorId: null,
+        monto: '200.00',
+        fecha: '2019-03-05',
+        metodoPago: 'efectivo',
+      });
+      const borrado = await sembrarCobro(db, {
+        clienteId: cliente,
+        vendedorId: null,
+        monto: '50.00',
+        fecha: '2019-03-05',
+        metodoPago: 'efectivo',
+      });
+      await db
+        .updateTable('cobro')
+        .set({ deleted_at: new Date() })
+        .where('id', '=', borrado)
+        .execute();
+      await sembrarCobro(db, {
+        clienteId: cliente,
+        vendedorId: null,
+        monto: '75.00',
+        fecha: '2019-03-05',
+        metodoPago: 'saldo_favor',
+      });
+      await sembrarContado(cliente, idTijuana, '2019-03-05', '30.00');
+
+      const v = (
+        await http()
+          .get('/tesoreria?desde=2019-03-02&hasta=2019-03-31&sucursal=TJ')
+          .set('Cookie', soloVer)
+          .expect(200)
+      ).body as Vista;
+      const fila = v.cuentas.find((c) => c.id === cuenta)!;
+      expect(fila).toMatchObject({
+        saldoInicioCentavos: 100_000,
+        entradasCentavos: 23_000,
+        salidasCentavos: 0,
+        saldoFinalCentavos: 123_000,
+      });
+      const ev = v.eventos.filter(
+        (e) => e.cuentaId === cuenta && e.tipo === 'cobranza',
+      );
+      expect(ev).toEqual([
+        expect.objectContaining({
+          fecha: '2019-03-05',
+          metodo: 'efectivo',
+          cantidad: 2,
+          montoCentavos: 23_000,
+        }),
+      ]);
+    });
+
+    it('una venta de contado eliminada deja de sumar', async () => {
+      const cuenta = await sembrarCuenta('Vista Contado TJ', idTijuana);
+      await db
+        .insertInto('tesoreria_saldo')
+        .values({
+          cuenta_id: cuenta,
+          fecha: '2019-03-01',
+          monto: '0',
+          capturo_usuario_id: usuarioIds[0],
+        })
+        .execute();
+      await http()
+        .put('/tesoreria/destinos')
+        .set('Cookie', general)
+        .send({
+          sucursalId: idTijuana,
+          metodo: 'cheque',
+          cuentaId: cuenta,
+          desde: '2019-03-01',
+        })
+        .expect(200);
+      const cliente = await sembrarCliente('Cliente contado', idTijuana);
+      const venta = await sembrarContado(
+        cliente,
+        idTijuana,
+        '2019-03-06',
+        '40.00',
+        'cheque',
+      );
+      const antes = (
+        await http()
+          .get('/tesoreria?desde=2019-03-06&hasta=2019-03-06&sucursal=TJ')
+          .set('Cookie', general)
+          .expect(200)
+      ).body as Vista;
+      expect(antes.cuentas.find((c) => c.id === cuenta)?.entradasCentavos).toBe(
+        4_000,
+      );
+      await db
+        .updateTable('venta_nota')
+        .set({ deleted_at: new Date() })
+        .where('id', '=', venta)
+        .execute();
+      const despues = (
+        await http()
+          .get('/tesoreria?desde=2019-03-06&hasta=2019-03-06&sucursal=TJ')
+          .set('Cookie', general)
+          .expect(200)
+      ).body as Vista;
+      expect(
+        despues.cuentas.find((c) => c.id === cuenta)?.entradasCentavos,
+      ).toBe(0);
+    });
+
+    it('cambiar el destino con desde no mueve lo anterior', async () => {
+      const vieja = await sembrarCuenta('Vista Vieja MX', idMexicali);
+      const nueva = await sembrarCuenta('Vista Nueva MX', idMexicali);
+      await http()
+        .put('/tesoreria/destinos')
+        .set('Cookie', general)
+        .send({
+          sucursalId: idMexicali,
+          metodo: 'transferencia',
+          cuentaId: vieja,
+          desde: '2019-03-01',
+        })
+        .expect(200);
+      await http()
+        .put('/tesoreria/destinos')
+        .set('Cookie', general)
+        .send({
+          sucursalId: idMexicali,
+          metodo: 'transferencia',
+          cuentaId: nueva,
+          desde: '2019-03-15',
+        })
+        .expect(200);
+      const cliente = await sembrarCliente('Cliente destino', idMexicali);
+      await sembrarCobro(db, {
+        clienteId: cliente,
+        vendedorId: null,
+        monto: '10.00',
+        fecha: '2019-03-14',
+        metodoPago: 'transferencia',
+      });
+      await sembrarCobro(db, {
+        clienteId: cliente,
+        vendedorId: null,
+        monto: '20.00',
+        fecha: '2019-03-15',
+        metodoPago: 'transferencia',
+      });
+      const v = (
+        await http()
+          .get('/tesoreria?desde=2019-03-14&hasta=2019-03-15&sucursal=MX')
+          .set('Cookie', general)
+          .expect(200)
+      ).body as Vista;
+      expect(v.cuentas.find((c) => c.id === vieja)?.entradasCentavos).toBe(
+        1_000,
+      );
+      expect(v.cuentas.find((c) => c.id === nueva)?.entradasCentavos).toBe(
+        2_000,
+      );
+    });
+
+    it('cobranza sin destino sale en sinCuenta de su sucursal y no suma a ninguna cuenta', async () => {
+      // MX · efectivo en marzo de 2019 no tiene destino en esta suite.
+      const cliente = await sembrarCliente('Cliente sin destino', idMexicali);
+      await sembrarCobro(db, {
+        clienteId: cliente,
+        vendedorId: null,
+        monto: '12.34',
+        fecha: '2019-03-20',
+        metodoPago: 'efectivo',
+      });
+      const v = (
+        await http()
+          .get('/tesoreria?desde=2019-03-20&hasta=2019-03-20&sucursal=MX')
+          .set('Cookie', general)
+          .expect(200)
+      ).body as Vista;
+      expect(v.sinCuenta).toEqual(
+        expect.arrayContaining([
+          { sucursalCodigo: 'MX', metodo: 'efectivo', montoCentavos: 1_234 },
+        ]),
+      );
+      const tj = (
+        await http()
+          .get('/tesoreria?desde=2019-03-20&hasta=2019-03-20&sucursal=TJ')
+          .set('Cookie', general)
+          .expect(200)
+      ).body as Vista;
+      expect(tj.sinCuenta.some((s) => s.sucursalCodigo === 'MX')).toBe(false);
+    });
+
+    it('depósito, retiro y traspaso en la vista: entradas, salidas y marca de saldo fijado en el rango', async () => {
+      const a = await sembrarCuenta('Vista Man A', idTijuana);
+      const b = await sembrarCuenta('Vista Man B', null);
+      await db
+        .insertInto('tesoreria_saldo')
+        .values([
+          {
+            cuenta_id: a,
+            fecha: '2019-03-01',
+            monto: '100.00',
+            capturo_usuario_id: usuarioIds[0],
+          },
+          {
+            cuenta_id: b,
+            fecha: '2019-03-01',
+            monto: '0',
+            capturo_usuario_id: usuarioIds[0],
+          },
+          {
+            cuenta_id: a,
+            fecha: '2019-03-25',
+            monto: '500.00',
+            capturo_usuario_id: usuarioIds[0],
+          },
+        ])
+        .execute();
+      for (const cuerpo of [
+        {
+          tipo: 'deposito',
+          fecha: '2019-03-21',
+          montoCentavos: 1_000,
+          cuentaId: a,
+        },
+        {
+          tipo: 'traspaso',
+          fecha: '2019-03-22',
+          montoCentavos: 3_000,
+          cuentaId: a,
+          cuentaDestinoId: b,
+        },
+        {
+          tipo: 'retiro',
+          fecha: '2019-03-26',
+          montoCentavos: 500,
+          cuentaId: a,
+        },
+      ]) {
+        await http()
+          .post('/tesoreria/movimientos')
+          .set('Cookie', general)
+          .send(cuerpo)
+          .expect(201);
+      }
+      const v = (
+        await http()
+          .get('/tesoreria?desde=2019-03-20&hasta=2019-03-31&sucursal=TJ')
+          .set('Cookie', general)
+          .expect(200)
+      ).body as Vista;
+      expect(v.cuentas.find((c) => c.id === a)).toMatchObject({
+        saldoInicioCentavos: 10_000,
+        entradasCentavos: 0,
+        salidasCentavos: 500,
+        saldoFinalCentavos: 49_500,
+        saldoFijadoEnRango: '2019-03-25',
+      });
+      expect(v.cuentas.find((c) => c.id === b)).toMatchObject({
+        entradasCentavos: 3_000,
+        saldoFinalCentavos: 3_000,
+      });
+      expect(
+        v.eventos.filter((e) => e.cuentaId === a).map((e) => e.tipo),
+      ).toEqual(['deposito', 'traspaso', 'saldo-fijado', 'retiro']);
     });
   });
 });

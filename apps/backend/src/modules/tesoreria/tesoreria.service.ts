@@ -25,7 +25,9 @@ import {
   type SaldoFijado,
   type VistaTesoreria,
 } from './reglas-saldo';
+import { CobranzaTesoreriaRepository } from './cobranza-tesoreria.repository';
 import { DestinosRepository } from './destinos.repository';
+import { MovimientosRepository } from './movimientos.repository';
 import { METODOS_COBRANZA, destinoDe } from './reglas-destino';
 import { TesoreriaRepository } from './tesoreria.repository';
 
@@ -68,9 +70,16 @@ export class TesoreriaService {
   constructor(
     private readonly repo: TesoreriaRepository,
     private readonly destinos: DestinosRepository,
+    private readonly movimientos: MovimientosRepository,
+    private readonly cobranza: CobranzaTesoreriaRepository,
   ) {}
 
-  /** La vista (spec §4): saldo al inicio y al final por cuenta, total y eventos del rango. */
+  /**
+   * La vista: saldo al inicio y al final por cuenta, entradas y salidas del rango,
+   * total, cobranza sin cuenta y eventos (spec §4.2). La cobranza se lee de TODAS
+   * las sucursales: una cuenta general puede recibir la de varias. `sinCuenta` solo
+   * reporta las sucursales en alcance.
+   */
   async vista(
     usuarioId: string,
     q: VistaTesoreriaDto,
@@ -81,14 +90,21 @@ export class TesoreriaService {
       usuarioId,
       normalizarSucursalPedida(q.sucursal),
     );
-    const cuentas = await this.repo.listarCuentas(
-      alcance.tipo === 'todas' ? null : alcance.codigo,
-    );
-    const saldos = await this.repo.saldosDeCuentas(
-      cuentas.map((c) => c.id),
-      q.hasta,
-    );
-    return armarVista(q.desde, q.hasta, cuentas, saldos);
+    const codigo = alcance.tipo === 'todas' ? null : alcance.codigo;
+    const cuentas = await this.repo.listarCuentas(codigo);
+    const ids = cuentas.map((c) => c.id);
+    const [saldos, manuales, cobranza, destinos] = await Promise.all([
+      this.repo.saldosDeCuentas(ids, q.hasta),
+      this.movimientos.listar(ids, null, q.hasta),
+      this.cobranza.porDia(q.hasta),
+      this.destinos.listar(null),
+    ]);
+    return armarVista(q.desde, q.hasta, cuentas, saldos, {
+      manuales,
+      cobranza,
+      destinos,
+      sucursalesEnAlcance: codigo === null ? null : [codigo],
+    });
   }
 
   async listarCuentas(

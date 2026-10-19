@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CobranzaTesoreriaRepository } from './cobranza-tesoreria.repository';
 import { DestinosController } from './destinos.controller';
 import { DestinosRepository } from './destinos.repository';
 import { DestinosService } from './destinos.service';
@@ -19,6 +20,7 @@ import { TesoreriaService } from './tesoreria.service';
     MovimientosRepository,
     DestinosService,
     DestinosRepository,
+    CobranzaTesoreriaRepository,
   ],
 })
 export class TesoreriaModule {}
