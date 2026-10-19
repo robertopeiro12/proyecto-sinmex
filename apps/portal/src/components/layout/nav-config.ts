@@ -22,7 +22,10 @@ export const navSections: NavSection[] = [
   },
   {
     label: "Finanzas",
-    items: [{ label: "Tesorería", href: "/finanzas/tesoreria" }],
+    items: [
+      { label: "Tesorería", href: "/finanzas/tesoreria" },
+      { label: "Gastos", href: "/finanzas/gastos" },
+    ],
   },
   {
     label: "Catálogo",

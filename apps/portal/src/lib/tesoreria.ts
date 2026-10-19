@@ -136,6 +136,17 @@ export type EventoTesoreria =
       metodo: MetodoCobranza;
       cantidad: number;
       montoCentavos: number;
+    }
+  | {
+      // T-30/T-31 (D7): el total de gastos de la ruta de una sucursal en un día. Monto positivo: es salida.
+      tipo: "gasto-ruta";
+      id: string;
+      fecha: string;
+      cuentaId: string;
+      cuentaNombre: string;
+      sucursalCodigo: string;
+      cantidad: number;
+      montoCentavos: number;
     };
 
 export interface VistaTesoreria {
@@ -153,6 +164,8 @@ export interface VistaTesoreria {
   };
   /** Cobranza del rango sin cuenta destino, de las sucursales en alcance. */
   sinCuenta: { sucursalCodigo: string; metodo: MetodoCobranza; montoCentavos: number }[];
+  /** T-30/T-31: gastos de la ruta del rango cuya sucursal no tiene cuenta destino de efectivo. */
+  gastosSinCuenta: { sucursalCodigo: string; montoCentavos: number }[];
   eventos: EventoTesoreria[];
 }
 
@@ -259,6 +272,12 @@ export function describirEvento(e: EventoTesoreria): { concepto: string; cuenta:
         cuenta: e.cuentaNombre,
         signo: 1,
       };
+    case "gasto-ruta":
+      return {
+        concepto: `Gastos de ruta · ${e.cantidad} ${e.cantidad === 1 ? "gasto" : "gastos"} · ${e.sucursalCodigo}`,
+        cuenta: e.cuentaNombre,
+        signo: -1,
+      };
     default:
       return { concepto: "Saldo fijado", cuenta: e.cuentaNombre, signo: 0 };
   }
@@ -346,13 +365,23 @@ export function definicionExcelTesoreria(vista: VistaTesoreria, filtros: { sucur
       filas.push({ celdas: [`${s.sucursalCodigo} · ${ETIQUETA_METODO[s.metodo]}`, null, null, null, null, null, `${formatearPesos(s.montoCentavos)} sin cuenta asignada`] });
     }
   }
+  if (vista.gastosSinCuenta.length > 0) {
+    filas.push({ celdas: ["Gastos de ruta sin cuenta de efectivo", null, null, null, null, null, null], tipo: "grupo" });
+    for (const g of vista.gastosSinCuenta) {
+      filas.push({ celdas: [g.sucursalCodigo, null, null, null, null, null, `${formatearPesos(g.montoCentavos)} sin cuenta de efectivo`] });
+    }
+  }
   if (vista.eventos.length > 0) {
     filas.push({ celdas: ["Movimientos del rango", "Fecha", "Concepto", "Entra", "Sale", null, "Comentario"], tipo: "grupo" });
     for (const e of vista.eventos) {
       const { concepto, cuenta, signo } = describirEvento(e);
       const monto = e.montoCentavos / 100;
       const comentario =
-        e.tipo === "cobranza" ? null : e.comentario ? `${e.comentario} · Capturó: ${e.capturo}` : `Capturó: ${e.capturo}`;
+        e.tipo === "cobranza" || e.tipo === "gasto-ruta"
+          ? null
+          : e.comentario
+            ? `${e.comentario} · Capturó: ${e.capturo}`
+            : `Capturó: ${e.capturo}`;
       filas.push({
         celdas: [
           cuenta,

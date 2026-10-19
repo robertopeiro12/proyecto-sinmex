@@ -147,14 +147,27 @@ export function PestanaVista({ sucursal, activa = true }: { sucursal: string | n
           <p className="text-sm text-muted-foreground">
             Del {formatearFecha(vista.desde)} al {formatearFecha(vista.hasta)}
           </p>
-          {vista.sinCuenta.length > 0 && (
+          {(vista.sinCuenta.length > 0 || vista.gastosSinCuenta.length > 0) && (
             <div role="status" className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
               {vista.sinCuenta.map((s) => (
                 <p key={`${s.sucursalCodigo}:${s.metodo}`}>
                   {formatearPesos(s.montoCentavos)} de cobranza de {s.sucursalCodigo} ({ETIQUETA_METODO[s.metodo].toLowerCase()}) sin cuenta asignada
                 </p>
               ))}
-              <p className="text-xs">Configúrala en Cuentas → ¿A qué cuenta entra la cobranza?</p>
+              {vista.sinCuenta.length > 0 && (
+                <p className="text-xs">Configúrala en Cuentas → ¿A qué cuenta entra la cobranza?</p>
+              )}
+              {vista.gastosSinCuenta.map((g) => (
+                <p key={`gasto:${g.sucursalCodigo}`}>
+                  {formatearPesos(g.montoCentavos)} de gastos de ruta de {g.sucursalCodigo} sin cuenta de efectivo
+                </p>
+              ))}
+              {vista.gastosSinCuenta.length > 0 && (
+                <p className="text-xs">
+                  Los gastos de ruta salen de la cuenta que recibe la cobranza en efectivo de su sucursal: configúrala en
+                  Cuentas → ¿A qué cuenta entra la cobranza?
+                </p>
+              )}
             </div>
           )}
           {vista.cuentas.length === 0 ? (
@@ -244,8 +257,10 @@ export function PestanaVista({ sucursal, activa = true }: { sucursal: string | n
                         <td className="whitespace-nowrap py-2 pr-4 text-right tabular-nums">
                           <Pesos centavos={signo === -1 ? -e.montoCentavos : e.montoCentavos} />
                         </td>
-                        <td className="py-2 pr-4">{e.tipo === "cobranza" ? "—" : (e.comentario ?? "—")}</td>
-                        <td className="py-2">{e.tipo === "cobranza" ? "—" : e.capturo}</td>
+                        <td className="py-2 pr-4">
+                          {e.tipo === "cobranza" || e.tipo === "gasto-ruta" ? "—" : (e.comentario ?? "—")}
+                        </td>
+                        <td className="py-2">{e.tipo === "cobranza" || e.tipo === "gasto-ruta" ? "—" : e.capturo}</td>
                       </tr>
                     );
                   })}
