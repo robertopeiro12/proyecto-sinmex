@@ -463,6 +463,10 @@ export interface VentaNota {
   factura_asignada_por_usuario_id: string | null;
   factura_id: string | null;
   fecha: Timestamp;
+  firma_archivo: string | null;
+  firma_esperada: Generated<boolean>;
+  firma_nombre: string | null;
+  firma_subida_en: Timestamp | null;
   folio: string;
   id: Generated<string>;
   mes: number;
