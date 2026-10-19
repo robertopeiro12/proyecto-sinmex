@@ -31,24 +31,26 @@ export async function guardarFirmaJpg(ventaId: string, pngBase64: string): Promi
   if (png.exists) png.delete();
   png.write(pngBase64, { encoding: 'base64' });
 
-  const { width } = await Image.getSize(png.uri);
-  const contexto = ImageManipulator.manipulate(png.uri);
-  const ancho = anchoDestinoFirma(width);
-  if (ancho !== null) contexto.resize({ width: ancho });
-  const imagen = await contexto.renderAsync();
-  const jpg = await imagen.saveAsync({ format: SaveFormat.JPEG, compress: CALIDAD_JPG_FIRMA });
-
-  const carpeta = new Directory(Paths.document, 'firmas');
-  carpeta.create({ intermediates: true, idempotent: true });
-  const destino = new File(carpeta, nombreArchivoFirma(ventaId));
-  if (destino.exists) destino.delete();
-  await new File(jpg.uri).move(destino);
-
   try {
-    png.delete();
-  } catch {
-    // El PNG es solo un paso intermedio en cache: si no se pudo borrar, el
-    // sistema lo limpia.
+    const { width } = await Image.getSize(png.uri);
+    const contexto = ImageManipulator.manipulate(png.uri);
+    const ancho = anchoDestinoFirma(width);
+    if (ancho !== null) contexto.resize({ width: ancho });
+    const imagen = await contexto.renderAsync();
+    const jpg = await imagen.saveAsync({ format: SaveFormat.JPEG, compress: CALIDAD_JPG_FIRMA });
+
+    const carpeta = new Directory(Paths.document, 'firmas');
+    carpeta.create({ intermediates: true, idempotent: true });
+    const destino = new File(carpeta, nombreArchivoFirma(ventaId));
+    if (destino.exists) destino.delete();
+    await new File(jpg.uri).move(destino);
+    return destino.uri;
+  } finally {
+    try {
+      png.delete();
+    } catch {
+      // El PNG es solo un paso intermedio en cache: si no se pudo borrar, el
+      // sistema lo limpia.
+    }
   }
-  return destino.uri;
 }

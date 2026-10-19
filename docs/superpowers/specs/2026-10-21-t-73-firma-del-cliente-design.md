@@ -30,6 +30,7 @@ Que el cliente firme en la tablet cada venta, para que el negocio tenga evidenci
 - `editada` también pasa a `true` al asignar una factura o marcar una cuenta incobrable, no solo al editar la nota.
 - El portal carga la imagen con la sesión (`fetch` + URL `blob:`), no con un `<img src>` directo.
 - Las fuentes de fotos de la tablet ganan un `fallaDefinitiva` opcional: solo las firmas tratan el 404 como definitivo; las demás fuentes lo siguen reintentando.
+- El método del servicio es `estadoFirma(id)` (devuelve tres estados: inexistente, no espera, espera), no `existeConFirmaEsperada`; `firma` y `editada` se agregan en `ventas-consulta.repository.ts` (`CabeceraVenta`), no en `ventas-consulta.service.ts`; y el aviso "editada" del portal se muestra siempre que la venta espera firma y fue editada, aun si la imagen todavía no llega.
 
 ## Tablet
 
