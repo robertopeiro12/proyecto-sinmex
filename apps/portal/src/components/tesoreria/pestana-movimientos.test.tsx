@@ -82,4 +82,29 @@ describe("PestanaMovimientos", () => {
     await userEvent.click(within(lista).getByRole("button", { name: "Eliminar" }));
     expect(lib.eliminarMovimiento).toHaveBeenCalledWith("m1");
   });
+
+  it("editar con cuentas fuera de la lista las muestra y solo manda lo cambiado", async () => {
+    vi.mocked(lib.listarCuentasTesoreria).mockResolvedValue([]);
+    vi.mocked(lib.editarMovimiento).mockResolvedValue(MOV);
+    render(<PestanaMovimientos sucursal={null} />);
+    const lista = await screen.findByRole("table", { name: "Movimientos registrados" });
+    await userEvent.click(within(lista).getByRole("button", { name: "Editar" }));
+    expect(screen.getByLabelText("De")).toHaveValue("a");
+    expect(screen.getByRole("option", { name: "Efectivo TJ" })).toBeInTheDocument();
+    expect(screen.getByLabelText("A")).toHaveValue("b");
+    await userEvent.clear(screen.getByLabelText("Comentario"));
+    await userEvent.type(screen.getByLabelText("Comentario"), "Otro");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(lib.editarMovimiento).toHaveBeenCalledWith("m1", { fecha: HOY, montoCentavos: 500_000, comentario: "Otro" });
+  });
+
+  it("fecha vacía: aviso y Registrar bloqueado", async () => {
+    render(<PestanaMovimientos sucursal={null} />);
+    await screen.findByRole("table", { name: "Movimientos registrados" });
+    await userEvent.selectOptions(screen.getByLabelText("Cuenta"), "a");
+    await userEvent.type(screen.getByLabelText("Monto"), "10");
+    await userEvent.clear(screen.getByLabelText("Fecha"));
+    expect(screen.getByText("Elige la fecha.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Registrar" })).toBeDisabled();
+  });
 });

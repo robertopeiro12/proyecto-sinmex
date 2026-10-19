@@ -47,7 +47,9 @@ export function FormularioMovimiento({ cuentas, movimiento, alGuardar, alCancela
           ? "Elige dos cuentas distintas."
           : centavos === null
             ? "Escribe un monto mayor a $0."
-            : fecha > hoy
+            : fecha === ""
+              ? "Elige la fecha."
+              : fecha > hoy
               ? "La fecha no puede ser futura."
               : null;
 
@@ -56,6 +58,13 @@ export function FormularioMovimiento({ cuentas, movimiento, alGuardar, alCancela
       {c.nombre} · {etiquetaSucursalCuenta(c.sucursalCodigo)}
     </option>
   ));
+  // Al editar, la cuenta del movimiento puede no estar en la lista (borrada o de otra sucursal): se muestra igual.
+  const fantasma = (id: string | null | undefined, nombre: string | null | undefined) =>
+    movimiento && id && !cuentas.some((c) => c.id === id) ? (
+      <option key={`fantasma-${id}`} value={id}>
+        {nombre ?? "Cuenta no disponible"}
+      </option>
+    ) : null;
 
   async function alEnviar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -66,10 +75,17 @@ export function FormularioMovimiento({ cuentas, movimiento, alGuardar, alCancela
       cuentaId,
       ...(tipo === "traspaso" ? { cuentaDestinoId: destinoId } : {}),
     };
+    // Al editar solo se mandan las cuentas que el usuario cambió.
+    const cambios = {
+      fecha,
+      montoCentavos: centavos,
+      ...(movimiento && cuentaId !== movimiento.cuentaId ? { cuentaId } : {}),
+      ...(movimiento && tipo === "traspaso" && destinoId !== movimiento.cuentaDestinoId ? { cuentaDestinoId: destinoId } : {}),
+    };
     await enviar(
       () =>
         movimiento
-          ? editarMovimiento(movimiento.id, { ...comun, comentario: comentario.trim() })
+          ? editarMovimiento(movimiento.id, { ...cambios, comentario: comentario.trim() })
           : crearMovimiento({ tipo, ...comun, ...(comentario.trim() ? { comentario: comentario.trim() } : {}) }),
       () => {
         if (!movimiento) {
@@ -103,6 +119,7 @@ export function FormularioMovimiento({ cuentas, movimiento, alGuardar, alCancela
           <select id="mov-cuenta" className={`${CLASE} w-64`} value={cuentaId} disabled={enviando} onChange={(e) => setCuentaId(e.target.value)}>
             <option value="">Elige…</option>
             {opciones}
+            {fantasma(movimiento?.cuentaId, movimiento?.cuentaNombre)}
           </select>
         </div>
         {tipo === "traspaso" && (
@@ -111,6 +128,7 @@ export function FormularioMovimiento({ cuentas, movimiento, alGuardar, alCancela
             <select id="mov-destino" className={`${CLASE} w-64`} value={destinoId} disabled={enviando} onChange={(e) => setDestinoId(e.target.value)}>
               <option value="">Elige…</option>
               {opciones}
+              {fantasma(movimiento?.cuentaDestinoId, movimiento?.cuentaDestinoNombre)}
             </select>
           </div>
         )}
