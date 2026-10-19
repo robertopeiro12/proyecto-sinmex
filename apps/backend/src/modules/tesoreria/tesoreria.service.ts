@@ -26,6 +26,7 @@ import {
   type VistaTesoreria,
 } from './reglas-saldo';
 import { CobranzaTesoreriaRepository } from './cobranza-tesoreria.repository';
+import { GastosTesoreriaRepository } from './gastos-tesoreria.repository';
 import { DestinosRepository } from './destinos.repository';
 import { MovimientosRepository } from './movimientos.repository';
 import { METODOS_COBRANZA, destinoDe } from './reglas-destino';
@@ -72,13 +73,15 @@ export class TesoreriaService {
     private readonly destinos: DestinosRepository,
     private readonly movimientos: MovimientosRepository,
     private readonly cobranza: CobranzaTesoreriaRepository,
+    // T-30/T-31: los gastos de la ruta se leen de `gasto`, como la cobranza.
+    private readonly gastos: GastosTesoreriaRepository,
   ) {}
 
   /**
    * La vista: saldo al inicio y al final por cuenta, entradas y salidas del rango,
    * total, cobranza sin cuenta y eventos (spec §4.2). La cobranza se lee de TODAS
-   * las sucursales: una cuenta general puede recibir la de varias. `sinCuenta` solo
-   * reporta las sucursales en alcance.
+   * las sucursales (y los gastos de la ruta, T-30/T-31): una cuenta general puede
+   * recibir la de varias. `sinCuenta` y `gastosSinCuenta` solo reportan las sucursales en alcance.
    */
   async vista(
     usuarioId: string,
@@ -93,16 +96,18 @@ export class TesoreriaService {
     const codigo = alcance.tipo === 'todas' ? null : alcance.codigo;
     const cuentas = await this.repo.listarCuentas(codigo);
     const ids = cuentas.map((c) => c.id);
-    const [saldos, manuales, cobranza, destinos] = await Promise.all([
+    const [saldos, manuales, cobranza, destinos, gastos] = await Promise.all([
       this.repo.saldosDeCuentas(ids, q.hasta),
       this.movimientos.listar(ids, null, q.hasta),
       this.cobranza.porDia(q.hasta),
       this.destinos.listar(null),
+      this.gastos.porDia(q.hasta),
     ]);
     return armarVista(q.desde, q.hasta, cuentas, saldos, {
       manuales,
       cobranza,
       destinos,
+      gastos,
       sucursalesEnAlcance: codigo === null ? null : [codigo],
     });
   }

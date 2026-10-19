@@ -162,7 +162,7 @@ describe('menu hamburguesa (D9, D16)', () => {
     expect(entradasMenu(false).map((e) => [e.titulo, e.destino])).toEqual([
       ['Todos los clientes', '/(jornada)/operacion'],
       ['Prospectos capturados', '/(jornada)/prospectos'],
-      ['Gastos', '/(jornada)/pendiente/gastos'],
+      ['Gastos', '/(jornada)/gastos'],
       ['Inventario', '/(jornada)/pendiente/inventario'],
       ['Merma, promoción y consumo', '/(jornada)/pendiente/merma'],
       ['Ruta y GPS', '/(jornada)/ruta'],
@@ -187,6 +187,13 @@ describe('menu hamburguesa (D9, D16)', () => {
       }
     }
     expect(esSeccionPendiente('otra')).toBe(false);
+  });
+
+  it('Gastos ya no es una seccion pendiente (T-30/T-31): abre su pantalla', () => {
+    expect(esSeccionPendiente('gastos')).toBe(false);
+    const gastos = entradasMenu(false).find((e) => e.clave === 'gastos');
+    expect(gastos).toMatchObject({ titulo: 'Gastos', destino: '/(jornada)/gastos', deshabilitada: false });
+    expect(gastos?.descripcion).not.toMatch(/Pendiente/);
   });
 });
 

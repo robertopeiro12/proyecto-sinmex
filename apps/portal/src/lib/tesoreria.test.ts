@@ -92,6 +92,12 @@ describe("describirEvento", () => {
     expect(
       describirEvento({ ...base, tipo: "cobranza", sucursalCodigo: "MX", metodo: "cheque", cantidad: 1, montoCentavos: 1 }),
     ).toEqual({ concepto: "Cobranza en cheque · 1 cobro · MX", cuenta: "Efectivo TJ", signo: 1 });
+    expect(
+      describirEvento({ ...base, tipo: "gasto-ruta", sucursalCodigo: "TJ", cantidad: 2, montoCentavos: 33_050 }),
+    ).toEqual({ concepto: "Gastos de ruta · 2 gastos · TJ", cuenta: "Efectivo TJ", signo: -1 });
+    expect(
+      describirEvento({ ...base, tipo: "gasto-ruta", sucursalCodigo: "MX", cantidad: 1, montoCentavos: 8_000 }),
+    ).toEqual({ concepto: "Gastos de ruta · 1 gasto · MX", cuenta: "Efectivo TJ", signo: -1 });
     expect(describirEvento({ ...base, tipo: "saldo-fijado", montoCentavos: 1, comentario: null, capturo: "Ana" })).toEqual({ concepto: "Saldo fijado", cuenta: "Efectivo TJ", signo: 0 });
   });
 });
@@ -121,13 +127,15 @@ describe("definicionExcelTesoreria", () => {
     desde: "2026-10-05",
     hasta: "2026-10-12",
     cuentas: [
-      { id: "a", nombre: "Efectivo TJ", sucursalCodigo: "TJ", saldoInicioCentavos: 1_000_000, saldoFinalCentavos: 950_000, entradasCentavos: 20_000, salidasCentavos: 70_000, saldoFijadoEnRango: null },
+      { id: "a", nombre: "Efectivo TJ", sucursalCodigo: "TJ", saldoInicioCentavos: 1_000_000, saldoFinalCentavos: 916_950, entradasCentavos: 20_000, salidasCentavos: 103_050, saldoFijadoEnRango: null },
     ],
-    total: { saldoInicioCentavos: 1_000_000, saldoFinalCentavos: 950_000, cuentasConSaldoInicio: 1, cuentasConSaldoFinal: 1, cuentas: 1, entradasCentavos: 20_000, salidasCentavos: 70_000 },
+    total: { saldoInicioCentavos: 1_000_000, saldoFinalCentavos: 916_950, cuentasConSaldoInicio: 1, cuentasConSaldoFinal: 1, cuentas: 1, entradasCentavos: 20_000, salidasCentavos: 103_050 },
     sinCuenta: [{ sucursalCodigo: "MX", metodo: "transferencia", montoCentavos: 325_000 }],
+    gastosSinCuenta: [{ sucursalCodigo: "MX", montoCentavos: 8_000 }],
     eventos: [
       { tipo: "cobranza", id: "c", fecha: "2026-10-06", cuentaId: "a", cuentaNombre: "Efectivo TJ", sucursalCodigo: "TJ", metodo: "efectivo", cantidad: 2, montoCentavos: 20_000 },
       { tipo: "retiro", id: "r", fecha: "2026-10-07", cuentaId: "a", cuentaNombre: "Efectivo TJ", montoCentavos: 70_000, comentario: "Banco", capturo: "Ana" },
+      { tipo: "gasto-ruta", id: "g", fecha: "2026-10-08", cuentaId: "a", cuentaNombre: "Efectivo TJ", sucursalCodigo: "TJ", cantidad: 2, montoCentavos: 33_050 },
     ],
   };
 
@@ -146,18 +154,21 @@ describe("definicionExcelTesoreria", () => {
       "Cuenta", "Sucursal", "Saldo al inicio", "Entradas", "Salidas", "Saldo al final", "Comentario",
     ]);
     expect(def.filas).toEqual([
-      { celdas: ["Efectivo TJ", "TJ", 10000, 200, 700, 9500, null] },
-      { celdas: ["Total Tesorería", "1 cuentas", 10000, 200, 700, 9500, null], tipo: "total" },
+      { celdas: ["Efectivo TJ", "TJ", 10000, 200, 1030.5, 9169.5, null] },
+      { celdas: ["Total Tesorería", "1 cuentas", 10000, 200, 1030.5, 9169.5, null], tipo: "total" },
       { celdas: ["Cobranza sin cuenta asignada", null, null, null, null, null, null], tipo: "grupo" },
       { celdas: ["MX · Transferencia", null, null, null, null, null, "$3,250.00 sin cuenta asignada"] },
+      { celdas: ["Gastos de ruta sin cuenta de efectivo", null, null, null, null, null, null], tipo: "grupo" },
+      { celdas: ["MX", null, null, null, null, null, "$80.00 sin cuenta de efectivo"] },
       { celdas: ["Movimientos del rango", "Fecha", "Concepto", "Entra", "Sale", null, "Comentario"], tipo: "grupo" },
       { celdas: ["Efectivo TJ", "06/10/2026", "Cobranza en efectivo · 2 cobros · TJ", 200, null, null, null] },
       { celdas: ["Efectivo TJ", "07/10/2026", "Retiro", null, 700, null, "Banco · Capturó: Ana"] },
+      { celdas: ["Efectivo TJ", "08/10/2026", "Gastos de ruta · 2 gastos · TJ", null, 330.5, null, null] },
     ]);
   });
 
   it("sin eventos ni cobranza sin cuenta no hay bloques", () => {
-    const def = definicionExcelTesoreria({ ...vista, eventos: [], sinCuenta: [] }, { sucursal: "TJ" });
+    const def = definicionExcelTesoreria({ ...vista, eventos: [], sinCuenta: [], gastosSinCuenta: [] }, { sucursal: "TJ" });
     expect(def.filas.some((f) => f.tipo === "grupo")).toBe(false);
   });
 });

@@ -534,3 +534,32 @@ describe('origen de la ubicacion del cliente (T-72, D3)', () => {
     expect(catalogos.obtenerCliente('cli-1')?.ubicacion_origen).toBeNull();
   });
 });
+
+describe('campos de egreso (T-30/T-31, D6)', () => {
+  it('lista los activos por nombre, con y sin la casilla', () => {
+    const { catalogos } = conCatalogos();
+    expect(catalogos.listarCamposEgreso().map((c) => [c.nombre, c.se_usa_en_app])).toEqual([
+      ['Envases', 0],
+      ['Gasolina', 1],
+      ['Hielo', 1],
+    ]);
+  });
+
+  it('obtenerCampoEgreso encuentra tambien uno dado de baja (un gasto guardado lo nombra)', () => {
+    const { catalogos } = conCatalogos();
+    expect(catalogos.obtenerCampoEgreso('ce-baja')).toMatchObject({ nombre: 'Celular', activo: 0 });
+    expect(catalogos.obtenerCampoEgreso('no-existe')).toBeNull();
+  });
+
+  it('la casilla y la baja llegan en el pull siguiente', () => {
+    const { catalogos } = conCatalogos();
+    catalogos.guardarSnapshot({
+      camposEgreso: [
+        { id: 'ce-hielo', nombre: 'Hielo', tipo: 'operacion', se_usa_en_app: 0, activo: 1 },
+        { id: 'ce-gasolina', nombre: 'Gasolina', tipo: 'operacion', se_usa_en_app: 1, activo: 0 },
+      ],
+    });
+    expect(catalogos.obtenerCampoEgreso('ce-hielo')?.se_usa_en_app).toBe(0);
+    expect(catalogos.listarCamposEgreso().map((c) => c.id)).not.toContain('ce-gasolina');
+  });
+});

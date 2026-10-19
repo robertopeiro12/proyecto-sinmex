@@ -84,8 +84,8 @@ import { trocearLotes } from './lotes';
  *
  * Cada modulo de negocio registra la suya sin tocar el motor: hoy jornada
  * (T-04), venta (T-16), prospecto (T-40), cobranza (T-20),
- * la visita (T-39) y el alta de ruta (T-37), en
- * `proveedor-sesion.tsx`. Faltan gasto y merma (T-27/T-33).
+ * la visita (T-39), el gasto de la ruta (T-30/T-31) y el alta de ruta (T-37),
+ * en `proveedor-sesion.tsx`. Falta la merma (T-33).
  */
 export interface FuenteOperaciones {
   tipo: TipoOperacion;
@@ -492,6 +492,12 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
       ...mo,
       exige_foto: mo.exige_foto ? 1 : 0,
       exige_atendio: mo.exige_atendio ? 1 : 0,
+    })),
+    // T-30/T-31: un servidor anterior no manda la coleccion (`undefined` no
+    // escribe nada). La casilla llega booleana y SQLite guarda 0/1, como `exige_foto`.
+    camposEgreso: c.campos_egreso?.map((ce) => ({
+      ...ce,
+      se_usa_en_app: ce.se_usa_en_app ? 1 : 0,
     })),
     precios: c.precios,
     notas: respuesta.notas_pendientes.map(({ abonos, ...nota }) => ({

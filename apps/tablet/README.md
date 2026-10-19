@@ -32,7 +32,8 @@ apps/tablet/
 │       ├── index.tsx          # la ruta del dia (pantalla principal, T-37)
 │       ├── agregar-a-ruta.tsx # clientes existentes que el vendedor suma a su ruta
 │       ├── operacion/         # todos los clientes -> ficha -> venta / cobranza / visita
-│       ├── pendiente/         # secciones del menu que aun no existen (gastos, inventario, merma)
+│       ├── gastos/            # Gastos de hoy y Registrar gasto (T-30/T-31)
+│       ├── pendiente/         # secciones del menu que aun no existen (inventario, merma)
 │       ├── prospectos.tsx
 │       ├── ruta.tsx           # Ruta y GPS (T-41)
 │       └── cerrar-dia.tsx     # km final (el corte es T-33)
@@ -282,6 +283,26 @@ Spec: `docs/superpowers/specs/2026-10-18-t-39-visita-sin-venta-design.md`. Panta
   sincronización. La URI lleva `?v=<foto_subida_en>` para que Android no reuse la imagen anterior (`uriFotoCliente`).
 - **Ruta**: "Visitados sin venta" y "Visitas de hoy" en la ficha; ver la sección de la ruta del día.
 
+## Gastos de la ruta (T-30/T-31)
+
+Spec: `docs/superpowers/specs/2026-10-20-t-30-31-gastos-de-ruta-design.md`. Pantallas:
+`app/(jornada)/gastos/index.tsx` (entrada **Gastos** del menú) y `app/(jornada)/gastos/registrar.tsx`.
+
+- **Lista**: "Gastos de hoy" con campo, monto, hora y pastilla (por subir, subido, rechazado con su motivo) y el
+  **total del día**, que suma todos los gastos de hoy sin importar si ya subieron (`gastos.totalDelDia`).
+- **Registrar** (sin red): campo (solo los activos con "Se usa en la app", `camposParaGasto`), monto en pesos
+  (`montoACentavos`: "12.5" → 1250; "12.345", "0", ".5" y la coma no valen), observaciones (≤ 200) y foto del ticket
+  opcional (`capturarFoto('gasto')`). El método se muestra fijo: "Efectivo cobranza del día". Toda la validación es
+  `validarGasto` (`src/estado/gasto.ts`, con pruebas). Ignora el segundo toque mientras guarda. Con el día cerrado o
+  sin catálogo no deja registrar.
+- **Datos** (migración 015, `src/datos/repositorios/gastos.ts`): `campo_egreso` baja con el pull (`campos_egreso`,
+  casilla como 0/1); el gasto nace `pendiente` con `campo_nombre` copiado. Un campo dado de baja o sin la casilla
+  después de elegirlo se guarda y sube igual. **Un gasto grabado no se edita ni se borra en la app**: las
+  correcciones son del portal.
+- **Sincroniza**: `fuente-gastos.ts` sube la operación `gasto` (sin `cliente_id` ni folio; clave = id) **después de
+  visitas y antes de rutas** (`fuentesDelPush`). La foto sube por la cola combinada de fotos (`fuenteFotosGastos`)
+  cuando el gasto ya está sincronizado; el servidor la guarda como `gasto-<id>.jpg`.
+
 ## Pruebas
 
 `npm test --workspace=apps/tablet` corre Jest con `ts-jest` en Node puro y prueba
@@ -312,5 +333,5 @@ solo cuando el portal suba a React 19.2.x, que no es alcance de T-04.
   implementar la sincronizacion. T-07 debe llamar a `gestor.renovar()` al
   conectarse: es lo que corre hacia adelante la ventana offline de la tablet.
 - **T-14** — folios (ver `ADR-0001`).
-- **T-20 / T-27 / T-31 / T-33 / T-41** — módulos de la jornada que todavía son placeholders (gastos,
-  inventario, merma, Ruta y GPS).
+- **T-20 / T-27 / T-33 / T-41** — módulos de la jornada que todavía son placeholders (inventario, merma, Ruta y
+  GPS). Los gastos ya tienen pantalla (T-30/T-31).

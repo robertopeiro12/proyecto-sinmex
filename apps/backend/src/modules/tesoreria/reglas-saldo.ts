@@ -4,7 +4,7 @@
  * Un saldo fijado es el saldo real de una cuenta al INICIO de su dia (spec §3.3):
  * el primero es el saldo inicial y los siguientes son "modificar saldo", un nuevo
  * punto de partida. T-28 no tiene movimientos; T-29 alimentara `movimientos`
- * (depositos, retiros, traspasos, cobranza) sin cambiar esta firma.
+ * (depositos, retiros, traspasos, cobranza; T-30/T-31, los gastos de la ruta (`GastoDia`)) sin cambiar esta firma.
  *
  * Todo en centavos enteros: nunca flotantes (ver sincronizacion/dinero.ts).
  */
@@ -63,6 +63,24 @@ export interface CuentaEnVista {
   salidasCentavos: number;
   /** Fecha del saldo fijado que usa el final si cae en (desde, hasta]; si no, null. */
   saldoFijadoEnRango: string | null;
+}
+
+/**
+ * T-30/T-31 (D7): los gastos de la ruta de un dia y una sucursal, ya sumados.
+ * Solo los de `metodo = METODO_GASTO_RUTA`: salen del efectivo que cobro
+ * el vendedor, asi que restan de la MISMA cuenta a la que T-29 suma la cobranza
+ * en efectivo de esa sucursal (la vigente de `(sucursal, 'efectivo')` en la
+ * fecha del gasto).
+ */
+export interface GastoDia {
+  /** `AAAA-MM-DD`: la `fecha_operacion` del gasto, nunca re-derivada de UTC. */
+  fecha: string;
+  sucursalId: string;
+  sucursalCodigo: string;
+  /** Cuantos gastos forman la suma. */
+  cantidad: number;
+  /** Positivo: el signo lo pone `movimientosDeSaldo`. */
+  montoCentavos: number;
 }
 
 export type TipoMovimiento = 'deposito' | 'retiro' | 'traspaso';
@@ -124,6 +142,18 @@ export type EventoTesoreria =
       metodo: MetodoCobranza;
       cantidad: number;
       montoCentavos: number;
+    }
+  | {
+      /** T-30/T-31: el total de gastos de la ruta de un dia y una sucursal. */
+      tipo: 'gasto-ruta';
+      id: string;
+      fecha: string;
+      cuentaId: string;
+      cuentaNombre: string;
+      sucursalCodigo: string;
+      cantidad: number;
+      /** Positivo: es una salida, como el retiro. */
+      montoCentavos: number;
     };
 
 export interface VistaTesoreria {
@@ -145,6 +175,15 @@ export interface VistaTesoreria {
     metodo: MetodoCobranza;
     montoCentavos: number;
   }[];
+  /**
+   * T-30/T-31: gastos de la ruta del rango cuya sucursal no tiene cuenta destino
+   * de efectivo, de las sucursales en alcance. No restan de ninguna cuenta, pero
+   * no se pierden: la vista los avisa como a la cobranza sin destino.
+   */
+  gastosSinCuenta: {
+    sucursalCodigo: string;
+    montoCentavos: number;
+  }[];
   eventos: EventoTesoreria[];
 }
 
@@ -152,6 +191,8 @@ export interface ExtrasVista {
   manuales?: MovimientoManual[];
   cobranza?: CobranzaDia[];
   destinos?: DestinoCobranza[];
+  /** T-30/T-31: gastos de la ruta agrupados por dia y sucursal. */
+  gastos?: GastoDia[];
   /** Codigos de sucursal cuya cobranza sin destino se reporta; null/ausente = todas. */
   sucursalesEnAlcance?: string[] | null;
 }
@@ -197,15 +238,22 @@ export function saldoDeCuenta(
 }
 
 /**
- * Convierte movimientos manuales y cobranza en el arreglo que `saldoDeCuenta`
- * suma (spec §3.4): deposito +, retiro −, traspaso − en la de salida y + en la
- * de entrada, cobranza + en la cuenta destino vigente en su fecha.
+ * Convierte movimientos manuales, cobranza y gastos de la ruta en el arreglo que
+ * `saldoDeCuenta` suma (spec §3.4 de T-28/T-29; D7 de T-30/T-31): deposito +,
+ * retiro −, traspaso − en la de salida y + en la de entrada, cobranza + en la
+ * cuenta destino vigente en su fecha, gasto de la ruta − en la cuenta destino
+ * del EFECTIVO de su sucursal vigente en su fecha.
  */
 export function movimientosDeSaldo(
   manuales: MovimientoManual[],
   cobranza: CobranzaDia[],
   destinos: DestinoCobranza[],
-): { movimientos: MovimientoSaldo[]; sinDestino: CobranzaDia[] } {
+  gastos: GastoDia[] = [],
+): {
+  movimientos: MovimientoSaldo[];
+  sinDestino: CobranzaDia[];
+  gastosSinCuenta: GastoDia[];
+} {
   const movimientos: MovimientoSaldo[] = [];
   for (const m of manuales) {
     if (m.tipo === 'deposito') {
@@ -244,7 +292,19 @@ export function movimientosDeSaldo(
         montoCentavos: c.montoCentavos,
       });
   }
-  return { movimientos, sinDestino };
+  const gastosSinCuenta: GastoDia[] = [];
+  for (const g of gastos) {
+    // "Efectivo cobranza del dia": la misma cuenta que recibe el efectivo.
+    const d = destinoDe(g.sucursalId, 'efectivo', g.fecha, destinos);
+    if (d === null) gastosSinCuenta.push(g);
+    else
+      movimientos.push({
+        cuentaId: d.cuentaId,
+        fecha: g.fecha,
+        montoCentavos: -g.montoCentavos,
+      });
+  }
+  return { movimientos, sinDestino, gastosSinCuenta };
 }
 
 /** El saldo fijado mas reciente con fecha <= `fecha` (la base del calculo), o null. */
@@ -290,10 +350,12 @@ export function armarVista(
   const manuales = extras.manuales ?? [];
   const cobranza = extras.cobranza ?? [];
   const destinos = extras.destinos ?? [];
-  const { movimientos, sinDestino } = movimientosDeSaldo(
+  const gastos = extras.gastos ?? [];
+  const { movimientos, sinDestino, gastosSinCuenta } = movimientosDeSaldo(
     manuales,
     cobranza,
     destinos,
+    gastos,
   );
 
   const filas: CuentaEnVista[] = ordenarCuentas(cuentas).map((c) => {
@@ -383,6 +445,28 @@ export function armarVista(
       a.metodo.localeCompare(b.metodo),
   );
 
+  const gastosSinCuentaMapa = new Map<
+    string,
+    { sucursalCodigo: string; montoCentavos: number }
+  >();
+  for (const g of gastosSinCuenta) {
+    if (!enRango(g.fecha)) continue;
+    if (
+      extras.sucursalesEnAlcance &&
+      !extras.sucursalesEnAlcance.includes(g.sucursalCodigo)
+    )
+      continue;
+    const actual = gastosSinCuentaMapa.get(g.sucursalCodigo) ?? {
+      sucursalCodigo: g.sucursalCodigo,
+      montoCentavos: 0,
+    };
+    actual.montoCentavos += g.montoCentavos;
+    gastosSinCuentaMapa.set(g.sucursalCodigo, actual);
+  }
+  const gastosSinCuentaVista = [...gastosSinCuentaMapa.values()].sort((a, b) =>
+    a.sucursalCodigo.localeCompare(b.sucursalCodigo),
+  );
+
   const eventos: EventoTesoreria[] = [];
   for (const s of saldos) {
     if (!enRango(s.fecha)) continue;
@@ -451,6 +535,21 @@ export function armarVista(
       montoCentavos: c.montoCentavos,
     });
   }
+  for (const g of gastos) {
+    if (!enRango(g.fecha)) continue;
+    const d = destinoDe(g.sucursalId, 'efectivo', g.fecha, destinos);
+    if (d === null || !visibles.has(d.cuentaId)) continue;
+    eventos.push({
+      tipo: 'gasto-ruta',
+      id: `gasto-ruta:${g.fecha}:${d.cuentaId}:${g.sucursalId}`,
+      fecha: g.fecha,
+      cuentaId: d.cuentaId,
+      cuentaNombre: d.cuentaNombre,
+      sucursalCodigo: g.sucursalCodigo,
+      cantidad: g.cantidad,
+      montoCentavos: g.montoCentavos,
+    });
+  }
   eventos.sort(
     (a, b) =>
       a.fecha.localeCompare(b.fecha) ||
@@ -460,5 +559,13 @@ export function armarVista(
       a.id.localeCompare(b.id),
   );
 
-  return { desde, hasta, cuentas: filas, total, sinCuenta, eventos };
+  return {
+    desde,
+    hasta,
+    cuentas: filas,
+    total,
+    sinCuenta,
+    gastosSinCuenta: gastosSinCuentaVista,
+    eventos,
+  };
 }

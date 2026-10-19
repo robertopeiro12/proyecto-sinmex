@@ -2,8 +2,14 @@ import { depsDePrueba, snapshotDePrueba } from '@/datos/pruebas-apoyo';
 import { crearRepositorioCatalogos } from '@/datos/repositorios/catalogos';
 import { crearRepositorioProspectos } from '@/datos/repositorios/prospectos';
 import { crearRepositorioVisitas } from '@/datos/repositorios/visitas';
+import { crearRepositorioGastos } from '@/datos/repositorios/gastos';
 
-import { combinarFuentesFotos, fuenteFotosProspectos, fuenteFotosVisitas } from './fuente-fotos';
+import {
+  combinarFuentesFotos,
+  fuenteFotosGastos,
+  fuenteFotosProspectos,
+  fuenteFotosVisitas,
+} from './fuente-fotos';
 
 function montar() {
   const deps = depsDePrueba();
@@ -135,5 +141,66 @@ describe('fotos de visitas y cola combinada (T-39, D9)', () => {
   it('un resultado de una clave que no salio de pendientes() es un bug y truena', () => {
     const { fuente } = montarAmbas();
     expect(() => fuente.anotarError('nadie', 'x')).toThrow(/no salio de pendientes/);
+  });
+});
+
+describe('fotos de gastos en la cola combinada (T-30/T-31, D8)', () => {
+  function montarTres() {
+    const deps = depsDePrueba();
+    const catalogos = crearRepositorioCatalogos(deps);
+    catalogos.guardarSnapshot(snapshotDePrueba());
+    const visitas = crearRepositorioVisitas(deps, { catalogos });
+    const gastos = crearRepositorioGastos(deps, { catalogos });
+    const fuente = combinarFuentesFotos([
+      fuenteFotosProspectos(crearRepositorioProspectos(deps, { catalogos })),
+      fuenteFotosVisitas(visitas),
+      fuenteFotosGastos(gastos),
+    ]);
+    return { visitas, gastos, fuente };
+  }
+
+  const gastoCon = (fotoUri: string | null) => ({
+    vendedorId: 'ven-1',
+    campoEgresoId: 'ce-gasolina',
+    montoCentavos: 25050,
+    comentario: null,
+    fotoUri,
+  });
+
+  it('la foto del ticket sale solo cuando el gasto ya esta sincronizado; sin foto no aparece', () => {
+    const { gastos, fuente } = montarTres();
+    const g = gastos.registrar(gastoCon('file:///cache/ticket.jpg'));
+    const sinFoto = gastos.registrar(gastoCon(null));
+    expect(fuente.pendientes()).toEqual([]);
+    gastos.marcarSincronizada(g.id);
+    gastos.marcarSincronizada(sinFoto.id);
+    expect(fuente.pendientes()).toEqual([{ clave: g.id, uri: 'file:///cache/ticket.jpg' }]);
+  });
+
+  it('visitas antes que gastos, y cada resultado vuelve a SU repositorio', () => {
+    const { visitas, gastos, fuente } = montarTres();
+    const v = visitas.registrar({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      motivoVisitaId: 'mot-cerrado',
+      observaciones: null,
+      atendio: null,
+      lat: 32.5,
+      lng: -117,
+      precisionM: null,
+      direccionTexto: null,
+      fotoUri: 'file:///cache/v.jpg',
+    });
+    visitas.marcarSincronizada(v.id);
+    const g = gastos.registrar(gastoCon('file:///cache/ticket.jpg'));
+    gastos.marcarSincronizada(g.id);
+
+    expect(fuente.pendientes().map((f) => f.clave)).toEqual([v.id, g.id]);
+    fuente.marcarSubida(g.id, '2026-08-07T16:00:00.000Z');
+    fuente.anotarError(v.id, 'sin red');
+
+    expect(gastos.porId(g.id)).toMatchObject({ foto_subida_en: '2026-08-07T16:00:00.000Z', sync_estado: 'sincronizado' });
+    expect(visitas.porId(v.id)).toMatchObject({ foto_error: 'sin red', foto_subida_en: null });
+    expect(gastos.porId(g.id)?.foto_error).toBeNull();
   });
 });

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ComprasEgresosModule } from '../compras-egresos/compras-egresos.module';
 import { CarteraClientesModule } from '../cartera-clientes/cartera-clientes.module';
 import { RutasModule } from '../rutas/rutas.module';
 import { VentasCobranzaModule } from '../ventas-cobranza/ventas-cobranza.module';
@@ -15,7 +16,13 @@ import { SincronizacionService } from './sincronizacion.service';
 @Module({
   // T-40 suma Cartera de Clientes: es la duena de `cliente` y por tanto la que
   // proyecta el `tipo: 'prospecto'`. T-38 suma Rutas: la duena de la jornada.
-  imports: [VentasCobranzaModule, CarteraClientesModule, RutasModule],
+  // T-30/T-31 suma Compras y Egresos: la duena de `gasto`.
+  imports: [
+    VentasCobranzaModule,
+    CarteraClientesModule,
+    RutasModule,
+    ComprasEgresosModule,
+  ],
   // T-40 (foto): `FotoController` es un canal aparte del lote del `push` — otro
   // controller, otro servicio, otro repositorio. Comparten el prefijo `sync` y
   // la auth de vendedor, y nada mas: asi un cambio en la foto no puede romper el

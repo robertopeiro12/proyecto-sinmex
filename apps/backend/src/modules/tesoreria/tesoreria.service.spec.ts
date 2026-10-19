@@ -1,5 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import type { CobranzaTesoreriaRepository } from './cobranza-tesoreria.repository';
+import type { GastosTesoreriaRepository } from './gastos-tesoreria.repository';
 import type { MovimientosRepository } from './movimientos.repository';
 import type { DestinosRepository } from './destinos.repository';
 import type { CuentaEnAlcance } from './reglas-saldo';
@@ -28,6 +29,7 @@ function armar(repo: Partial<Record<keyof TesoreriaRepository, jest.Mock>>) {
     } as unknown as DestinosRepository,
     {} as unknown as MovimientosRepository,
     {} as unknown as CobranzaTesoreriaRepository,
+    {} as unknown as GastosTesoreriaRepository,
   );
 }
 

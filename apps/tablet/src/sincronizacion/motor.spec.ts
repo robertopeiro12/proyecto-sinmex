@@ -1134,6 +1134,24 @@ describe('aSnapshot (T-39)', () => {
   });
 });
 
+describe('aSnapshot (T-30/T-31)', () => {
+  it('los campos de egreso bajan con la casilla booleana como 0/1 de SQLite', () => {
+    const respuesta = respuestaPullDePrueba();
+    respuesta.catalogos.campos_egreso = [
+      { id: 'ce1', nombre: 'Hielo', tipo: 'operacion', se_usa_en_app: true, activo: 1 },
+      { id: 'ce2', nombre: 'Envases', tipo: 'produccion', se_usa_en_app: false, activo: 0 },
+    ];
+    expect(aSnapshot(respuesta).camposEgreso).toEqual([
+      { id: 'ce1', nombre: 'Hielo', tipo: 'operacion', se_usa_en_app: 1, activo: 1 },
+      { id: 'ce2', nombre: 'Envases', tipo: 'produccion', se_usa_en_app: 0, activo: 0 },
+    ]);
+  });
+
+  it('un servidor anterior no manda la coleccion: no se escribe nada', () => {
+    expect(aSnapshot(respuestaPullDePrueba()).camposEgreso).toBeUndefined();
+  });
+});
+
 describe('aSnapshot (T-74)', () => {
   it('pasa las promociones con se_repite 0/1 y tolera que no vengan', () => {
     const base = {

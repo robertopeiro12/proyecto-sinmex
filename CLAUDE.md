@@ -405,7 +405,12 @@ usuario con sesion pasa.
   - **Destinos** (`tesoreria_destino_cobranza`): sucursal + método → cuenta, con vigencia `desde`; se usa la más
     reciente ≤ fecha del pago. Sin destino, el dinero no suma a ninguna cuenta y sale en `sinCuenta`. No se elimina
     la cuenta que **hoy** recibe cobranza (409).
-  - Las compras (T-30/T-31) entrarán igual: otra fuente más del arreglo `movimientos` de `reglas-saldo.ts`.
+  - **Gastos de la ruta (T-30/T-31)**: se **leen** de `gasto` (`tesoreria/gastos-tesoreria.repository.ts`, vivos con
+    `metodo = 'efectivo_cobranza_dia'`, por fecha y sucursal del gasto) y restan en la cuenta destino vigente de
+    `(sucursal, 'efectivo')`, la misma de la cobranza en efectivo (`destinoDe`). Sin destino salen en la lista aparte
+    `gastosSinCuenta`. Evento `gasto-ruta` ("Gastos de ruta") con la forma del de cobranza (`id`, `fecha`, `cuentaId`,
+    `cuentaNombre`, `sucursalCodigo`, `cantidad`, `montoCentavos`), un total por día, cuenta y sucursal. Las compras de
+    oficina del resto de T-31 entrarán igual.
 
 - **Visita sin venta (T-39).** El vendedor deja constancia, sin red, de por qué un cliente no compró: motivo del
   catálogo, hora, quién atendió, ubicación (GPS o dirección escrita) y foto si el motivo la exige. Spec:
@@ -420,7 +425,7 @@ usuario con sesion pasa.
     forma (ubicación obligatoria) y `rutas/visitas.service.ts` proyecta. Rechazos nuevos:
     `motivo-visita-inexistente` (uno **dado de baja sí entra**) y `visita-id-ocupado` (motivo neutro). **El servidor
     no revisa "exige foto/nombre"**: lo exige la tablet (`src/estado/visita.ts`, `validarVisita`).
-  - **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → rutas` (`fuentesDelPush`, con
+  - **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → gastos → rutas` (`fuentesDelPush`, con
     prueba). El alcance se comprueba **una vez por lote**: una visita a un prospecto cuya alta viaja en el mismo
     lote cae `cliente-fuera-de-alcance`; la tablet sube alta y visita en lotes consecutivos de una sincronización.
   - **GPS**: una coordenada inválida (fuera de rango o no finita) es "sin GPS" (se pide la dirección y se guarda con
@@ -483,6 +488,37 @@ usuario con sesion pasa.
     `select count(*) from cliente where (ubicacion_origen is null) <> (lat is null)` debe dar 0. El backfill mueve
     `updated_at` de los clientes con coordenada a propósito, para que las tablets reciban el origen).
 
+- **Gastos de la ruta y campos de egreso (T-30 / T-31).** El vendedor registra, sin red, lo que paga con la cobranza
+  (hielo, gasolina, reparación, adelanto); el gasto sube como operación `gasto`, resta en Tesorería y la oficina lo
+  consulta en *Finanzas → Gastos*. Spec: `docs/superpowers/specs/2026-10-20-t-30-31-gastos-de-ruta-design.md`. Las
+  compras de oficina desde el portal (cualquier método, días anteriores) son el resto de T-31, otro ticket.
+  - **Catálogo `campo_egreso`** global, con `tipo` fijo (`produccion`/`operacion`/`financiero`, un check, no tabla) y
+    la casilla `se_usa_en_app`; baja lógica, nombre único entre vivos (`uq_campo_egreso_nombre`) y
+    `creado_en`/`actualizado_en` con `set_actualizado_en()`. La baja se **rechaza con 409** si el campo tiene gastos
+    vivos en el año en curso de Tijuana ("podrás darlo de baja el próximo año"). Backend en `compras-egresos/`
+    (`/campos-egreso`, permiso `campo_egreso.gestionar`, grupo General); portal *Catálogo → Campos de egreso*
+    (`/catalogo/campos-de-egreso`). Baja en el pull como `campos_egreso`.
+  - **Tabla `gasto`**: `id` = clave de la operación; copia `campo_nombre` y `tipo` al proyectar; `metodo` fijo
+    `efectivo_cobranza_dia`, `origen = 'app'`, `quien` = nombre del vendedor, `fecha` = `fecha_operacion` del sobre
+    (nunca re-derivada de UTC). `vendedor_id` nulo y `origen = 'portal'` quedan para las compras de oficina.
+  - **Operación `gasto`** (ya estaba en `TIPOS_OPERACION`; dejó de guardarse sin proyectar), sin subir
+    `CONTRATO_ACTUAL`. Sin `cliente_id` ni folio. `prepararGasto` (`sincronizacion/despacho-gasto.ts`) valida la forma
+    y `compras-egresos/gastos.service.ts` proyecta. Rechazos nuevos: `campo-egreso-inexistente` (uno **dado de baja sí
+    entra**) y `gasto-id-ocupado` (motivo neutro). **El servidor no revisa "Se usa en la app"**: lo filtra la tablet.
+    Las operaciones `gasto` viejas del buzón se quedan sin proyectar (sin relleno).
+  - **Fotos**: `POST /sync/foto/:clave` acepta gastos (`gasto-<id>.jpg`, opcional). El portal la sirve en
+    `GET /gastos/:id/foto` (permiso `gasto.ver`; otra sucursal = 404).
+  - **Portal** *Finanzas → Gastos* (`/finanzas/gastos`): `GET /gastos?desde&hasta&sucursal&vendedor&campo` (permiso
+    `gasto.ver`, grupo Finanzas; alcance de sucursal; máximo 366 días), con total. Diseñada para 1366 px (`table-fixed` + `colgroup`, 736 px fijos y Comentario flexible); medir en navegador.
+  - **Tablet** (migración local 015): `campo_egreso` y `gasto` (foto con el esquema derivado de la visita). Pantallas
+    `app/(jornada)/gastos/index.tsx` (lista del día, entrada Gastos del menú) y `registrar.tsx`; la lista se refresca
+    con `versionCatalogos`/`ultimaSincronizacion` (no al enfocar). Los topes compartidos viven en
+    `src/datos/reglas-gasto.ts` y la lógica pura en `src/estado/gasto.ts` (`montoACentavos` exacto, `validarGasto`,
+    `camposParaGasto`, `faltantesVisiblesGasto`, `puedeRegistrarGasto`), con pruebas. Un gasto grabado no se edita ni
+    se borra en la app. El botón de la ficha queda en "Merma, promoción y consumo" (T-27).
+  - **Nube**: la migración `20261020120000_gastos_ruta.sql` se sube a `sinmex dev` después del merge, con el protocolo
+    de push (pre-flight: tablas nuevas, inserts de permisos y semilla; no hay nada que contar). Esta rama lleva el
+    fix de PR #139 (migración de T-72 renombrada a `20261019130000`).
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
   - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).

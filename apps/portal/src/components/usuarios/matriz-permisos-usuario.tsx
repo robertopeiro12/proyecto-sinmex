@@ -28,6 +28,9 @@ const EXPLICACION_PERMISO: Record<string, string> = {
     "Puede aprobar o rechazar solicitudes para eliminar una venta o un cobro ya registrado.",
   "motivo_visita.gestionar":
     "Puede dar de alta, editar o dar de baja los motivos por los que un cliente no compró (visita sin venta).",
+  "campo_egreso.gestionar":
+    "Puede dar de alta, editar o dar de baja los campos de egreso (gasolina, hielo, envases…) y decidir cuáles usa el vendedor en la tablet.",
+  "gasto.ver": "Puede consultar los gastos que registran los vendedores en la ruta, con su ticket.",
   "promocion.gestionar":
     "Puede crear, editar y desactivar las promociones (regalos por compra) para clientes, para todos o para prospectos.",
   "prospecto.gestionar":

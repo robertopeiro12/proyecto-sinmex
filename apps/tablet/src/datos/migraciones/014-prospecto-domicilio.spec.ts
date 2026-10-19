@@ -26,11 +26,10 @@ function columnas(bd: BaseDatos, tabla: string): { name: string; notnull: number
 }
 
 describe('migracion 014: prospecto-domicilio (T-72)', () => {
-  it('la 014 es la ultima y deja versionEsquema en 14', () => {
+  it('la 014 es prospecto-domicilio y deja de ser la ultima con la 015 (T-30/T-31)', () => {
     expect(migraciones[13]?.nombre).toBe('prospecto-domicilio');
     expect(migraciones[13]?.version).toBe(14);
-    expect(migraciones).toHaveLength(14);
-    expect(versionEsquema(baseAlDia())).toBe(14);
+    expect(versionEsquema(baseAlDia())).toBe(migraciones.length);
   });
 
   it('prospecto gana domicilio, nulable (las filas anteriores no lo tienen)', () => {

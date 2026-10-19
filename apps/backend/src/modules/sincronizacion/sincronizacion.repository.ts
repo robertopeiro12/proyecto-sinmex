@@ -14,6 +14,7 @@ import type {
   SucursalPull,
   TipoNegocioPull,
   MotivoVisitaPull,
+  CampoEgresoPull,
   VehiculoPull,
   VendedorPull,
 } from './contrato';
@@ -210,6 +211,23 @@ export class SincronizacionRepository {
       nombre: f.nombre,
       exige_foto: f.exige_foto,
       exige_atendio: f.exige_atendio,
+      activo: bandera(true, f.deleted_at),
+    }));
+  }
+
+  /** T-30 (D6): el catalogo de la pantalla de gastos. Global, como los motivos. */
+  async camposEgreso(desde: Date | null): Promise<CampoEgresoPull[]> {
+    let q = this.db
+      .selectFrom('campo_egreso')
+      .select(['id', 'nombre', 'tipo', 'se_usa_en_app', 'deleted_at']);
+    if (desde) q = q.where('actualizado_en', '>', desde);
+
+    return (await q.orderBy('nombre').execute()).map((f) => ({
+      id: f.id,
+      nombre: f.nombre,
+      // El check `ck_campo_egreso_tipo` garantiza uno de los tres.
+      tipo: f.tipo as CampoEgresoPull['tipo'],
+      se_usa_en_app: f.se_usa_en_app,
       activo: bandera(true, f.deleted_at),
     }));
   }
