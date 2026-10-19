@@ -30,8 +30,6 @@ interface Props {
   /** Los trazos, en el estado de la pantalla: asi "Corregir" puede vaciarlos (D4). */
   trazos: Punto[][];
   alCambiar: (trazos: Punto[][]) => void;
-  /** `true` al poner el dedo, `false` al levantarlo: la pantalla apaga su scroll mientras tanto. */
-  alDibujar?: (dibujando: boolean) => void;
   /** Mientras se graba no se dibuja ni se borra. */
   deshabilitado?: boolean;
 }
@@ -49,22 +47,20 @@ interface Props {
  *   (`trazoAPath`).
  */
 export const RecuadroFirma = forwardRef<ControlFirma, Props>(function RecuadroFirma(
-  { trazos, alCambiar, alDibujar, deshabilitado = false },
+  { trazos, alCambiar, deshabilitado = false },
   ref,
 ) {
   const svg = useRef<Svg>(null);
   // El PanResponder se crea una vez; lee lo ultimo por refs.
   const actuales = useRef(trazos);
   const avisar = useRef(alCambiar);
-  const avisarDibujo = useRef(alDibujar);
   const bloqueado = useRef(deshabilitado);
   useEffect(() => {
     actuales.current = trazos;
   }, [trazos]);
   useEffect(() => {
     avisar.current = alCambiar;
-    avisarDibujo.current = alDibujar;
-  }, [alCambiar, alDibujar]);
+  }, [alCambiar]);
   useEffect(() => {
     bloqueado.current = deshabilitado;
   }, [deshabilitado]);
@@ -78,14 +74,15 @@ export const RecuadroFirma = forwardRef<ControlFirma, Props>(function RecuadroFi
       actuales.current = nuevos;
       avisar.current(nuevos);
     };
-    const soltar = () => avisarDibujo.current?.(false);
     return PanResponder.create({
       onStartShouldSetPanResponder: () => !bloqueado.current,
       onMoveShouldSetPanResponder: () => !bloqueado.current,
-      // A media firma, ni el scroll ni otro gesto se quedan con el dedo.
+      // El recuadro reclama el toque al empezar y se niega a soltarlo: asi el
+      // ScrollView no se lo quita y la pantalla no se desplaza. No hay que
+      // re-renderizar la pantalla a media firma (p. ej. apagando `scrollEnabled`
+      // por estado): en el emulador eso cancelaba el PanResponder y cortaba el trazo.
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (e) => {
-        avisarDibujo.current?.(true);
         publicar([...actuales.current, [punto(e)]]);
       },
       onPanResponderMove: (e) => {
@@ -93,8 +90,6 @@ export const RecuadroFirma = forwardRef<ControlFirma, Props>(function RecuadroFi
         const ultimo = previos[previos.length - 1] ?? [];
         publicar([...previos.slice(0, -1), [...ultimo, punto(e)]]);
       },
-      onPanResponderRelease: soltar,
-      onPanResponderTerminate: soltar,
     });
   }, []);
 

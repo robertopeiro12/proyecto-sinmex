@@ -117,8 +117,6 @@ export default function PantallaVenta() {
   const [elecciones, setElecciones] = useState<Map<string, string>>(new Map());
   /** T-73: la firma del cliente (trazos y nombre), capturada en la revision (D3). */
   const [firma, setFirma] = useState<EstadoFirma>(FIRMA_VACIA);
-  /** Mientras el dedo esta en el recuadro, la pantalla no se desplaza. */
-  const [dibujando, setDibujando] = useState(false);
   const recuadro = useRef<ControlFirma>(null);
   /**
    * T-73: el id de la venta se genera ANTES de grabar, porque nombra el archivo
@@ -360,7 +358,6 @@ export default function PantallaVenta() {
       <Pantalla
         titulo="Revisa la venta"
         subtitulo={`${nombreCliente} · una vez grabada no se puede editar.`}
-        desplazable={!dibujando}
       >
         <Tarjeta etiqueta="Productos">
           {resumen.lineas.map((l) => (
@@ -427,7 +424,6 @@ export default function PantallaVenta() {
             ref={recuadro}
             trazos={firma.trazos}
             alCambiar={(trazos) => setFirma((previa) => ({ ...previa, trazos }))}
-            alDibujar={setDibujando}
             deshabilitado={grabando}
           />
           <Campo

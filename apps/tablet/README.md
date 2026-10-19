@@ -313,7 +313,7 @@ Spec: `docs/superpowers/specs/2026-10-21-t-73-firma-del-cliente-design.md`.
 - **Revisión de la venta** (`app/(jornada)/operacion/[clienteId]/venta.tsx`): tarjeta "Firma del cliente" con el
   recuadro (`src/ui/recuadro-firma.tsx`), "Borrar firma" y "Nombre de quien firma (opcional)". "Grabar venta" solo se
   habilita con firma (`puedeGrabarVenta`); "Corregir" vuelve a captura y **borra** la firma (el cliente firmó un total).
-  Mientras el dedo está en el recuadro la pantalla no se desplaza (`Pantalla desplazable`).
+  Mientras el dedo está en el recuadro la pantalla no se desplaza: el `PanResponder` reclama el toque y no lo suelta.
 - **Al grabar** (`crearGrabadorVenta`, ignora el segundo toque): `exportarPng()` (`toDataURL`) → `guardarFirmaJpg`
   (`src/fotos/firma-expo.ts`: JPG 0.8, ≤ 1000 px, en `documentDirectory/firmas/firma-<id>.jpg`) → `ventas.registrar`
   con el id generado antes y `firma: { uri, nombre }`, en la misma transacción que la venta y su folio. Si la firma no

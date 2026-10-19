@@ -29,7 +29,6 @@ export function Pantalla({
   children,
   formulario = false,
   sinCabecera = false,
-  desplazable = true,
 }: {
   titulo?: string;
   subtitulo?: ReactNode;
@@ -44,11 +43,6 @@ export function Pantalla({
    * que ve el vendedor cada manana.
    */
   sinCabecera?: boolean;
-  /**
-   * `false` apaga el scroll (T-73): mientras el cliente firma, un trazo vertical
-   * no debe mover la pantalla en vez de dibujar.
-   */
-  desplazable?: boolean;
 }) {
   const { estilos } = useTema();
   const insets = useSafeAreaInsets();
@@ -61,7 +55,6 @@ export function Pantalla({
         sinCabecera && { paddingTop: insets.top + espacio.md },
       ]}
       keyboardShouldPersistTaps="handled"
-      scrollEnabled={desplazable}
     >
       {titulo ? <Text style={estilos.titulo}>{titulo}</Text> : null}
       {typeof subtitulo === "string" ? (
