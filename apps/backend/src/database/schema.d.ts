@@ -25,6 +25,16 @@ export type Numeric = ColumnType<string, number | string, number | string>;
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export interface CampoEgreso {
+  actualizado_en: Generated<Timestamp>;
+  creado_en: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  id: Generated<string>;
+  nombre: string;
+  se_usa_en_app: Generated<boolean>;
+  tipo: string;
+}
+
 export interface Cliente {
   alta_cliente_en: Timestamp | null;
   alta_cliente_usuario_id: string | null;
@@ -111,6 +121,28 @@ export interface FolioOficinaContador {
   fecha: Timestamp;
   sucursal_id: string;
   ultimo: number;
+}
+
+export interface Gasto {
+  campo_egreso_id: string;
+  campo_nombre: string;
+  capturo_usuario_id: string | null;
+  comentario: string | null;
+  creado_en: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  factura: Generated<string>;
+  fecha: Timestamp;
+  foto_archivo: string | null;
+  foto_subida_en: Timestamp | null;
+  id: string;
+  metodo: string;
+  monto: Numeric;
+  origen: string;
+  quien: string | null;
+  registrado_en: Timestamp;
+  sucursal_id: string;
+  tipo: string;
+  vendedor_id: string | null;
 }
 
 export interface Jornada {
@@ -487,12 +519,14 @@ export interface Visita {
 }
 
 export interface DB {
+  campo_egreso: CampoEgreso;
   cliente: Cliente;
   cliente_precio: ClientePrecio;
   cobranza_abono: CobranzaAbono;
   cobro: Cobro;
   factura: Factura;
   folio_oficina_contador: FolioOficinaContador;
+  gasto: Gasto;
   jornada: Jornada;
   lista_precio: ListaPrecio;
   motivo_visita: MotivoVisita;
