@@ -240,6 +240,44 @@ describe('repositorio de prospectos', () => {
       });
     });
 
+    describe('direccion del negocio (T-72, D1)', () => {
+      it('se guarda recortada en el prospecto y en su espejo de cliente', () => {
+        const { prospectos, catalogos } = montar();
+
+        const p = prospectos.registrar(
+          captura({ lat: null, lng: null, domicilio: '  Av. Revolución 1234, Zona Centro  ' }),
+        );
+
+        expect(p.domicilio).toBe('Av. Revolución 1234, Zona Centro');
+        expect(catalogos.obtenerCliente(p.id)).toMatchObject({
+          domicilio: 'Av. Revolución 1234, Zona Centro',
+          lat: null,
+          lng: null,
+          ubicacion_origen: null,
+        });
+      });
+
+      it('vacia o ausente se guarda como null', () => {
+        const { prospectos } = montar();
+        expect(prospectos.registrar(captura({ domicilio: '   ' })).domicilio).toBeNull();
+        expect(prospectos.registrar(captura()).domicilio).toBeNull();
+      });
+
+      it('con GPS el espejo dice que la coordenada salio del GPS', () => {
+        const { prospectos, catalogos } = montar();
+        const p = prospectos.registrar(captura());
+        expect(catalogos.obtenerCliente(p.id)?.ubicacion_origen).toBe('gps');
+      });
+
+      it('tiene el mismo tope que el servidor: 300', () => {
+        const { prospectos } = montar();
+        expect(prospectos.registrar(captura({ domicilio: 'x'.repeat(300) })).domicilio).toHaveLength(300);
+        expect(() => prospectos.registrar(captura({ domicilio: 'x'.repeat(301) }))).toThrow(
+          new ErrorProspecto('La dirección no puede pasar de 300 caracteres.'),
+        );
+      });
+    });
+
     describe('ubicacion', () => {
       it('sin ubicacion se guarda igual: negar el permiso no bloquea el alta', () => {
         const { prospectos } = montar();
