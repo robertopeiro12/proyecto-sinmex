@@ -97,6 +97,9 @@ export class ListarMovimientosDto {
   hasta!: string;
 
   @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
   @IsString()
   sucursal?: string;
 }

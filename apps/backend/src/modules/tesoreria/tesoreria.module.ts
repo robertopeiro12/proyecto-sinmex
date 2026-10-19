@@ -6,7 +6,7 @@ import { TesoreriaController } from './tesoreria.controller';
 import { TesoreriaRepository } from './tesoreria.repository';
 import { TesoreriaService } from './tesoreria.service';
 
-// T-28: cuentas y saldos fijados. T-29 agregara los movimientos aqui mismo.
+// T-28: cuentas y saldos fijados. T-29: movimientos manuales (depositos, retiros, traspasos).
 @Module({
   controllers: [TesoreriaController, MovimientosController],
   providers: [

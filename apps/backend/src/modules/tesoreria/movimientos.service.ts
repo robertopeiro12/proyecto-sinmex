@@ -65,11 +65,12 @@ export class MovimientosService {
     id: string,
     dto: EditarMovimientoDto,
   ): Promise<MovimientoManual> {
+    // null en fecha/monto/cuentas = "no enviado"; en comentario, null o '' lo borra.
     if (
-      dto.fecha === undefined &&
-      dto.montoCentavos === undefined &&
-      dto.cuentaId === undefined &&
-      dto.cuentaDestinoId === undefined &&
+      dto.fecha == null &&
+      dto.montoCentavos == null &&
+      dto.cuentaId == null &&
+      dto.cuentaDestinoId == null &&
       dto.comentario === undefined
     ) {
       throw new BadRequestException('No hay nada que actualizar.');
@@ -104,17 +105,24 @@ export class MovimientosService {
   ): Promise<MovimientoManual> {
     const m = await this.repo.buscar(id);
     if (!m) throw new NotFoundException('No existe ese movimiento.');
-    await this.tesoreria.cuentaVisible(usuarioId, m.cuentaId).catch(() => {
-      throw new NotFoundException('No existe ese movimiento.');
-    });
-    if (m.cuentaDestinoId !== null) {
-      await this.tesoreria
-        .cuentaVisible(usuarioId, m.cuentaDestinoId)
-        .catch(() => {
-          throw new NotFoundException('No existe ese movimiento.');
-        });
-    }
+    await this.cuentaDelMovimiento(usuarioId, m.cuentaId);
+    if (m.cuentaDestinoId !== null)
+      await this.cuentaDelMovimiento(usuarioId, m.cuentaDestinoId);
     return m;
+  }
+
+  /** Solo el 404 de la cuenta se traduce a "no existe el movimiento"; sesion o BD siguen su camino. */
+  private async cuentaDelMovimiento(
+    usuarioId: string,
+    cuentaId: string,
+  ): Promise<void> {
+    await this.tesoreria
+      .cuentaVisible(usuarioId, cuentaId)
+      .catch((e: unknown) => {
+        throw e instanceof NotFoundException
+          ? new NotFoundException('No existe ese movimiento.')
+          : e;
+      });
   }
 
   /** Forma (spec §3.1) y alcance de las cuentas. */

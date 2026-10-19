@@ -395,6 +395,50 @@ describe('Tesorería — movimientos, destinos y cobranza (e2e)', () => {
         .expect(404);
     });
 
+    it('PATCH: comentario null lo borra; destino en depósito o igual a la cuenta en traspaso → 400', async () => {
+      const a = await sembrarCuenta('Patch A', idTijuana);
+      const b = await sembrarCuenta('Patch B', idTijuana);
+      const dep = await http()
+        .post('/tesoreria/movimientos')
+        .set('Cookie', tijuana)
+        .send({
+          tipo: 'deposito',
+          fecha: '2026-10-07',
+          montoCentavos: 100,
+          cuentaId: a,
+          comentario: 'Hola',
+        })
+        .expect(201);
+      const idDep = (dep.body as Movimiento).id;
+      const r = await http()
+        .patch(`/tesoreria/movimientos/${idDep}`)
+        .set('Cookie', tijuana)
+        .send({ comentario: null })
+        .expect(200);
+      expect((r.body as Movimiento).comentario).toBeNull();
+      await http()
+        .patch(`/tesoreria/movimientos/${idDep}`)
+        .set('Cookie', tijuana)
+        .send({ cuentaDestinoId: b })
+        .expect(400);
+      const tr = await http()
+        .post('/tesoreria/movimientos')
+        .set('Cookie', tijuana)
+        .send({
+          tipo: 'traspaso',
+          fecha: '2026-10-07',
+          montoCentavos: 100,
+          cuentaId: a,
+          cuentaDestinoId: b,
+        })
+        .expect(201);
+      await http()
+        .patch(`/tesoreria/movimientos/${(tr.body as Movimiento).id}`)
+        .set('Cookie', tijuana)
+        .send({ cuentaDestinoId: a })
+        .expect(400);
+    });
+
     it('corregir y eliminar; el tipo no cambia', async () => {
       const a = await sembrarCuenta('Edit A', idTijuana);
       const b = await sembrarCuenta('Edit B', idTijuana);
