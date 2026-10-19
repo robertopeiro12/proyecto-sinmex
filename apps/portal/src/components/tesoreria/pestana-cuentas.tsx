@@ -13,6 +13,7 @@ import {
   type CuentaTesoreria,
 } from "@/lib/tesoreria";
 import { FormularioCuentaTesoreria } from "./formulario-cuenta-tesoreria";
+import { SeccionDestinos } from "./seccion-destinos";
 
 /** Las cuentas ("campos" del cliente). Alta, renombrar y baja lógica con confirmación. */
 export function PestanaCuentas({ sucursal }: { sucursal: string | null }) {
@@ -110,6 +111,7 @@ export function PestanaCuentas({ sucursal }: { sucursal: string | null }) {
           }
         />
       )}
+      {!catalogo.cargando && !catalogo.error && <SeccionDestinos sucursal={sucursal} cuentas={catalogo.items} />}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { PestanaCuentas } from "./pestana-cuentas";
 
 vi.mock("@/components/auth/auth-provider");
 vi.mock("@/lib/sucursales");
+vi.mock("./seccion-destinos", () => ({ SeccionDestinos: () => null }));
 vi.mock("@/lib/tesoreria", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/tesoreria")>();
   return {

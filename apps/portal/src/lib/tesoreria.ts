@@ -2,6 +2,7 @@ import { apiFetch } from "./api";
 import { textoMonto } from "./cobranzas";
 import type { DefinicionExcel, FilaExcel } from "./excel/definicion";
 import { formatearFecha } from "./reportes";
+import { formatearPesos } from "./ventas";
 
 // Copia de las formas de apps/backend/src/modules/tesoreria/ (reglas-saldo.ts y
 // tesoreria.service.ts): el portal no puede importar del backend. Dinero en
@@ -41,24 +42,101 @@ export interface SaldosDelDia {
   saldos: SaldoFijado[];
 }
 
+export type MetodoCobranza = "efectivo" | "transferencia" | "cheque";
+export type TipoMovimiento = "deposito" | "retiro" | "traspaso";
+
 export interface CuentaEnVista {
   id: string;
   nombre: string;
   sucursalCodigo: string | null;
   saldoInicioCentavos: number | null;
   saldoFinalCentavos: number | null;
+  /** Movimientos del rango que cuentan para el final (desde el saldo fijado que usa). */
+  entradasCentavos: number;
+  salidasCentavos: number;
+  /** Fecha del saldo fijado que usa el final si cae en (desde, hasta]; si no, null. */
+  saldoFijadoEnRango: string | null;
 }
 
-export interface EventoTesoreria {
-  tipo: "saldo-fijado";
+export interface MovimientoManual {
   id: string;
+  tipo: TipoMovimiento;
   fecha: string;
+  /** Siempre positivo: el tipo dice si suma o resta. */
+  montoCentavos: number;
   cuentaId: string;
   cuentaNombre: string;
-  montoCentavos: number;
+  cuentaDestinoId: string | null;
+  cuentaDestinoNombre: string | null;
   comentario: string | null;
   capturo: string;
+  /** El usuario ve las dos cuentas: puede corregirlo o eliminarlo. */
+  editable: boolean;
 }
+
+export interface DestinoCobranza {
+  id: string;
+  sucursalId: string;
+  sucursalCodigo: string;
+  metodo: MetodoCobranza;
+  cuentaId: string;
+  cuentaNombre: string;
+  /** `AAAA-MM-DD`. */
+  desde: string;
+}
+
+export interface DestinosSucursal {
+  sucursalId: string;
+  sucursalCodigo: string;
+  sucursalNombre: string;
+  vigentes: Record<MetodoCobranza, DestinoCobranza | null>;
+  historial: DestinoCobranza[];
+}
+
+export type EventoTesoreria =
+  | {
+      tipo: "saldo-fijado";
+      id: string;
+      fecha: string;
+      cuentaId: string;
+      cuentaNombre: string;
+      montoCentavos: number;
+      comentario: string | null;
+      capturo: string;
+    }
+  | {
+      tipo: "deposito" | "retiro";
+      id: string;
+      fecha: string;
+      cuentaId: string;
+      cuentaNombre: string;
+      montoCentavos: number;
+      comentario: string | null;
+      capturo: string;
+    }
+  | {
+      tipo: "traspaso";
+      id: string;
+      fecha: string;
+      cuentaId: string;
+      cuentaNombre: string;
+      cuentaDestinoId: string;
+      cuentaDestinoNombre: string;
+      montoCentavos: number;
+      comentario: string | null;
+      capturo: string;
+    }
+  | {
+      tipo: "cobranza";
+      id: string;
+      fecha: string;
+      cuentaId: string;
+      cuentaNombre: string;
+      sucursalCodigo: string;
+      metodo: MetodoCobranza;
+      cantidad: number;
+      montoCentavos: number;
+    };
 
 export interface VistaTesoreria {
   desde: string;
@@ -70,7 +148,11 @@ export interface VistaTesoreria {
     cuentasConSaldoInicio: number;
     cuentasConSaldoFinal: number;
     cuentas: number;
+    entradasCentavos: number;
+    salidasCentavos: number;
   };
+  /** Cobranza del rango sin cuenta destino, de las sucursales en alcance. */
+  sinCuenta: { sucursalCodigo: string; metodo: MetodoCobranza; montoCentavos: number }[];
   eventos: EventoTesoreria[];
 }
 
@@ -114,6 +196,76 @@ export function eliminarSaldoFijado(id: string): Promise<{ id: string }> {
 
 export function obtenerTesoreria(p: { desde: string; hasta: string; sucursal?: string | null }): Promise<VistaTesoreria> {
   return apiFetch<VistaTesoreria>(`/tesoreria${query({ desde: p.desde, hasta: p.hasta, sucursal: p.sucursal })}`);
+}
+
+export function listarMovimientos(p: { desde: string; hasta: string; sucursal?: string | null }): Promise<MovimientoManual[]> {
+  return apiFetch<MovimientoManual[]>(`/tesoreria/movimientos${query({ desde: p.desde, hasta: p.hasta, sucursal: p.sucursal })}`);
+}
+
+export function crearMovimiento(d: {
+  tipo: TipoMovimiento;
+  fecha: string;
+  montoCentavos: number;
+  cuentaId: string;
+  cuentaDestinoId?: string;
+  comentario?: string;
+}): Promise<MovimientoManual> {
+  return apiFetch<MovimientoManual>("/tesoreria/movimientos", { method: "POST", body: JSON.stringify(d) });
+}
+
+export function editarMovimiento(
+  id: string,
+  d: { fecha?: string; montoCentavos?: number; cuentaId?: string; cuentaDestinoId?: string; comentario?: string },
+): Promise<MovimientoManual> {
+  return apiFetch<MovimientoManual>(`/tesoreria/movimientos/${id}`, { method: "PATCH", body: JSON.stringify(d) });
+}
+
+export function eliminarMovimiento(id: string): Promise<{ id: string }> {
+  return apiFetch<{ id: string }>(`/tesoreria/movimientos/${id}`, { method: "DELETE" });
+}
+
+export function obtenerDestinos(sucursal?: string | null): Promise<DestinosSucursal[]> {
+  return apiFetch<DestinosSucursal[]>(`/tesoreria/destinos${query({ sucursal })}`);
+}
+
+export function guardarDestino(d: { sucursalId: string; metodo: MetodoCobranza; cuentaId: string; desde: string }): Promise<DestinoCobranza> {
+  return apiFetch<DestinoCobranza>("/tesoreria/destinos", { method: "PUT", body: JSON.stringify(d) });
+}
+
+export const ETIQUETA_METODO: Record<MetodoCobranza, string> = {
+  efectivo: "Efectivo",
+  transferencia: "Transferencia",
+  cheque: "Cheque",
+};
+
+export const ETIQUETA_TIPO: Record<TipoMovimiento, string> = {
+  deposito: "Depósito",
+  retiro: "Retiro",
+  traspaso: "Traspaso",
+};
+
+/** Concepto y cuenta para la lista y el Excel; `signo`: 1 entra, −1 sale, 0 neutro (traspaso, saldo fijado). */
+export function describirEvento(e: EventoTesoreria): { concepto: string; cuenta: string; signo: 1 | -1 | 0 } {
+  switch (e.tipo) {
+    case "deposito":
+      return { concepto: "Depósito", cuenta: e.cuentaNombre, signo: 1 };
+    case "retiro":
+      return { concepto: "Retiro", cuenta: e.cuentaNombre, signo: -1 };
+    case "traspaso":
+      return { concepto: "Traspaso", cuenta: `${e.cuentaNombre} → ${e.cuentaDestinoNombre}`, signo: 0 };
+    case "cobranza":
+      return {
+        concepto: `Cobranza en ${ETIQUETA_METODO[e.metodo].toLowerCase()} · ${e.cantidad} ${e.cantidad === 1 ? "cobro" : "cobros"} · ${e.sucursalCodigo}`,
+        cuenta: e.cuentaNombre,
+        signo: 1,
+      };
+    default:
+      return { concepto: "Saldo fijado", cuenta: e.cuentaNombre, signo: 0 };
+  }
+}
+
+export function primerDiaDelMesDe(fecha: string): string {
+  return `${fecha.slice(0, 8)}01`;
 }
 
 export function etiquetaSucursalCuenta(codigo: string | null): string {
@@ -161,15 +313,21 @@ const pesos = (centavos: number | null): string | number =>
   centavos === null ? "Sin saldo inicial" : centavos / 100;
 
 /**
- * Una hoja (la utilidad de T-15 arma una sola): cuentas, Total Tesoreria y, si
- * hay, el bloque "Saldos fijados en el rango" reutilizando las columnas.
+ * Una hoja (la utilidad de T-15 arma una sola): cuentas con entradas y salidas,
+ * Total Tesoreria, la cobranza sin cuenta y los movimientos del rango, todo
+ * reutilizando las mismas columnas.
  */
-export function definicionExcelTesoreria(
-  vista: VistaTesoreria,
-  filtros: { sucursal: string },
-): DefinicionExcel {
+export function definicionExcelTesoreria(vista: VistaTesoreria, filtros: { sucursal: string }): DefinicionExcel {
   const filas: FilaExcel[] = vista.cuentas.map((c) => ({
-    celdas: [c.nombre, etiquetaSucursalCuenta(c.sucursalCodigo), pesos(c.saldoInicioCentavos), pesos(c.saldoFinalCentavos), null],
+    celdas: [
+      c.nombre,
+      etiquetaSucursalCuenta(c.sucursalCodigo),
+      pesos(c.saldoInicioCentavos),
+      c.entradasCentavos / 100,
+      c.salidasCentavos / 100,
+      pesos(c.saldoFinalCentavos),
+      c.saldoFijadoEnRango ? `Saldo fijado el ${formatearFecha(c.saldoFijadoEnRango)}` : null,
+    ],
   }));
   const t = vista.total;
   const conSaldo =
@@ -179,14 +337,33 @@ export function definicionExcelTesoreria(
         ? `${t.cuentasConSaldoFinal} de ${t.cuentas} con saldo`
         : `Inicio: ${t.cuentasConSaldoInicio} de ${t.cuentas} · final: ${t.cuentasConSaldoFinal} de ${t.cuentas} con saldo`;
   filas.push({
-    celdas: ["Total Tesorería", conSaldo, t.saldoInicioCentavos / 100, t.saldoFinalCentavos / 100, null],
+    celdas: ["Total Tesorería", conSaldo, t.saldoInicioCentavos / 100, t.entradasCentavos / 100, t.salidasCentavos / 100, t.saldoFinalCentavos / 100, null],
     tipo: "total",
   });
+  if (vista.sinCuenta.length > 0) {
+    filas.push({ celdas: ["Cobranza sin cuenta asignada", null, null, null, null, null, null], tipo: "grupo" });
+    for (const s of vista.sinCuenta) {
+      filas.push({ celdas: [`${s.sucursalCodigo} · ${ETIQUETA_METODO[s.metodo]}`, null, null, null, null, null, `${formatearPesos(s.montoCentavos)} sin cuenta asignada`] });
+    }
+  }
   if (vista.eventos.length > 0) {
-    filas.push({ celdas: ["Saldos fijados en el rango", "Fecha", null, "Monto", "Comentario"], tipo: "grupo" });
+    filas.push({ celdas: ["Movimientos del rango", "Fecha", "Concepto", "Entra", "Sale", null, "Comentario"], tipo: "grupo" });
     for (const e of vista.eventos) {
-      const comentario = e.comentario ? `${e.comentario} · Capturó: ${e.capturo}` : `Capturó: ${e.capturo}`;
-      filas.push({ celdas: [e.cuentaNombre, formatearFecha(e.fecha), null, e.montoCentavos / 100, comentario] });
+      const { concepto, cuenta, signo } = describirEvento(e);
+      const monto = e.montoCentavos / 100;
+      const comentario =
+        e.tipo === "cobranza" ? null : e.comentario ? `${e.comentario} · Capturó: ${e.capturo}` : `Capturó: ${e.capturo}`;
+      filas.push({
+        celdas: [
+          cuenta,
+          formatearFecha(e.fecha),
+          concepto,
+          signo === 1 ? monto : null,
+          signo === -1 || e.tipo === "traspaso" ? monto : null,
+          e.tipo === "saldo-fijado" ? monto : null,
+          comentario,
+        ],
+      });
     }
   }
   return {
@@ -196,9 +373,11 @@ export function definicionExcelTesoreria(
       ["Sucursal", filtros.sucursal],
     ],
     columnas: [
-      { encabezado: "Cuenta", tipo: "texto", ancho: 30 },
-      { encabezado: "Sucursal", tipo: "texto", ancho: 18 },
+      { encabezado: "Cuenta", tipo: "texto", ancho: 32 },
+      { encabezado: "Sucursal", tipo: "texto", ancho: 14 },
       { encabezado: "Saldo al inicio", tipo: "pesos", ancho: 18 },
+      { encabezado: "Entradas", tipo: "pesos", ancho: 16 },
+      { encabezado: "Salidas", tipo: "pesos", ancho: 16 },
       { encabezado: "Saldo al final", tipo: "pesos", ancho: 18 },
       { encabezado: "Comentario", tipo: "texto", ancho: 40 },
     ],
