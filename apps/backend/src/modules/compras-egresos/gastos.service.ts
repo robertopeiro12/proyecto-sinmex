@@ -1,10 +1,41 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { isUUID } from 'class-validator';
+import { FotosService } from '../cartera-clientes/fotos.service';
+import { validarRango } from '../estadisticas/reglas-kilometraje';
+import {
+  normalizarSucursalPedida,
+  resolverAlcance,
+} from '../sucursales/alcance-sucursal';
 import type { Transaction } from 'kysely';
 import type { DB } from '../../database/schema';
+import type { ListarGastosDto } from './dto/listar-gastos.dto';
 import type { GastoNormalizado } from './datos-gasto';
 import { GastoRechazado } from './gasto-rechazado';
-import { GastosRepository } from './gastos.repository';
+import { GastosRepository, type GastoListado } from './gastos.repository';
 import { METODO_GASTO_RUTA } from './tipos-egreso';
+
+/** La respuesta de `GET /gastos` (D10). */
+export interface ListaGastos {
+  desde: string;
+  hasta: string;
+  gastos: GastoListado[];
+  totalCentavos: number;
+}
+
+const SIN_FOTO = 'Ese gasto no tiene foto.';
+
+/** `undefined`/vacio = sin filtro; un uuid en minusculas; otra cosa, 400. */
+function filtroId(crudo: string | undefined, mensaje: string): string | null {
+  const valor = crudo?.trim();
+  if (!valor) return null;
+  if (!isUUID(valor)) throw new BadRequestException(mensaje);
+  return valor.toLowerCase();
+}
 
 /**
  * Quien, cual y cuando. Todo sale del token o del sobre, nunca de `datos`:
@@ -36,7 +67,11 @@ export interface EntidadGasto {
  */
 @Injectable()
 export class GastosService {
-  constructor(private readonly repo: GastosRepository) {}
+  constructor(
+    private readonly repo: GastosRepository,
+    // T-30/T-31 (D10): la foto del ticket vive en el disco de fotos de Cartera.
+    private readonly fotos: FotosService,
+  ) {}
 
   /**
    * @throws {GastoRechazado} `campo-egreso-inexistente` o `gasto-id-ocupado`.
@@ -93,5 +128,53 @@ export class GastosService {
   /** T-30 (D8): el archivo ya esta en disco; esto anota la columna. */
   anotarFoto(id: string, archivo: string, subidaEn: Date): Promise<boolean> {
     return this.repo.anotarFoto(id, archivo, subidaEn);
+  }
+
+  /**
+   * `GET /gastos` (D10): los gastos vivos del rango, con el alcance de sucursal
+   * del usuario. Valida antes de consultar: un rango malo no llega a la base.
+   */
+  async listar(usuarioId: string, q: ListarGastosDto): Promise<ListaGastos> {
+    const error = validarRango(q.desde, q.hasta);
+    if (error) throw new BadRequestException(error);
+    const vendedorId = filtroId(q.vendedor, 'El vendedor no es válido.');
+    const campoEgresoId = filtroId(q.campo, 'El campo no es válido.');
+    const codigoSucursal = await this.codigoEnAlcance(usuarioId, q.sucursal);
+
+    const gastos = await this.repo.listar({
+      desde: q.desde,
+      hasta: q.hasta,
+      codigoSucursal,
+      vendedorId,
+      campoEgresoId,
+    });
+    const totalCentavos = gastos.reduce((s, g) => s + g.montoCentavos, 0);
+    return { desde: q.desde, hasta: q.hasta, gastos, totalCentavos };
+  }
+
+  /**
+   * `GET /gastos/:id/foto` (D10): la ruta del ticket si el gasto es de una
+   * sucursal en alcance. Otra sucursal es 404, no 403: no confirma que exista.
+   */
+  async rutaFoto(usuarioId: string, id: string): Promise<string> {
+    const codigoSucursal = await this.codigoEnAlcance(usuarioId, undefined);
+    const archivo = await this.repo.fotoEnAlcance(id, codigoSucursal);
+    if (archivo === null) throw new NotFoundException(SIN_FOTO);
+    return this.fotos.rutaDeArchivo(archivo, SIN_FOTO);
+  }
+
+  /** `null` = todas; si no, el codigo de la unica sucursal visible. */
+  private async codigoEnAlcance(
+    usuarioId: string,
+    sucursalPedida: string | undefined,
+  ): Promise<string | null> {
+    // El guard valido la firma del token, no que el usuario siga existiendo.
+    const usuario = await this.repo.buscarSucursalUsuario(usuarioId);
+    if (!usuario) throw new UnauthorizedException('Sesion invalida.');
+    const alcance = resolverAlcance(
+      usuario.codigo,
+      normalizarSucursalPedida(sucursalPedida),
+    );
+    return alcance.tipo === 'una' ? alcance.codigo : null;
   }
 }

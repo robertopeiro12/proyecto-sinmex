@@ -142,7 +142,7 @@ export class FotosService implements OnModuleInit {
     await this.clientes.obtener(usuarioId, clienteId);
     const foto = await this.repo.foto(clienteId);
     if (!foto) throw new NotFoundException('Ese cliente no tiene foto.');
-    return this.rutaLegible(foto.archivo, clienteId);
+    return this.rutaDeArchivo(foto.archivo, 'Ese cliente no tiene foto.');
   }
 
   /**
@@ -156,14 +156,18 @@ export class FotosService implements OnModuleInit {
   ): Promise<string> {
     const foto = await this.repo.fotoEnSucursal(clienteId, sucursalId);
     if (!foto) throw new NotFoundException('Ese cliente no tiene foto.');
-    return this.rutaLegible(foto.archivo, clienteId);
+    return this.rutaDeArchivo(foto.archivo, 'Ese cliente no tiene foto.');
   }
 
-  /** La ruta absoluta del archivo, o 404 si la columna apunta a algo que ya no esta en disco. */
-  private async rutaLegible(
-    archivo: string,
-    clienteId: string,
-  ): Promise<string> {
+  /**
+   * La ruta absoluta de un archivo del disco de fotos, o 404 con `mensaje404`
+   * si la columna apunta a algo que ya no esta.
+   *
+   * Publico desde T-30/T-31: la foto del ticket de un gasto vive en el mismo
+   * disco (`gasto-<id>.jpg`) y su alcance lo decide Compras y Egresos, no este
+   * modulo; aqui solo se resuelve el directorio y se comprueba que se pueda leer.
+   */
+  async rutaDeArchivo(archivo: string, mensaje404: string): Promise<string> {
     const ruta = join(this.directorio, archivo);
     try {
       await fs.access(ruta, FS.R_OK);
@@ -174,9 +178,9 @@ export class FotosService implements OnModuleInit {
       // coinciden — exactamente lo que el respaldo pendiente del volumen
       // (`Despliegue y topologia`) predice.
       this.logger.warn(
-        `cliente ${clienteId}: foto_archivo apunta a ${ruta}, que no esta en el disco`,
+        `foto_archivo apunta a ${ruta}, que no esta en el disco`,
       );
-      throw new NotFoundException('Ese cliente no tiene foto.');
+      throw new NotFoundException(mensaje404);
     }
     return ruta;
   }

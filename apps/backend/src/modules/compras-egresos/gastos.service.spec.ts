@@ -41,7 +41,7 @@ function montar(
         'idInsertado' in opciones ? opciones.idInsertado : contexto.id,
       ),
   };
-  return { servicio: new GastosService(repo as never), repo };
+  return { servicio: new GastosService(repo as never, {} as never), repo };
 }
 
 describe('GastosService.registrarGasto (T-30/T-31, D4/D5)', () => {

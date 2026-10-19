@@ -1,8 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { Transaction } from 'kysely';
+import { sql, type Transaction } from 'kysely';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import type { DB } from '../../database/schema';
-import { aPesos } from '../sincronizacion/dinero';
+import { aCentavos, aPesos } from '../sincronizacion/dinero';
+import { buscarSucursalUsuario } from '../sucursales/buscar-sucursal-usuario';
 import type { TipoEgreso } from './tipos-egreso';
 
 /** Una fila de `gasto` lista para escribir. */
@@ -21,6 +22,35 @@ export interface NuevoGasto {
   origen: 'app' | 'portal';
   quien: string | null;
   comentario: string | null;
+}
+
+/** Filtros de `GET /gastos`, ya validados por el servicio. */
+export interface FiltroGastos {
+  desde: string;
+  hasta: string;
+  /** `null` = todas las sucursales (usuario General sin filtro). */
+  codigoSucursal: string | null;
+  vendedorId: string | null;
+  campoEgresoId: string | null;
+}
+
+/** Un gasto tal como lo ve el portal (camelCase, como el resto de los reportes). */
+export interface GastoListado {
+  id: string;
+  /** `AAAA-MM-DD`: el dia al que cuenta (la `fecha_operacion` del sobre). */
+  fecha: string;
+  /** ISO: cuando lo grabo el vendedor. La hora de la tabla sale de aqui. */
+  registradoEn: string;
+  sucursalCodigo: string;
+  vendedorId: string | null;
+  vendedorNombre: string | null;
+  campoEgresoId: string;
+  /** La copia del nombre al proyectar (D4), aunque el campo se renombre despues. */
+  campoNombre: string;
+  tipo: TipoEgreso;
+  montoCentavos: number;
+  comentario: string | null;
+  tieneFoto: boolean;
 }
 
 /**
@@ -127,5 +157,90 @@ export class GastosRepository {
       .returning('id')
       .executeTakeFirst();
     return fila !== undefined;
+  }
+
+  buscarSucursalUsuario(usuarioId: string) {
+    return buscarSucursalUsuario(this.db, usuarioId);
+  }
+
+  /**
+   * Los gastos vivos del rango para el portal (D10). La sucursal es la del
+   * GASTO (la del vendedor al proyectar), no la actual del vendedor.
+   */
+  async listar(f: FiltroGastos): Promise<GastoListado[]> {
+    const condiciones = [
+      sql`g.deleted_at is null`,
+      sql`g.fecha between ${f.desde}::date and ${f.hasta}::date`,
+    ];
+    if (f.codigoSucursal !== null)
+      condiciones.push(sql`s.codigo = ${f.codigoSucursal}`);
+    if (f.vendedorId !== null)
+      condiciones.push(sql`g.vendedor_id = ${f.vendedorId}::uuid`);
+    if (f.campoEgresoId !== null)
+      condiciones.push(sql`g.campo_egreso_id = ${f.campoEgresoId}::uuid`);
+
+    const filas = await sql<{
+      id: string;
+      fecha: string;
+      registrado_en: Date;
+      codigo: string;
+      vendedor_id: string | null;
+      vendedor_nombre: string | null;
+      campo_egreso_id: string;
+      campo_nombre: string;
+      tipo: string;
+      monto: string;
+      comentario: string | null;
+      tiene_foto: boolean;
+    }>`
+      select g.id, to_char(g.fecha, 'YYYY-MM-DD') as fecha, g.registrado_en,
+             s.codigo, g.vendedor_id,
+             coalesce(v.nombre, g.quien) as vendedor_nombre,
+             g.campo_egreso_id, g.campo_nombre, g.tipo,
+             g.monto::text as monto, g.comentario,
+             (g.foto_archivo is not null) as tiene_foto
+        from gasto g
+        join sucursal s on s.id = g.sucursal_id
+        left join vendedor v on v.id = g.vendedor_id
+       where ${sql.join(condiciones, sql` and `)}
+       order by g.fecha, g.registrado_en, g.id
+    `.execute(this.db);
+
+    return filas.rows.map((r) => ({
+      id: r.id,
+      fecha: r.fecha,
+      registradoEn: new Date(r.registrado_en).toISOString(),
+      sucursalCodigo: r.codigo,
+      vendedorId: r.vendedor_id,
+      vendedorNombre: r.vendedor_nombre,
+      campoEgresoId: r.campo_egreso_id,
+      campoNombre: r.campo_nombre,
+      // El check `ck_gasto_tipo` garantiza uno de los tres.
+      tipo: r.tipo as TipoEgreso,
+      montoCentavos: aCentavos(r.monto),
+      comentario: r.comentario,
+      tieneFoto: r.tiene_foto,
+    }));
+  }
+
+  /**
+   * El archivo de la foto del gasto si esta vivo, tiene foto y es de la
+   * sucursal (`null` = General, cualquiera). `null` en todo lo demas: el
+   * servicio lo vuelve un 404 sin decir cual de los casos fue.
+   */
+  async fotoEnAlcance(
+    id: string,
+    codigoSucursal: string | null,
+  ): Promise<string | null> {
+    let q = this.db
+      .selectFrom('gasto as g')
+      .innerJoin('sucursal as s', 's.id', 'g.sucursal_id')
+      .select('g.foto_archivo')
+      .where('g.id', '=', id)
+      .where('g.deleted_at', 'is', null)
+      .where('g.foto_archivo', 'is not', null);
+    if (codigoSucursal !== null) q = q.where('s.codigo', '=', codigoSucursal);
+    const fila = await q.executeTakeFirst();
+    return fila?.foto_archivo ?? null;
   }
 }
