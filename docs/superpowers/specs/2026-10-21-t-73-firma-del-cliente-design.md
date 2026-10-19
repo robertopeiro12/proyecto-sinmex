@@ -44,25 +44,25 @@ Que el cliente firme en la tablet cada venta, para que el negocio tenga evidenci
 - **Al grabar**, con la guardia de doble toque que ya existe:
   1. `exportarPng()` → base64.
   2. Escribir el PNG en caché, convertir a JPG con `expo-image-manipulator` (calidad 0.8, ancho máximo 1000 px) y mover el resultado a `documentDirectory/firmas/firma-<idVenta>.jpg`. El id de la venta se genera **antes** (hoy lo genera `registrar()`; pasa a aceptarlo como parámetro opcional o a exponer `generarId`).
-  3. `datos.ventas.registrar({ …, firma: { uri, nombre } })` — la misma transacción que hoy graba venta, líneas, regalos y folio guarda `firma_uri` y `firma_nombre`.
+  3. `datos.ventas.registrar({ …, firma: { uri, nombre } })` — la misma transacción que hoy graba venta, líneas, regalos y folio guarda `firma_local` y `firma_nombre`.
   4. Si falla 1 o 2: no se llama a `registrar`, no se quema folio, aviso "No se pudo guardar la firma. Intenta de nuevo." y la pantalla sigue en revisión con la firma intacta. Si falla 3 después de escribir el archivo, el archivo queda huérfano (inofensivo; se sobrescribe en el reintento porque el id se conserva mientras la pantalla siga abierta).
 - **Pantalla "Venta grabada":** agrega "Firmada por {nombre}" o "Firmada" si no hay nombre.
 
 ### Datos locales
 
-- **Migración 016** (`016-firma-venta.ts`): `alter table venta add column firma_uri text`, `firma_nombre text`, `firma_subida_en text`, `firma_error text`, `firma_descartada_en text` — el mismo juego de columnas de foto que usan visita y gasto (comprobar los nombres exactos en `013-visitas.ts`/`015-gastos.ts` y copiarlos).
+- **Migración 016** (`016-firma-venta.ts`): agrega a `venta` `firma_local text`, `firma_nombre text`, `firma_subida_en text`, `firma_error text` y `firma_descartada integer not null default 0 check (firma_descartada in (0, 1))` — el mismo esquema derivado que la foto de visita (013) y de gasto (015), con prefijo `firma_`; ninguna toca `sync_estado`. Índice `idx_venta_firma_pendiente on venta (sync_estado) where firma_local is not null and firma_subida_en is null and firma_descartada = 0`.
 - `RepositorioVentas`:
   - `registrar()` acepta `firma: { uri: string; nombre: string | null }` **obligatoria** en el tipo (D1). Las pruebas existentes de `registrar` se actualizan.
-  - métodos de la cola de foto como los de `RepositorioGastos`: `firmasPendientes()`, `marcarFirmaSubida`, `anotarErrorFirma`, `descartarFirma`. Elegible: `firma_uri is not null and firma_subida_en is null and firma_descartada_en is null` **y** la operación de la venta ya aceptada (mismo criterio que visita/gasto).
+  - métodos de la cola de foto como los de `RepositorioGastos`: `firmasPendientes()`, `marcarFirmaSubida`, `anotarErrorFirma`, `descartarFirma`. Elegible: `firma_local is not null and firma_subida_en is null and firma_descartada = 0` **y** la operación de la venta ya aceptada (mismo criterio que visita/gasto).
 - `src/sincronizacion/fuente-fotos.ts`: nueva `FuenteFotos` de tipo `venta` (`fuenteFirmasVentas`), sumada a la lista después de gastos.
-- `fuente-ventas.ts`: el cuerpo de la operación agrega `firma: { nombre }` cuando la venta tiene `firma_uri` (siempre, en ventas nuevas).
+- `fuente-ventas.ts`: el cuerpo de la operación agrega `firma: { nombre }` cuando la venta tiene `firma_local` (siempre, en ventas nuevas).
 - **Ficha del cliente, "Ventas de hoy":** junto al estado de sincronización, "firma por subir" mientras `firma_subida_en` sea null.
 
 ## Contrato de sincronización
 
 - Operación `venta`: campo **opcional** `firma: { nombre: string | null }`. Aditivo: `CONTRATO_ACTUAL` sigue en **1**. `contrato.ts` se actualiza en backend y tablet a la vez, y `docs/contrato-sincronizacion.md` en el mismo commit.
 - Presencia de `firma` = la venta espera una imagen. Ausente = app vieja (venta sin firma).
-- `firma.nombre`: string recortado de 1 a 80 caracteres o `null`; otro tipo o más largo → la operación se rechaza con el código de forma que ya usa la venta (`datos-invalidos` o el equivalente vigente en `venta-rechazada.ts`).
+- `firma.nombre`: string recortado de 1 a 80 caracteres o `null`; otro tipo o más largo → la operación se rechaza con `datos-invalidos` desde `normalizarDatosVenta`, como cualquier otro campo mal formado de la venta.
 - `POST /sync/foto/:clave` acepta ahora la clave de una operación `venta`.
 
 ## Servidor
@@ -86,7 +86,7 @@ Que el cliente firme en la tablet cada venta, para que el negocio tenga evidenci
   - Archivo `venta-<id>-firma.jpg` (agregar el dominio a `nombreArchivoFoto`), escrito **antes** de anotar la columna; reenviar escribe el mismo nombre.
   - El dueño de las columnas de `venta_nota` es `ventas-cobranza`: `VentasService` (o el repositorio que ya escribe `venta_nota`) expone `existeConFirmaEsperada(id)` y `anotarFirma(id, archivo, subidaEn)`, como `GastosService`.
   - Los mensajes de 404/409 genéricos del servicio pasan a nombrar "la venta" junto con prospecto, visita y gasto.
-- **Detalle de venta** (`GET /ventas/:id`): `VentaDetalle.firma: { esperada: boolean; nombre: string | null; subidaEn: string | null } `.
+- **Detalle de venta** (`GET /ventas/:id`, `ventas-consulta.service.ts`): `VentaDetalle.firma: { esperada: boolean; nombre: string | null; subidaEn: string | null }` y `VentaDetalle.editada: boolean`.
 - **Imagen:** `GET /ventas/:id/firma` — mismo alcance que `GET /ventas/:id` (la consulta de detalle ya valida sucursal); 404 si no hay archivo; `image/jpeg`, `Cache-Control: private, no-store`, como `/gastos/:id/foto`.
 
 ## Portal
@@ -99,7 +99,7 @@ En `components/ventas/detalle-venta.tsx`, bloque "Firma del cliente":
 | `esperada` y sin `subidaEn` | "Firma pendiente de subir: llega cuando el vendedor sincronice." |
 | no `esperada` | "Sin firma (venta capturada en oficina o anterior a la firma en tablet)." |
 
-Si hay firma **y** `actualizado_por_usuario_id` no es null, aviso debajo: *"Esta nota se editó en el portal después de firmarse; la firma corresponde a la versión original."* (El detalle ya expone quién la editó o se agrega el campo `editada: boolean` si no.)
+Si hay firma **y** `actualizado_por_usuario_id` no es null, aviso debajo: *"Esta nota se editó en el portal después de firmarse; la firma corresponde a la versión original."* `VentaDetalle` no expone hoy la edición: se agrega `editada: boolean` (`actualizado_por_usuario_id is not null`) en `ventas-consulta.service.ts`.
 
 ## Fuera de alcance
 
