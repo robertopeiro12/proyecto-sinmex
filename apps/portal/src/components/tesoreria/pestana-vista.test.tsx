@@ -20,10 +20,11 @@ const VISTA: VistaTesoreria = {
   desde: HOY,
   hasta: HOY,
   cuentas: [
-    { id: "b", nombre: "ScotiaFiscal", sucursalCodigo: null, saldoInicioCentavos: -250000, saldoFinalCentavos: -250000 },
-    { id: "a", nombre: "Efectivo TJ", sucursalCodigo: "TJ", saldoInicioCentavos: null, saldoFinalCentavos: null },
+    { id: "b", nombre: "ScotiaFiscal", sucursalCodigo: null, saldoInicioCentavos: -250000, saldoFinalCentavos: -250000, entradasCentavos: 0, salidasCentavos: 0, saldoFijadoEnRango: null },
+    { id: "a", nombre: "Efectivo TJ", sucursalCodigo: "TJ", saldoInicioCentavos: null, saldoFinalCentavos: null, entradasCentavos: 0, salidasCentavos: 0, saldoFijadoEnRango: null },
   ],
-  total: { saldoInicioCentavos: -250000, saldoFinalCentavos: -250000, cuentasConSaldoInicio: 1, cuentasConSaldoFinal: 1, cuentas: 2 },
+  total: { saldoInicioCentavos: -250000, saldoFinalCentavos: -250000, cuentasConSaldoInicio: 1, cuentasConSaldoFinal: 1, cuentas: 2, entradasCentavos: 0, salidasCentavos: 0 },
+  sinCuenta: [],
   eventos: [],
 };
 

@@ -219,8 +219,8 @@ export function PestanaVista({ sucursal, activa = true }: { sucursal: string | n
                       <td className="whitespace-nowrap py-2 pr-4 text-right tabular-nums">
                         <Pesos centavos={e.montoCentavos} />
                       </td>
-                      <td className="py-2 pr-4">{e.comentario ?? "—"}</td>
-                      <td className="py-2">{e.capturo}</td>
+                      <td className="py-2 pr-4">{"comentario" in e ? (e.comentario ?? "—") : "—"}</td>
+                      <td className="py-2">{"capturo" in e ? e.capturo : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
