@@ -364,7 +364,7 @@ export function crearMotorSincronizacion({
    * - **Permanente** (413, 415, el archivo local ya no esta): se descarta. Son
    *   juicios sobre *estos bytes*; reintentar da la misma respuesta para siempre.
    * - **Temporal** (404, 409, 403, 400, 5xx): se anota y sigue en la cola. El
-   *   problema es de *esta pasada*, no de la foto.
+   *   problema es de *esta pasada*, no de la foto. Salvo que la fuente lo declare definitivo (`fallaDefinitiva`, T-73): un 404 de una firma de venta se descarta.
    * - **Sin red o sesion caida**: se anota y se **corta el paso**. No es un
    *   problema de esta foto sino del canal, asi que intentar las siguientes solo
    *   gastaria tiempo con el vendedor esperando. Las demas siguen en la cola,
@@ -392,6 +392,13 @@ export function crearMotorSincronizacion({
           continue;
         }
         if (error instanceof FotoTemporalError) {
+          // T-73: una fuente puede declarar definitivo un fallo temporal (la
+          // firma de una venta eliminada en el portal da 404 para siempre).
+          if (error.status !== null && fotos.fuente.fallaDefinitiva?.(foto.clave, error.status)) {
+            fotos.fuente.descartar(foto.clave, error.message);
+            total.descartadas += 1;
+            continue;
+          }
           fotos.fuente.anotarError(foto.clave, error.message);
           total.pendientes += 1;
           continue;

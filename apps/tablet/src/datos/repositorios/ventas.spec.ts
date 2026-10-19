@@ -1,4 +1,4 @@
-import { depsDePrueba, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
+import { depsDePrueba, FIRMA_DE_PRUEBA, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
 import { relojFijo } from '../reloj';
 import { crearRepositorioCatalogos } from './catalogos';
 import type { DepsRepositorio } from './deps';
@@ -46,6 +46,7 @@ const venta = (extra: Partial<DatosRegistroVenta> = {}): DatosRegistroVenta => (
   lineas: [{ presentacionId: 'pre-1', cantidad: 24, cantidadPromocion: 2 }],
   // T-74: las 2 piezas de promocion de la linea llegan como regalo aplicado.
   regalos: [{ promocionId: 'promo-general', presentacionId: 'pre-1', cantidad: 2, texto: TEXTO_GENERAL }],
+  firma: FIRMA_DE_PRUEBA,
   ...extra,
 });
 
@@ -169,6 +170,7 @@ describe('repositorio de ventas (T-16)', () => {
         factura: 'N/A',
         comentarios: null,
         lineas: [{ presentacionId: 'pre-1', cantidad: 3, cantidadPromocion: 0 }],
+        firma: FIRMA_DE_PRUEBA,
       });
       expect(ventas.regalosDe(v.id)).toEqual([]);
       expect(ventas.hayAlgunaDe('cli-1')).toBe(true);
@@ -311,6 +313,114 @@ describe('repositorio de ventas (T-16)', () => {
         sync_estado: 'sincronizado',
         sincronizado_en: MOMENTO,
         sync_error: null,
+      });
+    });
+  });
+});
+
+describe('firma del cliente (T-73)', () => {
+  const FIRMA = { uri: 'file:///documentos/firmas/firma-x.jpg', nombre: 'Doña Lupe' };
+
+  it('graba la firma en la misma venta: ruta y nombre, por subir y sin error', () => {
+    const { ventas } = montar();
+    const v = ventas.registrar(venta({ firma: FIRMA }));
+    expect(v).toMatchObject({
+      firma_local: 'file:///documentos/firmas/firma-x.jpg',
+      firma_nombre: 'Doña Lupe',
+      firma_subida_en: null,
+      firma_error: null,
+      firma_descartada: 0,
+      sync_estado: 'pendiente',
+    });
+  });
+
+  it('usa el id que le da la pantalla: el archivo de la firma ya se nombro con el', () => {
+    const { folios, ventas } = montar();
+    const v = ventas.registrar(venta({ id: 'venta-de-la-pantalla' }));
+    expect(v.id).toBe('venta-de-la-pantalla');
+    expect(folios.porOperacion('venta-de-la-pantalla')?.folio).toBe(v.folio);
+  });
+
+  it('sin firma no graba ni quema folio (D1)', () => {
+    const { deps, folios, ventas } = montar();
+    expect(() => ventas.registrar(venta({ firma: { uri: '   ', nombre: null } }))).toThrow(ErrorVenta);
+    expect(folios.consecutivoDe('ven-1')).toBe(0);
+    expect(cuantas(deps, 'venta')).toBe(0);
+  });
+
+  it('un nombre sin recortar o de mas de 80 caracteres no se graba', () => {
+    const { deps, ventas } = montar();
+    expect(() => ventas.registrar(venta({ firma: { uri: FIRMA.uri, nombre: 'x'.repeat(81) } }))).toThrow(
+      ErrorVenta,
+    );
+    expect(() => ventas.registrar(venta({ firma: { uri: FIRMA.uri, nombre: ' Lupe ' } }))).toThrow(ErrorVenta);
+    expect(cuantas(deps, 'venta')).toBe(0);
+  });
+
+  it('un fallo dentro de la transaccion no deja firma ni folio', () => {
+    const { deps, folios, ventas } = montar();
+    deps.bd.execSync('drop table venta_linea;');
+    expect(() => ventas.registrar(venta({ firma: FIRMA }))).toThrow();
+    expect(folios.consecutivoDe('ven-1')).toBe(0);
+    expect(
+      deps.bd.getFirstSync<{ n: number }>('select count(*) as n from venta where firma_local is not null')?.n,
+    ).toBe(0);
+  });
+
+  describe('cola de firmas', () => {
+    it('solo ofrece firmas de ventas ya sincronizadas: ni pendientes ni rechazadas (Review Focus 4)', () => {
+      const { ventas } = montar();
+      const aceptada = ventas.registrar(venta());
+      const rechazada = ventas.registrar(venta({ numNota: '2347' }));
+      ventas.marcarError(rechazada.id, 'precio-no-asignado: el cliente no tiene precio');
+      expect(ventas.firmasPendientes()).toEqual([]);
+
+      ventas.marcarSincronizada(aceptada.id);
+      expect(ventas.firmasPendientes().map((v) => v.id)).toEqual([aceptada.id]);
+    });
+
+    it('una venta anterior a la 016 (sin firma_local) nunca entra a la cola', () => {
+      const { deps, ventas } = montar();
+      const v = ventas.registrar(venta());
+      deps.bd.runSync('update venta set firma_local = null where id = $id', { $id: v.id });
+      ventas.marcarSincronizada(v.id);
+      expect(ventas.firmasPendientes()).toEqual([]);
+    });
+
+    it('marcarFirmaSubida la saca de la cola y limpia el error, sin tocar sync_estado', () => {
+      const { ventas } = montar();
+      const v = ventas.registrar(venta());
+      ventas.marcarSincronizada(v.id);
+      ventas.anotarErrorFirma(v.id, 'sin red');
+      ventas.marcarFirmaSubida(v.id, '2026-08-07T16:00:00.000Z');
+      expect(ventas.porId(v.id)).toMatchObject({
+        firma_subida_en: '2026-08-07T16:00:00.000Z',
+        firma_error: null,
+        sync_estado: 'sincronizado',
+      });
+      expect(ventas.firmasPendientes()).toEqual([]);
+    });
+
+    it('anotarErrorFirma la deja en la cola; descartarFirma la saca; ninguna toca sync_estado', () => {
+      const { ventas } = montar();
+      const temporal = ventas.registrar(venta());
+      const definitiva = ventas.registrar(venta({ numNota: '2347' }));
+      ventas.marcarSincronizada(temporal.id);
+      ventas.marcarSincronizada(definitiva.id);
+
+      ventas.anotarErrorFirma(temporal.id, 'El servidor respondio 500.');
+      ventas.descartarFirma(definitiva.id, 'Esa venta ya no existe.');
+
+      expect(ventas.firmasPendientes().map((v) => v.id)).toEqual([temporal.id]);
+      expect(ventas.porId(temporal.id)).toMatchObject({
+        firma_error: 'El servidor respondio 500.',
+        firma_descartada: 0,
+        sync_estado: 'sincronizado',
+      });
+      expect(ventas.porId(definitiva.id)).toMatchObject({
+        firma_error: 'Esa venta ya no existe.',
+        firma_descartada: 1,
+        sync_estado: 'sincronizado',
       });
     });
   });

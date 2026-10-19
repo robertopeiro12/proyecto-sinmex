@@ -1,4 +1,4 @@
-import { depsDePrueba, snapshotDePrueba } from '@/datos/pruebas-apoyo';
+import { depsDePrueba, FIRMA_DE_PRUEBA, snapshotDePrueba } from '@/datos/pruebas-apoyo';
 import { crearRepositorioCatalogos } from '@/datos/repositorios/catalogos';
 import { crearRepositorioCobranzas } from '@/datos/repositorios/cobranzas';
 import { crearRepositorioVisitas } from '@/datos/repositorios/visitas';
@@ -51,6 +51,7 @@ describe('contarPendientesDeSubir', () => {
       factura: 'N/A',
       comentarios: null,
       lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
+      firma: FIRMA_DE_PRUEBA,
     });
     prospectos.registrar({
       vendedorId: 'ven-1',

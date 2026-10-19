@@ -1,4 +1,4 @@
-import { depsDePrueba, MOMENTO, snapshotDePrueba } from '@/datos/pruebas-apoyo';
+import { depsDePrueba, FIRMA_DE_PRUEBA, MOMENTO, snapshotDePrueba } from '@/datos/pruebas-apoyo';
 import { crearRepositorioCatalogos } from '@/datos/repositorios/catalogos';
 import { crearRepositorioFolios } from '@/datos/repositorios/folios';
 import { crearRepositorioVentas } from '@/datos/repositorios/ventas';
@@ -18,7 +18,7 @@ function montar() {
     catalogos,
     folios: crearRepositorioFolios(deps),
   });
-  return { ventas, fuente: fuenteVentas(ventas) };
+  return { deps, ventas, fuente: fuenteVentas(ventas) };
 }
 
 describe('fuente de ventas (T-16)', () => {
@@ -42,6 +42,7 @@ describe('fuente de ventas (T-16)', () => {
         { presentacionId: 'pre-2', cantidad: 0, cantidadPromocion: 3 },
       ],
       regalos: REGALOS,
+      firma: { uri: 'file:///documentos/firmas/firma-v.jpg', nombre: 'Doña Lupe' },
     });
 
     expect(fuente.pendientes()).toEqual([
@@ -68,6 +69,8 @@ describe('fuente de ventas (T-16)', () => {
             { promocion_id: 'promo-general', presentacion_id: 'pre-1', cantidad: 2, texto: 'Por cada 10 Jamaica, 1 Jamaica gratis' },
             { promocion_id: 'promo-prospecto', presentacion_id: 'pre-2', cantidad: 3, texto: 'Bienvenida' },
           ],
+          // T-73: toda venta nueva trae firma; solo viaja el nombre.
+          firma: { nombre: 'Doña Lupe' },
         },
       },
     ]);
@@ -83,6 +86,7 @@ describe('fuente de ventas (T-16)', () => {
       factura: 'N/A',
       comentarios: null,
       lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
+      firma: FIRMA_DE_PRUEBA,
     });
     const op = fuente.pendientes()[0];
     expect(op?.datos).not.toHaveProperty('regalos');
@@ -98,6 +102,7 @@ describe('fuente de ventas (T-16)', () => {
       factura: 'N/A',
       comentarios: null,
       lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
+      firma: FIRMA_DE_PRUEBA,
     });
 
     fuente.marcarSincronizada(v.id);
@@ -114,10 +119,42 @@ describe('fuente de ventas (T-16)', () => {
       factura: 'N/A',
       comentarios: null,
       lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
+      firma: FIRMA_DE_PRUEBA,
     });
 
     fuente.marcarError(v.id, 'precio-no-asignado: el cliente no tiene precio');
     expect(fuente.pendientes().map((o) => o.clave)).toEqual([v.id]);
     expect(ventas.porId(v.id)?.sync_error).toBe('precio-no-asignado: el cliente no tiene precio');
+  });
+
+  it('una firma sin nombre viaja con nombre null', () => {
+    const { ventas, fuente } = montar();
+    ventas.registrar({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      numNota: '',
+      contadoCredito: 'contado',
+      factura: 'N/A',
+      comentarios: null,
+      lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
+      firma: FIRMA_DE_PRUEBA,
+    });
+    expect(fuente.pendientes()[0]?.datos.firma).toEqual({ nombre: null });
+  });
+
+  it('una venta anterior a la 016 (sin firma_local) no manda la clave: el servidor no espera imagen', () => {
+    const { deps, ventas, fuente } = montar();
+    const v = ventas.registrar({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      numNota: '',
+      contadoCredito: 'contado',
+      factura: 'N/A',
+      comentarios: null,
+      lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
+      firma: FIRMA_DE_PRUEBA,
+    });
+    deps.bd.runSync('update venta set firma_local = null where id = $id', { $id: v.id });
+    expect(fuente.pendientes()[0]?.datos).not.toHaveProperty('firma');
   });
 });

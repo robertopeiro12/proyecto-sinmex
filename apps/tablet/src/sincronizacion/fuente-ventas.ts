@@ -14,6 +14,7 @@ import type { FuenteOperaciones } from './motor';
  *   local de la tablet). El servidor rechaza un folio cuya fecha no coincide.
  * - **`cliente_id` y `folio`** van en el sobre, no en `datos` (contrato §6).
  * - **`datos`** no lleva monto ni status: los calcula el servidor.
+ * - **`firma`** (T-73): `{ nombre }` en toda venta con firma local; la imagen sube aparte (`fuenteFirmasVentas`).
  *
  * Las que el servidor rechazo siguen en la cola (D19): se vuelven a mandar en
  * la siguiente sincronizacion.
@@ -50,6 +51,9 @@ export function fuenteVentas(ventas: RepositorioVentas): FuenteOperaciones {
                 })),
               }
             : {}),
+          // T-73: presente = el servidor espera la imagen por el canal de fotos.
+          // Una venta anterior a la 016 no tiene firma_local y no la manda.
+          ...(v.firma_local !== null ? { firma: { nombre: v.firma_nombre } } : {}),
         };
 
         return {

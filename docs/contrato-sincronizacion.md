@@ -831,7 +831,7 @@ códigos HTTP. Así una imagen pesada o cortada nunca rechaza la operación a la
   esa clave (o la operación se rechazó: no dejó fila) o si la fila ya no existe (una venta eliminada en el portal);
   403 si es de otro vendedor; 409 si es de otro tipo, aún no está proyectada o es una venta que no espera firma
   ("Esa venta no espera firma."); 413 si pesa de más; 415 si no es un JPEG completo. Responde
-  `200 { clave, subida_en }` también la primera vez.
+  `200 { clave, subida_en }` también la primera vez. La tablet trata el **404 de la firma de una venta** como definitivo (la venta ya se aceptó, así que solo puede haberse eliminado en el portal) y deja de reintentarla; para las demás fotos un 404 sigue siendo temporal.
 - **Nombre del archivo (T-78):** `cliente-<cliente.id>.jpg`, `visita-<visita.id>.jpg`, `gasto-<gasto.id>.jpg` (T-30) y
   `venta-<venta_nota.id>-firma.jpg` (T-73), nunca la clave. Reenviar escribe el mismo nombre: un solo archivo. Los
   archivos de antes (`<clave>.jpg`) no se migran; el servidor siempre lee por `foto_archivo` / `firma_archivo`.

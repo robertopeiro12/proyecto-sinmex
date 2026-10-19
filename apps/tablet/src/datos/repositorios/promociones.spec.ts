@@ -1,4 +1,4 @@
-import { depsDePrueba, snapshotDePrueba } from '../pruebas-apoyo';
+import { depsDePrueba, FIRMA_DE_PRUEBA, snapshotDePrueba } from '../pruebas-apoyo';
 import type { SnapshotCatalogos } from './catalogos';
 import { crearRepositorioCatalogos } from './catalogos';
 import { crearRepositorioFolios } from './folios';
@@ -68,6 +68,7 @@ describe('repositorio de promociones (T-74)', () => {
       factura: 'N/A',
       comentarios: null,
       lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
+      firma: FIRMA_DE_PRUEBA,
     });
     expect(ids(promociones.aplicablesPara('cli-2'))).toEqual(['promo-general']);
   });

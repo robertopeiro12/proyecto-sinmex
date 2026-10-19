@@ -303,6 +303,20 @@ export interface Venta {
   /** Motivo con el que el servidor la rechazo, si `sync_estado = 'error'`. */
   sync_error: string | null;
   sincronizado_en: MomentoISO | null;
+  /**
+   * T-73: ruta local del JPG de la firma del cliente
+   * (`documentDirectory/firmas/firma-<id>.jpg`). `null` solo en ventas
+   * anteriores a la migracion 016: desde entonces la firma es obligatoria (D1).
+   */
+  firma_local: string | null;
+  /** Quien firmo; `null` si no lo dijo (D2). */
+  firma_nombre: string | null;
+  /** Cuando recibio la imagen el SERVIDOR. `null` = todavia no esta arriba ("firma por subir"). */
+  firma_subida_en: MomentoISO | null;
+  /** Ultimo motivo por el que la firma no subio. Se limpia al subir. */
+  firma_error: string | null;
+  /** `1` = no recuperable (la venta se elimino en el portal, 413, 415, archivo perdido): no se reintenta. */
+  firma_descartada: Booleano;
 }
 
 export interface VentaLinea {

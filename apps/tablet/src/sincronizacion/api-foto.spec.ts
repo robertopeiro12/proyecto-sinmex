@@ -159,6 +159,15 @@ describe('cliente de la foto del prospecto', () => {
       expect(error).toBeInstanceOf(FotoTemporalError);
       expect(error.message).toContain('500');
     });
+
+    it('el error temporal lleva el codigo HTTP: cada fuente decide si para ella es definitivo (T-73)', async () => {
+      const { cliente } = montar(jsonNest(404, 'Esa venta ya no existe.'));
+
+      const error = await cliente.subir('token-vivo', CLAVE, URI).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(FotoTemporalError);
+      expect((error as FotoTemporalError).status).toBe(404);
+    });
   });
 
   describe('lo que no es de esta foto sino del canal', () => {

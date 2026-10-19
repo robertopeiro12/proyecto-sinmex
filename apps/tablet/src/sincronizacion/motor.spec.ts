@@ -1035,6 +1035,57 @@ describe('motor de sincronizacion', () => {
 
         expect(escenario.fotos).toHaveLength(1);
       });
+
+      describe('una falla que la fuente declara definitiva (T-73, Review Focus 5)', () => {
+        /** Una cola de una sola firma que recuerda que se hizo con ella. */
+        function fuenteDeUnaFirma() {
+          const registro = { descartadas: [] as string[], anotadas: [] as string[] };
+          const fuente: FuenteFotos = {
+            tipo: 'venta',
+            pendientes: () =>
+              registro.descartadas.length === 0
+                ? [{ clave: 'venta-1', uri: 'file:///documentos/firmas/firma-venta-1.jpg' }]
+                : [],
+            marcarSubida: jest.fn(),
+            anotarError: (clave) => {
+              registro.anotadas.push(clave);
+            },
+            descartar: (clave) => {
+              registro.descartadas.push(clave);
+            },
+            fallaDefinitiva: (_clave, status) => status === 404,
+          };
+          return { fuente, registro };
+        }
+
+        it('un 404 de una firma (la venta se elimino en el portal) se descarta y no se reintenta', async () => {
+          const { fuente, registro } = fuenteDeUnaFirma();
+          const { motor, escenario } = montar({
+            fotos: () => fuente,
+            subirFoto: () => Promise.reject(new FotoTemporalError('Esa venta ya no existe.', 404)),
+          });
+
+          const r = await motor.sincronizar();
+          expect(registro).toEqual({ descartadas: ['venta-1'], anotadas: [] });
+          expect(r.fotos).toMatchObject({ descartadas: 1, pendientes: 0 });
+
+          await motor.sincronizar();
+          expect(escenario.fotos).toHaveLength(1);
+        });
+
+        it('un 409 de la misma firma sigue siendo temporal', async () => {
+          const { fuente, registro } = fuenteDeUnaFirma();
+          const { motor } = montar({
+            fotos: () => fuente,
+            subirFoto: () =>
+              Promise.reject(new FotoTemporalError('Esa venta todavia no esta proyectada.', 409)),
+          });
+
+          const r = await motor.sincronizar();
+          expect(registro).toEqual({ descartadas: [], anotadas: ['venta-1'] });
+          expect(r.fotos).toMatchObject({ descartadas: 0, pendientes: 1 });
+        });
+      });
     });
 
     describe('una foto no arrastra a las demas', () => {

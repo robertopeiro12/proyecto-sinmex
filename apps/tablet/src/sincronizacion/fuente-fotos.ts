@@ -1,5 +1,6 @@
 import type { RepositorioProspectos } from '@/datos/repositorios/prospectos';
 import type { RepositorioGastos } from '@/datos/repositorios/gastos';
+import type { RepositorioVentas } from '@/datos/repositorios/ventas';
 import type { RepositorioVisitas } from '@/datos/repositorios/visitas';
 import type { MomentoISO } from '@/datos/tipos';
 
@@ -26,6 +27,12 @@ export interface FuenteFotos {
   anotarError(clave: string, motivo: string): void;
   /** Fallo permanente: se deja de reintentar. */
   descartar(clave: string, motivo: string): void;
+  /**
+   * Opcional (T-73): ¿este fallo TEMPORAL es definitivo para esta fuente? El
+   * motor descarta en vez de anotar si responde `true`. Sin el metodo, todo
+   * fallo temporal se reintenta (prospectos, visitas, gastos).
+   */
+  fallaDefinitiva?(clave: string, status: number): boolean;
 }
 
 export interface FotoPorSubir {
@@ -35,7 +42,7 @@ export interface FotoPorSubir {
    *
    * No es un identificador nuevo, y ahi esta toda la idempotencia de la foto: el
    * servidor nombra el archivo por ese id (`cliente-<id>.jpg`, `visita-<id>.jpg`,
-   * `gasto-<id>.jpg` en T-30/T-31,
+   * `gasto-<id>.jpg` en T-30/T-31, y la firma de la venta (`venta-<id de la nota>-firma.jpg`, T-73)
    * T-78), asi que **reenviar escribe el mismo nombre** y no hay duplicados posibles. Sin contador, sin tabla de control.
    */
   clave: string;
@@ -112,6 +119,32 @@ export function fuenteFotosGastos(gastos: RepositorioGastos): FuenteFotos {
 }
 
 /**
+ * Las firmas del cliente de las ventas (T-73). Obligatorias desde la 016: toda
+ * venta nueva trae una. `firmasPendientes()` ya exige `sync_estado =
+ * 'sincronizado'`: antes de que el servidor acepte la venta no existe la nota a
+ * la que la firma pertenece.
+ *
+ * A diferencia de las otras fuentes, **un 404 es definitivo**: la venta ya fue
+ * aceptada (si no, no estaria en la cola), asi que un 404 solo puede ser que la
+ * oficina la elimino en el portal. Reintentarlo seria para siempre (Review
+ * Focus 5).
+ */
+export function fuenteFirmasVentas(ventas: RepositorioVentas): FuenteFotos {
+  return {
+    tipo: 'venta',
+    pendientes(): FotoPorSubir[] {
+      return ventas
+        .firmasPendientes()
+        .flatMap((v) => (v.firma_local === null ? [] : [{ clave: v.id, uri: v.firma_local }]));
+    },
+    marcarSubida: (clave, subidaEn) => ventas.marcarFirmaSubida(clave, subidaEn),
+    anotarError: (clave, motivo) => ventas.anotarErrorFirma(clave, motivo),
+    descartar: (clave, motivo) => ventas.descartarFirma(clave, motivo),
+    fallaDefinitiva: (_clave, status) => status === 404,
+  };
+}
+
+/**
  * Varias fuentes de fotos vistas como una sola (T-39): el motor sigue hablando
  * con UNA `FuenteFotos` y no cambia. `pendientes()` las concatena en el orden
  * recibido y recuerda de quien es cada clave, para que `marcarSubida`,
@@ -142,5 +175,6 @@ export function combinarFuentesFotos(fuentes: readonly FuenteFotos[]): FuenteFot
     marcarSubida: (clave, subidaEn) => duenaDe(clave).marcarSubida(clave, subidaEn),
     anotarError: (clave, motivo) => duenaDe(clave).anotarError(clave, motivo),
     descartar: (clave, motivo) => duenaDe(clave).descartar(clave, motivo),
+    fallaDefinitiva: (clave, status) => duenaDe(clave).fallaDefinitiva?.(clave, status) ?? false,
   };
 }

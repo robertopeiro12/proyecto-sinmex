@@ -210,6 +210,7 @@ export default function PantallaVenta() {
             cantidad: r.cantidad,
             texto: r.texto,
           })),
+        firma: { uri: '', nombre: null }, // T-73: la pone la Tarea 7
       });
       setProblemas([]);
       setGrabada(venta);
