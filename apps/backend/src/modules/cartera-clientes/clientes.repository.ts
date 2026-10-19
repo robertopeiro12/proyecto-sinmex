@@ -547,6 +547,62 @@ export class ClientesRepository {
     return (await this.obtener(id))!;
   }
 
+  /**
+   * Lo minimo para geocodificar (T-72): domicilio, si ya tiene coordenada y de
+   * que sucursal es (para el alcance del portal). `undefined` si no existe o
+   * esta dado de baja.
+   */
+  async ubicacionDe(
+    id: string,
+  ): Promise<
+    | { domicilio: string | null; lat: number | null; sucursalCodigo: string }
+    | undefined
+  > {
+    const fila = await this.db
+      .selectFrom('cliente')
+      .innerJoin('sucursal', 'sucursal.id', 'cliente.sucursal_id')
+      .select(['cliente.domicilio', 'cliente.lat', 'sucursal.codigo'])
+      .where('cliente.id', '=', id)
+      .where('cliente.deleted_at', 'is', null)
+      .executeTakeFirst();
+    if (!fila) return undefined;
+    return {
+      domicilio: fila.domicilio,
+      lat: aNumero(fila.lat),
+      sucursalCodigo: fila.codigo,
+    };
+  }
+
+  /**
+   * Anota la coordenada que dio Google (T-72, D5). Devuelve `false` si no
+   * escribio nada.
+   *
+   * - `where lat is null`: si la oficina capturo una coordenada mientras Google
+   *   respondia, gana la de la oficina. Es la unica proteccion contra esa
+   *   carrera, y por eso vive en el `where` y no en una lectura previa.
+   * - `updated_at = now()` explicito (el trigger tambien lo haria): es lo que
+   *   hace que la coordenada baje sola en el siguiente pull incremental.
+   */
+  async guardarGeocodificada(
+    id: string,
+    lat: number,
+    lng: number,
+  ): Promise<boolean> {
+    const res = await this.db
+      .updateTable('cliente')
+      .set({
+        lat: lat.toString(),
+        lng: lng.toString(),
+        ubicacion_origen: 'geocodificada',
+        updated_at: sql<Date>`now()`,
+      })
+      .where('id', '=', id)
+      .where('lat', 'is', null)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    return Number(res.numUpdatedRows) > 0;
+  }
+
   /** Delegado al helper compartido (D9 del plan, Task 2). */
   async buscarSucursalUsuario(
     usuarioId: string,
