@@ -1,4 +1,4 @@
-import { apiFetch } from "./api";
+import { apiFetch, apiFetchBlob } from "./api";
 
 // Copia normativa de las formas de
 // apps/backend/src/modules/ventas-cobranza/ventas-portal.service.ts
@@ -175,6 +175,15 @@ export interface CobroDeVenta {
   peticionPendiente: boolean;
 }
 
+/** La firma del cliente en la nota (T-73). */
+export interface FirmaDeVenta {
+  /** La tablet la mandó con firma: la imagen llega (o llegó) al sincronizar. */
+  esperada: boolean;
+  nombre: string | null;
+  /** Cuándo llegó la imagen, en ISO; `null` = todavía no (o no se espera). */
+  subidaEn: string | null;
+}
+
 export interface VentaDetalle {
   id: string;
   folio: string;
@@ -202,6 +211,10 @@ export interface VentaDetalle {
   editable: boolean;
   motivoNoEditable: string | null;
   puedeMarcarPerdida: boolean;
+  /** T-73. */
+  firma: FirmaDeVenta;
+  /** T-73: el portal tocó la nota después de grabarse. */
+  editada: boolean;
 }
 
 /** El cuerpo de `PATCH /ventas/:id`: el estado completo de lo editable, sin precios. */
@@ -218,6 +231,11 @@ export function buscarVentas(filtro: FiltroVentas): Promise<ResultadoBusquedaVen
 
 export function obtenerVenta(id: string): Promise<VentaDetalle> {
   return apiFetch<VentaDetalle>(`/ventas/${encodeURIComponent(id)}`);
+}
+
+/** La imagen de la firma (T-73). Con `fetch` y no con `<img src>`: ver `FotoProspecto`. */
+export function descargarFirmaVenta(id: string): Promise<Blob> {
+  return apiFetchBlob(`/ventas/${encodeURIComponent(id)}/firma`);
 }
 
 export function editarVenta(id: string, cambios: CambiosVenta): Promise<VentaDetalle> {
