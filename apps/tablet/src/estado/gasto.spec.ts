@@ -2,8 +2,10 @@ import type { CampoEgreso } from '@/datos/tipos';
 
 import {
   camposParaGasto,
+  faltantesVisiblesGasto,
   montoACentavos,
   pastillaGasto,
+  puedeRegistrarGasto,
   TEXTO_METODO_GASTO,
   validarGasto,
   type EntradaGasto,
@@ -158,5 +160,40 @@ describe('pastillaGasto (D9)', () => {
       estado: 'error',
       detalle: 'El campo de egreso x no existe en el catálogo.',
     });
+  });
+});
+
+describe('faltantesVisiblesGasto (D9)', () => {
+  const vacia = entrada({ campo: null, monto: '', comentario: '' });
+
+  it('al abrir el formulario vacio no regaña', () => {
+    expect(faltantesVisiblesGasto(vacia, validarGasto(vacia))).toEqual([]);
+  });
+
+  it('en cuanto empieza a capturar (campo, monto u observaciones) lista lo que falta', () => {
+    for (const e of [
+      entrada({ monto: '' }),
+      entrada({ campo: null, monto: '12.345' }),
+      entrada({ campo: null, monto: '', comentario: 'hielo' }),
+    ]) {
+      expect(faltantesVisiblesGasto(e, validarGasto(e))).toEqual(validarGasto(e).faltantes);
+      expect(validarGasto(e).faltantes.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('completo no muestra nada', () => {
+    const e = entrada();
+    expect(faltantesVisiblesGasto(e, validarGasto(e))).toEqual([]);
+  });
+});
+
+describe('puedeRegistrarGasto (D9)', () => {
+  it('con catalogo y el dia abierto deja abrir el formulario', () => {
+    expect(puedeRegistrarGasto({ camposDisponibles: 3, diaCerrado: false })).toBe(true);
+  });
+
+  it('sin catalogo o con el dia cerrado no (como la entrada del menu)', () => {
+    expect(puedeRegistrarGasto({ camposDisponibles: 0, diaCerrado: false })).toBe(false);
+    expect(puedeRegistrarGasto({ camposDisponibles: 3, diaCerrado: true })).toBe(false);
   });
 });

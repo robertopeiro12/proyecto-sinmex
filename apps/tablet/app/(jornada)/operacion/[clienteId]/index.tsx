@@ -232,12 +232,13 @@ export default function FichaCliente() {
         />
       </View>
 
-      {/* Secundario: sigue aqui hasta que T-27/T-31 den a la entrada del menu una
-          pantalla real (hoy abre un "pendiente"); entonces se quita. */}
+      {/* Secundario: sigue aqui hasta que T-27 de a la entrada del menu una
+          pantalla real (hoy abre un "pendiente"); entonces se quita. El gasto ya
+          tiene su pantalla en el menu (T-30/T-31). */}
       {esProspecto ? null : (
         <View style={[estilos.rejilla, { marginTop: espacio.sm }]}>
           <BotonMenu
-            titulo="Merma, promoción, consumo y gasto"
+            titulo="Merma, promoción y consumo"
             descripcion="Registros de campo que afectan el inventario y el corte"
             destino={{ pathname: '/(jornada)/operacion/[clienteId]/registros', params }}
             deshabilitado={!menu.operacionesHabilitadas}

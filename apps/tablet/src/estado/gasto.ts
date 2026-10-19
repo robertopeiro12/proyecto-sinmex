@@ -83,6 +83,24 @@ export function validarGasto(e: EntradaGasto): ValidacionGasto {
   };
 }
 
+/**
+ * Lo que falta solo se lista cuando el vendedor ya empezo a capturar (campo,
+ * monto u observaciones): al abrir el formulario vacio no se le regaña.
+ */
+export function faltantesVisiblesGasto(e: EntradaGasto, v: ValidacionGasto): string[] {
+  const empezo = e.campo !== null || e.monto !== '' || e.comentario !== '';
+  return empezo ? v.faltantes : [];
+}
+
+/**
+ * Si "Gastos" deja abrir el formulario: hace falta al menos un campo con "Se usa
+ * en la app" y el dia abierto (con el dia cerrado la entrada del menu tambien
+ * queda deshabilitada, `estadoMenuJornada`).
+ */
+export function puedeRegistrarGasto(e: { camposDisponibles: number; diaCerrado: boolean }): boolean {
+  return e.camposDisponibles > 0 && !e.diaCerrado;
+}
+
 /** La pastilla de UN gasto en "Gastos de hoy". */
 export function pastillaGasto(
   g: Pick<Gasto, 'sync_estado' | 'sync_error'>,
