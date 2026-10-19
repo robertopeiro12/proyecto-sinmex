@@ -25,6 +25,10 @@ import {
   type SaldoFijado,
   type VistaTesoreria,
 } from './reglas-saldo';
+import { CobranzaTesoreriaRepository } from './cobranza-tesoreria.repository';
+import { DestinosRepository } from './destinos.repository';
+import { MovimientosRepository } from './movimientos.repository';
+import { METODOS_COBRANZA, destinoDe } from './reglas-destino';
 import { TesoreriaRepository } from './tesoreria.repository';
 
 const MENSAJE_DUPLICADA = 'Ya existe una cuenta con ese nombre.';
@@ -63,9 +67,19 @@ interface UsuarioSucursal {
 
 @Injectable()
 export class TesoreriaService {
-  constructor(private readonly repo: TesoreriaRepository) {}
+  constructor(
+    private readonly repo: TesoreriaRepository,
+    private readonly destinos: DestinosRepository,
+    private readonly movimientos: MovimientosRepository,
+    private readonly cobranza: CobranzaTesoreriaRepository,
+  ) {}
 
-  /** La vista (spec §4): saldo al inicio y al final por cuenta, total y eventos del rango. */
+  /**
+   * La vista: saldo al inicio y al final por cuenta, entradas y salidas del rango,
+   * total, cobranza sin cuenta y eventos (spec §4.2). La cobranza se lee de TODAS
+   * las sucursales: una cuenta general puede recibir la de varias. `sinCuenta` solo
+   * reporta las sucursales en alcance.
+   */
   async vista(
     usuarioId: string,
     q: VistaTesoreriaDto,
@@ -76,14 +90,21 @@ export class TesoreriaService {
       usuarioId,
       normalizarSucursalPedida(q.sucursal),
     );
-    const cuentas = await this.repo.listarCuentas(
-      alcance.tipo === 'todas' ? null : alcance.codigo,
-    );
-    const saldos = await this.repo.saldosDeCuentas(
-      cuentas.map((c) => c.id),
-      q.hasta,
-    );
-    return armarVista(q.desde, q.hasta, cuentas, saldos);
+    const codigo = alcance.tipo === 'todas' ? null : alcance.codigo;
+    const cuentas = await this.repo.listarCuentas(codigo);
+    const ids = cuentas.map((c) => c.id);
+    const [saldos, manuales, cobranza, destinos] = await Promise.all([
+      this.repo.saldosDeCuentas(ids, q.hasta),
+      this.movimientos.listar(ids, null, q.hasta),
+      this.cobranza.porDia(q.hasta),
+      this.destinos.listar(null),
+    ]);
+    return armarVista(q.desde, q.hasta, cuentas, saldos, {
+      manuales,
+      cobranza,
+      destinos,
+      sucursalesEnAlcance: codigo === null ? null : [codigo],
+    });
   }
 
   async listarCuentas(
@@ -137,6 +158,22 @@ export class TesoreriaService {
 
   async eliminarCuenta(usuarioId: string, id: string): Promise<void> {
     await this.cuentaModificable(usuarioId, id);
+    // No se elimina la cuenta que HOY recibe la cobranza de alguna sucursal:
+    // el dinero quedaria sin cuenta (spec §3.3). Si solo fue destino en el
+    // pasado, si se puede.
+    const destinos = await this.destinos.listar(null);
+    const hoy = await this.repo.hoyEnTijuana();
+    const sucursales = [...new Set(destinos.map((d) => d.sucursalId))];
+    for (const sucursalId of sucursales) {
+      for (const metodo of METODOS_COBRANZA) {
+        const vigente = destinoDe(sucursalId, metodo, hoy, destinos);
+        if (vigente?.cuentaId === id) {
+          throw new ConflictException(
+            `Esta cuenta recibe la cobranza de ${vigente.sucursalCodigo} (${metodo}). Cambia ese destino antes de eliminarla.`,
+          );
+        }
+      }
+    }
     await this.repo.eliminarCuenta(id);
   }
 
@@ -229,6 +266,28 @@ export class TesoreriaService {
   }
 
   /**
+   * La cuenta viva que el usuario VE (T-29, movimientos): la de su sucursal o una
+   * general; un General, cualquiera. Otra sucursal o borrada -> 404. A diferencia
+   * de `cuentaModificable`, una general SI pasa para un usuario atado.
+   */
+  async cuentaVisible(
+    usuarioId: string,
+    cuentaId: string,
+  ): Promise<CuentaEnAlcance> {
+    const usuario = await this.usuario(usuarioId);
+    const cuenta = await this.repo.buscarCuenta(cuentaId);
+    if (!cuenta) throw new NotFoundException('No existe esa cuenta.');
+    if (
+      usuario.id !== null &&
+      cuenta.sucursalId !== null &&
+      cuenta.sucursalId !== usuario.id
+    ) {
+      throw new NotFoundException('No existe esa cuenta.');
+    }
+    return cuenta;
+  }
+
+  /**
    * La cuenta viva que el usuario puede MODIFICAR (spec §3.2):
    *   - no existe / dada de baja / de otra sucursal -> 404 (no se revela)
    *   - general y el usuario esta atado a una sucursal -> 403
@@ -249,7 +308,7 @@ export class TesoreriaService {
     return cuenta;
   }
 
-  protected async usuario(usuarioId: string): Promise<UsuarioSucursal> {
+  async usuario(usuarioId: string): Promise<UsuarioSucursal> {
     // El guard valido la FIRMA del token, no que el usuario siga existiendo.
     const fila = await this.repo.buscarSucursalUsuario(usuarioId);
     if (!fila) throw new UnauthorizedException('Sesion invalida.');

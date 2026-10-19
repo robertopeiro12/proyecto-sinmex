@@ -371,8 +371,8 @@ usuario con sesion pasa.
     no tienen espejo local: salen en "Prospectos de hoy" sin enlace. La foto se liga por id (`fotoLocalDe`, con respaldo
     por nombre + teléfono). e2e: `apps/backend/test/prospecto-venta.e2e-spec.ts`.
 
-- **Tesorería (T-28).** *Finanzas → Tesorería* (`/finanzas/tesoreria`), backend en `modules/tesoreria/`
-  (`/tesoreria`). Permisos: `tesoreria.ver` (la vista) y `tesoreria.gestionar` (cuentas y saldos). Spec:
+- **Tesorería (T-28 / T-29).** *Finanzas → Tesorería* (`/finanzas/tesoreria`), backend en `modules/tesoreria/`
+  (`/tesoreria`). Permisos: `tesoreria.ver` (la vista) y `tesoreria.gestionar` (cuentas, saldos, movimientos y destinos de la cobranza). Spec:
   `docs/superpowers/specs/2026-10-15-t28-tesoreria-cuentas-saldo-inicial-design.md`.
   - **Dos "tesorerías":** la del repartidor (`Cobranza − Gastos`) se cuenta **en persona** y no es de aquí; esto
     son las **cuentas del negocio** (Efectivo, Caja Chica, bancos) que pidió el cliente.
@@ -386,6 +386,18 @@ usuario con sesion pasa.
     `null` ("Sin saldo inicial"), nunca 0. El final de D no es "el inicio de D+1". T-29 agrega movimientos
     (depósitos, retiros, traspasos, cobranza) alimentando `movimientos`, sin tocar la firma.
   - Montos en **centavos enteros con signo** en la API (pueden ser negativos: sobregiro).
+  - **Movimientos (T-29):** `tesoreria_movimiento` — depósito, retiro y traspaso (de una cuenta a otra), monto
+    positivo (el tipo da el signo), sin fechas futuras; se corrigen (no el tipo) y se eliminan con baja lógica. Las
+    cuentas tienen que ser **visibles**: un usuario atado puede usar una **general** en un movimiento (llevar el
+    efectivo al banco), pero dar de alta/renombrar/eliminar una general y fijarle saldo sigue siendo de un General.
+  - **La cobranza NO se copia a Tesorería: se lee al consultar** (`tesoreria/cobranza-tesoreria.repository.ts`):
+    `cobro` vivo de origen `cobro` (sucursal del cliente) + abonos vivos `venta_contado` de ventas vivas (sucursal
+    de la venta), por `fecha_pago` y método; **nunca** `saldo_favor`. Un cobro borrado (T-34) o una venta
+    editada/eliminada (T-17) se corrigen solos.
+  - **Destinos** (`tesoreria_destino_cobranza`): sucursal + método → cuenta, con vigencia `desde`; se usa la más
+    reciente ≤ fecha del pago. Sin destino, el dinero no suma a ninguna cuenta y sale en `sinCuenta`. No se elimina
+    la cuenta que **hoy** recibe cobranza (409).
+  - Las compras (T-30/T-31) entrarán igual: otra fuente más del arreglo `movimientos` de `reglas-saldo.ts`.
 
 - **Visita sin venta (T-39).** El vendedor deja constancia, sin red, de por qué un cliente no compró: motivo del
   catálogo, hora, quién atendió, ubicación (GPS o dirección escrita) y foto si el motivo la exige. Spec:

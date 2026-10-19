@@ -1,4 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
+import type { CobranzaTesoreriaRepository } from './cobranza-tesoreria.repository';
+import type { MovimientosRepository } from './movimientos.repository';
+import type { DestinosRepository } from './destinos.repository';
 import type { CuentaEnAlcance } from './reglas-saldo';
 import type { TesoreriaRepository } from './tesoreria.repository';
 import { TesoreriaService } from './tesoreria.service';
@@ -18,7 +21,14 @@ function armar(repo: Partial<Record<keyof TesoreriaRepository, jest.Mock>>) {
     buscarCuenta: jest.fn().mockResolvedValue(CUENTA),
     ...repo,
   };
-  return new TesoreriaService(base as unknown as TesoreriaRepository);
+  return new TesoreriaService(
+    base as unknown as TesoreriaRepository,
+    {
+      listar: jest.fn().mockResolvedValue([]),
+    } as unknown as DestinosRepository,
+    {} as unknown as MovimientosRepository,
+    {} as unknown as CobranzaTesoreriaRepository,
+  );
 }
 
 describe('TesoreriaService: cuenta borrada en medio', () => {

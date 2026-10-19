@@ -12,6 +12,13 @@
 /** ±999,999,999,999.99: lo que cabe en `numeric(14,2)`. */
 export const MAX_CENTAVOS_TESORERIA = 99_999_999_999_999;
 
+import {
+  destinoDe,
+  type CobranzaDia,
+  type DestinoCobranza,
+  type MetodoCobranza,
+} from './reglas-destino';
+
 export type Momento = 'inicio' | 'final';
 
 export interface BaseSaldo {
@@ -51,19 +58,73 @@ export interface CuentaEnVista {
   sucursalCodigo: string | null;
   saldoInicioCentavos: number | null;
   saldoFinalCentavos: number | null;
+  /** Movimientos del rango que cuentan para el final (desde el saldo fijado que usa). */
+  entradasCentavos: number;
+  salidasCentavos: number;
+  /** Fecha del saldo fijado que usa el final si cae en (desde, hasta]; si no, null. */
+  saldoFijadoEnRango: string | null;
 }
 
-export interface EventoTesoreria {
-  /** T-29 agregara 'deposito', 'retiro', 'traspaso'… sin cambiar la forma. */
-  tipo: 'saldo-fijado';
+export type TipoMovimiento = 'deposito' | 'retiro' | 'traspaso';
+
+export interface MovimientoManual {
   id: string;
+  tipo: TipoMovimiento;
   fecha: string;
+  /** Siempre positivo: el tipo dice si suma o resta. */
+  montoCentavos: number;
   cuentaId: string;
   cuentaNombre: string;
-  montoCentavos: number;
+  cuentaDestinoId: string | null;
+  cuentaDestinoNombre: string | null;
   comentario: string | null;
   capturo: string;
 }
+
+export type EventoTesoreria =
+  | {
+      tipo: 'saldo-fijado';
+      id: string;
+      fecha: string;
+      cuentaId: string;
+      cuentaNombre: string;
+      montoCentavos: number;
+      comentario: string | null;
+      capturo: string;
+    }
+  | {
+      tipo: 'deposito' | 'retiro';
+      id: string;
+      fecha: string;
+      cuentaId: string;
+      cuentaNombre: string;
+      montoCentavos: number;
+      comentario: string | null;
+      capturo: string;
+    }
+  | {
+      tipo: 'traspaso';
+      id: string;
+      fecha: string;
+      cuentaId: string;
+      cuentaNombre: string;
+      cuentaDestinoId: string;
+      cuentaDestinoNombre: string;
+      montoCentavos: number;
+      comentario: string | null;
+      capturo: string;
+    }
+  | {
+      tipo: 'cobranza';
+      id: string;
+      fecha: string;
+      cuentaId: string;
+      cuentaNombre: string;
+      sucursalCodigo: string;
+      metodo: MetodoCobranza;
+      cantidad: number;
+      montoCentavos: number;
+    };
 
 export interface VistaTesoreria {
   desde: string;
@@ -75,8 +136,24 @@ export interface VistaTesoreria {
     cuentasConSaldoInicio: number;
     cuentasConSaldoFinal: number;
     cuentas: number;
+    entradasCentavos: number;
+    salidasCentavos: number;
   };
+  /** Cobranza del rango sin cuenta destino, de las sucursales en alcance. */
+  sinCuenta: {
+    sucursalCodigo: string;
+    metodo: MetodoCobranza;
+    montoCentavos: number;
+  }[];
   eventos: EventoTesoreria[];
+}
+
+export interface ExtrasVista {
+  manuales?: MovimientoManual[];
+  cobranza?: CobranzaDia[];
+  destinos?: DestinoCobranza[];
+  /** Codigos de sucursal cuya cobranza sin destino se reporta; null/ausente = todas. */
+  sucursalesEnAlcance?: string[] | null;
 }
 
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
@@ -119,6 +196,71 @@ export function saldoDeCuenta(
   return total;
 }
 
+/**
+ * Convierte movimientos manuales y cobranza en el arreglo que `saldoDeCuenta`
+ * suma (spec §3.4): deposito +, retiro −, traspaso − en la de salida y + en la
+ * de entrada, cobranza + en la cuenta destino vigente en su fecha.
+ */
+export function movimientosDeSaldo(
+  manuales: MovimientoManual[],
+  cobranza: CobranzaDia[],
+  destinos: DestinoCobranza[],
+): { movimientos: MovimientoSaldo[]; sinDestino: CobranzaDia[] } {
+  const movimientos: MovimientoSaldo[] = [];
+  for (const m of manuales) {
+    if (m.tipo === 'deposito') {
+      movimientos.push({
+        cuentaId: m.cuentaId,
+        fecha: m.fecha,
+        montoCentavos: m.montoCentavos,
+      });
+    } else if (m.tipo === 'retiro') {
+      movimientos.push({
+        cuentaId: m.cuentaId,
+        fecha: m.fecha,
+        montoCentavos: -m.montoCentavos,
+      });
+    } else if (m.cuentaDestinoId !== null) {
+      movimientos.push({
+        cuentaId: m.cuentaId,
+        fecha: m.fecha,
+        montoCentavos: -m.montoCentavos,
+      });
+      movimientos.push({
+        cuentaId: m.cuentaDestinoId,
+        fecha: m.fecha,
+        montoCentavos: m.montoCentavos,
+      });
+    }
+  }
+  const sinDestino: CobranzaDia[] = [];
+  for (const c of cobranza) {
+    const d = destinoDe(c.sucursalId, c.metodo, c.fecha, destinos);
+    if (d === null) sinDestino.push(c);
+    else
+      movimientos.push({
+        cuentaId: d.cuentaId,
+        fecha: c.fecha,
+        montoCentavos: c.montoCentavos,
+      });
+  }
+  return { movimientos, sinDestino };
+}
+
+/** El saldo fijado mas reciente con fecha <= `fecha` (la base del calculo), o null. */
+function baseDe(
+  cuentaId: string,
+  fecha: string,
+  saldos: BaseSaldo[],
+): BaseSaldo | null {
+  let base: BaseSaldo | null = null;
+  for (const s of saldos) {
+    if (s.cuentaId !== cuentaId || s.fecha > fecha) continue;
+    if (base === null || s.fecha > base.fecha) base = s;
+  }
+  return base;
+}
+
 /** Generales primero; luego por codigo de sucursal y nombre (sin mayusculas). */
 export function ordenarCuentas<
   T extends { nombre: string; sucursalCodigo: string | null },
@@ -135,34 +277,60 @@ export function ordenarCuentas<
 
 /**
  * La vista de `GET /tesoreria`. `saldos` son los fijados vivos de las cuentas en
- * alcance con fecha <= `hasta` (el repositorio ya filtro).
+ * alcance con fecha <= `hasta`; `extras` trae los movimientos manuales, la
+ * cobranza agrupada y los destinos (T-29). Sin `extras` se comporta como T-28.
  */
 export function armarVista(
   desde: string,
   hasta: string,
   cuentas: CuentaEnAlcance[],
   saldos: SaldoFijado[],
+  extras: ExtrasVista = {},
 ): VistaTesoreria {
-  const movimientos: MovimientoSaldo[] = [];
-  const filas: CuentaEnVista[] = ordenarCuentas(cuentas).map((c) => ({
-    id: c.id,
-    nombre: c.nombre,
-    sucursalCodigo: c.sucursalCodigo,
-    saldoInicioCentavos: saldoDeCuenta(
-      c.id,
-      desde,
-      'inicio',
-      saldos,
-      movimientos,
-    ),
-    saldoFinalCentavos: saldoDeCuenta(
-      c.id,
-      hasta,
-      'final',
-      saldos,
-      movimientos,
-    ),
-  }));
+  const manuales = extras.manuales ?? [];
+  const cobranza = extras.cobranza ?? [];
+  const destinos = extras.destinos ?? [];
+  const { movimientos, sinDestino } = movimientosDeSaldo(
+    manuales,
+    cobranza,
+    destinos,
+  );
+
+  const filas: CuentaEnVista[] = ordenarCuentas(cuentas).map((c) => {
+    const baseFinal = baseDe(c.id, hasta, saldos);
+    const corte =
+      baseFinal && baseFinal.fecha > desde ? baseFinal.fecha : desde;
+    let entradas = 0;
+    let salidas = 0;
+    for (const m of movimientos) {
+      if (m.cuentaId !== c.id || m.fecha < corte || m.fecha > hasta) continue;
+      if (m.montoCentavos >= 0) entradas += m.montoCentavos;
+      else salidas += -m.montoCentavos;
+    }
+    return {
+      id: c.id,
+      nombre: c.nombre,
+      sucursalCodigo: c.sucursalCodigo,
+      saldoInicioCentavos: saldoDeCuenta(
+        c.id,
+        desde,
+        'inicio',
+        saldos,
+        movimientos,
+      ),
+      saldoFinalCentavos: saldoDeCuenta(
+        c.id,
+        hasta,
+        'final',
+        saldos,
+        movimientos,
+      ),
+      entradasCentavos: entradas,
+      salidasCentavos: salidas,
+      saldoFijadoEnRango:
+        baseFinal && baseFinal.fecha > desde ? baseFinal.fecha : null,
+    };
+  });
 
   const total = {
     saldoInicioCentavos: 0,
@@ -170,6 +338,8 @@ export function armarVista(
     cuentasConSaldoInicio: 0,
     cuentasConSaldoFinal: 0,
     cuentas: filas.length,
+    entradasCentavos: 0,
+    salidasCentavos: 0,
   };
   for (const f of filas) {
     if (f.saldoInicioCentavos !== null) {
@@ -180,18 +350,43 @@ export function armarVista(
       total.saldoFinalCentavos += f.saldoFinalCentavos;
       total.cuentasConSaldoFinal += 1;
     }
+    total.entradasCentavos += f.entradasCentavos;
+    total.salidasCentavos += f.salidasCentavos;
   }
 
-  const eventos: EventoTesoreria[] = saldos
-    .filter((s) => s.fecha >= desde && s.fecha <= hasta)
-    .sort(
-      (a, b) =>
-        a.fecha.localeCompare(b.fecha) ||
-        a.cuentaNombre.localeCompare(b.cuentaNombre, 'es', {
-          sensitivity: 'base',
-        }),
+  const enRango = (fecha: string) => fecha >= desde && fecha <= hasta;
+  const visibles = new Set(cuentas.map((c) => c.id));
+
+  const sinCuentaMapa = new Map<
+    string,
+    { sucursalCodigo: string; metodo: MetodoCobranza; montoCentavos: number }
+  >();
+  for (const c of sinDestino) {
+    if (!enRango(c.fecha)) continue;
+    if (
+      extras.sucursalesEnAlcance &&
+      !extras.sucursalesEnAlcance.includes(c.sucursalCodigo)
     )
-    .map((s) => ({
+      continue;
+    const clave = `${c.sucursalCodigo}:${c.metodo}`;
+    const actual = sinCuentaMapa.get(clave) ?? {
+      sucursalCodigo: c.sucursalCodigo,
+      metodo: c.metodo,
+      montoCentavos: 0,
+    };
+    actual.montoCentavos += c.montoCentavos;
+    sinCuentaMapa.set(clave, actual);
+  }
+  const sinCuenta = [...sinCuentaMapa.values()].sort(
+    (a, b) =>
+      a.sucursalCodigo.localeCompare(b.sucursalCodigo) ||
+      a.metodo.localeCompare(b.metodo),
+  );
+
+  const eventos: EventoTesoreria[] = [];
+  for (const s of saldos) {
+    if (!enRango(s.fecha)) continue;
+    eventos.push({
       tipo: 'saldo-fijado',
       id: s.id,
       fecha: s.fecha,
@@ -200,7 +395,70 @@ export function armarVista(
       montoCentavos: s.montoCentavos,
       comentario: s.comentario,
       capturo: s.capturo,
-    }));
+    });
+  }
+  for (const m of manuales) {
+    if (!enRango(m.fecha)) continue;
+    // Un traspaso se ve si cualquiera de sus dos cuentas esta en alcance (spec §4.2).
+    if (
+      !visibles.has(m.cuentaId) &&
+      !(m.cuentaDestinoId && visibles.has(m.cuentaDestinoId))
+    )
+      continue;
+    if (
+      m.tipo === 'traspaso' &&
+      m.cuentaDestinoId !== null &&
+      m.cuentaDestinoNombre !== null
+    ) {
+      eventos.push({
+        tipo: 'traspaso',
+        id: m.id,
+        fecha: m.fecha,
+        cuentaId: m.cuentaId,
+        cuentaNombre: m.cuentaNombre,
+        cuentaDestinoId: m.cuentaDestinoId,
+        cuentaDestinoNombre: m.cuentaDestinoNombre,
+        montoCentavos: m.montoCentavos,
+        comentario: m.comentario,
+        capturo: m.capturo,
+      });
+    } else if (m.tipo === 'deposito' || m.tipo === 'retiro') {
+      eventos.push({
+        tipo: m.tipo,
+        id: m.id,
+        fecha: m.fecha,
+        cuentaId: m.cuentaId,
+        cuentaNombre: m.cuentaNombre,
+        montoCentavos: m.montoCentavos,
+        comentario: m.comentario,
+        capturo: m.capturo,
+      });
+    }
+  }
+  for (const c of cobranza) {
+    if (!enRango(c.fecha)) continue;
+    const d = destinoDe(c.sucursalId, c.metodo, c.fecha, destinos);
+    if (d === null || !visibles.has(d.cuentaId)) continue;
+    eventos.push({
+      tipo: 'cobranza',
+      id: `cobranza:${c.fecha}:${d.cuentaId}:${c.sucursalId}:${c.metodo}`,
+      fecha: c.fecha,
+      cuentaId: d.cuentaId,
+      cuentaNombre: d.cuentaNombre,
+      sucursalCodigo: c.sucursalCodigo,
+      metodo: c.metodo,
+      cantidad: c.cantidad,
+      montoCentavos: c.montoCentavos,
+    });
+  }
+  eventos.sort(
+    (a, b) =>
+      a.fecha.localeCompare(b.fecha) ||
+      a.cuentaNombre.localeCompare(b.cuentaNombre, 'es', {
+        sensitivity: 'base',
+      }) ||
+      a.id.localeCompare(b.id),
+  );
 
-  return { desde, hasta, cuentas: filas, total, eventos };
+  return { desde, hasta, cuentas: filas, total, sinCuenta, eventos };
 }

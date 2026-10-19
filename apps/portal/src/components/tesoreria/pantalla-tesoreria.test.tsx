@@ -6,6 +6,7 @@ import { PantallaTesoreria } from "./pantalla-tesoreria";
 
 vi.mock("@/components/auth/auth-provider");
 vi.mock("./pestana-vista", () => ({ PestanaVista: () => <p>panel vista</p> }));
+vi.mock("./pestana-movimientos", () => ({ PestanaMovimientos: () => <p>panel movimientos</p> }));
 vi.mock("./pestana-cuentas", () => ({ PestanaCuentas: () => <p>panel cuentas</p> }));
 vi.mock("./pestana-saldos", () => ({ PestanaSaldos: () => <p>panel saldos</p> }));
 
@@ -24,7 +25,7 @@ describe("PantallaTesoreria", () => {
   it("con los dos permisos muestra las tres pestañas y abre en Tesorería", () => {
     sesion(["tesoreria.ver", "tesoreria.gestionar"]);
     render(<PantallaTesoreria sucursal={null} vistaInicial={null} />);
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Tesorería", "Cuentas", "Saldos"]);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Tesorería", "Movimientos", "Cuentas", "Saldos"]);
     expect(screen.getByText("panel vista")).toBeVisible();
   });
 
@@ -38,7 +39,7 @@ describe("PantallaTesoreria", () => {
   it("solo gestionar: Cuentas y Saldos, abre en la de la URL", () => {
     sesion(["tesoreria.gestionar"]);
     render(<PantallaTesoreria sucursal={null} vistaInicial="saldos" />);
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Cuentas", "Saldos"]);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Movimientos", "Cuentas", "Saldos"]);
     expect(screen.getByText("panel saldos")).toBeVisible();
   });
 

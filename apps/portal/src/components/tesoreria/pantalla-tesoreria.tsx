@@ -4,12 +4,14 @@ import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { PestanaCuentas } from "./pestana-cuentas";
+import { PestanaMovimientos } from "./pestana-movimientos";
 import { PestanaSaldos } from "./pestana-saldos";
 import { PestanaVista } from "./pestana-vista";
 
-type Pestana = "tesoreria" | "cuentas" | "saldos";
+type Pestana = "tesoreria" | "movimientos" | "cuentas" | "saldos";
 const TODAS: { clave: Pestana; texto: string; permiso: string }[] = [
   { clave: "tesoreria", texto: "Tesorería", permiso: "tesoreria.ver" },
+  { clave: "movimientos", texto: "Movimientos", permiso: "tesoreria.gestionar" },
   { clave: "cuentas", texto: "Cuentas", permiso: "tesoreria.gestionar" },
   { clave: "saldos", texto: "Saldos", permiso: "tesoreria.gestionar" },
 ];
@@ -81,6 +83,7 @@ export function PantallaTesoreria({
         {pestanas.map(({ clave }) => (
           <div key={clave} role="tabpanel" id={`panel-${clave}`} aria-labelledby={`pestana-${clave}`} hidden={actual !== clave}>
             {clave === "tesoreria" && <PestanaVista sucursal={sucursal} activa={actual === "tesoreria"} />}
+            {clave === "movimientos" && actual === clave && <PestanaMovimientos sucursal={sucursal} />}
             {clave === "cuentas" && actual === clave && <PestanaCuentas sucursal={sucursal} />}
             {clave === "saldos" && actual === clave && <PestanaSaldos sucursal={sucursal} />}
           </div>

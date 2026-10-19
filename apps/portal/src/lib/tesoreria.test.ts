@@ -2,11 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "./api";
 import {
   definicionExcelTesoreria,
+  describirEvento,
   diaAnterior,
   etiquetaSucursalCuenta,
+  guardarDestino,
   guardarSaldos,
+  listarMovimientos,
   leerMontoConSignoCentavos,
   obtenerTesoreria,
+  primerDiaDelMesDe,
   textoMontoConSigno,
   type VistaTesoreria,
 } from "./tesoreria";
@@ -74,17 +78,56 @@ describe("llamadas", () => {
   });
 });
 
+describe("describirEvento", () => {
+  const base = { id: "x", fecha: "2026-10-10", cuentaId: "a", cuentaNombre: "Efectivo TJ" };
+  it("arma concepto, cuenta y signo por tipo", () => {
+    expect(describirEvento({ ...base, tipo: "deposito", montoCentavos: 1, comentario: null, capturo: "Ana" })).toEqual({ concepto: "Depósito", cuenta: "Efectivo TJ", signo: 1 });
+    expect(describirEvento({ ...base, tipo: "retiro", montoCentavos: 1, comentario: null, capturo: "Ana" })).toEqual({ concepto: "Retiro", cuenta: "Efectivo TJ", signo: -1 });
+    expect(
+      describirEvento({ ...base, tipo: "traspaso", cuentaDestinoId: "b", cuentaDestinoNombre: "ScotiaFiscal", montoCentavos: 1, comentario: null, capturo: "Ana" }),
+    ).toEqual({ concepto: "Traspaso", cuenta: "Efectivo TJ → ScotiaFiscal", signo: 0 });
+    expect(
+      describirEvento({ ...base, tipo: "cobranza", sucursalCodigo: "TJ", metodo: "efectivo", cantidad: 12, montoCentavos: 1 }),
+    ).toEqual({ concepto: "Cobranza en efectivo · 12 cobros · TJ", cuenta: "Efectivo TJ", signo: 1 });
+    expect(
+      describirEvento({ ...base, tipo: "cobranza", sucursalCodigo: "MX", metodo: "cheque", cantidad: 1, montoCentavos: 1 }),
+    ).toEqual({ concepto: "Cobranza en cheque · 1 cobro · MX", cuenta: "Efectivo TJ", signo: 1 });
+    expect(describirEvento({ ...base, tipo: "saldo-fijado", montoCentavos: 1, comentario: null, capturo: "Ana" })).toEqual({ concepto: "Saldo fijado", cuenta: "Efectivo TJ", signo: 0 });
+  });
+});
+
+describe("primerDiaDelMesDe", () => {
+  it("devuelve el día 1 del mes", () => {
+    expect(primerDiaDelMesDe("2026-10-19")).toBe("2026-10-01");
+  });
+});
+
+describe("llamadas de movimientos y destinos", () => {
+  beforeEach(() => apiFetch.mockReset());
+  it("listarMovimientos arma la query; guardarDestino hace PUT", async () => {
+    apiFetch.mockResolvedValue([]);
+    await listarMovimientos({ desde: "2026-10-01", hasta: "2026-10-31", sucursal: null });
+    expect(apiFetch).toHaveBeenCalledWith("/tesoreria/movimientos?desde=2026-10-01&hasta=2026-10-31");
+    await guardarDestino({ sucursalId: "s", metodo: "efectivo", cuentaId: "a", desde: "2026-10-01" });
+    expect(apiFetch).toHaveBeenLastCalledWith("/tesoreria/destinos", {
+      method: "PUT",
+      body: JSON.stringify({ sucursalId: "s", metodo: "efectivo", cuentaId: "a", desde: "2026-10-01" }),
+    });
+  });
+});
+
 describe("definicionExcelTesoreria", () => {
   const vista: VistaTesoreria = {
     desde: "2026-10-05",
     hasta: "2026-10-12",
     cuentas: [
-      { id: "b", nombre: "ScotiaFiscal", sucursalCodigo: null, saldoInicioCentavos: null, saldoFinalCentavos: null },
-      { id: "a", nombre: "Efectivo TJ", sucursalCodigo: "TJ", saldoInicioCentavos: 1_000_000, saldoFinalCentavos: 950_000 },
+      { id: "a", nombre: "Efectivo TJ", sucursalCodigo: "TJ", saldoInicioCentavos: 1_000_000, saldoFinalCentavos: 950_000, entradasCentavos: 20_000, salidasCentavos: 70_000, saldoFijadoEnRango: null },
     ],
-    total: { saldoInicioCentavos: 1_000_000, saldoFinalCentavos: 950_000, cuentasConSaldoInicio: 1, cuentasConSaldoFinal: 1, cuentas: 2 },
+    total: { saldoInicioCentavos: 1_000_000, saldoFinalCentavos: 950_000, cuentasConSaldoInicio: 1, cuentasConSaldoFinal: 1, cuentas: 1, entradasCentavos: 20_000, salidasCentavos: 70_000 },
+    sinCuenta: [{ sucursalCodigo: "MX", metodo: "transferencia", montoCentavos: 325_000 }],
     eventos: [
-      { tipo: "saldo-fijado", id: "s", fecha: "2026-10-10", cuentaId: "a", cuentaNombre: "Efectivo TJ", montoCentavos: 950_000, comentario: "Arqueo", capturo: "Ana" },
+      { tipo: "cobranza", id: "c", fecha: "2026-10-06", cuentaId: "a", cuentaNombre: "Efectivo TJ", sucursalCodigo: "TJ", metodo: "efectivo", cantidad: 2, montoCentavos: 20_000 },
+      { tipo: "retiro", id: "r", fecha: "2026-10-07", cuentaId: "a", cuentaNombre: "Efectivo TJ", montoCentavos: 70_000, comentario: "Banco", capturo: "Ana" },
     ],
   };
 
@@ -97,26 +140,24 @@ describe("definicionExcelTesoreria", () => {
     expect(con({ cuentasConSaldoInicio: 2, cuentasConSaldoFinal: 2, cuentas: 2 })).toBe("2 cuentas");
   });
 
-  it("una hoja: cuentas, total y el bloque de saldos fijados", () => {
+  it("una hoja: cuentas con entradas y salidas, total, cobranza sin cuenta y movimientos", () => {
     const def = definicionExcelTesoreria(vista, { sucursal: "TJ" });
-    expect(def.titulo).toBe("Tesorería");
-    expect(def.nombreArchivo).toBe("tesoreria-2026-10-05-a-2026-10-12");
-    expect(def.filtros).toEqual([
-      ["Rango", "05/10/2026 a 12/10/2026"],
-      ["Sucursal", "TJ"],
+    expect(def.columnas.map((c) => c.encabezado)).toEqual([
+      "Cuenta", "Sucursal", "Saldo al inicio", "Entradas", "Salidas", "Saldo al final", "Comentario",
     ]);
-    expect(def.columnas.map((c) => c.encabezado)).toEqual(["Cuenta", "Sucursal", "Saldo al inicio", "Saldo al final", "Comentario"]);
     expect(def.filas).toEqual([
-      { celdas: ["ScotiaFiscal", "General", "Sin saldo inicial", "Sin saldo inicial", null] },
-      { celdas: ["Efectivo TJ", "TJ", 10000, 9500, null] },
-      { celdas: ["Total Tesorería", "1 de 2 con saldo", 10000, 9500, null], tipo: "total" },
-      { celdas: ["Saldos fijados en el rango", "Fecha", null, "Monto", "Comentario"], tipo: "grupo" },
-      { celdas: ["Efectivo TJ", "10/10/2026", null, 9500, "Arqueo · Capturó: Ana"] },
+      { celdas: ["Efectivo TJ", "TJ", 10000, 200, 700, 9500, null] },
+      { celdas: ["Total Tesorería", "1 cuentas", 10000, 200, 700, 9500, null], tipo: "total" },
+      { celdas: ["Cobranza sin cuenta asignada", null, null, null, null, null, null], tipo: "grupo" },
+      { celdas: ["MX · Transferencia", null, null, null, null, null, "$3,250.00 sin cuenta asignada"] },
+      { celdas: ["Movimientos del rango", "Fecha", "Concepto", "Entra", "Sale", null, "Comentario"], tipo: "grupo" },
+      { celdas: ["Efectivo TJ", "06/10/2026", "Cobranza en efectivo · 2 cobros · TJ", 200, null, null, null] },
+      { celdas: ["Efectivo TJ", "07/10/2026", "Retiro", null, 700, null, "Banco · Capturó: Ana"] },
     ]);
   });
 
-  it("sin eventos no hay bloque", () => {
-    const def = definicionExcelTesoreria({ ...vista, eventos: [] }, { sucursal: "TJ" });
+  it("sin eventos ni cobranza sin cuenta no hay bloques", () => {
+    const def = definicionExcelTesoreria({ ...vista, eventos: [], sinCuenta: [] }, { sucursal: "TJ" });
     expect(def.filas.some((f) => f.tipo === "grupo")).toBe(false);
   });
 });
