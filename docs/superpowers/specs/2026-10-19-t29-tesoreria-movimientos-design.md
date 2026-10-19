@@ -185,8 +185,8 @@ de esa sucursal o general."*; eliminar cuenta destino vigente → 409 (§3.3).
 - `saldoFijadoEnRango`: fecha del saldo fijado que usa el final si cae en `(desde, hasta]`; si no, `null`.
 - `sinCuenta`: cobranza **del rango** sin destino, de las sucursales en alcance, agrupada por sucursal y método.
 - `eventos`: por fecha; la cobranza agrupada por día, cuenta, sucursal y método (no cobro por cobro).
-- Un traspaso entre una cuenta visible y una que no lo es no puede existir (§3.1), así que la vista nunca muestra
-  media operación.
+- Un traspaso se muestra si **cualquiera** de sus dos cuentas está en alcance, con los dos nombres (p. ej. un usuario
+  de MX ve "Efectivo TJ → ScotiaFiscal" porque ve la cuenta general). Solo lo corrige o elimina quien ve **las dos**.
 
 ### 4.3 Pruebas
 
