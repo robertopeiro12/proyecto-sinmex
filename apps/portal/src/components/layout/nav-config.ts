@@ -25,6 +25,7 @@ export const navSections: NavSection[] = [
     items: [
       { label: "Tesorería", href: "/finanzas/tesoreria" },
       { label: "Gastos", href: "/finanzas/gastos" },
+      { label: "Flujo de Efectivo", href: "/finanzas/flujo-efectivo" },
     ],
   },
   {

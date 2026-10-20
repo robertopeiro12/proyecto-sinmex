@@ -16,8 +16,8 @@ select is(
 -- (campo_egreso.gestionar y gasto.ver).
 select is(
   (select count(*)::int from permiso where deleted_at is null),
-  33,
-  'el catalogo de permisos tiene 33 claves'
+  34,
+  'el catalogo de permisos tiene 34 claves'
 );
 
 select * from finish();

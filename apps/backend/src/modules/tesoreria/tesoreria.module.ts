@@ -24,5 +24,6 @@ import { TesoreriaService } from './tesoreria.service';
     CobranzaTesoreriaRepository,
     GastosTesoreriaRepository,
   ],
+  exports: [TesoreriaService],
 })
 export class TesoreriaModule {}
