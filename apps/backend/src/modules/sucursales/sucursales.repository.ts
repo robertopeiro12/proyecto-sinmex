@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { sql } from 'kysely';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 
 export interface Sucursal {
@@ -6,10 +7,18 @@ export interface Sucursal {
   codigo: string;
   nombre: string;
   activa: boolean;
+  /** T-27 (D7). */
+  controlInventario: boolean;
 }
 
 /** Las columnas que salen a la API. `deleted_at` nunca se expone (ver D6). */
-const CAMPOS = ['id', 'codigo', 'nombre', 'activa'] as const;
+const CAMPOS = [
+  'id',
+  'codigo',
+  'nombre',
+  'activa',
+  'control_inventario as controlInventario',
+] as const;
 
 @Injectable()
 export class SucursalesRepository {
@@ -58,17 +67,37 @@ export class SucursalesRepository {
   /**
    * `cambios` nunca llega vacio: el servicio lo comprueba antes. Un `.set({})`
    * genera SQL invalido, asi que el chequeo no es cortesia, es necesario.
+   *
+   * T-27 (D7): si cambia `control_inventario`, en la MISMA transaccion se toca
+   * `updated_at` de los vendedores de la sucursal. La tablet solo baja su propia
+   * ficha de `vendedor` y la baja por `updated_at`: sin esto, el pull
+   * incremental nunca le traeria la casilla nueva.
    */
   async actualizar(
     id: string,
-    cambios: { nombre?: string; activa?: boolean },
+    cambios: {
+      nombre?: string;
+      activa?: boolean;
+      control_inventario?: boolean;
+    },
+    tocarVendedores: boolean,
   ): Promise<Sucursal> {
-    return this.db
-      .updateTable('sucursal')
-      .set(cambios)
-      .where('id', '=', id)
-      .returning(CAMPOS)
-      .executeTakeFirstOrThrow();
+    return this.db.transaction().execute(async (trx) => {
+      const sucursal = await trx
+        .updateTable('sucursal')
+        .set(cambios)
+        .where('id', '=', id)
+        .returning(CAMPOS)
+        .executeTakeFirstOrThrow();
+      if (tocarVendedores) {
+        await trx
+          .updateTable('vendedor')
+          .set({ updated_at: sql<Date>`now()` })
+          .where('sucursal_id', '=', id)
+          .execute();
+      }
+      return sucursal;
+    });
   }
 
   /**
