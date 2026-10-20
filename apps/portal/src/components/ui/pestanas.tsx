@@ -36,7 +36,7 @@ export function Pestanas({
           <Tabs.Tab
             key={p.valor}
             value={p.valor}
-            className="-mb-px rounded-t-[7px] border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-sucursal/40 data-[active]:border-sucursal data-[active]:text-foreground"
+            className="-mb-px rounded-t-[7px] border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-sucursal data-[active]:border-sucursal data-[active]:text-foreground"
           >
             {p.etiqueta}
           </Tabs.Tab>

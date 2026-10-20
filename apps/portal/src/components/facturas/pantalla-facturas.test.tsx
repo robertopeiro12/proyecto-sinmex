@@ -59,7 +59,7 @@ describe("PantallaFacturas", () => {
   it("cambiar de pestaña no pierde las ventas marcadas", async () => {
     const usuario = userEvent.setup();
     render(<PantallaFacturas sucursal={null} />);
-    await usuario.type(screen.getByLabelText("Cliente"), "coba");
+    await usuario.type(screen.getAllByLabelText("Cliente")[0], "coba");
     await usuario.click(await screen.findByRole("button", { name: /Cobach XXI/ }));
     await usuario.click(await screen.findByLabelText("Marcar TJ240401OF01"));
     await waitFor(() => expect(screen.getByLabelText("Marcar TJ240401OF01")).toBeChecked());

@@ -2,7 +2,7 @@
 
 import { Menu as IconoMenu } from "lucide-react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type RefObject, type ReactNode } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { guardarLocal, leerLocal } from "@/lib/almacen-local";
 import { iniciales } from "@/lib/formato";
@@ -14,14 +14,15 @@ import { useSucursalActual } from "./use-sucursal-actual";
 
 export const CLAVE_MENU_ESCONDIDO = "jawa.menu.escondido";
 
-function BotonMenu({ etiqueta, onClick }: { etiqueta: string; onClick: () => void }) {
+function BotonMenu({ etiqueta, onClick, boton }: { etiqueta: string; onClick: () => void; boton: RefObject<HTMLButtonElement | null> }) {
   return (
     <button
+      ref={boton}
       type="button"
       aria-label={etiqueta}
       title={etiqueta}
       onClick={onClick}
-      className="grid size-8 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-sucursal/40"
+      className="grid size-8 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-sucursal"
     >
       <IconoMenu aria-hidden className="size-4" />
     </button>
@@ -46,7 +47,18 @@ export function MarcoPortal({ children }: { children: ReactNode }) {
     setEscondido(leerLocal(CLAVE_MENU_ESCONDIDO) === "1");
   }, []);
 
+  // El botón ☰ que se ve tras el cambio es otro (el anterior se desmonta): el foco pasa a él.
+  const botonMenu = useRef<HTMLButtonElement>(null);
+  const moverFoco = useRef(false);
+  useEffect(() => {
+    if (moverFoco.current) {
+      moverFoco.current = false;
+      botonMenu.current?.focus();
+    }
+  }, [escondido]);
+
   function alternarMenu() {
+    moverFoco.current = true;
     const nuevo = !escondido;
     setEscondido(nuevo);
     guardarLocal(CLAVE_MENU_ESCONDIDO, nuevo ? "1" : "0");
@@ -64,7 +76,7 @@ export function MarcoPortal({ children }: { children: ReactNode }) {
           aria-label="Menú escondido"
           className="sticky top-0 flex h-dvh w-[60px] shrink-0 flex-col items-center gap-3 border-r bg-menu py-3.5"
         >
-          <BotonMenu etiqueta="Mostrar menú" onClick={alternarMenu} />
+          <BotonMenu etiqueta="Mostrar menú" onClick={alternarMenu} boton={botonMenu} />
           <span title={sucursal.nombre} className="rounded-md bg-sucursal px-1.5 py-1 text-xs font-bold text-white">
             {sucursal.siglas}
           </span>
@@ -81,7 +93,7 @@ export function MarcoPortal({ children }: { children: ReactNode }) {
         <aside className="sticky top-0 flex h-dvh w-64 shrink-0 flex-col border-r bg-menu">
           <div className="flex items-center justify-between px-4 pt-4 pb-3">
             <span className="font-titulo text-xl font-bold">JAWA</span>
-            <BotonMenu etiqueta="Esconder menú" onClick={alternarMenu} />
+            <BotonMenu etiqueta="Esconder menú" onClick={alternarMenu} boton={botonMenu} />
           </div>
           <BloqueSucursal sucursal={sucursal} />
           <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">

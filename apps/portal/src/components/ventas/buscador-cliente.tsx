@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Campo, Entrada } from "@/components/ui/campo";
 import type { ClienteResumen } from "@/lib/clientes";
 import { normalizarTexto } from "@/lib/ventas";
 
@@ -24,6 +25,7 @@ export function BuscadorCliente({
   etiquetaQuitar?: string;
   disabled?: boolean;
 }) {
+  const id = useId();
   const [busqueda, setBusqueda] = useState("");
 
   const coincidencias = useMemo(() => {
@@ -36,10 +38,7 @@ export function BuscadorCliente({
     `${c.nombre} · ${c.sucursalCodigo}${c.tipo === "prospecto" ? " · Prospecto" : ""}`;
 
   return (
-    <div className="flex min-w-72 flex-1 flex-col gap-1.5">
-      <label htmlFor="buscar-cliente" className="text-sm font-medium">
-        Cliente
-      </label>
+    <Campo id={id} etiqueta="Cliente" className="w-72">
       {cliente ? (
         <div className="flex items-center gap-2 text-sm">
           <span>{etiqueta(cliente)}</span>
@@ -49,13 +48,11 @@ export function BuscadorCliente({
         </div>
       ) : (
         <>
-          <input
-            id="buscar-cliente"
+          <Entrada
             autoComplete="off"
             placeholder="Escribe el nombre del cliente"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            className="rounded-md border px-3 py-2 text-sm"
           />
           {coincidencias.length > 0 && (
             <ul className="flex flex-col rounded-md border">
@@ -77,6 +74,6 @@ export function BuscadorCliente({
           )}
         </>
       )}
-    </div>
+    </Campo>
   );
 }

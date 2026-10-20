@@ -96,6 +96,7 @@ describe("MarcoPortal", () => {
     expect(screen.getByText("AL")).toBeInTheDocument();
     expect(screen.getByText("Contenido de la pantalla")).toBeInTheDocument();
     expect(localStorage.getItem(CLAVE_MENU_ESCONDIDO)).toBe("1");
+    expect(screen.getByRole("button", { name: "Mostrar menú" })).toHaveFocus();
     unmount();
 
     renderizar();
@@ -103,6 +104,7 @@ describe("MarcoPortal", () => {
     await usuario.click(screen.getByRole("button", { name: "Mostrar menú" }));
     expect(screen.getByRole("navigation", { name: "Menú principal" })).toBeInTheDocument();
     expect(localStorage.getItem(CLAVE_MENU_ESCONDIDO)).toBe("0");
+    expect(screen.getByRole("button", { name: "Esconder menú" })).toHaveFocus();
   });
 
   it("Review Focus 2: sin localStorage el menú arranca abierto y se esconde igual", async () => {

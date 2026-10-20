@@ -65,7 +65,7 @@ export function SeccionesMenu({ pathname, sucursal }: { pathname: string; sucurs
             open={abierta}
             onOpenChange={(abrir) => alternar(seccion.label, abrir)}
           >
-            <Collapsible.Trigger className="flex w-full items-center justify-between rounded-md px-2 py-2 text-sm font-semibold outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-sucursal/40">
+            <Collapsible.Trigger className="flex w-full items-center justify-between rounded-md px-2 py-2 text-sm font-semibold outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-sucursal">
               {seccion.label}
               <ChevronDown
                 aria-hidden
@@ -85,7 +85,7 @@ export function SeccionesMenu({ pathname, sucursal }: { pathname: string; sucurs
                         href={`${item.href}${sufijo}`}
                         aria-current={activo ? "page" : undefined}
                         className={cn(
-                          "flex items-center justify-between gap-2 rounded-md py-1.5 pr-2 pl-5 text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-sucursal/40",
+                          "flex items-center justify-between gap-2 rounded-md py-1.5 pr-2 pl-5 text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-sucursal",
                           activo && "bg-background font-semibold shadow-[inset_3px_0_0_var(--suc)]",
                         )}
                       >
