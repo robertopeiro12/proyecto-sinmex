@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
+import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
+import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { BuscarPorCobrar } from "./buscar-por-cobrar";
 import { CobranzaCliente } from "./cobranza-cliente";
 
@@ -28,33 +29,11 @@ export function PantallaCobranza({
       : { tipo: "buscar" },
   );
 
-  if (cargandoSesion) {
-    // Mientras /auth/me no contesta, `puede()` da false a todos: sin esto, quien
-    // si tiene el permiso ve "No tienes permiso" un instante (como PantallaPerfiles).
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Cobranza</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">Cargando…</p>
-        </CardContent>
-      </Card>
-    );
-  }
+  // Mientras /auth/me no contesta, `puede()` da false a todos: sin esto, quien
+  // si tiene el permiso ve "No tienes permiso" un instante (como PantallaPerfiles).
+  if (cargandoSesion) return <EstadoPantalla titulo="Cobranza" tipo="cargando" />;
 
-  if (!puede("cobranza.registrar")) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Cobranza</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">No tienes permiso para registrar cobranza</p>
-        </CardContent>
-      </Card>
-    );
-  }
+  if (!puede("cobranza.registrar")) return <EstadoPantalla titulo="Cobranza" tipo="sin-permiso" />;
 
   if (vista.tipo === "cliente") {
     return (
@@ -78,16 +57,15 @@ export function PantallaCobranza({
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Cobranza</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <BuscarPorCobrar
-          sucursal={sucursal}
-          onElegir={(clienteId, notaId) => setVista({ tipo: "cliente", clienteId, notaId })}
-        />
-      </CardContent>
-    </Card>
+    <Pantalla>
+      <EncabezadoPantalla
+        titulo="Cobranza"
+        descripcion="Busca la cuenta por cobrar por cliente, por fecha de la venta o por # de nota, y registra su pago."
+      />
+      <BuscarPorCobrar
+        sucursal={sucursal}
+        onElegir={(clienteId, notaId) => setVista({ tipo: "cliente", clienteId, notaId })}
+      />
+    </Pantalla>
   );
 }

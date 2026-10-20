@@ -71,7 +71,7 @@ describe("RegistrarPago", () => {
     fireEvent.change(screen.getByLabelText("Fecha del pago"), { target: { value: "2024-03-31" } });
     await usuario.click(screen.getByRole("button", { name: "Vista previa" }));
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "La fecha del pago no puede ser anterior a la nota más vieja que marcaste (2024-04-01).",
+      "La fecha del pago no puede ser anterior a la nota más vieja que marcaste (01/04/2024).",
     );
     fireEvent.change(screen.getByLabelText("Fecha del pago"), { target: { value: "2999-01-01" } });
     await usuario.click(screen.getByRole("button", { name: "Vista previa" }));

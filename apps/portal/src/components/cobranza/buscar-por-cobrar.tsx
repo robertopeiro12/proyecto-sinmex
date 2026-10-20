@@ -1,12 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
+import { Campo, Entrada } from "@/components/ui/campo";
+import { EtiquetaStatusVenta } from "@/components/ui/etiqueta";
+import { Fecha } from "@/components/ui/fecha";
+import { CajaTabla, Fila, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
 import { BuscadorCliente } from "@/components/ventas/buscador-cliente";
 import { mensajeDe } from "@/lib/api";
 import { listarClientes, type ClienteResumen } from "@/lib/clientes";
 import { buscarPorCobrar, type NotaPorCobrar } from "@/lib/cobranzas";
-import { ETIQUETA_STATUS, formatearPesos, hoyEnTijuana } from "@/lib/ventas";
+import { hoyEnTijuana } from "@/lib/ventas";
 
 /**
  * §3.1: buscar la cuenta por cobrar. Por cliente se entra directo; por fecha de
@@ -66,109 +71,96 @@ export function BuscarPorCobrar({
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <BuscadorCliente clientes={clientes} cliente={null} onElegir={(c) => onElegir(c.id, null)} onQuitar={() => {}} />
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 rounded-[10px] border p-3.5">
+        <BuscadorCliente clientes={clientes} cliente={null} onElegir={(c) => onElegir(c.id, null)} onQuitar={() => {}} />
 
-      <div className="flex flex-wrap items-end gap-6">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void buscar({ fecha });
-          }}
-          className="flex items-end gap-2"
-        >
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="cobranza-fecha" className="text-sm font-medium">
-              Fecha de la venta
-            </label>
-            <input
-              id="cobranza-fecha"
-              type="date"
-              required
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-              className="rounded-md border px-3 py-2 text-sm"
-            />
-          </div>
-          <Button type="submit" variant="outline" disabled={buscando}>
-            Buscar por fecha
-          </Button>
-        </form>
+        <div className="flex flex-wrap items-end gap-6">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void buscar({ fecha });
+            }}
+            className="flex items-end gap-2"
+          >
+            <Campo id="cobranza-fecha" etiqueta="Fecha de la venta">
+              <Entrada type="date" required value={fecha} onChange={(e) => setFecha(e.target.value)} />
+            </Campo>
+            <Button type="submit" variant="outline" disabled={buscando}>
+              Buscar por fecha
+            </Button>
+          </form>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (numNota.trim() !== "") void buscar({ numNota });
-          }}
-          className="flex items-end gap-2"
-        >
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="cobranza-num-nota" className="text-sm font-medium">
-              # de nota
-            </label>
-            <input
-              id="cobranza-num-nota"
-              maxLength={30}
-              value={numNota}
-              onChange={(e) => setNumNota(e.target.value)}
-              className="w-40 rounded-md border px-3 py-2 text-sm"
-            />
-          </div>
-          <Button type="submit" variant="outline" disabled={buscando || numNota.trim() === ""}>
-            Buscar por # de nota
-          </Button>
-        </form>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (numNota.trim() !== "") void buscar({ numNota });
+            }}
+            className="flex items-end gap-2"
+          >
+            <Campo id="cobranza-num-nota" etiqueta="# de nota">
+              <Entrada maxLength={30} value={numNota} onChange={(e) => setNumNota(e.target.value)} className="w-40" />
+            </Campo>
+            <Button type="submit" variant="outline" disabled={buscando || numNota.trim() === ""}>
+              Buscar por # de nota
+            </Button>
+          </form>
+        </div>
       </div>
 
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {error && <Aviso tono="error">{error}</Aviso>}
 
       {notas !== null &&
         (notas.length === 0 ? (
           <p className="text-sm text-muted-foreground">No hay notas por cobrar con esa búsqueda.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left">
-                <th className="py-1.5">Cliente</th>
-                <th className="py-1.5">Fecha</th>
-                <th className="py-1.5">Folio</th>
-                <th className="py-1.5"># de nota</th>
-                <th className="py-1.5 text-right">Total</th>
-                <th className="py-1.5 text-right">Saldo</th>
-                <th className="py-1.5">Status</th>
-                <th className="py-1.5" />
-              </tr>
-            </thead>
-            <tbody>
-              {notas.map((n) => (
-                <tr key={n.id} className="border-t">
-                  <td className="py-1.5">
-                    {n.cliente} · {n.sucursalCodigo}
-                  </td>
-                  <td className="py-1.5">{n.fecha}</td>
-                  <td className="py-1.5 font-mono">{n.folio}</td>
-                  <td className="py-1.5">{n.numNota ?? "—"}</td>
-                  <td className="py-1.5 text-right">{formatearPesos(n.montoCentavos)}</td>
-                  <td className="py-1.5 text-right font-semibold">{formatearPesos(n.saldoCentavos)}</td>
-                  <td className="py-1.5">{ETIQUETA_STATUS[n.status]}</td>
-                  <td className="py-1.5 text-right">
-                    <Button
-                      type="button"
-                      size="sm"
-                      aria-label={`Cobrar ${n.folio}`}
-                      onClick={() => onElegir(n.clienteId, n.id)}
-                    >
-                      Cobrar
-                    </Button>
-                  </td>
+          <CajaTabla>
+            <Tabla className="min-w-[860px]">
+              <thead>
+                <tr>
+                  <Th>Cliente</Th>
+                  <Th>Fecha</Th>
+                  <Th>Folio</Th>
+                  <Th># de nota</Th>
+                  <Th alinear="derecha">Total</Th>
+                  <Th alinear="derecha">Saldo</Th>
+                  <Th>Status</Th>
+                  <Th>
+                    <span className="sr-only">Acciones</span>
+                  </Th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {notas.map((n) => (
+                  <Fila key={n.id} interactiva>
+                    <Td>
+                      {n.cliente} · {n.sucursalCodigo}
+                    </Td>
+                    <Td>
+                      <Fecha valor={n.fecha} />
+                    </Td>
+                    <Td className="font-mono">{n.folio}</Td>
+                    <Td>{n.numNota ?? "—"}</Td>
+                    <TdMonto centavos={n.montoCentavos} />
+                    <TdMonto centavos={n.saldoCentavos} className="font-semibold" />
+                    <Td>
+                      <EtiquetaStatusVenta status={n.status} />
+                    </Td>
+                    <Td alinear="derecha">
+                      <Button
+                        type="button"
+                        size="sm"
+                        aria-label={`Cobrar ${n.folio}`}
+                        onClick={() => onElegir(n.clienteId, n.id)}
+                      >
+                        Cobrar
+                      </Button>
+                    </Td>
+                  </Fila>
+                ))}
+              </tbody>
+            </Tabla>
+          </CajaTabla>
         ))}
     </div>
   );

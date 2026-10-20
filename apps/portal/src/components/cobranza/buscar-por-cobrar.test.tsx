@@ -52,6 +52,8 @@ describe("BuscarPorCobrar", () => {
     expect(buscarPorCobrar).toHaveBeenCalledWith({ fecha: "2024-04-01" }, "TJ");
     expect(await screen.findByText("TJ240401OF01")).toBeInTheDocument();
     expect(screen.getByText("$40.00")).toBeInTheDocument();
+    expect(screen.getByText("01/04/2024")).toBeInTheDocument();
+    expect(screen.getByText("Abonado")).toHaveAttribute("data-tono", "informacion");
     await usuario.click(screen.getByRole("button", { name: "Cobrar TJ240401OF01" }));
     expect(onElegir).toHaveBeenCalledWith("c1", "n1");
   });

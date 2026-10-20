@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import {
@@ -119,11 +120,7 @@ export function AplicarSaldoFavor({
         </Button>
       </div>
 
-      {avisoLocal && (
-        <p role="alert" className="text-sm text-destructive">
-          {avisoLocal}
-        </p>
-      )}
+      {avisoLocal && <Aviso tono="error">{avisoLocal}</Aviso>}
 
       {plan && (
         <>
@@ -136,11 +133,7 @@ export function AplicarSaldoFavor({
         </>
       )}
 
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {error && <Aviso tono="error">{error}</Aviso>}
     </section>
   );
 }

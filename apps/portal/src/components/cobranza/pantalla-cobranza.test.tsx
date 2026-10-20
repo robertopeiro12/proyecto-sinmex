@@ -54,7 +54,7 @@ describe("PantallaCobranza", () => {
   it("sin cobranza.registrar lo dice y no pide nada", () => {
     mockAuth(() => false);
     render(<PantallaCobranza sucursal={null} />);
-    expect(screen.getByText("No tienes permiso para registrar cobranza")).toBeInTheDocument();
+    expect(screen.getByText("No tienes permiso para ver esta sección.")).toBeInTheDocument();
     expect(listarClientes).not.toHaveBeenCalled();
   });
 
@@ -117,7 +117,14 @@ describe("PantallaCobranza", () => {
   it("sin cobranza.registrar no abre al cliente aunque venga en la dirección", () => {
     mockAuth(() => false);
     render(<PantallaCobranza sucursal={null} clienteInicial="c1" notaInicial="n1" />);
-    expect(screen.getByText("No tienes permiso para registrar cobranza")).toBeInTheDocument();
+    expect(screen.getByText("No tienes permiso para ver esta sección.")).toBeInTheDocument();
     expect(porCobrarDeCliente).not.toHaveBeenCalled();
+  });
+
+  it("el encabezado dice para qué sirve la pantalla", () => {
+    mockAuth(() => true);
+    render(<PantallaCobranza sucursal={null} />);
+    expect(screen.getByRole("heading", { level: 1, name: "Cobranza" })).toBeInTheDocument();
+    expect(screen.getByText(/por cliente, por fecha de la venta o por # de nota/)).toBeInTheDocument();
   });
 });
