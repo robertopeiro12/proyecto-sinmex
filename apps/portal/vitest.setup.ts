@@ -9,3 +9,11 @@ import { cleanup } from "@testing-library/react";
 afterEach(() => {
   cleanup();
 });
+
+// Node 25+ trae su propio `localStorage` global; sin `--localstorage-file` vale undefined y
+// tapa al de jsdom. Las pruebas usan el de jsdom (el mismo que tendría el navegador). Con un
+// Node más viejo, o en las pruebas con `@vitest-environment node` (sin jsdom), no se toca nada.
+const entorno = globalThis as unknown as { jsdom?: { window: Window } };
+if (typeof globalThis.localStorage === "undefined" && entorno.jsdom) {
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: entorno.jsdom.window.localStorage });
+}
