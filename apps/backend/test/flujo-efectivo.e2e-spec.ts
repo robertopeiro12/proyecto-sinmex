@@ -1,5 +1,6 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { AppModule } from './../src/app.module';
@@ -240,6 +241,10 @@ describe('Flujo de Efectivo (e2e)', () => {
       await db.deleteFrom('cliente').where('id', 'in', clienteIds).execute();
     }
     if (vendedorIds.length > 0) {
+      await db
+        .deleteFrom('gasto')
+        .where('vendedor_id', 'in', vendedorIds)
+        .execute();
       await db.deleteFrom('vendedor').where('id', 'in', vendedorIds).execute();
     }
     if (usuarioIds.length > 0) {
@@ -297,7 +302,6 @@ describe('Flujo de Efectivo (e2e)', () => {
           d!.ventasCentavos,
       ) / 10,
     );
-    expect(despues.gastosDisponibles).toBe(false);
     expect(despues.dias.map((d) => d.fecha)).toContain(dia);
   });
 
@@ -388,6 +392,73 @@ describe('Flujo de Efectivo (e2e)', () => {
       montoCentavos: 5_000,
       comentario: 'Pago de gasolina',
     });
+  });
+
+  it('gastos de Compras y Egresos por tipo, utilidades y comentarios (T-30/T-31)', async () => {
+    const dia = '2018-11-08';
+    const campo = async (nombre: string) =>
+      await db
+        .selectFrom('campo_egreso')
+        .select(['id', 'tipo'])
+        .where('nombre', '=', nombre)
+        .executeTakeFirstOrThrow();
+    const gasto = async (
+      nombre: string,
+      monto: string,
+      extra: { comentario?: string; deleted_at?: string } = {},
+    ) => {
+      const c = await campo(nombre);
+      await db
+        .insertInto('gasto')
+        .values({
+          id: randomUUID(),
+          sucursal_id: idTijuana,
+          vendedor_id: vendedorId,
+          campo_egreso_id: c.id,
+          campo_nombre: nombre,
+          tipo: c.tipo,
+          fecha: dia,
+          registrado_en: `${dia}T18:00:00.000Z`,
+          monto,
+          metodo: 'efectivo_cobranza_dia',
+          origen: 'app',
+          ...extra,
+        })
+        .execute();
+    };
+
+    const antes = await flujo(general, dia, dia);
+    await gasto('Envases', '100.00');
+    await gasto('Gasolina', '50.00', { comentario: `${PREFIJO} tanque lleno` });
+    await gasto('Hielo', '25.50');
+    await gasto('Hielo', '999.00', { deleted_at: `${dia}T19:00:00.000Z` });
+    const despues = await flujo(general, dia, dia);
+
+    expect(despues.gastosDisponibles).toBe(true);
+    expect(
+      despues.gastosProduccionCentavos - antes.gastosProduccionCentavos,
+    ).toBe(10_000);
+    expect(
+      despues.gastosOperacionCentavos - antes.gastosOperacionCentavos,
+    ).toBe(7_550);
+    expect(
+      despues.gastosFinancierosCentavos - antes.gastosFinancierosCentavos,
+    ).toBe(0);
+    expect(despues.utilidadNetaCentavos - antes.utilidadNetaCentavos).toBe(
+      -17_550,
+    );
+    expect(despues.comentarios.egresos).toContainEqual({
+      fecha: dia,
+      concepto: 'Gasto',
+      cuenta: `Gasolina · Vendedor ${PREFIJO}`,
+      montoCentavos: 5_000,
+      comentario: `${PREFIJO} tanque lleno`,
+    });
+    // Otra sucursal no los ve.
+    const mx = await flujo(general, dia, dia, 'MX');
+    expect(
+      mx.comentarios.egresos.some((e) => e.comentario.startsWith(PREFIJO)),
+    ).toBe(false);
   });
 
   it('Total Tesorería coincide con GET /tesoreria', async () => {

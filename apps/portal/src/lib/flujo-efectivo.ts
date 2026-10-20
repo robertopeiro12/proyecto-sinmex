@@ -23,7 +23,7 @@ export interface ComentarioIngreso {
 
 export interface ComentarioEgreso {
   fecha: string;
-  concepto: "Retiro" | "Traspaso";
+  concepto: "Retiro" | "Traspaso" | "Gasto";
   cuenta: string;
   montoCentavos: number;
   comentario: string;

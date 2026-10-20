@@ -16,7 +16,7 @@ export type { ComentarioIngreso };
 
 export interface ComentarioEgreso {
   fecha: string;
-  concepto: 'Retiro' | 'Traspaso';
+  concepto: 'Retiro' | 'Traspaso' | 'Gasto';
   cuenta: string;
   montoCentavos: number;
   comentario: string;
@@ -52,16 +52,19 @@ export class FlujoEfectivoService {
     );
     const codigo = alcance.tipo === 'todas' ? null : alcance.codigo;
 
-    const [ventas, cobros, ingresos, vista] = await Promise.all([
-      this.repo.ventasPorDia(q.desde, q.hasta, codigo),
-      this.repo.cobradasPorDia(q.desde, q.hasta, codigo),
-      this.repo.comentariosDeVentas(q.desde, q.hasta, codigo),
-      this.tesoreria.vista(usuarioId, {
-        desde: q.desde,
-        hasta: q.hasta,
-        sucursal: q.sucursal,
-      }),
-    ]);
+    const [ventas, cobros, gastos, ingresos, deGastos, vista] =
+      await Promise.all([
+        this.repo.ventasPorDia(q.desde, q.hasta, codigo),
+        this.repo.cobradasPorDia(q.desde, q.hasta, codigo),
+        this.repo.gastosPorTipo(q.desde, q.hasta, codigo),
+        this.repo.comentariosDeVentas(q.desde, q.hasta, codigo),
+        this.repo.comentariosDeGastos(q.desde, q.hasta, codigo),
+        this.tesoreria.vista(usuarioId, {
+          desde: q.desde,
+          hasta: q.hasta,
+          sucursal: q.sucursal,
+        }),
+      ]);
 
     const egresos: ComentarioEgreso[] = [];
     for (const e of vista.eventos) {
@@ -78,9 +81,20 @@ export class FlujoEfectivoService {
         comentario: e.comentario,
       });
     }
+    // Gastos de la ruta (T-30/T-31): en "cuenta" va el campo y quien lo gasto.
+    for (const g of deGastos) {
+      egresos.push({
+        fecha: g.fecha,
+        concepto: 'Gasto',
+        cuenta: g.vendedor ? `${g.campo} · ${g.vendedor}` : g.campo,
+        montoCentavos: g.montoCentavos,
+        comentario: g.comentario,
+      });
+    }
+    egresos.sort((a, b) => a.fecha.localeCompare(b.fecha));
 
     return {
-      ...armarResumen(ventas, cobros),
+      ...armarResumen(ventas, cobros, gastos),
       desde: q.desde,
       hasta: q.hasta,
       totalTesoreriaCentavos: vista.total.saldoFinalCentavos,

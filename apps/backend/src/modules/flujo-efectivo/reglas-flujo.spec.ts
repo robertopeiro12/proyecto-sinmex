@@ -11,7 +11,7 @@ describe('porcentajeCobro', () => {
 });
 
 describe('armarResumen', () => {
-  it('suma ventas y cobros por tipo, encadena utilidades con gastos en 0 y arma los días ordenados', () => {
+  it('suma ventas y cobros por tipo, encadena utilidades sin gastos y arma los días ordenados', () => {
     const r = armarResumen(
       [
         { fecha: '2026-10-02', ventasCentavos: 40_000 },
@@ -22,6 +22,7 @@ describe('armarResumen', () => {
         { fecha: '2026-10-01', repartidor: false, montoCentavos: 10_000 },
         { fecha: '2026-10-03', repartidor: true, montoCentavos: 5_000 },
       ],
+      [],
     );
     expect(r).toMatchObject({
       ventasTotalesCentavos: 100_000,
@@ -29,7 +30,7 @@ describe('armarResumen', () => {
       cobradoOficinaCentavos: 10_000,
       ventasCobradasCentavos: 45_000,
       porcentajeCobro: 45,
-      gastosDisponibles: false,
+      gastosDisponibles: true,
       gastosProduccionCentavos: 0,
       utilidadBrutaCentavos: 45_000,
       utilidadOperacionCentavos: 45_000,
@@ -61,10 +62,41 @@ describe('armarResumen', () => {
   });
 
   it('sin nada, todo en cero y sin días', () => {
-    expect(armarResumen([], [])).toMatchObject({
+    expect(armarResumen([], [], [])).toMatchObject({
       ventasTotalesCentavos: 0,
       porcentajeCobro: null,
       dias: [],
     });
+  });
+
+  it('gastos por tipo y utilidades encadenadas (T-30/T-31)', () => {
+    const r = armarResumen(
+      [{ fecha: '2026-10-14', ventasCentavos: 100_000 }],
+      [{ fecha: '2026-10-14', repartidor: true, montoCentavos: 80_000 }],
+      [
+        { tipo: 'produccion', montoCentavos: 10_000 },
+        { tipo: 'operacion', montoCentavos: 5_000 },
+        { tipo: 'operacion', montoCentavos: 2_500 },
+        { tipo: 'financiero', montoCentavos: 1_000 },
+      ],
+    );
+    expect(r).toMatchObject({
+      gastosDisponibles: true,
+      gastosProduccionCentavos: 10_000,
+      gastosOperacionCentavos: 7_500,
+      gastosFinancierosCentavos: 1_000,
+      utilidadBrutaCentavos: 70_000,
+      utilidadOperacionCentavos: 62_500,
+      utilidadNetaCentavos: 61_500,
+    });
+  });
+
+  it('los gastos pueden dejar la utilidad en negativo', () => {
+    const r = armarResumen(
+      [],
+      [],
+      [{ tipo: 'operacion', montoCentavos: 3_000 }],
+    );
+    expect(r.utilidadNetaCentavos).toBe(-3_000);
   });
 });

@@ -416,8 +416,10 @@ usuario con sesion pasa.
   `modules/flujo-efectivo/`). Solo lectura. Ventas Totales por **fecha de la venta** (cualquier status, sucursal de la
   venta); Ventas Cobradas = la **misma** cobranza que lee Tesorería, por **fecha del pago**, separada por **quién cobró**
   (con vendedor = repartidor; sin vendedor / venta de mostrador = oficina); abonos por lo abonado; nunca saldo a favor.
-  `% de cobro` con 1 decimal, `null` sin ventas. **Gastos en $0** (`gastosDisponibles: false`) hasta T-30/T-31 (Mario):
-  al llegar, se suman en `reglas-flujo.ts`. Total Tesorería sale de `TesoreriaService.vista` (exportado), no se recalcula.
+  `% de cobro` con 1 decimal, `null` sin ventas. **Gastos** = la tabla `gasto` de T-30/T-31, vivos, por su `fecha` y
+  sucursal, sumados por `tipo` en `reglas-flujo.ts`, de **todos** los métodos (Tesorería solo resta los del efectivo de
+  la cobranza); sus comentarios salen en egresos como `Gasto`. `gastosDisponibles` ya es siempre `true`. Total Tesorería
+  sale de `TesoreriaService.vista` (exportado), no se recalcula.
 
 - **Visita sin venta (T-39).** El vendedor deja constancia, sin red, de por qué un cliente no compró: motivo del
   catálogo, hora, quién atendió, ubicación (GPS o dirección escrita) y foto si el motivo la exige. Spec:

@@ -2,7 +2,15 @@ import { Inject, Injectable } from '@nestjs/common';
 import { sql } from 'kysely';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import { aCentavos } from '../sincronizacion/dinero';
-import type { FilaCobroDia, FilaVentaDia } from './reglas-flujo';
+import type { FilaCobroDia, FilaGastoTipo, FilaVentaDia } from './reglas-flujo';
+
+export interface ComentarioGasto {
+  fecha: string;
+  campo: string;
+  vendedor: string | null;
+  montoCentavos: number;
+  comentario: string;
+}
 
 export interface ComentarioIngreso {
   fecha: string;
@@ -12,8 +20,8 @@ export interface ComentarioIngreso {
 }
 
 /**
- * T-32 (spec §3): lecturas del Flujo de Efectivo. Solo lee de Ventas y Cobranza;
- * `codigo` null = todas las sucursales.
+ * T-32 (spec §3): lecturas del Flujo de Efectivo. Solo lee de Ventas, Cobranza y
+ * Compras y Egresos; `codigo` null = todas las sucursales.
  */
 @Injectable()
 export class FlujoEfectivoRepository {
@@ -103,5 +111,65 @@ export class FlujoEfectivoRepository {
        order by vn.fecha, vn.folio
     `.execute(this.db);
     return r.rows;
+  }
+
+  /**
+   * Gastos vivos del rango por tipo (T-30/T-31), por su `fecha` y la sucursal
+   * del gasto. TODOS los metodos: el flujo cuenta todo egreso, no solo el que
+   * salio del efectivo de la cobranza (eso es lo que filtra Tesoreria).
+   */
+  async gastosPorTipo(
+    desde: string,
+    hasta: string,
+    codigo: string | null,
+  ): Promise<FilaGastoTipo[]> {
+    const filtro = codigo === null ? sql`` : sql`and s.codigo = ${codigo}`;
+    const r = await sql<{ tipo: FilaGastoTipo['tipo']; monto: string }>`
+      select g.tipo, sum(g.monto)::text as monto
+        from gasto g
+        join sucursal s on s.id = g.sucursal_id
+       where g.deleted_at is null
+         and g.fecha between ${desde}::date and ${hasta}::date
+         ${filtro}
+       group by g.tipo
+    `.execute(this.db);
+    return r.rows.map((f) => ({
+      tipo: f.tipo,
+      montoCentavos: aCentavos(f.monto),
+    }));
+  }
+
+  /** Comentarios de los gastos vivos del rango. */
+  async comentariosDeGastos(
+    desde: string,
+    hasta: string,
+    codigo: string | null,
+  ): Promise<ComentarioGasto[]> {
+    const filtro = codigo === null ? sql`` : sql`and s.codigo = ${codigo}`;
+    const r = await sql<{
+      fecha: string;
+      campo: string;
+      vendedor: string | null;
+      monto: string;
+      comentario: string;
+    }>`
+      select to_char(g.fecha, 'YYYY-MM-DD') as fecha, g.campo_nombre as campo,
+             v.nombre as vendedor, g.monto::text as monto,
+             btrim(g.comentario) as comentario
+        from gasto g
+        join sucursal s on s.id = g.sucursal_id
+        left join vendedor v on v.id = g.vendedor_id
+       where g.deleted_at is null and btrim(coalesce(g.comentario, '')) <> ''
+         and g.fecha between ${desde}::date and ${hasta}::date
+         ${filtro}
+       order by g.fecha, g.registrado_en, g.id
+    `.execute(this.db);
+    return r.rows.map((f) => ({
+      fecha: f.fecha,
+      campo: f.campo,
+      vendedor: f.vendedor,
+      montoCentavos: aCentavos(f.monto),
+      comentario: f.comentario,
+    }));
   }
 }

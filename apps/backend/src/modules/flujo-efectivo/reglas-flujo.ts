@@ -1,7 +1,8 @@
 /**
  * T-32 — fórmulas del Flujo de Efectivo (spec §3), puras y en centavos.
- * Gastos en 0 hasta que T-30/T-31 (Mario) traigan Compras y Egresos.
+ * Los gastos son los de Compras y Egresos (T-30/T-31), sumados por su tipo.
  */
+import type { TipoEgreso } from '../compras-egresos/tipos-egreso';
 
 export interface FilaVentaDia {
   fecha: string;
@@ -11,6 +12,11 @@ export interface FilaVentaDia {
 export interface FilaCobroDia {
   fecha: string;
   repartidor: boolean;
+  montoCentavos: number;
+}
+
+export interface FilaGastoTipo {
+  tipo: TipoEgreso;
   montoCentavos: number;
 }
 
@@ -50,6 +56,7 @@ export function porcentajeCobro(
 export function armarResumen(
   ventas: FilaVentaDia[],
   cobros: FilaCobroDia[],
+  gastos: FilaGastoTipo[],
 ): ResumenFlujo {
   const dias = new Map<string, DiaFlujo>();
   const dia = (fecha: string): DiaFlujo => {
@@ -89,10 +96,13 @@ export function armarResumen(
   const oficina = lista.reduce((s, d) => s + d.cobradoOficinaCentavos, 0);
   const cobradas = repartidor + oficina;
 
-  // Gastos en 0: T-30/T-31 todavía no los aportan.
-  const gastosProduccion = 0;
-  const gastosOperacion = 0;
-  const gastosFinancieros = 0;
+  const gastoDe = (tipo: TipoEgreso) =>
+    gastos
+      .filter((g) => g.tipo === tipo)
+      .reduce((s, g) => s + g.montoCentavos, 0);
+  const gastosProduccion = gastoDe('produccion');
+  const gastosOperacion = gastoDe('operacion');
+  const gastosFinancieros = gastoDe('financiero');
   const utilidadBruta = cobradas - gastosProduccion;
   const utilidadOperacion = utilidadBruta - gastosOperacion;
 
@@ -102,7 +112,7 @@ export function armarResumen(
     cobradoOficinaCentavos: oficina,
     ventasCobradasCentavos: cobradas,
     porcentajeCobro: porcentajeCobro(cobradas, ventasTotales),
-    gastosDisponibles: false,
+    gastosDisponibles: true,
     gastosProduccionCentavos: gastosProduccion,
     gastosOperacionCentavos: gastosOperacion,
     gastosFinancierosCentavos: gastosFinancieros,
