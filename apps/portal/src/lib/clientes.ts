@@ -7,6 +7,9 @@ import { apiFetch, apiFetchBlob } from "./api";
 export type TipoCliente = "cliente" | "prospecto";
 export type TipoFiltro = TipoCliente | "todos";
 
+/** De dónde salió la coordenada (T-72, D3). */
+export type OrigenUbicacion = "gps" | "geocodificada" | "manual";
+
 export interface ClienteResumen {
   id: string;
   nombre: string;
@@ -43,6 +46,8 @@ export interface ClienteDetalle {
   plazoCreditoDias: number | null;
   lat: number | null;
   lng: number | null;
+  /** De dónde salió la coordenada (T-72): `null` si no hay. */
+  ubicacionOrigen: OrigenUbicacion | null;
   comentarios: string | null;
   sucursalId: string;
   sucursalCodigo: string;
@@ -104,8 +109,9 @@ export interface DatosClienteFormulario {
   listaPrecioId: string;
   pctComision?: number;
   plazoCreditoDias?: number;
-  lat?: number;
-  lng?: number;
+  /** Al editar, omitidas conservan la coordenada y `null` la borra (T-72). */
+  lat?: number | null;
+  lng?: number | null;
   comentarios?: string;
   overridesPrecio: { presentacionId: string; precio: number | null }[];
 }
@@ -150,4 +156,22 @@ export function convertirACliente(id: string): Promise<ClienteDetalle> {
  */
 export function descargarFotoCliente(id: string): Promise<Blob> {
   return apiFetchBlob(`/clientes/${id}/foto`);
+}
+
+/** Lo que responde "Ubicar con la dirección" cuando Google encontró el domicilio. */
+export interface UbicacionGeocodificada {
+  lat: number;
+  lng: number;
+  ubicacionOrigen: "geocodificada";
+}
+
+/**
+ * "Ubicar con la dirección" (T-72, D5): el servidor geocodifica el domicilio
+ * guardado y espera a Google (como mucho 5 s). Un 409 o un 502 llega como
+ * `ErrorApi` con el motivo en español en `mensajeApi`.
+ */
+export function ubicarCliente(id: string): Promise<UbicacionGeocodificada> {
+  return apiFetch<UbicacionGeocodificada>(`/clientes/${id}/ubicar`, {
+    method: "POST",
+  });
 }

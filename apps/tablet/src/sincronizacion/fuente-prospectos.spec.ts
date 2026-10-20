@@ -55,6 +55,7 @@ describe('fuenteProspectos', () => {
         encargado: 'Don Aaron',
         tipo_negocio_id: 'tn-2',
         comentarios: 'Quiere probar jamaica',
+        domicilio: null,
         lat: 32.5149,
         lng: -117.0382,
         foto: null,
@@ -99,5 +100,16 @@ describe('fuenteProspectos', () => {
     });
     // El rechazado sigue en la cola: se reintenta en la siguiente pasada.
     expect(fuente.pendientes().map((o) => o.clave)).toEqual([dos.id]);
+  });
+
+  it('manda la direccion del negocio (T-72, D2)', () => {
+    const { prospectos, fuente } = montar();
+    prospectos.registrar(captura({ lat: null, lng: null, domicilio: 'Av. Revolución 1234' }));
+
+    expect(fuente.pendientes()[0]?.datos).toMatchObject({
+      domicilio: 'Av. Revolución 1234',
+      lat: null,
+      lng: null,
+    });
   });
 });

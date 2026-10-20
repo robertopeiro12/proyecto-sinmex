@@ -25,6 +25,39 @@ export type Numeric = ColumnType<string, number | string, number | string>;
 
 export type Timestamp = ColumnType<Date, Date | string, Date | string>;
 
+export interface CampoEgreso {
+  actualizado_en: Generated<Timestamp>;
+  creado_en: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  id: Generated<string>;
+  nombre: string;
+  se_usa_en_app: Generated<boolean>;
+  tipo: string;
+}
+
+export interface Carga {
+  capturo_usuario_id: string;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  estado: Generated<string>;
+  fecha: Timestamp;
+  id: Generated<string>;
+  motivo_rechazo: string | null;
+  numero: number;
+  respondida_en: Timestamp | null;
+  sucursal_id: string;
+  updated_at: Generated<Timestamp>;
+  vendedor_id: string;
+  version: Generated<number>;
+}
+
+export interface CargaDetalle {
+  carga_id: string;
+  id: Generated<string>;
+  piezas: number;
+  presentacion_id: string;
+}
+
 export interface Cliente {
   alta_cliente_en: Timestamp | null;
   alta_cliente_usuario_id: string | null;
@@ -48,6 +81,7 @@ export interface Cliente {
   telefono: string;
   tipo: string;
   tipo_negocio_id: string | null;
+  ubicacion_origen: string | null;
   updated_at: Generated<Timestamp>;
 }
 
@@ -110,6 +144,28 @@ export interface FolioOficinaContador {
   fecha: Timestamp;
   sucursal_id: string;
   ultimo: number;
+}
+
+export interface Gasto {
+  campo_egreso_id: string;
+  campo_nombre: string;
+  capturo_usuario_id: string | null;
+  comentario: string | null;
+  creado_en: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  factura: Generated<string>;
+  fecha: Timestamp;
+  foto_archivo: string | null;
+  foto_subida_en: Timestamp | null;
+  id: string;
+  metodo: string;
+  monto: Numeric;
+  origen: string;
+  quien: string | null;
+  registrado_en: Timestamp;
+  sucursal_id: string;
+  tipo: string;
+  vendedor_id: string | null;
 }
 
 export interface Jornada {
@@ -289,6 +345,7 @@ export interface SesionVendedor {
 export interface Sucursal {
   activa: Generated<boolean>;
   codigo: string;
+  control_inventario: Generated<boolean>;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
   id: Generated<string>;
@@ -430,6 +487,10 @@ export interface VentaNota {
   factura_asignada_por_usuario_id: string | null;
   factura_id: string | null;
   fecha: Timestamp;
+  firma_archivo: string | null;
+  firma_esperada: Generated<boolean>;
+  firma_nombre: string | null;
+  firma_subida_en: Timestamp | null;
   folio: string;
   id: Generated<string>;
   mes: number;
@@ -486,12 +547,16 @@ export interface Visita {
 }
 
 export interface DB {
+  campo_egreso: CampoEgreso;
+  carga: Carga;
+  carga_detalle: CargaDetalle;
   cliente: Cliente;
   cliente_precio: ClientePrecio;
   cobranza_abono: CobranzaAbono;
   cobro: Cobro;
   factura: Factura;
   folio_oficina_contador: FolioOficinaContador;
+  gasto: Gasto;
   jornada: Jornada;
   lista_precio: ListaPrecio;
   motivo_visita: MotivoVisita;

@@ -35,6 +35,13 @@ export interface DatosRegistroProspecto {
   lat: number | null;
   lng: number | null;
   /**
+   * T-72 (D1): "Dirección del negocio", hasta 300. Cuando es obligatoria (sin
+   * GPS) lo decide `validarAltaProspecto`; aqui solo se recorta, se mide y se
+   * guarda en `prospecto` y en el espejo de `cliente`. Opcional para quien no la
+   * pasa (pruebas y capturas anteriores).
+   */
+  domicilio?: string | null;
+  /**
    * Ruta local de la foto del lugar, **ya comprimida** por `src/fotos/`.
    *
    * Opcional de verdad: si el vendedor no la tomo, o si la camara o la
@@ -50,6 +57,8 @@ export const LARGO_MAX_NOMBRE = 200;
 export const LARGO_MAX_TELEFONO = 30;
 export const LARGO_MAX_ENCARGADO = 120;
 export const LARGO_MAX_COMENTARIOS = 500;
+/** T-72: el mismo tope que el servidor (`LARGO_MAX_DOMICILIO` de `datos-prospecto.ts`). */
+export const LARGO_MAX_DOMICILIO = 300;
 
 export type RepositorioProspectos = ReturnType<typeof crearRepositorioProspectos>;
 
@@ -123,6 +132,13 @@ export function crearRepositorioProspectos(
         );
       }
 
+      const domicilio = recortar(datos.domicilio ?? null);
+      if (domicilio !== null && domicilio.length > LARGO_MAX_DOMICILIO) {
+        throw new ErrorProspecto(
+          `La dirección no puede pasar de ${LARGO_MAX_DOMICILIO} caracteres.`,
+        );
+      }
+
       // El tipo de negocio se comprueba contra el catalogo local: si el portal
       // lo dio de baja, el servidor lo rechazaria con `tipo-negocio-inexistente`
       // y el vendedor se enteraria mañana. Aqui se entera ahora.
@@ -151,10 +167,10 @@ export function crearRepositorioProspectos(
         bd.runSync(
           `insert into prospecto (
              id, fecha, vendedor_id, sucursal_id, nombre, telefono, encargado,
-             tipo_negocio_id, comentarios, lat, lng, foto_uri, grabado_en, sync_estado
+             tipo_negocio_id, comentarios, lat, lng, domicilio, foto_uri, grabado_en, sync_estado
            ) values (
              $id, $fecha, $vendedor_id, $sucursal_id, $nombre, $telefono, $encargado,
-             $tipo_negocio_id, $comentarios, $lat, $lng, $foto_uri, $grabado_en, 'pendiente'
+             $tipo_negocio_id, $comentarios, $lat, $lng, $domicilio, $foto_uri, $grabado_en, 'pendiente'
            )`,
           {
             $id: id,
@@ -170,6 +186,8 @@ export function crearRepositorioProspectos(
             $comentarios: comentarios,
             $lat: datos.lat,
             $lng: datos.lng,
+            // T-72 (D1): la direccion que escribio, o null.
+            $domicilio: domicilio,
             // La foto, si la hubo. No se valida nada de ella aqui a proposito:
             // todo lo que podia fallar (permiso, camara, compresion, tamano) ya
             // fallo antes de llegar, y en ese caso esto vale `null`. Este `insert`
@@ -180,24 +198,29 @@ export function crearRepositorioProspectos(
         );
 
         // T-75 (D1): el espejo local. Mismo id: el servidor lo adoptara (D2) y
-        // el pull pisara esta fila por id sin duplicar. Sin precios ni
-        // domicilio: la venta solo admite regalo y la conversion es del portal.
+        // el pull pisara esta fila por id sin duplicar. Sin precios: la
+        // venta solo admite regalo y la conversion es del portal. T-72: con la
+        // direccion, la ficha abre Maps por domicilio mientras no haya coordenada.
         bd.runSync(
           `insert into cliente (
              id, nombre, domicilio, telefono, encargado, tipo, pct_comision,
-             plazo_credito_dias, primera_venta_en, lat, lng, sucursal_id, activo,
-             saldo_favor_centavos, sincronizado_en
+             plazo_credito_dias, primera_venta_en, lat, lng, ubicacion_origen,
+             sucursal_id, activo, saldo_favor_centavos, sincronizado_en
            ) values (
-             $id, $nombre, null, $telefono, $encargado, 'prospecto', null,
-             null, null, $lat, $lng, $sucursal_id, 1, 0, $sincronizado_en
+             $id, $nombre, $domicilio, $telefono, $encargado, 'prospecto', null,
+             null, null, $lat, $lng, $ubicacion_origen,
+             $sucursal_id, 1, 0, $sincronizado_en
            )`,
           {
             $id: id,
             $nombre: nombre,
+            $domicilio: domicilio,
             $telefono: telefono,
             $encargado: encargado,
             $lat: datos.lat,
             $lng: datos.lng,
+            // T-72 (D3): la coordenada de un alta solo puede ser del GPS.
+            $ubicacion_origen: datos.lat !== null ? 'gps' : null,
             $sucursal_id: datos.sucursalId,
             $sincronizado_en: ahora,
           },

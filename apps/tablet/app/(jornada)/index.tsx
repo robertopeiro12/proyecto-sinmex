@@ -4,6 +4,7 @@ import { Alert, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ErrorRuta } from '@/datos';
+import { MOTIVO_CARGA_PENDIENTE, totalPiezas } from '@/estado/inventario';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
@@ -19,6 +20,7 @@ import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 import { Boton } from '@/ui/boton';
 import { FilaAtendidoFueraDeRuta, FilaFueraDeRuta, FilaVisitadoSinVenta, ListaRuta } from '@/ui/lista-ruta';
 import { BotonIcono } from '@/ui/boton-icono';
+import { Cifra } from '@/ui/cifra';
 import { MenuLateral } from '@/ui/menu-lateral';
 import { formatearMomento } from '@/ui/momento';
 import { Pastilla, Tarjeta } from '@/ui/pantalla';
@@ -98,6 +100,16 @@ export default function RutaDelDia() {
     void ultimaSincronizacion;
     return contarPendientesDeSubir(datos);
   }, [datos, vueltas, versionCatalogos, ultimaSincronizacion]);
+
+  // T-27 (D9): sin notificaciones push, la pantalla principal avisa de la carga
+  // por aceptar mientras exista una pendiente de hoy, con o sin control (el aviso
+  // no bloquea nada por si mismo).
+  const cargaPorAceptar = useMemo(() => {
+    void vueltas;
+    void versionCatalogos;
+    void ultimaSincronizacion;
+    return vendedor ? datos.cargas.pendienteDeHoy(vendedor.id) : null;
+  }, [datos, vendedor, vueltas, versionCatalogos, ultimaSincronizacion]);
 
   // T-38 (D6 capa 2): con el dia cerrado, la lista queda en solo lectura.
   const menu = estadoMenuJornada(jornada);
@@ -265,6 +277,28 @@ export default function RutaDelDia() {
 
           {ultimaSincronizacion && !ultimaSincronizacion.ok ? (
             <Text style={estilos.error}>{MENSAJE[ultimaSincronizacion.motivo ?? 'sin-red']}</Text>
+          ) : null}
+
+          {cargaPorAceptar ? (
+            <Tarjeta estado="accion" etiqueta="Carga por aceptar">
+              <Text style={estilos.textoTarjeta}>{MOTIVO_CARGA_PENDIENTE}</Text>
+              <Text style={estilos.textoSuave}>
+                Carga n.º {cargaPorAceptar.numero} ·{' '}
+                <Cifra valor={totalPiezas(cargaPorAceptar.lineas)} tono="suave" /> piezas
+              </Text>
+              <Boton
+                etiqueta="Ver la carga"
+                glifo="→"
+                ancho="ajustado"
+                onPress={() =>
+                  router.push({
+                    pathname: '/(jornada)/inventario/[cargaId]',
+                    params: { cargaId: cargaPorAceptar.id },
+                  })
+                }
+                estilo={{ marginTop: espacio.sm }}
+              />
+            </Tarjeta>
           ) : null}
 
           {menu.avisoDiaCerrado ? (

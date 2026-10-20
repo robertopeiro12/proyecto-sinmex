@@ -84,7 +84,14 @@ export type ResultadoCaptura =
  * bucle de `comprimirParaSubir` midiendo.
  */
 /** Para que es la foto: cambia el texto del fallo, no la compresion (T-39, D9). */
-export type DestinoFoto = 'prospecto' | 'visita';
+export type DestinoFoto = 'prospecto' | 'visita' | 'gasto';
+
+/** "No se pudo tomar la foto ..." segun el destino. */
+const QUE_FOTO: Record<DestinoFoto, string> = {
+  prospecto: 'del lugar',
+  visita: 'de la visita',
+  gasto: 'del ticket',
+};
 
 export async function capturarFoto(destino: DestinoFoto): Promise<ResultadoCaptura> {
   try {
@@ -125,7 +132,7 @@ export async function capturarFoto(destino: DestinoFoto): Promise<ResultadoCaptu
       motivo:
         error instanceof ErrorCompresion
           ? error.message
-          : `No se pudo tomar la foto ${destino === 'visita' ? 'de la visita' : 'del lugar'}: ${error instanceof Error ? error.message : String(error)}`,
+          : `No se pudo tomar la foto ${QUE_FOTO[destino]}: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
 }

@@ -2,6 +2,7 @@ import type { BaseDatos, ValorSQL } from '../base-datos';
 import type { DepsRepositorio } from './deps';
 import { enTransaccion } from './deps';
 import type {
+  CampoEgreso,
   Cliente,
   ClientePrecio,
   FechaISO,
@@ -16,6 +17,7 @@ import type {
   Vehiculo,
   Vendedor,
 } from '../tipos';
+import { aplicarSnapshotCargas, type FilaCargaPull } from './cargas';
 import { aplicarSnapshotRutas, type FilaRutaPull } from './rutas';
 
 /**
@@ -29,20 +31,32 @@ import { aplicarSnapshotRutas, type FilaRutaPull } from './rutas';
  */
 export interface SnapshotCatalogos {
   sucursales?: Omit<Sucursal, 'sincronizado_en'>[];
-  vendedores?: Omit<Vendedor, 'sincronizado_en'>[];
+  /**
+   * T-27: `control_inventario` es opcional aqui: un servidor anterior no lo manda
+   * y el login sin red no lo conoce. Ausente, el upsert conserva lo que habia (0
+   * en una fila nueva); ver NO_BORRAR_CON_NULO.
+   */
+  vendedores?: (Omit<Vendedor, 'sincronizado_en' | 'control_inventario'> &
+    Partial<Pick<Vendedor, 'control_inventario'>>)[];
   vehiculos?: Omit<Vehiculo, 'sincronizado_en'>[];
   productos?: Omit<Producto, 'sincronizado_en'>[];
   presentaciones?: Omit<Presentacion, 'sincronizado_en'>[];
   /**
-   * `foto_subida_en` es opcional aqui (un servidor anterior a T-39 no lo manda;
-   * el upsert escribe `null`) y `foto_cache_subida_en` no viene nunca del pull.
+   * `foto_subida_en` (T-39) y `ubicacion_origen` (T-72) son opcionales aqui (un
+   * servidor anterior no los manda; el upsert escribe `null`) y
+   * `foto_cache_subida_en` no viene nunca del pull.
    */
-  clientes?: (Omit<Cliente, 'sincronizado_en' | 'foto_subida_en' | 'foto_cache_subida_en'> &
-    Partial<Pick<Cliente, 'foto_subida_en'>>)[];
+  clientes?: (Omit<
+    Cliente,
+    'sincronizado_en' | 'foto_subida_en' | 'foto_cache_subida_en' | 'ubicacion_origen'
+  > &
+    Partial<Pick<Cliente, 'foto_subida_en' | 'ubicacion_origen'>>)[];
   /** T-40. Coleccion nueva del `pull`: el desplegable de la pantalla de prospectos. */
   tiposNegocio?: Omit<TipoNegocio, 'sincronizado_en'>[];
   /** T-39. Coleccion nueva del pull: el catalogo de la pantalla de visita. Baja como bandera. */
   motivosVisita?: Omit<MotivoVisita, 'sincronizado_en'>[];
+  /** T-30/T-31. Coleccion nueva del pull: el catalogo de la pantalla Gastos. Baja como bandera. */
+  camposEgreso?: Omit<CampoEgreso, 'sincronizado_en'>[];
   precios?: Omit<ClientePrecio, 'sincronizado_en'>[];
   notas?: Omit<NotaPendiente, 'sincronizado_en'>[];
   /**
@@ -52,6 +66,8 @@ export interface SnapshotCatalogos {
   rutas?: FilaRutaPull[];
   /** T-74. Coleccion nueva del pull; baja como bandera. */
   promociones?: Omit<Promocion, 'sincronizado_en'>[];
+  /** T-27. La carga y las recargas del vendedor; regla propia (`aplicarSnapshotCargas`). */
+  cargas?: FilaCargaPull[];
 }
 
 /** Una fila de la pantalla de venta: que se puede vender y a cuanto (T-16). */
@@ -76,11 +92,14 @@ const COLUMNAS = {
     'activo',
     // T-14: lo asigna el servidor; la tablet lo refleja y lo usa al foliar.
     'folio_segmento',
+    // T-27 (D7): la casilla de su sucursal. El login sin red no la pisa.
+    'control_inventario',
   ],
   vehiculo: ['id', 'nombre', 'sucursal_id', 'activo'],
   producto: ['id', 'nombre', 'activo'],
   tipo_negocio: ['id', 'nombre', 'activo'],
   motivo_visita: ['id', 'nombre', 'exige_foto', 'exige_atendio', 'activo'],
+  campo_egreso: ['id', 'nombre', 'tipo', 'se_usa_en_app', 'activo'],
   presentacion: ['id', 'producto_id', 'volumen', 'activo'],
   cliente: [
     'id',
@@ -100,6 +119,8 @@ const COLUMNAS = {
     'saldo_favor_centavos',
     // T-39 (D9): cuando el servidor recibio su foto. `foto_cache_subida_en` NO va: es de la tablet.
     'foto_subida_en',
+    // T-72 (D3): de donde salio la coordenada. Se guarda; aun no se muestra.
+    'ubicacion_origen',
   ],
   promocion: [
     'id', 'audiencia', 'cliente_id',
@@ -148,9 +169,14 @@ const COLUMNAS = {
  * valor de verdad gana (el `pull` sigue mandando), pero un `null` no borra lo
  * que ya habia. Es la misma doctrina de ADR-0007: el segmento **se pina**, no se
  * recalcula ni se pierde por el camino.
+ *
+ * T-27: `vendedor.control_inventario` tiene el mismo problema y uno peor: es
+ * `not null`. Un `null` del login sin red fallaria el `not null`, y un 0 apagaria
+ * el control hasta el siguiente pull. Por eso cada columna lleva el valor (SQL
+ * literal, de esta constante) con que nace una fila NUEVA que no lo trae.
  */
-const NO_BORRAR_CON_NULO: Record<string, readonly string[]> = {
-  vendedor: ['folio_segmento'],
+const NO_BORRAR_CON_NULO: Record<string, Record<string, string>> = {
+  vendedor: { folio_segmento: 'null', control_inventario: '0' },
 };
 
 /**
@@ -270,6 +296,8 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
           upsert(bd, 'tipo_negocio', COLUMNAS.tipo_negocio, snapshot.tiposNegocio, ahora) +
           // T-39: sin llaves foraneas hacia nadie; catalogo de empresa como tipo_negocio.
           upsert(bd, 'motivo_visita', COLUMNAS.motivo_visita, snapshot.motivosVisita, ahora) +
+          // T-30/T-31: sin llaves foraneas hacia nadie; catalogo de empresa como motivo_visita.
+          upsert(bd, 'campo_egreso', COLUMNAS.campo_egreso, snapshot.camposEgreso, ahora) +
           upsert(bd, 'presentacion', COLUMNAS.presentacion, snapshot.presentaciones, ahora) +
           upsert(bd, 'cliente', COLUMNAS.cliente, snapshot.clientes, ahora) +
           // T-37: despues de `cliente`, porque la fila de ruta lo referencia y un
@@ -278,6 +306,9 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
           aplicarSnapshotRutas(bd, snapshot.rutas, ahora) +
           // T-74: sin llaves foraneas; va aqui por orden de lectura.
           upsert(bd, 'promocion', COLUMNAS.promocion, snapshot.promociones, ahora) +
+          // T-27: sin llaves foraneas hacia los catalogos (ver la 017); regla de
+          // fusion propia en `cargas.ts` (una respuesta no se deshace).
+          aplicarSnapshotCargas(bd, snapshot.cargas, ahora) +
           upsert(bd, 'cliente_precio', COLUMNAS.cliente_precio, snapshot.precios, ahora) +
           upsert(bd, 'nota_pendiente', COLUMNAS.nota_pendiente, snapshot.notas, ahora)
         );
@@ -334,6 +365,23 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
      */
     obtenerMotivoVisita(id: string): MotivoVisita | null {
       return bd.getFirstSync<MotivoVisita>('select * from motivo_visita where id = $id', { $id: id });
+    },
+
+    /**
+     * Campos de egreso **activos**, por nombre (T-30/T-31). Trae tambien los que
+     * no tienen "Se usa en la app": filtrar es de `camposParaGasto`
+     * (`src/estado/gasto.ts`), que es la regla con prueba.
+     */
+    listarCamposEgreso(): CampoEgreso[] {
+      return bd.getAllSync<CampoEgreso>('select * from campo_egreso where activo = 1 order by nombre');
+    },
+
+    /**
+     * Un campo por id, activo o no. Uno dado de baja (o sin la casilla) despues de
+     * elegirlo sigue sirviendo para guardar el gasto (D5: el servidor lo acepta).
+     */
+    obtenerCampoEgreso(id: string): CampoEgreso | null {
+      return bd.getFirstSync<CampoEgreso>('select * from campo_egreso where id = $id', { $id: id });
     },
 
     /**
@@ -495,14 +543,19 @@ function upsert(
   if (!filas || filas.length === 0) return 0;
 
   const todas = [...columnas, 'sincronizado_en'];
-  const marcadores = todas.map((c) => `$${c}`).join(', ');
-  const conservar = NO_BORRAR_CON_NULO[tabla] ?? [];
+  const conservar = NO_BORRAR_CON_NULO[tabla] ?? {};
+  const seConserva = (c: string) => Object.prototype.hasOwnProperty.call(conservar, c);
+  const marcadores = todas
+    .map((c) => (seConserva(c) ? `coalesce($${c}, ${conservar[c] ?? 'null'})` : `$${c}`))
+    .join(', ');
   const asignaciones = todas
     .filter((c) => c !== 'id')
     .map((c) =>
-      conservar.includes(c)
-        ? // Un valor de verdad gana; un null no borra lo que ya habia.
-          `${c} = coalesce(excluded.${c}, ${tabla}.${c})`
+      seConserva(c)
+        ? // Un valor de verdad gana; un null no borra lo que ya habia. Se lee el
+          // PARAMETRO y no `excluded`: en `excluded` ya va el valor con que nace
+          // una fila nueva, y ese tampoco debe pisar al que existia.
+          `${c} = coalesce($${c}, ${tabla}.${c})`
         : `${c} = excluded.${c}`,
     )
     .join(', ');

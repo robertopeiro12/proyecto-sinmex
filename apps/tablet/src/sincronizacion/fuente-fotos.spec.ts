@@ -2,8 +2,17 @@ import { depsDePrueba, snapshotDePrueba } from '@/datos/pruebas-apoyo';
 import { crearRepositorioCatalogos } from '@/datos/repositorios/catalogos';
 import { crearRepositorioProspectos } from '@/datos/repositorios/prospectos';
 import { crearRepositorioVisitas } from '@/datos/repositorios/visitas';
+import { crearRepositorioGastos } from '@/datos/repositorios/gastos';
+import { crearRepositorioFolios } from '@/datos/repositorios/folios';
+import { crearRepositorioVentas } from '@/datos/repositorios/ventas';
 
-import { combinarFuentesFotos, fuenteFotosProspectos, fuenteFotosVisitas } from './fuente-fotos';
+import {
+  combinarFuentesFotos,
+  fuenteFirmasVentas,
+  fuenteFotosGastos,
+  fuenteFotosProspectos,
+  fuenteFotosVisitas,
+} from './fuente-fotos';
 
 function montar() {
   const deps = depsDePrueba();
@@ -135,5 +144,157 @@ describe('fotos de visitas y cola combinada (T-39, D9)', () => {
   it('un resultado de una clave que no salio de pendientes() es un bug y truena', () => {
     const { fuente } = montarAmbas();
     expect(() => fuente.anotarError('nadie', 'x')).toThrow(/no salio de pendientes/);
+  });
+});
+
+describe('fotos de gastos en la cola combinada (T-30/T-31, D8)', () => {
+  function montarTres() {
+    const deps = depsDePrueba();
+    const catalogos = crearRepositorioCatalogos(deps);
+    catalogos.guardarSnapshot(snapshotDePrueba());
+    const visitas = crearRepositorioVisitas(deps, { catalogos });
+    const gastos = crearRepositorioGastos(deps, { catalogos });
+    const fuente = combinarFuentesFotos([
+      fuenteFotosProspectos(crearRepositorioProspectos(deps, { catalogos })),
+      fuenteFotosVisitas(visitas),
+      fuenteFotosGastos(gastos),
+    ]);
+    return { visitas, gastos, fuente };
+  }
+
+  const gastoCon = (fotoUri: string | null) => ({
+    vendedorId: 'ven-1',
+    campoEgresoId: 'ce-gasolina',
+    montoCentavos: 25050,
+    comentario: null,
+    fotoUri,
+  });
+
+  it('la foto del ticket sale solo cuando el gasto ya esta sincronizado; sin foto no aparece', () => {
+    const { gastos, fuente } = montarTres();
+    const g = gastos.registrar(gastoCon('file:///cache/ticket.jpg'));
+    const sinFoto = gastos.registrar(gastoCon(null));
+    expect(fuente.pendientes()).toEqual([]);
+    gastos.marcarSincronizada(g.id);
+    gastos.marcarSincronizada(sinFoto.id);
+    expect(fuente.pendientes()).toEqual([{ clave: g.id, uri: 'file:///cache/ticket.jpg' }]);
+  });
+
+  it('visitas antes que gastos, y cada resultado vuelve a SU repositorio', () => {
+    const { visitas, gastos, fuente } = montarTres();
+    const v = visitas.registrar({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      motivoVisitaId: 'mot-cerrado',
+      observaciones: null,
+      atendio: null,
+      lat: 32.5,
+      lng: -117,
+      precisionM: null,
+      direccionTexto: null,
+      fotoUri: 'file:///cache/v.jpg',
+    });
+    visitas.marcarSincronizada(v.id);
+    const g = gastos.registrar(gastoCon('file:///cache/ticket.jpg'));
+    gastos.marcarSincronizada(g.id);
+
+    expect(fuente.pendientes().map((f) => f.clave)).toEqual([v.id, g.id]);
+    fuente.marcarSubida(g.id, '2026-08-07T16:00:00.000Z');
+    fuente.anotarError(v.id, 'sin red');
+
+    expect(gastos.porId(g.id)).toMatchObject({ foto_subida_en: '2026-08-07T16:00:00.000Z', sync_estado: 'sincronizado' });
+    expect(visitas.porId(v.id)).toMatchObject({ foto_error: 'sin red', foto_subida_en: null });
+    expect(gastos.porId(g.id)?.foto_error).toBeNull();
+  });
+});
+
+describe('firmas de ventas en la cola combinada (T-73)', () => {
+  function montarConVentas() {
+    const deps = depsDePrueba();
+    const catalogos = crearRepositorioCatalogos(deps);
+    catalogos.guardarSnapshot(snapshotDePrueba());
+    const gastos = crearRepositorioGastos(deps, { catalogos });
+    const ventas = crearRepositorioVentas(deps, { catalogos, folios: crearRepositorioFolios(deps) });
+    const fuente = combinarFuentesFotos([
+      fuenteFotosProspectos(crearRepositorioProspectos(deps, { catalogos })),
+      fuenteFotosVisitas(crearRepositorioVisitas(deps, { catalogos })),
+      fuenteFotosGastos(gastos),
+      fuenteFirmasVentas(ventas),
+    ]);
+    return { gastos, ventas, fuente };
+  }
+
+  const ventaFirmada = (
+    ventas: ReturnType<typeof montarConVentas>['ventas'],
+    uri = 'file:///documentos/firmas/firma-v.jpg',
+  ) =>
+    ventas.registrar({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      numNota: '',
+      contadoCredito: 'contado',
+      factura: 'N/A',
+      comentarios: null,
+      lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
+      firma: { uri, nombre: 'Doña Lupe' },
+    });
+
+  it('la firma sale solo cuando la venta ya esta sincronizada; una rechazada no (Review Focus 4)', () => {
+    const { ventas, fuente } = montarConVentas();
+    const v = ventaFirmada(ventas);
+    const rechazada = ventaFirmada(ventas, 'file:///documentos/firmas/firma-r.jpg');
+    ventas.marcarError(rechazada.id, 'precio-no-asignado: sin precio');
+    expect(fuente.pendientes()).toEqual([]);
+
+    ventas.marcarSincronizada(v.id);
+    expect(fuente.pendientes()).toEqual([{ clave: v.id, uri: 'file:///documentos/firmas/firma-v.jpg' }]);
+  });
+
+  it('gastos antes que ventas, y cada resultado vuelve a SU repositorio', () => {
+    const { gastos, ventas, fuente } = montarConVentas();
+    const v = ventaFirmada(ventas);
+    ventas.marcarSincronizada(v.id);
+    const g = gastos.registrar({
+      vendedorId: 'ven-1',
+      campoEgresoId: 'ce-gasolina',
+      montoCentavos: 25050,
+      comentario: null,
+      fotoUri: 'file:///cache/ticket.jpg',
+    });
+    gastos.marcarSincronizada(g.id);
+
+    expect(fuente.pendientes().map((f) => f.clave)).toEqual([g.id, v.id]);
+    fuente.marcarSubida(v.id, '2026-08-07T16:00:00.000Z');
+    expect(ventas.porId(v.id)?.firma_subida_en).toBe('2026-08-07T16:00:00.000Z');
+    expect(gastos.porId(g.id)?.foto_subida_en).toBeNull();
+  });
+
+  it('un 404 es definitivo solo para la firma; un 409 no (Review Focus 5)', () => {
+    const { gastos, ventas, fuente } = montarConVentas();
+    const v = ventaFirmada(ventas);
+    ventas.marcarSincronizada(v.id);
+    const g = gastos.registrar({
+      vendedorId: 'ven-1',
+      campoEgresoId: 'ce-gasolina',
+      montoCentavos: 8000,
+      comentario: null,
+      fotoUri: 'file:///cache/ticket.jpg',
+    });
+    gastos.marcarSincronizada(g.id);
+    fuente.pendientes();
+
+    expect(fuente.fallaDefinitiva?.(v.id, 404)).toBe(true);
+    expect(fuente.fallaDefinitiva?.(v.id, 409)).toBe(false);
+    expect(fuente.fallaDefinitiva?.(g.id, 404)).toBe(false);
+  });
+
+  it('descartar la firma la saca de la cola sin tocar la venta', () => {
+    const { ventas, fuente } = montarConVentas();
+    const v = ventaFirmada(ventas);
+    ventas.marcarSincronizada(v.id);
+    fuente.pendientes();
+    fuente.descartar(v.id, 'Esa venta ya no existe.');
+    expect(fuente.pendientes()).toEqual([]);
+    expect(ventas.porId(v.id)).toMatchObject({ firma_descartada: 1, sync_estado: 'sincronizado' });
   });
 });

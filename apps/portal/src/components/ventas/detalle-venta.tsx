@@ -8,6 +8,7 @@ import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import { PedirBorradoCobro } from "@/components/peticiones/pedir-borrado-cobro";
 import { ETIQUETA_METODO_PAGO } from "@/lib/cobranzas";
 import { ETIQUETA_BORRADO_PEDIDO } from "@/lib/peticiones";
+import { FirmaVenta } from "./firma-venta";
 import {
   ETIQUETA_ORIGEN,
   ETIQUETA_STATUS,
@@ -176,6 +177,8 @@ export function DetalleVenta({
             </table>
           )}
         </section>
+
+        <FirmaVenta ventaId={venta.id} firma={venta.firma} editada={venta.editada} />
 
         {pidiendo && (
           <PedirBorradoCobro

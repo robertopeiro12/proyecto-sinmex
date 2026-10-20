@@ -24,6 +24,7 @@ export const navSections: NavSection[] = [
     label: "Finanzas",
     items: [
       { label: "Tesorería", href: "/finanzas/tesoreria" },
+      { label: "Gastos", href: "/finanzas/gastos" },
       { label: "Flujo de Efectivo", href: "/finanzas/flujo-efectivo" },
     ],
   },
@@ -35,6 +36,7 @@ export const navSections: NavSection[] = [
       { label: "Vendedores", href: "/catalogo/vendedores" },
       { label: "Vehículos", href: "/catalogo/vehiculos" },
       { label: "Motivos de visita", href: "/catalogo/motivos-de-visita" },
+      { label: "Campos de egreso", href: "/catalogo/campos-de-egreso" },
       { label: "Productos", href: "/catalogo/productos" },
       { label: "Listas de Precios", href: "/catalogo/precios" },
       { label: "Usuarios", href: "/catalogo/usuarios" },

@@ -18,6 +18,9 @@ npm test          --workspace=apps/tablet   # pruebas de la capa de datos
 npm run export    --workspace=apps/tablet   # bundle de Metro (sin SDK de Android)
 ```
 
+**Dependencias nativas.** `react-native-svg` (T-73, la firma del cliente) es nativa: después de instalarla o
+actualizarla hace falta un APK nuevo (`expo prebuild -p android --clean` y `expo run:android`); Metro solo no basta.
+
 ## Estructura
 
 ```
@@ -32,7 +35,9 @@ apps/tablet/
 │       ├── index.tsx          # la ruta del dia (pantalla principal, T-37)
 │       ├── agregar-a-ruta.tsx # clientes existentes que el vendedor suma a su ruta
 │       ├── operacion/         # todos los clientes -> ficha -> venta / cobranza / visita
-│       ├── pendiente/         # secciones del menu que aun no existen (gastos, inventario, merma)
+│       ├── gastos/            # Gastos de hoy y Registrar gasto (T-30/T-31)
+│       ├── inventario/        # Inventario y el detalle de una carga (T-27)
+│       ├── pendiente/         # secciones del menu que aun no existen (merma)
 │       ├── prospectos.tsx
 │       ├── ruta.tsx           # Ruta y GPS (T-41)
 │       └── cerrar-dia.tsx     # km final (el corte es T-33)
@@ -245,6 +250,12 @@ Spec: `docs/superpowers/specs/2026-10-14-t-75-camino-prospecto-design.md`. Flujo
    el administrador lo convierta en el portal.
 
 - La foto se liga por id (`fotoLocalDe`), con respaldo por nombre + teléfono.
+- **Dirección del negocio (T-72)**: campo del alta, obligatorio cuando no hay coordenada válida (no se tomó, permiso
+  negado, sin señal o lectura fuera de rango). La regla es `validarAltaProspecto` (`src/estado/alta-prospecto.ts`, con
+  pruebas) y comparte con la visita `esCoordenadaValida` (`src/estado/coordenada.ts`). Se guarda en
+  `prospecto.domicilio` y en el espejo (`cliente.domicilio`; migración 014), sube como `domicilio` en la operación y
+  el servidor la geocodifica después del commit, sin que el push espere; la coordenada baja en el pull con
+  `ubicacion_origen` (se guarda, no se muestra).
 - **Prospectos capturados antes de T-75** no tienen espejo local con su id: "Prospectos de hoy" los muestra sin
   enlace (`enlaceAFicha` da `null`) y se alcanzan por la pestaña Prospectos cuando el pull los baje.
 - Un alta rechazada (p. ej. tipo de negocio dado de baja) deja alta y venta en `error`; con `tipo-negocio-inexistente` entran solas
@@ -276,6 +287,69 @@ Spec: `docs/superpowers/specs/2026-10-18-t-39-visita-sin-venta-design.md`. Panta
   sincronización. La URI lleva `?v=<foto_subida_en>` para que Android no reuse la imagen anterior (`uriFotoCliente`).
 - **Ruta**: "Visitados sin venta" y "Visitas de hoy" en la ficha; ver la sección de la ruta del día.
 
+## Gastos de la ruta (T-30/T-31)
+
+Spec: `docs/superpowers/specs/2026-10-20-t-30-31-gastos-de-ruta-design.md`. Pantallas:
+`app/(jornada)/gastos/index.tsx` (entrada **Gastos** del menú) y `app/(jornada)/gastos/registrar.tsx`.
+
+- **Lista**: "Gastos de hoy" con campo, monto, hora y pastilla (por subir, subido, rechazado con su motivo) y el
+  **total del día**, que suma todos los gastos de hoy sin importar si ya subieron (`gastos.totalDelDia`).
+- **Registrar** (sin red): campo (solo los activos con "Se usa en la app", `camposParaGasto`), monto en pesos
+  (`montoACentavos`: "12.5" → 1250; "12.345", "0", ".5" y la coma no valen), observaciones (≤ 200) y foto del ticket
+  opcional (`capturarFoto('gasto')`). El método se muestra fijo: "Efectivo cobranza del día". Toda la validación es
+  `validarGasto` (`src/estado/gasto.ts`, con pruebas). Ignora el segundo toque mientras guarda. Con el día cerrado o
+  sin catálogo no deja registrar.
+- **Datos** (migración 015, `src/datos/repositorios/gastos.ts`): `campo_egreso` baja con el pull (`campos_egreso`,
+  casilla como 0/1); el gasto nace `pendiente` con `campo_nombre` copiado. Un campo dado de baja o sin la casilla
+  después de elegirlo se guarda y sube igual. **Un gasto grabado no se edita ni se borra en la app**: las
+  correcciones son del portal.
+- **Sincroniza**: `fuente-gastos.ts` sube la operación `gasto` (sin `cliente_id` ni folio; clave = id) **después de
+  visitas y antes de rutas** (`fuentesDelPush`). La foto sube por la cola combinada de fotos (`fuenteFotosGastos`)
+  cuando el gasto ya está sincronizado; el servidor la guarda como `gasto-<id>.jpg`.
+
+## Firma del cliente en la venta (T-73)
+
+Spec: `docs/superpowers/specs/2026-10-21-t-73-firma-del-cliente-design.md`.
+
+- **Revisión de la venta** (`app/(jornada)/operacion/[clienteId]/venta.tsx`): tarjeta "Firma del cliente" con el
+  recuadro (`src/ui/recuadro-firma.tsx`), "Borrar firma" y "Nombre de quien firma (opcional)". "Grabar venta" solo se
+  habilita con firma (`puedeGrabarVenta`); "Corregir" vuelve a captura y **borra** la firma (el cliente firmó un total).
+  Mientras el dedo está en el recuadro la pantalla no se desplaza: el `PanResponder` reclama el toque y no lo suelta.
+- **Al grabar** (`crearGrabadorVenta`, ignora el segundo toque): `exportarPng()` (`toDataURL`) → `guardarFirmaJpg`
+  (`src/fotos/firma-expo.ts`: JPG 0.8, ≤ 1000 px, en `documentDirectory/firmas/firma-<id>.jpg`) → `ventas.registrar`
+  con el id generado antes y `firma: { uri, nombre }`, en la misma transacción que la venta y su folio. Si la firma no
+  se pudo guardar, la venta no se graba, no se quema folio y la pantalla sigue en revisión con la firma.
+- **"Venta grabada"** dice "Firmada por {nombre}" o "Firmada"; la ficha marca "Firma por subir" mientras el servidor no
+  tenga la imagen (`firmaPorSubir`).
+- **Datos** (migración 016): `venta.firma_local`, `firma_nombre`, `firma_subida_en`, `firma_error`,
+  `firma_descartada` (esquema derivado como la foto de la visita y del gasto; no tocan `sync_estado`).
+- **Sincroniza**: la operación `venta` lleva `firma: { nombre }`; la imagen sube por la cola de fotos
+  (`fuenteFirmasVentas`, después de los gastos) cuando la venta ya está sincronizada. Un 404 (la venta se eliminó en el
+  portal) la descarta (`fallaDefinitiva`); un 409 se reintenta.
+
+## Carga, recarga e Inventario (T-27 pieza 1)
+
+Spec: `docs/superpowers/specs/2026-10-22-t-27-carga-y-recarga-design.md`.
+
+- **La tablet no crea cargas**: las captura producción en el portal y bajan en el pull (`cargas`). Migración 017:
+  `carga` y `carga_detalle` (las escribe solo el pull o la respuesta del servidor) y `vendedor.control_inventario`.
+- **Inventario** (`app/(jornada)/inventario/index.tsx`, entrada del menú): cargas de hoy con estado y total, y por
+  presentación Cargado − Vendido − Regalado = Existencia (en rojo si es 0). Con el control apagado se ve igual, con la
+  nota.
+- **Detalle** (`inventario/[cargaId].tsx`): Aceptar (confirmar ✓) o Rechazar (peligro ×, con motivo ≤ 300). Llama a
+  `POST /sync/cargas/:id/respuesta` con la versión que se pinta (`crearRespondedorCarga` en un `useRef`: un solo envío
+  aunque se toque dos veces). Sin red: "Conéctate al WiFi para aceptar la carga."; 409: aplica la carga nueva,
+  sincroniza y pide revisarla; 404: sincroniza (se eliminó en el portal).
+- **Ruta del día**: aviso "Tienes una carga por aceptar" con botón a la carga mientras haya una pendiente de hoy (con o
+  sin control; no bloquea por sí mismo).
+- **Venta** (control prendido): con una carga pendiente, en lugar de la captura va el motivo y "Ir a Inventario"; cada
+  presentación dice "Te quedan N"; la revisión lista los faltantes (calculados al tocar Revisar y congelados mientras
+  se firma) y no deja grabar. `ventas.registrar()` vuelve a calcular todo **dentro de su transacción**, antes del folio.
+- Lógica con pruebas: `src/datos/inventario-reglas.ts`, `src/estado/inventario.ts`, `src/datos/repositorios/cargas.ts`,
+  `src/sincronizacion/api-carga.ts`.
+- `ventas.registrar()` publica un cambio de catálogo tras grabar; el `sincronizar` del proveedor reutiliza la corrida en
+  curso (`src/sincronizacion/una-a-la-vez.ts`) para no renovar el refresh token dos veces a la vez.
+
 ## Pruebas
 
 `npm test --workspace=apps/tablet` corre Jest con `ts-jest` en Node puro y prueba
@@ -285,6 +359,9 @@ la **capa de datos** (migraciones + repositorios) contra `better-sqlite3`, la
 No hay pruebas de componentes ni de navegacion: necesitarian `jest-expo` y el
 transform de React Native, y siguen fuera de alcance. Es decir: **la pantalla de
 login no tiene pruebas automatizadas**, solo la logica que hay debajo.
+
+En `motor.spec.ts` el error de SQLite se compara por su codigo (`toMatchObject`) y no con `toThrow()`: los errores de
+better-sqlite3 pueden heredar del `Error` de otro realm de Jest y fallar `instanceof` de forma intermitente.
 
 ## Nota sobre el monorepo
 
@@ -306,5 +383,5 @@ solo cuando el portal suba a React 19.2.x, que no es alcance de T-04.
   implementar la sincronizacion. T-07 debe llamar a `gestor.renovar()` al
   conectarse: es lo que corre hacia adelante la ventana offline de la tablet.
 - **T-14** — folios (ver `ADR-0001`).
-- **T-20 / T-27 / T-31 / T-33 / T-41** — módulos de la jornada que todavía son placeholders (gastos,
-  inventario, merma, Ruta y GPS).
+- **T-27 (piezas 2 y 3) / T-33 / T-41** — merma, movimientos del día y corte de inventario, Ruta y GPS. Los gastos
+  (T-30/T-31) y la carga e Inventario (T-27 pieza 1) ya tienen pantalla.

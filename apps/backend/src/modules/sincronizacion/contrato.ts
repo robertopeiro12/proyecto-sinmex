@@ -64,7 +64,10 @@ export const MAX_BYTES_POR_LOTE = 1_000_000;
  *
  * Hecho: T-16 — `venta` (cabecera + lineas, ver {@link DatosVenta} y [[Venta-Nota]]).
  * Hecho: T-20 — `cobranza` (abono/liquidacion sobre una nota, ver {@link DatosCobranza} y [[Cobranza-Abono]]).
- * TODO: T-27 — `gasto` (hielo, gasolina, reparacion, adelanto).
+ * Hecho: T-30/T-31 — `gasto`, un gasto de la ruta pagado con el efectivo
+ *        cobrado (ver {@link DatosGasto}); se proyecta a la tabla `gasto` con
+ *        `id = clave`. El tipo ya existia: fijar su forma es aditivo y no sube
+ *        la version.
  * TODO: T-33 — `merma` (los 3 tipos de merma del documento de julio 2026).
  * Hecho: T-39 — `visita`, una visita sin venta con su motivo (ver
  *        {@link DatosVisita}); se proyecta a la tabla `visita` con `id = clave`.
@@ -244,6 +247,18 @@ export const CODIGOS_RECHAZO = [
    * neutro a proposito: no confirma que hay detras del id.
    */
   'visita-id-ocupado',
+  /**
+   * El `campo_egreso_id` de un gasto no existe en el catalogo. T-30/T-31. Un
+   * campo **dado de baja si se acepta**, y tampoco se mira "se usa en la app":
+   * la oficina pudo cambiarlo mientras la tablet estaba sin red. Esto solo cae
+   * con un id que nunca existio (bug de la tablet).
+   */
+  'campo-egreso-inexistente',
+  /**
+   * El id del gasto (su clave) ya esta ocupado por otro registro. T-30/T-31. El
+   * mismo vendedor con la misma clave es `duplicada`, no esto. Motivo neutro.
+   */
+  'gasto-id-ocupado',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -298,6 +313,13 @@ export type DatosVenta = {
    * regla de negocio: las piezas ya se entregaron en la calle.
    */
   regalos?: RegaloVenta[];
+  /**
+   * T-73. Opcional y aditivo (`CONTRATO_ACTUAL` sigue en 1). Presente = la venta
+   * espera la imagen de la firma del cliente por el canal de fotos. Ausente (o
+   * `null`) = tablet anterior a T-73: la venta entra sin firma. Un `nombre` que no
+   * es texto o pasa de 80 caracteres es `datos-invalidos` (`firma.nombre: …`).
+   */
+  firma?: FirmaVenta | null;
 };
 
 /**
@@ -309,8 +331,6 @@ export type DatosVenta = {
  *
  * Lo que NO viaja, y por que:
  *
- * - **`domicilio`**: no se captura. Lo sustituye la ubicacion, y en Postgres la
- *   columna dejo de ser obligatoria para un prospecto.
  * - **`lista_precio_id`, `pct_comision`, `promocion`, `plazo_credito_dias`**: son
  *   decisiones del administrador. El vendedor no puede dar de alta clientes
  *   justamente porque el control del precio no es suyo.
@@ -341,6 +361,18 @@ export type DatosProspecto = {
   /** Del catalogo `tipos_negocio` que baja en el `pull`. */
   tipo_negocio_id: string | null;
   comentarios: string | null;
+  /**
+   * T-72 (D2): la direccion del negocio que escribio el vendedor. Hasta 300
+   * caracteres; se recorta y un texto vacio cuenta como `null`. La tablet la
+   * exige cuando no hay GPS; el servidor solo valida la forma (mas de 300 o no
+   * texto = `datos-invalidos`, motivo `domicilio: …`). Se guarda en
+   * `cliente.domicilio` y, sin `lat`/`lng`, el servidor la geocodifica despues
+   * del commit, sin que el push espere.
+   *
+   * Opcional: una tablet anterior no la manda. Aditivo, `CONTRATO_ACTUAL` sigue
+   * en 1.
+   */
+  domicilio?: string | null;
   /**
    * Ubicacion del dispositivo. **Las dos o ninguna**: media coordenada no ubica
    * nada y en el portal se veria como un punto en el meridiano cero, que es peor
@@ -479,6 +511,32 @@ export type DatosVisita = {
   direccion_texto?: string | null;
 };
 
+/**
+ * `datos` de una operacion `tipo: "gasto"` (T-30/T-31): un gasto de la ruta
+ * (hielo, gasolina, reparacion del vehiculo, adelanto de sueldo) que el
+ * vendedor pago con el efectivo que cobro.
+ *
+ * El sobre **no** lleva `cliente_id` (un gasto no es de un cliente) ni folio.
+ * La `clave` **es el id** de la fila `gasto`: debe ser uuid. El dia al que
+ * cuenta es `fecha_operacion`, nunca re-derivado de `registrado_en`. El metodo
+ * no viaja: en la app siempre es efectivo de la cobranza del dia.
+ *
+ * El servidor **no** revisa `se_usa_en_app` del campo, y uno dado de baja se
+ * acepta.
+ *
+ * Es `type` y no `interface` por la misma razon que {@link DatosVenta}.
+ */
+export type DatosGasto = {
+  /** uuid de `campo_egreso` (vivo o dado de baja). */
+  campo_egreso_id: string;
+  /** Entero, de 1 a 999_999_999_999. */
+  monto_centavos: number;
+  /** Instante ISO-8601 con zona en que el vendedor lo guardo. */
+  registrado_en: string;
+  /** Hasta 200 caracteres; se recorta y uno vacio es `null`. */
+  comentario?: string | null;
+};
+
 export interface ResultadoOperacion {
   clave: string;
   tipo: string;
@@ -563,6 +621,13 @@ export interface VendedorPull extends FilaSincronizable {
    * una tablet vieja (que no captura ventas) no se entera del cambio.
    */
   folio_segmento: string | null;
+  /**
+   * T-27 (D7): la casilla "Control de inventario en la app" de SU sucursal.
+   * Prendida, la tablet no vende con una carga pendiente ni deja una
+   * presentacion en negativo. Cambiarla en el portal toca `updated_at` de los
+   * vendedores de esa sucursal, asi que baja en el pull incremental. Aditivo.
+   */
+  control_inventario: boolean;
 }
 
 export interface VehiculoPull extends FilaSincronizable {
@@ -601,6 +666,23 @@ export interface MotivoVisitaPull extends FilaSincronizable {
   exige_foto: boolean;
   /** La tablet no deja guardar la visita sin el nombre de quien atendio. */
   exige_atendio: boolean;
+}
+
+/**
+ * Un campo de egreso (T-30, D6): el catalogo de la pantalla "Gastos" de la
+ * tablet. Global (no cuelga de sucursal), como `motivos_visita`. Coleccion
+ * nueva = aditiva. Incremental por `actualizado_en`; la baja logica viaja como
+ * `activo: 0`.
+ *
+ * La tablet ofrece solo los que tienen `activo: 1` y `se_usa_en_app: true`. Un
+ * gasto ya guardado con un campo que despues se apago o se dio de baja sube
+ * igual: el servidor no revisa la casilla (D5).
+ */
+export interface CampoEgresoPull extends FilaSincronizable {
+  nombre: string;
+  tipo: 'produccion' | 'operacion' | 'financiero';
+  /** "Se usa en la app": la tablet solo ofrece los que la tienen. */
+  se_usa_en_app: boolean;
 }
 
 export interface ProductoPull extends FilaSincronizable {
@@ -655,6 +737,14 @@ export interface ClientePull extends FilaSincronizable {
   plazo_credito_dias: number | null;
   lat: number | null;
   lng: number | null;
+  /**
+   * T-72 (D3): de donde salio la coordenada: `'gps'` (la tablet al dar de alta
+   * el prospecto), `'geocodificada'` (el servidor, con Google) o `'manual'` (la
+   * oficina en el portal); `null` sin coordenada. Cuando el servidor geocodifica
+   * le toca `updated_at`, asi que coordenada y origen bajan solos en el pull
+   * incremental. Aditivo: una tablet anterior lo ignora.
+   */
+  ubicacion_origen: 'gps' | 'geocodificada' | 'manual' | null;
   sucursal_id: string;
   /**
    * Saldo a favor del cliente, en centavos: la suma de sus movimientos vivos de
@@ -791,6 +881,67 @@ export type RegaloVenta = {
   texto: string;
 };
 
+/**
+ * La firma del cliente en una venta (T-73). Solo el nombre viaja en la
+ * operacion; la imagen sube aparte por `POST /sync/foto/:clave` con la clave de
+ * esta misma venta, cuando la venta ya fue aceptada.
+ */
+export type FirmaVenta = {
+  /** Quien firmo: texto de 1 a 80 caracteres (se recorta; en blanco es null) o `null`. */
+  nombre: string | null;
+};
+
+/* ------------------------------------------------------------------ */
+/* T-27: carga y recarga del vendedor                                  */
+/* ------------------------------------------------------------------ */
+
+export type EstadoCargaPull = 'pendiente' | 'aceptada' | 'rechazada';
+
+export interface LineaCargaPull {
+  presentacion_id: string;
+  /** Piezas enteras, 1..99 999. */
+  piezas: number;
+}
+
+/**
+ * Una carga (la de la manana o una recarga) que produccion registro en el
+ * portal para el vendedor del token (T-27, D1). La tablet NO crea cargas: solo
+ * las recibe y responde con `POST /sync/cargas/:id/respuesta`.
+ *
+ * - Bajan las del vendedor con `fecha >= current_date - 1` del reloj de
+ *   Postgres (como `rutas`). Incremental por `updated_at`; sin `desde`, solo las
+ *   vivas. Una eliminada en el portal viaja con `activo: 0`.
+ * - `version` sube cada vez que el portal edita las lineas (y la regresa a
+ *   `pendiente`); la respuesta de la tablet la manda de vuelta y el servidor
+ *   contesta 409 si ya no coincide (D6).
+ * - `lineas` viene siempre COMPLETA: la tablet reemplaza las suyas.
+ */
+export interface CargaPull extends FilaSincronizable {
+  vendedor_id: string;
+  /** `AAAA-MM-DD`: hoy en Tijuana cuando se capturo (D8). */
+  fecha: string;
+  /** 1, 2, 3… por vendedor y dia. */
+  numero: number;
+  estado: EstadoCargaPull;
+  /** Solo en `rechazada` (1..300). */
+  motivo_rechazo: string | null;
+  version: number;
+  /** Instante ISO de la respuesta, o `null` si sigue pendiente. */
+  respondida_en: string | null;
+  lineas: LineaCargaPull[];
+}
+
+/**
+ * Cuerpo de `POST /sync/cargas/:id/respuesta` (T-27, D2/D6). Viaja con red, en
+ * el momento: no es una operacion del push ni lleva `contrato`. `motivo` solo
+ * con `rechazar` (1..300, se recorta); con `aceptar` es 400.
+ */
+export type CuerpoRespuestaCarga = {
+  version: number;
+  accion: 'aceptar' | 'rechazar';
+  motivo?: string;
+};
+
 export interface RespuestaPull {
   contrato: number;
   /** Reloj del servidor al atender la peticion. */
@@ -831,6 +982,8 @@ export interface RespuestaPull {
     tipos_negocio: TipoNegocioPull[];
     /** T-39. Aditiva: una tablet vieja la ignora. */
     motivos_visita: MotivoVisitaPull[];
+    /** T-30. Aditiva: una tablet vieja la ignora. */
+    campos_egreso: CampoEgresoPull[];
     /**
      * **Siempre completo o vacio**, nunca parcial. El precio efectivo depende
      * de tres tablas (`precio`, `cliente_precio` y la lista asignada al
@@ -851,4 +1004,9 @@ export interface RespuestaPull {
    * {@link PromocionPull}). Aditiva: una tablet vieja la ignora.
    */
   promociones: PromocionPull[];
+  /**
+   * T-27. Las cargas del vendedor del token (ver {@link CargaPull}). Aditiva:
+   * una tablet vieja la ignora y sigue vendiendo como hoy.
+   */
+  cargas: CargaPull[];
 }

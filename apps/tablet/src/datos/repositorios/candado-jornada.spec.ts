@@ -1,4 +1,4 @@
-import { depsDePrueba, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
+import { depsDePrueba, FIRMA_DE_PRUEBA, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
 import { relojFijo } from '../reloj';
 import { crearRepositorioCatalogos } from './catalogos';
 import { crearRepositorioCobranzas, type DatosRegistroCobranza } from './cobranzas';
@@ -42,6 +42,7 @@ const venta: DatosRegistroVenta = {
   factura: 'N/A',
   comentarios: null,
   lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
+  firma: FIRMA_DE_PRUEBA,
 };
 
 const cobro: DatosRegistroCobranza = {

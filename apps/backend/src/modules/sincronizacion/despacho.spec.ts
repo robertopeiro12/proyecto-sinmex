@@ -36,7 +36,7 @@ const op = (
 });
 
 describe('prepararProyeccion', () => {
-  it.each(['gasto', 'merma', 'ruta'] as const)(
+  it.each(['merma', 'ruta'] as const)(
     '%s no tiene modulo que la proyecte todavia: va al buzon sin mirar datos',
     (tipo) => {
       expect(
@@ -46,6 +46,49 @@ describe('prepararProyeccion', () => {
       ).toEqual({ ok: true, proyeccion: null });
     },
   );
+
+  it('un gasto pasa por prepararGasto y sale como proyeccion de gasto (T-30/T-31)', () => {
+    const CAMPO = '5d1c9a7e-3b2f-4c8d-9e0a-1b2c3d4e5f30';
+    const r = prepararProyeccion(
+      op({
+        tipo: 'gasto',
+        clave: 'c0ffee00-0000-4000-8000-000000000030',
+        folio: null,
+        clienteId: null,
+        datos: {
+          campo_egreso_id: CAMPO,
+          monto_centavos: 8000,
+          registrado_en: '2026-10-20T18:40:00.000Z',
+        },
+      }),
+    );
+    expect(r).toEqual({
+      ok: true,
+      proyeccion: {
+        tipo: 'gasto',
+        gasto: {
+          campoEgresoId: CAMPO,
+          montoCentavos: 8000,
+          registradoEn: '2026-10-20T18:40:00.000Z',
+          comentario: null,
+        },
+      },
+    });
+  });
+
+  it('un gasto con datos libres ya no entra al buzon: es datos-invalidos', () => {
+    expect(
+      prepararProyeccion(
+        op({
+          tipo: 'gasto',
+          clave: 'c0ffee00-0000-4000-8000-000000000031',
+          folio: null,
+          clienteId: null,
+          datos: { concepto: 'hielo', monto_centavos: 5000 },
+        }),
+      ),
+    ).toMatchObject({ ok: false, codigo: 'datos-invalidos' });
+  });
 
   it('una jornada pasa por prepararJornada y sale como proyeccion de jornada (T-38)', () => {
     const VEHICULO = '106c93f1-0c9a-4efc-b167-8c73eea9b023';
@@ -187,6 +230,7 @@ describe('prepararProyeccion', () => {
             },
           ],
           regalos: [],
+          firma: null,
         },
       },
     });

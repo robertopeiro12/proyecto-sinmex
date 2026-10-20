@@ -96,6 +96,8 @@ const DETALLE: VentaDetalle = {
   editable: true,
   motivoNoEditable: null,
   puedeMarcarPerdida: true,
+  firma: { esperada: false, nombre: null, subidaEn: null },
+  editada: false,
 };
 
 describe("PantallaVentas", () => {

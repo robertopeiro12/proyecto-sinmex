@@ -25,6 +25,7 @@ const VISTA: VistaTesoreria = {
   ],
   total: { saldoInicioCentavos: -250000, saldoFinalCentavos: -250000, cuentasConSaldoInicio: 1, cuentasConSaldoFinal: 1, cuentas: 2, entradasCentavos: 0, salidasCentavos: 0 },
   sinCuenta: [],
+  gastosSinCuenta: [],
   eventos: [],
 };
 
@@ -133,5 +134,33 @@ describe("PestanaVista", () => {
     await screen.findByText("ScotiaFiscal");
     await userEvent.click(screen.getByRole("button", { name: "Exportar a Excel" }));
     expect(excel.exportarExcel).toHaveBeenCalledWith(lib.definicionExcelTesoreria(VISTA, { sucursal: "Todas" }));
+  });
+
+  it("los gastos de ruta salen como salida con su concepto y sin comentario ni capturó", async () => {
+    vi.mocked(lib.obtenerTesoreria).mockResolvedValue({
+      ...VISTA,
+      eventos: [
+        { tipo: "gasto-ruta", id: "g", fecha: HOY, cuentaId: "a", cuentaNombre: "Efectivo TJ", sucursalCodigo: "TJ", cantidad: 2, montoCentavos: 33_050 },
+      ],
+    });
+    render(<PestanaVista sucursal={null} />);
+    const tabla = await screen.findByRole("table", { name: "Movimientos del rango" });
+    const fila = within(tabla).getByText("Gastos de ruta · 2 gastos · TJ").closest("tr")!;
+    expect(within(fila).getByText("-$330.50")).toBeInTheDocument();
+    expect(within(fila).getAllByRole("cell").slice(-2).map((c) => c.textContent)).toEqual(["—", "—"]);
+  });
+
+  it("avisa de los gastos de ruta sin cuenta de efectivo, aunque no haya cobranza sin cuenta", async () => {
+    vi.mocked(lib.obtenerTesoreria).mockResolvedValue({
+      ...VISTA,
+      gastosSinCuenta: [{ sucursalCodigo: "TJ", montoCentavos: 33_050 }],
+    });
+    render(<PestanaVista sucursal={null} />);
+    const aviso = await screen.findByRole("status");
+    expect(aviso).toHaveTextContent("$330.50 de gastos de ruta de TJ sin cuenta de efectivo");
+    expect(aviso).toHaveTextContent(
+      "Los gastos de ruta salen de la cuenta que recibe la cobranza en efectivo de su sucursal: configúrala en Cuentas → ¿A qué cuenta entra la cobranza?",
+    );
+    expect(aviso).not.toHaveTextContent("de cobranza de");
   });
 });

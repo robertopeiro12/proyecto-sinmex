@@ -1,5 +1,6 @@
 import type { FuenteOperaciones } from './motor';
 import { fuenteCobranzas } from './fuente-cobranzas';
+import { fuenteGastos } from './fuente-gastos';
 import { fuenteJornadas } from './fuente-jornadas';
 import { fuenteProspectos } from './fuente-prospectos';
 import { fuenteRutas } from './fuente-rutas';
@@ -22,6 +23,8 @@ import type { FuentesConPendientes } from './pendientes';
  * - Cobranzas despues de ventas (T-20): nunca antes que una venta del dia.
  * - Visitas despues de cobranzas (T-39): la visita a un prospecto capturado sin red necesita
  *   su alta ya aplicada (el alcance se comprueba una vez por lote, como la venta de bienvenida de T-75).
+ * - Gastos despues de visitas (T-30/T-31, D5): no dependen de ningun cliente;
+ *   van antes de las altas de ruta para que el orden del spec quede fijo.
  * - Altas de ruta (T-37) no dependen de nadie: al final.
  *
  * Vive aqui y no en `proveedor-sesion.tsx` para que el orden tenga prueba.
@@ -33,6 +36,7 @@ export function fuentesDelPush(datos: FuentesConPendientes): FuenteOperaciones[]
     fuenteVentas(datos.ventas),
     fuenteCobranzas(datos.cobranzas),
     fuenteVisitas(datos.visitas),
+    fuenteGastos(datos.gastos),
     fuenteRutas(datos.rutas),
   ];
 }

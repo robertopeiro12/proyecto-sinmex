@@ -105,3 +105,13 @@ export const CODIGO_POR_RAZON_PROSPECTO: Record<
   'tipo-negocio-inexistente': 'tipo-negocio-inexistente',
   'id-ocupado': 'datos-invalidos',
 };
+
+/**
+ * ¿El servidor intenta geocodificar este alta despues del commit? (T-72, D5)
+ *
+ * Solo con direccion y sin GPS: con coordenada del GPS no hay nada que
+ * calcular, y sin direccion no hay con que.
+ */
+export function pideGeocodificacion(prospecto: ProspectoNormalizado): boolean {
+  return prospecto.domicilio !== null && prospecto.lat === null;
+}

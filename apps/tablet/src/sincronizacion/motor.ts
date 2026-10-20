@@ -84,8 +84,8 @@ import { trocearLotes } from './lotes';
  *
  * Cada modulo de negocio registra la suya sin tocar el motor: hoy jornada
  * (T-04), venta (T-16), prospecto (T-40), cobranza (T-20),
- * la visita (T-39) y el alta de ruta (T-37), en
- * `proveedor-sesion.tsx`. Faltan gasto y merma (T-27/T-33).
+ * la visita (T-39), el gasto de la ruta (T-30/T-31) y el alta de ruta (T-37),
+ * en `proveedor-sesion.tsx`. Falta la merma (T-33).
  */
 export interface FuenteOperaciones {
   tipo: TipoOperacion;
@@ -364,7 +364,7 @@ export function crearMotorSincronizacion({
    * - **Permanente** (413, 415, el archivo local ya no esta): se descarta. Son
    *   juicios sobre *estos bytes*; reintentar da la misma respuesta para siempre.
    * - **Temporal** (404, 409, 403, 400, 5xx): se anota y sigue en la cola. El
-   *   problema es de *esta pasada*, no de la foto.
+   *   problema es de *esta pasada*, no de la foto. Salvo que la fuente lo declare definitivo (`fallaDefinitiva`, T-73): un 404 de una firma de venta se descarta.
    * - **Sin red o sesion caida**: se anota y se **corta el paso**. No es un
    *   problema de esta foto sino del canal, asi que intentar las siguientes solo
    *   gastaria tiempo con el vendedor esperando. Las demas siguen en la cola,
@@ -392,6 +392,13 @@ export function crearMotorSincronizacion({
           continue;
         }
         if (error instanceof FotoTemporalError) {
+          // T-73: una fuente puede declarar definitivo un fallo temporal (la
+          // firma de una venta eliminada en el portal da 404 para siempre).
+          if (error.status !== null && fotos.fuente.fallaDefinitiva?.(foto.clave, error.status)) {
+            fotos.fuente.descartar(foto.clave, error.message);
+            total.descartadas += 1;
+            continue;
+          }
           fotos.fuente.anotarError(foto.clave, error.message);
           total.pendientes += 1;
           continue;
@@ -464,7 +471,13 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
       nombre,
       activa: activo,
     })),
-    vendedores: c.vendedores,
+    // T-27: la casilla llega booleana y SQLite guarda 0/1. Un servidor anterior
+    // no la manda: `undefined`, y el upsert conserva lo que habia.
+    vendedores: c.vendedores.map(({ control_inventario, ...v }) => ({
+      ...v,
+      control_inventario:
+        control_inventario === undefined ? undefined : control_inventario ? 1 : 0,
+    })),
     vehiculos: c.vehiculos,
     productos: c.productos,
     presentaciones: c.presentaciones,
@@ -477,6 +490,8 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
       primera_venta_en: cliente.primera_venta_en ?? null,
       // T-39: un servidor anterior no lo manda.
       foto_subida_en: cliente.foto_subida_en ?? null,
+      // T-72: un servidor anterior no lo manda.
+      ubicacion_origen: cliente.ubicacion_origen ?? null,
     })),
     // T-40: un servidor anterior a este ticket no manda la coleccion. Se pasa
     // `undefined` y `guardarSnapshot` simplemente no escribe nada de esa tabla;
@@ -490,6 +505,12 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
       ...mo,
       exige_foto: mo.exige_foto ? 1 : 0,
       exige_atendio: mo.exige_atendio ? 1 : 0,
+    })),
+    // T-30/T-31: un servidor anterior no manda la coleccion (`undefined` no
+    // escribe nada). La casilla llega booleana y SQLite guarda 0/1, como `exige_foto`.
+    camposEgreso: c.campos_egreso?.map((ce) => ({
+      ...ce,
+      se_usa_en_app: ce.se_usa_en_app ? 1 : 0,
     })),
     precios: c.precios,
     notas: respuesta.notas_pendientes.map(({ abonos, ...nota }) => ({
@@ -506,6 +527,8 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
     promociones: respuesta.promociones?.map(
       (p): Omit<Promocion, 'sincronizado_en'> => ({ ...p, se_repite: p.se_repite ? 1 : 0 }),
     ),
+    // T-27: un servidor anterior no manda la coleccion; `undefined` no escribe nada.
+    cargas: respuesta.cargas,
   };
 }
 

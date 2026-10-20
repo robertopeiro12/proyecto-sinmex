@@ -10,10 +10,14 @@ import type { Transaction } from 'kysely';
 import type { DB } from '../../database/schema';
 import { ClientesService } from '../cartera-clientes/clientes.service';
 import { ProspectoRechazado } from '../cartera-clientes/prospecto-rechazado';
+import { UbicacionClientesService } from '../cartera-clientes/ubicacion-clientes.service';
 import {
   normalizarSucursalPedida,
   resolverAlcance,
 } from '../sucursales/alcance-sucursal';
+import { GastoRechazado } from '../compras-egresos/gasto-rechazado';
+import { GastosService } from '../compras-egresos/gastos.service';
+import { CargasService } from '../produccion/cargas.service';
 import { JornadaRechazada } from '../rutas/jornada-rechazada';
 import { JornadasService } from '../rutas/jornadas.service';
 import { RutaRechazada } from '../rutas/ruta-rechazada';
@@ -39,8 +43,12 @@ import {
 } from './despacho';
 import { CODIGO_POR_RAZON_COBRANZA } from './despacho-cobranza';
 import { CODIGO_POR_RAZON_JORNADA } from './despacho-jornada';
-import { CODIGO_POR_RAZON_PROSPECTO } from './despacho-prospecto';
+import {
+  CODIGO_POR_RAZON_PROSPECTO,
+  pideGeocodificacion,
+} from './despacho-prospecto';
 import { CODIGO_POR_RAZON_RUTA } from './despacho-ruta-alta';
+import { CODIGO_POR_RAZON_GASTO } from './despacho-gasto';
 import { CODIGO_POR_RAZON_VISITA } from './despacho-visita';
 import type { PullDto, PushDto } from './dto/sincronizacion.dto';
 import { INTENTOS_ANTE_CONFLICTO, reintentarAnteConflicto } from './reintento';
@@ -89,6 +97,12 @@ export class SincronizacionService {
     private readonly rutasDiarias: RutasDiariasService,
     // T-39: Rutas tambien es la duena de la visita sin venta.
     private readonly visitas: VisitasService,
+    // T-72: geocodificar el domicilio de un prospecto sin GPS, DESPUES del commit.
+    private readonly ubicacion: UbicacionClientesService,
+    // T-30/T-31: Compras y Egresos es la duena del gasto de la ruta.
+    private readonly gastos: GastosService,
+    // T-27: Produccion es la duena de la carga del vendedor (pull y respuesta).
+    private readonly cargas: CargasService,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -114,9 +128,11 @@ export class SincronizacionService {
       clientes,
       tiposNegocio,
       motivosVisita,
+      camposEgreso,
       notasPendientes,
       rutas,
       promociones,
+      cargas,
     ] = await Promise.all([
       this.repo.sucursales(vendedor.sucursal_id, desde),
       this.repo.vendedores(vendedor.id, desde),
@@ -128,11 +144,15 @@ export class SincronizacionService {
       this.repo.tiposNegocio(desde),
       // T-39: el catalogo de la pantalla de visita. No lleva sucursal.
       this.repo.motivosVisita(desde),
+      // T-30: el catalogo de la pantalla de gastos. No lleva sucursal.
+      this.repo.camposEgreso(desde),
       this.repo.notasPendientes(vendedor.sucursal_id, desde),
       // T-37: la ruta diaria. Por VENDEDOR, no por sucursal.
       this.repo.rutas(vendedor.id, desde),
       // T-74: por SUCURSAL, como los clientes.
       this.repo.promociones(vendedor.sucursal_id, desde),
+      // T-27: las cargas del vendedor. Por VENDEDOR, como la ruta.
+      this.cargas.paraPull(vendedor.id, desde),
     ]);
 
     // Los precios van completos o no van: ver `RespuestaPull.catalogos.precios`.
@@ -172,11 +192,13 @@ export class SincronizacionService {
         clientes,
         tipos_negocio: tiposNegocio,
         motivos_visita: motivosVisita,
+        campos_egreso: camposEgreso,
         precios,
       },
       notas_pendientes: notasPendientes,
       rutas,
       promociones,
+      cargas,
     };
   }
 
@@ -375,6 +397,19 @@ export class SincronizacionService {
           ),
       );
 
+      // T-72 (D5): aqui la transaccion ya hizo commit (`enTransaccion` resolvio)
+      // y el intento se dispara SIN esperarlo: el push no espera a Google. Solo
+      // un alta recien aplicada; un reenvio `duplicada` no repite el intento, y
+      // una rechazada nunca llega a esta linea (sale por el `catch`).
+      if (
+        !guardado.duplicada &&
+        proyeccion?.tipo === 'prospecto' &&
+        pideGeocodificacion(proyeccion.prospecto)
+      ) {
+        // T-75: la clave del prospecto ES el id del cliente.
+        void this.ubicacion.geocodificarEnSegundoPlano(op.clave);
+      }
+
       return {
         clave: op.clave,
         tipo: op.tipo,
@@ -442,6 +477,16 @@ export class SincronizacionService {
           tipo: op.tipo,
           estado: 'rechazada',
           codigo: CODIGO_POR_RAZON_VISITA[error.razon],
+          motivo: error.message,
+        };
+      }
+      // T-30/T-31: el rollback ya dejo sin fila tanto el buzon como el gasto.
+      if (error instanceof GastoRechazado) {
+        return {
+          clave: op.clave,
+          tipo: op.tipo,
+          estado: 'rechazada',
+          codigo: CODIGO_POR_RAZON_GASTO[error.razon],
           motivo: error.message,
         };
       }
@@ -558,6 +603,21 @@ export class SincronizacionService {
             sucursalId: vendedor.sucursal_id,
             vendedorId: vendedor.id,
             clienteId: proyeccion.clienteId,
+            // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
+            fechaOperacion: op.fechaOperacion,
+          },
+          trx,
+        );
+      case 'gasto':
+        // La entidad del buzon es la fila de `gasto` (ADR-0009 §2.4, enmendado).
+        return this.gastos.registrarGasto(
+          proyeccion.gasto,
+          {
+            // T-30/T-31 (D4): la clave ES el id del gasto (uuid validado en prepararGasto).
+            id: op.clave,
+            // Del token, nunca del cuerpo.
+            sucursalId: vendedor.sucursal_id,
+            vendedorId: vendedor.id,
             // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
             fechaOperacion: op.fechaOperacion,
           },

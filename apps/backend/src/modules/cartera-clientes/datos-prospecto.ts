@@ -29,6 +29,13 @@ export interface ProspectoNormalizado {
   tipoNegocioId: string | null;
   comentarios: string | null;
   /**
+   * T-72 (D2): "Dirección del negocio" que escribio el vendedor, o `null`.
+   * Se guarda en `cliente.domicilio`; sin `lat`/`lng`, el servidor la
+   * geocodifica despues del commit. Que sea obligatoria sin GPS lo exige la
+   * tablet (`validarAltaProspecto`): aqui solo se valida la forma.
+   */
+  domicilio: string | null;
+  /**
    * Ubicacion del negocio. Las dos o ninguna.
    *
    * `null` es un caso **normal, no un error**: el vendedor pudo negar el permiso
@@ -55,6 +62,8 @@ export const LARGO_MAX_NOMBRE = 200;
 export const LARGO_MAX_TELEFONO = 30;
 export const LARGO_MAX_ENCARGADO = 120;
 export const LARGO_MAX_COMENTARIO = 500;
+/** T-72: el mismo tope que la tablet (`LARGO_MAX_DOMICILIO` de `prospectos.ts`). */
+export const LARGO_MAX_DOMICILIO = 300;
 
 /**
  * `numeric(9,6)` de Postgres: 3 digitos de parte entera y 6 decimales. Los
@@ -154,6 +163,10 @@ export function normalizarDatosProspecto(
   );
   if (!comentarios.ok) return comentarios.error;
 
+  // T-72 (D2): opcional en el cable; una tablet anterior no la manda.
+  const domicilio = opcional('domicilio', datos.domicilio, LARGO_MAX_DOMICILIO);
+  if (!domicilio.ok) return domicilio.error;
+
   // El uuid se comprueba AQUI y no se deja a la llave foranea: `where id =
   // 'abc'` no devuelve cero filas, hace que Postgres reviente con 22P02 y eso
   // seria un 500 para todo el lote.
@@ -195,6 +208,7 @@ export function normalizarDatosProspecto(
       encargado,
       tipoNegocioId,
       comentarios: comentarios.valor,
+      domicilio: domicilio.valor,
       lat: ubicacion.lat,
       lng: ubicacion.lng,
     },

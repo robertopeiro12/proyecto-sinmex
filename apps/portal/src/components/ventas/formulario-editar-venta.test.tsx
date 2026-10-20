@@ -60,6 +60,8 @@ const VENTA: VentaDetalle = {
   editable: true,
   motivoNoEditable: null,
   puedeMarcarPerdida: true,
+  firma: { esperada: false, nombre: null, subidaEn: null },
+  editada: false,
 };
 
 async function prepararFormulario(venta: VentaDetalle = VENTA) {

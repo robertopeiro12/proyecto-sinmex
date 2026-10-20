@@ -3,9 +3,11 @@ import { randomUUID } from 'expo-crypto';
 import { abrirBaseDatos } from './driver-expo';
 import { ejecutarMigraciones, migraciones } from './migraciones';
 import { relojSistema } from './reloj';
+import { crearRepositorioCargas, type RepositorioCargas } from './repositorios/cargas';
 import { crearRepositorioCatalogos, type RepositorioCatalogos } from './repositorios/catalogos';
 import { crearRepositorioCobranzas, type RepositorioCobranzas } from './repositorios/cobranzas';
 import { crearRepositorioVisitas, type RepositorioVisitas } from './repositorios/visitas';
+import { crearRepositorioGastos, type RepositorioGastos } from './repositorios/gastos';
 import { crearRepositorioRutas, type RepositorioRutas } from './repositorios/rutas';
 import { crearRepositorioFolios, type RepositorioFolios } from './repositorios/folios';
 import { crearRepositorioJornadas, type RepositorioJornadas } from './repositorios/jornadas';
@@ -38,10 +40,14 @@ export interface CapaDatos {
   cobranzas: RepositorioCobranzas;
   /** Visitas sin venta capturadas en ruta (T-39). */
   visitas: RepositorioVisitas;
+  /** Gastos de la ruta capturados en la tablet (T-30/T-31). */
+  gastos: RepositorioGastos;
   /** La ruta del dia: lo que baja del portal y lo que agrega el vendedor (T-37). */
   rutas: RepositorioRutas;
   /** Que promociones aplican hoy a un cliente y como se llaman (T-74). */
   promociones: RepositorioPromociones;
+  /** La carga y las recargas del vendedor y su inventario del dia (T-27). */
+  cargas: RepositorioCargas;
   /** Version de esquema con la que quedo la base tras migrar. */
   versionEsquema: number;
 }
@@ -80,10 +86,14 @@ export function inicializarCapaDatos(): CapaDatos {
     prospectos: crearRepositorioProspectos(deps, { catalogos }),
     cobranzas: crearRepositorioCobranzas(deps, { catalogos }),
     visitas: crearRepositorioVisitas(deps, { catalogos }),
+    gastos: crearRepositorioGastos(deps, { catalogos }),
     // El MISMO `catalogos`: es quien publica la version que observa la
     // pantalla principal, y la ruta se aplica dentro de su `guardarSnapshot`.
     rutas: crearRepositorioRutas(deps, { catalogos }),
     promociones: crearRepositorioPromociones(deps, { catalogos }),
+    // El MISMO `catalogos`: `aplicarRespuesta` publica por el la version que
+    // observan Inventario, la pantalla principal y la venta.
+    cargas: crearRepositorioCargas(deps, { catalogos }),
     versionEsquema: versionFinal,
   };
 }

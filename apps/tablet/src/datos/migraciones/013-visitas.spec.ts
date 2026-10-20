@@ -48,11 +48,10 @@ function insertarVisita(bd: BaseDatos, cambios: Record<string, string | number |
 }
 
 describe('migracion 013: visitas (T-39)', () => {
-  it('la 013 es la ultima y deja versionEsquema en 13', () => {
+  it('la 013 es visitas y deja de ser la ultima con la 014 (T-72)', () => {
     expect(migraciones[12]?.nombre).toBe('visitas');
     expect(migraciones[12]?.version).toBe(13);
-    expect(migraciones).toHaveLength(13);
-    expect(versionEsquema(baseAlDia())).toBe(13);
+    expect(versionEsquema(baseAlDia())).toBe(migraciones.length);
   });
 
   it('una visita con GPS entra pendiente, sin foto y no descartada', () => {

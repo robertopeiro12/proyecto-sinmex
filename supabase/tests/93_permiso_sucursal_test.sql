@@ -12,12 +12,12 @@ select is(
 -- (perfil.gestionar); T-13 agrega 26o (usuario.gestionar); T-19 agrega 27o
 -- (venta.asignar_factura); T-22 agrega 28o (cuentas_cobrar.ver); T-28 agrega
 -- 29o y 30o (tesoreria.ver y tesoreria.gestionar); T-39 agrega 31o
--- (motivo_visita.gestionar); T-32 agrega 32o
--- (flujo_efectivo.ver).
+-- (motivo_visita.gestionar); T-30/T-31 agrega 32o y 33o
+-- (campo_egreso.gestionar y gasto.ver).
 select is(
   (select count(*)::int from permiso where deleted_at is null),
-  32,
-  'el catalogo de permisos tiene 32 claves'
+  34,
+  'el catalogo de permisos tiene 34 claves'
 );
 
 select * from finish();

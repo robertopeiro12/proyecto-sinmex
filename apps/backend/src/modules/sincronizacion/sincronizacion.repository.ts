@@ -14,6 +14,7 @@ import type {
   SucursalPull,
   TipoNegocioPull,
   MotivoVisitaPull,
+  CampoEgresoPull,
   VehiculoPull,
   VendedorPull,
 } from './contrato';
@@ -115,17 +116,22 @@ export class SincronizacionRepository {
   ): Promise<VendedorPull[]> {
     let q = this.db
       .selectFrom('vendedor')
+      .innerJoin('sucursal', 'sucursal.id', 'vendedor.sucursal_id')
       .select([
-        'id',
-        'login',
-        'nombre',
-        'sucursal_id',
-        'activo',
-        'folio_segmento',
-        'deleted_at',
+        'vendedor.id as id',
+        'vendedor.login as login',
+        'vendedor.nombre as nombre',
+        'vendedor.sucursal_id as sucursal_id',
+        'vendedor.activo as activo',
+        'vendedor.folio_segmento as folio_segmento',
+        'vendedor.deleted_at as deleted_at',
+        // T-27 (D7): la casilla es de la sucursal; cambiarla toca
+        // `vendedor.updated_at` (SucursalesRepository.actualizar), asi que el
+        // corte incremental de abajo la trae.
+        'sucursal.control_inventario as control_inventario',
       ])
-      .where('id', '=', vendedorId);
-    if (desde) q = q.where('updated_at', '>', desde);
+      .where('vendedor.id', '=', vendedorId);
+    if (desde) q = q.where('vendedor.updated_at', '>', desde);
 
     return (await q.execute()).map((f) => ({
       id: f.id,
@@ -135,6 +141,7 @@ export class SincronizacionRepository {
       // Lo asigna el servidor porque la tablet no puede: solo baja su propia
       // ficha, asi que no ve si otro vendedor comparte sus iniciales (T-14).
       folio_segmento: f.folio_segmento,
+      control_inventario: f.control_inventario,
       activo: bandera(f.activo, f.deleted_at),
     }));
   }
@@ -214,6 +221,23 @@ export class SincronizacionRepository {
     }));
   }
 
+  /** T-30 (D6): el catalogo de la pantalla de gastos. Global, como los motivos. */
+  async camposEgreso(desde: Date | null): Promise<CampoEgresoPull[]> {
+    let q = this.db
+      .selectFrom('campo_egreso')
+      .select(['id', 'nombre', 'tipo', 'se_usa_en_app', 'deleted_at']);
+    if (desde) q = q.where('actualizado_en', '>', desde);
+
+    return (await q.orderBy('nombre').execute()).map((f) => ({
+      id: f.id,
+      nombre: f.nombre,
+      // El check `ck_campo_egreso_tipo` garantiza uno de los tres.
+      tipo: f.tipo as CampoEgresoPull['tipo'],
+      se_usa_en_app: f.se_usa_en_app,
+      activo: bandera(true, f.deleted_at),
+    }));
+  }
+
   async presentaciones(desde: Date | null): Promise<PresentacionPull[]> {
     let q = this.db
       .selectFrom('presentacion')
@@ -247,6 +271,7 @@ export class SincronizacionRepository {
         'plazo_credito_dias',
         'lat',
         'lng',
+        'ubicacion_origen',
         'sucursal_id',
         'foto_subida_en',
         'deleted_at',
@@ -280,6 +305,8 @@ export class SincronizacionRepository {
       plazo_credito_dias: f.plazo_credito_dias,
       lat: aNumero(f.lat),
       lng: aNumero(f.lng),
+      // T-72 (D3): de donde salio la coordenada. La tablet la guarda.
+      ubicacion_origen: f.ubicacion_origen as ClientePull['ubicacion_origen'],
       sucursal_id: f.sucursal_id,
       saldo_favor_centavos: aCentavos(f.saldo_favor),
       // T-39 (D9): la ficha de la tablet decide con esto si baja la foto.

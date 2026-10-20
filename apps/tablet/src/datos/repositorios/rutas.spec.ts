@@ -1,4 +1,4 @@
-import { depsDePrueba, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
+import { depsDePrueba, FIRMA_DE_PRUEBA, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
 import { crearRepositorioCatalogos } from './catalogos';
 import { crearRepositorioCobranzas } from './cobranzas';
 import { crearRepositorioFolios } from './folios';
@@ -74,6 +74,7 @@ function venderA(ventas: ReturnType<typeof montar>['ventas']) {
     factura: 'N/A',
     comentarios: null,
     lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
+    firma: FIRMA_DE_PRUEBA,
   });
 }
 

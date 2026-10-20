@@ -38,7 +38,9 @@ export class EditarClienteDto {
   @Transform(recortar)
   @IsString()
   @MinLength(1, { message: 'El domicilio es obligatorio.' })
-  @MaxLength(200, { message: 'El domicilio no puede pasar de 200 caracteres.' })
+  // T-72: 300, igual que la "Dirección del negocio" de la tablet; con 200 un
+  // prospecto que llego de la app no se podria volver a guardar.
+  @MaxLength(300, { message: 'El domicilio no puede pasar de 300 caracteres.' })
   domicilio!: string;
 
   @Transform(recortar)
@@ -82,17 +84,19 @@ export class EditarClienteDto {
   })
   plazoCreditoDias?: number;
 
+  // T-72: a diferencia del resto, omitir `lat` y `lng` conserva la coordenada
+  // (el formulario los manda solo si la oficina los cambio); `null` la borra.
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 6 })
   @Min(-90)
   @Max(90)
-  lat?: number;
+  lat?: number | null;
 
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 6 })
   @Min(-180)
   @Max(180)
-  lng?: number;
+  lng?: number | null;
 
   @IsOptional()
   @Transform(recortar)

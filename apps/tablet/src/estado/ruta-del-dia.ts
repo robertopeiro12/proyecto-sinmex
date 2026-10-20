@@ -137,17 +137,6 @@ export function filtrarParaAgregar<T extends Pick<Cliente, 'id' | 'nombre' | 'ti
 
 /** Las secciones del menu que todavia no existen, con el ticket que las trae. */
 export const SECCIONES_PENDIENTES = {
-  gastos: {
-    titulo: 'Gastos',
-    ticket: 'pieza 6 del rediseño (T-30/T-31)',
-    descripcion:
-      'Gastos de la ruta con su tipo (catálogo del portal), monto y comprobante.',
-  },
-  inventario: {
-    titulo: 'Inventario',
-    ticket: 'T-27',
-    descripcion: 'Recarga y devolución de producto a media jornada.',
-  },
   merma: {
     titulo: 'Merma, promoción y consumo',
     ticket: 'T-27 / T-31',
@@ -183,7 +172,7 @@ export interface EntradaMenu {
 
 /**
  * Las entradas del menu, en el orden del spec (D16). Con el dia cerrado se
- * deshabilita solo lo que captura (gastos, inventario, merma); lo que consulta
+ * deshabilita solo lo que captura (gastos, merma; T-30/T-31 dio a Gastos su pantalla y T-27 a Inventario); lo que consulta
  * se sigue viendo. Ruta y GPS es la pantalla pendiente de T-41 que ya existe.
  */
 export function entradasMenu(diaCerrado: boolean): EntradaMenu[] {
@@ -202,13 +191,28 @@ export function entradasMenu(diaCerrado: boolean): EntradaMenu[] {
       destino: '/(jornada)/prospectos',
       deshabilitada: false,
     },
-    ...(['gastos', 'inventario', 'merma'] as const).map((clave) => ({
-      clave,
-      titulo: SECCIONES_PENDIENTES[clave].titulo,
-      descripcion: `Pendiente: ${SECCIONES_PENDIENTES[clave].ticket}`,
-      destino: `/(jornada)/pendiente/${clave}`,
+    {
+      clave: 'gastos',
+      titulo: 'Gastos',
+      descripcion: 'Lo que pagaste hoy con la cobranza',
+      destino: '/(jornada)/gastos',
       deshabilitada: diaCerrado,
-    })),
+    },
+    {
+      clave: 'inventario',
+      titulo: 'Inventario',
+      descripcion: 'Tu carga, tus recargas y lo que te queda',
+      destino: '/(jornada)/inventario',
+      // T-27: es consulta (y aceptar la carga de la manana); se ve con el dia cerrado.
+      deshabilitada: false,
+    },
+    {
+      clave: 'merma',
+      titulo: SECCIONES_PENDIENTES.merma.titulo,
+      descripcion: `Pendiente: ${SECCIONES_PENDIENTES.merma.ticket}`,
+      destino: '/(jornada)/pendiente/merma',
+      deshabilitada: diaCerrado,
+    },
     {
       clave: 'ruta-gps',
       titulo: 'Ruta y GPS',

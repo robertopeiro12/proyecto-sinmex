@@ -13,6 +13,15 @@ import type { SnapshotCatalogos } from './repositorios/catalogos';
 /** Momento fijo por defecto de las pruebas (hora de Tijuana, UTC-7). */
 export const MOMENTO = '2026-08-07T15:00:00.000Z';
 
+/**
+ * La firma de una venta de prueba (T-73): `ventas.registrar()` la exige (D1).
+ * La ruta nunca se abre en las pruebas: solo se guarda y viaja en la cola.
+ */
+export const FIRMA_DE_PRUEBA: { uri: string; nombre: string | null } = {
+  uri: 'file:///documentos/firmas/firma-prueba.jpg',
+  nombre: null,
+};
+
 /** Base en memoria, migrada al dia, con reloj y generador de ids deterministas. */
 export function depsDePrueba(momento: string = MOMENTO): DepsRepositorio {
   const bd = abrirBaseDatosNode();
@@ -67,6 +76,14 @@ export function snapshotDePrueba(): SnapshotCatalogos {
       { id: 'mot-encargado', nombre: 'No estaba el encargado', exige_foto: 1, exige_atendio: 1, activo: 1 },
       // Dado de baja en el portal: baja con la bandera y ya no se ofrece.
       { id: 'mot-baja', nombre: 'Vacaciones', exige_foto: 0, exige_atendio: 0, activo: 0 },
+    ],
+    camposEgreso: [
+      { id: 'ce-gasolina', nombre: 'Gasolina', tipo: 'operacion', se_usa_en_app: 1, activo: 1 },
+      { id: 'ce-hielo', nombre: 'Hielo', tipo: 'operacion', se_usa_en_app: 1, activo: 1 },
+      // De la oficina: vivo pero sin "Se usa en la app"; la pantalla no lo ofrece.
+      { id: 'ce-envases', nombre: 'Envases', tipo: 'produccion', se_usa_en_app: 0, activo: 1 },
+      // Dado de baja en el portal: baja con la bandera.
+      { id: 'ce-baja', nombre: 'Celular', tipo: 'operacion', se_usa_en_app: 1, activo: 0 },
     ],
     presentaciones: [
       { id: 'pre-1', producto_id: 'pro-1', volumen: '1 L', activo: 1 },
@@ -209,7 +226,11 @@ export function respuestaPullDePrueba(
         nombre,
         activo: activa,
       })),
-      vendedores: s.vendedores ?? [],
+      // T-27: el snapshot guarda la casilla 0/1; el pull la manda booleana.
+      vendedores: (s.vendedores ?? []).map(({ control_inventario, ...v }) => ({
+        ...v,
+        ...(control_inventario === undefined ? {} : { control_inventario: control_inventario === 1 }),
+      })),
       vehiculos: s.vehiculos ?? [],
       productos: s.productos ?? [],
       presentaciones: s.presentaciones ?? [],

@@ -186,18 +186,20 @@ nadie relacionaría con nada.
   "catalogos": {
     "sucursales":     [{ "id": "…", "codigo": "TJ", "nombre": "Tijuana", "activo": 1 }],
     "vendedores":     [{ "id": "…", "login": "…", "nombre": "…", "sucursal_id": "…",
-                         "folio_segmento": "AP", "activo": 1 }],
+                         "folio_segmento": "AP", "control_inventario": false, "activo": 1 }],
     "vehiculos":      [{ "id": "…", "nombre": "…", "sucursal_id": "…", "activo": 1 }],
     "productos":      [{ "id": "…", "nombre": "Jamaica", "activo": 1 }],
     "presentaciones": [{ "id": "…", "producto_id": "…", "volumen": "1 L", "activo": 1 }],
     "clientes":       [{ "id": "…", "nombre": "…", "domicilio": "…", "telefono": "…",
                          "encargado": null, "tipo": "cliente", "pct_comision": 3.5,
                          "primera_venta_en": null, "plazo_credito_dias": 7,
-                         "lat": 32.5149, "lng": -117.0382, "sucursal_id": "…",
+                         "lat": 32.5149, "lng": -117.0382, "ubicacion_origen": "manual", "sucursal_id": "…",
                          "saldo_favor_centavos": 0, "foto_subida_en": null, "activo": 1 }],
     "tipos_negocio":  [{ "id": "…", "nombre": "Abarrotes", "activo": 1 }],
     "motivos_visita": [{ "id": "…", "nombre": "Cerrado", "exige_foto": true,
                          "exige_atendio": false, "activo": 1 }],
+    "campos_egreso":  [{ "id": "…", "nombre": "Gasolina", "tipo": "operacion",
+                         "se_usa_en_app": true, "activo": 1 }],
     "precios":        [{ "id": "<clienteId>:<presentacionId>", "cliente_id": "…",
                          "presentacion_id": "…", "precio_centavos": 800,
                          "vigente_desde": "2026-02-01", "activo": 1 }]
@@ -210,7 +212,8 @@ nadie relacionaría con nada.
                           "activo": 1 }],
   "rutas": [{ "id": "…", "cliente_id": "…", "fecha": "2026-10-12", "orden": 1,
               "origen": "oficina", "activo": 1 }],
-  "promociones": [ /* filas: ver la seccion promociones, abajo */ ]
+  "promociones": [ /* filas: ver la seccion promociones, abajo */ ],
+  "cargas": [ /* filas: ver la seccion cargas, abajo */ ]
 }
 ```
 
@@ -288,12 +291,32 @@ Colección **nueva** y aditiva (§3). Baja completa (no por sucursal: es un cat�
 `activo: 0`: la tablet deja de ofrecer el motivo, y una visita ya guardada con él sube igual (el push lo acepta,
 §6). `exige_foto` y `exige_atendio` son booleanos JSON; **los exige la tablet**, el servidor no los revisa.
 
+### `campos_egreso`: el catálogo de los gastos de la ruta (T-30)
+
+Colección **nueva** y aditiva (§3). Baja completa (no por sucursal: es un catálogo de la empresa, como
+`motivos_visita`) e incremental por **`actualizado_en`** (un trigger la mueve en cualquier cambio, la baja lógica
+incluida). La baja viaja como `activo: 0`. `tipo` es `produccion`, `operacion` o `financiero` (fijos, D1).
+
+La tablet ofrece en "Registrar gasto" solo los campos con `activo: 1` **y** `se_usa_en_app: true`. Si la oficina
+apaga la casilla o da de baja el campo mientras la tablet está sin red, el gasto ya capturado sube igual: el
+servidor **no** revisa la casilla (§6, `gasto`), y el siguiente pull quita el campo de la lista.
+
 ### `foto_subida_en` del cliente (T-39)
 
 Campo **nuevo** y aditivo en `clientes`: cuándo recibió el servidor la foto del cliente o prospecto, o `null`.
 La ficha de la tablet lo compara con su copia en caché y, si no la tiene o es más vieja, la baja de
 `GET /sync/foto/cliente/:clienteId` (§6, "Fotos"). Subir una foto toca `cliente.updated_at`, así que el cliente
 vuelve a bajar en el pull incremental con el valor nuevo.
+
+### `ubicacion_origen` del cliente (T-72)
+
+Campo **nuevo** y aditivo en `clientes`: de dónde salió la coordenada actual. `"gps"` (la tablet al dar de alta el
+prospecto), `"geocodificada"` (el servidor, con Google, a partir del domicilio) o `"manual"` (la oficina en el
+portal); `null` cuando no hay coordenada (la base exige nulo si y solo si `lat` es nula). Las coordenadas anteriores
+a T-72 bajan como `"manual"`.
+
+Cuando el servidor geocodifica un prospecto después de su alta, le toca `updated_at`: la coordenada y
+`"geocodificada"` bajan solas en el siguiente pull incremental. La tablet guarda el campo y todavía no lo muestra.
 
 ### La baja viaja como bandera, nunca como ausencia
 
@@ -399,6 +422,34 @@ Ejemplo de una fila:
 - `compra_cantidad` puede ser 0 solo en una promoción de `prospecto` (regalo sin compra, D7).
 - `se_repite`: si es `true`, por cada `compra_cantidad` piezas compradas se regala `regalo_cantidad`; si es `false`, una sola vez (D2).
 
+### `cargas`: la carga y las recargas del vendedor (T-27)
+
+Colección **nueva y de nivel superior** (junto a `rutas`). Aditiva: una tablet vieja la ignora y sigue vendiendo como
+hoy; la tablet nueva la trata como opcional.
+
+- Producción captura la carga de la mañana y cada recarga en el portal (*Producción › Recarga*, `/cargas`). La tablet
+  **no crea cargas**: las recibe y responde (abajo, §6).
+- Solo cargas del **vendedor del token**, con `fecha >= current_date - 1` del reloj de Postgres (como `rutas`).
+  Incremental por `updated_at > desde`; sin `desde`, solo las vivas. Una carga eliminada en el portal viaja con
+  `activo: 0` y la tablet la saca del inventario y del aviso.
+- `lineas` viene **completa** cada vez (la tablet reemplaza las suyas). Editar las líneas en el portal sube `version`
+  y regresa la carga a `pendiente` (eso mueve `updated_at`, y vuelve a bajar).
+- Una carga **aceptada** no se edita ni se elimina (D5): el inventario de la tablet nunca cambia por debajo.
+
+```jsonc
+{ "id": "…", "vendedor_id": "…", "fecha": "2026-10-22", "numero": 2, "estado": "pendiente",
+  "motivo_rechazo": null, "version": 1, "respondida_en": null, "activo": 1,
+  "lineas": [{ "presentacion_id": "…", "piezas": 24 }] }
+```
+
+### `control_inventario` del vendedor (T-27)
+
+`VendedorPull.control_inventario` es la casilla "Control de inventario en la app" de **su sucursal** (D7, apagada por
+defecto). Prendida, la tablet no vende con una carga pendiente de hoy (D3) ni deja una presentación en negativo,
+contando piezas vendidas más piezas regaladas (D4). Cambiar la casilla toca `updated_at` de los vendedores de esa
+sucursal, así que baja en el pull incremental. Aditivo; un servidor anterior no lo manda y la tablet conserva lo que
+tenía.
+
 ---
 
 ## 6. `POST /sync/push`
@@ -458,8 +509,9 @@ no hacer.
 `datos` lo fija el ticket de cada módulo, y fijarlo es un cambio **aditivo** que
 no sube la versión del contrato. Hoy tienen forma fija **`venta`** (T-16),
 **`prospecto`** (T-40), **`cobranza`** (T-20), **`jornada`** (T-38),
-**`ruta-alta`** (T-37) y **`visita`** (T-39), los seis abajo; gastos, merma y ruta
-(reservada, sin forma) siguen libres hasta T-27/T-33, y el servidor las guarda tal cual.
+**`ruta-alta`** (T-37), **`visita`** (T-39) y **`gasto`** (T-30/T-31), los siete
+abajo; merma y ruta (reservada, sin forma) siguen libres hasta T-33, y el servidor
+las guarda tal cual.
 
 ### `datos` de una venta (T-16)
 
@@ -480,7 +532,8 @@ no sube la versión del contrato. Hoy tienen forma fija **`venta`** (T-16),
       { "presentacion_id": "uuid", "cantidad": 24, "cantidad_promocion": 2, "precio_centavos": 1350 }
       // enteros ≥ 0; cantidad + cantidad_promocion > 0;
       // precio_centavos siempre presente, > 0 si cantidad > 0 (0 solo en líneas de pura promoción)
-    ]
+    ],
+    "firma": { "nombre": "Doña Lupe" } // T-73, opcional: presente = espera la imagen de la firma
   }
 }
 ```
@@ -527,6 +580,23 @@ Los regalos de la venta: qué promoción dio cuántas piezas de qué presentaci�
 - El texto se congela en la nota (D12): si la oficina edita la promoción después, la nota conserva la frase original.
 - Al proyectar la primera nota del cliente, el servidor marca `cliente.primera_venta_en` (D14); ver arriba.
 
+#### `firma` (T-73)
+
+La firma del cliente en la nota. **Opcional y aditivo** (`CONTRATO_ACTUAL` sigue en 1): la tablet desde T-73 la manda
+en toda venta (la firma es obligatoria en la app); una tablet anterior no la manda y la venta del portal no la lleva.
+
+```jsonc
+"firma": { "nombre": "Doña Lupe" }    // opcional; ausente o null = la venta no espera firma
+```
+
+- **Presencia = la venta espera una imagen.** El servidor guarda `venta_nota.firma_esperada = true` y el nombre; la
+  imagen llega aparte por `POST /sync/foto/:clave` con la clave de esta venta (ver "Fotos"). Ausente o `null`:
+  `firma_esperada = false` y el portal la muestra como "Sin firma".
+- `nombre`: texto que se recorta, de 1 a 80 caracteres; en blanco o `null` es firma sin nombre. Otro tipo o más de 80
+  → `datos-invalidos` con motivo `firma.nombre: …`. `firma` que no es objeto → `datos-invalidos` (`firma: …`).
+- Editar la venta en el portal no borra la firma ni la vuelve a pedir: el portal avisa que la firma corresponde a la
+  versión original.
+
 ### `tipo: "prospecto"` — el alta de un prospecto (T-40)
 
 Es el **único** tipo que crea una fila de *catálogo* (`cliente` con
@@ -546,6 +616,7 @@ Es el **único** tipo que crea una fila de *catálogo* (`cliente` con
     "encargado": "Don Aarón",          // obligatorio
     "tipo_negocio_id": "…",            // del catálogo `tipos_negocio`, o null
     "comentarios": "Quiere probar jamaica",  // o null
+    "domicilio": "Av. Revolución 1234, Zona Centro",  // T-72: hasta 300; null o ausente si no hay
     "lat": 32.514900, "lng": -117.038200,    // las dos o las dos null
     "foto": null                       // reservado, siempre null por ahora
   }
@@ -571,13 +642,18 @@ Es el **único** tipo que crea una fila de *catálogo* (`cliente` con
 Los campos son los que **dictó el cliente** en agosto de 2026 (ver
 `10-Dominio/Entidades/Cliente.md` en el vault). Lo que **no** viaja:
 
-- **`domicilio`**: no se captura. Lo sustituye la ubicación, y en Postgres la
-  columna dejó de ser obligatoria para un prospecto.
 - **`lista_precio_id`, `pct_comision`, `plazo_credito_dias`** (y, hasta T-74, `promocion`): son
   decisiones del administrador. El vendedor no puede dar de alta clientes
   justamente porque el control del precio no es suyo (cambio v2.0).
 
-Cinco reglas que se rechazan **por operación**, todas como `datos-invalidos`:
+> [!info] T-72: `domicilio` sí viaja, opcional
+> La "Dirección del negocio" que escribió el vendedor, recortada y de hasta 300 caracteres (vacía = `null`). La
+> tablet la exige cuando no hay GPS; el servidor solo valida la forma y la guarda en `cliente.domicilio`. Si el alta
+> llega **sin** `lat`/`lng` y **con** `domicilio`, el servidor la geocodifica **después del commit** y sin que el push
+> espere (un reenvío `duplicada` o un alta rechazada no disparan nada). Una tablet anterior no la manda y no pasa
+> nada: `CONTRATO_ACTUAL` sigue en 1.
+
+Seis reglas que se rechazan **por operación**, todas como `datos-invalidos`:
 
 | Qué llega | Por qué se rechaza |
 |---|---|
@@ -586,6 +662,7 @@ Cinco reglas que se rechazan **por operación**, todas como `datos-invalidos`:
 | Una clave que no es uuid | Es el id del `cliente` que se crea (T-75) |
 | Una clave que ya es el id de un `cliente` | La clave es el id del cliente que se crea y ese id está ocupado (T-75). Motivo neutro a propósito ("La clave de este prospecto no es nueva; avisa a la oficina."): no confirma que exista un cliente, que podría ser de otra sucursal |
 | Media coordenada | No ubica nada y en el portal se vería como un punto en el meridiano cero: parece un dato bueno |
+| Un `domicilio` de más de 300 caracteres, o que no es texto | El motivo empieza por `domicilio:` y dice el tope (T-72) |
 
 **Sin ubicación es un caso normal**, no un error: el vendedor pudo negar el
 permiso o no haber señal, y eso no le impide registrar al prospecto.
@@ -737,27 +814,83 @@ permiso o no haber señal, y eso no le impide registrar al prospecto.
 - **El servidor no revisa "exige foto" ni "exige nombre"**: lo exige la tablet al guardar.
 - Se guarda en `visita` con `id = clave` y `fecha = fecha_operacion`; el buzón apunta a esa fila
   (`entidad_tabla = 'visita'`). Puede haber varias visitas al día por cliente, y se puede visitar a un prospecto.
-- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → rutas`. La visita a un prospecto
+- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → gastos → rutas`. La visita a un prospecto
   capturado sin red necesita que su alta ya haya entrado en un lote anterior (el alcance se comprueba una vez por
   lote, como la venta de bienvenida de T-75).
 
-### Fotos: subida y descarga (canal aparte del lote; T-40, T-39)
+### `datos` de un gasto de la ruta (T-30/T-31)
+
+```jsonc
+{
+  "clave": "uuid de la fila local",     // ES el id del gasto en el servidor: debe ser uuid
+  "tipo": "gasto",
+  "fecha_operacion": "2026-10-20",      // el día al que cuenta el gasto (Tesorería y el corte)
+  "ocurrido_en": "2026-10-20T18:40:00.000Z",
+  // sin "cliente_id" y sin "folio": un gasto no es de un cliente ni es una nota
+  "datos": {
+    "campo_egreso_id": "uuid",          // del catálogo campos_egreso (vivo o dado de baja)
+    "monto_centavos": 25050,            // entero, 1..999 999 999 999
+    "registrado_en": "2026-10-20T11:40:00-07:00",
+    "comentario": "Ticket de la gasolinera" // opcional, <= 200
+  }
+}
+```
+
+- La forma se valida **antes** de la transacción (`prepararGasto`): clave no uuid, folio o `cliente_id` en el
+  sobre, o `datos` mal formado es `datos-invalidos` con un motivo que nombra el campo. El comentario se recorta y uno
+  vacío se guarda como `null`.
+- Dentro de la transacción (`GastosService.registrarGasto`, `modules/compras-egresos/`): un campo que no existe es
+  `campo-egreso-inexistente`; **uno dado de baja sí se acepta**, y el servidor **no** revisa "se usa en la app". Un
+  id que ya ocupa otro gasto es `gasto-id-ocupado`, con motivo neutro. La misma clave reenviada es `duplicada`.
+- Se guarda en `gasto` con `id = clave`, `fecha = fecha_operacion` (nunca re-derivada de `registrado_en`),
+  `metodo = 'efectivo_cobranza_dia'`, `origen = 'app'`, `quien` = el nombre del vendedor y una copia del nombre y
+  el tipo del campo. El buzón apunta a esa fila (`entidad_tabla = 'gasto'`).
+- Tesorería **lee** la tabla `gasto` (no copia nada) y resta el gasto de la cuenta de efectivo de la sucursal.
+- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → gastos → rutas`.
+- Las operaciones `gasto` que llegaron antes de T-30/T-31 (ninguna tablet las mandaba) se quedan en el buzón sin
+  proyectar y sin relleno.
+
+### Fotos: subida y descarga (canal aparte del lote; T-40, T-39, T-30, T-73)
 
 La foto **no** viaja dentro de la operación: va por su propio request, sin `contrato` ni `resultados[]`, solo
 códigos HTTP. Así una imagen pesada o cortada nunca rechaza la operación a la que pertenece.
 
 - **`POST /sync/foto/:clave`** (`@SoloApp`, cuerpo = el JPEG crudo, máx. 2 MB). La `clave` es la de una operación
-  `prospecto` **o** `visita` del vendedor del token. 404 si nadie tiene esa clave (o la operación se rechazó: no dejó
-  fila) o si la fila ya no existe; 403 si es de otro vendedor; 409 si es de otro tipo o aún no está proyectada;
-  413 si pesa de más; 415 si no es un JPEG completo. Responde `200 { clave, subida_en }` también la primera vez.
-- **Nombre del archivo (T-78):** `cliente-<cliente.id>.jpg` y `visita-<visita.id>.jpg`, nunca la clave. Reenviar
-  escribe el mismo nombre: un solo archivo. Los archivos de antes (`<clave>.jpg`) no se migran; el servidor siempre
-  lee por `foto_archivo`.
+  `prospecto`, `visita`, `gasto` **o** `venta` (la firma del cliente, T-73) del vendedor del token. 404 si nadie tiene
+  esa clave (o la operación se rechazó: no dejó fila) o si la fila ya no existe (una venta eliminada en el portal);
+  403 si es de otro vendedor; 409 si es de otro tipo, aún no está proyectada o es una venta que no espera firma
+  ("Esa venta no espera firma."); 413 si pesa de más; 415 si no es un JPEG completo. Responde
+  `200 { clave, subida_en }` también la primera vez. La tablet trata el **404 de la firma de una venta** como definitivo (la venta ya se aceptó, así que solo puede haberse eliminado en el portal) y deja de reintentarla; para las demás fotos un 404 sigue siendo temporal.
+- **Nombre del archivo (T-78):** `cliente-<cliente.id>.jpg`, `visita-<visita.id>.jpg`, `gasto-<gasto.id>.jpg` (T-30) y
+  `venta-<venta_nota.id>-firma.jpg` (T-73), nunca la clave. Reenviar escribe el mismo nombre: un solo archivo. Los
+  archivos de antes (`<clave>.jpg`) no se migran; el servidor siempre lee por `foto_archivo` / `firma_archivo`.
 - La foto del prospecto se anota en `cliente.foto_archivo/foto_subida_en`; la de la visita, en
-  `visita.foto_archivo/foto_subida_en`.
+  `visita.foto_archivo/foto_subida_en`; la del gasto (el ticket, opcional), en
+  `gasto.foto_archivo/foto_subida_en`; la firma de la venta, en `venta_nota.firma_archivo/firma_subida_en` (solo si `firma_esperada`).
 - **`GET /sync/foto/cliente/:clienteId`** (`@SoloApp`): el JPEG de la foto del cliente o prospecto si es de la
   sucursal del vendedor y está vivo; **404** si no tiene foto o no está en su alcance (no 403: no confirma que
-  exista). La tablet lo pide cuando `foto_subida_en` (§5) es más nuevo que su copia. Las fotos de visitas **no** bajan.
+  exista). La tablet lo pide cuando `foto_subida_en` (§5) es más nuevo que su copia. Las fotos de visitas y de gastos **no**
+  bajan a la tablet; la del gasto la ve el portal en `GET /gastos/:id/foto`. La firma de la venta tampoco baja; el portal la ve en `GET /ventas/:id/firma`.
+
+### Respuesta a una carga: `POST /sync/cargas/:id/respuesta` (T-27)
+
+Canal aparte del lote, como las fotos: sin `contrato` ni `resultados[]`, solo códigos HTTP. `@SoloApp`, con el mismo
+`Authorization: Bearer` de siempre; **no renueva la sesión** por su cuenta (un `401` lo resuelve la tablet
+sincronizando y reintentando una vez).
+
+```jsonc
+{ "version": 1, "accion": "aceptar" }                              // aceptar: sin motivo
+{ "version": 1, "accion": "rechazar", "motivo": "Faltan 2 cajas" } // 1..300, se recorta
+```
+
+- **200** con la carga (`CargaPull`) ya respondida. La **misma** respuesta otra vez (reintento de red, doble toque) es
+  200 sin reescribir nada.
+- **400** si la forma no vale (`aceptar` con motivo, `rechazar` sin motivo o de más de 300).
+- **404** si la carga es de otro vendedor, no existe o se eliminó (no confirma que exista). La tablet sincroniza.
+- **409** `{ message, carga }` si la `version` ya no coincide (el portal la editó) o ya tiene otra respuesta. La tablet
+  aplica la carga del cuerpo, sincroniza y pide revisarla de nuevo: **nunca acepta lo que no vio**.
+
+Sin red no se puede aceptar (D6): la carga ocurre en la planta, con WiFi y con el almacenista enfrente.
 
 ### Respuesta `200` — parcial y honesta
 
@@ -813,6 +946,8 @@ texto en español** si reintenta o si avisa al vendedor.
 | `ruta-duplicada` | Ya había una fila viva de ese vendedor, fecha y cliente con **otra** clave. **La tablet la trata como aplicada** (T-37) |
 | `motivo-visita-inexistente` | El `motivo_visita_id` de una visita no existe. Uno dado de baja **sí** se acepta. Se reintenta (T-39) |
 | `visita-id-ocupado` | El id (la clave) de la visita ya lo ocupa otro registro. Motivo neutro; avisar a la oficina (T-39) |
+| `campo-egreso-inexistente` | El `campo_egreso_id` de un gasto no existe. Uno dado de baja **sí** se acepta y "se usa en la app" no se revisa. Se reintenta (T-30/T-31) |
+| `gasto-id-ocupado` | El id (la clave) del gasto ya lo ocupa otro registro. Motivo neutro; avisar a la oficina (T-30/T-31) |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo
@@ -856,7 +991,7 @@ El rechazo se recalcula en cada intento: es determinista y no necesita memoria.
 ### Una transacción por operación (T-16, ADR-0009)
 
 Cuando un `tipo` tiene un módulo de dominio que lo proyecta (hoy `venta`,
-`cobranza`, `prospecto`, `jornada`, `ruta-alta` y `visita`), cada operación del lote se aplica **en su
+`cobranza`, `prospecto`, `jornada`, `ruta-alta`, `visita` y `gasto`), cada operación del lote se aplica **en su
 propia transacción**:
 
 1. `INSERT` en `sync_operacion` con `on conflict (vendedor_id, clave_idempotencia) do nothing`.
@@ -880,11 +1015,14 @@ propia transacción**:
    - `VisitasService.registrarVisita` (T-39) → comprueba que el motivo exista (**aunque esté dado de baja**) e
      inserta en `visita` con `id = clave` y `on conflict (id) do nothing`; si no insertó, `visita-id-ocupado`.
      La entidad es la fila de `visita`.
+   - `GastosService.registrarGasto` (T-30/T-31) → comprueba que el campo exista (**aunque esté dado de baja**),
+     copia su nombre y su tipo e inserta en `gasto` con `id = clave` y `on conflict (id) do nothing`; si no
+     insertó, `gasto-id-ocupado`. La entidad es la fila de `gasto`.
 3. `commit` → `aplicada`. Si el dominio rechaza (`presentacion-inactiva`,
-   `precio-no-asignado`, `nota-no-encontrada`, `vehiculo-inexistente`, `jornada-duplicada`, `cliente-inexistente`, `ruta-duplicada`, `motivo-visita-inexistente`, `visita-id-ocupado`),
+   `precio-no-asignado`, `nota-no-encontrada`, `vehiculo-inexistente`, `jornada-duplicada`, `cliente-inexistente`, `ruta-duplicada`, `motivo-visita-inexistente`, `visita-id-ocupado`, `campo-egreso-inexistente`, `gasto-id-ocupado`),
    `rollback`: no queda **ni** la fila de negocio **ni** la del buzón.
 
-Los tipos sin módulo todavía (`gasto`, `merma`, `ruta`) se guardan en el buzón y
+Los tipos sin módulo todavía (`merma`, `ruta`) se guardan en el buzón y
 quedan `aplicada` con `entidad_id` nulo, como hasta ahora.
 Las operaciones se aplican **en el orden del lote**, y un error inesperado a mitad
 de lote deja comprometidas las anteriores (cada una tuvo su `commit`): el reintento
@@ -1018,11 +1156,12 @@ sincronizar.
 | Resolución de conflictos (portal y tablet tocan lo mismo) | **T-43** |
 | Subir el orden en que el vendedor arrastró su ruta (hoy se queda en la tablet, D4) | Futuro, aditivo |
 | Sincronización automática 11:00/14:00 | **T-44** |
-| Forma de `datos` para gasto / merma (la de `ruta` sigue reservada sin forma; la visita es `visita`, §6) | **T-27 / T-33** |
-| Proyección de `gasto` y `merma` a sus tablas de negocio (las de `venta`, `cobranza`, `jornada`, `ruta-alta` y `visita` ya existen, §7) | Los mismos |
+| Forma de `datos` para merma (la de `ruta` sigue reservada sin forma; la visita es `visita` y el gasto `gasto`, §6) | **T-33** |
+| Proyección de `merma` a su tabla de negocio (las de `venta`, `cobranza`, `jornada`, `ruta-alta`, `visita` y `gasto` ya existen, §7) | El mismo |
 | Reporte de Kilometraje del portal (lee `jornada`) y reproceso de las jornadas que llegaron antes de T-38 | Portal (siguiente paso de T-38) |
 | Eliminar una cobranza con autorización (el saldo a favor y la cobranza desde el portal ya están: T-21) | **T-34** |
 | Permisos granulares en estos endpoints | **T-8** |
+| Movimientos del día de la tablet (merma de 3 tipos, cambios físicos, consumo propio) y corte de inventario | **T-27** piezas 2 y 3 |
 
 El envelope está diseñado para que todo eso **quepa encima sin romper la
 versión 1**: los `tipo` nuevos y los campos nuevos dentro de `datos` son

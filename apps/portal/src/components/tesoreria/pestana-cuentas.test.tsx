@@ -39,7 +39,7 @@ describe("PestanaCuentas", () => {
     vi.clearAllMocks();
     vi.mocked(lib.listarCuentasTesoreria).mockResolvedValue(CUENTAS);
     vi.mocked(sucursalesLib.listarSucursales).mockResolvedValue([
-      { id: "s-tj", codigo: "TJ", nombre: "Tijuana", activa: true },
+      { id: "s-tj", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false },
     ]);
   });
 

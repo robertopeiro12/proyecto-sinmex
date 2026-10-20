@@ -28,6 +28,10 @@ export interface NuevaVentaNota {
   origen: OrigenVenta;
   /** T-17: quien la capturo en el portal; `null` desde la tablet. */
   capturoUsuarioId: string | null;
+  /** T-73: la venta espera la imagen de la firma (vino `firma` en la operacion). */
+  firmaEsperada: boolean;
+  /** T-73: quien firmo; `null` si no lo dijo o si no hay firma. */
+  firmaNombre: string | null;
 }
 
 export interface NuevoDetalleVenta {
@@ -103,6 +107,8 @@ export class VentasRepository {
         pct_comision: venta.pctComision,
         origen: venta.origen,
         capturo_usuario_id: venta.capturoUsuarioId,
+        firma_esperada: venta.firmaEsperada,
+        firma_nombre: venta.firmaNombre,
       })
       .returning('id')
       .executeTakeFirstOrThrow();

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { GeocodificacionModule } from '../integraciones/geocodificacion/geocodificacion.module';
 import { ClientesController } from './clientes.controller';
 import { ClientesRepository } from './clientes.repository';
 import { ClientesService } from './clientes.service';
@@ -14,12 +15,15 @@ import { PromocionesService } from './promociones.service';
 import { TiposNegocioController } from './tipos-negocio.controller';
 import { TiposNegocioRepository } from './tipos-negocio.repository';
 import { TiposNegocioService } from './tipos-negocio.service';
+import { UbicacionClientesService } from './ubicacion-clientes.service';
 
 // Cartera de Clientes es el modulo de dominio del vault que agrupa Cliente y
 // Lista de precios (Lista de precios.md declara `modulo: cartera-clientes`).
 // Precios lo lleno T-18; Tipos de Negocio y Cliente (con sus respectivos
 // controller/service/repository) llegan con T-12.
 @Module({
+  // T-72: el geocodificador (Google) llega por token; Cartera de Clientes no lo conoce.
+  imports: [GeocodificacionModule],
   controllers: [
     ClientesController,
     ListasPrecioController,
@@ -35,6 +39,8 @@ import { TiposNegocioService } from './tipos-negocio.service';
     // dos columnas en `cliente`, del que esta modulo es el dueno (ADR-0009).
     FotosService,
     FotosRepository,
+    // T-72: geocodificacion del domicilio (segundo plano y boton del portal).
+    UbicacionClientesService,
     PreciosService,
     PreciosRepository,
     PromocionesService,
@@ -54,6 +60,13 @@ import { TiposNegocioService } from './tipos-negocio.service';
   // T-40 (foto): `sincronizacion/` expone `POST /sync/foto/:clave` —la clave de
   // la URL es la del buzon del push— y despacha aqui a guardar el archivo. La
   // dependencia sigue yendo de sincronizacion hacia Cartera de Clientes.
-  exports: [PreciosRepository, ClientesService, FotosService],
+  //
+  // T-72: `sincronizacion/` dispara el intento de geocodificar despues del commit de un prospecto.
+  exports: [
+    PreciosRepository,
+    ClientesService,
+    FotosService,
+    UbicacionClientesService,
+  ],
 })
 export class CarteraClientesModule {}

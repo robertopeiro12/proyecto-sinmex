@@ -111,6 +111,12 @@ Si el pull trajo migraciones y prefieres partir limpio, `npm run supabase -- db 
 Siempre con el `--`: `npm run supabase migration up --local` sin él se come `--local` en silencio
 y aplica al destino equivocado. Es el mismo aviso de más abajo, repetido a propósito.
 
+**Cada migración necesita una versión (el timestamp del nombre) única.** Supabase registra las migraciones por
+versión: si dos archivos comparten timestamp, la segunda nunca se aplica (`migration up`/`db push` la dan por
+hecha) y CI no lo detecta porque aplica los archivos uno por uno. Pasó el 2026-10-19 con T-29 y T-72 (los dos con
+`20261019120000`); la de T-72 se renombró a `20261019130000`. Antes de crear una, revisa `ls supabase/migrations`
+y la rama de tu compañero.
+
 **La nube (`sinmex dev`) refleja `main`, nunca una rama — decidido el 2026-09-14.** Las migraciones
 de un PR **no** se suben hasta que el PR se mergea. El motivo: si el PR cambia en revisión, la nube
 queda con un esquema que `main` nunca tuvo, y una migración *correctiva* encima es peor que
@@ -354,6 +360,8 @@ usuario con sesion pasa.
   - **La tablet crea el espejo en `cliente` con el mismo id** al guardar el alta (D1): `prospectos.registrar()`
     inserta la fila de `prospecto` y la de `cliente` (`tipo = 'prospecto'`, sin precios) en una sola transacción. Desde
     ese momento tiene ficha, bienvenida y venta de solo regalo, sin red. El pull posterior la pisa por id sin duplicar.
+  - **T-72**: el alta gana "Dirección del negocio" (obligatoria sin GPS) y el espejo la guarda en `cliente.domicilio`,
+    así que la ficha abre Maps por domicilio mientras el servidor no la geocodifique. Ver el bloque de T-72.
   - **El servidor adopta la clave como `cliente.id`** (D2, `despacho-prospecto.ts`, `clientes.service.ts`): la clave
     debe ser uuid (si no, `datos-invalidos`) y un id ya ocupado se rechaza con razón `id-ocupado` (código
     `datos-invalidos`, nunca un 500). El motivo es **neutro a propósito**: no confirma que exista un cliente, que podría
@@ -397,7 +405,12 @@ usuario con sesion pasa.
   - **Destinos** (`tesoreria_destino_cobranza`): sucursal + método → cuenta, con vigencia `desde`; se usa la más
     reciente ≤ fecha del pago. Sin destino, el dinero no suma a ninguna cuenta y sale en `sinCuenta`. No se elimina
     la cuenta que **hoy** recibe cobranza (409).
-  - Las compras (T-30/T-31) entrarán igual: otra fuente más del arreglo `movimientos` de `reglas-saldo.ts`.
+  - **Gastos de la ruta (T-30/T-31)**: se **leen** de `gasto` (`tesoreria/gastos-tesoreria.repository.ts`, vivos con
+    `metodo = 'efectivo_cobranza_dia'`, por fecha y sucursal del gasto) y restan en la cuenta destino vigente de
+    `(sucursal, 'efectivo')`, la misma de la cobranza en efectivo (`destinoDe`). Sin destino salen en la lista aparte
+    `gastosSinCuenta`. Evento `gasto-ruta` ("Gastos de ruta") con la forma del de cobranza (`id`, `fecha`, `cuentaId`,
+    `cuentaNombre`, `sucursalCodigo`, `cantidad`, `montoCentavos`), un total por día, cuenta y sucursal. Las compras de
+    oficina del resto de T-31 entrarán igual.
 
 - **Flujo de Efectivo (T-32).** *Finanzas → Flujo de Efectivo* (`/flujo-efectivo`, permiso `flujo_efectivo.ver`,
   `modules/flujo-efectivo/`). Solo lectura. Ventas Totales por **fecha de la venta** (cualquier status, sucursal de la
@@ -419,7 +432,7 @@ usuario con sesion pasa.
     forma (ubicación obligatoria) y `rutas/visitas.service.ts` proyecta. Rechazos nuevos:
     `motivo-visita-inexistente` (uno **dado de baja sí entra**) y `visita-id-ocupado` (motivo neutro). **El servidor
     no revisa "exige foto/nombre"**: lo exige la tablet (`src/estado/visita.ts`, `validarVisita`).
-  - **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → rutas` (`fuentesDelPush`, con
+  - **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → gastos → rutas` (`fuentesDelPush`, con
     prueba). El alcance se comprueba **una vez por lote**: una visita a un prospecto cuya alta viaja en el mismo
     lote cae `cliente-fuera-de-alcance`; la tablet sube alta y visita en lotes consecutivos de una sincronización.
   - **GPS**: una coordenada inválida (fuera de rango o no finita) es "sin GPS" (se pide la dirección y se guarda con
@@ -440,6 +453,142 @@ usuario con sesion pasa.
   - **Nube**: la migración `20261018120000_visita_sin_venta.sql` debe subirse a `sinmex dev` después del merge,
     siguiendo el protocolo de push de migraciones (pre-flight: solo tablas nuevas).
 
+- **Geocodificación de prospectos (T-72).** El alta de prospecto de la tablet gana "Dirección del negocio" (obligatoria
+  sin GPS válido; una coordenada inválida cuenta como sin GPS, con la misma `esCoordenadaValida` de la visita de T-39) y
+  el servidor convierte direcciones en coordenadas con la Geocoding API de Google. Spec:
+  `docs/superpowers/specs/2026-10-19-t-72-geocodificacion-design.md`.
+  - **`GOOGLE_MAPS_API_KEY`** (opcional, solo en el servidor; ver `.env.example`). Sin ella nada falla: el intento da
+    `sin-configurar` (se loguea una vez por arranque) y el portal lo dice. La clave **nunca** se loguea ni sale en
+    respuestas; se loguea el `status` de Google o el código HTTP, nunca la URL.
+  - **`GEOCODIFICADOR_FALSO=1`** (solo desarrollo) ubica toda dirección en el centro de Tijuana sin llamar a Google. Se
+    **ignora si `NODE_ENV=production`** (se usa Google y se loguea un `warn`). Ojo: esa guarda solo funciona si el
+    despliegue **fija `NODE_ENV=production`**; hoy nada en el repo lo fija (el backend solo lo lee para elegir el
+    `.env.<entorno>` y para `/health`), así que quien despliegue debe ponerlo.
+  - Módulo `modules/integraciones/geocodificacion/` (token `GEOCODIFICADOR`, `fetch` nativo, **5 s** con
+    `AbortController`; solo `ROOFTOP`/`RANGE_INTERPOLATED`/`GEOMETRIC_CENTER`, `APPROXIMATE` = `imprecisa`). **Bajo
+    `NODE_ENV=test` la fábrica siempre da un geocodificador `sin-configurar`**: ninguna prueba puede llamar a Google
+    aunque haya clave en el `.env`. Los e2e que necesitan geocodificar sustituyen el proveedor
+    (`overrideProvider(GEOCODIFICADOR)`) con el falso compartido de `apps/backend/test/apoyo-geocodificador.ts`
+    (`retener` mantiene una respuesta en espera para probar las carreras).
+  - **Después del commit y sin bloquear**: `SincronizacionService` dispara
+    `UbicacionClientesService.geocodificarEnSegundoPlano` tras aplicar un prospecto con `domicilio` y sin GPS (nunca en
+    `duplicada` ni `rechazada`) y **no lo espera**; `ClientesService` lo dispara al guardar desde el portal si el
+    domicilio cambió y no hay coordenada. Nunca dentro de una transacción. La escritura es `… where lat is null` con
+    `updated_at = now()`: no pisa una coordenada capturada mientras tanto y baja sola en el pull. Sin reintentos, cola
+    ni cron.
+  - `cliente.ubicacion_origen` (`gps`/`geocodificada`/`manual`; nula ⇔ `lat` nula, por check; backfill `manual`).
+    El portal conserva el origen si reenvía la misma coordenada y pone `manual` si cambia (`ubicacion-origen.ts`).
+    En `PATCH /clientes/:id`, **omitir `lat` y `lng` conserva la coordenada y `null` la borra**: el formulario solo las
+    manda si la oficina tocó los campos (`coordenadaAEnviar`), para no borrar la que Google puso con el formulario
+    abierto. "Ubicar con la dirección" se deshabilita mientras el domicilio del campo no esté guardado.
+    Baja en el pull; la tablet la guarda (migración local 014, junto con `prospecto.domicilio`, sin check para que un
+    origen nuevo del servidor no tumbe el pull) y todavía no la muestra.
+  - Portal: "Ubicar con la dirección" → `POST /clientes/:id/ubicar` (permiso `cliente.gestionar`, espera ≤ 5 s):
+    200 con la coordenada, 409/502 con el motivo en español. **Otra sucursal = 404** (a diferencia de otros endpoints
+    de clientes, que contestan 403: no confirma que el cliente exista). El domicilio admite 300 caracteres (antes 200),
+    igual que la tablet.
+  - `DatosProspecto.domicilio` (≤ 300) es aditivo: `CONTRATO_ACTUAL` sigue en 1.
+  - **Nube**: `20261019130000_cliente_ubicacion_origen.sql` se sube a `sinmex dev` después del merge, con el protocolo
+    de push (su comentario trae el pre-flight: `select count(*) from cliente where lat is not null` cuenta las filas
+    que el backfill va a marcar `manual`, para el comentario del PR; los dos checks nuevos no pueden fallar porque el
+    backfill corre antes de crearlos. Después de migrar,
+    `select count(*) from cliente where (ubicacion_origen is null) <> (lat is null)` debe dar 0. El backfill mueve
+    `updated_at` de los clientes con coordenada a propósito, para que las tablets reciban el origen).
+
+- **Gastos de la ruta y campos de egreso (T-30 / T-31).** El vendedor registra, sin red, lo que paga con la cobranza
+  (hielo, gasolina, reparación, adelanto); el gasto sube como operación `gasto`, resta en Tesorería y la oficina lo
+  consulta en *Finanzas → Gastos*. Spec: `docs/superpowers/specs/2026-10-20-t-30-31-gastos-de-ruta-design.md`. Las
+  compras de oficina desde el portal (cualquier método, días anteriores) son el resto de T-31, otro ticket.
+  - **Catálogo `campo_egreso`** global, con `tipo` fijo (`produccion`/`operacion`/`financiero`, un check, no tabla) y
+    la casilla `se_usa_en_app`; baja lógica, nombre único entre vivos (`uq_campo_egreso_nombre`) y
+    `creado_en`/`actualizado_en` con `set_actualizado_en()`. La baja se **rechaza con 409** si el campo tiene gastos
+    vivos en el año en curso de Tijuana ("podrás darlo de baja el próximo año"). Backend en `compras-egresos/`
+    (`/campos-egreso`, permiso `campo_egreso.gestionar`, grupo General); portal *Catálogo → Campos de egreso*
+    (`/catalogo/campos-de-egreso`). Baja en el pull como `campos_egreso`.
+  - **Tabla `gasto`**: `id` = clave de la operación; copia `campo_nombre` y `tipo` al proyectar; `metodo` fijo
+    `efectivo_cobranza_dia`, `origen = 'app'`, `quien` = nombre del vendedor, `fecha` = `fecha_operacion` del sobre
+    (nunca re-derivada de UTC). `vendedor_id` nulo y `origen = 'portal'` quedan para las compras de oficina.
+  - **Operación `gasto`** (ya estaba en `TIPOS_OPERACION`; dejó de guardarse sin proyectar), sin subir
+    `CONTRATO_ACTUAL`. Sin `cliente_id` ni folio. `prepararGasto` (`sincronizacion/despacho-gasto.ts`) valida la forma
+    y `compras-egresos/gastos.service.ts` proyecta. Rechazos nuevos: `campo-egreso-inexistente` (uno **dado de baja sí
+    entra**) y `gasto-id-ocupado` (motivo neutro). **El servidor no revisa "Se usa en la app"**: lo filtra la tablet.
+    Las operaciones `gasto` viejas del buzón se quedan sin proyectar (sin relleno).
+  - **Fotos**: `POST /sync/foto/:clave` acepta gastos (`gasto-<id>.jpg`, opcional). El portal la sirve en
+    `GET /gastos/:id/foto` (permiso `gasto.ver`; otra sucursal = 404).
+  - **Portal** *Finanzas → Gastos* (`/finanzas/gastos`): `GET /gastos?desde&hasta&sucursal&vendedor&campo` (permiso
+    `gasto.ver`, grupo Finanzas; alcance de sucursal; máximo 366 días), con total. Diseñada para 1366 px (`table-fixed` + `colgroup`, 736 px fijos y Comentario flexible); medir en navegador.
+  - **Tablet** (migración local 015): `campo_egreso` y `gasto` (foto con el esquema derivado de la visita). Pantallas
+    `app/(jornada)/gastos/index.tsx` (lista del día, entrada Gastos del menú) y `registrar.tsx`; la lista se refresca
+    con `versionCatalogos`/`ultimaSincronizacion` (no al enfocar). Los topes compartidos viven en
+    `src/datos/reglas-gasto.ts` y la lógica pura en `src/estado/gasto.ts` (`montoACentavos` exacto, `validarGasto`,
+    `camposParaGasto`, `faltantesVisiblesGasto`, `puedeRegistrarGasto`), con pruebas. Un gasto grabado no se edita ni
+    se borra en la app. El botón de la ficha queda en "Merma, promoción y consumo" (T-27).
+  - **Nube**: la migración `20261020120000_gastos_ruta.sql` se sube a `sinmex dev` después del merge, con el protocolo
+    de push (pre-flight: tablas nuevas, inserts de permisos y semilla; no hay nada que contar). Esta rama lleva el
+    fix de PR #139 (migración de T-72 renombrada a `20261019130000`).
+- **Firma del cliente en la nota (T-73).** El cliente firma con el dedo en la tablet **toda** venta (contado y crédito,
+  sin poder omitirla) antes de grabarla; la firma complementa la nota de papel. Spec:
+  `docs/superpowers/specs/2026-10-21-t-73-firma-del-cliente-design.md`.
+  - **Tablet**: la revisión de la venta lleva el recuadro (`src/ui/recuadro-firma.tsx`, `react-native-svg` +
+    `PanResponder`, papel **blanco** como `<Rect>` dentro del `Svg` para que el PNG no salga transparente) y el nombre
+    opcional (≤ 80). "Grabar venta" no se habilita sin firma; "Corregir" la borra. Toda decisión vive en
+    `src/estado/firma.ts` (`puedeGrabarVenta`, `crearGrabadorVenta` con la guardia de doble toque), con pruebas.
+  - **El id de la venta se genera antes de grabar**: `toDataURL` → PNG → JPG (`src/fotos/firma-expo.ts`,
+    `expo-image-manipulator`, 0.8, ≤ 1000 px) en `documentDirectory/firmas/firma-<id>.jpg`, y `ventas.registrar({ id,
+    …, firma: { uri, nombre } })` guarda `firma_local`/`firma_nombre` en la **misma transacción** que la venta y el
+    folio (migración local 016). Si exportar o convertir falla, no se graba ni se quema folio.
+  - **`react-native-svg` es nativa: hace falta un APK nuevo.** Una app vieja sigue funcionando: sus ventas llegan sin
+    `firma` y el portal las muestra "sin firma".
+  - **Contrato**: `firma: { nombre }` opcional en `datos` de la operación `venta` (aditivo, `CONTRATO_ACTUAL` sigue en
+    1). Presencia = la venta espera imagen (`venta_nota.firma_esperada`); `nombre` > 80 o de otro tipo →
+    `datos-invalidos` (`firma.nombre`). Las ventas del portal quedan con `firma_esperada = false`.
+  - **Imagen**: sube por `POST /sync/foto/:clave` (rama `venta`) como `venta-<venta_nota.id>-firma.jpg`; 409 si aún
+    no está proyectada o no espera firma, 404 si la venta se eliminó. Las columnas son de `ventas-cobranza`
+    (`FirmasVentaService`/`FirmasVentaRepository`). La tablet trata **solo** el 404 de una firma como definitivo
+    (`fuenteFirmasVentas.fallaDefinitiva`; `FotoTemporalError.status`) y la descarta; la cola sube las firmas después
+    de las fotos de gastos y solo de ventas ya sincronizadas.
+  - **Portal**: `VentaDetalle.firma { esperada, nombre, subidaEn }` y `editada` (`actualizado_por_usuario_id is not
+    null`); bloque "Firma del cliente" en el detalle (imagen por `GET /ventas/:id/firma`, mismo alcance que el detalle,
+    `Cache-Control: private, no-store`), "pendiente de subir" o "sin firma", y el aviso si la nota se editó después
+    de firmarse. Editar en el portal **no** vuelve a pedir la firma.
+  - **Nube**: `20261021120000_venta_firma.sql` se sube a `sinmex dev` después del merge y **antes** del backend (y el
+    backend antes de la app), con el protocolo de push (pre-flight: columnas nuevas con default; nada que contar).
+- **Carga y recarga del vendedor (T-27 pieza 1 / T-26).** Producción registra en el portal la carga de la mañana y cada
+  recarga; la carga baja a la tablet, el vendedor la **acepta o la rechaza** con red y, con el control de inventario de
+  su sucursal prendido, no vende con una carga pendiente ni deja una presentación en negativo. Spec:
+  `docs/superpowers/specs/2026-10-22-t-27-carga-y-recarga-design.md`. Piezas 2 (movimientos del día) y 3 (corte de
+  inventario) son otros PR.
+  - **Servidor**: `sucursal.control_inventario` (apagada por defecto, D7), `carga` (numerada por vendedor y día;
+    `uq_carga_vendedor_fecha_numero` parcial: una baja libera su número; `ck_carga_motivo`, `ck_carga_respondida`) y
+    `carga_detalle` (piezas > 0). Permiso `carga.gestionar` (ya existía, grupo Produccion/Almacen). Backend en
+    `modules/produccion/` (`/cargas`, reglas puras en `reglas-carga.ts`): solo cargas de **hoy en Tijuana** (D8);
+    editar o eliminar solo pendiente/rechazada, de hoy y con la `version` (si no, 409 con la carga actual; una de un día anterior también es 409 en PATCH/DELETE); editar la
+    regresa a pendiente y sube la versión; una **aceptada no se toca** (D5). El número se calcula con la fila del
+    vendedor bloqueada (`for no key update`); otra sucursal = 404.
+  - **App**: `POST /sync/cargas/:id/respuesta` (`@SoloApp`, `sincronizacion/cargas-app.controller.ts` →
+    `CargasService.responder`): `{ version, accion, motivo? }`; la misma respuesta otra vez es 200 sin reescribir; otra
+    versión o ya respondida = 409 con la carga; de otro vendedor, inexistente o eliminada = 404. No renueva la sesión.
+  - **Contrato** (aditivo, `CONTRATO_ACTUAL` sigue en 1): colección `cargas` en el pull (las del vendedor desde
+    `current_date - 1`, baja con `activo: 0`) y `VendedorPull.control_inventario`. Cambiar la casilla toca
+    `vendedor.updated_at` de esa sucursal (`SucursalesRepository.actualizar`).
+  - **Portal**: *Producción › Recarga* (`components/produccion/`, `lib/cargas.ts`): rejilla presentaciones × vendedores
+    con subcolumnas por carga (pastilla de estado, motivo del rechazo en rojo), "Nueva carga", "Editar", "Eliminar";
+    días anteriores en solo lectura; caja con scroll propio a 1366 px. *Catálogo › Sucursales*: casilla "Control de
+    inventario en la app".
+  - **Tablet** (migración local 017): `carga`, `carga_detalle`, `vendedor.control_inventario` (el login sin red no la
+    pisa: `NO_BORRAR_CON_NULO` ahora lleva el valor con que nace una fila nueva). La mezcla del pull
+    (`repositorios/cargas.ts`) reemplaza las líneas y **no deja que un pull viejo deshaga una respuesta**. Reglas puras
+    en `src/datos/inventario-reglas.ts` (`existencias`, `bloqueoDeVenta`, `faltantesDeVenta`), reexportadas en
+    `src/estado/inventario.ts` con la respuesta (`crearRespondedorCarga`, guardia de doble toque; 409 aplica la nueva y
+    sincroniza; 404 sincroniza; 401 sincroniza y reintenta una vez). El `sincronizar` del proveedor reutiliza la corrida en
+    curso (`src/sincronizacion/una-a-la-vez.ts`) para no renovar dos veces el refresh token a la vez, y
+    `ventas.registrar()` publica un cambio de catálogo tras grabar para que Inventario relea. **`ventas.registrar()` recalcula bloqueo y
+    faltantes dentro de su transacción, antes del folio** (vale la existencia del momento de grabar). Pantallas:
+    Inventario (menú), detalle con Aceptar/Rechazar, aviso "Tienes una carga por aceptar" en la ruta, y la venta con
+    bloqueo, "Te quedan N" y faltantes congelados en la revisión.
+  - **Nube**: `20261022120000_carga_vendedor.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
+    (pre-flight: tablas nuevas y una columna con default; nada que contar). Backend antes que la app. **No prender la
+    casilla de una sucursal hasta que sus tablets tengan la versión nueva** y producción esté capturando cargas.
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
   - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).

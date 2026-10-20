@@ -42,6 +42,12 @@ export interface Vendedor {
    * puede emitir folio. Ver T-14 y ADR-0007.
    */
   folio_segmento: string | null;
+  /**
+   * T-27 (D7): el control de inventario de su sucursal (0/1). Prendido, no se
+   * vende con una carga pendiente de hoy ni se deja una presentacion en
+   * negativo. Baja en el pull; el login sin red no lo pisa.
+   */
+  control_inventario: Booleano;
   sincronizado_en: MomentoISO;
 }
 
@@ -95,7 +101,26 @@ export interface MotivoVisita {
   sincronizado_en: MomentoISO;
 }
 
+/**
+ * Un campo de egreso (T-30, D6): el catalogo de la pantalla Gastos. Baja en el
+ * pull como `campos_egreso`; la baja viaja como `activo: 0`.
+ */
+export interface CampoEgreso {
+  id: string;
+  nombre: string;
+  /** `produccion` | `operacion` | `financiero` (D1). Sin check local: ver la migracion 015. */
+  tipo: string;
+  /** `1` = la pantalla Gastos lo ofrece ("Se usa en la app"). */
+  se_usa_en_app: Booleano;
+  /** `0` = dado de baja en el portal: ya no se ofrece. */
+  activo: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
 export type TipoCliente = 'cliente' | 'prospecto';
+
+/** De donde salio la coordenada del cliente (T-72, D3). Baja en el pull; la tablet aun no la muestra. */
+export type OrigenUbicacion = 'gps' | 'geocodificada' | 'manual';
 
 export interface Cliente {
   id: string;
@@ -138,6 +163,12 @@ export interface Cliente {
    * el pull. `null` = no tiene foto (o el servidor es anterior a T-39).
    */
   foto_subida_en: MomentoISO | null;
+  /**
+   * T-72 (D3): de donde salio la coordenada, tal como baja en el pull. `null`
+   * sin coordenada o con un servidor anterior. El espejo local de un prospecto
+   * con GPS nace en `'gps'`.
+   */
+  ubicacion_origen: OrigenUbicacion | null;
   /**
    * El `foto_subida_en` de la copia que esta tablet ya bajo a su cache (no viene
    * del pull). Si es menor que `foto_subida_en`, la ficha la vuelve a bajar.
@@ -278,6 +309,20 @@ export interface Venta {
   /** Motivo con el que el servidor la rechazo, si `sync_estado = 'error'`. */
   sync_error: string | null;
   sincronizado_en: MomentoISO | null;
+  /**
+   * T-73: ruta local del JPG de la firma del cliente
+   * (`documentDirectory/firmas/firma-<id>.jpg`). `null` solo en ventas
+   * anteriores a la migracion 016: desde entonces la firma es obligatoria (D1).
+   */
+  firma_local: string | null;
+  /** Quien firmo; `null` si no lo dijo (D2). */
+  firma_nombre: string | null;
+  /** Cuando recibio la imagen el SERVIDOR. `null` = todavia no esta arriba ("firma por subir"). */
+  firma_subida_en: MomentoISO | null;
+  /** Ultimo motivo por el que la firma no subio. Se limpia al subir. */
+  firma_error: string | null;
+  /** `1` = no recuperable (la venta se elimino en el portal, 413, 415, archivo perdido): no se reintenta. */
+  firma_descartada: Booleano;
 }
 
 export interface VentaLinea {
@@ -386,6 +431,12 @@ export interface Prospecto {
   lat: number | null;
   lng: number | null;
   /**
+   * T-72 (D1): la "Dirección del negocio". Obligatoria al capturar sin GPS
+   * (`validarAltaProspecto`); `null` con GPS si no se escribio, y en filas
+   * anteriores a la migracion 014.
+   */
+  domicilio: string | null;
+  /**
    * Ruta local de la foto del lugar, ya comprimida. `null` si el vendedor no
    * tomo foto — que es un prospecto **completo**, no uno a medias.
    *
@@ -456,4 +507,59 @@ export interface Visita {
   sync_estado: SyncEstado;
   sync_error: string | null;
   sincronizado_en: MomentoISO | null;
+}
+
+/** Un gasto de la ruta (T-30/T-31, D8): lo que el vendedor pago con la cobranza del dia. */
+export interface Gasto {
+  id: string;
+  /** Dia de trabajo (`reloj.hoy()`), el de `fecha_operacion`. */
+  fecha: FechaISO;
+  vendedor_id: string;
+  sucursal_id: string;
+  campo_egreso_id: string;
+  /** Copia del nombre del campo al guardar: se pinta sin join. */
+  campo_nombre: string;
+  /** Entero > 0. */
+  monto_centavos: number;
+  comentario: string | null;
+  /** Cuando lo guardo el vendedor. Viaja como `ocurrido_en` y `datos.registrado_en`. */
+  registrado_en: MomentoISO;
+  /** Ruta local de la foto del ticket ya comprimida, o `null`. */
+  foto_local: string | null;
+  /** Cuando la recibio el SERVIDOR. `null` = todavia no esta arriba. */
+  foto_subida_en: MomentoISO | null;
+  foto_error: string | null;
+  /** `1` = no recuperable (413, 415, archivo perdido): no se reintenta. */
+  foto_descartada: Booleano;
+  sync_estado: SyncEstado;
+  sync_error: string | null;
+  sincronizado_en: MomentoISO | null;
+}
+
+/** Estado de una carga (T-27). Sin check en SQLite: ver la migracion 017. */
+export type EstadoCarga = 'pendiente' | 'aceptada' | 'rechazada';
+
+/**
+ * Una carga (la de la manana o una recarga) que produccion registro en el
+ * portal (T-27). La escribe el pull o la respuesta del servidor; la tablet no
+ * crea cargas ni cambia sus lineas.
+ */
+export interface Carga {
+  id: string;
+  vendedor_id: string;
+  fecha: FechaISO;
+  numero: number;
+  estado: EstadoCarga;
+  motivo_rechazo: string | null;
+  version: number;
+  respondida_en: MomentoISO | null;
+  activo: Booleano;
+  /** Cuando la tablet escribio la fila (pull o respuesta). */
+  actualizado_en: MomentoISO;
+}
+
+export interface CargaDetalle {
+  carga_id: string;
+  presentacion_id: string;
+  piezas: number;
 }

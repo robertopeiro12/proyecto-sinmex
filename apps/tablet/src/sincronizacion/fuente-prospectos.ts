@@ -38,6 +38,8 @@ export function fuenteProspectos(
           encargado: p.encargado,
           tipo_negocio_id: p.tipo_negocio_id,
           comentarios: p.comentarios,
+          // T-72 (D2): la direccion del negocio; null si no se escribio.
+          domicilio: p.domicilio,
           lat: p.lat,
           lng: p.lng,
           foto: null,

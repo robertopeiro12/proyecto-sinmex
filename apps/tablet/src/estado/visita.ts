@@ -6,6 +6,7 @@ import {
 } from '@/datos/repositorios/visitas';
 import type { MotivoVisita, Visita } from '@/datos/tipos';
 
+import { esCoordenadaValida } from './coordenada';
 import { motivoDeRechazo, type EstadoPastilla, type EstadoSubida } from './ruta-del-dia';
 
 /**
@@ -65,15 +66,8 @@ export function validarVisita(e: EntradaVisita): ValidacionVisita {
   const u = e.ubicacion;
   // El repositorio no revisa el rango: lo hace esta funcion. Una coordenada invalida (NaN, fuera
   // de rango) es "sin GPS": nunca bloquea si hay direccion, y sin ella se pide como en `fallo`.
-  const coordenadasValidas =
-    u.estado === 'ok' &&
-    Number.isFinite(u.lat) &&
-    Number.isFinite(u.lng) &&
-    u.lat >= -90 &&
-    u.lat <= 90 &&
-    u.lng >= -180 &&
-    u.lng <= 180;
-  const gps = u.estado === 'ok' && coordenadasValidas ? u : null;
+  // La regla es la misma del alta de prospecto (T-72): `esCoordenadaValida`.
+  const gps = u.estado === 'ok' && esCoordenadaValida(u.lat, u.lng) ? u : null;
   // El servidor exige precision >= 0: una negativa o no finita se descarta, la coordenada se queda.
   const precisionM =
     gps !== null && gps.precisionM !== null && Number.isFinite(gps.precisionM) && gps.precisionM >= 0

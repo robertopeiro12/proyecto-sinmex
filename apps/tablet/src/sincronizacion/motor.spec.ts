@@ -235,6 +235,46 @@ describe('aSnapshot (T-37)', () => {
   });
 });
 
+describe('aSnapshot (T-72)', () => {
+  it('pasa ubicacion_origen y tolera un servidor que todavia no lo manda', () => {
+    const respuesta = respuestaPullDePrueba();
+    respuesta.catalogos.clientes[0] = { ...respuesta.catalogos.clientes[0]!, ubicacion_origen: 'gps' };
+    expect(aSnapshot(respuesta).clientes?.map((c) => c.ubicacion_origen)).toEqual(['gps', null]);
+  });
+});
+
+describe('aSnapshot (T-27)', () => {
+  it('pasa la casilla del vendedor a 0/1 y tolera un servidor que no la manda', () => {
+    const respuesta = respuestaPullDePrueba();
+    respuesta.catalogos.vendedores = respuesta.catalogos.vendedores.map((v, i) => ({
+      ...v,
+      control_inventario: i === 0,
+    }));
+    expect(aSnapshot(respuesta).vendedores?.map((v) => v.control_inventario)).toEqual([1, 0]);
+    expect(aSnapshot(respuestaPullDePrueba()).vendedores?.map((v) => v.control_inventario)).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it('pasa las cargas y tolera un servidor que todavia no las manda', () => {
+    const carga = {
+      id: 'carga-1',
+      vendedor_id: 'ven-1',
+      fecha: '2026-08-07',
+      numero: 1,
+      estado: 'pendiente' as const,
+      motivo_rechazo: null,
+      version: 1,
+      respondida_en: null,
+      activo: 1 as const,
+      lineas: [{ presentacion_id: 'pre-1', piezas: 24 }],
+    };
+    expect(aSnapshot(respuestaPullDePrueba({ cargas: [carga] })).cargas).toEqual([carga]);
+    expect(aSnapshot(respuestaPullDePrueba()).cargas).toBeUndefined();
+  });
+});
+
 describe('motor de sincronizacion', () => {
   describe('renovar la sesion es el PRIMER paso', () => {
     it('llama a renovar() antes que a pull o push', async () => {
@@ -337,7 +377,10 @@ describe('motor de sincronizacion', () => {
           }),
       });
 
-      await expect(motor.sincronizar()).rejects.toThrow();
+      // `toMatchObject` y no `toThrow()`: el `SqliteError` de better-sqlite3
+      // puede heredar del `Error` de otro realm de Jest (segun que suite corrio
+      // antes en el mismo proceso) y `toThrow()` lo reporta como "did not throw".
+      await expect(motor.sincronizar()).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_FOREIGNKEY' });
       expect(sync.leerCursor()).toBeNull();
     });
 
@@ -1027,6 +1070,57 @@ describe('motor de sincronizacion', () => {
 
         expect(escenario.fotos).toHaveLength(1);
       });
+
+      describe('una falla que la fuente declara definitiva (T-73, Review Focus 5)', () => {
+        /** Una cola de una sola firma que recuerda que se hizo con ella. */
+        function fuenteDeUnaFirma() {
+          const registro = { descartadas: [] as string[], anotadas: [] as string[] };
+          const fuente: FuenteFotos = {
+            tipo: 'venta',
+            pendientes: () =>
+              registro.descartadas.length === 0
+                ? [{ clave: 'venta-1', uri: 'file:///documentos/firmas/firma-venta-1.jpg' }]
+                : [],
+            marcarSubida: jest.fn(),
+            anotarError: (clave) => {
+              registro.anotadas.push(clave);
+            },
+            descartar: (clave) => {
+              registro.descartadas.push(clave);
+            },
+            fallaDefinitiva: (_clave, status) => status === 404,
+          };
+          return { fuente, registro };
+        }
+
+        it('un 404 de una firma (la venta se elimino en el portal) se descarta y no se reintenta', async () => {
+          const { fuente, registro } = fuenteDeUnaFirma();
+          const { motor, escenario } = montar({
+            fotos: () => fuente,
+            subirFoto: () => Promise.reject(new FotoTemporalError('Esa venta ya no existe.', 404)),
+          });
+
+          const r = await motor.sincronizar();
+          expect(registro).toEqual({ descartadas: ['venta-1'], anotadas: [] });
+          expect(r.fotos).toMatchObject({ descartadas: 1, pendientes: 0 });
+
+          await motor.sincronizar();
+          expect(escenario.fotos).toHaveLength(1);
+        });
+
+        it('un 409 de la misma firma sigue siendo temporal', async () => {
+          const { fuente, registro } = fuenteDeUnaFirma();
+          const { motor } = montar({
+            fotos: () => fuente,
+            subirFoto: () =>
+              Promise.reject(new FotoTemporalError('Esa venta todavia no esta proyectada.', 409)),
+          });
+
+          const r = await motor.sincronizar();
+          expect(registro).toEqual({ descartadas: [], anotadas: ['venta-1'] });
+          expect(r.fotos).toMatchObject({ descartadas: 0, pendientes: 1 });
+        });
+      });
     });
 
     describe('una foto no arrastra a las demas', () => {
@@ -1123,6 +1217,24 @@ describe('aSnapshot (T-39)', () => {
   it('un cliente sin foto_subida_en (servidor anterior) llega como null', () => {
     const cliente = aSnapshot(respuestaPullDePrueba()).clientes?.[0];
     expect(cliente?.foto_subida_en).toBeNull();
+  });
+});
+
+describe('aSnapshot (T-30/T-31)', () => {
+  it('los campos de egreso bajan con la casilla booleana como 0/1 de SQLite', () => {
+    const respuesta = respuestaPullDePrueba();
+    respuesta.catalogos.campos_egreso = [
+      { id: 'ce1', nombre: 'Hielo', tipo: 'operacion', se_usa_en_app: true, activo: 1 },
+      { id: 'ce2', nombre: 'Envases', tipo: 'produccion', se_usa_en_app: false, activo: 0 },
+    ];
+    expect(aSnapshot(respuesta).camposEgreso).toEqual([
+      { id: 'ce1', nombre: 'Hielo', tipo: 'operacion', se_usa_en_app: 1, activo: 1 },
+      { id: 'ce2', nombre: 'Envases', tipo: 'produccion', se_usa_en_app: 0, activo: 0 },
+    ]);
+  });
+
+  it('un servidor anterior no manda la coleccion: no se escribe nada', () => {
+    expect(aSnapshot(respuestaPullDePrueba()).camposEgreso).toBeUndefined();
   });
 });
 

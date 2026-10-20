@@ -11,6 +11,8 @@ import { CobranzasService } from './cobranzas.service';
 import { FacturasController } from './facturas.controller';
 import { FacturasRepository } from './facturas.repository';
 import { FacturasService } from './facturas.service';
+import { FirmasVentaRepository } from './firmas-venta.repository';
+import { FirmasVentaService } from './firmas-venta.service';
 import { FoliosOficinaRepository } from './folios-oficina.repository';
 import { PeticionesController } from './peticiones.controller';
 import { PeticionesRepository } from './peticiones.repository';
@@ -53,6 +55,9 @@ import { VentasService } from './ventas.service';
     VentasConsultaRepository,
     VentasEdicionService,
     VentasEdicionRepository,
+    // T-73: la firma del cliente en la nota
+    FirmasVentaService,
+    FirmasVentaRepository,
     // T-19: asignar factura
     FacturasService,
     FacturasRepository,
@@ -65,6 +70,7 @@ import { VentasService } from './ventas.service';
     PeticionesService,
     PeticionesRepository,
   ],
-  exports: [VentasService, CobranzasService],
+  // T-73: `FirmasVentaService` para el canal de fotos de sincronizacion/.
+  exports: [VentasService, CobranzasService, FirmasVentaService],
 })
 export class VentasCobranzaModule {}

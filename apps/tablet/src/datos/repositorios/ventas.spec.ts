@@ -1,5 +1,7 @@
-import { depsDePrueba, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
+import { depsDePrueba, FIRMA_DE_PRUEBA, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
 import { relojFijo } from '../reloj';
+import type { EstadoCarga } from '../tipos';
+import { aplicarSnapshotCargas } from './cargas';
 import { crearRepositorioCatalogos } from './catalogos';
 import type { DepsRepositorio } from './deps';
 import { crearRepositorioFolios, ErrorFolio } from './folios';
@@ -46,6 +48,7 @@ const venta = (extra: Partial<DatosRegistroVenta> = {}): DatosRegistroVenta => (
   lineas: [{ presentacionId: 'pre-1', cantidad: 24, cantidadPromocion: 2 }],
   // T-74: las 2 piezas de promocion de la linea llegan como regalo aplicado.
   regalos: [{ promocionId: 'promo-general', presentacionId: 'pre-1', cantidad: 2, texto: TEXTO_GENERAL }],
+  firma: FIRMA_DE_PRUEBA,
   ...extra,
 });
 
@@ -169,6 +172,7 @@ describe('repositorio de ventas (T-16)', () => {
         factura: 'N/A',
         comentarios: null,
         lineas: [{ presentacionId: 'pre-1', cantidad: 3, cantidadPromocion: 0 }],
+        firma: FIRMA_DE_PRUEBA,
       });
       expect(ventas.regalosDe(v.id)).toEqual([]);
       expect(ventas.hayAlgunaDe('cli-1')).toBe(true);
@@ -312,6 +316,245 @@ describe('repositorio de ventas (T-16)', () => {
         sincronizado_en: MOMENTO,
         sync_error: null,
       });
+    });
+  });
+});
+
+describe('firma del cliente (T-73)', () => {
+  const FIRMA = { uri: 'file:///documentos/firmas/firma-x.jpg', nombre: 'Doña Lupe' };
+
+  it('graba la firma en la misma venta: ruta y nombre, por subir y sin error', () => {
+    const { ventas } = montar();
+    const v = ventas.registrar(venta({ firma: FIRMA }));
+    expect(v).toMatchObject({
+      firma_local: 'file:///documentos/firmas/firma-x.jpg',
+      firma_nombre: 'Doña Lupe',
+      firma_subida_en: null,
+      firma_error: null,
+      firma_descartada: 0,
+      sync_estado: 'pendiente',
+    });
+  });
+
+  it('usa el id que le da la pantalla: el archivo de la firma ya se nombro con el', () => {
+    const { folios, ventas } = montar();
+    const v = ventas.registrar(venta({ id: 'venta-de-la-pantalla' }));
+    expect(v.id).toBe('venta-de-la-pantalla');
+    expect(folios.porOperacion('venta-de-la-pantalla')?.folio).toBe(v.folio);
+  });
+
+  it('sin firma no graba ni quema folio (D1)', () => {
+    const { deps, folios, ventas } = montar();
+    expect(() => ventas.registrar(venta({ firma: { uri: '   ', nombre: null } }))).toThrow(ErrorVenta);
+    expect(folios.consecutivoDe('ven-1')).toBe(0);
+    expect(cuantas(deps, 'venta')).toBe(0);
+  });
+
+  it('un nombre sin recortar o de mas de 80 caracteres no se graba', () => {
+    const { deps, ventas } = montar();
+    expect(() => ventas.registrar(venta({ firma: { uri: FIRMA.uri, nombre: 'x'.repeat(81) } }))).toThrow(
+      ErrorVenta,
+    );
+    expect(() => ventas.registrar(venta({ firma: { uri: FIRMA.uri, nombre: ' Lupe ' } }))).toThrow(ErrorVenta);
+    expect(cuantas(deps, 'venta')).toBe(0);
+  });
+
+  it('un fallo dentro de la transaccion no deja firma ni folio', () => {
+    const { deps, folios, ventas } = montar();
+    deps.bd.execSync('drop table venta_linea;');
+    expect(() => ventas.registrar(venta({ firma: FIRMA }))).toThrow();
+    expect(folios.consecutivoDe('ven-1')).toBe(0);
+    expect(
+      deps.bd.getFirstSync<{ n: number }>('select count(*) as n from venta where firma_local is not null')?.n,
+    ).toBe(0);
+  });
+
+  describe('cola de firmas', () => {
+    it('solo ofrece firmas de ventas ya sincronizadas: ni pendientes ni rechazadas (Review Focus 4)', () => {
+      const { ventas } = montar();
+      const aceptada = ventas.registrar(venta());
+      const rechazada = ventas.registrar(venta({ numNota: '2347' }));
+      ventas.marcarError(rechazada.id, 'precio-no-asignado: el cliente no tiene precio');
+      expect(ventas.firmasPendientes()).toEqual([]);
+
+      ventas.marcarSincronizada(aceptada.id);
+      expect(ventas.firmasPendientes().map((v) => v.id)).toEqual([aceptada.id]);
+    });
+
+    it('una venta anterior a la 016 (sin firma_local) nunca entra a la cola', () => {
+      const { deps, ventas } = montar();
+      const v = ventas.registrar(venta());
+      deps.bd.runSync('update venta set firma_local = null where id = $id', { $id: v.id });
+      ventas.marcarSincronizada(v.id);
+      expect(ventas.firmasPendientes()).toEqual([]);
+    });
+
+    it('marcarFirmaSubida la saca de la cola y limpia el error, sin tocar sync_estado', () => {
+      const { ventas } = montar();
+      const v = ventas.registrar(venta());
+      ventas.marcarSincronizada(v.id);
+      ventas.anotarErrorFirma(v.id, 'sin red');
+      ventas.marcarFirmaSubida(v.id, '2026-08-07T16:00:00.000Z');
+      expect(ventas.porId(v.id)).toMatchObject({
+        firma_subida_en: '2026-08-07T16:00:00.000Z',
+        firma_error: null,
+        sync_estado: 'sincronizado',
+      });
+      expect(ventas.firmasPendientes()).toEqual([]);
+    });
+
+    it('anotarErrorFirma la deja en la cola; descartarFirma la saca; ninguna toca sync_estado', () => {
+      const { ventas } = montar();
+      const temporal = ventas.registrar(venta());
+      const definitiva = ventas.registrar(venta({ numNota: '2347' }));
+      ventas.marcarSincronizada(temporal.id);
+      ventas.marcarSincronizada(definitiva.id);
+
+      ventas.anotarErrorFirma(temporal.id, 'El servidor respondio 500.');
+      ventas.descartarFirma(definitiva.id, 'Esa venta ya no existe.');
+
+      expect(ventas.firmasPendientes().map((v) => v.id)).toEqual([temporal.id]);
+      expect(ventas.porId(temporal.id)).toMatchObject({
+        firma_error: 'El servidor respondio 500.',
+        firma_descartada: 0,
+        sync_estado: 'sincronizado',
+      });
+      expect(ventas.porId(definitiva.id)).toMatchObject({
+        firma_error: 'Esa venta ya no existe.',
+        firma_descartada: 1,
+        sync_estado: 'sincronizado',
+      });
+    });
+  });
+});
+
+describe('inventario del vendedor (T-27, D3, D4, D10)', () => {
+  const HOY = '2026-08-07';
+
+  function prenderControl(deps: DepsRepositorio) {
+    deps.bd.runSync("update vendedor set control_inventario = 1 where id = 'ven-1'");
+  }
+
+  function cargar(
+    deps: DepsRepositorio,
+    id: string,
+    numero: number,
+    estado: EstadoCarga,
+    lineas: { presentacion_id: string; piezas: number }[],
+  ) {
+    aplicarSnapshotCargas(
+      deps.bd,
+      [
+        {
+          id,
+          vendedor_id: 'ven-1',
+          fecha: HOY,
+          numero,
+          estado,
+          motivo_rechazo: estado === 'rechazada' ? 'Faltan cajas' : null,
+          version: 1,
+          respondida_en: estado === 'pendiente' ? null : MOMENTO,
+          activo: 1,
+          lineas,
+        },
+      ],
+      MOMENTO,
+    );
+  }
+
+  it('Review Focus 5: con el control apagado vende aunque haya una carga pendiente', () => {
+    const { deps, ventas } = montar();
+    cargar(deps, 'carga-1', 1, 'pendiente', [{ presentacion_id: 'pre-1', piezas: 1 }]);
+    expect(ventas.registrar(venta()).folio).toBe('TJ260807AP01');
+  });
+
+  it('con el control prendido y una carga pendiente no graba ni quema folio (D3)', () => {
+    const { deps, ventas } = montar();
+    prenderControl(deps);
+    cargar(deps, 'carga-1', 1, 'aceptada', [{ presentacion_id: 'pre-1', piezas: 100 }]);
+    cargar(deps, 'carga-2', 2, 'pendiente', [{ presentacion_id: 'pre-1', piezas: 10 }]);
+    expect(() => ventas.registrar(venta())).toThrow(ErrorVenta);
+    expect(() => ventas.registrar(venta())).toThrow(
+      'Tienes una carga por aceptar. Acéptala en Inventario antes de vender.',
+    );
+    expect(cuantas(deps, 'venta')).toBe(0);
+    expect(cuantas(deps, 'folio_emitido')).toBe(0);
+  });
+
+  it('con el control prendido no vende mas de lo que trae, regalos incluidos, y no quema folio (D4)', () => {
+    const { deps, ventas } = montar();
+    prenderControl(deps);
+    cargar(deps, 'carga-1', 1, 'aceptada', [{ presentacion_id: 'pre-1', piezas: 20 }]);
+    // 24 vendidas + 2 regaladas contra 20 cargadas.
+    expect(() => ventas.registrar(venta())).toThrow(
+      'No te alcanza el producto: Jamaica 1 L: faltan 6 piezas.',
+    );
+    expect(cuantas(deps, 'venta')).toBe(0);
+    expect(cuantas(deps, 'folio_emitido')).toBe(0);
+  });
+
+  it('una venta de solo regalo tambien necesita piezas (D10)', () => {
+    const { deps, ventas } = montar();
+    prenderControl(deps);
+    cargar(deps, 'carga-1', 1, 'aceptada', [{ presentacion_id: 'pre-1', piezas: 20 }]);
+    expect(() =>
+      ventas.registrar(
+        venta({
+          lineas: [{ presentacionId: 'pre-2', cantidad: 0, cantidadPromocion: 3 }],
+          regalos: [{ promocionId: 'promo-prospecto', presentacionId: 'pre-2', cantidad: 3, texto: 'Bienvenida' }],
+        }),
+      ),
+    ).toThrow('Jamaica 500 ml: faltan 3 piezas');
+  });
+
+  it('Review Focus 1: valida con la existencia del momento de grabar', () => {
+    const { deps, ventas } = montar();
+    prenderControl(deps);
+    cargar(deps, 'carga-1', 1, 'aceptada', [{ presentacion_id: 'pre-1', piezas: 20 }]);
+    // Al abrir la pantalla habia 20: la captura de 24 + 2 no alcanza.
+    expect(() => ventas.registrar(venta())).toThrow('faltan 6 piezas');
+
+    // A media captura se acepta una recarga (la escribe la respuesta o el pull)...
+    cargar(deps, 'carga-2', 2, 'aceptada', [{ presentacion_id: 'pre-1', piezas: 10 }]);
+    // ...y el MISMO registrar valida con lo que hay al grabar: 30 alcanzan para 26.
+    expect(ventas.registrar(venta()).folio).toBe('TJ260807AP01');
+
+    // Y al reves: la venta grabada se llevo 26; lo que queda (4) no alcanza para 5.
+    expect(() =>
+      ventas.registrar(
+        venta({
+          lineas: [{ presentacionId: 'pre-1', cantidad: 5, cantidadPromocion: 0 }],
+          regalos: [],
+        }),
+      ),
+    ).toThrow('Jamaica 1 L: falta 1 pieza');
+    expect(cuantas(deps, 'folio_emitido')).toBe(1);
+  });
+
+  describe('F3: la venta grabada avisa a las pantallas (Inventario relee Vendido/Existencia)', () => {
+    it('una venta grabada publica el cambio despues del commit', () => {
+      const { catalogos, ventas } = montar();
+      const antes = catalogos.version();
+      ventas.registrar(venta());
+      expect(catalogos.version()).toBe(antes + 1);
+    });
+
+    it('una venta rechazada no avisa de nada', () => {
+      const { catalogos, deps, ventas } = montar();
+      prenderControl(deps);
+      cargar(deps, 'carga-1', 1, 'pendiente', [{ presentacion_id: 'pre-1', piezas: 100 }]);
+      const antes = catalogos.version();
+      expect(() => ventas.registrar(venta())).toThrow(ErrorVenta);
+      expect(catalogos.version()).toBe(antes);
+    });
+
+    it('si un oyente del refresco truena, la venta ya grabada no se reporta como fallida', () => {
+      const { catalogos, deps, ventas } = montar();
+      catalogos.suscribir(() => {
+        throw new Error('una pantalla abierta truena al refrescar');
+      });
+      expect(ventas.registrar(venta()).folio).toBe('TJ260807AP01');
+      expect(cuantas(deps, 'venta')).toBe(1);
     });
   });
 });

@@ -17,8 +17,12 @@ import type { EstadoSesion, VendedorSesion } from '@/sesion/politica';
 import { bajarFotoExpo, crearClienteFotosExpo, rutaCacheFotoCliente } from '@/fotos/expo';
 import { descargarFotoCliente as descargarFoto, uriFotoCliente } from '@/fotos/descarga';
 import { crearClienteSync } from '@/sincronizacion/api';
+import { crearClienteCargas, type ResultadoApiCarga } from '@/sincronizacion/api-carga';
+import type { CuerpoRespuestaCarga } from '@/sincronizacion/contrato';
 import {
   combinarFuentesFotos,
+  fuenteFirmasVentas,
+  fuenteFotosGastos,
   fuenteFotosProspectos,
   fuenteFotosVisitas,
 } from '@/sincronizacion/fuente-fotos';
@@ -28,6 +32,7 @@ import {
   type MotorSincronizacion,
   type ResultadoSincronizacion,
 } from '@/sincronizacion/motor';
+import { unaALaVez } from '@/sincronizacion/una-a-la-vez';
 
 export interface ContextoSesion {
   /**
@@ -59,6 +64,14 @@ export interface ContextoSesion {
    * Nunca lanza.
    */
   descargarFotoCliente: (clienteId: string, fotoSubidaEn: string) => Promise<string | null>;
+  /**
+   * T-27 (D6): aceptar o rechazar una carga, con red y en el momento. Usa el
+   * token de acceso actual y **nunca renueva la sesion** (como
+   * `descargarFotoCliente`): un 401 vuelve como `{ tipo: 'sesion' }` y la
+   * pantalla sincroniza, que renueva por su camino normal
+   * (`crearRespondedorCarga`). Sin red lanza `SinRedError`.
+   */
+  responderCarga: (cargaId: string, cuerpo: CuerpoRespuestaCarga) => Promise<ResultadoApiCarga>;
 }
 
 const Contexto = createContext<ContextoSesion | null>(null);
@@ -101,13 +114,16 @@ export function ProveedorSesion({
       sync: datos.sync,
       // Orden del push (T-16, T-40, T-20, T-37, T-75 D3): ver `fuentesDelPush`.
       fuentes: fuentesDelPush(datos),
-      // T-40 / T-39: el canal de la foto, aparte del lote del push. Corre despues,
-      // y solo para prospectos y visitas que el servidor ya acepto — antes no existe
-      // la fila a la que la foto pertenece. Una cola, varias fuentes.
+      // T-40 / T-39 / T-30 / T-73: el canal de la foto, aparte del lote del push.
+      // Corre despues, y solo para lo que el servidor ya acepto — antes no existe
+      // la fila a la que la imagen pertenece. Una cola, varias fuentes; las
+      // firmas de las ventas al final.
       fotos: {
         fuente: combinarFuentesFotos([
           fuenteFotosProspectos(datos.prospectos),
           fuenteFotosVisitas(datos.visitas),
+          fuenteFotosGastos(datos.gastos),
+          fuenteFirmasVentas(datos.ventas),
         ]),
         api: crearClienteFotosExpo(),
       },
@@ -117,6 +133,8 @@ export function ProveedorSesion({
       },
     }),
   );
+
+  const [clienteCargas] = useState(() => crearClienteCargas());
 
   const [vendedor, setVendedor] = useState<VendedorSesion | null>(null);
   // Se lee UNA vez al montar, de forma sincrona: `expo-secure-store` expone
@@ -170,17 +188,28 @@ export function ProveedorSesion({
     [datos],
   );
 
-  const sincronizar = useCallback(async (): Promise<ResultadoSincronizacion> => {
-    const resultado = await motor.sincronizar();
-    setMaterial(gestor.estado());
-    if (resultado.motivo === 'sin-sesion' && gestor.sesionGuardada() === null) {
-      // El servidor tumbo la sesion (vendedor dado de baja, sesion revocada) y
-      // el gestor ya borro el material local.
-      setVendedor(null);
-    }
-    setUltimaSincronizacion(resultado);
-    return resultado;
-  }, [motor, gestor]);
+  // T-27 (F1): una sola corrida a la vez. Si ya hay una en curso (la del
+  // login, el boton, o la respuesta a una carga tras un 401), se reusa: dos en
+  // paralelo renovarian con el mismo refresh token y el servidor lo trata como
+  // reuso (revoca todas las sesiones del vendedor). `motor`, `gestor` y los
+  // `set*` son estables, asi que se arma una vez.
+  const [sincronizarUnaVez] = useState(() =>
+    unaALaVez(async (): Promise<ResultadoSincronizacion> => {
+      const resultado = await motor.sincronizar();
+      setMaterial(gestor.estado());
+      if (resultado.motivo === 'sin-sesion' && gestor.sesionGuardada() === null) {
+        // El servidor tumbo la sesion (vendedor dado de baja, sesion revocada) y
+        // el gestor ya borro el material local.
+        setVendedor(null);
+      }
+      setUltimaSincronizacion(resultado);
+      return resultado;
+    }),
+  );
+  const sincronizar = useCallback(
+    (): Promise<ResultadoSincronizacion> => sincronizarUnaVez(),
+    [sincronizarUnaVez],
+  );
 
   const entrar = useCallback(
     async (login: string, password: string): Promise<ResultadoEntrada> => {
@@ -257,6 +286,15 @@ export function ProveedorSesion({
     [gestor, datos],
   );
 
+  const responderCarga = useCallback(
+    async (cargaId: string, cuerpo: CuerpoRespuestaCarga): Promise<ResultadoApiCarga> => {
+      const token = gestor.sesionGuardada()?.tokenAcceso ?? null;
+      if (token === null) return { tipo: 'sesion' };
+      return clienteCargas.responder(token, cargaId, cuerpo);
+    },
+    [gestor, clienteCargas],
+  );
+
   const valor = useMemo<ContextoSesion>(
     () => ({
       vendedor,
@@ -267,8 +305,19 @@ export function ProveedorSesion({
       sincronizar,
       ultimaSincronizacion,
       descargarFotoCliente,
+      responderCarga,
     }),
-    [vendedor, material, entrar, salir, renovar, sincronizar, ultimaSincronizacion, descargarFotoCliente],
+    [
+      vendedor,
+      material,
+      entrar,
+      salir,
+      renovar,
+      sincronizar,
+      ultimaSincronizacion,
+      descargarFotoCliente,
+      responderCarga,
+    ],
   );
 
   return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;

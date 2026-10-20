@@ -132,6 +132,13 @@ export const CODIGOS_RECHAZO = [
   'motivo-visita-inexistente',
   /** T-39: el id de la visita ya lo ocupa otro registro. Motivo neutro. */
   'visita-id-ocupado',
+  /**
+   * T-30/T-31: el campo del gasto no existe en el servidor (un id que nunca
+   * existio; uno dado de baja se acepta). El gasto queda en `error`.
+   */
+  'campo-egreso-inexistente',
+  /** T-30/T-31: el id del gasto ya lo ocupa otro registro. Motivo neutro. */
+  'gasto-id-ocupado',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -167,6 +174,12 @@ export interface VendedorPull extends FilaSincronizable {
    * Campo **aditivo**: no sube la version del contrato.
    */
   folio_segmento: string | null;
+  /**
+   * T-27 (D7): el control de inventario de su sucursal. **Opcional en la copia
+   * de la tablet, obligatorio en el servidor** (regla §3): un servidor anterior
+   * no lo manda y la tablet conserva el valor que ya tenia (0 la primera vez).
+   */
+  control_inventario?: boolean;
 }
 
 export interface VehiculoPull extends FilaSincronizable {
@@ -197,6 +210,13 @@ export interface MotivoVisitaPull extends FilaSincronizable {
   nombre: string;
   exige_foto: boolean;
   exige_atendio: boolean;
+}
+
+/** Copia del backend (T-30). */
+export interface CampoEgresoPull extends FilaSincronizable {
+  nombre: string;
+  tipo: 'produccion' | 'operacion' | 'financiero';
+  se_usa_en_app: boolean;
 }
 
 export interface ProductoPull extends FilaSincronizable {
@@ -250,6 +270,11 @@ export interface ClientePull extends FilaSincronizable {
   plazo_credito_dias: number | null;
   lat: number | null;
   lng: number | null;
+  /**
+   * T-72 (D3). **Opcional en la copia de la tablet**: un servidor anterior no lo
+   * manda (`aSnapshot` lo vuelve `null`). Se guarda; aun no se muestra.
+   */
+  ubicacion_origen?: 'gps' | 'geocodificada' | 'manual' | null;
   sucursal_id: string;
   /** T-20: suma de los movimientos vivos de saldo a favor, en centavos. Solo se muestra. */
   saldo_favor_centavos: number;
@@ -354,6 +379,62 @@ export type RegaloVenta = {
   texto: string;
 };
 
+/** Copia del backend (T-73). Solo el nombre: la imagen va por el canal de fotos. */
+export type FirmaVenta = {
+  nombre: string | null;
+};
+
+/* ------------------------------------------------------------------ */
+/* T-27: carga y recarga del vendedor                                  */
+/* ------------------------------------------------------------------ */
+
+export type EstadoCargaPull = 'pendiente' | 'aceptada' | 'rechazada';
+
+export interface LineaCargaPull {
+  presentacion_id: string;
+  /** Piezas enteras, 1..99 999. */
+  piezas: number;
+}
+
+/**
+ * Una carga (la de la manana o una recarga) que produccion registro en el
+ * portal para el vendedor del token (T-27, D1). La tablet NO crea cargas: solo
+ * las recibe y responde con `POST /sync/cargas/:id/respuesta`.
+ *
+ * - Bajan las del vendedor con `fecha >= current_date - 1` del reloj de
+ *   Postgres (como `rutas`). Incremental por `updated_at`; sin `desde`, solo las
+ *   vivas. Una eliminada en el portal viaja con `activo: 0`.
+ * - `version` sube cada vez que el portal edita las lineas (y la regresa a
+ *   `pendiente`); la respuesta de la tablet la manda de vuelta y el servidor
+ *   contesta 409 si ya no coincide (D6).
+ * - `lineas` viene siempre COMPLETA: la tablet reemplaza las suyas.
+ */
+export interface CargaPull extends FilaSincronizable {
+  vendedor_id: string;
+  /** `AAAA-MM-DD`: hoy en Tijuana cuando se capturo (D8). */
+  fecha: string;
+  /** 1, 2, 3… por vendedor y dia. */
+  numero: number;
+  estado: EstadoCargaPull;
+  /** Solo en `rechazada` (1..300). */
+  motivo_rechazo: string | null;
+  version: number;
+  /** Instante ISO de la respuesta, o `null` si sigue pendiente. */
+  respondida_en: string | null;
+  lineas: LineaCargaPull[];
+}
+
+/**
+ * Cuerpo de `POST /sync/cargas/:id/respuesta` (T-27, D2/D6). Viaja con red, en
+ * el momento: no es una operacion del push ni lleva `contrato`. `motivo` solo
+ * con `rechazar` (1..300, se recorta); con `aceptar` es 400.
+ */
+export type CuerpoRespuestaCarga = {
+  version: number;
+  accion: 'aceptar' | 'rechazar';
+  motivo?: string;
+};
+
 export interface RespuestaPull {
   contrato: number;
   servidor_en: string;
@@ -393,6 +474,12 @@ export interface RespuestaPull {
      * visita dice que no hay catalogo y no deja guardar.
      */
     motivos_visita?: MotivoVisitaPull[];
+    /**
+     * T-30. **Opcional en la copia de la tablet, obligatoria en el servidor**,
+     * por la misma razon que `tipos_negocio`: sin la coleccion la pantalla de
+     * gastos dice que no hay catalogo y no deja registrar.
+     */
+    campos_egreso?: CampoEgresoPull[];
     precios: PrecioPull[];
   };
   notas_pendientes: NotaPendientePull[];
@@ -412,6 +499,12 @@ export interface RespuestaPull {
    * promociones (la ficha dice "Sin promoción").
    */
   promociones?: PromocionPull[];
+  /**
+   * T-27. **Opcional en la copia de la tablet, obligatoria en el servidor**, por
+   * la misma razon que `rutas`: sin la coleccion la tablet no conoce cargas, no
+   * hay nada que aceptar y el control no puede prenderse (el vendedor tampoco).
+   */
+  cargas?: CargaPull[];
 }
 
 /**
@@ -500,6 +593,12 @@ export type DatosVenta = {
    * regla de negocio: las piezas ya se entregaron en la calle.
    */
   regalos?: RegaloVenta[];
+  /**
+   * T-73. La tablet la manda en toda venta grabada desde la 016 (la firma es
+   * obligatoria, D1). Presente = el servidor espera la imagen por el canal de
+   * fotos.
+   */
+  firma?: FirmaVenta | null;
 };
 
 /**
@@ -511,8 +610,6 @@ export type DatosVenta = {
  *
  * Lo que NO viaja, y por que:
  *
- * - **`domicilio`**: no se captura. Lo sustituye la ubicacion, y en Postgres la
- *   columna dejo de ser obligatoria para un prospecto.
  * - **`lista_precio_id`, `pct_comision`, `promocion`, `plazo_credito_dias`**: son
  *   decisiones del administrador. El vendedor no puede dar de alta clientes
  *   justamente porque el control del precio no es suyo.
@@ -538,6 +635,12 @@ export type DatosProspecto = {
   /** Del catalogo `tipos_negocio` que baja en el `pull`. */
   tipo_negocio_id: string | null;
   comentarios: string | null;
+  /**
+   * T-72 (D2): "Dirección del negocio", hasta 300. Obligatoria al capturar sin
+   * GPS (`validarAltaProspecto`); el servidor la geocodifica despues del commit.
+   * Opcional en el cable.
+   */
+  domicilio?: string | null;
   /**
    * Ubicacion del dispositivo. **Las dos o ninguna**: media coordenada no ubica
    * nada y en el portal se veria como un punto en el meridiano cero, que es peor
@@ -628,6 +731,21 @@ export type DatosVisita = {
   precision_m?: number | null;
   /** Hasta 300; obligatoria (no vacia) si no hay lat/lng. */
   direccion_texto?: string | null;
+};
+
+/**
+ * `datos` de una operacion `tipo: "gasto"` (T-30/T-31). Copia del tipo del
+ * backend: sin `cliente_id` ni folio en el sobre; la clave es el id del gasto.
+ */
+export type DatosGasto = {
+  /** uuid de `campo_egreso` (vivo o dado de baja). */
+  campo_egreso_id: string;
+  /** Entero, de 1 a 999_999_999_999. */
+  monto_centavos: number;
+  /** Instante ISO-8601 con zona en que el vendedor lo guardo. */
+  registrado_en: string;
+  /** Hasta 200 caracteres. */
+  comentario?: string | null;
 };
 
 export interface ResultadoOperacion {

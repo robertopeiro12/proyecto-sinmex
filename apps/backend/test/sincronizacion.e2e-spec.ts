@@ -112,13 +112,13 @@ describe('Sincronizacion pull/push (e2e)', () => {
   /**
    * Una operacion valida SIN modulo de dominio, con clave unica por defecto: el
    * sobre generico de las pruebas del buzon (idempotencia, push parcial,
-   * alcance). Es un `gasto` porque sigue sin proyeccion y sin forma fija de
-   * `datos` hasta T-27.
+   * alcance). Es una `merma` porque sigue sin proyeccion y sin forma fija de
+   * `datos` hasta T-33.
    *
-   * Hasta T-38 era una `jornada`. Ya no puede serlo: la jornada se proyecta a su
-   * tabla, que admite UNA por vendedor y dia, y estas pruebas mandan varias en el
-   * mismo lote (hasta 47). Las pruebas de la jornada usan `jornadaValida()`.
-   * Cuando T-27 proyecte el gasto, este sobre tendra que mudarse otra vez.
+   * Hasta T-38 era una `jornada` y hasta T-30/T-31 un `gasto`. Ya no pueden
+   * serlo: los dos se proyectan a su tabla y validan su forma. Cuando T-33
+   * proyecte la merma, este sobre tendra que mudarse otra vez (a `ruta`, que
+   * sigue reservado). Las pruebas del gasto viven en `gasto.e2e-spec.ts`.
    *
    * Generico a proposito: lo que trae `extra` (un `folio`, un `cliente_id`)
    * forma parte del tipo de retorno. Con `Record<string, unknown>` el objeto
@@ -129,10 +129,10 @@ describe('Sincronizacion pull/push (e2e)', () => {
     extra: E = {} as E,
   ) => ({
     clave: `op-${SUFIJO}-${Math.random().toString(36).slice(2)}`,
-    tipo: 'gasto',
+    tipo: 'merma',
     fecha_operacion: new Date().toISOString().slice(0, 10),
     ocurrido_en: new Date().toISOString(),
-    datos: { concepto: 'hielo', monto_centavos: 5000 },
+    datos: { piezas: 3 },
     ...extra,
   });
 
@@ -702,6 +702,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
           plazo_credito_dias: 7,
           lat: '32.514900',
           lng: '-117.038200',
+          // T-72: con coordenada, el origen es obligatorio (ck_cliente_ubicacion_origen_con_lat).
+          ubicacion_origen: 'manual',
           sucursal_id: sucursalId,
         })
         .returning('id')
@@ -1431,10 +1433,6 @@ describe('Sincronizacion pull/push (e2e)', () => {
         cobranzaValida(cobro.clienteId, cobro.notas[0], {
           monto_centavos: 15000,
         }),
-        operacion({
-          tipo: 'gasto',
-          datos: { concepto: 'hielo', monto_centavos: 5000 },
-        }),
         operacion({ tipo: 'merma', datos: { piezas: 3 } }),
         operacion({ tipo: 'ruta', datos: { visitas: [] } }),
       ];
@@ -1443,12 +1441,12 @@ describe('Sincronizacion pull/push (e2e)', () => {
       const cuerpo = res.body as RespuestaPush;
 
       expect(cuerpo.resumen).toEqual({
-        recibidas: 6,
-        aplicadas: 6,
+        recibidas: 5,
+        aplicadas: 5,
         duplicadas: 0,
         rechazadas: 0,
       });
-      expect(cuerpo.resultados).toHaveLength(6);
+      expect(cuerpo.resultados).toHaveLength(5);
       for (const r of cuerpo.resultados) {
         expect(r.estado).toBe('aplicada');
         expect(r.id_servidor).toBeTruthy();
