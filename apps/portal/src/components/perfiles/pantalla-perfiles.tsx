@@ -4,6 +4,9 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
+import { Aviso } from "@/components/ui/aviso";
+import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
+import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { obtenerPerfiles, crearPerfil, type MatrizPerfiles } from "@/lib/perfiles";
 import { CeldaPermiso } from "./celda-permiso";
 import { ColumnaPerfil } from "./columna-perfil";
@@ -18,19 +21,6 @@ const ORDEN_GRUPOS = [
   "Finanzas",
 ];
 
-function TarjetaMensaje({ mensaje }: { mensaje: string }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Perfiles y Permisos</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-muted-foreground">{mensaje}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
 export function PantallaPerfiles() {
   const { puede, cargando } = useAuth();
 
@@ -40,10 +30,10 @@ export function PantallaPerfiles() {
   // TODOS mientras `usuario` sigue en null, y un usuario con el permiso veria
   // el mensaje de "no tienes permiso" un instante antes de la matriz real).
   if (cargando) {
-    return <TarjetaMensaje mensaje="Cargando…" />;
+    return <EstadoPantalla titulo="Perfiles y Permisos" tipo="cargando" />;
   }
   if (!puede("perfil.gestionar")) {
-    return <TarjetaMensaje mensaje="No tienes permiso para ver esta sección." />;
+    return <EstadoPantalla titulo="Perfiles y Permisos" tipo="sin-permiso" />;
   }
   return <Matriz />;
 }
@@ -88,10 +78,15 @@ function Matriz() {
   }
 
   if (error) {
-    return <TarjetaMensaje mensaje={error} />;
+    return (
+      <Pantalla>
+        <EncabezadoPantalla titulo="Perfiles y Permisos" />
+        <Aviso tono="error">{error}</Aviso>
+      </Pantalla>
+    );
   }
   if (!datos) {
-    return <TarjetaMensaje mensaje="Cargando…" />;
+    return <EstadoPantalla titulo="Perfiles y Permisos" tipo="cargando" />;
   }
 
   // Un permiso con un grupo fuera de ORDEN_GRUPOS debe seguir apareciendo en
