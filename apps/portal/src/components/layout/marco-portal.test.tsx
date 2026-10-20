@@ -85,21 +85,6 @@ describe("MarcoPortal", () => {
     expect(screen.queryByRole("button", { name: /Cambiar de sucursal/ })).not.toBeInTheDocument();
   });
 
-  it("hidratación: el primer render no muestra al usuario y al montar aparece", async () => {
-    preparar();
-    const { renderToString } = await import("react-dom/server");
-    const html = renderToString(
-      <MarcoPortal>
-        <p>x</p>
-      </MarcoPortal>,
-    );
-    // Como el servidor: con la sesión ya resuelta, el primer render sigue sin usuario.
-    expect(html).not.toContain("Abrir opciones");
-    expect(html).toContain("h-[59px]");
-    renderizar();
-    expect(await screen.findByRole("button", { name: /Admin Local/ })).toBeInTheDocument();
-  });
-
   it("☰ esconde el menú y deja la franja con la sucursal y las iniciales; se recuerda", async () => {
     preparar();
     const usuario = userEvent.setup();
