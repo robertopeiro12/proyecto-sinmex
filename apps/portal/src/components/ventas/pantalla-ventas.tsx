@@ -1,15 +1,21 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/components/auth/auth-provider";
+import { Aviso } from "@/components/ui/aviso";
+import { buttonVariants } from "@/components/ui/button";
+import { Campo, Entrada } from "@/components/ui/campo";
+import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
+import { EtiquetaStatusVenta } from "@/components/ui/etiqueta";
+import { Fecha } from "@/components/ui/fecha";
+import { FiltroFechas } from "@/components/ui/filtro-fechas";
+import { CajaTabla, Fila, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
 import { mensajeDe } from "@/lib/api";
 import { listarClientes, type ClienteResumen } from "@/lib/clientes";
 import {
   ETIQUETA_ORIGEN,
-  ETIQUETA_STATUS,
   buscarVentas,
-  formatearPesos,
   hoyEnTijuana,
   obtenerVenta,
   type ResultadoBusquedaVentas,
@@ -45,6 +51,7 @@ function filtroDeHoy(): Filtro {
  * con los mismos filtros y vuelve a buscar (la venta pudo cambiar).
  */
 export function PantallaVentas({ sucursal }: { sucursal: string | null }) {
+  const { puede } = useAuth();
   const [clientes, setClientes] = useState<ClienteResumen[]>([]);
   const [borrador, setBorrador] = useState<Filtro>(filtroDeHoy);
   const [aplicado, setAplicado] = useState<Filtro>(filtroDeHoy);
@@ -67,7 +74,7 @@ export function PantallaVentas({ sucursal }: { sucursal: string | null }) {
     };
   }, [sucursal]);
 
-  // Cada `setAplicado` (Buscar, Volver) es un objeto nuevo: vuelve a buscar.
+  // Cada `setAplicado` (Mostrar, Volver) es un objeto nuevo: vuelve a buscar.
   useEffect(() => {
     let vigente = true;
     setCargando(true);
@@ -93,11 +100,6 @@ export function PantallaVentas({ sucursal }: { sucursal: string | null }) {
       vigente = false;
     };
   }, [aplicado, sucursal]);
-
-  function alBuscar(evento: FormEvent<HTMLFormElement>) {
-    evento.preventDefault();
-    setAplicado({ ...borrador });
-  }
 
   function volverABusqueda() {
     setVista({ tipo: "busqueda" });
@@ -135,98 +137,79 @@ export function PantallaVentas({ sucursal }: { sucursal: string | null }) {
     );
   }
 
+  const enlaceRegistrar = sucursal
+    ? `/operacion/registrar-venta?sucursal=${encodeURIComponent(sucursal)}`
+    : "/operacion/registrar-venta";
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Ventas</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-5">
-        <form onSubmit={alBuscar} className="flex flex-wrap items-end gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="desde" className="text-sm font-medium">
-              Desde
-            </label>
-            <input
-              id="desde"
-              type="date"
-              required
-              value={borrador.desde}
-              onChange={(e) => setBorrador({ ...borrador, desde: e.target.value })}
-              className="rounded-md border px-3 py-2 text-sm"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="hasta" className="text-sm font-medium">
-              Hasta
-            </label>
-            <input
-              id="hasta"
-              type="date"
-              required
-              value={borrador.hasta}
-              onChange={(e) => setBorrador({ ...borrador, hasta: e.target.value })}
-              className="rounded-md border px-3 py-2 text-sm"
-            />
-          </div>
-          <BuscadorCliente
-            clientes={clientes}
-            cliente={borrador.cliente}
-            onElegir={(cliente) => setBorrador({ ...borrador, cliente })}
-            onQuitar={() => setBorrador({ ...borrador, cliente: null })}
-            etiquetaQuitar="Quitar"
+    <Pantalla>
+      <EncabezadoPantalla
+        titulo="Ventas"
+        descripcion="Busca una venta por fecha, cliente o # de nota para verla, editarla o eliminarla."
+        acciones={
+          puede("venta.registrar") ? (
+            <Link href={enlaceRegistrar} className={buttonVariants()}>
+              Registrar venta
+            </Link>
+          ) : undefined
+        }
+      />
+
+      <FiltroFechas
+        id="ventas"
+        desde={borrador.desde}
+        hasta={borrador.hasta}
+        onCambio={(rango) => setBorrador({ ...borrador, ...rango })}
+        onMostrar={() => setAplicado({ ...borrador })}
+        deshabilitado={cargando}
+      >
+        <BuscadorCliente
+          clientes={clientes}
+          cliente={borrador.cliente}
+          onElegir={(cliente) => setBorrador({ ...borrador, cliente })}
+          onQuitar={() => setBorrador({ ...borrador, cliente: null })}
+          etiquetaQuitar="Quitar"
+        />
+        <Campo id="buscar-num-nota" etiqueta="# de nota">
+          <Entrada
+            maxLength={30}
+            value={borrador.numNota}
+            onChange={(e) => setBorrador({ ...borrador, numNota: e.target.value })}
+            className="w-40"
           />
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="buscar-num-nota" className="text-sm font-medium">
-              # de nota
-            </label>
-            <input
-              id="buscar-num-nota"
-              maxLength={30}
-              value={borrador.numNota}
-              onChange={(e) => setBorrador({ ...borrador, numNota: e.target.value })}
-              className="w-40 rounded-md border px-3 py-2 text-sm"
-            />
-          </div>
-          <Button type="submit" disabled={cargando}>
-            Buscar
-          </Button>
-        </form>
+        </Campo>
+      </FiltroFechas>
 
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
+      {error && <Aviso tono="error">{error}</Aviso>}
 
-        {resultado?.hayMas && (
-          <p className="text-sm text-muted-foreground">
-            Hay más de 200 ventas: acota el rango o filtra por cliente.
-          </p>
-        )}
+      {resultado?.hayMas && (
+        <Aviso tono="advertencia">Hay más de 200 ventas: acota el rango o filtra por cliente.</Aviso>
+      )}
 
-        {resultado && resultado.ventas.length === 0 && (
-          <p className="text-sm text-muted-foreground">No hay ventas con esos filtros.</p>
-        )}
+      {resultado && resultado.ventas.length === 0 && (
+        <p className="text-sm text-muted-foreground">No hay ventas con esos filtros.</p>
+      )}
 
-        {resultado && resultado.ventas.length > 0 && (
-          <table className="w-full text-sm">
+      {resultado && resultado.ventas.length > 0 && (
+        <CajaTabla>
+          <Tabla className="min-w-[860px]">
             <thead>
-              <tr className="text-left text-muted-foreground">
-                <th className="py-1 font-medium">Folio</th>
-                <th className="py-1 font-medium">Fecha</th>
-                <th className="py-1 font-medium">Cliente</th>
-                <th className="py-1 font-medium">Repartidor</th>
-                <th className="py-1 font-medium"># de nota</th>
-                <th className="py-1 text-right font-medium">Monto</th>
-                <th className="py-1 font-medium">Status</th>
-                <th className="py-1 font-medium">Origen</th>
-                <th className="py-1 text-right font-medium">Saldo</th>
+              <tr>
+                <Th>Folio</Th>
+                <Th>Fecha</Th>
+                <Th>Cliente</Th>
+                <Th>Repartidor</Th>
+                <Th># de nota</Th>
+                <Th alinear="derecha">Monto</Th>
+                <Th>Status</Th>
+                <Th>Origen</Th>
+                <Th alinear="derecha">Saldo</Th>
               </tr>
             </thead>
             <tbody>
               {resultado.ventas.map((v) => (
-                <tr key={v.id} className="border-t">
-                  <td className="py-1.5">
+                <Fila key={v.id} interactiva>
+                  <Td>
                     <button
                       type="button"
                       onClick={() => void abrir(v.id)}
@@ -234,21 +217,25 @@ export function PantallaVentas({ sucursal }: { sucursal: string | null }) {
                     >
                       {v.folio}
                     </button>
-                  </td>
-                  <td className="py-1.5">{v.fecha}</td>
-                  <td className="py-1.5">{v.cliente}</td>
-                  <td className="py-1.5">{v.repartidor ?? "Oficina"}</td>
-                  <td className="py-1.5">{v.numNota ?? "—"}</td>
-                  <td className="py-1.5 text-right">{formatearPesos(v.montoCentavos)}</td>
-                  <td className="py-1.5">{ETIQUETA_STATUS[v.status]}</td>
-                  <td className="py-1.5">{ETIQUETA_ORIGEN[v.origen]}</td>
-                  <td className="py-1.5 text-right">{formatearPesos(v.saldoCentavos)}</td>
-                </tr>
+                  </Td>
+                  <Td>
+                    <Fecha valor={v.fecha} />
+                  </Td>
+                  <Td>{v.cliente}</Td>
+                  <Td>{v.repartidor ?? "Oficina"}</Td>
+                  <Td>{v.numNota ?? "—"}</Td>
+                  <TdMonto centavos={v.montoCentavos} />
+                  <Td>
+                    <EtiquetaStatusVenta status={v.status} />
+                  </Td>
+                  <Td>{ETIQUETA_ORIGEN[v.origen]}</Td>
+                  <TdMonto centavos={v.saldoCentavos} />
+                </Fila>
               ))}
             </tbody>
-          </table>
-        )}
-      </CardContent>
-    </Card>
+          </Tabla>
+        </CajaTabla>
+      )}
+    </Pantalla>
   );
 }

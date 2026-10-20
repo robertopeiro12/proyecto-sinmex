@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorApi } from "@/lib/api";
@@ -114,7 +114,9 @@ describe("DetalleVenta", () => {
     renderizar();
     expect(screen.getByText("Venta TJ240304OF01")).toBeInTheDocument();
     expect(screen.getByText("Oficina")).toBeInTheDocument();
-    expect(screen.getByText("Abonado")).toBeInTheDocument();
+    expect(screen.getByText("Abonado")).toHaveAttribute("data-tono", "informacion");
+    expect(screen.getByText("04/03/2024")).toBeInTheDocument();
+    expect(screen.getByText("05/03/2024")).toBeInTheDocument();
     expect(screen.getByText("Entregar temprano")).toBeInTheDocument();
     expect(screen.getByText("Horchata 1 L")).toBeInTheDocument();
     expect(screen.getByText("$240.00")).toBeInTheDocument();
@@ -157,18 +159,19 @@ describe("DetalleVenta", () => {
     expect(onEditar).toHaveBeenCalledTimes(1);
   });
 
-  it("Eliminar pide confirmación y, si se cancela, no hace nada", async () => {
-    const confirmar = vi.spyOn(window, "confirm").mockReturnValue(false);
+  it("Eliminar pregunta en la ventana y, si se cancela, no hace nada", async () => {
     const { usuario, onEliminada } = renderizar();
     await usuario.click(screen.getByRole("button", { name: "Eliminar" }));
-    expect(confirmar).toHaveBeenCalledWith("¿Eliminar la venta TJ240304OF01 (nota 1234)? No se puede deshacer.");
+    const ventana = screen.getByRole("alertdialog", { name: "¿Eliminar la venta TJ240304OF01 (nota 1234)?" });
+    expect(ventana).toHaveTextContent("No se puede deshacer.");
+    await usuario.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     expect(eliminarVenta).not.toHaveBeenCalled();
     expect(onEliminada).not.toHaveBeenCalled();
   });
 
-  // Review Focus 5
+  // Review Focus 5 (T-17) y Review Focus 4 (UI Etapa 1)
   it("Eliminar confirmado llama una sola vez aunque se pulse dos veces, y avisa al terminar", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     let terminar!: (v: { id: string }) => void;
     eliminarVenta.mockReturnValue(
       new Promise<{ id: string }>((r) => {
@@ -178,20 +181,29 @@ describe("DetalleVenta", () => {
     const { usuario, onEliminada } = renderizar();
     const boton = screen.getByRole("button", { name: "Eliminar" });
     await usuario.click(boton);
+    // Dos clics seguidos en "Eliminar venta": el primero cierra la ventana, el segundo no hace nada.
+    const confirmarBoton = screen.getByRole("button", { name: "Eliminar venta" });
+    fireEvent.click(confirmarBoton);
+    fireEvent.click(confirmarBoton);
+    // Mientras se elimina el botón queda apagado: otro clic no abre otra pregunta.
+    await vi.waitFor(() => expect(boton).toBeDisabled());
     await usuario.click(boton);
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     expect(eliminarVenta).toHaveBeenCalledTimes(1);
     expect(eliminarVenta).toHaveBeenCalledWith("v1");
     terminar({ id: "v1" });
     await vi.waitFor(() => expect(onEliminada).toHaveBeenCalledTimes(1));
   });
 
-  it("Marcar como cuenta perdida confirma y entrega la venta actualizada", async () => {
-    const confirmar = vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("Marcar como cuenta perdida pregunta en la ventana y entrega la venta actualizada", async () => {
     const actualizada = { ...VENTA, status: "cuenta_perdida" as const, editable: false, puedeMarcarPerdida: false };
     marcarCuentaPerdida.mockResolvedValue(actualizada);
     const { usuario, onCambiada } = renderizar();
     await usuario.click(screen.getByRole("button", { name: "Marcar como cuenta perdida" }));
-    expect(confirmar).toHaveBeenCalledWith("La venta TJ240304OF01 dejará de cobrarse. ¿Continuar?");
+    expect(
+      screen.getByRole("alertdialog", { name: "¿Marcar la venta TJ240304OF01 como cuenta perdida?" }),
+    ).toHaveTextContent("La venta dejará de cobrarse.");
+    await usuario.click(screen.getByRole("button", { name: "Marcar como perdida" }));
     await vi.waitFor(() => expect(onCambiada).toHaveBeenCalledWith(actualizada));
   });
 
@@ -206,16 +218,16 @@ describe("DetalleVenta", () => {
   });
 
   it("muestra el mensaje del servidor", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     eliminarVenta.mockRejectedValue(new ErrorApi("fallo", 409, "Tiene cobros registrados: no se puede eliminar."));
     const { usuario, onEliminada } = renderizar();
     await usuario.click(screen.getByRole("button", { name: "Eliminar" }));
+    await usuario.click(screen.getByRole("button", { name: "Eliminar venta" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Tiene cobros registrados: no se puede eliminar.");
     expect(onEliminada).not.toHaveBeenCalled();
   });
 
   describe("pedir borrado (T-34)", () => {
-    const ETIQUETA = "Pedir borrado del cobro del 2024-03-05 por $100.00";
+    const ETIQUETA = "Pedir borrado del cobro del 05/03/2024 por $100.00";
 
     it("con cobranza.editar_eliminar, un cobro que es un pago tiene Pedir borrado; el de contado no", () => {
       renderizar({
