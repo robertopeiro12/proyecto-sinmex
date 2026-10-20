@@ -243,6 +243,38 @@ describe('aSnapshot (T-72)', () => {
   });
 });
 
+describe('aSnapshot (T-27)', () => {
+  it('pasa la casilla del vendedor a 0/1 y tolera un servidor que no la manda', () => {
+    const respuesta = respuestaPullDePrueba();
+    respuesta.catalogos.vendedores = respuesta.catalogos.vendedores.map((v, i) => ({
+      ...v,
+      control_inventario: i === 0,
+    }));
+    expect(aSnapshot(respuesta).vendedores?.map((v) => v.control_inventario)).toEqual([1, 0]);
+    expect(aSnapshot(respuestaPullDePrueba()).vendedores?.map((v) => v.control_inventario)).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it('pasa las cargas y tolera un servidor que todavia no las manda', () => {
+    const carga = {
+      id: 'carga-1',
+      vendedor_id: 'ven-1',
+      fecha: '2026-08-07',
+      numero: 1,
+      estado: 'pendiente' as const,
+      motivo_rechazo: null,
+      version: 1,
+      respondida_en: null,
+      activo: 1 as const,
+      lineas: [{ presentacion_id: 'pre-1', piezas: 24 }],
+    };
+    expect(aSnapshot(respuestaPullDePrueba({ cargas: [carga] })).cargas).toEqual([carga]);
+    expect(aSnapshot(respuestaPullDePrueba()).cargas).toBeUndefined();
+  });
+});
+
 describe('motor de sincronizacion', () => {
   describe('renovar la sesion es el PRIMER paso', () => {
     it('llama a renovar() antes que a pull o push', async () => {
@@ -345,7 +377,10 @@ describe('motor de sincronizacion', () => {
           }),
       });
 
-      await expect(motor.sincronizar()).rejects.toThrow();
+      // `toMatchObject` y no `toThrow()`: el `SqliteError` de better-sqlite3
+      // puede heredar del `Error` de otro realm de Jest (segun que suite corrio
+      // antes en el mismo proceso) y `toThrow()` lo reporta como "did not throw".
+      await expect(motor.sincronizar()).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_FOREIGNKEY' });
       expect(sync.leerCursor()).toBeNull();
     });
 

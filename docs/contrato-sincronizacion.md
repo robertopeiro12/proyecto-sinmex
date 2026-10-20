@@ -186,7 +186,7 @@ nadie relacionaría con nada.
   "catalogos": {
     "sucursales":     [{ "id": "…", "codigo": "TJ", "nombre": "Tijuana", "activo": 1 }],
     "vendedores":     [{ "id": "…", "login": "…", "nombre": "…", "sucursal_id": "…",
-                         "folio_segmento": "AP", "activo": 1 }],
+                         "folio_segmento": "AP", "control_inventario": false, "activo": 1 }],
     "vehiculos":      [{ "id": "…", "nombre": "…", "sucursal_id": "…", "activo": 1 }],
     "productos":      [{ "id": "…", "nombre": "Jamaica", "activo": 1 }],
     "presentaciones": [{ "id": "…", "producto_id": "…", "volumen": "1 L", "activo": 1 }],
@@ -212,7 +212,8 @@ nadie relacionaría con nada.
                           "activo": 1 }],
   "rutas": [{ "id": "…", "cliente_id": "…", "fecha": "2026-10-12", "orden": 1,
               "origen": "oficina", "activo": 1 }],
-  "promociones": [ /* filas: ver la seccion promociones, abajo */ ]
+  "promociones": [ /* filas: ver la seccion promociones, abajo */ ],
+  "cargas": [ /* filas: ver la seccion cargas, abajo */ ]
 }
 ```
 
@@ -420,6 +421,34 @@ Ejemplo de una fila:
 - `compra_tipo` (`cualquiera` / `producto` / `presentacion`) y `regalo_tipo` (`mismo` / `producto` / `presentacion`) dicen a qué apunta cada lado. El `*_producto_id` o `*_presentacion_id` que no aplica va en `null`. `regalo_tipo = 'mismo'` nunca viene con `compra_tipo = 'cualquiera'`.
 - `compra_cantidad` puede ser 0 solo en una promoción de `prospecto` (regalo sin compra, D7).
 - `se_repite`: si es `true`, por cada `compra_cantidad` piezas compradas se regala `regalo_cantidad`; si es `false`, una sola vez (D2).
+
+### `cargas`: la carga y las recargas del vendedor (T-27)
+
+Colección **nueva y de nivel superior** (junto a `rutas`). Aditiva: una tablet vieja la ignora y sigue vendiendo como
+hoy; la tablet nueva la trata como opcional.
+
+- Producción captura la carga de la mañana y cada recarga en el portal (*Producción › Recarga*, `/cargas`). La tablet
+  **no crea cargas**: las recibe y responde (abajo, §6).
+- Solo cargas del **vendedor del token**, con `fecha >= current_date - 1` del reloj de Postgres (como `rutas`).
+  Incremental por `updated_at > desde`; sin `desde`, solo las vivas. Una carga eliminada en el portal viaja con
+  `activo: 0` y la tablet la saca del inventario y del aviso.
+- `lineas` viene **completa** cada vez (la tablet reemplaza las suyas). Editar las líneas en el portal sube `version`
+  y regresa la carga a `pendiente` (eso mueve `updated_at`, y vuelve a bajar).
+- Una carga **aceptada** no se edita ni se elimina (D5): el inventario de la tablet nunca cambia por debajo.
+
+```jsonc
+{ "id": "…", "vendedor_id": "…", "fecha": "2026-10-22", "numero": 2, "estado": "pendiente",
+  "motivo_rechazo": null, "version": 1, "respondida_en": null, "activo": 1,
+  "lineas": [{ "presentacion_id": "…", "piezas": 24 }] }
+```
+
+### `control_inventario` del vendedor (T-27)
+
+`VendedorPull.control_inventario` es la casilla "Control de inventario en la app" de **su sucursal** (D7, apagada por
+defecto). Prendida, la tablet no vende con una carga pendiente de hoy (D3) ni deja una presentación en negativo,
+contando piezas vendidas más piezas regaladas (D4). Cambiar la casilla toca `updated_at` de los vendedores de esa
+sucursal, así que baja en el pull incremental. Aditivo; un servidor anterior no lo manda y la tablet conserva lo que
+tenía.
 
 ---
 
@@ -843,6 +872,26 @@ códigos HTTP. Así una imagen pesada o cortada nunca rechaza la operación a la
   exista). La tablet lo pide cuando `foto_subida_en` (§5) es más nuevo que su copia. Las fotos de visitas y de gastos **no**
   bajan a la tablet; la del gasto la ve el portal en `GET /gastos/:id/foto`. La firma de la venta tampoco baja; el portal la ve en `GET /ventas/:id/firma`.
 
+### Respuesta a una carga: `POST /sync/cargas/:id/respuesta` (T-27)
+
+Canal aparte del lote, como las fotos: sin `contrato` ni `resultados[]`, solo códigos HTTP. `@SoloApp`, con el mismo
+`Authorization: Bearer` de siempre; **no renueva la sesión** por su cuenta (un `401` lo resuelve la tablet
+sincronizando y reintentando una vez).
+
+```jsonc
+{ "version": 1, "accion": "aceptar" }                              // aceptar: sin motivo
+{ "version": 1, "accion": "rechazar", "motivo": "Faltan 2 cajas" } // 1..300, se recorta
+```
+
+- **200** con la carga (`CargaPull`) ya respondida. La **misma** respuesta otra vez (reintento de red, doble toque) es
+  200 sin reescribir nada.
+- **400** si la forma no vale (`aceptar` con motivo, `rechazar` sin motivo o de más de 300).
+- **404** si la carga es de otro vendedor, no existe o se eliminó (no confirma que exista). La tablet sincroniza.
+- **409** `{ message, carga }` si la `version` ya no coincide (el portal la editó) o ya tiene otra respuesta. La tablet
+  aplica la carga del cuerpo, sincroniza y pide revisarla de nuevo: **nunca acepta lo que no vio**.
+
+Sin red no se puede aceptar (D6): la carga ocurre en la planta, con WiFi y con el almacenista enfrente.
+
 ### Respuesta `200` — parcial y honesta
 
 ```jsonc
@@ -1112,6 +1161,7 @@ sincronizar.
 | Reporte de Kilometraje del portal (lee `jornada`) y reproceso de las jornadas que llegaron antes de T-38 | Portal (siguiente paso de T-38) |
 | Eliminar una cobranza con autorización (el saldo a favor y la cobranza desde el portal ya están: T-21) | **T-34** |
 | Permisos granulares en estos endpoints | **T-8** |
+| Movimientos del día de la tablet (merma de 3 tipos, cambios físicos, consumo propio) y corte de inventario | **T-27** piezas 2 y 3 |
 
 El envelope está diseñado para que todo eso **quepa encima sin romper la
 versión 1**: los `tipo` nuevos y los campos nuevos dentro de `datos` son

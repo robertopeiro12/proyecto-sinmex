@@ -1,5 +1,7 @@
 import { depsDePrueba, FIRMA_DE_PRUEBA, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
 import { relojFijo } from '../reloj';
+import type { EstadoCarga } from '../tipos';
+import { aplicarSnapshotCargas } from './cargas';
 import { crearRepositorioCatalogos } from './catalogos';
 import type { DepsRepositorio } from './deps';
 import { crearRepositorioFolios, ErrorFolio } from './folios';
@@ -422,6 +424,137 @@ describe('firma del cliente (T-73)', () => {
         firma_descartada: 1,
         sync_estado: 'sincronizado',
       });
+    });
+  });
+});
+
+describe('inventario del vendedor (T-27, D3, D4, D10)', () => {
+  const HOY = '2026-08-07';
+
+  function prenderControl(deps: DepsRepositorio) {
+    deps.bd.runSync("update vendedor set control_inventario = 1 where id = 'ven-1'");
+  }
+
+  function cargar(
+    deps: DepsRepositorio,
+    id: string,
+    numero: number,
+    estado: EstadoCarga,
+    lineas: { presentacion_id: string; piezas: number }[],
+  ) {
+    aplicarSnapshotCargas(
+      deps.bd,
+      [
+        {
+          id,
+          vendedor_id: 'ven-1',
+          fecha: HOY,
+          numero,
+          estado,
+          motivo_rechazo: estado === 'rechazada' ? 'Faltan cajas' : null,
+          version: 1,
+          respondida_en: estado === 'pendiente' ? null : MOMENTO,
+          activo: 1,
+          lineas,
+        },
+      ],
+      MOMENTO,
+    );
+  }
+
+  it('Review Focus 5: con el control apagado vende aunque haya una carga pendiente', () => {
+    const { deps, ventas } = montar();
+    cargar(deps, 'carga-1', 1, 'pendiente', [{ presentacion_id: 'pre-1', piezas: 1 }]);
+    expect(ventas.registrar(venta()).folio).toBe('TJ260807AP01');
+  });
+
+  it('con el control prendido y una carga pendiente no graba ni quema folio (D3)', () => {
+    const { deps, ventas } = montar();
+    prenderControl(deps);
+    cargar(deps, 'carga-1', 1, 'aceptada', [{ presentacion_id: 'pre-1', piezas: 100 }]);
+    cargar(deps, 'carga-2', 2, 'pendiente', [{ presentacion_id: 'pre-1', piezas: 10 }]);
+    expect(() => ventas.registrar(venta())).toThrow(ErrorVenta);
+    expect(() => ventas.registrar(venta())).toThrow(
+      'Tienes una carga por aceptar. Acéptala en Inventario antes de vender.',
+    );
+    expect(cuantas(deps, 'venta')).toBe(0);
+    expect(cuantas(deps, 'folio_emitido')).toBe(0);
+  });
+
+  it('con el control prendido no vende mas de lo que trae, regalos incluidos, y no quema folio (D4)', () => {
+    const { deps, ventas } = montar();
+    prenderControl(deps);
+    cargar(deps, 'carga-1', 1, 'aceptada', [{ presentacion_id: 'pre-1', piezas: 20 }]);
+    // 24 vendidas + 2 regaladas contra 20 cargadas.
+    expect(() => ventas.registrar(venta())).toThrow(
+      'No te alcanza el producto: Jamaica 1 L: faltan 6 piezas.',
+    );
+    expect(cuantas(deps, 'venta')).toBe(0);
+    expect(cuantas(deps, 'folio_emitido')).toBe(0);
+  });
+
+  it('una venta de solo regalo tambien necesita piezas (D10)', () => {
+    const { deps, ventas } = montar();
+    prenderControl(deps);
+    cargar(deps, 'carga-1', 1, 'aceptada', [{ presentacion_id: 'pre-1', piezas: 20 }]);
+    expect(() =>
+      ventas.registrar(
+        venta({
+          lineas: [{ presentacionId: 'pre-2', cantidad: 0, cantidadPromocion: 3 }],
+          regalos: [{ promocionId: 'promo-prospecto', presentacionId: 'pre-2', cantidad: 3, texto: 'Bienvenida' }],
+        }),
+      ),
+    ).toThrow('Jamaica 500 ml: faltan 3 piezas');
+  });
+
+  it('Review Focus 1: valida con la existencia del momento de grabar', () => {
+    const { deps, ventas } = montar();
+    prenderControl(deps);
+    cargar(deps, 'carga-1', 1, 'aceptada', [{ presentacion_id: 'pre-1', piezas: 20 }]);
+    // Al abrir la pantalla habia 20: la captura de 24 + 2 no alcanza.
+    expect(() => ventas.registrar(venta())).toThrow('faltan 6 piezas');
+
+    // A media captura se acepta una recarga (la escribe la respuesta o el pull)...
+    cargar(deps, 'carga-2', 2, 'aceptada', [{ presentacion_id: 'pre-1', piezas: 10 }]);
+    // ...y el MISMO registrar valida con lo que hay al grabar: 30 alcanzan para 26.
+    expect(ventas.registrar(venta()).folio).toBe('TJ260807AP01');
+
+    // Y al reves: la venta grabada se llevo 26; lo que queda (4) no alcanza para 5.
+    expect(() =>
+      ventas.registrar(
+        venta({
+          lineas: [{ presentacionId: 'pre-1', cantidad: 5, cantidadPromocion: 0 }],
+          regalos: [],
+        }),
+      ),
+    ).toThrow('Jamaica 1 L: falta 1 pieza');
+    expect(cuantas(deps, 'folio_emitido')).toBe(1);
+  });
+
+  describe('F3: la venta grabada avisa a las pantallas (Inventario relee Vendido/Existencia)', () => {
+    it('una venta grabada publica el cambio despues del commit', () => {
+      const { catalogos, ventas } = montar();
+      const antes = catalogos.version();
+      ventas.registrar(venta());
+      expect(catalogos.version()).toBe(antes + 1);
+    });
+
+    it('una venta rechazada no avisa de nada', () => {
+      const { catalogos, deps, ventas } = montar();
+      prenderControl(deps);
+      cargar(deps, 'carga-1', 1, 'pendiente', [{ presentacion_id: 'pre-1', piezas: 100 }]);
+      const antes = catalogos.version();
+      expect(() => ventas.registrar(venta())).toThrow(ErrorVenta);
+      expect(catalogos.version()).toBe(antes);
+    });
+
+    it('si un oyente del refresco truena, la venta ya grabada no se reporta como fallida', () => {
+      const { catalogos, deps, ventas } = montar();
+      catalogos.suscribir(() => {
+        throw new Error('una pantalla abierta truena al refrescar');
+      });
+      expect(ventas.registrar(venta()).folio).toBe('TJ260807AP01');
+      expect(cuantas(deps, 'venta')).toBe(1);
     });
   });
 });

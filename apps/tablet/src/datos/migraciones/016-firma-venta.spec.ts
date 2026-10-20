@@ -37,11 +37,10 @@ function insertarVentaVieja(bd: BaseDatos, cambios: Record<string, string | numb
 }
 
 describe('migracion 016: firma de la venta (T-73)', () => {
-  it('la 016 es la ultima y deja versionEsquema en 16', () => {
+  it('la 016 es firma-venta y deja de ser la ultima con la 017 (T-27)', () => {
     expect(migraciones[15]?.nombre).toBe('firma-venta');
     expect(migraciones[15]?.version).toBe(16);
-    expect(migraciones).toHaveLength(16);
-    expect(versionEsquema(baseAlDia())).toBe(16);
+    expect(versionEsquema(baseAlDia())).toBe(migraciones.length);
   });
 
   it('una venta anterior queda sin firma, no descartada y con su sync_estado intacto', () => {

@@ -35,6 +35,29 @@ export interface CampoEgreso {
   tipo: string;
 }
 
+export interface Carga {
+  capturo_usuario_id: string;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  estado: Generated<string>;
+  fecha: Timestamp;
+  id: Generated<string>;
+  motivo_rechazo: string | null;
+  numero: number;
+  respondida_en: Timestamp | null;
+  sucursal_id: string;
+  updated_at: Generated<Timestamp>;
+  vendedor_id: string;
+  version: Generated<number>;
+}
+
+export interface CargaDetalle {
+  carga_id: string;
+  id: Generated<string>;
+  piezas: number;
+  presentacion_id: string;
+}
+
 export interface Cliente {
   alta_cliente_en: Timestamp | null;
   alta_cliente_usuario_id: string | null;
@@ -322,6 +345,7 @@ export interface SesionVendedor {
 export interface Sucursal {
   activa: Generated<boolean>;
   codigo: string;
+  control_inventario: Generated<boolean>;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
   id: Generated<string>;
@@ -524,6 +548,8 @@ export interface Visita {
 
 export interface DB {
   campo_egreso: CampoEgreso;
+  carga: Carga;
+  carga_detalle: CargaDetalle;
   cliente: Cliente;
   cliente_precio: ClientePrecio;
   cobranza_abono: CobranzaAbono;

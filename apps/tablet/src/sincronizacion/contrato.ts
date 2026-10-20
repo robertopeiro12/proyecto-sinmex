@@ -174,6 +174,12 @@ export interface VendedorPull extends FilaSincronizable {
    * Campo **aditivo**: no sube la version del contrato.
    */
   folio_segmento: string | null;
+  /**
+   * T-27 (D7): el control de inventario de su sucursal. **Opcional en la copia
+   * de la tablet, obligatorio en el servidor** (regla §3): un servidor anterior
+   * no lo manda y la tablet conserva el valor que ya tenia (0 la primera vez).
+   */
+  control_inventario?: boolean;
 }
 
 export interface VehiculoPull extends FilaSincronizable {
@@ -378,6 +384,57 @@ export type FirmaVenta = {
   nombre: string | null;
 };
 
+/* ------------------------------------------------------------------ */
+/* T-27: carga y recarga del vendedor                                  */
+/* ------------------------------------------------------------------ */
+
+export type EstadoCargaPull = 'pendiente' | 'aceptada' | 'rechazada';
+
+export interface LineaCargaPull {
+  presentacion_id: string;
+  /** Piezas enteras, 1..99 999. */
+  piezas: number;
+}
+
+/**
+ * Una carga (la de la manana o una recarga) que produccion registro en el
+ * portal para el vendedor del token (T-27, D1). La tablet NO crea cargas: solo
+ * las recibe y responde con `POST /sync/cargas/:id/respuesta`.
+ *
+ * - Bajan las del vendedor con `fecha >= current_date - 1` del reloj de
+ *   Postgres (como `rutas`). Incremental por `updated_at`; sin `desde`, solo las
+ *   vivas. Una eliminada en el portal viaja con `activo: 0`.
+ * - `version` sube cada vez que el portal edita las lineas (y la regresa a
+ *   `pendiente`); la respuesta de la tablet la manda de vuelta y el servidor
+ *   contesta 409 si ya no coincide (D6).
+ * - `lineas` viene siempre COMPLETA: la tablet reemplaza las suyas.
+ */
+export interface CargaPull extends FilaSincronizable {
+  vendedor_id: string;
+  /** `AAAA-MM-DD`: hoy en Tijuana cuando se capturo (D8). */
+  fecha: string;
+  /** 1, 2, 3… por vendedor y dia. */
+  numero: number;
+  estado: EstadoCargaPull;
+  /** Solo en `rechazada` (1..300). */
+  motivo_rechazo: string | null;
+  version: number;
+  /** Instante ISO de la respuesta, o `null` si sigue pendiente. */
+  respondida_en: string | null;
+  lineas: LineaCargaPull[];
+}
+
+/**
+ * Cuerpo de `POST /sync/cargas/:id/respuesta` (T-27, D2/D6). Viaja con red, en
+ * el momento: no es una operacion del push ni lleva `contrato`. `motivo` solo
+ * con `rechazar` (1..300, se recorta); con `aceptar` es 400.
+ */
+export type CuerpoRespuestaCarga = {
+  version: number;
+  accion: 'aceptar' | 'rechazar';
+  motivo?: string;
+};
+
 export interface RespuestaPull {
   contrato: number;
   servidor_en: string;
@@ -442,6 +499,12 @@ export interface RespuestaPull {
    * promociones (la ficha dice "Sin promoción").
    */
   promociones?: PromocionPull[];
+  /**
+   * T-27. **Opcional en la copia de la tablet, obligatoria en el servidor**, por
+   * la misma razon que `rutas`: sin la coleccion la tablet no conoce cargas, no
+   * hay nada que aceptar y el control no puede prenderse (el vendedor tampoco).
+   */
+  cargas?: CargaPull[];
 }
 
 /**

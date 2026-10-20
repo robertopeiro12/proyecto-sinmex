@@ -94,7 +94,7 @@ describe("PantallaUsuarios", () => {
     vi.clearAllMocks();
     obtenerCatalogoPerfiles.mockResolvedValue(CATALOGO);
     vi.mocked(sucursalesLib.listarSucursales).mockResolvedValue([
-      { id: "suc-1", codigo: "TJ", nombre: "Tijuana", activa: true },
+      { id: "suc-1", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false },
     ]);
   });
 

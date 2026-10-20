@@ -16,6 +16,7 @@ interface SucursalRespuesta {
   codigo: string;
   nombre: string;
   activa: boolean;
+  controlInventario: boolean;
 }
 
 const SUFIJO = Date.now();
@@ -455,6 +456,85 @@ describe('Sucursales (e2e)', () => {
         .expect(200);
 
       expect((res.body as SucursalRespuesta).nombre).toBe('Zacatecas Centro');
+    });
+
+    it('T-27: la casilla de control de inventario toca a los vendedores siempre que la peticion trae la casilla', async () => {
+      // Una corrida abortada pudo dejar ZH (y su vendedor): se limpia antes de
+      // crearla, o el POST seria 409 y la prueba fallaria por basura ajena.
+      const restos = db
+        .selectFrom('sucursal')
+        .select('id')
+        .where('codigo', '=', 'ZH');
+      await db
+        .deleteFrom('vendedor')
+        .where('sucursal_id', 'in', restos)
+        .execute();
+      await db.deleteFrom('sucursal').where('codigo', '=', 'ZH').execute();
+
+      // ZH es de las reservadas para esta suite (CODIGOS_DE_PRUEBA): la borra el afterAll.
+      const creada = await request(app.getHttpServer())
+        .post('/sucursales')
+        .set('Cookie', [cookieGeneral])
+        .send({ codigo: 'ZH', nombre: 'Control de inventario' })
+        .expect(201);
+      const sucursal = creada.body as SucursalRespuesta;
+      expect(sucursal.controlInventario).toBe(false);
+
+      const { id: vendedorId } = await db
+        .insertInto('vendedor')
+        .values({
+          login: `e2e-suc-inv-${SUFIJO}`,
+          nombre: 'Vendedor control inventario',
+          password_hash: 'x',
+          sucursal_id: sucursal.id,
+          updated_at: new Date('2020-01-01T00:00:00Z'),
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const tocadoEn = async () =>
+        (
+          await db
+            .selectFrom('vendedor')
+            .select('updated_at')
+            .where('id', '=', vendedorId)
+            .executeTakeFirstOrThrow()
+        ).updated_at.getTime();
+
+      try {
+        const prendida = await request(app.getHttpServer())
+          .patch(`/sucursales/${sucursal.id}`)
+          .set('Cookie', [cookieGeneral])
+          .send({ controlInventario: true })
+          .expect(200);
+        expect((prendida.body as SucursalRespuesta).controlInventario).toBe(
+          true,
+        );
+        expect(await tocadoEn()).toBeGreaterThan(
+          new Date('2020-01-01T00:00:00Z').getTime(),
+        );
+
+        const primera = await tocadoEn();
+
+        // Si la peticion trae la casilla, siempre se toca al vendedor (aunque
+        // el valor no cambie): no se decide con una lectura previa a la transaccion.
+        await request(app.getHttpServer())
+          .patch(`/sucursales/${sucursal.id}`)
+          .set('Cookie', [cookieGeneral])
+          .send({ controlInventario: true })
+          .expect(200);
+        const segunda = await tocadoEn();
+        expect(segunda).toBeGreaterThan(primera);
+
+        // Sin la casilla en la peticion, no se toca.
+        await request(app.getHttpServer())
+          .patch(`/sucursales/${sucursal.id}`)
+          .set('Cookie', [cookieGeneral])
+          .send({ nombre: 'Control de inventario 2' })
+          .expect(200);
+        expect(await tocadoEn()).toBe(segunda);
+      } finally {
+        await db.deleteFrom('vendedor').where('id', '=', vendedorId).execute();
+      }
     });
 
     it('desactiva la sucursal sin sacarla del listado', async () => {

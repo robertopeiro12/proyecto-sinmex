@@ -54,6 +54,8 @@ export default function LayoutJornada() {
       <Stack.Screen name="prospectos" options={{ title: 'Prospectos' }} />
       <Stack.Screen name="gastos/index" options={{ title: 'Gastos' }} />
       <Stack.Screen name="gastos/registrar" options={{ title: 'Registrar gasto' }} />
+      <Stack.Screen name="inventario/index" options={{ title: 'Inventario' }} />
+      <Stack.Screen name="inventario/[cargaId]" options={{ title: 'Carga' }} />
       <Stack.Screen name="agregar-a-ruta" options={{ title: 'Agregar a mi ruta' }} />
       <Stack.Screen name="ruta" options={{ title: 'Ruta y GPS' }} />
       <Stack.Screen name="pendiente/[seccion]" options={{ title: 'Próximamente' }} />

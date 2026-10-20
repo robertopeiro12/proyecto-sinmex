@@ -31,6 +31,7 @@ import {
   textoFirmada,
   type EstadoFirma,
 } from '@/estado/firma';
+import { faltantesDeCaptura, textoTeQuedan } from '@/estado/inventario';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { guardarFirmaJpg } from '@/fotos/firma-expo';
 import { Boton } from '@/ui/boton';
@@ -102,6 +103,14 @@ export default function PantallaVenta() {
     return datos.promociones.aplicablesPara(clienteId);
   }, [datos, clienteId, versionCatalogos]);
 
+  // T-27 (D3, D4): bloqueo y existencias al abrir (y cuando el pull o una
+  // respuesta escriben). Solo para pintar: `ventas.registrar` vuelve a calcular
+  // al grabar, con la base de ese momento (Review Focus 1).
+  const inventario = useMemo(() => {
+    void versionCatalogos;
+    return vendedor ? datos.cargas.paraVenta(vendedor.id) : null;
+  }, [datos, vendedor, versionCatalogos]);
+
   const [paso, setPaso] = useState<Paso>('captura');
   const [capturas, setCapturas] = useState<Record<string, CapturaTexto>>({});
   const [contadoCredito, setContadoCredito] = useState<ContadoCredito | null>(null);
@@ -109,6 +118,12 @@ export default function PantallaVenta() {
   const [numNota, setNumNota] = useState('');
   const [comentarios, setComentarios] = useState('');
   const [problemas, setProblemas] = useState<string[]>([]);
+  /**
+   * T-27 (D4): los faltantes que ve la revision. Se calculan al tocar "Revisar"
+   * y se CONGELAN: nada de la revision cambia mientras el cliente firma
+   * (leccion de T-73: re-renderizar a medio gesto corta el trazo).
+   */
+  const [faltantesRevision, setFaltantesRevision] = useState<string[]>([]);
   const [grabada, setGrabada] = useState<Venta | null>(null);
   const [grabando, setGrabando] = useState(false);
   /** Promociones cuyo regalo el cliente no quiso (D6). */
@@ -202,7 +217,20 @@ export default function PantallaVenta() {
       ...problemasDeRegalos(regalos),
     ];
     setProblemas(encontrados);
-    if (encontrados.length === 0) setPaso('revision');
+    if (encontrados.length > 0) return;
+    setFaltantesRevision(
+      faltantesDeCaptura({
+        controlInventario: inventario?.controlInventario ?? false,
+        existencias: inventario?.existencias ?? new Map(),
+        lineas: lineas.map((l) => ({
+          presentacionId: l.presentacionId,
+          etiqueta: l.etiqueta,
+          cantidad: l.cantidad,
+        })),
+        regalos,
+      }),
+    );
+    setPaso('revision');
   }
 
   function volverACaptura() {
@@ -213,6 +241,7 @@ export default function PantallaVenta() {
     recuadro.current?.borrar();
     setFirma(FIRMA_VACIA);
     setProblemas([]);
+    setFaltantesRevision([]);
     setPaso('captura');
   }
 
@@ -418,6 +447,17 @@ export default function PantallaVenta() {
           T-73 (D1, D3): la firma se captura aqui, antes de grabar, y se guarda en
           la misma transaccion. Sin firma, "Grabar venta" no se habilita.
         */}
+        {faltantesRevision.length > 0 ? (
+          <Tarjeta estado="error" etiqueta="No te alcanza el producto">
+            {faltantesRevision.map((f) => (
+              <Text key={f} style={estilos.textoTarjeta}>
+                {f}
+              </Text>
+            ))}
+            <Text style={estilos.textoSuave}>Corrige las cantidades o acepta una recarga en Inventario.</Text>
+          </Tarjeta>
+        ) : null}
+
         <Tarjeta estado={hayFirma(firma.trazos) ? 'listo' : 'pendiente'} etiqueta="Firma del cliente">
           <Text style={estilos.textoSuave}>Pide al cliente que firme con el dedo.</Text>
           <RecuadroFirma
@@ -458,9 +498,35 @@ export default function PantallaVenta() {
             glifo="✓"
             onPress={() => void grabar()}
             ocupado={grabando}
-            deshabilitado={!puedeGrabarVenta({ contadoCredito, trazos: firma.trazos, grabando })}
+            deshabilitado={
+              !puedeGrabarVenta({ contadoCredito, trazos: firma.trazos, grabando }) ||
+              faltantesRevision.length > 0
+            }
           />
         </View>
+      </Pantalla>
+    );
+  }
+
+  // T-27 (D3): con el control prendido y una carga por aceptar, en lugar de la
+  // captura va el motivo y el camino a Inventario. SOLO en la captura: si la
+  // carga llega con la revision abierta (y la firma a medias), la pantalla no
+  // cambia; `ventas.registrar` la rechaza al grabar.
+  if (inventario?.bloqueo) {
+    return (
+      <Pantalla titulo={`Venta · ${nombreCliente}`} subtitulo="Antes de vender acepta tu carga.">
+        <Tarjeta estado="pendiente" etiqueta="Carga por aceptar">
+          <Text style={estilos.textoTarjeta}>{inventario.bloqueo}.</Text>
+          <Text style={estilos.textoSuave}>
+            Revisa las piezas con el almacenista y acéptala en Inventario; después podrás vender.
+          </Text>
+        </Tarjeta>
+        <Boton
+          etiqueta="Ir a Inventario"
+          glifo="→"
+          onPress={() => router.push('/(jornada)/inventario')}
+          estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
+        />
       </Pantalla>
     );
   }
@@ -519,6 +585,14 @@ export default function PantallaVenta() {
           const captura = capturas[p.presentacion_id];
           const cantidad = leerCantidad(captura?.cantidad ?? '');
           const sinPrecio = p.precio_centavos === null || p.precio_centavos === 0;
+          // T-27 (D4): lo que queda de esta presentacion si se graba lo capturado
+          // (vendido + regalado en esta venta). Solo con el control prendido.
+          const quedan = inventario?.controlInventario
+            ? textoTeQuedan(
+                inventario.existencias.get(p.presentacion_id)?.existencia ?? 0,
+                (cantidad ?? 0) + (gratisPor.get(p.presentacion_id) ?? 0),
+              )
+            : null;
           return (
             <Tarjeta key={p.presentacion_id} etiqueta={`${p.producto_nombre} · ${p.volumen}`}>
               <Text style={estilos.textoSuave}>
@@ -534,6 +608,9 @@ export default function PantallaVenta() {
                 <Text style={estilos.textoTarjeta}>
                   +<Cifra valor={gratisPor.get(p.presentacion_id) ?? 0} /> gratis por promoción
                 </Text>
+              ) : null}
+              {quedan ? (
+                <Text style={quedan.falta ? estilos.error : estilos.textoSuave}>{quedan.texto}</Text>
               ) : null}
               {/* Sin precio no se vende (el servidor rechaza piezas a $0): el campo
                   queda bloqueado y la fila solo recibe regalos. */}

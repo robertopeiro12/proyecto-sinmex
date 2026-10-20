@@ -7,8 +7,10 @@ import type {
   VentaLinea,
   VentaPromocion,
 } from '../tipos';
+import { bloqueoDeVenta, existencias, faltantesDeVenta, textoFaltante } from '../inventario-reglas';
 import { LARGO_MAX_NOMBRE_FIRMA, nombreFirmaValido } from '../reglas-firma';
 import { problemasDeCaptura, resumirCaptura, type LineaCaptura } from '../ventas-reglas';
+import { leerInventarioDelDia } from './cargas';
 import type { RepositorioCatalogos } from './catalogos';
 import type { DepsRepositorio } from './deps';
 import { enTransaccion } from './deps';
@@ -103,6 +105,12 @@ export function crearRepositorioVentas(
      * SQLite) hace `rollback` de todo, **incluido el contador de folios**:
      * `folios.emitir()` usa `savepoint` y se cuelga de esta transaccion. Asi un
      * fallo nunca quema un numero que el vendedor ya no puede usar.
+     *
+     * T-27 (D3, D4): con el control de inventario prendido, una carga pendiente
+     * de hoy o una presentacion que quedaria en negativo (vendidas + regaladas)
+     * detienen la venta. Se calcula DENTRO de la transaccion y antes de emitir
+     * el folio: vale la existencia del momento de grabar (Review Focus 1), no la
+     * que pinto la pantalla, y un rechazo no quema numero.
      *
      * @throws {ErrorVenta} si la captura no se puede grabar.
      * @throws {ErrorFolio} si el vendedor no tiene segmento o llego al tope del dia.
@@ -220,6 +228,33 @@ export function crearRepositorioVentas(
       const comentarios = datos.comentarios?.trim() ? datos.comentarios.trim() : null;
 
       enTransaccion(bd, () => {
+        // T-27 (D3, D4): la carga pendiente y la existencia se leen AQUI, con
+        // la base tal como esta al grabar. La pantalla no es la unica defensa
+        // (igual que el precio, D15). Un throw hace rollback: no hay folio.
+        const inventario = leerInventarioDelDia(bd, datos.vendedorId, fecha);
+        const bloqueo = bloqueoDeVenta({
+          controlInventario: inventario.controlInventario,
+          cargas: inventario.cargas,
+          hoy: fecha,
+        });
+        if (bloqueo !== null) {
+          throw new ErrorVenta(`${bloqueo}. Acéptala en Inventario antes de vender.`);
+        }
+        const faltantes = faltantesDeVenta({
+          controlInventario: inventario.controlInventario,
+          existencias: existencias(inventario.cargas, inventario.ventas, fecha),
+          lineas: resumen.lineas.map((l) => ({ presentacionId: l.presentacionId, cantidad: l.cantidad })),
+          regalos: regalos.map((r) => ({ presentacionId: r.presentacionId, cantidad: r.cantidad })),
+        });
+        if (faltantes.length > 0) {
+          const etiquetas = new Map(lineas.map((l) => [l.presentacionId, l.etiqueta] as const));
+          throw new ErrorVenta(
+            `No te alcanza el producto: ${faltantes
+              .map((f) => textoFaltante(etiquetas.get(f.presentacionId) ?? 'Un producto', f.faltan))
+              .join('; ')}.`,
+          );
+        }
+
         const emitido = folios.emitir({ vendedorId: datos.vendedorId, claveOperacion: id });
 
         bd.runSync(
@@ -284,6 +319,15 @@ export function crearRepositorioVentas(
           );
         }
       });
+
+      // T-27 (F3): despues del commit, para que Inventario (abierto o al volver)
+      // relea Vendido y Existencia. Como en `cobranzas`, un oyente que truena no
+      // convierte en fallo una venta que ya esta grabada con su folio.
+      try {
+        catalogos.publicarCambio();
+      } catch {
+        // Solo se pierde el refresco de pantallas abiertas; la venta esta firme.
+      }
 
       const grabada = repo.porId(id);
       if (!grabada) throw new ErrorVenta('No se pudo leer la venta recién grabada.');

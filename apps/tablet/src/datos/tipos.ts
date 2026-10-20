@@ -42,6 +42,12 @@ export interface Vendedor {
    * puede emitir folio. Ver T-14 y ADR-0007.
    */
   folio_segmento: string | null;
+  /**
+   * T-27 (D7): el control de inventario de su sucursal (0/1). Prendido, no se
+   * vende con una carga pendiente de hoy ni se deja una presentacion en
+   * negativo. Baja en el pull; el login sin red no lo pisa.
+   */
+  control_inventario: Booleano;
   sincronizado_en: MomentoISO;
 }
 
@@ -528,4 +534,32 @@ export interface Gasto {
   sync_estado: SyncEstado;
   sync_error: string | null;
   sincronizado_en: MomentoISO | null;
+}
+
+/** Estado de una carga (T-27). Sin check en SQLite: ver la migracion 017. */
+export type EstadoCarga = 'pendiente' | 'aceptada' | 'rechazada';
+
+/**
+ * Una carga (la de la manana o una recarga) que produccion registro en el
+ * portal (T-27). La escribe el pull o la respuesta del servidor; la tablet no
+ * crea cargas ni cambia sus lineas.
+ */
+export interface Carga {
+  id: string;
+  vendedor_id: string;
+  fecha: FechaISO;
+  numero: number;
+  estado: EstadoCarga;
+  motivo_rechazo: string | null;
+  version: number;
+  respondida_en: MomentoISO | null;
+  activo: Booleano;
+  /** Cuando la tablet escribio la fila (pull o respuesta). */
+  actualizado_en: MomentoISO;
+}
+
+export interface CargaDetalle {
+  carga_id: string;
+  presentacion_id: string;
+  piezas: number;
 }

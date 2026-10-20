@@ -226,7 +226,11 @@ export function respuestaPullDePrueba(
         nombre,
         activo: activa,
       })),
-      vendedores: s.vendedores ?? [],
+      // T-27: el snapshot guarda la casilla 0/1; el pull la manda booleana.
+      vendedores: (s.vendedores ?? []).map(({ control_inventario, ...v }) => ({
+        ...v,
+        ...(control_inventario === undefined ? {} : { control_inventario: control_inventario === 1 }),
+      })),
       vehiculos: s.vehiculos ?? [],
       productos: s.productos ?? [],
       presentaciones: s.presentaciones ?? [],

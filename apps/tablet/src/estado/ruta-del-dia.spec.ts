@@ -163,7 +163,7 @@ describe('menu hamburguesa (D9, D16)', () => {
       ['Todos los clientes', '/(jornada)/operacion'],
       ['Prospectos capturados', '/(jornada)/prospectos'],
       ['Gastos', '/(jornada)/gastos'],
-      ['Inventario', '/(jornada)/pendiente/inventario'],
+      ['Inventario', '/(jornada)/inventario'],
       ['Merma, promoción y consumo', '/(jornada)/pendiente/merma'],
       ['Ruta y GPS', '/(jornada)/ruta'],
       ['Cerrar el día', '/(jornada)/cerrar-dia'],
@@ -175,7 +175,7 @@ describe('menu hamburguesa (D9, D16)', () => {
     const deshabilitadas = entradasMenu(true)
       .filter((e) => e.deshabilitada)
       .map((e) => e.clave);
-    expect(deshabilitadas).toEqual(['gastos', 'inventario', 'merma']);
+    expect(deshabilitadas).toEqual(['gastos', 'merma']);
   });
 
   it('cada pendiente del menu tiene su seccion con ticket', () => {
@@ -194,6 +194,17 @@ describe('menu hamburguesa (D9, D16)', () => {
     const gastos = entradasMenu(false).find((e) => e.clave === 'gastos');
     expect(gastos).toMatchObject({ titulo: 'Gastos', destino: '/(jornada)/gastos', deshabilitada: false });
     expect(gastos?.descripcion).not.toMatch(/Pendiente/);
+  });
+
+  it('Inventario ya no es una seccion pendiente (T-27): abre su pantalla y se consulta con el dia cerrado', () => {
+    expect(esSeccionPendiente('inventario')).toBe(false);
+    const inventario = entradasMenu(true).find((e) => e.clave === 'inventario');
+    expect(inventario).toMatchObject({
+      titulo: 'Inventario',
+      destino: '/(jornada)/inventario',
+      deshabilitada: false,
+    });
+    expect(inventario?.descripcion).not.toMatch(/Pendiente/);
   });
 });
 

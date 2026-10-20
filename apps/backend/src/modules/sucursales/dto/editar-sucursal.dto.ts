@@ -26,4 +26,13 @@ export class EditarSucursalDto {
   @IsOptional()
   @IsBoolean()
   activa?: boolean;
+
+  /**
+   * T-27 (D7): "Control de inventario en la app". Prendida, los vendedores de la
+   * sucursal necesitan aceptar su carga para vender y no venden mas de lo que
+   * traen.
+   */
+  @IsOptional()
+  @IsBoolean()
+  controlInventario?: boolean;
 }

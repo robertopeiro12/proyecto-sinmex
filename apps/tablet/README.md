@@ -36,7 +36,8 @@ apps/tablet/
 │       ├── agregar-a-ruta.tsx # clientes existentes que el vendedor suma a su ruta
 │       ├── operacion/         # todos los clientes -> ficha -> venta / cobranza / visita
 │       ├── gastos/            # Gastos de hoy y Registrar gasto (T-30/T-31)
-│       ├── pendiente/         # secciones del menu que aun no existen (inventario, merma)
+│       ├── inventario/        # Inventario y el detalle de una carga (T-27)
+│       ├── pendiente/         # secciones del menu que aun no existen (merma)
 │       ├── prospectos.tsx
 │       ├── ruta.tsx           # Ruta y GPS (T-41)
 │       └── cerrar-dia.tsx     # km final (el corte es T-33)
@@ -326,6 +327,29 @@ Spec: `docs/superpowers/specs/2026-10-21-t-73-firma-del-cliente-design.md`.
   (`fuenteFirmasVentas`, después de los gastos) cuando la venta ya está sincronizada. Un 404 (la venta se eliminó en el
   portal) la descarta (`fallaDefinitiva`); un 409 se reintenta.
 
+## Carga, recarga e Inventario (T-27 pieza 1)
+
+Spec: `docs/superpowers/specs/2026-10-22-t-27-carga-y-recarga-design.md`.
+
+- **La tablet no crea cargas**: las captura producción en el portal y bajan en el pull (`cargas`). Migración 017:
+  `carga` y `carga_detalle` (las escribe solo el pull o la respuesta del servidor) y `vendedor.control_inventario`.
+- **Inventario** (`app/(jornada)/inventario/index.tsx`, entrada del menú): cargas de hoy con estado y total, y por
+  presentación Cargado − Vendido − Regalado = Existencia (en rojo si es 0). Con el control apagado se ve igual, con la
+  nota.
+- **Detalle** (`inventario/[cargaId].tsx`): Aceptar (confirmar ✓) o Rechazar (peligro ×, con motivo ≤ 300). Llama a
+  `POST /sync/cargas/:id/respuesta` con la versión que se pinta (`crearRespondedorCarga` en un `useRef`: un solo envío
+  aunque se toque dos veces). Sin red: "Conéctate al WiFi para aceptar la carga."; 409: aplica la carga nueva,
+  sincroniza y pide revisarla; 404: sincroniza (se eliminó en el portal).
+- **Ruta del día**: aviso "Tienes una carga por aceptar" con botón a la carga mientras haya una pendiente de hoy (con o
+  sin control; no bloquea por sí mismo).
+- **Venta** (control prendido): con una carga pendiente, en lugar de la captura va el motivo y "Ir a Inventario"; cada
+  presentación dice "Te quedan N"; la revisión lista los faltantes (calculados al tocar Revisar y congelados mientras
+  se firma) y no deja grabar. `ventas.registrar()` vuelve a calcular todo **dentro de su transacción**, antes del folio.
+- Lógica con pruebas: `src/datos/inventario-reglas.ts`, `src/estado/inventario.ts`, `src/datos/repositorios/cargas.ts`,
+  `src/sincronizacion/api-carga.ts`.
+- `ventas.registrar()` publica un cambio de catálogo tras grabar; el `sincronizar` del proveedor reutiliza la corrida en
+  curso (`src/sincronizacion/una-a-la-vez.ts`) para no renovar el refresh token dos veces a la vez.
+
 ## Pruebas
 
 `npm test --workspace=apps/tablet` corre Jest con `ts-jest` en Node puro y prueba
@@ -335,6 +359,9 @@ la **capa de datos** (migraciones + repositorios) contra `better-sqlite3`, la
 No hay pruebas de componentes ni de navegacion: necesitarian `jest-expo` y el
 transform de React Native, y siguen fuera de alcance. Es decir: **la pantalla de
 login no tiene pruebas automatizadas**, solo la logica que hay debajo.
+
+En `motor.spec.ts` el error de SQLite se compara por su codigo (`toMatchObject`) y no con `toThrow()`: los errores de
+better-sqlite3 pueden heredar del `Error` de otro realm de Jest y fallar `instanceof` de forma intermitente.
 
 ## Nota sobre el monorepo
 
@@ -356,5 +383,5 @@ solo cuando el portal suba a React 19.2.x, que no es alcance de T-04.
   implementar la sincronizacion. T-07 debe llamar a `gestor.renovar()` al
   conectarse: es lo que corre hacia adelante la ventana offline de la tablet.
 - **T-14** — folios (ver `ADR-0001`).
-- **T-20 / T-27 / T-33 / T-41** — módulos de la jornada que todavía son placeholders (inventario, merma, Ruta y
-  GPS). Los gastos ya tienen pantalla (T-30/T-31).
+- **T-27 (piezas 2 y 3) / T-33 / T-41** — merma, movimientos del día y corte de inventario, Ruta y GPS. Los gastos
+  (T-30/T-31) y la carga e Inventario (T-27 pieza 1) ya tienen pantalla.

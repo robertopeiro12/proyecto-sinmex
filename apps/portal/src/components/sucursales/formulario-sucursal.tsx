@@ -16,6 +16,7 @@ export function FormularioSucursal({ sucursal, alGuardar, alCancelar }: Props) {
   const [codigo, setCodigo] = useState(sucursal?.codigo ?? "");
   const [nombre, setNombre] = useState(sucursal?.nombre ?? "");
   const [activa, setActiva] = useState(sucursal?.activa ?? true);
+  const [controlInventario, setControlInventario] = useState(sucursal?.controlInventario ?? false);
   const { enviando, error, enviar } = useEnvioFormulario(
     "No se pudo guardar la sucursal.",
   );
@@ -27,7 +28,7 @@ export function FormularioSucursal({ sucursal, alGuardar, alCancelar }: Props) {
     await enviar(
       () =>
         sucursal
-          ? editarSucursal(sucursal.id, { nombre, activa })
+          ? editarSucursal(sucursal.id, { nombre, activa, controlInventario })
           : crearSucursal({ codigo, nombre }),
       alGuardar,
     );
@@ -94,6 +95,24 @@ export function FormularioSucursal({ sucursal, alGuardar, alCancelar }: Props) {
           />
           Activa
         </label>
+      )}
+
+      {!esAlta && (
+        <div className="flex flex-col gap-1">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={controlInventario}
+              disabled={enviando}
+              onChange={(e) => setControlInventario(e.target.checked)}
+            />
+            Control de inventario en la app
+          </label>
+          <span className="text-xs text-muted-foreground">
+            Al prenderla, los vendedores de esta sucursal necesitan aceptar su carga para vender y no pueden vender
+            más de lo que traen.
+          </span>
+        </div>
       )}
 
       {error && (

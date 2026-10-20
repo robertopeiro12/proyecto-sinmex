@@ -66,7 +66,11 @@ export class SucursalesService {
   ): Promise<Sucursal> {
     // El 400 va ANTES de tocar la base: un PATCH sin cambios no es un fallo
     // del servidor ni justifica una consulta, es un cuerpo mal armado.
-    if (dto.nombre === undefined && dto.activa === undefined) {
+    if (
+      dto.nombre === undefined &&
+      dto.activa === undefined &&
+      dto.controlInventario === undefined
+    ) {
       throw new BadRequestException('No hay nada que actualizar.');
     }
 
@@ -83,15 +87,26 @@ export class SucursalesService {
       throw new ForbiddenException('No tienes acceso a esa sucursal.');
     }
 
-    const cambios: { nombre?: string; activa?: boolean } = {};
+    const cambios: {
+      nombre?: string;
+      activa?: boolean;
+      control_inventario?: boolean;
+    } = {};
     if (dto.nombre !== undefined) {
       cambios.nombre = dto.nombre;
     }
     if (dto.activa !== undefined) {
       cambios.activa = dto.activa;
     }
+    if (dto.controlInventario !== undefined) {
+      cambios.control_inventario = dto.controlInventario;
+    }
 
-    return this.repo.actualizar(id, cambios);
+    // T-27: si la peticion trae la casilla se toca a los vendedores, siempre y
+    // dentro de la misma transaccion. Comparar contra el valor leido antes
+    // dejaba que dos administradores simultaneos se saltaran el toque.
+    const tocarVendedores = dto.controlInventario !== undefined;
+    return this.repo.actualizar(id, cambios, tocarVendedores);
   }
 
   /**
