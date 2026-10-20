@@ -236,3 +236,19 @@ con `bloqueoDeVenta` (D3).
 - Backend antes que la app. Una app vieja no ve cargas ni bloquea: sigue vendiendo como hoy.
 - **No prender la casilla de una sucursal hasta que sus tablets tengan la versión nueva** y producción esté capturando
   cargas: una tablet vieja ignora el control.
+
+## Enmiendas de implementación (2026-10-22)
+
+Diferencias entre este texto y lo construido (el código manda):
+
+- Las reglas puras (`existencias`, `bloqueoDeVenta`, `faltantesDeVenta`) viven en `src/datos/inventario-reglas.ts`, no
+  en `src/estado/`: la capa de datos no importa de `estado`. `src/estado/inventario.ts` las reexporta junto con la
+  respuesta (`crearRespondedorCarga`, textos, `validarRespuesta`).
+- El número de la carga se asigna con la fila del vendedor bloqueada (`for no key update`); el índice único parcial
+  es la red (409 si aun así choca).
+- Editar o eliminar una carga de un día anterior es 409 también en `PATCH` y `DELETE` (D8), no solo se rechaza el `POST`.
+- `ventas.registrar()` publica un cambio de catálogo tras grabar, para que Inventario relea Vendido y Existencia.
+- El `sincronizar` del proveedor de sesión reutiliza la corrida en curso (`src/sincronizacion/una-a-la-vez.ts`) para
+  evitar dos renovaciones simultáneas del refresh token.
+- `NO_BORRAR_CON_NULO` lleva ahora el valor con que nace una fila nueva (`control_inventario: '0'`), para que el login
+  sin red no pise la casilla.

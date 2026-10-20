@@ -546,6 +546,42 @@ usuario con sesion pasa.
     de firmarse. Editar en el portal **no** vuelve a pedir la firma.
   - **Nube**: `20261021120000_venta_firma.sql` se sube a `sinmex dev` después del merge y **antes** del backend (y el
     backend antes de la app), con el protocolo de push (pre-flight: columnas nuevas con default; nada que contar).
+- **Carga y recarga del vendedor (T-27 pieza 1 / T-26).** Producción registra en el portal la carga de la mañana y cada
+  recarga; la carga baja a la tablet, el vendedor la **acepta o la rechaza** con red y, con el control de inventario de
+  su sucursal prendido, no vende con una carga pendiente ni deja una presentación en negativo. Spec:
+  `docs/superpowers/specs/2026-10-22-t-27-carga-y-recarga-design.md`. Piezas 2 (movimientos del día) y 3 (corte de
+  inventario) son otros PR.
+  - **Servidor**: `sucursal.control_inventario` (apagada por defecto, D7), `carga` (numerada por vendedor y día;
+    `uq_carga_vendedor_fecha_numero` parcial: una baja libera su número; `ck_carga_motivo`, `ck_carga_respondida`) y
+    `carga_detalle` (piezas > 0). Permiso `carga.gestionar` (ya existía, grupo Produccion/Almacen). Backend en
+    `modules/produccion/` (`/cargas`, reglas puras en `reglas-carga.ts`): solo cargas de **hoy en Tijuana** (D8);
+    editar o eliminar solo pendiente/rechazada, de hoy y con la `version` (si no, 409 con la carga actual; una de un día anterior también es 409 en PATCH/DELETE); editar la
+    regresa a pendiente y sube la versión; una **aceptada no se toca** (D5). El número se calcula con la fila del
+    vendedor bloqueada (`for no key update`); otra sucursal = 404.
+  - **App**: `POST /sync/cargas/:id/respuesta` (`@SoloApp`, `sincronizacion/cargas-app.controller.ts` →
+    `CargasService.responder`): `{ version, accion, motivo? }`; la misma respuesta otra vez es 200 sin reescribir; otra
+    versión o ya respondida = 409 con la carga; de otro vendedor, inexistente o eliminada = 404. No renueva la sesión.
+  - **Contrato** (aditivo, `CONTRATO_ACTUAL` sigue en 1): colección `cargas` en el pull (las del vendedor desde
+    `current_date - 1`, baja con `activo: 0`) y `VendedorPull.control_inventario`. Cambiar la casilla toca
+    `vendedor.updated_at` de esa sucursal (`SucursalesRepository.actualizar`).
+  - **Portal**: *Producción › Recarga* (`components/produccion/`, `lib/cargas.ts`): rejilla presentaciones × vendedores
+    con subcolumnas por carga (pastilla de estado, motivo del rechazo en rojo), "Nueva carga", "Editar", "Eliminar";
+    días anteriores en solo lectura; caja con scroll propio a 1366 px. *Catálogo › Sucursales*: casilla "Control de
+    inventario en la app".
+  - **Tablet** (migración local 017): `carga`, `carga_detalle`, `vendedor.control_inventario` (el login sin red no la
+    pisa: `NO_BORRAR_CON_NULO` ahora lleva el valor con que nace una fila nueva). La mezcla del pull
+    (`repositorios/cargas.ts`) reemplaza las líneas y **no deja que un pull viejo deshaga una respuesta**. Reglas puras
+    en `src/datos/inventario-reglas.ts` (`existencias`, `bloqueoDeVenta`, `faltantesDeVenta`), reexportadas en
+    `src/estado/inventario.ts` con la respuesta (`crearRespondedorCarga`, guardia de doble toque; 409 aplica la nueva y
+    sincroniza; 404 sincroniza; 401 sincroniza y reintenta una vez). El `sincronizar` del proveedor reutiliza la corrida en
+    curso (`src/sincronizacion/una-a-la-vez.ts`) para no renovar dos veces el refresh token a la vez, y
+    `ventas.registrar()` publica un cambio de catálogo tras grabar para que Inventario relea. **`ventas.registrar()` recalcula bloqueo y
+    faltantes dentro de su transacción, antes del folio** (vale la existencia del momento de grabar). Pantallas:
+    Inventario (menú), detalle con Aceptar/Rechazar, aviso "Tienes una carga por aceptar" en la ruta, y la venta con
+    bloqueo, "Te quedan N" y faltantes congelados en la revisión.
+  - **Nube**: `20261022120000_carga_vendedor.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
+    (pre-flight: tablas nuevas y una columna con default; nada que contar). Backend antes que la app. **No prender la
+    casilla de una sucursal hasta que sus tablets tengan la versión nueva** y producción esté capturando cargas.
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
   - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).
