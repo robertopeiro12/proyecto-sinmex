@@ -13,6 +13,15 @@ import type { SnapshotCatalogos } from './repositorios/catalogos';
 /** Momento fijo por defecto de las pruebas (hora de Tijuana, UTC-7). */
 export const MOMENTO = '2026-08-07T15:00:00.000Z';
 
+/**
+ * La firma de una venta de prueba (T-73): `ventas.registrar()` la exige (D1).
+ * La ruta nunca se abre en las pruebas: solo se guarda y viaja en la cola.
+ */
+export const FIRMA_DE_PRUEBA: { uri: string; nombre: string | null } = {
+  uri: 'file:///documentos/firmas/firma-prueba.jpg',
+  nombre: null,
+};
+
 /** Base en memoria, migrada al dia, con reloj y generador de ids deterministas. */
 export function depsDePrueba(momento: string = MOMENTO): DepsRepositorio {
   const bd = abrirBaseDatosNode();

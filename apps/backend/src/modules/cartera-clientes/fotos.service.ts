@@ -178,7 +178,7 @@ export class FotosService implements OnModuleInit {
       // coinciden — exactamente lo que el respaldo pendiente del volumen
       // (`Despliegue y topologia`) predice.
       this.logger.warn(
-        `foto_archivo apunta a ${ruta}, que no esta en el disco`,
+        `El archivo ${ruta} (foto o firma) esta en la base pero no en el disco`,
       );
       throw new NotFoundException(mensaje404);
     }

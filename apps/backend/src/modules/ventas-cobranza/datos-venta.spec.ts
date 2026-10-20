@@ -1,4 +1,8 @@
-import { MAX_LINEAS_VENTA, normalizarDatosVenta } from './datos-venta';
+import {
+  LARGO_MAX_NOMBRE_FIRMA,
+  MAX_LINEAS_VENTA,
+  normalizarDatosVenta,
+} from './datos-venta';
 
 const CLIENTE = '0b7f5e2a-3c1d-4e8f-9a6b-1c2d3e4f5a6b';
 const PRE_A = '5f3c1a2b-7d8e-4f90-a1b2-c3d4e5f60718';
@@ -48,6 +52,7 @@ describe('normalizarDatosVenta (D12)', () => {
           },
         ],
         regalos: [],
+        firma: null,
       },
     });
   });
@@ -382,5 +387,56 @@ describe('regalos (T-74)', () => {
     expect(
       normalizarDatosVenta(CLIENTE, datos({ regalos: 'no' })),
     ).toMatchObject({ ok: false, campo: 'regalos' });
+  });
+});
+
+describe('firma (T-73)', () => {
+  it('sin firma la venta no la espera: firma null (tablet anterior o portal)', () => {
+    const r = normalizarDatosVenta(CLIENTE, datos());
+    expect(r.ok && r.venta.firma).toBeNull();
+    const conNull = normalizarDatosVenta(CLIENTE, datos({ firma: null }));
+    expect(conNull.ok && conNull.venta.firma).toBeNull();
+  });
+
+  it('con firma recorta el nombre', () => {
+    const r = normalizarDatosVenta(
+      CLIENTE,
+      datos({ firma: { nombre: '  Doña Lupe  ' } }),
+    );
+    expect(r.ok && r.venta.firma).toEqual({ nombre: 'Doña Lupe' });
+  });
+
+  it('un nombre null, ausente o en blanco es firma sin nombre', () => {
+    for (const firma of [{ nombre: null }, {}, { nombre: '   ' }]) {
+      const r = normalizarDatosVenta(CLIENTE, datos({ firma }));
+      expect(r.ok && r.venta.firma).toEqual({ nombre: null });
+    }
+  });
+
+  it(`hasta ${LARGO_MAX_NOMBRE_FIRMA} caracteres entra; uno mas es invalido y el motivo empieza por firma.nombre`, () => {
+    const ok = normalizarDatosVenta(
+      CLIENTE,
+      datos({ firma: { nombre: 'x'.repeat(80) } }),
+    );
+    expect(ok.ok && ok.venta.firma).toEqual({ nombre: 'x'.repeat(80) });
+    const largo = normalizarDatosVenta(
+      CLIENTE,
+      datos({ firma: { nombre: 'x'.repeat(81) } }),
+    );
+    expect(largo).toMatchObject({ ok: false, campo: 'firma.nombre' });
+    expect(!largo.ok && largo.motivo).toMatch(/^firma\.nombre: /);
+  });
+
+  it('un nombre que no es texto es invalido', () => {
+    const r = normalizarDatosVenta(CLIENTE, datos({ firma: { nombre: 42 } }));
+    expect(r).toMatchObject({ ok: false, campo: 'firma.nombre' });
+  });
+
+  it('una firma que no es objeto es invalida', () => {
+    for (const firma of ['si', true, ['Lupe']]) {
+      const r = normalizarDatosVenta(CLIENTE, datos({ firma }));
+      expect(r).toMatchObject({ ok: false, campo: 'firma' });
+      expect(!r.ok && r.motivo).toMatch(/^firma: /);
+    }
   });
 });

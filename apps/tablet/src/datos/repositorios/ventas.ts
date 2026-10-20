@@ -2,10 +2,12 @@ import type {
   ContadoCredito,
   FacturaVenta,
   FechaISO,
+  MomentoISO,
   Venta,
   VentaLinea,
   VentaPromocion,
 } from '../tipos';
+import { LARGO_MAX_NOMBRE_FIRMA, nombreFirmaValido } from '../reglas-firma';
 import { problemasDeCaptura, resumirCaptura, type LineaCaptura } from '../ventas-reglas';
 import type { RepositorioCatalogos } from './catalogos';
 import type { DepsRepositorio } from './deps';
@@ -40,12 +42,25 @@ export interface RegaloRegistroVenta {
   texto: string;
 }
 
+/** La firma del cliente (T-73): el JPG ya escrito y el nombre ya normalizado por la pantalla. */
+export interface FirmaRegistroVenta {
+  /** Ruta local del JPG (`documentDirectory/firmas/firma-<id>.jpg`). */
+  uri: string;
+  /** `null` = no dijo su nombre (D2). */
+  nombre: string | null;
+}
+
 /**
  * Lo que captura la pantalla. **Sin precios, a proposito** (D15): el precio lo
  * pone este repositorio desde el catalogo local, asi que no hay forma de que un
  * error de la pantalla grabe un precio distinto al del catalogo.
  */
 export interface DatosRegistroVenta {
+  /**
+   * T-73: el id lo genera la pantalla ANTES de grabar, para nombrar con el el
+   * archivo de la firma. Sin el, lo genera este repositorio (como antes).
+   */
+  id?: string;
   vendedorId: string;
   clienteId: string;
   /** El # del block de papel; en blanco = sin nota (se graba null). */
@@ -60,6 +75,8 @@ export interface DatosRegistroVenta {
    * `datos-venta.ts` del servidor) y que ninguno viene incompleto.
    */
   regalos?: RegaloRegistroVenta[];
+  /** T-73 (D1): obligatoria. Se guarda en la misma transaccion que la venta y su folio. */
+  firma: FirmaRegistroVenta;
 }
 
 export type RepositorioVentas = ReturnType<typeof crearRepositorioVentas>;
@@ -186,7 +203,19 @@ export function crearRepositorioVentas(
         }
       }
 
-      const id = generarId();
+      // T-73 (D1): sin firma no hay venta. La pantalla no deja llegar aqui sin
+      // ella; esto es la red por si otra pantalla llamara a `registrar`. Va antes
+      // de abrir la transaccion: no se quema folio.
+      if (datos.firma.uri.trim() === '') {
+        throw new ErrorVenta('Falta la firma del cliente. Pídele que firme antes de grabar.');
+      }
+      if (!nombreFirmaValido(datos.firma.nombre)) {
+        throw new ErrorVenta(
+          `El nombre de quien firma no es válido (de 1 a ${LARGO_MAX_NOMBRE_FIRMA} caracteres, sin espacios al inicio ni al final).`,
+        );
+      }
+
+      const id = datos.id ?? generarId();
       const ahora = reloj.ahora();
       const comentarios = datos.comentarios?.trim() ? datos.comentarios.trim() : null;
 
@@ -197,11 +226,11 @@ export function crearRepositorioVentas(
           `insert into venta (
              id, fecha, cliente_id, vendedor_id, sucursal_id, folio, num_nota,
              contado_credito, factura, comentarios, monto_total_centavos,
-             grabada_en, sync_estado
+             grabada_en, sync_estado, firma_local, firma_nombre
            ) values (
              $id, $fecha, $cliente_id, $vendedor_id, $sucursal_id, $folio, $num_nota,
              $contado_credito, $factura, $comentarios, $monto_total_centavos,
-             $grabada_en, 'pendiente'
+             $grabada_en, 'pendiente', $firma_local, $firma_nombre
            )`,
           {
             $id: id,
@@ -218,6 +247,9 @@ export function crearRepositorioVentas(
             $comentarios: comentarios,
             $monto_total_centavos: resumen.totalCentavos,
             $grabada_en: ahora,
+            // T-73: la firma entra o sale con la venta y el folio.
+            $firma_local: datos.firma.uri,
+            $firma_nombre: datos.firma.nombre,
           },
         );
 
@@ -344,6 +376,46 @@ export function crearRepositorioVentas(
       bd.runSync(`update venta set sync_estado = 'error', sync_error = $motivo where id = $id`, {
         $motivo: motivo,
         $id: ventaId,
+      });
+    },
+
+    // ----------------------------------------------------------------------
+    // La firma del cliente (T-73). Mismo reparto que la foto del gasto
+    // (`gastos.ts`): estos `update` no mencionan `sync_estado` ni `sync_error`.
+    // Una firma que no sube no se lleva la venta.
+    // ----------------------------------------------------------------------
+
+    /**
+     * Firmas por subir: de ventas ya **sincronizadas**. Antes, la nota no existe
+     * en el servidor (el canal responde 409) y una venta rechazada no dejo fila
+     * (404): reintentarlas solo gastaria WiFi (Review Focus 4).
+     */
+    firmasPendientes(): Venta[] {
+      return bd.getAllSync<Venta>(
+        `select * from venta
+          where sync_estado = 'sincronizado'
+            and firma_local is not null
+            and firma_subida_en is null
+            and firma_descartada = 0
+          order by fecha, grabada_en, rowid`,
+      );
+    },
+
+    marcarFirmaSubida(id: string, subidaEn: MomentoISO): void {
+      bd.runSync(`update venta set firma_subida_en = $en, firma_error = null where id = $id`, {
+        $en: subidaEn,
+        $id: id,
+      });
+    },
+
+    anotarErrorFirma(id: string, motivo: string): void {
+      bd.runSync(`update venta set firma_error = $motivo where id = $id`, { $motivo: motivo, $id: id });
+    },
+
+    descartarFirma(id: string, motivo: string): void {
+      bd.runSync(`update venta set firma_descartada = 1, firma_error = $motivo where id = $id`, {
+        $motivo: motivo,
+        $id: id,
       });
     },
   };

@@ -79,6 +79,18 @@ describe('nombreArchivoFoto (T-78)', () => {
     );
   });
 
+  it('la firma de una venta es venta-<id>-firma.jpg (T-73): distinta de una foto de la misma fila', () => {
+    expect(nombreArchivoFoto('venta', id, 'firma')).toBe(
+      `venta-${id}-firma.jpg`,
+    );
+    expect(nombreArchivoFoto('venta', id, 'firma')).toBe(
+      nombreArchivoFoto('venta', id, 'firma'),
+    );
+    expect(() => nombreArchivoFoto('venta', '../x', 'firma')).toThrow(
+      /no utilizable/,
+    );
+  });
+
   it.each([
     ['../../etc/passwd', 'sale del directorio'],
     ['..%2F..%2Fx', 'escapado'],

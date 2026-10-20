@@ -19,7 +19,7 @@ import { leerCuerpoLimitado } from './cuerpo-crudo';
 import { FotoService, type RespuestaFoto } from './foto.service';
 
 /**
- * La foto del prospecto (T-40), de la visita (T-39) o del gasto (T-30) que sube la tablet, y la
+ * La foto del prospecto (T-40), de la visita (T-39) o del gasto (T-30), o la firma de una venta (T-73), que sube la tablet, y la
  * del cliente que baja (T-39).
  *
  * Controller aparte de `SincronizacionController` porque es un canal aparte: no

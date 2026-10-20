@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorApi } from "@/lib/api";
@@ -10,7 +10,13 @@ import { DetalleVenta } from "./detalle-venta";
 
 vi.mock("@/lib/ventas", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/ventas")>();
-  return { ...real, eliminarVenta: vi.fn(), marcarCuentaPerdida: vi.fn(), obtenerVenta: vi.fn() };
+  return {
+    ...real,
+    eliminarVenta: vi.fn(),
+    marcarCuentaPerdida: vi.fn(),
+    obtenerVenta: vi.fn(),
+    descargarFirmaVenta: vi.fn(),
+  };
 });
 vi.mock("@/lib/peticiones", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/peticiones")>();
@@ -21,6 +27,7 @@ vi.mock("@/components/auth/auth-provider");
 const eliminarVenta = vi.mocked(ventasLib.eliminarVenta);
 const marcarCuentaPerdida = vi.mocked(ventasLib.marcarCuentaPerdida);
 const obtenerVenta = vi.mocked(ventasLib.obtenerVenta);
+const descargarFirmaVenta = vi.mocked(ventasLib.descargarFirmaVenta);
 const vistaBorradoDeCobro = vi.mocked(peticionesLib.vistaBorradoDeCobro);
 const pedirBorrarCobro = vi.mocked(peticionesLib.pedirBorrarCobro);
 
@@ -62,6 +69,9 @@ const VENTA: VentaDetalle = {
   editable: true,
   motivoNoEditable: null,
   puedeMarcarPerdida: true,
+  // T-73: la venta de prueba es del portal: no espera firma.
+  firma: { esperada: false, nombre: null, subidaEn: null },
+  editada: false,
 };
 
 function renderizar(venta: VentaDetalle = VENTA) {
@@ -75,6 +85,10 @@ describe("DetalleVenta", () => {
     vi.clearAllMocks();
     vi.restoreAllMocks();
     mockAuth(() => true);
+    // jsdom no tiene almacén de blobs (ver foto-prospecto.test.tsx).
+    URL.createObjectURL = vi.fn(() => "blob:firma");
+    URL.revokeObjectURL = vi.fn();
+    descargarFirmaVenta.mockResolvedValue(new Blob(["firma"]));
   });
 
   it("una venta facturada muestra su número", () => {
@@ -293,5 +307,75 @@ describe("DetalleVenta", () => {
         "Petición enviada: borrar el pago de $100.00 de Abarrotes Lupita.",
       );
     });
+  });
+});
+
+describe("DetalleVenta · firma del cliente (T-73)", () => {
+  const conFirma = (firma: VentaDetalle["firma"], editada = false): VentaDetalle => ({
+    ...VENTA,
+    origen: "app",
+    firma,
+    editada,
+  });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuth(() => true);
+    URL.createObjectURL = vi.fn(() => "blob:firma");
+    URL.revokeObjectURL = vi.fn();
+    descargarFirmaVenta.mockResolvedValue(new Blob(["firma"]));
+  });
+
+  it("subida: la imagen, quién firmó y que se firmó en la tablet", async () => {
+    renderizar(conFirma({ esperada: true, nombre: "Doña Lupe", subidaEn: "2026-10-21T19:00:00.000Z" }));
+    const imagen = await screen.findByAltText("Firma del cliente");
+    expect(imagen).toHaveAttribute("src", "blob:firma");
+    expect(descargarFirmaVenta).toHaveBeenCalledWith("v1");
+    expect(screen.getByText("Firmó: Doña Lupe")).toBeInTheDocument();
+    expect(screen.getByText("Firmada en la tablet")).toBeInTheDocument();
+  });
+
+  it("subida sin nombre: sin la línea de quién firmó", async () => {
+    renderizar(conFirma({ esperada: true, nombre: null, subidaEn: "2026-10-21T19:00:00.000Z" }));
+    await screen.findByAltText("Firma del cliente");
+    expect(screen.queryByText(/^Firmó:/)).not.toBeInTheDocument();
+  });
+
+  it("esperada y sin subir: pendiente de la sincronización, sin pedir la imagen", () => {
+    renderizar(conFirma({ esperada: true, nombre: "Doña Lupe", subidaEn: null }));
+    expect(
+      screen.getByText("Firma pendiente de subir: llega cuando el vendedor sincronice."),
+    ).toBeInTheDocument();
+    expect(descargarFirmaVenta).not.toHaveBeenCalled();
+  });
+
+  it("no esperada: sin firma, sin pedir la imagen", () => {
+    renderizar(conFirma({ esperada: false, nombre: null, subidaEn: null }));
+    expect(
+      screen.getByText("Sin firma (venta capturada en oficina o anterior a la firma en tablet)."),
+    ).toBeInTheDocument();
+    expect(descargarFirmaVenta).not.toHaveBeenCalled();
+  });
+
+  it("firmada y editada en el portal: avisa que la firma es de la versión original", async () => {
+    renderizar(conFirma({ esperada: true, nombre: null, subidaEn: "2026-10-21T19:00:00.000Z" }, true));
+    await screen.findByAltText("Firma del cliente");
+    expect(
+      screen.getByText(
+        "Esta nota se editó en el portal después de firmarse; la firma corresponde a la versión original.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("editada pero sin firma: no hay aviso", () => {
+    renderizar(conFirma({ esperada: false, nombre: null, subidaEn: null }, true));
+    expect(screen.queryByText(/después de firmarse/)).not.toBeInTheDocument();
+  });
+
+  it("si la imagen no baja, lo dice sin romper el detalle", async () => {
+    descargarFirmaVenta.mockRejectedValue(new Error("red"));
+    renderizar(conFirma({ esperada: true, nombre: "Doña Lupe", subidaEn: "2026-10-21T19:00:00.000Z" }));
+    await waitFor(() => expect(screen.getByText("No se pudo cargar la firma.")).toBeInTheDocument());
+    expect(screen.getByText("Firmó: Doña Lupe")).toBeInTheDocument();
   });
 });

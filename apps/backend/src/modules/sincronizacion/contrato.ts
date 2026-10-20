@@ -313,6 +313,13 @@ export type DatosVenta = {
    * regla de negocio: las piezas ya se entregaron en la calle.
    */
   regalos?: RegaloVenta[];
+  /**
+   * T-73. Opcional y aditivo (`CONTRATO_ACTUAL` sigue en 1). Presente = la venta
+   * espera la imagen de la firma del cliente por el canal de fotos. Ausente (o
+   * `null`) = tablet anterior a T-73: la venta entra sin firma. Un `nombre` que no
+   * es texto o pasa de 80 caracteres es `datos-invalidos` (`firma.nombre: …`).
+   */
+  firma?: FirmaVenta | null;
 };
 
 /**
@@ -865,6 +872,16 @@ export type RegaloVenta = {
   presentacion_id: string;
   cantidad: number;
   texto: string;
+};
+
+/**
+ * La firma del cliente en una venta (T-73). Solo el nombre viaja en la
+ * operacion; la imagen sube aparte por `POST /sync/foto/:clave` con la clave de
+ * esta misma venta, cuando la venta ya fue aceptada.
+ */
+export type FirmaVenta = {
+  /** Quien firmo: texto de 1 a 80 caracteres (se recorta; en blanco es null) o `null`. */
+  nombre: string | null;
 };
 
 export interface RespuestaPull {

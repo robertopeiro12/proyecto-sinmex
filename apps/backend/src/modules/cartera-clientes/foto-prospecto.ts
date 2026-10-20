@@ -47,8 +47,8 @@ export function claveNombrable(clave: string): boolean {
   return RE_CLAVE.test(clave);
 }
 
-/** A que fila pertenece una foto. El prefijo del archivo lo dice (T-78). */
-export type EntidadFoto = 'cliente' | 'visita' | 'gasto';
+/** A que fila pertenece una foto. El prefijo del archivo lo dice (T-78). T-73: la firma de una venta. */
+export type EntidadFoto = 'cliente' | 'visita' | 'gasto' | 'venta';
 
 /**
  * `<entidad>-<id>.jpg` (T-78).
@@ -62,14 +62,20 @@ export type EntidadFoto = 'cliente' | 'visita' | 'gasto';
  *
  * Lanza si el id no es nombrable en vez de sanearlo: "saneado" significaria
  * que dos ids distintos pueden acabar en el mismo archivo.
+ *
+ * T-73: `sufijo` nombra una imagen de la fila que no es "la foto": la firma de una venta es `venta-<id>-firma.jpg`.
  */
-export function nombreArchivoFoto(entidad: EntidadFoto, id: string): string {
+export function nombreArchivoFoto(
+  entidad: EntidadFoto,
+  id: string,
+  sufijo?: 'firma',
+): string {
   if (!claveNombrable(id)) {
     throw new Error(
       `id no utilizable como nombre de archivo: ${JSON.stringify(id)}`,
     );
   }
-  return `${entidad}-${id}.jpg`;
+  return `${entidad}-${id}${sufijo === undefined ? '' : `-${sufijo}`}.jpg`;
 }
 
 /**

@@ -52,6 +52,7 @@ const venta = (extra: Partial<VentaNormalizada> = {}): VentaNormalizada => ({
     },
   ],
   regalos: [],
+  firma: null,
   ...extra,
 });
 
@@ -139,6 +140,8 @@ describe('VentasService.registrarVenta', () => {
         pctComision: '3.50',
         origen: 'app',
         capturoUsuarioId: null,
+        firmaEsperada: false,
+        firmaNombre: null,
       },
       trx,
     );
@@ -490,5 +493,49 @@ describe('VentasService.registrarVenta', () => {
         trx,
       );
     });
+  });
+});
+
+describe('VentasService.registrarVenta con firma (T-73)', () => {
+  it('una venta con firma la espera y guarda el nombre', async () => {
+    const { servicio, repo } = montar();
+    await servicio.registrarVenta(
+      venta({ firma: { nombre: 'Doña Lupe' } }),
+      contexto(),
+      trx,
+    );
+    expect(repo.insertarVenta).toHaveBeenCalledWith(
+      expect.objectContaining({
+        firmaEsperada: true,
+        firmaNombre: 'Doña Lupe',
+      }),
+      trx,
+    );
+  });
+
+  it('una firma sin nombre la espera igual, con nombre null', async () => {
+    const { servicio, repo } = montar();
+    await servicio.registrarVenta(
+      venta({ firma: { nombre: null } }),
+      contexto(),
+      trx,
+    );
+    expect(repo.insertarVenta).toHaveBeenCalledWith(
+      expect.objectContaining({ firmaEsperada: true, firmaNombre: null }),
+      trx,
+    );
+  });
+
+  it('una venta del portal no espera firma', async () => {
+    const { servicio, repo } = montar();
+    await servicio.registrarVenta(venta(), contextoPortal(), trx);
+    expect(repo.insertarVenta).toHaveBeenCalledWith(
+      expect.objectContaining({
+        origen: 'portal',
+        firmaEsperada: false,
+        firmaNombre: null,
+      }),
+      trx,
+    );
   });
 });

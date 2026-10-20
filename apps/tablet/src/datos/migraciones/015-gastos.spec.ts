@@ -43,11 +43,10 @@ function insertarGasto(bd: BaseDatos, cambios: Record<string, string | number | 
 }
 
 describe('migracion 015: gastos (T-30/T-31)', () => {
-  it('la 015 es la ultima y deja versionEsquema en 15', () => {
+  it('la 015 es gastos y deja de ser la ultima con la 016 (T-73)', () => {
     expect(migraciones[14]?.nombre).toBe('gastos');
     expect(migraciones[14]?.version).toBe(15);
-    expect(migraciones).toHaveLength(15);
-    expect(versionEsquema(baseAlDia())).toBe(15);
+    expect(versionEsquema(baseAlDia())).toBe(migraciones.length);
   });
 
   it('un gasto entra pendiente, sin foto y no descartado', () => {

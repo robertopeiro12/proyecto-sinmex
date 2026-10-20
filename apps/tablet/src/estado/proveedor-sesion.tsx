@@ -19,6 +19,7 @@ import { descargarFotoCliente as descargarFoto, uriFotoCliente } from '@/fotos/d
 import { crearClienteSync } from '@/sincronizacion/api';
 import {
   combinarFuentesFotos,
+  fuenteFirmasVentas,
   fuenteFotosGastos,
   fuenteFotosProspectos,
   fuenteFotosVisitas,
@@ -102,14 +103,16 @@ export function ProveedorSesion({
       sync: datos.sync,
       // Orden del push (T-16, T-40, T-20, T-37, T-75 D3): ver `fuentesDelPush`.
       fuentes: fuentesDelPush(datos),
-      // T-40 / T-39: el canal de la foto, aparte del lote del push. Corre despues,
-      // y solo para prospectos y visitas que el servidor ya acepto — antes no existe
-      // la fila a la que la foto pertenece. Una cola, varias fuentes.
+      // T-40 / T-39 / T-30 / T-73: el canal de la foto, aparte del lote del push.
+      // Corre despues, y solo para lo que el servidor ya acepto — antes no existe
+      // la fila a la que la imagen pertenece. Una cola, varias fuentes; las
+      // firmas de las ventas al final.
       fotos: {
         fuente: combinarFuentesFotos([
           fuenteFotosProspectos(datos.prospectos),
           fuenteFotosVisitas(datos.visitas),
           fuenteFotosGastos(datos.gastos),
+          fuenteFirmasVentas(datos.ventas),
         ]),
         api: crearClienteFotosExpo(),
       },

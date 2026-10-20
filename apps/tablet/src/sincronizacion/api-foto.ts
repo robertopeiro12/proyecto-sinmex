@@ -20,6 +20,7 @@
  * | 413 (pasa de 2 MB) | {@link FotoPermanenteError} | descarta, no reintenta |
  * | 415 (no es JPEG de verdad) | {@link FotoPermanenteError} | descarta, no reintenta |
  * | 404 (el servidor no conoce la clave) | {@link FotoTemporalError} | anota y reintenta |
+ * | 404 de la firma de una venta (T-73) | {@link FotoTemporalError} con `status` 404 | la cola de firmas lo trata como definitivo (`fallaDefinitiva`): la venta se eliminó en el portal |
  * | 409 (aun sin proyectar) | {@link FotoTemporalError} | anota y reintenta |
  * | 403 (la operacion no es de este vendedor) | {@link FotoTemporalError} | anota y reintenta |
  * | 400, 5xx | {@link FotoTemporalError} | anota y reintenta |
@@ -60,9 +61,18 @@ export class FotoPermanenteError extends Error {
  * y la foto **sigue en la cola**.
  */
 export class FotoTemporalError extends Error {
-  constructor(mensaje: string) {
+  /**
+   * El codigo HTTP que la provoco, o `null` si no hubo uno util (un 2xx que no
+   * se pudo leer). Sirve para que una FUENTE decida si para ella es definitivo:
+   * la cola de firmas (T-73) descarta un 404 porque la venta se elimino en el
+   * portal; para las demas fotos un 404 sigue siendo "todavia no".
+   */
+  readonly status: number | null;
+
+  constructor(mensaje: string, status: number | null = null) {
     super(mensaje);
     this.name = 'FotoTemporalError';
+    this.status = status;
   }
 }
 
@@ -145,7 +155,7 @@ export function crearClienteFotos(enviar: EnviarFoto, base: string): ClienteFoto
         // 404, 409, 403, 400 y 5xx. Todos se pueden arreglar con el tiempo: el
         // push que falta, la proyeccion pendiente, el vendedor que vuelve a
         // entrar, el backend que se levanta.
-        throw new FotoTemporalError(mensajeDe(respuesta));
+        throw new FotoTemporalError(mensajeDe(respuesta), respuesta.status);
       }
 
       // El servidor responde 200 tambien en la primera subida (la operacion es

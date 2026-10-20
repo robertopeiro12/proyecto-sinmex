@@ -105,6 +105,8 @@ const VENTA: VentaDetalle = {
   editable: true,
   motivoNoEditable: null,
   puedeMarcarPerdida: false,
+  firma: { esperada: false, nombre: null, subidaEn: null },
+  editada: false,
 };
 
 describe("normalizarTexto", () => {

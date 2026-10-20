@@ -373,6 +373,11 @@ export type RegaloVenta = {
   texto: string;
 };
 
+/** Copia del backend (T-73). Solo el nombre: la imagen va por el canal de fotos. */
+export type FirmaVenta = {
+  nombre: string | null;
+};
+
 export interface RespuestaPull {
   contrato: number;
   servidor_en: string;
@@ -525,6 +530,12 @@ export type DatosVenta = {
    * regla de negocio: las piezas ya se entregaron en la calle.
    */
   regalos?: RegaloVenta[];
+  /**
+   * T-73. La tablet la manda en toda venta grabada desde la 016 (la firma es
+   * obligatoria, D1). Presente = el servidor espera la imagen por el canal de
+   * fotos.
+   */
+  firma?: FirmaVenta | null;
 };
 
 /**

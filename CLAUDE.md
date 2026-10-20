@@ -519,6 +519,33 @@ usuario con sesion pasa.
   - **Nube**: la migración `20261020120000_gastos_ruta.sql` se sube a `sinmex dev` después del merge, con el protocolo
     de push (pre-flight: tablas nuevas, inserts de permisos y semilla; no hay nada que contar). Esta rama lleva el
     fix de PR #139 (migración de T-72 renombrada a `20261019130000`).
+- **Firma del cliente en la nota (T-73).** El cliente firma con el dedo en la tablet **toda** venta (contado y crédito,
+  sin poder omitirla) antes de grabarla; la firma complementa la nota de papel. Spec:
+  `docs/superpowers/specs/2026-10-21-t-73-firma-del-cliente-design.md`.
+  - **Tablet**: la revisión de la venta lleva el recuadro (`src/ui/recuadro-firma.tsx`, `react-native-svg` +
+    `PanResponder`, papel **blanco** como `<Rect>` dentro del `Svg` para que el PNG no salga transparente) y el nombre
+    opcional (≤ 80). "Grabar venta" no se habilita sin firma; "Corregir" la borra. Toda decisión vive en
+    `src/estado/firma.ts` (`puedeGrabarVenta`, `crearGrabadorVenta` con la guardia de doble toque), con pruebas.
+  - **El id de la venta se genera antes de grabar**: `toDataURL` → PNG → JPG (`src/fotos/firma-expo.ts`,
+    `expo-image-manipulator`, 0.8, ≤ 1000 px) en `documentDirectory/firmas/firma-<id>.jpg`, y `ventas.registrar({ id,
+    …, firma: { uri, nombre } })` guarda `firma_local`/`firma_nombre` en la **misma transacción** que la venta y el
+    folio (migración local 016). Si exportar o convertir falla, no se graba ni se quema folio.
+  - **`react-native-svg` es nativa: hace falta un APK nuevo.** Una app vieja sigue funcionando: sus ventas llegan sin
+    `firma` y el portal las muestra "sin firma".
+  - **Contrato**: `firma: { nombre }` opcional en `datos` de la operación `venta` (aditivo, `CONTRATO_ACTUAL` sigue en
+    1). Presencia = la venta espera imagen (`venta_nota.firma_esperada`); `nombre` > 80 o de otro tipo →
+    `datos-invalidos` (`firma.nombre`). Las ventas del portal quedan con `firma_esperada = false`.
+  - **Imagen**: sube por `POST /sync/foto/:clave` (rama `venta`) como `venta-<venta_nota.id>-firma.jpg`; 409 si aún
+    no está proyectada o no espera firma, 404 si la venta se eliminó. Las columnas son de `ventas-cobranza`
+    (`FirmasVentaService`/`FirmasVentaRepository`). La tablet trata **solo** el 404 de una firma como definitivo
+    (`fuenteFirmasVentas.fallaDefinitiva`; `FotoTemporalError.status`) y la descarta; la cola sube las firmas después
+    de las fotos de gastos y solo de ventas ya sincronizadas.
+  - **Portal**: `VentaDetalle.firma { esperada, nombre, subidaEn }` y `editada` (`actualizado_por_usuario_id is not
+    null`); bloque "Firma del cliente" en el detalle (imagen por `GET /ventas/:id/firma`, mismo alcance que el detalle,
+    `Cache-Control: private, no-store`), "pendiente de subir" o "sin firma", y el aviso si la nota se editó después
+    de firmarse. Editar en el portal **no** vuelve a pedir la firma.
+  - **Nube**: `20261021120000_venta_firma.sql` se sube a `sinmex dev` después del merge y **antes** del backend (y el
+    backend antes de la app), con el protocolo de push (pre-flight: columnas nuevas con default; nada que contar).
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
   - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).
