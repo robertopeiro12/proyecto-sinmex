@@ -124,3 +124,31 @@ export type {
 export { ayudaRangoFecha, lineasDelCobro, NOMBRE_METODO } from './cobranzas-textos';
 export type { LineaDeCobro } from './cobranzas-textos';
 export * from './tipos';
+export {
+  aplicarSnapshotCargas,
+  crearRepositorioCargas,
+  PRODUCTO_FUERA_DE_CATALOGO,
+} from './repositorios/cargas';
+export type {
+  CargaConLineas,
+  FilaCargaPull,
+  FilaInventario,
+  InventarioParaVenta,
+  LineaCargaConEtiqueta,
+  RepositorioCargas,
+} from './repositorios/cargas';
+export {
+  bloqueoDeVenta,
+  cargaPendiente,
+  existencias,
+  faltantesDeVenta,
+  MOTIVO_CARGA_PENDIENTE,
+  textoFaltante,
+} from './inventario-reglas';
+export type {
+  CargaInventario,
+  Existencia,
+  Faltante,
+  LineaVentaInventario,
+  PiezasDePresentacion,
+} from './inventario-reglas';

@@ -17,6 +17,7 @@ import type {
   Vehiculo,
   Vendedor,
 } from '../tipos';
+import { aplicarSnapshotCargas, type FilaCargaPull } from './cargas';
 import { aplicarSnapshotRutas, type FilaRutaPull } from './rutas';
 
 /**
@@ -30,7 +31,13 @@ import { aplicarSnapshotRutas, type FilaRutaPull } from './rutas';
  */
 export interface SnapshotCatalogos {
   sucursales?: Omit<Sucursal, 'sincronizado_en'>[];
-  vendedores?: Omit<Vendedor, 'sincronizado_en'>[];
+  /**
+   * T-27: `control_inventario` es opcional aqui: un servidor anterior no lo manda
+   * y el login sin red no lo conoce. Ausente, el upsert conserva lo que habia (0
+   * en una fila nueva); ver NO_BORRAR_CON_NULO.
+   */
+  vendedores?: (Omit<Vendedor, 'sincronizado_en' | 'control_inventario'> &
+    Partial<Pick<Vendedor, 'control_inventario'>>)[];
   vehiculos?: Omit<Vehiculo, 'sincronizado_en'>[];
   productos?: Omit<Producto, 'sincronizado_en'>[];
   presentaciones?: Omit<Presentacion, 'sincronizado_en'>[];
@@ -59,6 +66,8 @@ export interface SnapshotCatalogos {
   rutas?: FilaRutaPull[];
   /** T-74. Coleccion nueva del pull; baja como bandera. */
   promociones?: Omit<Promocion, 'sincronizado_en'>[];
+  /** T-27. La carga y las recargas del vendedor; regla propia (`aplicarSnapshotCargas`). */
+  cargas?: FilaCargaPull[];
 }
 
 /** Una fila de la pantalla de venta: que se puede vender y a cuanto (T-16). */
@@ -83,6 +92,8 @@ const COLUMNAS = {
     'activo',
     // T-14: lo asigna el servidor; la tablet lo refleja y lo usa al foliar.
     'folio_segmento',
+    // T-27 (D7): la casilla de su sucursal. El login sin red no la pisa.
+    'control_inventario',
   ],
   vehiculo: ['id', 'nombre', 'sucursal_id', 'activo'],
   producto: ['id', 'nombre', 'activo'],
@@ -158,9 +169,14 @@ const COLUMNAS = {
  * valor de verdad gana (el `pull` sigue mandando), pero un `null` no borra lo
  * que ya habia. Es la misma doctrina de ADR-0007: el segmento **se pina**, no se
  * recalcula ni se pierde por el camino.
+ *
+ * T-27: `vendedor.control_inventario` tiene el mismo problema y uno peor: es
+ * `not null`. Un `null` del login sin red fallaria el `not null`, y un 0 apagaria
+ * el control hasta el siguiente pull. Por eso cada columna lleva el valor (SQL
+ * literal, de esta constante) con que nace una fila NUEVA que no lo trae.
  */
-const NO_BORRAR_CON_NULO: Record<string, readonly string[]> = {
-  vendedor: ['folio_segmento'],
+const NO_BORRAR_CON_NULO: Record<string, Record<string, string>> = {
+  vendedor: { folio_segmento: 'null', control_inventario: '0' },
 };
 
 /**
@@ -290,6 +306,9 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
           aplicarSnapshotRutas(bd, snapshot.rutas, ahora) +
           // T-74: sin llaves foraneas; va aqui por orden de lectura.
           upsert(bd, 'promocion', COLUMNAS.promocion, snapshot.promociones, ahora) +
+          // T-27: sin llaves foraneas hacia los catalogos (ver la 017); regla de
+          // fusion propia en `cargas.ts` (una respuesta no se deshace).
+          aplicarSnapshotCargas(bd, snapshot.cargas, ahora) +
           upsert(bd, 'cliente_precio', COLUMNAS.cliente_precio, snapshot.precios, ahora) +
           upsert(bd, 'nota_pendiente', COLUMNAS.nota_pendiente, snapshot.notas, ahora)
         );
@@ -524,14 +543,19 @@ function upsert(
   if (!filas || filas.length === 0) return 0;
 
   const todas = [...columnas, 'sincronizado_en'];
-  const marcadores = todas.map((c) => `$${c}`).join(', ');
-  const conservar = NO_BORRAR_CON_NULO[tabla] ?? [];
+  const conservar = NO_BORRAR_CON_NULO[tabla] ?? {};
+  const seConserva = (c: string) => Object.prototype.hasOwnProperty.call(conservar, c);
+  const marcadores = todas
+    .map((c) => (seConserva(c) ? `coalesce($${c}, ${conservar[c] ?? 'null'})` : `$${c}`))
+    .join(', ');
   const asignaciones = todas
     .filter((c) => c !== 'id')
     .map((c) =>
-      conservar.includes(c)
-        ? // Un valor de verdad gana; un null no borra lo que ya habia.
-          `${c} = coalesce(excluded.${c}, ${tabla}.${c})`
+      seConserva(c)
+        ? // Un valor de verdad gana; un null no borra lo que ya habia. Se lee el
+          // PARAMETRO y no `excluded`: en `excluded` ya va el valor con que nace
+          // una fila nueva, y ese tampoco debe pisar al que existia.
+          `${c} = coalesce($${c}, ${tabla}.${c})`
         : `${c} = excluded.${c}`,
     )
     .join(', ');

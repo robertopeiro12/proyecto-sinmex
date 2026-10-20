@@ -14,6 +14,7 @@ import { visitas } from './013-visitas';
 import { prospectoDomicilio } from './014-prospecto-domicilio';
 import { gastos } from './015-gastos';
 import { firmaVenta } from './016-firma-venta';
+import { cargas } from './017-cargas';
 import type { Migracion } from './motor';
 
 /**
@@ -42,6 +43,7 @@ export const migraciones: readonly Migracion[] = [
   prospectoDomicilio,
   gastos,
   firmaVenta,
+  cargas,
 ];
 
 export { ejecutarMigraciones, versionEsquema } from './motor';

@@ -471,7 +471,13 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
       nombre,
       activa: activo,
     })),
-    vendedores: c.vendedores,
+    // T-27: la casilla llega booleana y SQLite guarda 0/1. Un servidor anterior
+    // no la manda: `undefined`, y el upsert conserva lo que habia.
+    vendedores: c.vendedores.map(({ control_inventario, ...v }) => ({
+      ...v,
+      control_inventario:
+        control_inventario === undefined ? undefined : control_inventario ? 1 : 0,
+    })),
     vehiculos: c.vehiculos,
     productos: c.productos,
     presentaciones: c.presentaciones,
@@ -521,6 +527,8 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
     promociones: respuesta.promociones?.map(
       (p): Omit<Promocion, 'sincronizado_en'> => ({ ...p, se_repite: p.se_repite ? 1 : 0 }),
     ),
+    // T-27: un servidor anterior no manda la coleccion; `undefined` no escribe nada.
+    cargas: respuesta.cargas,
   };
 }
 
