@@ -27,6 +27,15 @@ export function PantallaSucursales({ sucursal }: { sucursal: string | null }) {
               <span className="text-muted-foreground">Inactiva</span>
             ),
         },
+        {
+          encabezado: "Inventario en la app",
+          celda: (s) =>
+            s.controlInventario ? (
+              "Prendido"
+            ) : (
+              <span className="text-muted-foreground">Apagado</span>
+            ),
+        },
       ]}
       formulario={(item, alGuardar, alCancelar) => (
         <FormularioSucursal

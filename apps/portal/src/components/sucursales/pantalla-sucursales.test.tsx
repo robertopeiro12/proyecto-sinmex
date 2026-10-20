@@ -28,7 +28,7 @@ function mockAuth(puede: (clave: string) => boolean) {
   });
 }
 
-const TIJUANA: Sucursal = { id: "1", codigo: "TJ", nombre: "Tijuana", activa: true };
+const TIJUANA: Sucursal = { id: "1", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false };
 
 describe("PantallaSucursales", () => {
   beforeEach(() => {
@@ -81,9 +81,10 @@ describe("PantallaSucursales", () => {
       codigo: "MX",
       nombre: "Mexicali",
       activa: true,
+      controlInventario: false,
     });
     listarSucursales.mockResolvedValueOnce([
-      { id: "2", codigo: "MX", nombre: "Mexicali", activa: true },
+      { id: "2", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false },
     ]);
 
     render(<PantallaSucursales sucursal={null} />);
@@ -125,6 +126,7 @@ describe("PantallaSucursales", () => {
       expect(editarSucursal).toHaveBeenCalledWith("1", {
         nombre: "Tijuana Centro",
         activa: true,
+        controlInventario: false,
       }),
     );
     expect(await screen.findByText("Tijuana Centro")).toBeInTheDocument();
@@ -149,5 +151,32 @@ describe("PantallaSucursales", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Ya existe una sucursal con el código MX.",
     );
+  });
+
+  it("T-27: prende el control de inventario desde la edicion", async () => {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    listarSucursales.mockResolvedValueOnce([TIJUANA]);
+    editarSucursal.mockResolvedValue({ ...TIJUANA, controlInventario: true });
+    listarSucursales.mockResolvedValueOnce([{ ...TIJUANA, controlInventario: true }]);
+
+    render(<PantallaSucursales sucursal={null} />);
+    expect(await screen.findByText("Apagado")).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("button", { name: "Editar" }));
+    expect(
+      screen.getByText(/necesitan aceptar su carga para vender/),
+    ).toBeInTheDocument();
+    await usuario.click(screen.getByLabelText("Control de inventario en la app"));
+    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() =>
+      expect(editarSucursal).toHaveBeenCalledWith("1", {
+        nombre: "Tijuana",
+        activa: true,
+        controlInventario: true,
+      }),
+    );
+    expect(await screen.findByText("Prendido")).toBeInTheDocument();
   });
 });

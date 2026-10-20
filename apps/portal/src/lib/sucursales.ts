@@ -5,6 +5,8 @@ export interface Sucursal {
   codigo: string;
   nombre: string;
   activa: boolean;
+  /** T-27 (D7): "Control de inventario en la app". */
+  controlInventario: boolean;
 }
 
 /**
@@ -29,7 +31,7 @@ export function crearSucursal(datos: {
 
 export function editarSucursal(
   id: string,
-  cambios: { nombre?: string; activa?: boolean },
+  cambios: { nombre?: string; activa?: boolean; controlInventario?: boolean },
 ): Promise<Sucursal> {
   return apiFetch<Sucursal>(`/sucursales/${id}`, {
     method: "PATCH",
