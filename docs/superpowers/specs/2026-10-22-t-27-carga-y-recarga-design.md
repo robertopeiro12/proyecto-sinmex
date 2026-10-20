@@ -252,3 +252,4 @@ Diferencias entre este texto y lo construido (el código manda):
   evitar dos renovaciones simultáneas del refresh token.
 - `NO_BORRAR_CON_NULO` lleva ahora el valor con que nace una fila nueva (`control_inventario: '0'`), para que el login
   sin red no pise la casilla.
+- La rejilla de `GET /cargas` incluye también a los vendedores y presentaciones desactivados que tienen una carga viva ese día.

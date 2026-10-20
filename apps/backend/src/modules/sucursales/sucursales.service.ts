@@ -102,11 +102,10 @@ export class SucursalesService {
       cambios.control_inventario = dto.controlInventario;
     }
 
-    // T-27: solo si la casilla CAMBIA se toca a los vendedores; reenviar el
-    // mismo valor no hace bajar de nuevo su ficha.
-    const tocarVendedores =
-      dto.controlInventario !== undefined &&
-      dto.controlInventario !== sucursal.controlInventario;
+    // T-27: si la peticion trae la casilla se toca a los vendedores, siempre y
+    // dentro de la misma transaccion. Comparar contra el valor leido antes
+    // dejaba que dos administradores simultaneos se saltaran el toque.
+    const tocarVendedores = dto.controlInventario !== undefined;
     return this.repo.actualizar(id, cambios, tocarVendedores);
   }
 

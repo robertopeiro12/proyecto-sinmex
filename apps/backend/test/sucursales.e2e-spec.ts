@@ -458,7 +458,7 @@ describe('Sucursales (e2e)', () => {
       expect((res.body as SucursalRespuesta).nombre).toBe('Zacatecas Centro');
     });
 
-    it('T-27: la casilla de control de inventario toca a los vendedores solo si cambia', async () => {
+    it('T-27: la casilla de control de inventario toca a los vendedores siempre que la peticion trae la casilla', async () => {
       // Una corrida abortada pudo dejar ZH (y su vendedor): se limpia antes de
       // crearla, o el POST seria 409 y la prueba fallaria por basura ajena.
       const restos = db
@@ -509,18 +509,29 @@ describe('Sucursales (e2e)', () => {
         expect((prendida.body as SucursalRespuesta).controlInventario).toBe(
           true,
         );
-        const primera = await tocadoEn();
-        expect(primera).toBeGreaterThan(
+        expect(await tocadoEn()).toBeGreaterThan(
           new Date('2020-01-01T00:00:00Z').getTime(),
         );
 
-        // El mismo valor otra vez: no vuelve a tocar al vendedor.
+        const primera = await tocadoEn();
+
+        // Si la peticion trae la casilla, siempre se toca al vendedor (aunque
+        // el valor no cambie): no se decide con una lectura previa a la transaccion.
         await request(app.getHttpServer())
           .patch(`/sucursales/${sucursal.id}`)
           .set('Cookie', [cookieGeneral])
           .send({ controlInventario: true })
           .expect(200);
-        expect(await tocadoEn()).toBe(primera);
+        const segunda = await tocadoEn();
+        expect(segunda).toBeGreaterThan(primera);
+
+        // Sin la casilla en la peticion, no se toca.
+        await request(app.getHttpServer())
+          .patch(`/sucursales/${sucursal.id}`)
+          .set('Cookie', [cookieGeneral])
+          .send({ nombre: 'Control de inventario 2' })
+          .expect(200);
+        expect(await tocadoEn()).toBe(segunda);
       } finally {
         await db.deleteFrom('vendedor').where('id', '=', vendedorId).execute();
       }

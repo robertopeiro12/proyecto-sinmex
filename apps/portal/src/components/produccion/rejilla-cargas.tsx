@@ -48,7 +48,8 @@ const PASTILLA: Record<EstadoCarga, string> = {
  * (`w-48`) y cada subcolumna 112 px (`w-28`), así que caben 7 cargas sin desplazar;
  * con más, la tabla se desplaza de lado DENTRO de su caja (`w-0 min-w-full`) con la
  * presentación fija (`sticky left-0`) y el encabezado fijo (`thead sticky top-0`).
- * Medido en el navegador antes de cerrar la tarea.
+ * Medido en el navegador a 1366 px: página de 1366 px y caja de la rejilla de 1012 px sin
+ * desbordar (2 vendedores, 4 cargas); con más vendedores la caja se desplaza de lado.
  */
 const TH = "border-b px-2 py-1.5 text-left align-top font-medium";
 const CELDA = "w-28 min-w-28 border-b border-l px-2 py-1 text-right tabular-nums";

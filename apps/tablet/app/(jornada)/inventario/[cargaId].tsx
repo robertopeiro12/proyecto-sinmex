@@ -6,6 +6,7 @@ import {
   crearRespondedorCarga,
   cuerpoRespuesta,
   LARGO_MAX_MOTIVO_RECHAZO,
+  MENSAJE_CARGA_ELIMINADA,
   pastillaCarga,
   puedeResponder,
   totalPiezas,
@@ -70,7 +71,8 @@ export default function DetalleCarga() {
     }
     // La version de la carga QUE SE VE (Review Focus 2).
     const cuerpo = cuerpoRespuesta(accion, motivo, actual.version);
-    setEnviando(accion);
+    // Si el candado ya lo tiene un primer toque, este conserva su estado (no se pisa ni queda colgado).
+    setEnviando((previo) => previo ?? accion);
     setAviso(null);
     let resultado: Awaited<ReturnType<RespondedorCarga['responder']>>;
     try {
@@ -144,7 +146,7 @@ export default function DetalleCarga() {
       {carga.activo === 0 ? (
         <Text style={estilos.error}>El almacén eliminó esta carga: ya no cuenta en tu inventario.</Text>
       ) : null}
-      {aviso ? <Text style={aviso.error ? estilos.error : estilos.textoTarjeta}>{aviso.texto}</Text> : null}
+      {aviso && !(carga.activo === 0 && aviso.texto === MENSAJE_CARGA_ELIMINADA) ? <Text style={aviso.error ? estilos.error : estilos.textoTarjeta}>{aviso.texto}</Text> : null}
 
       {respondible && rechazando ? (
         <Tarjeta estado="error" etiqueta="Rechazar la carga">
