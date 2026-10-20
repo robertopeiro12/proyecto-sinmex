@@ -12,10 +12,9 @@ import {
 } from "@/lib/cuentas-por-cobrar";
 import { exportarExcel } from "@/lib/excel/exportar";
 import { etiquetaSucursal } from "@/lib/reportes";
+import { plural } from "@/lib/formato";
 import { formatearPesos } from "@/lib/ventas";
 import { TablaCuentasPorCobrar } from "./tabla-cuentas-por-cobrar";
-
-const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 
 /**
  * Operación → Cuentas por Cobrar (T-22). La página monta este componente con

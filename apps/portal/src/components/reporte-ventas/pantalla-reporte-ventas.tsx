@@ -6,13 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { mensajeDe } from "@/lib/api";
 import { exportarExcel } from "@/lib/excel/exportar";
+import { rangoMes, rangoSemana } from "@/lib/fechas";
+import { plural } from "@/lib/formato";
 import { etiquetaSucursal, formatearFecha } from "@/lib/reportes";
 import {
   definicionExcelReporteVentas,
   formatearPiezas,
   obtenerReporteVentas,
-  rangoMes,
-  rangoSemana,
   type ReporteVentas,
 } from "@/lib/reporte-ventas";
 import { listarVendedores, type Vendedor } from "@/lib/vendedores";
@@ -27,8 +27,6 @@ interface Consultado {
   sucursal: string;
   repartidor: string;
 }
-
-const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 
 /**
  * Operación → Reporte de Ventas (T-49): "resultados por vendedor y por día".

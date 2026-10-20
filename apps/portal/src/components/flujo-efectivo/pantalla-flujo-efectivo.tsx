@@ -12,9 +12,8 @@ import {
   obtenerFlujoEfectivo,
   type FlujoEfectivo,
 } from "@/lib/flujo-efectivo";
-import { rangoMes, rangoSemana } from "@/lib/reporte-ventas";
+import { diaAnterior, rangoMes, rangoSemana } from "@/lib/fechas";
 import { etiquetaSucursal, formatearFecha } from "@/lib/reportes";
-import { diaAnterior } from "@/lib/tesoreria";
 import { formatearPesos, hoyEnTijuana } from "@/lib/ventas";
 
 const NOTA_GASTOS = "sin gastos registrados todavía (llegan con Compras y Egresos)";

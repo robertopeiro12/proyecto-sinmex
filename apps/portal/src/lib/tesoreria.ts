@@ -283,9 +283,8 @@ export function describirEvento(e: EventoTesoreria): { concepto: string; cuenta:
   }
 }
 
-export function primerDiaDelMesDe(fecha: string): string {
-  return `${fecha.slice(0, 8)}01`;
-}
+/** Vive en lib/fechas.ts como `primerDiaDelMes` (UI Etapa 1); se re-exporta con su nombre de antes. */
+export { primerDiaDelMes as primerDiaDelMesDe } from "./fechas";
 
 export function etiquetaSucursalCuenta(codigo: string | null): string {
   return codigo ?? "General";
@@ -321,12 +320,8 @@ export function textoMontoConSigno(centavos: number): string {
   return centavos < 0 ? `-${textoMonto(-centavos)}` : textoMonto(centavos);
 }
 
-/** El dia anterior a `AAAA-MM-DD` (para el atajo "Ayer"). */
-export function diaAnterior(fecha: string): string {
-  const d = new Date(`${fecha}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() - 1);
-  return d.toISOString().slice(0, 10);
-}
+/** Vive en lib/fechas.ts (UI Etapa 1); se re-exporta para no romper importaciones. */
+export { diaAnterior } from "./fechas";
 
 const pesos = (centavos: number | null): string | number =>
   centavos === null ? "Sin saldo inicial" : centavos / 100;

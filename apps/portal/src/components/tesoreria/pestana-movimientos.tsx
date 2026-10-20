@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { mensajeDe } from "@/lib/api";
+import { primerDiaDelMes } from "@/lib/fechas";
 import { formatearFecha } from "@/lib/reportes";
 import {
   eliminarMovimiento,
   ETIQUETA_TIPO,
   listarCuentasTesoreria,
   listarMovimientos,
-  primerDiaDelMesDe,
   type CuentaTesoreria,
   type MovimientoManual,
 } from "@/lib/tesoreria";
@@ -19,7 +19,7 @@ import { FormularioMovimiento } from "./formulario-movimiento";
 /** Registrar operación (T-29): formulario arriba y los movimientos del rango abajo. */
 export function PestanaMovimientos({ sucursal }: { sucursal: string | null }) {
   const hoy = hoyEnTijuana();
-  const [desde, setDesde] = useState(primerDiaDelMesDe(hoy));
+  const [desde, setDesde] = useState(primerDiaDelMes(hoy));
   const [hasta, setHasta] = useState(hoy);
   const [cuentas, setCuentas] = useState<CuentaTesoreria[]>([]);
   const [movimientos, setMovimientos] = useState<MovimientoManual[] | null>(null);

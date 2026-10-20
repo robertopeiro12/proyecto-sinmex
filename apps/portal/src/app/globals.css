@@ -7,11 +7,23 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  /* Geist la carga app/layout.tsx como --font-geist-sans. Apuntar --font-sans a si
-     misma invalidaba la variable y todo el portal caia en Times. */
-  --font-sans: var(--font-geist-sans);
+  /* Las fuentes las carga app/layout.tsx con next/font, en <html>. Apuntar --font-sans a
+     si misma invalidaba la variable y todo el portal caia en Times. */
+  --font-sans: var(--font-public-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
+  /* Solo el titulo de la pantalla y el nombre de la sucursal (UI Etapa 1, spec §2.1). */
+  --font-titulo: var(--font-bricolage);
+  /* UI Etapa 1: el menu, el color de la sucursal que se esta viendo y los colores que informan. */
+  --color-menu: var(--menu);
+  --color-sucursal: var(--suc);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-destructive-soft: var(--destructive-soft);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -51,24 +63,25 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  /* Base tranquila (spec §2.1): contenido en blanco, tinta, menu gris con toque verde. */
+  --background: #ffffff;
+  --foreground: #18211d;
+  --card: #ffffff;
+  --card-foreground: #18211d;
+  --popover: #ffffff;
+  --popover-foreground: #18211d;
+  --primary: #18211d;
+  --primary-foreground: #ffffff;
+  --secondary: #f2f4f1;
+  --secondary-foreground: #18211d;
+  --muted: #f2f4f1;
+  --muted-foreground: #5f6b65;
+  --accent: #e8ece7;
+  --accent-foreground: #18211d;
+  --destructive: #b42318;
+  --border: #dde2dd;
+  --input: #dde2dd;
+  --ring: #5f6b65;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -83,27 +96,41 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --menu: #f2f4f1;
+  /* Colores que informan: el texto sobre su fondo suave. */
+  --success: #1f7a4d;
+  --success-soft: #e6f3ec;
+  --warning: #8a4f06;
+  --warning-soft: #fdf3e1;
+  --destructive-soft: #fdecea;
+  --info: #3d5566;
+  --info-soft: #eaf0f4;
+  /* Un color por sucursal (lib/sucursal-color.ts). La que no tenga usa la tinta. */
+  --suc-tj: #1d5b79;
+  --suc-mx: #6b2d5c;
+  --suc-todas: #18211d;
+  --suc: var(--suc-todas);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --background: #141917;
+  --foreground: #e6ebe7;
+  --card: #1b211e;
+  --card-foreground: #e6ebe7;
+  --popover: #1b211e;
+  --popover-foreground: #e6ebe7;
+  --primary: #e6ebe7;
+  --primary-foreground: #141917;
+  --secondary: #1b211e;
+  --secondary-foreground: #e6ebe7;
+  --muted: #1b211e;
+  --muted-foreground: #9aa7a0;
+  --accent: #242b27;
+  --accent-foreground: #e6ebe7;
+  --destructive: #f08a7e;
+  --border: #2c3430;
+  --input: #2c3430;
+  --ring: #9aa7a0;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
@@ -117,6 +144,18 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --menu: #1b211e;
+  --success: #6cc79a;
+  --success-soft: #18301f;
+  --warning: #f0b45a;
+  --warning-soft: #33270f;
+  --destructive-soft: #3a1a17;
+  --info: #a9c1d1;
+  --info-soft: #1d2a33;
+  --suc-tj: #3f86a8;
+  --suc-mx: #a35a90;
+  --suc-todas: #4a5650;
+  --suc: var(--suc-todas);
 }
 
 @layer base {
@@ -128,5 +167,14 @@
   }
   html {
     @apply font-sans;
+  }
+  /* Movimiento solo cuando el usuario actua, y nunca si pidio menos movimiento (spec §2.1). */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
   }
 }

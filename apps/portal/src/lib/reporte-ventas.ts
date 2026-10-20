@@ -68,25 +68,8 @@ export function obtenerReporteVentas(f: {
   return apiFetch<ReporteVentas>(`/reportes/ventas?${q.toString()}`);
 }
 
-const MS_DIA = 24 * 60 * 60 * 1000;
-
-const aFecha = (iso: string): Date => new Date(`${iso}T00:00:00Z`);
-const aIso = (d: Date): string => d.toISOString().slice(0, 10);
-
-/** Lunes a domingo de la semana de `hoy` (`AAAA-MM-DD`), sin zona horaria de por medio. */
-export function rangoSemana(hoy: string): { desde: string; hasta: string } {
-  const d = aFecha(hoy);
-  const desdeLunes = (d.getUTCDay() + 6) % 7;
-  const lunes = new Date(d.getTime() - desdeLunes * MS_DIA);
-  return { desde: aIso(lunes), hasta: aIso(new Date(lunes.getTime() + 6 * MS_DIA)) };
-}
-
-/** Del día 1 al último día del mes de `hoy`. */
-export function rangoMes(hoy: string): { desde: string; hasta: string } {
-  const [anio, mes] = hoy.split("-").map(Number);
-  const ultimo = new Date(Date.UTC(anio, mes, 0));
-  return { desde: `${hoy.slice(0, 8)}01`, hasta: aIso(ultimo) };
-}
+/** Viven en lib/fechas.ts (UI Etapa 1); se re-exportan para no romper importaciones. */
+export { rangoMes, rangoSemana } from "./fechas";
 
 /** Piezas con separador de miles (12,345); en Excel van los números crudos. */
 export function formatearPiezas(n: number): string {

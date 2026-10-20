@@ -12,8 +12,8 @@ import {
   textoTotalClientes,
   type ReporteClientesNuevos,
 } from "@/lib/reporte-clientes-nuevos";
-import { rangoMes, rangoSemana } from "@/lib/reporte-ventas";
-import { etiquetaSucursal, formatearFecha, primerDiaDelMes } from "@/lib/reportes";
+import { primerDiaDelMes, rangoMes, rangoSemana } from "@/lib/fechas";
+import { etiquetaSucursal, formatearFecha } from "@/lib/reportes";
 import { hoyEnTijuana } from "@/lib/ventas";
 import { TablaClientesNuevos } from "./tabla-clientes-nuevos";
 
