@@ -5,11 +5,10 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth/auth-provider";
 import { mensajeDe } from "@/lib/api";
 import { exportarExcel } from "@/lib/excel/exportar";
-import { rangoMes, rangoSemana } from "@/lib/reporte-ventas";
+import { diaAnterior, rangoMes, rangoSemana } from "@/lib/fechas";
 import { etiquetaSucursal, formatearFecha } from "@/lib/reportes";
 import {
   definicionExcelTesoreria,
-  diaAnterior,
   describirEvento,
   ETIQUETA_METODO,
   etiquetaSucursalCuenta,

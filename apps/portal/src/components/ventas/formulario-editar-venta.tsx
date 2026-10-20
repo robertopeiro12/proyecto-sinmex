@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
+import { Aviso } from "@/components/ui/aviso";
+import { Button } from "@/components/ui/button";
+import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
+import { Fecha } from "@/components/ui/fecha";
 import {
   REPARTIDOR_OFICINA,
   camposDeCondiciones,
@@ -113,65 +115,60 @@ export function FormularioEditarVenta({
   const mensajeError = errorLocal ?? error;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Editar venta {venta.folio}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={alEnviar} className="flex flex-col gap-5">
-          {errorCarga && <p className="text-sm text-destructive">{errorCarga}</p>}
+    <Pantalla>
+      <EncabezadoPantalla
+        titulo={`Editar venta ${venta.folio}`}
+        descripcion="Cambia productos, repartidor o condiciones. El cliente y la fecha no se cambian; los productos que ya tenía conservan su precio."
+      />
+      <form onSubmit={alEnviar} className="flex flex-col gap-5">
+        {errorCarga && <Aviso tono="error">{errorCarga}</Aviso>}
 
-          <div className="flex flex-wrap gap-4">
-            <div className="flex flex-col gap-1.5 text-sm">
-              <span className="font-medium">Fecha</span>
-              <span>{venta.fecha}</span>
-            </div>
-            <div className="flex min-w-72 flex-1 flex-col gap-1.5 text-sm">
-              <span className="font-medium">Cliente</span>
-              <span>
-                {venta.cliente} · {venta.sucursalCodigo}
-              </span>
-            </div>
-            <SelectorRepartidor
-              repartidores={opciones}
-              valor={repartidor}
-              onCambio={setRepartidor}
-              disabled={enviando}
-              conOficina={venta.origen === "portal"}
-            />
+        <div className="flex flex-wrap gap-4">
+          <div className="flex flex-col gap-1.5 text-sm">
+            <span className="text-[13px] font-semibold">Fecha</span>
+            <Fecha valor={venta.fecha} />
           </div>
-
-          <TablaProductosVenta
-            filas={filas}
-            captura={captura}
-            onCambio={(id, campo, valor) => setCaptura((actual) => conCaptura(actual, id, campo, valor))}
-            disabled={enviando}
-          />
-
-          <p className="text-right text-base font-semibold">Total: {formatearPesos(totalCentavos)}</p>
-
-          <CamposCondicionesVenta
-            valores={condiciones}
-            onCambio={(cambio) => setCondiciones((actual) => ({ ...actual, ...cambio }))}
-            disabled={enviando}
-          />
-
-          {mensajeError && (
-            <p role="alert" className="text-sm text-destructive">
-              {mensajeError}
-            </p>
-          )}
-
-          <div className="flex gap-2">
-            <Button type="submit" disabled={enviando}>
-              {enviando ? "Guardando…" : "Guardar"}
-            </Button>
-            <Button type="button" variant="outline" disabled={enviando} onClick={onCancelar}>
-              Cancelar
-            </Button>
+          <div className="flex min-w-72 flex-1 flex-col gap-1.5 text-sm">
+            <span className="text-[13px] font-semibold">Cliente</span>
+            <span>
+              {venta.cliente} · {venta.sucursalCodigo}
+            </span>
           </div>
-        </form>
-      </CardContent>
-    </Card>
+          <SelectorRepartidor
+            repartidores={opciones}
+            valor={repartidor}
+            onCambio={setRepartidor}
+            disabled={enviando}
+            conOficina={venta.origen === "portal"}
+          />
+        </div>
+
+        <TablaProductosVenta
+          filas={filas}
+          captura={captura}
+          onCambio={(id, campo, valor) => setCaptura((actual) => conCaptura(actual, id, campo, valor))}
+          disabled={enviando}
+        />
+
+        <p className="text-right text-base font-semibold">Total: {formatearPesos(totalCentavos)}</p>
+
+        <CamposCondicionesVenta
+          valores={condiciones}
+          onCambio={(cambio) => setCondiciones((actual) => ({ ...actual, ...cambio }))}
+          disabled={enviando}
+        />
+
+        {mensajeError && <Aviso tono="error">{mensajeError}</Aviso>}
+
+        <div className="flex gap-2">
+          <Button type="submit" disabled={enviando}>
+            {enviando ? "Guardando…" : "Guardar"}
+          </Button>
+          <Button type="button" variant="outline" disabled={enviando} onClick={onCancelar}>
+            Cancelar
+          </Button>
+        </div>
+      </form>
+    </Pantalla>
   );
 }

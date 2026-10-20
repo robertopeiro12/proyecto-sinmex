@@ -1,11 +1,17 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { mensajeDe } from "@/lib/api";
-import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
+import { Aviso } from "@/components/ui/aviso";
+import { Button } from "@/components/ui/button";
+import { Campo, Casilla, Entrada } from "@/components/ui/campo";
+import { EstadoPantalla } from "@/components/ui/estado-pantalla";
+import { EtiquetaStatusVenta } from "@/components/ui/etiqueta";
+import { Fecha } from "@/components/ui/fecha";
+import { CajaTabla, Fila, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
 import { BuscadorCliente } from "@/components/ventas/buscador-cliente";
+import { mensajeDe } from "@/lib/api";
 import { listarClientes, type ClienteResumen } from "@/lib/clientes";
 import {
   LARGO_MAX_NUMERO_FACTURA,
@@ -14,7 +20,7 @@ import {
   totalSeleccionado,
   type VentaPorFacturar,
 } from "@/lib/facturas";
-import { ETIQUETA_STATUS, formatearPesos } from "@/lib/ventas";
+import { formatearPesos, plural } from "@/lib/formato";
 
 /**
  * Asignar factura a notas de ventas (T-19, §5.1 del spec): cliente → marcar
@@ -73,14 +79,9 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
     };
   }, [cliente, incluirNA, recarga]);
 
-  if (cargandoSesion) {
-    // Sin esto, quien si tiene el permiso ve "No tienes permiso" un instante.
-    return <p className="text-sm text-muted-foreground">Cargando…</p>;
-  }
-
-  if (!permitido) {
-    return <p className="text-sm text-muted-foreground">No tienes permiso para asignar facturas.</p>;
-  }
+  // Sin esto, quien si tiene el permiso ve "No tienes permiso" un instante.
+  if (cargandoSesion) return <EstadoPantalla tipo="cargando" />;
+  if (!permitido) return <EstadoPantalla tipo="sin-permiso" />;
 
   const total = totalSeleccionado(ventas, seleccion);
   // Mientras recarga la lista es la anterior: no se deja marcar filas viejas.
@@ -104,9 +105,7 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
       async () => {
         setAviso(null);
         const factura = await asignarFactura(cliente.id, numero.trim(), ids);
-        setAviso(
-          `Factura ${factura.numero} asignada a ${ids.length} ${ids.length === 1 ? "venta" : "ventas"} (${formatearPesos(total)})`,
-        );
+        setAviso(`Factura ${factura.numero} asignada a ${plural(ids.length, "venta", "ventas")} (${formatearPesos(total)})`);
         setNumero("");
         setRecarga((n) => n + 1);
       },
@@ -132,91 +131,82 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
         disabled={enviando}
       />
 
-      {aviso && (
-        <p role="status" className="rounded-md border p-3 text-sm">
-          {aviso}
-        </p>
-      )}
+      {aviso && <Aviso tono="exito">{aviso}</Aviso>}
 
       {cliente && (
         <>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={incluirNA}
-              onChange={(e) => setIncluirNA(e.target.checked)}
-              disabled={enviando}
-            />
-            Mostrar también las N/A
-          </label>
+          <Casilla
+            etiqueta="Mostrar también las N/A"
+            checked={incluirNA}
+            onChange={(e) => setIncluirNA(e.target.checked)}
+            disabled={enviando}
+          />
 
           {errorCarga ? (
-            <p role="alert" className="text-sm text-destructive">
-              {errorCarga}
-            </p>
+            <Aviso tono="error">{errorCarga}</Aviso>
           ) : cargada && ventas.length === 0 ? (
             <p className="text-sm text-muted-foreground">Este cliente no tiene ventas por facturar.</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left">
-                  <th className="py-1.5">
-                    <input
-                      type="checkbox"
-                      aria-label="Seleccionar todas"
-                      checked={todas}
-                      onChange={() => setSeleccion(todas ? new Set() : new Set(ventas.map((v) => v.id)))}
-                      disabled={bloqueada}
-                    />
-                  </th>
-                  <th className="py-1.5">Fecha</th>
-                  <th className="py-1.5">Folio</th>
-                  <th className="py-1.5"># de nota</th>
-                  <th className="py-1.5 text-right">Monto</th>
-                  <th className="py-1.5">Status</th>
-                  <th className="py-1.5">Factura</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ventas.map((v) => (
-                  <tr key={v.id} className="border-t">
-                    <td className="py-1.5">
-                      <input
-                        type="checkbox"
-                        aria-label={`Marcar ${v.folio}`}
-                        checked={seleccion.has(v.id)}
-                        onChange={() => alternar(v.id)}
+            <CajaTabla>
+              <Tabla className="min-w-[720px]">
+                <thead>
+                  <tr>
+                    <Th>
+                      <Casilla
+                        aria-label="Seleccionar todas"
+                        checked={todas}
+                        onChange={() => setSeleccion(todas ? new Set() : new Set(ventas.map((v) => v.id)))}
                         disabled={bloqueada}
                       />
-                    </td>
-                    <td className="py-1.5">{v.fecha}</td>
-                    <td className="py-1.5 font-mono">{v.folio}</td>
-                    <td className="py-1.5">{v.numNota ?? "—"}</td>
-                    <td className="py-1.5 text-right">{formatearPesos(v.montoCentavos)}</td>
-                    <td className="py-1.5">{ETIQUETA_STATUS[v.status]}</td>
-                    <td className="py-1.5">{v.factura}</td>
+                    </Th>
+                    <Th>Fecha</Th>
+                    <Th>Folio</Th>
+                    <Th># de nota</Th>
+                    <Th alinear="derecha">Monto</Th>
+                    <Th>Status</Th>
+                    <Th>Factura</Th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {ventas.map((v) => (
+                    <Fila key={v.id} interactiva>
+                      <Td>
+                        <Casilla
+                          aria-label={`Marcar ${v.folio}`}
+                          checked={seleccion.has(v.id)}
+                          onChange={() => alternar(v.id)}
+                          disabled={bloqueada}
+                        />
+                      </Td>
+                      <Td>
+                        <Fecha valor={v.fecha} />
+                      </Td>
+                      <Td className="font-mono">{v.folio}</Td>
+                      <Td>{v.numNota ?? "—"}</Td>
+                      <TdMonto centavos={v.montoCentavos} />
+                      <Td>
+                        <EtiquetaStatusVenta status={v.status} />
+                      </Td>
+                      <Td>{v.factura}</Td>
+                    </Fila>
+                  ))}
+                </tbody>
+              </Tabla>
+            </CajaTabla>
           )}
 
           <p className="text-right text-base font-semibold">Total marcado: {formatearPesos(total)}</p>
 
           <div className="flex flex-wrap items-end gap-3">
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="numero-factura" className="text-sm font-medium">
-                Número de factura
-              </label>
-              <input
-                id="numero-factura"
+            <Campo id="numero-factura" etiqueta="Número de factura">
+              <Entrada
                 maxLength={LARGO_MAX_NUMERO_FACTURA}
                 value={numero}
                 onChange={(e) => setNumero(e.target.value)}
                 disabled={enviando}
-                className="w-48 rounded-md border px-3 py-2 text-sm"
+                className="w-48"
               />
-            </div>
+            </Campo>
             <Button type="submit" disabled={enviando || seleccion.size === 0 || numero.trim() === ""}>
               {enviando ? "Asignando…" : "Asignar"}
             </Button>
@@ -224,11 +214,7 @@ export function AsignarFactura({ sucursal }: { sucursal: string | null }) {
         </>
       )}
 
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {error && <Aviso tono="error">{error}</Aviso>}
     </form>
   );
 }

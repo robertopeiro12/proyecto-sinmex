@@ -92,15 +92,8 @@ export function leerPiezas(texto: string): number | null {
   return /^\d+$/.test(limpio) ? Number(limpio) : null;
 }
 
-/** Centavos a `$1,234.56`. */
-export function formatearPesos(centavos: number): string {
-  // El signo va antes del $ ("-$50.00"), como se escribe a mano (T-34).
-  const signo = centavos < 0 ? "-" : "";
-  return `${signo}$${(Math.abs(centavos) / 100).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
+/** Vive en lib/formato.ts (UI Etapa 1); se re-exporta para no romper importaciones. */
+export { formatearPesos } from "./formato";
 
 /* ------------------------------------------------------------------ */
 /* Buscar, editar y eliminar (T-17, parte 2)                           */

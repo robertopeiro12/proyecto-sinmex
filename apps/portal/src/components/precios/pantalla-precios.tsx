@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
+import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { listarProductos, type Producto } from "@/lib/productos";
 import { listarSucursales, type Sucursal } from "@/lib/sucursales";
 import {
@@ -24,25 +25,6 @@ interface PrecioCelda {
   precio: number;
 }
 
-/** El mismo Card/CardHeader/CardTitle que usa esta pantalla en sus tres
- * estados sin matriz (General sin filtro, cargando, codigo sin resolver):
- * evita repetir el marcado tres veces. */
-function TarjetaMensaje({ mensaje }: { mensaje: string }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Listas de Precios</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-muted-foreground">{mensaje}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-const MENSAJE_ELIGE_SUCURSAL =
-  "Elige una sucursal en el filtro para ver y editar sus precios.";
-
 export function PantallaPrecios({ sucursal }: { sucursal: string | null }) {
   const { usuario, puede } = useAuth();
   const puedeGestionar = puede("precio.gestionar");
@@ -55,14 +37,14 @@ export function PantallaPrecios({ sucursal }: { sucursal: string | null }) {
   }, []);
 
   // Atado: siempre la suya, sin importar el filtro global (el selector ni
-  // siquiera le pinta un <select>, ver selector-sucursal.tsx). General: la
+  // siquiera le pinta una lista, ver use-sucursal-actual.ts). General: la
   // que elija el selector, o ninguna hasta que elija -- la matriz pinta UNA
   // sucursal a la vez (D7 del spec), a diferencia de Vehiculos.
   const sucursalActual =
     usuario?.sucursal ?? sucursales.find((s) => s.codigo === sucursal) ?? null;
 
   if (usuario !== null && usuario.sucursal === null && !sucursal) {
-    return <TarjetaMensaje mensaje={MENSAJE_ELIGE_SUCURSAL} />;
+    return <EstadoPantalla titulo="Listas de Precios" tipo="elige-sucursal" />;
   }
 
   if (!sucursalActual) {
@@ -70,13 +52,13 @@ export function PantallaPrecios({ sucursal }: { sucursal: string | null }) {
     // MatrizPrecios para su propio "Cargando...", asi la pantalla nunca se ve
     // en blanco.
     if (usuario === null || sucursales.length === 0) {
-      return <TarjetaMensaje mensaje="Cargando…" />;
+      return <EstadoPantalla titulo="Listas de Precios" tipo="cargando" />;
     }
     // Ya cargo todo y el codigo pedido no resolvio a ninguna sucursal (URL
     // vieja, sucursal desactivada, o alguien escribio el query param a mano):
     // mismo mensaje que el caso de General sin filtro, en vez de un callejon
     // sin salida en blanco.
-    return <TarjetaMensaje mensaje={MENSAJE_ELIGE_SUCURSAL} />;
+    return <EstadoPantalla titulo="Listas de Precios" tipo="elige-sucursal" />;
   }
 
   return (

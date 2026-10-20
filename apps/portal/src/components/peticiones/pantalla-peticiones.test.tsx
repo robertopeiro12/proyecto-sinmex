@@ -33,19 +33,22 @@ describe("PantallaPeticiones", () => {
   it("sin peticiones.gestionar lo dice y no pide nada", () => {
     mockAuth((clave) => clave !== "peticiones.gestionar");
     render(<PantallaPeticiones sucursal={null} />);
-    expect(screen.getByText("No tienes permiso para ver peticiones")).toBeInTheDocument();
+    expect(screen.getByText("No tienes permiso para ver esta sección.")).toBeInTheDocument();
     expect(listarPeticiones).not.toHaveBeenCalled();
   });
 
-  it("abre en Pendientes con la sucursal del filtro; Historial pide las resueltas", async () => {
+  it("encabezado con su explicación; abre en Pendientes con la sucursal del filtro; Historial pide las resueltas", async () => {
     mockAuth(() => true);
     const usuario = userEvent.setup();
     render(<PantallaPeticiones sucursal="TJ" />);
+    expect(screen.getByRole("heading", { level: 1, name: "Peticiones" })).toBeInTheDocument();
+    expect(screen.getByText(/borrar un pago/)).toBeInTheDocument();
     expect(await screen.findByText("No hay peticiones pendientes.")).toBeInTheDocument();
     expect(listarPeticiones).toHaveBeenCalledWith("pendiente", "TJ");
-    expect(screen.getByRole("button", { name: "Pendientes" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("tab", { name: "Pendientes" })).toHaveAttribute("aria-selected", "true");
 
-    await usuario.click(screen.getByRole("button", { name: "Historial" }));
+    await usuario.click(screen.getByRole("tab", { name: "Historial" }));
+    expect(screen.getByRole("tab", { name: "Historial" })).toHaveAttribute("aria-selected", "true");
     expect(await screen.findByText("No hay peticiones resueltas.")).toBeInTheDocument();
     expect(listarPeticiones).toHaveBeenLastCalledWith("historial", "TJ");
   });

@@ -6,6 +6,7 @@ import { ErrorApi } from "@/lib/api";
 import * as excel from "@/lib/excel/exportar";
 import * as reportes from "@/lib/reportes";
 import type { ReporteKilometraje } from "@/lib/reportes";
+import { diaAnterior } from "@/lib/fechas";
 import { hoyEnTijuana } from "@/lib/ventas";
 import * as vehiculosLib from "@/lib/vehiculos";
 import { PantallaKilometraje } from "./pantalla-kilometraje";
@@ -96,12 +97,12 @@ describe("PantallaKilometraje", () => {
   it("sin reportes.ver lo dice y no pide nada", () => {
     mockAuth(() => false);
     render(<PantallaKilometraje sucursal={null} />);
-    expect(screen.getByText("No tienes permiso para ver reportes")).toBeInTheDocument();
+    expect(screen.getByText("No tienes permiso para ver esta sección.")).toBeInTheDocument();
     expect(listarVehiculos).not.toHaveBeenCalled();
     expect(obtener).not.toHaveBeenCalled();
   });
 
-  it("arranca con el mes en curso, lista los vehiculos de la sucursal y no consulta hasta Consultar", async () => {
+  it("arranca con el mes en curso, lista los vehiculos de la sucursal y no consulta hasta Mostrar", async () => {
     mockAuth(() => true);
     render(<PantallaKilometraje sucursal="TJ" />);
     const hoy = hoyEnTijuana();
@@ -119,7 +120,7 @@ describe("PantallaKilometraje", () => {
     render(<PantallaKilometraje sucursal={null} />);
     // Un <input type="date"> en jsdom se cambia con un evento, no tecleando.
     fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2099-12-31" } });
-    await usuario.click(screen.getByRole("button", { name: "Consultar" }));
+    await usuario.click(screen.getByRole("button", { name: "Mostrar" }));
     expect(screen.getByRole("alert")).toHaveTextContent("La fecha inicial no puede ser posterior a la final.");
     expect(obtener).not.toHaveBeenCalled();
   });
@@ -128,7 +129,7 @@ describe("PantallaKilometraje", () => {
     mockAuth(() => true);
     const usuario = userEvent.setup();
     render(<PantallaKilometraje sucursal="TJ" />);
-    await usuario.click(screen.getByRole("button", { name: "Consultar" }));
+    await usuario.click(screen.getByRole("button", { name: "Mostrar" }));
 
     // `selector: "th"`: el mismo texto esta en la lista de vehiculos del filtro.
     expect(await screen.findByText("Nissan-01 (ABC-123)", { selector: "th" })).toBeInTheDocument();
@@ -158,7 +159,7 @@ describe("PantallaKilometraje", () => {
     obtener.mockResolvedValue({ ...REPORTE, vehiculos: [], totalKilometrosDecimas: 0, totalSaltoDecimas: 0 });
     const usuario = userEvent.setup();
     render(<PantallaKilometraje sucursal={null} />);
-    await usuario.click(screen.getByRole("button", { name: "Consultar" }));
+    await usuario.click(screen.getByRole("button", { name: "Mostrar" }));
     expect(await screen.findByText("No hay jornadas cerradas en ese rango.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Exportar a Excel" })).toBeDisabled();
   });
@@ -168,7 +169,7 @@ describe("PantallaKilometraje", () => {
     obtener.mockRejectedValue(new ErrorApi("x", 400, "El rango no puede pasar de un año."));
     const usuario = userEvent.setup();
     render(<PantallaKilometraje sucursal={null} />);
-    await usuario.click(screen.getByRole("button", { name: "Consultar" }));
+    await usuario.click(screen.getByRole("button", { name: "Mostrar" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("El rango no puede pasar de un año.");
   });
 
@@ -178,7 +179,7 @@ describe("PantallaKilometraje", () => {
     render(<PantallaKilometraje sucursal={null} />);
     await screen.findByRole("option", { name: "Nissan-01 (ABC-123)" });
     await usuario.selectOptions(screen.getByLabelText("Vehículo"), "v1");
-    await usuario.click(screen.getByRole("button", { name: "Consultar" }));
+    await usuario.click(screen.getByRole("button", { name: "Mostrar" }));
     await screen.findByText("Total general");
 
     // Cambia los filtros SIN volver a consultar.
@@ -193,5 +194,20 @@ describe("PantallaKilometraje", () => {
       ["Vehículo", "Nissan-01 (ABC-123)"],
     ]);
     expect(def?.nombreArchivo).toBe("kilometraje_2026-10-01_a_2026-10-13");
+  });
+
+  it("el encabezado explica el reporte; los atajos cambian el rango sin consultar", async () => {
+    mockAuth(() => true);
+    const usuario = userEvent.setup();
+    render(<PantallaKilometraje sucursal={null} />);
+    expect(screen.getByRole("heading", { level: 1, name: "Reporte de Kilometraje" })).toBeInTheDocument();
+    expect(screen.getByText(/Un salto avisa/)).toBeInTheDocument();
+    const ayer = diaAnterior(hoyEnTijuana());
+    await usuario.click(screen.getByRole("button", { name: "Ayer" }));
+    expect(screen.getByLabelText("Desde")).toHaveValue(ayer);
+    expect(screen.getByLabelText("Hasta")).toHaveValue(ayer);
+    expect(obtener).not.toHaveBeenCalled();
+    await usuario.click(screen.getByRole("button", { name: "Mostrar" }));
+    expect(obtener).toHaveBeenCalledWith({ desde: ayer, hasta: ayer, vehiculoId: null, sucursal: null });
   });
 });

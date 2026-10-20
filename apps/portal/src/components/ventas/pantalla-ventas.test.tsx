@@ -121,12 +121,13 @@ describe("PantallaVentas", () => {
     expect(buscarVentas).toHaveBeenCalledWith({ desde: hoy, hasta: hoy, sucursal: null, clienteId: null, numNota: "" });
     expect(screen.getByText("Oficina")).toBeInTheDocument();
     expect(screen.getByText("Tablet")).toBeInTheDocument();
-    expect(screen.getByText("Pendiente")).toBeInTheDocument();
+    expect(screen.getByText("Pendiente")).toHaveAttribute("data-tono", "advertencia");
+    expect(screen.getByText("04/03/2024")).toBeInTheDocument();
     expect(screen.getByText("$270.00")).toBeInTheDocument();
     expect(screen.getByText("$170.00")).toBeInTheDocument();
   });
 
-  it("aplica los filtros al pulsar Buscar, con la sucursal del selector", async () => {
+  it("aplica los filtros al pulsar Mostrar, con la sucursal del selector", async () => {
     const usuario = userEvent.setup();
     render(<PantallaVentas sucursal="TJ" />);
     await screen.findByRole("button", { name: "TJ240304AP01" });
@@ -136,7 +137,7 @@ describe("PantallaVentas", () => {
     await usuario.type(screen.getByLabelText("Cliente"), "lupi");
     await usuario.click(await screen.findByRole("button", { name: /Abarrotes Lupita · TJ/ }));
     await usuario.type(screen.getByLabelText("# de nota"), "1234");
-    await usuario.click(screen.getByRole("button", { name: "Buscar" }));
+    await usuario.click(screen.getByRole("button", { name: "Mostrar" }));
 
     await waitFor(() =>
       expect(buscarVentas).toHaveBeenLastCalledWith({
@@ -162,7 +163,7 @@ describe("PantallaVentas", () => {
     render(<PantallaVentas sucursal={null} />);
     await screen.findByRole("button", { name: "TJ240304AP01" });
     fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2024-03-01" } });
-    await usuario.click(screen.getByRole("button", { name: "Buscar" }));
+    await usuario.click(screen.getByRole("button", { name: "Mostrar" }));
     await waitFor(() => expect(buscarVentas).toHaveBeenCalledTimes(2));
 
     await usuario.click(screen.getByRole("button", { name: "TJ240304AP01" }));
@@ -199,15 +200,48 @@ describe("PantallaVentas", () => {
     );
   });
 
-  it("Eliminar confirmado vuelve a la búsqueda y la refresca", async () => {
+  it("Eliminar confirmado en la ventana vuelve a la búsqueda y la refresca", async () => {
     const usuario = userEvent.setup();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     eliminarVenta.mockResolvedValue({ id: "v1" });
     render(<PantallaVentas sucursal={null} />);
     await usuario.click(await screen.findByRole("button", { name: "TJ240304AP01" }));
     await usuario.click(await screen.findByRole("button", { name: "Eliminar" }));
+    await usuario.click(screen.getByRole("button", { name: "Eliminar venta" }));
 
-    expect(await screen.findByRole("button", { name: "Buscar" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Mostrar" })).toBeInTheDocument();
     await waitFor(() => expect(buscarVentas).toHaveBeenCalledTimes(2));
+  });
+
+  it("el encabezado explica la pantalla y lleva a Registrar venta con la sucursal", async () => {
+    render(<PantallaVentas sucursal="TJ" />);
+    expect(screen.getByRole("heading", { level: 1, name: "Ventas" })).toBeInTheDocument();
+    expect(screen.getByText(/para verla, editarla o eliminarla/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Registrar venta" })).toHaveAttribute(
+      "href",
+      "/operacion/registrar-venta?sucursal=TJ",
+    );
+    await screen.findByRole("button", { name: "TJ240304AP01" });
+  });
+
+  it("sin venta.registrar no ofrece Registrar venta", async () => {
+    vi.mocked(useAuth).mockReturnValue({
+      usuario: null,
+      cargando: false,
+      cerrarSesion: vi.fn(),
+      puede: (clave) => clave !== "venta.registrar",
+    });
+    render(<PantallaVentas sucursal={null} />);
+    await screen.findByRole("button", { name: "TJ240304AP01" });
+    expect(screen.queryByRole("link", { name: "Registrar venta" })).not.toBeInTheDocument();
+  });
+
+  it("con fechas invertidas avisa y no vuelve a buscar", async () => {
+    const usuario = userEvent.setup();
+    render(<PantallaVentas sucursal={null} />);
+    await screen.findByRole("button", { name: "TJ240304AP01" });
+    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2099-12-31" } });
+    await usuario.click(screen.getByRole("button", { name: "Mostrar" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("La fecha inicial no puede ser posterior a la final.");
+    expect(buscarVentas).toHaveBeenCalledTimes(1);
   });
 });

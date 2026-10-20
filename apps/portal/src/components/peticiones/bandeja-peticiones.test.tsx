@@ -80,11 +80,11 @@ describe("BandejaPeticiones", () => {
     render(<BandejaPeticiones status="pendiente" sucursal="TJ" />);
     expect(await screen.findByText("Era de crédito")).toBeInTheDocument();
     expect(listarPeticiones).toHaveBeenCalledWith("pendiente", "TJ");
-    expect(screen.getByText("2026-10-13 09:15")).toBeInTheDocument();
+    expect(screen.getByText("13/10/2026 09:15")).toBeInTheDocument();
     expect(screen.getByText("Ana")).toBeInTheDocument();
     expect(screen.getByText("Tacos Erick · TJ")).toBeInTheDocument();
     expect(
-      screen.getByText("Pago de $1,000.00 · Tacos Erick · 2026-10-10 · Efectivo · cobró Juan Pérez"),
+      screen.getByText("Pago de $1,000.00 · Tacos Erick · 10/10/2026 · Efectivo · cobró Juan Pérez"),
     ).toBeInTheDocument();
     expect(screen.getByText("TJ261001AP01, TJ261003AP02")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: BOTON_AUTORIZAR })).toBeInTheDocument();
@@ -105,8 +105,8 @@ describe("BandejaPeticiones", () => {
       { ...PENDIENTE, status: "denegada", resolvio: "Beto", resueltaEn: "2026-10-13 10:00", comentario: "No procede" },
     ]);
     render(<BandejaPeticiones status="historial" sucursal={null} />);
-    expect(await screen.findByText("Denegada")).toBeInTheDocument();
-    expect(screen.getByText("Beto · 2026-10-13 10:00")).toBeInTheDocument();
+    expect(await screen.findByText("Denegada")).toHaveAttribute("data-tono", "neutro");
+    expect(screen.getByText("Beto · 13/10/2026 10:00")).toBeInTheDocument();
     expect(screen.getByText("No procede")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: BOTON_AUTORIZAR })).not.toBeInTheDocument();
   });

@@ -37,6 +37,13 @@ async function buscarA708() {
   return usuario;
 }
 
+/** "Quitar de la factura" abre la ventana; "Quitar ventas" confirma. */
+async function quitarYConfirmar(usuario: ReturnType<typeof userEvent.setup>, dentroDe?: HTMLElement) {
+  const lugar = dentroDe ? within(dentroDe) : screen;
+  await usuario.click(lugar.getByRole("button", { name: "Quitar de la factura" }));
+  await usuario.click(screen.getByRole("button", { name: "Quitar ventas" }));
+}
+
 describe("BuscarFacturas", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -46,11 +53,13 @@ describe("BuscarFacturas", () => {
     buscarFacturas.mockResolvedValue([FACTURA]);
   });
 
-  it("busca por número y muestra cliente, ventas y total", async () => {
+  it("busca por número y muestra cliente, cuándo se registró, ventas y total", async () => {
     await buscarA708();
     expect(buscarFacturas).toHaveBeenCalledWith({ numero: "a708", clienteId: undefined, sucursal: null });
     const tarjeta = screen.getByRole("region", { name: "Factura A708" });
     expect(within(tarjeta).getByText(/Cobach XXI/)).toBeInTheDocument();
+    expect(within(tarjeta).getByText(/el 07\/10\/2026 10:00/)).toBeInTheDocument();
+    expect(within(tarjeta).getByText("01/04/2024")).toBeInTheDocument();
     expect(within(tarjeta).getByText("Total: $150.50")).toBeInTheDocument();
   });
 
@@ -65,24 +74,24 @@ describe("BuscarFacturas", () => {
     expect(await screen.findByText("Factura A780")).toBeInTheDocument();
   });
 
-  it("quita ventas con confirmación", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("quita ventas después de confirmar en la ventana", async () => {
     quitarDeFactura.mockResolvedValue({ factura: { ...FACTURA, ventas: [FACTURA.ventas[1]], totalCentavos: 5050 } });
     const usuario = await buscarA708();
     await usuario.click(screen.getByLabelText("Quitar TJ240401OF01"));
-    await usuario.click(screen.getByRole("button", { name: "Quitar de la factura" }));
+    await quitarYConfirmar(usuario);
     expect(quitarDeFactura).toHaveBeenCalledWith("f1", ["v1"]);
     expect(await screen.findByText("Total: $50.50")).toBeInTheDocument();
   });
 
-  it("si se quitan todas, la factura desaparece y se avisa", async () => {
-    const confirmar = vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("si se quitan todas, la ventana lo advierte, la factura desaparece y se avisa", async () => {
     quitarDeFactura.mockResolvedValue({ factura: null });
     const usuario = await buscarA708();
     await usuario.click(screen.getByLabelText("Quitar TJ240401OF01"));
     await usuario.click(screen.getByLabelText("Quitar TJ240402OF01"));
     await usuario.click(screen.getByRole("button", { name: "Quitar de la factura" }));
-    expect(confirmar).toHaveBeenCalledWith(expect.stringContaining("la factura A708 desaparece"));
+    const ventana = screen.getByRole("alertdialog", { name: "¿Quitar todas las ventas de la factura A708?" });
+    expect(ventana).toHaveTextContent("la factura A708 desaparece");
+    await usuario.click(screen.getByRole("button", { name: "Quitar ventas" }));
     expect(await screen.findByRole("status")).toHaveTextContent("La factura A708 se borró: ya no tenía ventas.");
     expect(screen.queryByText("Factura A708")).not.toBeInTheDocument();
     expect(screen.queryByText("No se encontraron facturas.")).not.toBeInTheDocument();
@@ -117,7 +126,7 @@ describe("BuscarFacturas", () => {
   it("sin el permiso muestra el texto y no pide clientes", () => {
     vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: false, cerrarSesion: vi.fn(), puede: () => false });
     render(<BuscarFacturas sucursal={null} />);
-    expect(screen.getByText("No tienes permiso para asignar facturas.")).toBeInTheDocument();
+    expect(screen.getByText("No tienes permiso para ver esta sección.")).toBeInTheDocument();
     expect(clientesLib.listarClientes).not.toHaveBeenCalled();
   });
 
@@ -142,28 +151,28 @@ describe("BuscarFacturas", () => {
     expect(buscarFacturas).toHaveBeenCalledWith({ numero: undefined, clienteId: "c1", sucursal: "TJ" });
   });
 
-  it("cancelar el confirm no quita nada", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(false);
+  it("cancelar en la ventana no quita nada", async () => {
     const usuario = await buscarA708();
     await usuario.click(screen.getByLabelText("Quitar TJ240401OF01"));
     await usuario.click(screen.getByRole("button", { name: "Quitar de la factura" }));
+    await usuario.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     expect(quitarDeFactura).not.toHaveBeenCalled();
   });
 
-  it("el confirm de quitar solo algunas lo dice", async () => {
-    const confirmar = vi.spyOn(window, "confirm").mockReturnValue(false);
+  it("la ventana de quitar solo algunas lo dice", async () => {
     const usuario = await buscarA708();
     await usuario.click(screen.getByLabelText("Quitar TJ240401OF01"));
     await usuario.click(screen.getByRole("button", { name: "Quitar de la factura" }));
-    expect(confirmar).toHaveBeenCalledWith('¿Quitar 1 venta de la factura A708? Regresan a "pendiente".');
+    const ventana = screen.getByRole("alertdialog", { name: "¿Quitar 1 venta de la factura A708?" });
+    expect(ventana).toHaveTextContent('Regresan a "pendiente".');
   });
 
   it("un error al quitar se ve dentro de la tarjeta", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     quitarDeFactura.mockRejectedValue(new ErrorApi("x", 409, "La venta ya tiene cobros."));
     const usuario = await buscarA708();
     await usuario.click(screen.getByLabelText("Quitar TJ240401OF01"));
-    await usuario.click(screen.getByRole("button", { name: "Quitar de la factura" }));
+    await quitarYConfirmar(usuario);
     const tarjeta = screen.getByRole("region", { name: "Factura A708" });
     expect(await within(tarjeta).findByRole("alert")).toHaveTextContent("La venta ya tiene cobros.");
   });
@@ -181,12 +190,11 @@ describe("BuscarFacturas", () => {
   });
 
   it("el aviso de borrada se limpia al buscar de nuevo", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     quitarDeFactura.mockResolvedValue({ factura: null });
     const usuario = await buscarA708();
     await usuario.click(screen.getByLabelText("Quitar TJ240401OF01"));
     await usuario.click(screen.getByLabelText("Quitar TJ240402OF01"));
-    await usuario.click(screen.getByRole("button", { name: "Quitar de la factura" }));
+    await quitarYConfirmar(usuario);
     await screen.findByRole("status");
     await usuario.click(screen.getByRole("button", { name: "Buscar" }));
     await screen.findByText("Factura A708");
@@ -194,7 +202,6 @@ describe("BuscarFacturas", () => {
   });
 
   it("el aviso de borrada se limpia al actuar en otra tarjeta", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     const OTRA: FacturaConVentas = {
       ...FACTURA,
       id: "f2",
@@ -207,11 +214,11 @@ describe("BuscarFacturas", () => {
     const a = screen.getByRole("region", { name: "Factura A708" });
     await usuario.click(within(a).getByLabelText("Quitar TJ240401OF01"));
     await usuario.click(within(a).getByLabelText("Quitar TJ240402OF01"));
-    await usuario.click(within(a).getByRole("button", { name: "Quitar de la factura" }));
+    await quitarYConfirmar(usuario, a);
     await screen.findByRole("status");
     const b = screen.getByRole("region", { name: "Factura B1" });
     await usuario.click(within(b).getByLabelText("Quitar TJ240409OF01"));
-    await usuario.click(within(b).getByRole("button", { name: "Quitar de la factura" }));
+    await quitarYConfirmar(usuario, b);
     await within(b).findByRole("alert");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });

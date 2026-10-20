@@ -74,13 +74,14 @@ describe("CobranzaCliente", () => {
     expect(screen.getByLabelText("Marcar TJ240402OF01")).toBeChecked();
     expect(screen.getByLabelText("Marcar TJ240401OF01")).not.toBeChecked();
     expect(screen.getByText("$50.00")).toBeInTheDocument();
-    expect(screen.getByText("Abonado")).toBeInTheDocument();
+    expect(screen.getByText("Abonado")).toHaveAttribute("data-tono", "informacion");
+    expect(screen.getByText("02/04/2024")).toBeInTheDocument();
   });
 
   it("los abonos anteriores dicen fecha, monto y método (Saldo a favor incluido)", async () => {
     renderizar();
     expect(await screen.findByText("1 abono")).toBeInTheDocument();
-    expect(screen.getByText("2024-04-03 · $30.00 · Saldo a favor")).toBeInTheDocument();
+    expect(screen.getByText("03/04/2024 · $30.00 · Saldo a favor")).toBeInTheDocument();
   });
 
   it("el saldo a favor del cliente se ve solo si hay", async () => {
@@ -96,21 +97,24 @@ describe("CobranzaCliente", () => {
     expect(await screen.findByText("Este cliente no tiene notas por cobrar.")).toBeInTheDocument();
   });
 
-  it("Marcar como cuenta perdida confirma, marca y recarga", async () => {
-    const confirmar = vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("Marcar como cuenta perdida pregunta en la ventana, marca y recarga", async () => {
     marcarCuentaPerdida.mockResolvedValue({} as VentaDetalle);
     const { usuario } = renderizar();
     await usuario.click(await screen.findByRole("button", { name: "Marcar TJ240401OF01 como cuenta perdida" }));
-    expect(confirmar).toHaveBeenCalledWith("La venta TJ240401OF01 dejará de cobrarse. ¿Continuar?");
+    expect(
+      screen.getByRole("alertdialog", { name: "¿Marcar la venta TJ240401OF01 como cuenta perdida?" }),
+    ).toHaveTextContent("La venta dejará de cobrarse.");
+    await usuario.click(screen.getByRole("button", { name: "Marcar como perdida" }));
     expect(marcarCuentaPerdida).toHaveBeenCalledWith("n1");
     expect(await screen.findByRole("status")).toHaveTextContent("La venta TJ240401OF01 quedó como cuenta perdida.");
     await waitFor(() => expect(porCobrarDeCliente).toHaveBeenCalledTimes(2));
   });
 
-  it("si no confirma, no marca nada", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(false);
+  it("si cancela en la ventana, no marca nada", async () => {
     const { usuario } = renderizar();
     await usuario.click(await screen.findByRole("button", { name: "Marcar TJ240401OF01 como cuenta perdida" }));
+    await usuario.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     expect(marcarCuentaPerdida).not.toHaveBeenCalled();
   });
 
@@ -186,9 +190,9 @@ describe("CobranzaCliente", () => {
     await within(panel).findByRole("button", { name: "Grabar cobro" });
     // Alguien más cobró parte de n1: misma selección, otro saldo.
     porCobrarDeCliente.mockResolvedValue({ ...DATOS, notas: [{ ...N1, saldoCentavos: 4000 }, N2] });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     marcarCuentaPerdida.mockResolvedValue({} as VentaDetalle);
     await usuario.click(screen.getByRole("button", { name: "Marcar TJ240402OF01 como cuenta perdida" }));
+    await usuario.click(screen.getByRole("button", { name: "Marcar como perdida" }));
     await waitFor(() => expect(porCobrarDeCliente).toHaveBeenCalledTimes(2));
     await screen.findByText("$40.00");
     expect(screen.queryByRole("button", { name: "Grabar cobro" })).not.toBeInTheDocument();
@@ -221,7 +225,7 @@ describe("CobranzaCliente", () => {
   });
 
   describe("pedir borrado de un abono (T-34)", () => {
-    const ETIQUETA = "Pedir borrado del abono del 2024-04-03 por $30.00";
+    const ETIQUETA = "Pedir borrado del abono del 03/04/2024 por $30.00";
 
     it("cada abono que es un pago tiene Pedir borrado", async () => {
       renderizar();

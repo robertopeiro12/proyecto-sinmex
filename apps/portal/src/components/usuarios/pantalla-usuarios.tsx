@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useCatalogo } from "@/components/catalogo/use-catalogo";
 import { TablaCatalogo } from "@/components/catalogo/tabla-catalogo";
+import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { ErrorApi } from "@/lib/api";
 import {
   eliminarUsuario,
@@ -18,19 +19,6 @@ import { FormularioUsuario } from "./formulario-usuario";
 
 type Edicion = "nueva" | UsuarioDetalle | null;
 
-function TarjetaMensaje({ mensaje }: { mensaje: string }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Usuarios</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-muted-foreground">{mensaje}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
 /**
  * D6 del spec: usuario.gestionar gatea tambien la LECTURA, igual que
  * PantallaPerfiles (T-08b) -- ni siquiera se intenta el GET sin el
@@ -42,10 +30,10 @@ export function PantallaUsuarios({ sucursal }: { sucursal: string | null }) {
   const { puede, cargando: cargandoSesion } = useAuth();
 
   if (cargandoSesion) {
-    return <TarjetaMensaje mensaje="Cargando…" />;
+    return <EstadoPantalla titulo="Usuarios" tipo="cargando" />;
   }
   if (!puede("usuario.gestionar")) {
-    return <TarjetaMensaje mensaje="No tienes permiso para ver esta sección." />;
+    return <EstadoPantalla titulo="Usuarios" tipo="sin-permiso" />;
   }
   return <Tabla sucursal={sucursal} />;
 }

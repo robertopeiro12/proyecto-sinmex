@@ -87,7 +87,7 @@ describe("FormularioEditarVenta", () => {
     expect(listarRepartidores).toHaveBeenCalledWith("suc-tj");
     expect(screen.queryByLabelText("Fecha")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Cliente")).not.toBeInTheDocument();
-    expect(screen.getByText("2024-03-04")).toBeInTheDocument();
+    expect(screen.getByText("04/03/2024")).toBeInTheDocument();
     expect(screen.getByText("Abarrotes Lupita · TJ")).toBeInTheDocument();
 
     expect(screen.getByLabelText("Cantidad de Horchata 1 L")).toHaveValue(24);

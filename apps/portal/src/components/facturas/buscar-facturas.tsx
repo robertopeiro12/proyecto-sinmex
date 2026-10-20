@@ -1,8 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/auth/auth-provider";
+import { Aviso } from "@/components/ui/aviso";
+import { Button } from "@/components/ui/button";
+import { Campo, Casilla, Entrada } from "@/components/ui/campo";
+import { useConfirmar } from "@/components/ui/confirmar";
+import { EstadoPantalla } from "@/components/ui/estado-pantalla";
+import { Fecha } from "@/components/ui/fecha";
+import { CajaTabla, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
 import { BuscadorCliente } from "@/components/ventas/buscador-cliente";
 import { mensajeDe } from "@/lib/api";
 import { listarClientes, type ClienteResumen } from "@/lib/clientes";
@@ -13,7 +19,7 @@ import {
   renombrarFactura,
   type FacturaConVentas,
 } from "@/lib/facturas";
-import { formatearPesos } from "@/lib/ventas";
+import { formatearFechaHora, formatearPesos, plural } from "@/lib/formato";
 
 /** Buscar facturas por número o cliente, cambiar su número o quitarle ventas (T-19, §5.2). */
 export function BuscarFacturas({ sucursal }: { sucursal: string | null }) {
@@ -41,14 +47,9 @@ export function BuscarFacturas({ sucursal }: { sucursal: string | null }) {
     };
   }, [sucursal, permitido]);
 
-  if (cargandoSesion) {
-    // Sin esto, quien si tiene el permiso ve "No tienes permiso" un instante.
-    return <p className="text-sm text-muted-foreground">Cargando…</p>;
-  }
-
-  if (!permitido) {
-    return <p className="text-sm text-muted-foreground">No tienes permiso para asignar facturas.</p>;
-  }
+  // Sin esto, quien si tiene el permiso ve "No tienes permiso" un instante.
+  if (cargandoSesion) return <EstadoPantalla tipo="cargando" />;
+  if (!permitido) return <EstadoPantalla tipo="sin-permiso" />;
 
   async function alBuscar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
@@ -76,26 +77,20 @@ export function BuscarFacturas({ sucursal }: { sucursal: string | null }) {
   }
 
   function reemplazar(id: string, nueva: FacturaConVentas | null) {
-    setFacturas((actual) =>
-      (actual ?? []).flatMap((f) => (f.id !== id ? [f] : nueva ? [nueva] : [])),
-    );
+    setFacturas((actual) => (actual ?? []).flatMap((f) => (f.id !== id ? [f] : nueva ? [nueva] : [])));
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <form onSubmit={alBuscar} className="flex flex-wrap items-end gap-3">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="buscar-numero-factura" className="text-sm font-medium">
-            Número de factura a buscar
-          </label>
-          <input
-            id="buscar-numero-factura"
+      <form onSubmit={alBuscar} className="flex flex-wrap items-end gap-3 rounded-[10px] border p-3.5">
+        <Campo id="buscar-numero-factura" etiqueta="Número de factura a buscar">
+          <Entrada
             maxLength={LARGO_MAX_NUMERO_FACTURA}
             value={numero}
             onChange={(e) => setNumero(e.target.value)}
-            className="w-48 rounded-md border px-3 py-2 text-sm"
+            className="w-48"
           />
-        </div>
+        </Campo>
         <BuscadorCliente
           clientes={clientes}
           cliente={cliente}
@@ -106,16 +101,8 @@ export function BuscarFacturas({ sucursal }: { sucursal: string | null }) {
         <Button type="submit">Buscar</Button>
       </form>
 
-      {aviso && (
-        <p role="status" className="rounded-md border p-3 text-sm">
-          {aviso}
-        </p>
-      )}
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {aviso && <Aviso tono="exito">{aviso}</Aviso>}
+      {error && <Aviso tono="error">{error}</Aviso>}
 
       {/* Tras borrar la ultima, el aviso ya explica por que no hay ninguna. */}
       {facturas !== null && facturas.length === 0 && !aviso && (
@@ -150,6 +137,7 @@ function TarjetaFactura({
   /** Avisa al padre que se hizo algo en esta tarjeta (limpia el aviso de arriba). */
   alActuar: () => void;
 }) {
+  const { confirmar, ventana } = useConfirmar();
   const [error, setError] = useState<string | null>(null);
   const [nuevoNumero, setNuevoNumero] = useState(factura.numero);
   const [marcadas, setMarcadas] = useState<Set<string>>(new Set());
@@ -172,10 +160,20 @@ function TarjetaFactura({
 
   async function quitar() {
     const todas = marcadas.size === factura.ventas.length;
-    const pregunta = todas
-      ? `¿Quitar todas las ventas? Regresan a "pendiente" y la factura ${factura.numero} desaparece.`
-      : `¿Quitar ${marcadas.size} ${marcadas.size === 1 ? "venta" : "ventas"} de la factura ${factura.numero}? Regresan a "pendiente".`;
-    if (!window.confirm(pregunta)) return;
+    const si = await confirmar(
+      todas
+        ? {
+            titulo: `¿Quitar todas las ventas de la factura ${factura.numero}?`,
+            descripcion: `Regresan a "pendiente" y la factura ${factura.numero} desaparece.`,
+            confirmar: "Quitar ventas",
+          }
+        : {
+            titulo: `¿Quitar ${plural(marcadas.size, "venta", "ventas")} de la factura ${factura.numero}?`,
+            descripcion: 'Regresan a "pendiente".',
+            confirmar: "Quitar ventas",
+          },
+    );
+    if (!si) return;
     setError(null);
     alActuar();
     setEnviando(true);
@@ -192,87 +190,87 @@ function TarjetaFactura({
   }
 
   return (
-    <section aria-label={titulo} className="flex flex-col gap-3 rounded-md border p-4">
+    <section aria-label={titulo} className="flex flex-col gap-3 rounded-[10px] border p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="font-semibold">{titulo}</h3>
         <p className="text-sm text-muted-foreground">
-          {factura.cliente} · {factura.sucursalCodigo} · registró {factura.creadoPor} el {factura.creadoEn}
+          {factura.cliente} · {factura.sucursalCodigo} · registró {factura.creadoPor} el{" "}
+          {formatearFechaHora(factura.creadoEn)}
         </p>
       </div>
 
       <div className="flex flex-wrap items-end gap-2">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor={`renombrar-${factura.id}`} className="text-sm font-medium">
-            Nuevo número de {factura.numero}
-          </label>
-          <input
-            id={`renombrar-${factura.id}`}
+        <Campo id={`renombrar-${factura.id}`} etiqueta={`Nuevo número de ${factura.numero}`}>
+          <Entrada
             maxLength={LARGO_MAX_NUMERO_FACTURA}
             value={nuevoNumero}
             onChange={(e) => setNuevoNumero(e.target.value)}
             disabled={enviando}
-            className="w-48 rounded-md border px-3 py-2 text-sm"
+            className="w-48"
           />
-        </div>
+        </Campo>
         <Button
           variant="outline"
-          onClick={guardarNumero}
+          onClick={() => void guardarNumero()}
           disabled={enviando || nuevoNumero.trim() === "" || nuevoNumero.trim() === factura.numero}
         >
           Guardar número
         </Button>
       </div>
 
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left">
-            <th className="py-1.5" />
-            <th className="py-1.5">Fecha</th>
-            <th className="py-1.5">Folio</th>
-            <th className="py-1.5"># de nota</th>
-            <th className="py-1.5 text-right">Monto</th>
-          </tr>
-        </thead>
-        <tbody>
-          {factura.ventas.map((v) => (
-            <tr key={v.id} className="border-t">
-              <td className="py-1.5">
-                <input
-                  type="checkbox"
-                  aria-label={`Quitar ${v.folio}`}
-                  checked={marcadas.has(v.id)}
-                  onChange={() =>
-                    setMarcadas((actual) => {
-                      const nueva = new Set(actual);
-                      if (nueva.has(v.id)) nueva.delete(v.id);
-                      else nueva.add(v.id);
-                      return nueva;
-                    })
-                  }
-                  disabled={enviando}
-                />
-              </td>
-              <td className="py-1.5">{v.fecha}</td>
-              <td className="py-1.5 font-mono">{v.folio}</td>
-              <td className="py-1.5">{v.numNota ?? "—"}</td>
-              <td className="py-1.5 text-right">{formatearPesos(v.montoCentavos)}</td>
+      <CajaTabla>
+        <Tabla>
+          <thead>
+            <tr>
+              <Th>
+                <span className="sr-only">Quitar</span>
+              </Th>
+              <Th>Fecha</Th>
+              <Th>Folio</Th>
+              <Th># de nota</Th>
+              <Th alinear="derecha">Monto</Th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {factura.ventas.map((v) => (
+              <tr key={v.id}>
+                <Td>
+                  <Casilla
+                    aria-label={`Quitar ${v.folio}`}
+                    checked={marcadas.has(v.id)}
+                    onChange={() =>
+                      setMarcadas((actual) => {
+                        const nueva = new Set(actual);
+                        if (nueva.has(v.id)) nueva.delete(v.id);
+                        else nueva.add(v.id);
+                        return nueva;
+                      })
+                    }
+                    disabled={enviando}
+                  />
+                </Td>
+                <Td>
+                  <Fecha valor={v.fecha} />
+                </Td>
+                <Td className="font-mono">{v.folio}</Td>
+                <Td>{v.numNota ?? "—"}</Td>
+                <TdMonto centavos={v.montoCentavos} />
+              </tr>
+            ))}
+          </tbody>
+        </Tabla>
+      </CajaTabla>
 
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {error && <Aviso tono="error">{error}</Aviso>}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="font-semibold">Total: {formatearPesos(factura.totalCentavos)}</p>
-        <Button variant="destructive" onClick={quitar} disabled={enviando || marcadas.size === 0}>
+        <Button variant="destructive" onClick={() => void quitar()} disabled={enviando || marcadas.size === 0}>
           Quitar de la factura
         </Button>
       </div>
+
+      {ventana}
     </section>
   );
 }

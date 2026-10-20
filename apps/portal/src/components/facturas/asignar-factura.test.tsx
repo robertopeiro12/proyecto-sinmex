@@ -52,6 +52,8 @@ describe("AsignarFactura", () => {
   it("lista las pendientes del cliente; la casilla N/A vuelve a pedir con incluirNA", async () => {
     const usuario = await elegirCliente();
     expect(listarPorFacturar).toHaveBeenCalledWith("c1", false);
+    expect(screen.getByText("01/04/2024")).toBeInTheDocument();
+    expect(screen.getByText("Abonado")).toHaveAttribute("data-tono", "informacion");
     await usuario.click(screen.getByLabelText("Mostrar también las N/A"));
     await waitFor(() => expect(listarPorFacturar).toHaveBeenCalledWith("c1", true));
   });
@@ -122,7 +124,7 @@ describe("AsignarFactura", () => {
   it("sin el permiso no se puede asignar", async () => {
     vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: false, cerrarSesion: vi.fn(), puede: () => false });
     render(<AsignarFactura sucursal={null} />);
-    expect(screen.getByText("No tienes permiso para asignar facturas.")).toBeInTheDocument();
+    expect(screen.getByText("No tienes permiso para ver esta sección.")).toBeInTheDocument();
   });
 
   it("sin el permiso no pide la lista de clientes", () => {

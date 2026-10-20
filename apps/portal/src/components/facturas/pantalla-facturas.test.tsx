@@ -13,6 +13,11 @@ vi.mock("@/lib/facturas", async (importOriginal) => {
 });
 vi.mock("@/components/auth/auth-provider");
 
+/** El panel que controla una pestaña (base-ui genera los ids). */
+function panelDe(pestana: HTMLElement): HTMLElement | null {
+  return document.getElementById(pestana.getAttribute("aria-controls") ?? "");
+}
+
 describe("PantallaFacturas", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -25,18 +30,19 @@ describe("PantallaFacturas", () => {
     ]);
   });
 
-  it("enlaza pestañas y paneles con ARIA y maneja tabIndex", () => {
+  it("encabezado con su explicación, y pestañas ligadas a sus paneles con ARIA", () => {
     render(<PantallaFacturas sucursal={null} />);
+    expect(screen.getByRole("heading", { level: 1, name: "Facturas" })).toBeInTheDocument();
+    expect(screen.getByText(/factura del SAT/)).toBeInTheDocument();
     const asignar = screen.getByRole("tab", { name: "Asignar" });
     const buscar = screen.getByRole("tab", { name: "Buscar y corregir" });
-    expect(asignar).toHaveAttribute("aria-controls", "panel-asignar");
-    expect(buscar).toHaveAttribute("aria-controls", "panel-buscar");
+    expect(asignar).toHaveAttribute("aria-selected", "true");
     expect(asignar).toHaveAttribute("tabindex", "0");
     expect(buscar).toHaveAttribute("tabindex", "-1");
-    expect(document.getElementById("panel-asignar")).toHaveAttribute("aria-labelledby", asignar.id);
-    expect(document.getElementById("panel-buscar")).toHaveAttribute("aria-labelledby", buscar.id);
-    expect(document.getElementById("panel-buscar")).toHaveAttribute("role", "tabpanel");
-    expect(document.getElementById("panel-buscar")).toHaveAttribute("hidden");
+    expect(panelDe(asignar)).toHaveAttribute("role", "tabpanel");
+    expect(panelDe(asignar)).toHaveAttribute("aria-labelledby", asignar.id);
+    expect(panelDe(buscar)).toHaveAttribute("aria-labelledby", buscar.id);
+    expect(panelDe(buscar)).toHaveAttribute("hidden");
   });
 
   it("las flechas cambian de pestaña", async () => {
@@ -53,13 +59,28 @@ describe("PantallaFacturas", () => {
   it("cambiar de pestaña no pierde las ventas marcadas", async () => {
     const usuario = userEvent.setup();
     render(<PantallaFacturas sucursal={null} />);
-    await usuario.type(screen.getByLabelText("Cliente"), "coba");
+    await usuario.type(screen.getAllByLabelText("Cliente")[0], "coba");
     await usuario.click(await screen.findByRole("button", { name: /Cobach XXI/ }));
     await usuario.click(await screen.findByLabelText("Marcar TJ240401OF01"));
     await waitFor(() => expect(screen.getByLabelText("Marcar TJ240401OF01")).toBeChecked());
+    const asignar = screen.getByRole("tab", { name: "Asignar" });
     await usuario.click(screen.getByRole("tab", { name: "Buscar y corregir" }));
-    expect(document.getElementById("panel-asignar")).toHaveAttribute("hidden"); // oculto, no desmontado
-    await usuario.click(screen.getByRole("tab", { name: "Asignar" }));
+    expect(panelDe(asignar)).toHaveAttribute("hidden"); // oculto, no desmontado
+    await usuario.click(asignar);
     expect(screen.getByLabelText("Marcar TJ240401OF01")).toBeChecked();
+  });
+
+  it("mientras carga la sesión dice Cargando…; sin el permiso lo dice, sin pestañas ni pedir nada", () => {
+    vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: true, cerrarSesion: vi.fn(), puede: () => false });
+    const { unmount } = render(<PantallaFacturas sucursal={null} />);
+    expect(screen.getByText("Cargando…")).toBeInTheDocument();
+    expect(screen.queryByText(/No tienes permiso/)).not.toBeInTheDocument();
+    unmount();
+
+    vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: false, cerrarSesion: vi.fn(), puede: () => false });
+    render(<PantallaFacturas sucursal={null} />);
+    expect(screen.getByText("No tienes permiso para ver esta sección.")).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(clientesLib.listarClientes).not.toHaveBeenCalled();
   });
 });

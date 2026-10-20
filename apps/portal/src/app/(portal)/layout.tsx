@@ -1,24 +1,18 @@
 import type { ReactNode } from "react";
 import { Suspense } from "react";
 import { AuthProvider } from "@/components/auth/auth-provider";
-import { BarraUsuario } from "@/components/layout/barra-usuario";
-import { SidebarNav } from "@/components/layout/sidebar-nav";
+import { MarcoPortal } from "@/components/layout/marco-portal";
 
 export default function PortalLayout({ children }: { children: ReactNode }) {
   return (
-    <AuthProvider>
-      <div className="flex min-h-screen">
-        <aside className="w-64 shrink-0 border-r bg-background p-4">
-          <div className="mb-6 px-3 text-lg font-bold">JAWA</div>
-          <Suspense fallback={null}>
-            <SidebarNav />
-          </Suspense>
-        </aside>
-        <main className="flex-1 p-8">
-          <BarraUsuario />
-          <div className="pt-6">{children}</div>
-        </main>
-      </div>
-    </AuthProvider>
+    // El AuthProvider va DENTRO del Suspense: el marco lee ?sucursal= (useSearchParams) y Next
+    // pide un Suspense para las páginas estáticas. Si el proveedor quedara afuera, al hidratar
+    // la sesión ya estaría resuelta y el cliente pintaría distinto que el servidor (error de
+    // hidratación). Así proveedor y pantallas hidratan juntos, empezando sin usuario.
+    <Suspense fallback={null}>
+      <AuthProvider>
+        <MarcoPortal>{children}</MarcoPortal>
+      </AuthProvider>
+    </Suspense>
   );
 }

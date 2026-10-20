@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
+import { formatearFecha } from "@/lib/formato";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import {
   MENSAJE_MONTO,
@@ -80,7 +82,7 @@ export function RegistrarPago({
     if (fechaPago === "") return "Elige la fecha del pago.";
     if (fechaPago > hoy) return "La fecha del pago no puede ser futura.";
     if (fechaPago < masVieja)
-      return `La fecha del pago no puede ser anterior a la nota más vieja que marcaste (${masVieja}).`;
+      return `La fecha del pago no puede ser anterior a la nota más vieja que marcaste (${formatearFecha(masVieja)}).`;
     return null;
   }
 
@@ -208,11 +210,7 @@ export function RegistrarPago({
         </Button>
       </div>
 
-      {avisoLocal && (
-        <p role="alert" className="text-sm text-destructive">
-          {avisoLocal}
-        </p>
-      )}
+      {avisoLocal && <Aviso tono="error">{avisoLocal}</Aviso>}
 
       {plan && (
         <>
@@ -225,11 +223,7 @@ export function RegistrarPago({
         </>
       )}
 
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {error && <Aviso tono="error">{error}</Aviso>}
     </section>
   );
 }

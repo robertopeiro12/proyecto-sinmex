@@ -1,5 +1,10 @@
 import { apiFetch } from "./api";
 import type { DefinicionExcel, FilaExcel } from "./excel/definicion";
+import { formatearFecha } from "./formato";
+
+// Viven en lib/formato.ts y lib/fechas.ts (UI Etapa 1); se re-exportan para no romper importaciones.
+export { formatearFecha };
+export { primerDiaDelMes } from "./fechas";
 
 /*
  * Reporte de Kilometraje (T-50). Misma forma que
@@ -69,15 +74,6 @@ export function formatearSalto(decimas: number | null): string {
   return decimas > 0 ? `+${formatearKm(decimas)}` : formatearKm(decimas);
 }
 
-/** `AAAA-MM-DD` → `dd/mm/aaaa`, sin pasar por `Date` (que correria el dia). */
-export function formatearFecha(iso: string): string {
-  const [anio, mes, dia] = iso.split("-");
-  return `${dia}/${mes}/${anio}`;
-}
-
-export function primerDiaDelMes(hoy: string): string {
-  return `${hoy.slice(0, 8)}01`;
-}
 
 /** El `title` del salto en pantalla. */
 export function explicarSalto(j: JornadaEnReporte): string | undefined {

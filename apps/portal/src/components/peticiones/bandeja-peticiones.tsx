@@ -1,9 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
+import { Aviso } from "@/components/ui/aviso";
+import { Button } from "@/components/ui/button";
+import { AreaTexto, Campo } from "@/components/ui/campo";
+import { Etiqueta, type TonoEtiqueta } from "@/components/ui/etiqueta";
+import { Fecha } from "@/components/ui/fecha";
+import { CajaTabla, Tabla, Td, Th } from "@/components/ui/tabla";
 import { mensajeDe } from "@/lib/api";
+import { formatearFechaHora } from "@/lib/formato";
 import {
   ETIQUETA_STATUS_PETICION,
   LARGO_MAX_TEXTO,
@@ -16,6 +22,7 @@ import {
   textoDenegada,
   vistaPreviaDePeticion,
   type PeticionEnBandeja,
+  type StatusPeticion,
   type VistaBorrado,
 } from "@/lib/peticiones";
 import { VistaBorradoPago } from "./vista-borrado";
@@ -24,6 +31,13 @@ type Accion = { tipo: "autorizar" | "denegar"; peticion: PeticionEnBandeja };
 
 /** Cómo termina una acción: un aviso (salió bien) o una alerta (409: la pantalla quedó vieja). */
 type Fin = { aviso: string } | { alerta: string };
+
+/** Autorizada = el pago se borró (información); denegada = no pasó nada (gris). */
+const TONO_PETICION: Record<StatusPeticion, TonoEtiqueta> = {
+  pendiente: "advertencia",
+  autorizada: "informacion",
+  denegada: "neutro",
+};
 
 /**
  * La bandeja de peticiones (T-34, §3.2). La lista la arma el servidor con el
@@ -77,21 +91,9 @@ export function BandejaPeticiones({
 
   return (
     <div className="flex flex-col gap-4">
-      {fin && "aviso" in fin && (
-        <p role="status" className="rounded-md border p-3 text-sm">
-          {fin.aviso}
-        </p>
-      )}
-      {fin && "alerta" in fin && (
-        <p role="alert" className="text-sm text-destructive">
-          {fin.alerta}
-        </p>
-      )}
-      {errorCarga && (
-        <p role="alert" className="text-sm text-destructive">
-          {errorCarga}
-        </p>
-      )}
+      {fin && "aviso" in fin && <Aviso tono="exito">{fin.aviso}</Aviso>}
+      {fin && "alerta" in fin && <Aviso tono="error">{fin.alerta}</Aviso>}
+      {errorCarga && <Aviso tono="error">{errorCarga}</Aviso>}
       {peticiones === null && errorCarga === null && <p className="text-sm text-muted-foreground">Cargando…</p>}
 
       {peticiones &&
@@ -100,70 +102,78 @@ export function BandejaPeticiones({
             {pendientes ? "No hay peticiones pendientes." : "No hay peticiones resueltas."}
           </p>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left">
-                <th className="py-1.5">Pedida</th>
-                <th className="py-1.5">Pidió</th>
-                <th className="py-1.5">Cliente</th>
-                <th className="py-1.5">Pago</th>
-                <th className="py-1.5">Notas</th>
-                <th className="py-1.5">Motivo</th>
-                {pendientes ? (
-                  <th className="py-1.5" />
-                ) : (
-                  <>
-                    <th className="py-1.5">Resultado</th>
-                    <th className="py-1.5">Resolvió</th>
-                    <th className="py-1.5">Comentario</th>
-                  </>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {peticiones.map((p) => (
-                <tr key={p.id} className="border-t align-top">
-                  <td className="py-1.5">{p.creadaEn}</td>
-                  <td className="py-1.5">{p.solicito}</td>
-                  <td className="py-1.5">{`${p.cobro.cliente} · ${p.sucursalCodigo}`}</td>
-                  <td className="py-1.5">{describirPago(p.cobro)}</td>
-                  <td className="py-1.5 font-mono">{p.cobro.folios.join(", ") || "—"}</td>
-                  <td className="py-1.5">{p.motivo}</td>
+          <CajaTabla>
+            <Tabla className="min-w-[980px]">
+              <thead>
+                <tr>
+                  <Th>Pedida</Th>
+                  <Th>Pidió</Th>
+                  <Th>Cliente</Th>
+                  <Th>Pago</Th>
+                  <Th>Notas</Th>
+                  <Th>Motivo</Th>
                   {pendientes ? (
-                    <td className="py-1.5 text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          aria-label={`Autorizar petición de ${p.cobro.cliente}`}
-                          disabled={accion !== null}
-                          onClick={() => abrir("autorizar", p)}
-                        >
-                          Autorizar
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          aria-label={`Denegar petición de ${p.cobro.cliente}`}
-                          disabled={accion !== null}
-                          onClick={() => abrir("denegar", p)}
-                        >
-                          Denegar
-                        </Button>
-                      </div>
-                    </td>
+                    <Th>
+                      <span className="sr-only">Acciones</span>
+                    </Th>
                   ) : (
                     <>
-                      <td className="py-1.5">{ETIQUETA_STATUS_PETICION[p.status]}</td>
-                      <td className="py-1.5">{`${p.resolvio ?? "—"} · ${p.resueltaEn ?? "—"}`}</td>
-                      <td className="py-1.5">{p.comentario ?? "—"}</td>
+                      <Th>Resultado</Th>
+                      <Th>Resolvió</Th>
+                      <Th>Comentario</Th>
                     </>
                   )}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {peticiones.map((p) => (
+                  <tr key={p.id} className="align-top">
+                    <Td>
+                      <Fecha valor={p.creadaEn} conHora />
+                    </Td>
+                    <Td>{p.solicito}</Td>
+                    <Td>{`${p.cobro.cliente} · ${p.sucursalCodigo}`}</Td>
+                    <Td>{describirPago(p.cobro)}</Td>
+                    <Td className="font-mono">{p.cobro.folios.join(", ") || "—"}</Td>
+                    <Td>{p.motivo}</Td>
+                    {pendientes ? (
+                      <Td alinear="derecha">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            aria-label={`Autorizar petición de ${p.cobro.cliente}`}
+                            disabled={accion !== null}
+                            onClick={() => abrir("autorizar", p)}
+                          >
+                            Autorizar
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            aria-label={`Denegar petición de ${p.cobro.cliente}`}
+                            disabled={accion !== null}
+                            onClick={() => abrir("denegar", p)}
+                          >
+                            Denegar
+                          </Button>
+                        </div>
+                      </Td>
+                    ) : (
+                      <>
+                        <Td>
+                          <Etiqueta tono={TONO_PETICION[p.status]}>{ETIQUETA_STATUS_PETICION[p.status]}</Etiqueta>
+                        </Td>
+                        <Td>{`${p.resolvio ?? "—"} · ${p.resueltaEn ? formatearFechaHora(p.resueltaEn) : "—"}`}</Td>
+                        <Td>{p.comentario ?? "—"}</Td>
+                      </>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </Tabla>
+          </CajaTabla>
         ))}
 
       {accion?.tipo === "autorizar" && (
@@ -242,21 +252,13 @@ function AutorizarPeticion({
   }
 
   return (
-    <section aria-label="Autorizar petición" className="flex flex-col gap-3 rounded-md border p-3">
+    <section aria-label="Autorizar petición" className="flex flex-col gap-3 rounded-[10px] border p-4">
       <h3 className="text-sm font-semibold">Autorizar: se borra el pago completo</h3>
       <p className="text-sm">{`Motivo: ${peticion.motivo}`}</p>
-      {errorCarga && (
-        <p role="alert" className="text-sm text-destructive">
-          {errorCarga}
-        </p>
-      )}
+      {errorCarga && <Aviso tono="error">{errorCarga}</Aviso>}
       {vista === null && errorCarga === null && <p className="text-sm text-muted-foreground">Cargando…</p>}
       {vista && <VistaBorradoPago vista={vista} />}
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {error && <Aviso tono="error">{error}</Aviso>}
       <div className="flex gap-2">
         <Button
           type="button"
@@ -305,23 +307,12 @@ function DenegarPeticion({
   }
 
   return (
-    <section aria-label="Denegar petición" className="flex flex-col gap-3 rounded-md border p-3">
+    <section aria-label="Denegar petición" className="flex flex-col gap-3 rounded-[10px] border p-4">
       <h3 className="text-sm font-semibold">{`Denegar: ${describirPago(peticion.cobro)}`}</h3>
-      <label className="flex flex-col gap-1 text-sm">
-        Comentario (opcional)
-        <textarea
-          className="rounded-md border p-2"
-          rows={2}
-          maxLength={LARGO_MAX_TEXTO}
-          value={comentario}
-          onChange={(e) => setComentario(e.target.value)}
-        />
-      </label>
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      <Campo id={`denegar-comentario-${peticion.id}`} etiqueta="Comentario" opcional>
+        <AreaTexto maxLength={LARGO_MAX_TEXTO} value={comentario} onChange={(e) => setComentario(e.target.value)} />
+      </Campo>
+      {error && <Aviso tono="error">{error}</Aviso>}
       <div className="flex gap-2">
         <Button type="button" onClick={() => void confirmar()} disabled={enviando}>
           Confirmar denegación

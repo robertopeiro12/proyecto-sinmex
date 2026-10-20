@@ -98,7 +98,7 @@ describe("PantallaPromociones", () => {
     mockAuth(() => true, GENERAL);
     render(<PantallaPromociones sucursal={null} />);
 
-    expect(screen.getByText(/Elige una sucursal en el selector de arriba/)).toBeInTheDocument();
+    expect(screen.getByText("Elige una sucursal en el menú lateral para ver esta sección.")).toBeInTheDocument();
     expect(promocionesLib.listarPromociones).not.toHaveBeenCalled();
   });
 
