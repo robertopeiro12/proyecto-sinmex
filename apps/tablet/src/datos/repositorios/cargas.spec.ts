@@ -167,6 +167,16 @@ describe('el inventario del dia', () => {
     expect(cargas.porId('carga-1')?.estado).toBe('aceptada');
     expect(catalogos.version()).toBe(antes + 1);
   });
+
+  it('si un oyente del refresco truena, la respuesta ya escrita no se reporta como fallida', () => {
+    const { catalogos, cargas, deps } = montar();
+    aplicarSnapshotCargas(deps.bd, [fila()], MOMENTO);
+    catalogos.suscribir(() => {
+      throw new Error('una pantalla abierta truena al refrescar');
+    });
+    expect(() => cargas.aplicarRespuesta(fila({ estado: 'aceptada' }))).not.toThrow();
+    expect(cargas.porId('carga-1')?.estado).toBe('aceptada');
+  });
 });
 
 describe('vendedor.control_inventario (D7)', () => {

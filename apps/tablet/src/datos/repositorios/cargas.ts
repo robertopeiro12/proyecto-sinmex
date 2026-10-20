@@ -276,7 +276,13 @@ export function crearRepositorioCargas(
      */
     aplicarRespuesta(fila: FilaCargaPull): void {
       enTransaccion(bd, () => aplicarSnapshotCargas(bd, [fila], reloj.ahora()));
-      catalogos.publicarCambio();
+      // Como en `ventas.registrar`: un oyente que truena no convierte en fallo
+      // una respuesta que ya quedo escrita (y que el servidor ya tiene).
+      try {
+        catalogos.publicarCambio();
+      } catch {
+        // Solo se pierde el refresco de pantallas abiertas; la carga esta firme.
+      }
     },
   };
 }

@@ -377,7 +377,10 @@ describe('motor de sincronizacion', () => {
           }),
       });
 
-      await expect(motor.sincronizar()).rejects.toThrow();
+      // `toMatchObject` y no `toThrow()`: el `SqliteError` de better-sqlite3
+      // puede heredar del `Error` de otro realm de Jest (segun que suite corrio
+      // antes en el mismo proceso) y `toThrow()` lo reporta como "did not throw".
+      await expect(motor.sincronizar()).rejects.toMatchObject({ code: 'SQLITE_CONSTRAINT_FOREIGNKEY' });
       expect(sync.leerCursor()).toBeNull();
     });
 
