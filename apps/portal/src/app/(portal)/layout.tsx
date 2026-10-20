@@ -1,24 +1,15 @@
 import type { ReactNode } from "react";
 import { Suspense } from "react";
 import { AuthProvider } from "@/components/auth/auth-provider";
-import { BarraUsuario } from "@/components/layout/barra-usuario";
-import { SidebarNav } from "@/components/layout/sidebar-nav";
+import { MarcoPortal } from "@/components/layout/marco-portal";
 
 export default function PortalLayout({ children }: { children: ReactNode }) {
   return (
     <AuthProvider>
-      <div className="flex min-h-screen">
-        <aside className="w-64 shrink-0 border-r bg-background p-4">
-          <div className="mb-6 px-3 text-lg font-bold">JAWA</div>
-          <Suspense fallback={null}>
-            <SidebarNav />
-          </Suspense>
-        </aside>
-        <main className="flex-1 p-8">
-          <BarraUsuario />
-          <div className="pt-6">{children}</div>
-        </main>
-      </div>
+      {/* El marco lee ?sucursal= (useSearchParams): Next pide un Suspense para las páginas estáticas ("Próximamente"). */}
+      <Suspense fallback={null}>
+        <MarcoPortal>{children}</MarcoPortal>
+      </Suspense>
     </AuthProvider>
   );
 }

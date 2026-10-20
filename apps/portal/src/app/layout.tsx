@@ -20,8 +20,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Sin `title`: lo pone cada pantalla del portal ("Ventas | JAWA Tijuana", MarcoPortal) y el
+// login trae el suyo. Dos <title> en el <head> harían que el navegador mostrara el primero.
 export const metadata: Metadata = {
-  title: "JAWA · Portal",
   description: "Portal de administración de JAWA",
 };
 

@@ -37,7 +37,7 @@ export function PantallaPrecios({ sucursal }: { sucursal: string | null }) {
   }, []);
 
   // Atado: siempre la suya, sin importar el filtro global (el selector ni
-  // siquiera le pinta un <select>, ver selector-sucursal.tsx). General: la
+  // siquiera le pinta una lista, ver use-sucursal-actual.ts). General: la
   // que elija el selector, o ninguna hasta que elija -- la matriz pinta UNA
   // sucursal a la vez (D7 del spec), a diferencia de Vehiculos.
   const sucursalActual =
