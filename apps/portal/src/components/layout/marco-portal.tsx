@@ -37,12 +37,17 @@ function BotonMenu({ etiqueta, onClick }: { etiqueta: string; onClick: () => voi
 export function MarcoPortal({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const params = useSearchParams();
-  const { usuario, cerrarSesion } = useAuth();
-  const sucursal = useSucursalActual();
+  const { usuario: usuarioSesion, cerrarSesion } = useAuth();
+  // AuthProvider queda fuera del Suspense: al hidratar, la sesión puede estar ya resuelta
+  // aunque el servidor pintó el marco sin usuario. Hasta montar se muestra sin usuario.
+  const [montado, setMontado] = useState(false);
+  const usuario = montado ? usuarioSesion : null;
+  const sucursal = useSucursalActual(usuario);
   // En el servidor no hay localStorage: se arranca abierto y se ajusta al montar.
   const [escondido, setEscondido] = useState(false);
 
   useEffect(() => {
+    setMontado(true);
     setEscondido(leerLocal(CLAVE_MENU_ESCONDIDO) === "1");
   }, []);
 
