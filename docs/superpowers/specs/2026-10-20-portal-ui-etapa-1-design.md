@@ -24,12 +24,35 @@ seguir pasando (solo se ajustan donde cambie un texto o un rol a propósito).
 | Tema | Decisión |
 |---|---|
 | Objetivo | Parejo + fácil de usar, conservando el estilo actual (blanco y negro, limpio). |
-| Color | Solo donde informa algo: verde = éxito o pagado, ámbar = aviso o pendiente, rojo = error, vencido o eliminar. Sin color de marca por ahora. |
+| Color | Solo donde informa algo: verde = éxito o pagado, ámbar = aviso o pendiente, rojo = error, vencido o eliminar. **Más un color por sucursal** (§2.1), la única parte llamativa. Roberto dio luz verde el 2026-10-20 para ajustar el diseño siguiendo la guía de diseño. |
 | Enfoque | **Por etapas**, PRs chicos. Esta es la Etapa 1. |
 | Menú lateral | Fijo, con su propio desplazamiento; secciones que se abren y cierran; botón ☰ que lo esconde completo. |
 | Sucursal y usuario | **Todo en el menú lateral**: la sucursal en grande arriba, el usuario abajo con "Cerrar sesión" en un menú. Se quita la barra de arriba. |
 | Opción de todas | Se llama **"Todas las sucursales"**. |
 | Pantallas de Mario | Recarga y Gastos **no se tocan** en esta etapa; nota en el PR. |
+
+## 2.1 Identidad visual
+
+Maqueta aprobada como referencia: https://claude.ai/artifact/PTs75Sx63RnyF5t8PwybbR (Ventas a 1366 px; botones para
+cambiar de sucursal, abrir la lista, la ventana de confirmar y el menú escondido).
+
+- **Una sola cosa llamativa: el color de la sucursal.** Llena el bloque de sucursal del menú, la pastilla del menú
+  escondido, la marca de la opción activa y una línea de 3 px arriba del contenido. Sirve para saber dónde estás sin leer.
+  - Tijuana `TJ` → azul pacífico `#1d5b79`; Mexicali `MX` → morado jamaica `#6b2d5c`; Todas las sucursales → tinta `#18211d`.
+  - Una sucursal sin color asignado (por ejemplo Ensenada el próximo año) usa la tinta hasta que se le asigne uno. El mapa
+    vive en un solo archivo (`lib/sucursal-color.ts`).
+- **Base tranquila:** contenido en blanco; menú en gris muy claro con un toque verde (`#f2f4f1`); líneas `#dde2dd`; texto
+  secundario `#5f6b65`; botón principal en tinta `#18211d`.
+- **Colores que informan:** éxito `#1f7a4d` sobre `#e6f3ec`; aviso `#8a4f06` sobre `#fdf3e1`; error `#b42318` sobre
+  `#fdecea`; información `#3d5566` sobre `#eaf0f4`. Con su versión oscura, como la maqueta.
+- **Letra:** **Public Sans** para todo el texto (legible, números de ancho fijo para columnas de montos) y **Bricolage
+  Grotesque** solo para el título de la pantalla y el nombre de la sucursal. Se cargan con `next/font/google` y reemplazan a
+  Geist; la mono se queda solo donde ya se usa.
+- **Lo que se evita a propósito:** etiquetas en mayúsculas, sombras en todas las cajas, degradados de adorno. Sombra solo en
+  lo que flota (lista de sucursales, ventana de confirmar). Bordes redondeados por jerarquía: 10 px cajas, 7 px botones y
+  campos, pastillas redondas.
+- **Movimiento:** solo cuando el usuario actúa (abrir una sección, la ventana de confirmar); respeta
+  `prefers-reduced-motion`.
 
 ## 3. Menú lateral (el marco de todas las pantallas)
 
@@ -39,7 +62,7 @@ seguir pasando (solo se ajustan donde cambie un texto o un rol a propósito).
 ┌──────────────────────┐
 │ JAWA             ☰   │  marca + botón para esconder el menú
 │ ┌──────────────────┐ │
-│ │ SUCURSAL         │ │  bloque de sucursal (§3.2)
+│ │ Sucursal         │ │  bloque de sucursal (§3.2)
 │ │ Tijuana        ▾ │ │
 │ └──────────────────┘ │
 │ ▾ Operación          │  secciones que se abren y cierran (§3.3)
@@ -60,12 +83,12 @@ seguir pasando (solo se ajustan donde cambie un texto o un rol a propósito).
 
 ### 3.2 Sucursal
 
-- Bloque con la etiqueta pequeña "SUCURSAL" y el nombre en grande: **Tijuana**, **Mexicali** o **Todas las sucursales**.
+- Bloque en el color de la sucursal, con la etiqueta pequeña "Sucursal" y el nombre en grande: **Tijuana**, **Mexicali** o **Todas las sucursales**.
 - **Usuario que puede elegir** (General): el bloque es un botón que abre la lista (`Menu` de base-ui) con "Todas las
   sucursales" y cada sucursal activa; la elegida lleva palomita. Funciona igual que hoy por dentro (`?sucursal=` en la URL,
   sin parámetro = todas).
 - **Usuario atado a una sucursal:** el mismo bloque, sin flecha y sin lista: solo dice su sucursal.
-- La pestaña del navegador dice **"JAWA Tijuana · Ventas"** (o "JAWA · Ventas" con todas), para distinguir pestañas abiertas.
+- La pestaña del navegador dice **"Ventas | JAWA Tijuana"** (o "Ventas | JAWA" con todas), para distinguir pestañas abiertas.
 
 ### 3.3 Secciones que se abren y cierran
 
@@ -85,8 +108,8 @@ seguir pasando (solo se ajustan donde cambie un texto o un rol a propósito).
 
 ### 3.5 Menú escondido (☰)
 
-- El botón ☰ esconde el menú completo y deja una **franja delgada** (unos 56 px) con: el botón ☰ para volver a abrirlo, las
-  siglas de la sucursal en una pastilla (**TJ**, **MX** o **Todas**) y las iniciales del usuario. Así, aun escondido, se
+- El botón ☰ esconde el menú completo y deja una **franja delgada** (unos 60 px) con: el botón ☰ para volver a abrirlo, las
+  siglas de la sucursal en una pastilla de su color (**TJ**, **MX** o **Todas**) y las iniciales del usuario. Así, aun escondido, se
   sabe en qué sucursal se está.
 - El estado (abierto/escondido) se recuerda en esa computadora (`localStorage`, con `try/catch`).
 
