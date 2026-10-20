@@ -1,12 +1,15 @@
 import {
+  aCargaPull,
   aCargaRejilla,
   armarRejilla,
+  decidirRespuesta,
   mililitros,
   MOTIVO_CARGA_ACEPTADA,
   MOTIVO_CARGA_CAMBIO,
   MOTIVO_CARGA_DE_OTRO_DIA,
   motivoNoEditable,
   normalizarLineas,
+  normalizarRespuesta,
   ordenarPresentaciones,
   validarLineas,
   type FilaCarga,
@@ -193,5 +196,106 @@ describe('armarRejilla (GET /cargas)', () => {
       respondidaEn: '2026-10-22T15:00:00.000Z',
       lineas: [{ presentacionId: A, piezas: 24 }],
     });
+  });
+});
+
+describe('normalizarRespuesta (POST /sync/cargas/:id/respuesta)', () => {
+  it('aceptar no lleva motivo: ausente o null pasa, con texto es 400', () => {
+    expect(normalizarRespuesta('aceptar', undefined)).toEqual({
+      ok: true,
+      respuesta: { estado: 'aceptada', motivo: null },
+    });
+    expect(normalizarRespuesta('aceptar', null)).toEqual({
+      ok: true,
+      respuesta: { estado: 'aceptada', motivo: null },
+    });
+    expect(normalizarRespuesta('aceptar', 'todo bien')).toEqual({
+      ok: false,
+      mensaje: 'Aceptar una carga no lleva motivo.',
+    });
+  });
+
+  it('rechazar exige motivo de 1 a 300 caracteres, recortado', () => {
+    expect(normalizarRespuesta('rechazar', '  Faltan 2 cajas  ')).toEqual({
+      ok: true,
+      respuesta: { estado: 'rechazada', motivo: 'Faltan 2 cajas' },
+    });
+    expect(normalizarRespuesta('rechazar', 'x'.repeat(300)).ok).toBe(true);
+    for (const motivo of [undefined, null, '', '   ', 'x'.repeat(301)]) {
+      expect(normalizarRespuesta('rechazar', motivo)).toEqual({
+        ok: false,
+        mensaje:
+          'Para rechazar la carga escribe el motivo (hasta 300 caracteres).',
+      });
+    }
+  });
+});
+
+describe('decidirRespuesta (D6, Review Focus 2 y 3)', () => {
+  const aceptar = { estado: 'aceptada', motivo: null } as const;
+  const rechazar = { estado: 'rechazada', motivo: 'Faltan cajas' } as const;
+
+  it('pendiente con su version: se escribe', () => {
+    expect(decidirRespuesta(fila(), aceptar, 1)).toBe('escribir');
+    expect(decidirRespuesta(fila(), rechazar, 1)).toBe('escribir');
+  });
+
+  it('la misma respuesta otra vez (reintento de red, doble toque): repetida', () => {
+    expect(decidirRespuesta(fila({ estado: 'aceptada' }), aceptar, 1)).toBe(
+      'repetida',
+    );
+    expect(
+      decidirRespuesta(
+        fila({ estado: 'rechazada', motivoRechazo: 'Faltan cajas' }),
+        rechazar,
+        1,
+      ),
+    ).toBe('repetida');
+  });
+
+  it('otra version, u otra respuesta ya escrita: conflicto (409)', () => {
+    expect(decidirRespuesta(fila({ version: 2 }), aceptar, 1)).toBe(
+      'conflicto',
+    );
+    expect(
+      decidirRespuesta(
+        fila({ estado: 'rechazada', motivoRechazo: 'Faltan cajas' }),
+        aceptar,
+        1,
+      ),
+    ).toBe('conflicto');
+    expect(
+      decidirRespuesta(
+        fila({ estado: 'rechazada', motivoRechazo: 'Otra cosa' }),
+        rechazar,
+        1,
+      ),
+    ).toBe('conflicto');
+  });
+});
+
+describe('aCargaPull (colección `cargas` del pull)', () => {
+  it('snake_case, fecha tal cual, respondida en ISO y la baja como activo 0', () => {
+    expect(
+      aCargaPull(
+        fila({
+          estado: 'aceptada',
+          respondidaEn: new Date('2026-10-22T15:00:00.000Z'),
+          eliminada: true,
+        }),
+      ),
+    ).toEqual({
+      id: 'c-1',
+      vendedor_id: 'v-1',
+      fecha: '2026-10-22',
+      numero: 1,
+      estado: 'aceptada',
+      motivo_rechazo: null,
+      version: 1,
+      respondida_en: '2026-10-22T15:00:00.000Z',
+      activo: 0,
+      lineas: [{ presentacion_id: A, piezas: 24 }],
+    });
+    expect(aCargaPull(fila()).activo).toBe(1);
   });
 });

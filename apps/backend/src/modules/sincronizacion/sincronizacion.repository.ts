@@ -116,17 +116,22 @@ export class SincronizacionRepository {
   ): Promise<VendedorPull[]> {
     let q = this.db
       .selectFrom('vendedor')
+      .innerJoin('sucursal', 'sucursal.id', 'vendedor.sucursal_id')
       .select([
-        'id',
-        'login',
-        'nombre',
-        'sucursal_id',
-        'activo',
-        'folio_segmento',
-        'deleted_at',
+        'vendedor.id as id',
+        'vendedor.login as login',
+        'vendedor.nombre as nombre',
+        'vendedor.sucursal_id as sucursal_id',
+        'vendedor.activo as activo',
+        'vendedor.folio_segmento as folio_segmento',
+        'vendedor.deleted_at as deleted_at',
+        // T-27 (D7): la casilla es de la sucursal; cambiarla toca
+        // `vendedor.updated_at` (SucursalesRepository.actualizar), asi que el
+        // corte incremental de abajo la trae.
+        'sucursal.control_inventario as control_inventario',
       ])
-      .where('id', '=', vendedorId);
-    if (desde) q = q.where('updated_at', '>', desde);
+      .where('vendedor.id', '=', vendedorId);
+    if (desde) q = q.where('vendedor.updated_at', '>', desde);
 
     return (await q.execute()).map((f) => ({
       id: f.id,
@@ -136,6 +141,7 @@ export class SincronizacionRepository {
       // Lo asigna el servidor porque la tablet no puede: solo baja su propia
       // ficha, asi que no ve si otro vendedor comparte sus iniciales (T-14).
       folio_segmento: f.folio_segmento,
+      control_inventario: f.control_inventario,
       activo: bandera(f.activo, f.deleted_at),
     }));
   }

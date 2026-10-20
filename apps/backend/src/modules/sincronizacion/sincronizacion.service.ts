@@ -17,6 +17,7 @@ import {
 } from '../sucursales/alcance-sucursal';
 import { GastoRechazado } from '../compras-egresos/gasto-rechazado';
 import { GastosService } from '../compras-egresos/gastos.service';
+import { CargasService } from '../produccion/cargas.service';
 import { JornadaRechazada } from '../rutas/jornada-rechazada';
 import { JornadasService } from '../rutas/jornadas.service';
 import { RutaRechazada } from '../rutas/ruta-rechazada';
@@ -100,6 +101,8 @@ export class SincronizacionService {
     private readonly ubicacion: UbicacionClientesService,
     // T-30/T-31: Compras y Egresos es la duena del gasto de la ruta.
     private readonly gastos: GastosService,
+    // T-27: Produccion es la duena de la carga del vendedor (pull y respuesta).
+    private readonly cargas: CargasService,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -129,6 +132,7 @@ export class SincronizacionService {
       notasPendientes,
       rutas,
       promociones,
+      cargas,
     ] = await Promise.all([
       this.repo.sucursales(vendedor.sucursal_id, desde),
       this.repo.vendedores(vendedor.id, desde),
@@ -147,6 +151,8 @@ export class SincronizacionService {
       this.repo.rutas(vendedor.id, desde),
       // T-74: por SUCURSAL, como los clientes.
       this.repo.promociones(vendedor.sucursal_id, desde),
+      // T-27: las cargas del vendedor. Por VENDEDOR, como la ruta.
+      this.cargas.paraPull(vendedor.id, desde),
     ]);
 
     // Los precios van completos o no van: ver `RespuestaPull.catalogos.precios`.
@@ -192,6 +198,7 @@ export class SincronizacionService {
       notas_pendientes: notasPendientes,
       rutas,
       promociones,
+      cargas,
     };
   }
 

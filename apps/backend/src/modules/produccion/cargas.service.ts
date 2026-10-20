@@ -8,19 +8,25 @@ import {
 import type { Transaction } from 'kysely';
 import type { DB } from '../../database/schema';
 import { esViolacionUnicidad } from '../../database/errores-postgres';
+import type { CargaPull } from '../sincronizacion/contrato';
 import { resolverAlcance } from '../sucursales/alcance-sucursal';
 import type {
   ConsultaCargasDto,
   CrearCargaDto,
   EditarCargaDto,
+  RespuestaCargaDto,
   VersionCargaDto,
 } from './dto/cargas.dto';
 import { CargasRepository, type VendedorParaCarga } from './cargas.repository';
 import {
+  aCargaPull,
   aCargaRejilla,
   armarRejilla,
+  decidirRespuesta,
+  MOTIVO_RESPUESTA_CONFLICTO,
   motivoNoEditable,
   normalizarLineas,
+  normalizarRespuesta,
   validarLineas,
   type CargaRejilla,
   type FilaCarga,
@@ -160,6 +166,51 @@ export class CargasService {
       await this.repo.darDeBaja(carga.id, trx);
     });
     return { id };
+  }
+
+  /** La coleccion `cargas` del pull para el vendedor del token (T-27). */
+  async paraPull(vendedorId: string, desde: Date | null): Promise<CargaPull[]> {
+    return (await this.repo.leerCargas({ vendedorId, desde })).map(aCargaPull);
+  }
+
+  /**
+   * `POST /sync/cargas/:id/respuesta` (D2, D6): aceptar o rechazar la carga
+   * completa, con red y en el momento.
+   *
+   * La forma se valida primero (400). Despues, en una transaccion con la carga
+   * bloqueada: de otro vendedor, inexistente o eliminada → 404 (no confirma que
+   * exista); la misma respuesta otra vez → 200 sin reescribir (idempotente);
+   * otra version o ya respondida → 409 con la carga actual; si no, se escribe.
+   */
+  async responder(
+    vendedorId: string,
+    cargaId: string,
+    dto: RespuestaCargaDto,
+  ): Promise<CargaPull> {
+    const forma = normalizarRespuesta(dto.accion, dto.motivo);
+    if (!forma.ok) throw new BadRequestException(forma.mensaje);
+    if (!(await this.repo.vendedorActivo(vendedorId))) {
+      throw new UnauthorizedException('Sesion invalida.');
+    }
+
+    return this.repo.enTransaccion(async (trx) => {
+      const carga = await this.repo.bloquearCarga(cargaId, trx);
+      if (!carga || carga.vendedorId !== vendedorId) {
+        throw new NotFoundException(MOTIVO_CARGA_INEXISTENTE);
+      }
+      const decision = decidirRespuesta(carga, forma.respuesta, dto.version);
+      if (decision === 'conflicto') {
+        throw new ConflictException({
+          message: MOTIVO_RESPUESTA_CONFLICTO,
+          carga: aCargaPull(carga),
+        });
+      }
+      if (decision === 'escribir') {
+        await this.repo.escribirRespuesta(carga.id, forma.respuesta, trx);
+      }
+      const [actual] = await this.repo.leerCargas({ id: carga.id }, trx);
+      return aCargaPull(actual);
+    });
   }
 
   private exigirEditable(carga: FilaCarga, hoy: string, version: number): void {

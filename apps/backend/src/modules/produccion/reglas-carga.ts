@@ -1,3 +1,5 @@
+import type { CargaPull } from '../sincronizacion/contrato';
+
 /**
  * Reglas de la carga del vendedor (T-27 pieza 1), sin base ni Nest: las lineas
  * de un POST/PATCH, cuando una carga se puede editar, el armado de la rejilla del
@@ -228,5 +230,87 @@ export function armarRejilla(entrada: {
           .sort((a, b) => a.numero - b.numero)
           .map(aCargaRejilla),
       })),
+  };
+}
+
+export const MOTIVO_RESPUESTA_CONFLICTO =
+  'La carga cambió en el almacén o ya tiene otra respuesta; sincroniza y revísala de nuevo.';
+
+/** Lo que el vendedor contesta, ya validado (D2: completa, con motivo si rechaza). */
+export type RespuestaCarga =
+  | { estado: 'aceptada'; motivo: null }
+  | { estado: 'rechazada'; motivo: string };
+
+/**
+ * La forma de la respuesta. `aceptar` no lleva motivo (400 si viene con texto;
+ * `null` cuenta como ausente); `rechazar` exige 1..300 caracteres recortados.
+ */
+export function normalizarRespuesta(
+  accion: 'aceptar' | 'rechazar',
+  motivo: string | null | undefined,
+): { ok: true; respuesta: RespuestaCarga } | { ok: false; mensaje: string } {
+  if (accion === 'aceptar') {
+    if (motivo !== undefined && motivo !== null) {
+      return { ok: false, mensaje: 'Aceptar una carga no lleva motivo.' };
+    }
+    return { ok: true, respuesta: { estado: 'aceptada', motivo: null } };
+  }
+  const texto = typeof motivo === 'string' ? motivo.trim() : '';
+  if (texto.length < 1 || texto.length > LARGO_MAX_MOTIVO_RECHAZO) {
+    return {
+      ok: false,
+      mensaje:
+        'Para rechazar la carga escribe el motivo (hasta 300 caracteres).',
+    };
+  }
+  return { ok: true, respuesta: { estado: 'rechazada', motivo: texto } };
+}
+
+export type DecisionRespuesta = 'escribir' | 'repetida' | 'conflicto';
+
+/**
+ * Que hacer con una respuesta sobre la carga YA bloqueada (`for update`):
+ *
+ * - `repetida`: ya tiene esa misma respuesta en esa version (reintento de red o
+ *   doble toque, Review Focus 3): 200 sin reescribir.
+ * - `conflicto`: otra version (el portal la edito, Review Focus 2) o ya no esta
+ *   pendiente con otra respuesta: 409 con la carga actual.
+ * - `escribir`: pendiente y con la version que vio el vendedor.
+ */
+export function decidirRespuesta(
+  carga: Pick<FilaCarga, 'estado' | 'version' | 'motivoRechazo'>,
+  respuesta: RespuestaCarga,
+  version: number,
+): DecisionRespuesta {
+  if (
+    carga.version === version &&
+    carga.estado === respuesta.estado &&
+    (respuesta.estado === 'aceptada' ||
+      carga.motivoRechazo === respuesta.motivo)
+  ) {
+    return 'repetida';
+  }
+  if (carga.version !== version || carga.estado !== 'pendiente')
+    return 'conflicto';
+  return 'escribir';
+}
+
+/** Una fila de la coleccion `cargas` del pull (y la respuesta del endpoint de la app). */
+export function aCargaPull(f: FilaCarga): CargaPull {
+  return {
+    id: f.id,
+    vendedor_id: f.vendedorId,
+    fecha: f.fecha,
+    numero: f.numero,
+    estado: f.estado,
+    motivo_rechazo: f.motivoRechazo,
+    version: f.version,
+    respondida_en:
+      f.respondidaEn === null ? null : f.respondidaEn.toISOString(),
+    activo: f.eliminada ? 0 : 1,
+    lineas: f.lineas.map((l) => ({
+      presentacion_id: l.presentacionId,
+      piezas: l.piezas,
+    })),
   };
 }

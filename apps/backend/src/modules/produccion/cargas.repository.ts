@@ -8,12 +8,15 @@ import type {
   FilaCarga,
   LineaCarga,
   PresentacionRejilla,
+  RespuestaCarga,
   SucursalRejilla,
 } from './reglas-carga';
 
-/** Que cargas leer. La Tarea 3 agrega el filtro del pull. */
+/** Que cargas leer: una, las de la rejilla, o las del vendedor del token para el pull. */
 export type FiltroCargas =
-  { id: string } | { sucursalId: string; fecha: string };
+  | { id: string }
+  | { sucursalId: string; fecha: string }
+  | { vendedorId: string; desde: Date | null };
 
 export interface VendedorParaCarga {
   id: string;
@@ -292,6 +295,35 @@ export class CargasRepository {
       .execute();
   }
 
+  /** ¿El vendedor del token sigue vivo y activo? (El guard valido la firma, no eso.) */
+  async vendedorActivo(vendedorId: string): Promise<boolean> {
+    const fila = await this.db
+      .selectFrom('vendedor')
+      .select('id')
+      .where('id', '=', vendedorId)
+      .where('activo', '=', true)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    return fila !== undefined;
+  }
+
+  /** Escribe la respuesta del vendedor (D2): estado, motivo y `respondida_en = now()`. */
+  async escribirRespuesta(
+    cargaId: string,
+    respuesta: RespuestaCarga,
+    trx: Transaction<DB>,
+  ): Promise<void> {
+    await trx
+      .updateTable('carga')
+      .set({
+        estado: respuesta.estado,
+        motivo_rechazo: respuesta.motivo,
+        respondida_en: sql<Date>`now()`,
+      })
+      .where('id', '=', cargaId)
+      .execute();
+  }
+
   /**
    * Las cargas del filtro con sus lineas. `fecha` sale como texto de Postgres:
    * el driver la convertiria a `Date` en la hora local del proceso.
@@ -316,11 +348,22 @@ export class CargasRepository {
       ]);
     if ('id' in filtro) {
       q = q.where('id', '=', filtro.id);
-    } else {
+    } else if ('sucursalId' in filtro) {
       q = q
         .where('sucursal_id', '=', filtro.sucursalId)
         .where(sql<boolean>`fecha = ${filtro.fecha}::date`)
         .where('deleted_at', 'is', null);
+    } else {
+      // El pull: las del vendedor del token desde AYER por el reloj de Postgres
+      // (UTC), como `rutas` (T-37): el `- 1` mantiene "hoy en Tijuana" dentro de
+      // la ventana despues de las 17:00 locales. Sin `desde`, solo las vivas; con
+      // `desde`, todo lo que cambio (una baja viaja como `activo: 0`).
+      q = q
+        .where('vendedor_id', '=', filtro.vendedorId)
+        .where(sql<boolean>`fecha >= current_date - 1`);
+      q = filtro.desde
+        ? q.where('updated_at', '>', filtro.desde)
+        : q.where('deleted_at', 'is', null);
     }
     const filas = await q.orderBy('fecha').orderBy('numero').execute();
     if (filas.length === 0) return [];
