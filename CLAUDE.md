@@ -612,6 +612,28 @@ usuario con sesion pasa.
     de columna: la primera versión de T-49 se desplazaba de lado incluso a 1440 px. Ver
     `components/reporte-ventas/tabla-reporte-ventas.tsx` (`table-fixed`, `colgroup`, `min-w`, scroll en su caja).
 
+- **Portal UI (piezas comunes, Etapa 1).** Spec: `docs/superpowers/specs/2026-10-20-portal-ui-etapa-1-design.md`.
+  - **Toda pantalla nueva, o una vieja que se toque, usa `apps/portal/src/components/ui/`**: `EncabezadoPantalla`
+    (título + UNA línea que dice para qué sirve), `EstadoPantalla` (Cargando / sin permiso / elige sucursal, mismo texto
+    en todas), `Tabla`/`Th`/`Td`/`TdMonto`/`CajaTabla`, `FiltroFechas` (botón **Mostrar**, atajos Hoy · Ayer · Esta
+    semana · Este mes) + `BotonExcel`, `Aviso`, `Etiqueta`/`EtiquetaStatusVenta`, `Monto`, `Fecha`, `Campo` y sus
+    controles, `Pestanas`. Para confirmar, `useConfirmar()` (pinta `{ventana}` en la pantalla), **nunca `window.confirm`**.
+  - Formatos y rangos en un solo lugar: `lib/formato.ts` (`formatearPesos`, `formatearFecha`, `formatearFechaHora`,
+    `plural`, `iniciales`) y `lib/fechas.ts` (`rangoSemana`, `rangoMes`, `diaAnterior`, `primerDiaDelMes`). Los archivos
+    de antes (`lib/ventas.ts`, `lib/reportes.ts`, `lib/reporte-ventas.ts`, `lib/tesoreria.ts`) solo re-exportan.
+  - **El color de la sucursal vive en `lib/sucursal-color.ts`** (TJ azul pacífico, MX morado jamaica, todas = tinta) y
+    en las variables `--suc-…` de `globals.css`. Una sucursal nueva usa la tinta hasta que se agregue en los dos
+    lugares. Es la única parte llamativa del portal: no se usa para otra cosa.
+  - El marco es `components/layout/marco-portal.tsx`: sucursal arriba en su color, secciones plegables, usuario y
+    "Cerrar sesión" abajo, ☰ lo esconde (se recuerda con `lib/almacen-local.ts`), y el `<title>` de la pestaña
+    ("Ventas | JAWA Tijuana"). Una pantalla nueva se agrega en `nav-config.ts`; mientras su `page.tsx` sea un
+    `Placeholder` lleva `pronto: true` (una prueba lo exige).
+  - **En `app/(portal)/layout.tsx`, el `AuthProvider` va DENTRO del `<Suspense>`** (arreglo del error de hidratación,
+    Tarea 8). Todo lo que lea `useAuth` tiene que seguir dentro de ese Suspense.
+  - Siguen con el estilo de antes hasta su etapa: catálogos, Tesorería, Reporte de Ventas, Clientes nuevos, Flujo,
+    Cuentas por Cobrar, Registrar venta, Perfiles, Precios, Promociones, Ruta diaria. **Recarga y Gastos son de Mario:**
+    no se tocan sin él.
+
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
 `--`: sin él, npm se come los argumentos).
 
