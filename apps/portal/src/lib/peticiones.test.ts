@@ -88,14 +88,14 @@ describe("lib/peticiones", () => {
 
   it("describe el pago: con cobrador, de Oficina o saldo a favor", () => {
     expect(describirPago(PETICION.cobro)).toBe(
-      "Pago de $1,000.00 · Tacos Erick · 2026-10-10 · Efectivo · cobró Juan Pérez",
+      "Pago de $1,000.00 · Tacos Erick · 10/10/2026 · Efectivo · cobró Juan Pérez",
     );
     expect(describirPago({ ...PETICION.cobro, cobrador: null, metodoPago: "transferencia" })).toBe(
-      "Pago de $1,000.00 · Tacos Erick · 2026-10-10 · Transferencia · Oficina",
+      "Pago de $1,000.00 · Tacos Erick · 10/10/2026 · Transferencia · Oficina",
     );
     expect(
       describirPago({ ...PETICION.cobro, origen: "saldo_favor", metodoPago: "saldo_favor", cobrador: null }),
-    ).toBe("Saldo a favor aplicado de $1,000.00 · Tacos Erick · 2026-10-10");
+    ).toBe("Saldo a favor aplicado de $1,000.00 · Tacos Erick · 10/10/2026");
   });
 
   it("los avisos de enviada, autorizada y denegada", () => {

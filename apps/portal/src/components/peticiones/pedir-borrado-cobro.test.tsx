@@ -85,7 +85,7 @@ describe("PedirBorradoCobro", () => {
   it("muestra el pago y cómo quedaría cada nota y el saldo a favor", async () => {
     renderizar();
     expect(
-      await screen.findByText("Pago de $1,000.00 · Tacos Erick · 2026-10-10 · Efectivo · cobró Juan Pérez"),
+      await screen.findByText("Pago de $1,000.00 · Tacos Erick · 10/10/2026 · Efectivo · cobró Juan Pérez"),
     ).toBeInTheDocument();
     expect(vistaBorradoDeCobro).toHaveBeenCalledWith("co1");
     expect(screen.getByText("TJ261001AP01")).toBeInTheDocument();

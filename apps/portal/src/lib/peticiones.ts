@@ -1,6 +1,6 @@
 import { ErrorApi, apiFetch } from "./api";
 import { ETIQUETA_METODO_PAGO } from "./cobranzas";
-import { formatearPesos } from "./ventas";
+import { formatearFecha, formatearPesos } from "./formato";
 
 // Copia normativa de las formas de apps/backend/src/modules/ventas-cobranza/reglas-borrado-cobro.ts
 // (`NotaTrasBorrar`, `BloqueoBorrado`), cobros-borrado.service.ts (`CobroEnVista`, `VistaBorrado`) y
@@ -131,7 +131,7 @@ export function denegarPeticion(id: string, comentario: string): Promise<Peticio
   });
 }
 
-/** "Pago de $1,000.00 · Tacos Erick · 2026-10-10 · Efectivo · cobró Juan Pérez" (§3.1). */
+/** "Pago de $1,000.00 · Tacos Erick · 10/10/2026 · Efectivo · cobró Juan Pérez" (§3.1). */
 export function describirPago(c: {
   cliente: string;
   montoCentavos: number;
@@ -140,11 +140,12 @@ export function describirPago(c: {
   fechaPago: string;
   cobrador: string | null;
 }): string {
+  const fecha = formatearFecha(c.fechaPago);
   if (c.origen === "saldo_favor")
-    return `Saldo a favor aplicado de ${formatearPesos(c.montoCentavos)} · ${c.cliente} · ${c.fechaPago}`;
+    return `Saldo a favor aplicado de ${formatearPesos(c.montoCentavos)} · ${c.cliente} · ${fecha}`;
   const metodo = ETIQUETA_METODO_PAGO[c.metodoPago] ?? c.metodoPago;
   const quien = c.cobrador ? `cobró ${c.cobrador}` : "Oficina";
-  return `Pago de ${formatearPesos(c.montoCentavos)} · ${c.cliente} · ${c.fechaPago} · ${metodo} · ${quien}`;
+  return `Pago de ${formatearPesos(c.montoCentavos)} · ${c.cliente} · ${fecha} · ${metodo} · ${quien}`;
 }
 
 export function textoPeticionEnviada(p: PeticionEnBandeja): string {
