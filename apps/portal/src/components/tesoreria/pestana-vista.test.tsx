@@ -163,4 +163,21 @@ describe("PestanaVista", () => {
     );
     expect(aviso).not.toHaveTextContent("de cobranza de");
   });
+
+  it("rango invertido: FiltroFechas muestra su error común y no consulta", async () => {
+    render(<PestanaVista sucursal={null} />);
+    await screen.findByText("ScotiaFiscal");
+    const desde = screen.getByLabelText("Desde");
+    await userEvent.clear(desde);
+    await userEvent.type(desde, "2099-01-01");
+    await userEvent.click(screen.getByRole("button", { name: "Mostrar" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("La fecha inicial no puede ser posterior a la final.");
+    expect(lib.obtenerTesoreria).toHaveBeenCalledTimes(1);
+  });
+
+  it("un error del servidor sale en un Aviso de error", async () => {
+    vi.mocked(lib.obtenerTesoreria).mockRejectedValue(new Error("boom"));
+    render(<PestanaVista sucursal={null} />);
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+  });
 });
