@@ -414,7 +414,7 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
           Comisión y crédito
         </legend>
         <div className="flex flex-wrap gap-4">
-          <Campo id="comision" etiqueta="% Comisión">
+          <Campo opcional id="comision" etiqueta="% Comisión">
             <Entrada
               id="comision"
               type="number"
@@ -427,7 +427,7 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
               className="w-32"
             />
           </Campo>
-          <Campo id="credito" etiqueta="Plazo de crédito (días)">
+          <Campo opcional id="credito" etiqueta="Plazo de crédito (días)">
             <Entrada
               id="credito"
               type="number"
@@ -447,7 +447,7 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
           Ubicación y notas
         </legend>
         <div className="flex flex-wrap gap-4">
-          <Campo id="lat" etiqueta="Latitud">
+          <Campo opcional id="lat" etiqueta="Latitud">
             <Entrada
               id="lat"
               type="number"
@@ -460,7 +460,7 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
               className="w-40"
             />
           </Campo>
-          <Campo id="lng" etiqueta="Longitud">
+          <Campo opcional id="lng" etiqueta="Longitud">
             <Entrada
               id="lng"
               type="number"
@@ -503,7 +503,7 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
             {avisoUbicar}
           </p>
         )}
-        <Campo id="comentarios" etiqueta="Comentarios">
+        <Campo opcional id="comentarios" etiqueta="Comentarios">
           <AreaTexto
             id="comentarios"
             maxLength={2000}

@@ -280,4 +280,20 @@ describe("PantallaCatalogo", () => {
     expect(screen.getByText("Jamaica")).toBeInTheDocument();
     expect(within(filaDe("Jamaica")).getByRole("button", { name: "Dar de baja" })).toBeEnabled();
   });
+
+  it("abrir un formulario quita el aviso de una baja fallida", async () => {
+    const usuario = userEvent.setup();
+    const { baja } = bajaDePrueba(
+      vi.fn().mockRejectedValue(new ErrorApi("La peticion fallo", 409, "Podrás darlo de baja el próximo año.")),
+    );
+    renderizar({ baja });
+    await screen.findByText("Jamaica");
+
+    await usuario.click(within(filaDe("Jamaica")).getByRole("button", { name: "Dar de baja" }));
+    await usuario.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Dar de baja" }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("button", { name: "Nuevo sabor" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });

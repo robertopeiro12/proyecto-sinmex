@@ -140,6 +140,7 @@ describe("PantallaUsuarios", () => {
 
     render(<PantallaUsuarios sucursal="TJ" />);
     await screen.findByText("jgarcia");
+    const cargasAntes = listarUsuarios.mock.calls.length;
 
     await usuario.click(screen.getByRole("button", { name: "Nuevo usuario" }));
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
@@ -149,8 +150,9 @@ describe("PantallaUsuarios", () => {
     await usuario.click(screen.getByRole("button", { name: "← Volver a usuarios" }));
     expect(await screen.findByRole("table")).toBeInTheDocument();
     expect(crearUsuario).not.toHaveBeenCalled();
-    // La sucursal viene de fuera: volver recarga la lista con la misma.
-    expect(listarUsuarios).toHaveBeenLastCalledWith("TJ");
+    // Volver no recarga la lista (ya estaba cargada): ninguna llamada nueva, y todas con la sucursal "TJ".
+    expect(listarUsuarios).toHaveBeenCalledTimes(cargasAntes);
+    expect(listarUsuarios.mock.calls.every(([sucursal]) => sucursal === "TJ")).toBe(true);
   });
 
   it("muestra el mensaje de error cuando la carga falla", async () => {

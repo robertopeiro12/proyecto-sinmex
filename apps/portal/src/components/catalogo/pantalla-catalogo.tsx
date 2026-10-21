@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Aviso } from "@/components/ui/aviso";
 import { useConfirmar, type OpcionesConfirmar } from "@/components/ui/confirmar";
@@ -87,7 +87,14 @@ export function PantallaCatalogo<T extends { id: string }>({
   const [apertura, setApertura] = useState({ numero: 0, titulo: "" });
   const vigente = useRef(0);
 
+  // El aviso de una baja fallida es de la lista que se miraba: cambiar de sucursal lo quita.
+  useEffect(() => {
+    setErrorBaja(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+
   const abrir = (item: T | null) => {
+    setErrorBaja(null);
     vigente.current += 1;
     setApertura({ numero: vigente.current, titulo: tituloFormulario?.(item) ?? etiquetaAlta });
     if (item === null) catalogo.abrirAlta();

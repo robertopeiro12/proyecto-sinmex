@@ -25,8 +25,10 @@ vi.mock("@/lib/sucursales");
 vi.mock("@/lib/promociones");
 vi.mock("@/components/auth/auth-provider");
 const paramsUrl = new URLSearchParams("tipo=prospecto");
+const push = vi.fn();
+const replace = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push, replace }),
   usePathname: () => "/catalogo/clientes",
   useSearchParams: () => paramsUrl,
 }));
@@ -148,8 +150,9 @@ describe("PantallaClientes", () => {
     await usuario.click(screen.getByRole("button", { name: "← Volver a clientes" }));
     expect(await screen.findByRole("table")).toBeInTheDocument();
     expect(crearCliente).not.toHaveBeenCalled();
-    // El filtro de tipo vive en la URL: volver no la toca.
-    expect(paramsUrl.get("tipo")).toBe("prospecto");
+    // El filtro de tipo vive en la URL: volver no la toca (no navega).
+    expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   it("oculta el alta, la edicion y la baja cuando el usuario no puede gestionar", async () => {
@@ -420,7 +423,7 @@ describe("PantallaClientes · ubicación (T-72, D6)", () => {
     render(<PantallaClientes sucursal={null} tipo="todos" />);
     await screen.findByText("Abarrotes Lupita");
     await usuario.click(screen.getByRole("button", { name: "Editar" }));
-    await screen.findByLabelText("Latitud");
+    await screen.findByLabelText(/^Latitud/);
     return usuario;
   }
 
@@ -445,8 +448,8 @@ describe("PantallaClientes · ubicación (T-72, D6)", () => {
 
     expect(await screen.findByText("Origen de la ubicación: Ubicada por Google")).toBeInTheDocument();
     expect(ubicarCliente).toHaveBeenCalledWith("1");
-    expect((screen.getByLabelText("Latitud") as HTMLInputElement).value).toBe("32.5251");
-    expect((screen.getByLabelText("Longitud") as HTMLInputElement).value).toBe("-117.0213");
+    expect((screen.getByLabelText(/^Latitud/) as HTMLInputElement).value).toBe("32.5251");
+    expect((screen.getByLabelText(/^Longitud/) as HTMLInputElement).value).toBe("-117.0213");
     expect(screen.queryByRole("button", UBICAR)).not.toBeInTheDocument();
   });
 
@@ -464,7 +467,7 @@ describe("PantallaClientes · ubicación (T-72, D6)", () => {
     await usuario.click(screen.getByRole("button", UBICAR));
 
     expect(await screen.findByText(motivo)).toBeInTheDocument();
-    expect((screen.getByLabelText("Latitud") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText(/^Latitud/) as HTMLInputElement).value).toBe("");
     expect(screen.getByRole("button", UBICAR)).toBeEnabled();
   });
 
@@ -520,8 +523,8 @@ describe("PantallaClientes · ubicación (T-72, D6)", () => {
       ubicacionOrigen: "geocodificada",
     });
 
-    await usuario.clear(screen.getByLabelText("Latitud"));
-    await usuario.clear(screen.getByLabelText("Longitud"));
+    await usuario.clear(screen.getByLabelText(/^Latitud/));
+    await usuario.clear(screen.getByLabelText(/^Longitud/));
     await usuario.click(screen.getByRole("button", { name: "Guardar" }));
 
     await waitFor(() => expect(editarCliente).toHaveBeenCalledTimes(1));
@@ -540,7 +543,7 @@ describe("PantallaClientes · ubicación (T-72, D6)", () => {
       lng: -117.0213,
       ubicacionOrigen: "geocodificada",
     });
-    const latitud = screen.getByLabelText("Latitud");
+    const latitud = screen.getByLabelText(/^Latitud/);
     await usuario.clear(latitud);
     await usuario.type(latitud, "32.53");
     expect(screen.getByText("Origen de la ubicación: Capturada a mano")).toBeInTheDocument();
