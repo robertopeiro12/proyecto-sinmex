@@ -54,14 +54,15 @@ egreso y Motivos de visita** (hoy los dos últimos tienen pantalla propia solo p
 - **Tabla común**: `TablaCatalogo` pasa a construirse con `Tabla`/`Th`/`Td`/`FilaVacia` dentro de `CajaTabla`. Su API
   (`columnas`, `vacio`, `acciones`) no cambia.
 - **Estados**: "Cargando…" con `EstadoPantalla`; el error de carga con `Aviso tono="error"`.
-- **Alta y edición en `Ventana`** (`titulo` = "Nuevo producto" / "Editar producto", es decir la `etiquetaAlta` y
-  "Editar " + el nombre del catálogo en singular, prop nueva `singular`). Se conserva el `key` por item que ya documenta
-  el archivo (T-09).
+- **Alta y edición en `Ventana`**. El título es el mismo texto que hoy pone el `h2` de cada formulario ("Nuevo
+  producto" / "Editar Jamaica", "Editar TJ" en Sucursales), que pasa a la pantalla con una prop nueva
+  `tituloFormulario: (item: T | null) => string`. Se conserva el `key` por item que ya documenta el archivo (T-09).
 - **Modo de formulario**: prop `formularioEn: "ventana" | "pantalla"`, `"ventana"` por omisión. **Promociones** (que
   también usa esta pantalla y es de la Etapa 4) pasa `"pantalla"`: su formulario es largo (515 líneas) y así no cambia de
   forma hasta su etapa; recibe el encabezado y la tabla comunes de rebote, nada más.
 - **Dar de baja opcional**: prop `baja?: { etiqueta?: string; confirmar: (item) => OpcionesConfirmar; ejecutar: (item) =>
-  Promise<void>; mostrar?: (item) => boolean }`. Pinta un botón "Dar de baja" junto a "Editar", pregunta con
+  Promise<void>; mostrar?: (item) => boolean }`. Pinta un botón junto a "Editar" (texto `etiqueta`, por omisión "Dar de baja"; Campos de egreso y Motivos de visita
+  conservan su "Eliminar" de hoy), pregunta con
   `useConfirmar()` (botón rojo) y, si `ejecutar` falla, muestra el mensaje del servidor en un `Aviso` arriba de la tabla
   (así sigue saliendo el 409 de Campos de egreso, "podrás darlo de baja el próximo año"). Si funciona, recarga.
 - Los formularios internos (los 6) pasan a `Campo` + `Entrada`/`Lista`/`AreaTexto`/`Casilla`, con "(opcional)" donde el
