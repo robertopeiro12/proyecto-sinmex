@@ -591,6 +591,17 @@ usuario con sesion pasa.
   - **Nube**: `20261022120000_carga_vendedor.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
     (pre-flight: tablas nuevas y una columna con default; nada que contar). Backend antes que la app. **No prender la
     casilla de una sucursal hasta que sus tablets tengan la versión nueva** y producción esté capturando cargas.
+- **Producción por día (T-25).** Producción captura en el portal lo producido por sabor y tamaño (*Producción → Producción
+  del día*, `/produccion/produccion-del-dia`); es la entrada del Almacén General, pero **aún no alimenta inventario**
+  (T-24) ni almacenes (T-63). Spec: `docs/superpowers/specs/2026-10-21-t25-produccion-por-dia-design.md`.
+  - Tabla `produccion`: una fila **viva** por fecha, sucursal y presentación (índice único parcial), piezas enteras > 0.
+    Backend en `modules/produccion/` (`GET`/`PUT /produccion`, reglas puras en `reglas-produccion.ts`), permiso
+    `almacen_general.gestionar` (ya existía) y alcance de sucursal.
+  - `PUT` reemplaza el día: **0 da de baja** la fila (no deja una con 0) y volver a capturarla crea otra. Fecha futura
+    = 400 con `hoyEnTijuana`; "hoy" es el de Tijuana. Una presentación desactivada con piezas ese día sigue en el `GET`.
+    Un primer guardado concurrente da 409.
+  - **Nube**: `20261023120000_produccion.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
+    (pre-flight: tabla nueva; nada que contar).
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
   - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).
