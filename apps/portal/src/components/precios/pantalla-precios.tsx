@@ -161,15 +161,15 @@ function MatrizPrecios({
       <CajaTabla>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b text-left text-muted-foreground">
-              <th scope="col" className="py-2 font-medium">
+            <tr>
+              <th scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold whitespace-nowrap text-muted-foreground">
                 Producto
               </th>
-              <th scope="col" className="py-2 font-medium">
+              <th scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold whitespace-nowrap text-muted-foreground">
                 Presentación
               </th>
               {listas.map((lista) => (
-                <th key={lista.id} scope="col" className="py-2 font-medium">
+                <th key={lista.id} scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold whitespace-nowrap text-muted-foreground">
                   {lista.nombre}
                 </th>
               ))}
@@ -179,7 +179,7 @@ function MatrizPrecios({
             {productos.flatMap((producto) =>
               producto.presentaciones.map((presentacion) => (
                 <tr key={presentacion.id} className="border-b last:border-0">
-                  <td className="py-2">
+                  <td className="px-3 py-2">
                     {producto.nombre}
                     {!producto.activo && (
                       <span className="ml-2 text-xs text-muted-foreground">
@@ -187,9 +187,9 @@ function MatrizPrecios({
                       </span>
                     )}
                   </td>
-                  <td className="py-2">{presentacion.volumen}</td>
+                  <td className="px-3 py-2">{presentacion.volumen}</td>
                   {listas.map((lista) => (
-                    <td key={lista.id} className="py-2">
+                    <td key={lista.id} className="px-3 py-2">
                       <CeldaPrecio
                         presentacionId={presentacion.id}
                         listaPrecioId={lista.id}
@@ -209,7 +209,7 @@ function MatrizPrecios({
               <tr>
                 <td
                   colSpan={2 + listas.length}
-                  className="py-4 text-muted-foreground"
+                  className="px-3 py-4 text-muted-foreground"
                 >
                   No hay productos en el catálogo.
                 </td>

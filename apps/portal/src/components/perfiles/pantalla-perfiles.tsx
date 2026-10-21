@@ -121,19 +121,19 @@ function Matriz() {
       <CajaTabla>
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b text-left text-muted-foreground">
-              <th scope="col" className="py-2 font-medium">
+            <tr>
+              <th scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold whitespace-nowrap text-muted-foreground">
                 Permiso
               </th>
               {datos.perfiles.map((perfil) => (
-                <th key={perfil.id} scope="col" className="py-2 font-medium">
+                <th key={perfil.id} scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold whitespace-nowrap text-muted-foreground">
                   <ColumnaPerfil
                     perfil={perfil}
                     alCambiar={() => void cargar()}
                   />
                 </th>
               ))}
-              <th scope="col" className="py-2 font-medium">
+              <th scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold whitespace-nowrap text-muted-foreground">
                 <input
                   aria-label="Nombre del nuevo perfil"
                   placeholder="Nuevo perfil…"
@@ -160,7 +160,7 @@ function Matriz() {
             {grupos.map((grupo) => (
               <Fragment key={grupo}>
                 <tr className="border-b bg-muted/50">
-                  <td colSpan={columnas} className="py-1 font-medium">
+                  <td colSpan={columnas} className="px-3 py-1 font-medium">
                     {grupo}
                   </td>
                 </tr>
@@ -168,11 +168,11 @@ function Matriz() {
                   .filter((p) => p.grupo === grupo)
                   .map((permiso) => (
                     <tr key={permiso.id} className="border-b last:border-0">
-                      <th scope="row" className="py-2 text-left font-normal">
+                      <th scope="row" className="px-3 py-2 text-left font-normal">
                         {permiso.descripcion ?? permiso.clave}
                       </th>
                       {datos.perfiles.map((perfil) => (
-                        <td key={perfil.id} className="py-2">
+                        <td key={perfil.id} className="px-3 py-2">
                           <CeldaPermiso
                             perfilId={perfil.id}
                             permisoId={permiso.id}
@@ -191,7 +191,7 @@ function Matriz() {
             ))}
             {datos.perfiles.length === 0 && (
               <tr>
-                <td colSpan={columnas} className="py-4 text-muted-foreground">
+                <td colSpan={columnas} className="px-3 py-4 text-muted-foreground">
                   No hay perfiles.
                 </td>
               </tr>

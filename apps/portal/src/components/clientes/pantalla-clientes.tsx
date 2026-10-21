@@ -132,7 +132,7 @@ export function PantallaClientes({
         <EncabezadoPantalla
           titulo={edicion === "nueva" ? "Nuevo cliente" : `Editar ${edicion.nombre}`}
         />
-        <div key={edicion === "nueva" ? "nueva" : edicion.id}>
+        <div key={edicion === "nueva" ? "nueva" : edicion.id} className="flex flex-col gap-6">
           <FormularioCliente
             cliente={edicion === "nueva" ? null : edicion}
             alGuardar={alGuardar}
