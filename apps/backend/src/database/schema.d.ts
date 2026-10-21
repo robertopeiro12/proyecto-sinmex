@@ -264,6 +264,19 @@ export interface Presentacion {
   volumen: string;
 }
 
+export interface Produccion {
+  actualizado_por_usuario_id: string | null;
+  capturo_usuario_id: string;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  fecha: Timestamp;
+  id: Generated<string>;
+  piezas: number;
+  presentacion_id: string;
+  sucursal_id: string;
+  updated_at: Generated<Timestamp>;
+}
+
 export interface Producto {
   activo: Generated<boolean>;
   created_at: Generated<Timestamp>;
@@ -566,6 +579,7 @@ export interface DB {
   peticion: Peticion;
   precio: Precio;
   presentacion: Presentacion;
+  produccion: Produccion;
   producto: Producto;
   promocion: Promocion;
   ruta: Ruta;
