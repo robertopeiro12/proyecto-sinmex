@@ -71,6 +71,7 @@ describe("PantallaCamposEgreso", () => {
     vi.mocked(lib.crearCampoEgreso).mockResolvedValue({ id: "c3", nombre: "Renta", tipo: "financiero", seUsaEnApp: true });
     render(<PantallaCamposEgreso />);
     await userEvent.click(await screen.findByRole("button", { name: "Nuevo campo" }));
+    expect(within(screen.getByRole("dialog", { name: "Nuevo campo" })).getByRole("button", { name: "Guardar" })).toBeInTheDocument();
     expect(screen.getByLabelText("Tipo")).toHaveValue("operacion");
     expect(within(screen.getByLabelText("Tipo")).getAllByRole("option").map((o) => o.textContent)).toEqual([
       "Producción",
@@ -111,41 +112,43 @@ describe("PantallaCamposEgreso", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent('Ya existe un campo de egreso llamado "Gasolina".');
   });
 
-  it("eliminar pide confirmación, da de baja y recarga", async () => {
+  it("eliminar pregunta en la ventana, da de baja y recarga", async () => {
     sesion(true);
-    const confirmar = vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.mocked(lib.eliminarCampoEgreso).mockResolvedValue({ id: "c2" });
     render(<PantallaCamposEgreso />);
     const fila = (await screen.findByText("Envases")).closest("tr")!;
     await userEvent.click(within(fila).getByRole("button", { name: "Eliminar" }));
-    expect(confirmar).toHaveBeenCalledWith(
-      '¿Seguro que quieres eliminar el campo "Envases"? Los gastos ya registrados lo conservan, pero las tablets dejarán de ofrecerlo.',
-    );
+    const ventana = screen.getByRole("alertdialog", { name: '¿Eliminar el campo "Envases"?' });
+    expect(ventana).toHaveTextContent("Los gastos ya registrados lo conservan, pero las tablets dejarán de ofrecerlo.");
+    await userEvent.click(within(ventana).getByRole("button", { name: "Eliminar campo" }));
+    await vi.waitFor(() => expect(lib.listarCamposEgreso).toHaveBeenCalledTimes(2));
+    expect(lib.eliminarCampoEgreso).toHaveBeenCalledTimes(1);
     expect(lib.eliminarCampoEgreso).toHaveBeenCalledWith("c2");
-    expect(lib.listarCamposEgreso).toHaveBeenCalledTimes(2);
   });
 
   it("si el campo tiene gastos este año, la baja muestra el motivo del servidor (409) y no recarga", async () => {
     sesion(true);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.mocked(lib.eliminarCampoEgreso).mockRejectedValue(
       new ErrorApi("conflicto", 409, "Este campo tiene gastos este año; podrás darlo de baja el próximo año."),
     );
     render(<PantallaCamposEgreso />);
     const fila = (await screen.findByText("Gasolina")).closest("tr")!;
     await userEvent.click(within(fila).getByRole("button", { name: "Eliminar" }));
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Eliminar campo" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Este campo tiene gastos este año; podrás darlo de baja el próximo año.",
     );
+    expect(screen.getByText("Gasolina")).toBeInTheDocument();
     expect(lib.listarCamposEgreso).toHaveBeenCalledTimes(1);
   });
 
   it("cancelar la confirmación no da de baja", async () => {
     sesion(true);
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     render(<PantallaCamposEgreso />);
     const fila = (await screen.findByText("Gasolina")).closest("tr")!;
     await userEvent.click(within(fila).getByRole("button", { name: "Eliminar" }));
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     expect(lib.eliminarCampoEgreso).not.toHaveBeenCalled();
   });
 });

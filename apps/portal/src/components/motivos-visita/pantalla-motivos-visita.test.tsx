@@ -63,6 +63,7 @@ describe("PantallaMotivosVisita", () => {
     vi.mocked(lib.crearMotivoVisita).mockResolvedValue({ id: "m3", nombre: "Bodega", exigeFoto: true, exigeAtendio: false });
     render(<PantallaMotivosVisita />);
     await userEvent.click(await screen.findByRole("button", { name: "Nuevo motivo" }));
+    expect(within(screen.getByRole("dialog", { name: "Nuevo motivo" })).getByRole("button", { name: "Guardar" })).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Nombre del motivo"), "Bodega");
     await userEvent.click(screen.getByLabelText("Exige foto"));
     await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
@@ -95,17 +96,26 @@ describe("PantallaMotivosVisita", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent('Ya existe un motivo de visita llamado "Cerrado".');
   });
 
-  it("eliminar pide confirmación, da de baja y recarga", async () => {
+  it("eliminar pregunta en la ventana, da de baja y recarga", async () => {
     sesion(true);
-    const confirmar = vi.spyOn(window, "confirm").mockReturnValue(true);
     vi.mocked(lib.eliminarMotivoVisita).mockResolvedValue({ id: "m1" });
     render(<PantallaMotivosVisita />);
     const fila = (await screen.findByText("Cerrado")).closest("tr")!;
     await userEvent.click(within(fila).getByRole("button", { name: "Eliminar" }));
-    expect(confirmar).toHaveBeenCalledWith(
-      '¿Seguro que quieres eliminar el motivo "Cerrado"? Las visitas ya registradas lo conservan, pero las tablets dejarán de ofrecerlo.',
-    );
+    const ventana = screen.getByRole("alertdialog", { name: '¿Eliminar el motivo "Cerrado"?' });
+    expect(ventana).toHaveTextContent("Las visitas ya registradas lo conservan, pero las tablets dejarán de ofrecerlo.");
+    await userEvent.click(within(ventana).getByRole("button", { name: "Eliminar motivo" }));
+    await vi.waitFor(() => expect(lib.listarMotivosVisita).toHaveBeenCalledTimes(2));
+    expect(lib.eliminarMotivoVisita).toHaveBeenCalledTimes(1);
     expect(lib.eliminarMotivoVisita).toHaveBeenCalledWith("m1");
-    expect(lib.listarMotivosVisita).toHaveBeenCalledTimes(2);
+  });
+
+  it("cancelar la confirmación no da de baja", async () => {
+    sesion(true);
+    render(<PantallaMotivosVisita />);
+    const fila = (await screen.findByText("Cerrado")).closest("tr")!;
+    await userEvent.click(within(fila).getByRole("button", { name: "Eliminar" }));
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Cancelar" }));
+    expect(lib.eliminarMotivoVisita).not.toHaveBeenCalled();
   });
 });

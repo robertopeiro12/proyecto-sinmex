@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Campo, Casilla, Entrada } from "@/components/ui/campo";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import { crearMotivoVisita, editarMotivoVisita, type MotivoVisita } from "@/lib/motivos-visita";
 
@@ -25,14 +26,9 @@ export function FormularioMotivoVisita({ motivo, alGuardar, alCancelar }: Props)
   }
 
   return (
-    <form onSubmit={alEnviar} className="mb-6 flex flex-col gap-4 rounded-md border p-4">
-      <h2 className="text-sm font-semibold">{motivo ? `Editar ${motivo.nombre}` : "Nuevo motivo"}</h2>
-
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="motivo-nombre" className="text-sm font-medium">
-          Nombre del motivo
-        </label>
-        <input
+    <form onSubmit={alEnviar} className="flex flex-col gap-4">
+      <Campo id="motivo-nombre" etiqueta="Nombre del motivo">
+        <Entrada
           id="motivo-nombre"
           required
           maxLength={80}
@@ -40,27 +36,27 @@ export function FormularioMotivoVisita({ motivo, alGuardar, alCancelar }: Props)
           placeholder="Cerrado, Sin dinero, Tenía producto…"
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
-          className="w-96 max-w-full rounded-md border px-3 py-2 text-sm"
         />
-      </div>
+      </Campo>
 
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={exigeFoto} disabled={enviando} onChange={(e) => setExigeFoto(e.target.checked)} />
-        Exige foto
-      </label>
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
+      <div className="flex flex-col gap-2">
+        <Casilla
+          etiqueta="Exige foto"
+          checked={exigeFoto}
+          disabled={enviando}
+          onChange={(e) => setExigeFoto(e.target.checked)}
+        />
+        <Casilla
+          etiqueta="Exige nombre de quien atendió"
           checked={exigeAtendio}
           disabled={enviando}
           onChange={(e) => setExigeAtendio(e.target.checked)}
         />
-        Exige nombre de quien atendió
-      </label>
-      <p className="text-xs text-muted-foreground">
-        Las casillas las exige la tablet al guardar la visita. Si las cambias, las visitas ya capturadas sin red suben
-        igual.
-      </p>
+        <p className="text-xs text-muted-foreground">
+          Las casillas las exige la tablet al guardar la visita. Si las cambias, las visitas ya capturadas sin red suben
+          igual.
+        </p>
+      </div>
 
       {error && (
         <p role="alert" className="text-sm text-destructive">
@@ -68,12 +64,12 @@ export function FormularioMotivoVisita({ motivo, alGuardar, alCancelar }: Props)
         </p>
       )}
 
-      <div className="flex gap-2">
-        <Button type="submit" disabled={enviando}>
-          {enviando ? "Guardando…" : "Guardar"}
-        </Button>
+      <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" disabled={enviando} onClick={alCancelar}>
           Cancelar
+        </Button>
+        <Button type="submit" disabled={enviando}>
+          {enviando ? "Guardando…" : "Guardar"}
         </Button>
       </div>
     </form>
