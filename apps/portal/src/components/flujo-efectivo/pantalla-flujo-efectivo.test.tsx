@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import * as excel from "@/lib/excel/exportar";
@@ -174,10 +174,43 @@ describe("PantallaFlujoEfectivo", () => {
     expect(await screen.findByRole("alert")).toBeInTheDocument();
   });
 
-  it("sin permiso, el aviso y ninguna consulta", () => {
+  it("sin permiso, el texto común y ninguna consulta", () => {
     mockAuth([]);
     render(<PantallaFlujoEfectivo sucursal={null} />);
-    expect(screen.getByText("No tienes permiso para ver el Flujo de Efectivo")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Flujo de Efectivo" })).toBeInTheDocument();
+    expect(screen.getByText("No tienes permiso para ver esta sección.")).toBeInTheDocument();
     expect(obtener).not.toHaveBeenCalled();
+  });
+
+  it("encabezado con su descripción y los atajos del filtro común", async () => {
+    obtener.mockResolvedValue(FLUJO);
+    render(<PantallaFlujoEfectivo sucursal={null} />);
+    expect(screen.getByRole("heading", { level: 1, name: "Flujo de Efectivo" })).toBeInTheDocument();
+    expect(screen.getByText("Ventas, cobranza, gastos y utilidades de un rango de fechas.")).toBeInTheDocument();
+    for (const atajo of ["Hoy", "Ayer", "Esta semana", "Este mes"]) {
+      expect(screen.getByRole("button", { name: atajo })).toBeInTheDocument();
+    }
+    await screen.findByRole("table", { name: "Flujo de Efectivo" });
+  });
+
+  it("un rango invertido muestra el error común y no consulta", async () => {
+    obtener.mockResolvedValue(FLUJO);
+    render(<PantallaFlujoEfectivo sucursal={null} />);
+    await screen.findByRole("table", { name: "Flujo de Efectivo" });
+    obtener.mockClear();
+    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-10-20" } });
+    fireEvent.change(screen.getByLabelText("Hasta"), { target: { value: "2026-10-10" } });
+    await userEvent.click(screen.getByRole("button", { name: "Mostrar" }));
+    expect(await screen.findByText("La fecha inicial no puede ser posterior a la final.")).toBeInTheDocument();
+    expect(obtener).not.toHaveBeenCalled();
+  });
+
+  it("las cuatro tablas conservan su nombre accesible", async () => {
+    obtener.mockResolvedValue(FLUJO);
+    render(<PantallaFlujoEfectivo sucursal={null} />);
+    await screen.findByRole("table", { name: "Flujo de Efectivo" });
+    expect(screen.getByRole("table", { name: "Desglose por día" })).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Comentarios de ingresos" })).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Comentarios de egresos" })).toBeInTheDocument();
   });
 });

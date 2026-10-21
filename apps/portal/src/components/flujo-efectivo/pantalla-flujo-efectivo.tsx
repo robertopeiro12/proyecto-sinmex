@@ -1,9 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { Aviso } from "@/components/ui/aviso";
+import { BotonExcel } from "@/components/ui/boton-excel";
+import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
+import { EstadoPantalla } from "@/components/ui/estado-pantalla";
+import { FiltroFechas } from "@/components/ui/filtro-fechas";
+import { Monto } from "@/components/ui/monto";
+import { CajaTabla, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
 import { mensajeDe } from "@/lib/api";
 import { exportarExcel } from "@/lib/excel/exportar";
 import {
@@ -12,15 +17,11 @@ import {
   obtenerFlujoEfectivo,
   type FlujoEfectivo,
 } from "@/lib/flujo-efectivo";
-import { diaAnterior, rangoMes, rangoSemana } from "@/lib/fechas";
+import type { RangoFechas } from "@/lib/fechas";
 import { etiquetaSucursal, formatearFecha } from "@/lib/reportes";
-import { formatearPesos, hoyEnTijuana } from "@/lib/ventas";
+import { hoyEnTijuana } from "@/lib/ventas";
 
 const NOTA_GASTOS = "sin gastos registrados todavía (llegan con Compras y Egresos)";
-
-function Pesos({ centavos }: { centavos: number }) {
-  return <span className={centavos < 0 ? "text-destructive" : ""}>{formatearPesos(centavos)}</span>;
-}
 
 interface FilaResumen {
   concepto: string;
@@ -32,20 +33,20 @@ interface FilaResumen {
 function filasResumen(f: FlujoEfectivo): FilaResumen[] {
   const nota = f.gastosDisponibles ? undefined : NOTA_GASTOS;
   return [
-    { concepto: "Ventas Totales", valor: <Pesos centavos={f.ventasTotalesCentavos} /> },
-    { concepto: "Ventas Repartidor", valor: <Pesos centavos={f.cobradoRepartidorCentavos} /> },
-    { concepto: "Ventas Oficinas", valor: <Pesos centavos={f.cobradoOficinaCentavos} /> },
-    { concepto: "Ventas Cobradas", valor: <Pesos centavos={f.ventasCobradasCentavos} /> },
+    { concepto: "Ventas Totales", valor: <Monto centavos={f.ventasTotalesCentavos} /> },
+    { concepto: "Ventas Repartidor", valor: <Monto centavos={f.cobradoRepartidorCentavos} /> },
+    { concepto: "Ventas Oficinas", valor: <Monto centavos={f.cobradoOficinaCentavos} /> },
+    { concepto: "Ventas Cobradas", valor: <Monto centavos={f.ventasCobradasCentavos} /> },
     { concepto: "% de Cobro", valor: formatearPorcentaje(f.porcentajeCobro) },
-    { concepto: "Gastos de Producción", valor: <Pesos centavos={f.gastosProduccionCentavos} />, nota },
-    { concepto: "Utilidad Bruta", valor: <Pesos centavos={f.utilidadBrutaCentavos} />, negritas: true },
-    { concepto: "Gastos Operativos", valor: <Pesos centavos={f.gastosOperacionCentavos} />, nota },
-    { concepto: "Utilidad de Operación", valor: <Pesos centavos={f.utilidadOperacionCentavos} />, negritas: true },
-    { concepto: "Gastos Financieros", valor: <Pesos centavos={f.gastosFinancierosCentavos} />, nota },
-    { concepto: "Utilidad Neta", valor: <Pesos centavos={f.utilidadNetaCentavos} />, negritas: true },
+    { concepto: "Gastos de Producción", valor: <Monto centavos={f.gastosProduccionCentavos} />, nota },
+    { concepto: "Utilidad Bruta", valor: <Monto centavos={f.utilidadBrutaCentavos} />, negritas: true },
+    { concepto: "Gastos Operativos", valor: <Monto centavos={f.gastosOperacionCentavos} />, nota },
+    { concepto: "Utilidad de Operación", valor: <Monto centavos={f.utilidadOperacionCentavos} />, negritas: true },
+    { concepto: "Gastos Financieros", valor: <Monto centavos={f.gastosFinancierosCentavos} />, nota },
+    { concepto: "Utilidad Neta", valor: <Monto centavos={f.utilidadNetaCentavos} />, negritas: true },
     {
       concepto: "Total Tesorería",
-      valor: <Pesos centavos={f.totalTesoreriaCentavos} />,
+      valor: <Monto centavos={f.totalTesoreriaCentavos} />,
       negritas: true,
       nota:
         f.tesoreriaCuentasConSaldo < f.tesoreriaCuentas
@@ -61,14 +62,13 @@ interface Consultado {
 }
 
 /**
- * Finanzas → Flujo de Efectivo (T-32): solo lectura. La página la monta con `key={sucursal}`.
+ * Finanzas → Flujo de Efectivo (T-32): solo lectura. FiltroFechas revisa el rango antes de consultar. La página la monta con `key={sucursal}`.
  */
 export function PantallaFlujoEfectivo({ sucursal }: { sucursal: string | null }) {
   const { puede, usuario, cargando: cargandoSesion } = useAuth();
   const permitido = puede("flujo_efectivo.ver");
   const hoy = hoyEnTijuana();
-  const [desde, setDesde] = useState(hoy);
-  const [hasta, setHasta] = useState(hoy);
+  const [rango, setRango] = useState<RangoFechas>({ desde: hoy, hasta: hoy });
   const [consultado, setConsultado] = useState<Consultado | null>(null);
   const [cargando, setCargando] = useState(false);
   const [exportando, setExportando] = useState(false);
@@ -80,10 +80,6 @@ export function PantallaFlujoEfectivo({ sucursal }: { sucursal: string | null })
   const consultar = useCallback(
     async (d: string, h: string) => {
       setError(null);
-      if (d > h) {
-        setError("La fecha inicial no puede ser posterior a la final.");
-        return;
-      }
       const esta = ++ultima.current;
       setCargando(true);
       try {
@@ -107,41 +103,8 @@ export function PantallaFlujoEfectivo({ sucursal }: { sucursal: string | null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permitido, sucursal]);
 
-  if (cargandoSesion) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Flujo de Efectivo</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">Cargando…</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!permitido) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Flujo de Efectivo</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">No tienes permiso para ver el Flujo de Efectivo</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  function aplicar(r: { desde: string; hasta: string }) {
-    setDesde(r.desde);
-    setHasta(r.hasta);
-  }
-
-  function alMostrar(e: FormEvent) {
-    e.preventDefault();
-    void consultar(desde, hasta);
-  }
+  if (cargandoSesion) return <EstadoPantalla titulo="Flujo de Efectivo" tipo="cargando" />;
+  if (!permitido) return <EstadoPantalla titulo="Flujo de Efectivo" tipo="sin-permiso" />;
 
   async function alExportar() {
     if (!consultado) return;
@@ -158,193 +121,146 @@ export function PantallaFlujoEfectivo({ sucursal }: { sucursal: string | null })
 
   const flujo = consultado?.flujo ?? null;
   const actualizando = cargando && consultado !== null;
-  const celda = "px-3 py-2";
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Flujo de Efectivo</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-5">
-        <form onSubmit={alMostrar} className="flex flex-wrap items-end gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="fe-desde" className="text-sm font-medium">
-              Desde
-            </label>
-            <input
-              id="fe-desde"
-              type="date"
-              required
-              value={desde}
-              onChange={(e) => setDesde(e.target.value)}
-              className="rounded-md border px-3 py-2 text-sm"
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="fe-hasta" className="text-sm font-medium">
-              Hasta
-            </label>
-            <input
-              id="fe-hasta"
-              type="date"
-              required
-              value={hasta}
-              onChange={(e) => setHasta(e.target.value)}
-              className="rounded-md border px-3 py-2 text-sm"
-            />
-          </div>
-          <div className="flex items-end gap-1">
-            <Button type="button" variant="ghost" size="sm" onClick={() => aplicar({ desde: hoy, hasta: hoy })}>
-              Hoy
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => aplicar({ desde: diaAnterior(hoy), hasta: diaAnterior(hoy) })}
-            >
-              Ayer
-            </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={() => aplicar(rangoSemana(hoy))}>
-              Esta semana
-            </Button>
-            <Button type="button" variant="ghost" size="sm" onClick={() => aplicar(rangoMes(hoy))}>
-              Este mes
-            </Button>
-          </div>
-          <Button type="submit">Mostrar</Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!flujo || exportando || cargando}
-            onClick={() => void alExportar()}
-          >
-            Exportar a Excel
-          </Button>
-        </form>
+    <Pantalla>
+      <EncabezadoPantalla
+        titulo="Flujo de Efectivo"
+        descripcion="Ventas, cobranza, gastos y utilidades de un rango de fechas."
+      />
 
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
+      <FiltroFechas
+        id="flujo"
+        desde={rango.desde}
+        hasta={rango.hasta}
+        onCambio={setRango}
+        onMostrar={(r) => void consultar(r.desde, r.hasta)}
+        acciones={<BotonExcel exportando={exportando} disabled={!flujo || cargando} onClick={() => void alExportar()} />}
+      />
+
+      {error && <Aviso tono="error">{error}</Aviso>}
+
+      {cargando && !consultado && <p className="text-sm text-muted-foreground">Cargando…</p>}
+      {actualizando && <p className="text-sm text-muted-foreground">Actualizando…</p>}
+
+      {flujo && (
+        <div aria-busy={actualizando} className={`flex flex-col gap-6 ${actualizando ? "opacity-60" : ""}`}>
+          <p className="text-sm text-muted-foreground">
+            {`Del ${formatearFecha(flujo.desde)} al ${formatearFecha(flujo.hasta)} · Sucursal: ${consultado!.sucursal}`}
           </p>
-        )}
 
-        {cargando && !consultado && <p className="text-sm text-muted-foreground">Cargando…</p>}
-        {actualizando && <p className="text-sm text-muted-foreground">Actualizando…</p>}
-
-        {flujo && (
-          <div aria-busy={actualizando} className={`flex flex-col gap-6 ${actualizando ? "opacity-60" : ""}`}>
-            <p className="text-sm text-muted-foreground">
-              {`Del ${formatearFecha(flujo.desde)} al ${formatearFecha(flujo.hasta)} · Sucursal: ${consultado!.sucursal}`}
-            </p>
-
-            <table aria-label="Flujo de Efectivo" className="w-full max-w-3xl text-sm">
+          <CajaTabla className="max-w-3xl">
+            <Tabla aria-label="Flujo de Efectivo">
               <tbody>
                 {filasResumen(flujo).map((f) => (
-                  <tr key={f.concepto} className={`border-b ${f.negritas ? "font-semibold" : ""}`}>
-                    <td className={`${celda} whitespace-nowrap`}>{f.concepto}</td>
-                    <td className={`${celda} whitespace-nowrap text-right tabular-nums`}>{f.valor}</td>
-                    <td className={`${celda} text-xs font-normal text-muted-foreground`}>{f.nota}</td>
+                  <tr key={f.concepto} className={f.negritas ? "font-semibold" : undefined}>
+                    <Td className="whitespace-nowrap">{f.concepto}</Td>
+                    <Td alinear="derecha" className="whitespace-nowrap">
+                      {f.valor}
+                    </Td>
+                    <Td className="text-xs font-normal text-muted-foreground">{f.nota}</Td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </Tabla>
+          </CajaTabla>
 
-            <div className="flex flex-col gap-2">
-              <h3 className="text-sm font-semibold">Desglose por día</h3>
-              {flujo.dias.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No hay ventas ni cobranza en ese rango.</p>
-              ) : (
-                <table aria-label="Desglose por día" className="w-full text-sm">
+          <div className="flex flex-col gap-2">
+            <h3 className="text-sm font-semibold">Desglose por día</h3>
+            {flujo.dias.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No hay ventas ni cobranza en ese rango.</p>
+            ) : (
+              <CajaTabla>
+                <Tabla aria-label="Desglose por día">
                   <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                      <th className={`${celda} font-medium`}>Fecha</th>
-                      <th className={`${celda} text-right font-medium`}>Ventas</th>
-                      <th className={`${celda} text-right font-medium`}>Cobrado repartidor</th>
-                      <th className={`${celda} text-right font-medium`}>Cobrado oficina</th>
-                      <th className={`${celda} text-right font-medium`}>% de cobro</th>
+                    <tr>
+                      <Th>Fecha</Th>
+                      <Th alinear="derecha">Ventas</Th>
+                      <Th alinear="derecha">Cobrado repartidor</Th>
+                      <Th alinear="derecha">Cobrado oficina</Th>
+                      <Th alinear="derecha">% de cobro</Th>
                     </tr>
                   </thead>
                   <tbody>
                     {flujo.dias.map((d) => (
-                      <tr key={d.fecha} className="border-b">
-                        <td className={celda}>{formatearFecha(d.fecha)}</td>
-                        <td className={`${celda} text-right tabular-nums`}>{formatearPesos(d.ventasCentavos)}</td>
-                        <td className={`${celda} text-right tabular-nums`}>
-                          {formatearPesos(d.cobradoRepartidorCentavos)}
-                        </td>
-                        <td className={`${celda} text-right tabular-nums`}>
-                          {formatearPesos(d.cobradoOficinaCentavos)}
-                        </td>
-                        <td className={`${celda} text-right tabular-nums`}>{formatearPorcentaje(d.porcentajeCobro)}</td>
+                      <tr key={d.fecha}>
+                        <Td>{formatearFecha(d.fecha)}</Td>
+                        <TdMonto centavos={d.ventasCentavos} />
+                        <TdMonto centavos={d.cobradoRepartidorCentavos} />
+                        <TdMonto centavos={d.cobradoOficinaCentavos} />
+                        <Td alinear="derecha">{formatearPorcentaje(d.porcentajeCobro)}</Td>
                       </tr>
                     ))}
                   </tbody>
-                </table>
-              )}
-            </div>
+                </Tabla>
+              </CajaTabla>
+            )}
+          </div>
 
-            <section aria-label="Comentarios" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="flex flex-col gap-2">
-                <h3 className="text-sm font-semibold">Comentarios de ingresos</h3>
-                {flujo.comentarios.ingresos.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Sin comentarios en el rango.</p>
-                ) : (
-                  <table className="w-full text-sm">
+          <section aria-label="Comentarios" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <div className="flex min-w-0 flex-col gap-2">
+              <h3 className="text-sm font-semibold">Comentarios de ingresos</h3>
+              {flujo.comentarios.ingresos.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Sin comentarios en el rango.</p>
+              ) : (
+                <CajaTabla>
+                  <Tabla aria-label="Comentarios de ingresos">
                     <thead>
-                      <tr className="border-b text-left text-muted-foreground">
-                        <th className={`${celda} font-medium`}>Fecha</th>
-                        <th className={`${celda} font-medium`}>Folio</th>
-                        <th className={`${celda} font-medium`}>Cliente</th>
-                        <th className={`${celda} font-medium`}>Comentario</th>
+                      <tr>
+                        <Th>Fecha</Th>
+                        <Th>Folio</Th>
+                        <Th>Cliente</Th>
+                        <Th>Comentario</Th>
                       </tr>
                     </thead>
                     <tbody>
                       {flujo.comentarios.ingresos.map((c, i) => (
-                        <tr key={i} className="border-b align-top">
-                          <td className={`${celda} whitespace-nowrap`}>{formatearFecha(c.fecha)}</td>
-                          <td className={`${celda} whitespace-nowrap`}>{c.folio}</td>
-                          <td className={celda}>{c.cliente}</td>
-                          <td className={celda}>{c.comentario}</td>
+                        <tr key={i} className="align-top">
+                          <Td className="whitespace-nowrap">{formatearFecha(c.fecha)}</Td>
+                          <Td className="whitespace-nowrap">{c.folio}</Td>
+                          <Td>{c.cliente}</Td>
+                          <Td>{c.comentario}</Td>
                         </tr>
                       ))}
                     </tbody>
-                  </table>
-                )}
-              </div>
-              <div className="flex flex-col gap-2">
-                <h3 className="text-sm font-semibold">Comentarios de egresos</h3>
-                {flujo.comentarios.egresos.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Sin comentarios en el rango.</p>
-                ) : (
-                  <table className="w-full text-sm">
+                  </Tabla>
+                </CajaTabla>
+              )}
+            </div>
+            <div className="flex min-w-0 flex-col gap-2">
+              <h3 className="text-sm font-semibold">Comentarios de egresos</h3>
+              {flujo.comentarios.egresos.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Sin comentarios en el rango.</p>
+              ) : (
+                <CajaTabla>
+                  <Tabla aria-label="Comentarios de egresos">
                     <thead>
-                      <tr className="border-b text-left text-muted-foreground">
-                        <th className={`${celda} font-medium`}>Fecha</th>
-                        <th className={`${celda} font-medium`}>Concepto</th>
-                        <th className={`${celda} font-medium`}>Cuenta</th>
-                        <th className={`${celda} text-right font-medium`}>Monto</th>
-                        <th className={`${celda} font-medium`}>Comentario</th>
+                      <tr>
+                        <Th>Fecha</Th>
+                        <Th>Concepto</Th>
+                        <Th>Cuenta</Th>
+                        <Th alinear="derecha">Monto</Th>
+                        <Th>Comentario</Th>
                       </tr>
                     </thead>
                     <tbody>
                       {flujo.comentarios.egresos.map((c, i) => (
-                        <tr key={i} className="border-b align-top">
-                          <td className={`${celda} whitespace-nowrap`}>{formatearFecha(c.fecha)}</td>
-                          <td className={celda}>{c.concepto}</td>
-                          <td className={celda}>{c.cuenta}</td>
-                          <td className={`${celda} text-right tabular-nums`}>{formatearPesos(c.montoCentavos)}</td>
-                          <td className={celda}>{c.comentario}</td>
+                        <tr key={i} className="align-top">
+                          <Td className="whitespace-nowrap">{formatearFecha(c.fecha)}</Td>
+                          <Td>{c.concepto}</Td>
+                          <Td>{c.cuenta}</Td>
+                          <TdMonto centavos={c.montoCentavos} />
+                          <Td>{c.comentario}</Td>
                         </tr>
                       ))}
                     </tbody>
-                  </table>
-                )}
-              </div>
-            </section>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+                  </Tabla>
+                </CajaTabla>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+    </Pantalla>
   );
 }
