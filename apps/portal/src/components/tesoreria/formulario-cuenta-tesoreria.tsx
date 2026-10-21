@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
+import { Campo, Entrada, Lista } from "@/components/ui/campo";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import { listarSucursales, type Sucursal } from "@/lib/sucursales";
@@ -57,38 +59,27 @@ export function FormularioCuentaTesoreria({ cuenta, alGuardar, alCancelar }: Pro
   }
 
   return (
-    <form onSubmit={alEnviar} className="mb-6 flex flex-col gap-4 rounded-md border p-4">
-      <h2 className="text-sm font-semibold">{esAlta ? "Nueva cuenta" : `Editar ${cuenta.nombre}`}</h2>
-
+    <form onSubmit={alEnviar} className="flex flex-col gap-4">
       <div className="flex flex-wrap gap-4">
-        <div className="flex flex-1 flex-col gap-1.5">
-          <label htmlFor="cuenta-nombre" className="text-sm font-medium">
-            Nombre de la cuenta
-          </label>
-          <input
-            id="cuenta-nombre"
+        <Campo id="cuenta-nombre" etiqueta="Nombre de la cuenta" className="flex-1">
+          <Entrada
             required
             maxLength={60}
             disabled={enviando}
             placeholder="Efectivo, Caja Chica, ScotiaFiscal…"
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            className="rounded-md border px-3 py-2 text-sm"
           />
-        </div>
+        </Campo>
 
         {eligeSucursal && (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="cuenta-sucursal" className="text-sm font-medium">
-              Sucursal
-            </label>
-            <select
-              id="cuenta-sucursal"
+          <Campo id="cuenta-sucursal" etiqueta="Sucursal">
+            <Lista
               required
               disabled={enviando}
               value={destino}
               onChange={(e) => setDestino(e.target.value)}
-              className="w-64 rounded-md border px-3 py-2 text-sm"
+              className="w-64"
             >
               <option value="">Elige…</option>
               <option value="general">General (toda la empresa)</option>
@@ -97,8 +88,8 @@ export function FormularioCuentaTesoreria({ cuenta, alGuardar, alCancelar }: Pro
                   {s.codigo} · {s.nombre}
                 </option>
               ))}
-            </select>
-          </div>
+            </Lista>
+          </Campo>
         )}
       </div>
 
@@ -108,18 +99,14 @@ export function FormularioCuentaTesoreria({ cuenta, alGuardar, alCancelar }: Pro
         </p>
       )}
 
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {error && <Aviso tono="error">{error}</Aviso>}
 
-      <div className="flex gap-2">
-        <Button type="submit" disabled={enviando || (eligeSucursal && destino === "")}>
-          {enviando ? "Guardando…" : "Guardar"}
-        </Button>
+      <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" disabled={enviando} onClick={alCancelar}>
           Cancelar
+        </Button>
+        <Button type="submit" disabled={enviando || (eligeSucursal && destino === "")}>
+          {enviando ? "Guardando…" : "Guardar"}
         </Button>
       </div>
     </form>
