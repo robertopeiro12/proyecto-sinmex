@@ -1,45 +1,48 @@
 "use client";
 
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
+import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
+import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 
 /** Información → Reportes (T-50): la lista. Kilometraje (T-50) y Clientes nuevos (T-51); los demas reportes se suman aqui. */
 export function ListaReportes({ sucursal }: { sucursal: string | null }) {
   const { puede, cargando: cargandoSesion } = useAuth();
   const consulta = sucursal ? `?sucursal=${encodeURIComponent(sucursal)}` : "";
 
+  if (cargandoSesion) return <EstadoPantalla titulo="Reportes" tipo="cargando" />;
+  if (!puede("reportes.ver")) return <EstadoPantalla titulo="Reportes" tipo="sin-permiso" />;
+
+  const reportes = [
+    {
+      nombre: "Kilometraje",
+      href: `/informacion/reportes/kilometraje${consulta}`,
+      explicacion: "Kilómetros por vehículo y día, con los saltos entre jornadas. Exportable a Excel.",
+    },
+    {
+      nombre: "Clientes nuevos",
+      href: `/informacion/reportes/clientes-nuevos${consulta}`,
+      explicacion:
+        "Clientes dados de alta (o convertidos de prospecto) en un rango, con el usuario que los dio de alta. Exportable a Excel.",
+    },
+  ];
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Reportes</CardTitle>
-      </CardHeader>
-      <CardContent>
-        {cargandoSesion ? (
-          <p className="text-sm text-muted-foreground">Cargando…</p>
-        ) : !puede("reportes.ver") ? (
-          <p className="text-sm text-muted-foreground">No tienes permiso para ver reportes</p>
-        ) : (
-          <ul className="flex flex-col gap-3">
-            <li>
-              <Link href={`/informacion/reportes/kilometraje${consulta}`} className="font-medium underline">
-                Kilometraje
-              </Link>
-              <p className="text-sm text-muted-foreground">
-                Kilómetros por vehículo y día, con los saltos entre jornadas. Exportable a Excel.
-              </p>
-            </li>
-            <li>
-              <Link href={`/informacion/reportes/clientes-nuevos${consulta}`} className="font-medium underline">
-                Clientes nuevos
-              </Link>
-              <p className="text-sm text-muted-foreground">
-                Clientes dados de alta (o convertidos de prospecto) en un rango, con el usuario que los dio de alta. Exportable a Excel.
-              </p>
-            </li>
-          </ul>
-        )}
-      </CardContent>
-    </Card>
+    <Pantalla>
+      <EncabezadoPantalla
+        titulo="Reportes"
+        descripcion="Los reportes del negocio que se pueden consultar y exportar a Excel."
+      />
+      <ul className="flex flex-col gap-3">
+        {reportes.map((r) => (
+          <li key={r.href} className="rounded-[10px] border px-4 py-3 transition-colors hover:bg-menu">
+            <Link href={r.href} className="font-semibold underline">
+              {r.nombre}
+            </Link>
+            <p className="mt-1 text-sm text-muted-foreground">{r.explicacion}</p>
+          </li>
+        ))}
+      </ul>
+    </Pantalla>
   );
 }

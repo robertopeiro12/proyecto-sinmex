@@ -26,10 +26,22 @@ describe("ListaReportes", () => {
     expect(screen.queryByText(/No tienes permiso/)).not.toBeInTheDocument();
   });
 
+  it("encabezado de nivel 1 con su descripción y un enlace por reporte con su explicación", () => {
+    mockAuth((clave) => clave === "reportes.ver");
+    render(<ListaReportes sucursal={null} />);
+    expect(screen.getByRole("heading", { level: 1, name: "Reportes" })).toBeInTheDocument();
+    expect(screen.getByText("Los reportes del negocio que se pueden consultar y exportar a Excel.")).toBeInTheDocument();
+    expect(screen.getAllByRole("link")).toHaveLength(2);
+    expect(screen.getByText("Kilómetros por vehículo y día, con los saltos entre jornadas. Exportable a Excel.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Clientes dados de alta (o convertidos de prospecto) en un rango, con el usuario que los dio de alta. Exportable a Excel."),
+    ).toBeInTheDocument();
+  });
+
   it("sin reportes.ver lo dice", () => {
     mockAuth(() => false);
     render(<ListaReportes sucursal={null} />);
-    expect(screen.getByText("No tienes permiso para ver reportes")).toBeInTheDocument();
+    expect(screen.getByText("No tienes permiso para ver esta sección.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Kilometraje" })).not.toBeInTheDocument();
   });
 

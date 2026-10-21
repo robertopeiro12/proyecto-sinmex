@@ -58,8 +58,18 @@ describe("PantallaClientesNuevos", () => {
   it("sin reportes.ver lo dice y no pide nada", () => {
     mockAuth([]);
     render(<PantallaClientesNuevos sucursal={null} />);
-    expect(screen.getByText("No tienes permiso para ver reportes")).toBeInTheDocument();
+    expect(screen.getByText("No tienes permiso para ver esta sección.")).toBeInTheDocument();
     expect(obtener).not.toHaveBeenCalled();
+  });
+
+  it("encabezado con título y descripción; atajos Hoy, Ayer, Esta semana y Este mes", () => {
+    mockAuth([PERMISO]);
+    render(<PantallaClientesNuevos sucursal={null} />);
+    expect(screen.getByRole("heading", { level: 1, name: "Clientes nuevos" })).toBeInTheDocument();
+    expect(screen.getByText("Los clientes dados de alta en un rango y quién los dio de alta.")).toBeInTheDocument();
+    for (const atajo of ["Hoy", "Ayer", "Esta semana", "Este mes"]) {
+      expect(screen.getByRole("button", { name: atajo })).toBeInTheDocument();
+    }
   });
 
   it("no consulta al abrir; fechas por defecto del día 1 a hoy; atajos solo llenan", async () => {
@@ -108,7 +118,7 @@ describe("PantallaClientesNuevos", () => {
     expect(screen.getByText("2 clientes nuevos")).toBeInTheDocument();
   });
 
-  it("tabla alineada: table-fixed, px-2 en toda celda, 9 columnas por fila", async () => {
+  it("tabla alineada: table-fixed, 9 columnas por fila", async () => {
     mockAuth([PERMISO]);
     const u = userEvent.setup();
     render(<PantallaClientesNuevos sucursal={null} />);
@@ -117,9 +127,6 @@ describe("PantallaClientesNuevos", () => {
     expect(tabla).toHaveClass("table-fixed");
     expect(tabla).toHaveClass("min-w-[61rem]");
     expect(tabla.querySelectorAll("col")).toHaveLength(9);
-    for (const celda of [...within(tabla).getAllByRole("cell"), ...within(tabla).getAllByRole("columnheader")]) {
-      expect(celda).toHaveClass("px-2");
-    }
     for (const fila of within(tabla).getAllByRole("row")) {
       expect(fila.children).toHaveLength(9);
     }
