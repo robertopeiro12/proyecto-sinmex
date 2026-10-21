@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import * as lib from "@/lib/tesoreria";
 import type { MovimientoManual } from "@/lib/tesoreria";
-import { hoyEnTijuana } from "@/lib/ventas";
+import { formatearFecha } from "@/lib/reportes";
+import { formatearPesos, hoyEnTijuana } from "@/lib/ventas";
 import { PestanaMovimientos } from "./pestana-movimientos";
 
 vi.mock("@/lib/tesoreria", async (importOriginal) => {
@@ -70,16 +71,45 @@ describe("PestanaMovimientos", () => {
     expect(screen.getByRole("button", { name: "Registrar" })).toBeDisabled();
   });
 
-  it("editar reabre el formulario con los datos; eliminar pide confirmación", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    vi.mocked(lib.eliminarMovimiento).mockResolvedValue({ id: "m1" });
+  it("Editar abre una ventana con el formulario de edición y el de arriba sigue diciendo Registrar operación", async () => {
+    render(<PestanaMovimientos sucursal={null} />);
+    const lista = await screen.findByRole("table", { name: "Movimientos registrados" });
+    await userEvent.type(screen.getByLabelText("Monto"), "77");
+    await userEvent.click(within(lista).getByRole("button", { name: "Editar" }));
+    const ventana = await screen.findByRole("dialog", { name: "Editar traspaso" });
+    expect(within(ventana).getByLabelText("Monto")).toHaveValue("5000.00");
+    expect(within(ventana).getByLabelText("Tipo")).toBeDisabled();
+    await userEvent.click(within(ventana).getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Registrar operación" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Monto")).toHaveValue("77");
+  });
+
+  it("guardar la edición cierra la ventana y recarga la lista", async () => {
+    vi.mocked(lib.editarMovimiento).mockResolvedValue(MOV);
     render(<PestanaMovimientos sucursal={null} />);
     const lista = await screen.findByRole("table", { name: "Movimientos registrados" });
     await userEvent.click(within(lista).getByRole("button", { name: "Editar" }));
-    expect(screen.getByLabelText("Monto")).toHaveValue("5000.00");
-    expect(screen.getByLabelText("Tipo")).toBeDisabled();
-    await userEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    const ventana = await screen.findByRole("dialog", { name: "Editar traspaso" });
+    await userEvent.click(within(ventana).getByRole("button", { name: "Guardar" }));
+    expect(lib.editarMovimiento).toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(lib.listarMovimientos).toHaveBeenCalledTimes(2);
+  });
+
+  it("Eliminar pide confirmar; Cancelar no elimina y confirmar sí", async () => {
+    vi.mocked(lib.eliminarMovimiento).mockResolvedValue({ id: "m1" });
+    render(<PestanaMovimientos sucursal={null} />);
+    const lista = await screen.findByRole("table", { name: "Movimientos registrados" });
     await userEvent.click(within(lista).getByRole("button", { name: "Eliminar" }));
+    const pregunta = await screen.findByRole("alertdialog", {
+      name: `¿Eliminar el traspaso de ${formatearPesos(500_000)} del ${formatearFecha(HOY)}?`,
+    });
+    expect(within(pregunta).getByText("No se puede deshacer.")).toBeInTheDocument();
+    await userEvent.click(within(pregunta).getByRole("button", { name: "Cancelar" }));
+    expect(lib.eliminarMovimiento).not.toHaveBeenCalled();
+    await userEvent.click(within(lista).getByRole("button", { name: "Eliminar" }));
+    await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Eliminar movimiento" }));
     expect(lib.eliminarMovimiento).toHaveBeenCalledWith("m1");
   });
 
@@ -91,30 +121,19 @@ describe("PestanaMovimientos", () => {
     expect(within(lista).queryByRole("button", { name: "Eliminar" })).not.toBeInTheDocument();
   });
 
-  it("eliminar el movimiento que se está editando cierra el formulario", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    vi.mocked(lib.eliminarMovimiento).mockResolvedValue({ id: "m1" });
-    render(<PestanaMovimientos sucursal={null} />);
-    const lista = await screen.findByRole("table", { name: "Movimientos registrados" });
-    await userEvent.click(within(lista).getByRole("button", { name: "Editar" }));
-    expect(screen.getByRole("button", { name: "Cancelar" })).toBeInTheDocument();
-    await userEvent.click(within(lista).getByRole("button", { name: "Eliminar" }));
-    expect(await screen.findByRole("button", { name: "Registrar" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Cancelar" })).not.toBeInTheDocument();
-  });
-
   it("editar con cuentas fuera de la lista las muestra y solo manda lo cambiado", async () => {
     vi.mocked(lib.listarCuentasTesoreria).mockResolvedValue([]);
     vi.mocked(lib.editarMovimiento).mockResolvedValue(MOV);
     render(<PestanaMovimientos sucursal={null} />);
     const lista = await screen.findByRole("table", { name: "Movimientos registrados" });
     await userEvent.click(within(lista).getByRole("button", { name: "Editar" }));
-    expect(screen.getByLabelText("De")).toHaveValue("a");
-    expect(screen.getByRole("option", { name: "Efectivo TJ" })).toBeInTheDocument();
-    expect(screen.getByLabelText("A")).toHaveValue("b");
-    await userEvent.clear(screen.getByLabelText("Comentario"));
-    await userEvent.type(screen.getByLabelText("Comentario"), "Otro");
-    await userEvent.click(screen.getByRole("button", { name: "Guardar" }));
+    const ventana = await screen.findByRole("dialog", { name: "Editar traspaso" });
+    expect(within(ventana).getByLabelText("De")).toHaveValue("a");
+    expect(within(ventana).getByRole("option", { name: "Efectivo TJ" })).toBeInTheDocument();
+    expect(within(ventana).getByLabelText("A")).toHaveValue("b");
+    await userEvent.clear(within(ventana).getByLabelText("Comentario"));
+    await userEvent.type(within(ventana).getByLabelText("Comentario"), "Otro");
+    await userEvent.click(within(ventana).getByRole("button", { name: "Guardar" }));
     expect(lib.editarMovimiento).toHaveBeenCalledWith("m1", { fecha: HOY, montoCentavos: 500_000, comentario: "Otro" });
   });
 

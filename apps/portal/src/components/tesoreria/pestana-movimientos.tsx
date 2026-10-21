@@ -1,9 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
+import { useConfirmar } from "@/components/ui/confirmar";
+import { FiltroFechas } from "@/components/ui/filtro-fechas";
+import { CajaTabla, FilaVacia, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
+import { Ventana } from "@/components/ui/ventana";
 import { mensajeDe } from "@/lib/api";
-import { primerDiaDelMes } from "@/lib/fechas";
+import { primerDiaDelMes, type RangoFechas } from "@/lib/fechas";
 import { formatearFecha } from "@/lib/reportes";
 import {
   eliminarMovimiento,
@@ -19,8 +24,10 @@ import { FormularioMovimiento } from "./formulario-movimiento";
 /** Registrar operación (T-29): formulario arriba y los movimientos del rango abajo. */
 export function PestanaMovimientos({ sucursal }: { sucursal: string | null }) {
   const hoy = hoyEnTijuana();
-  const [desde, setDesde] = useState(primerDiaDelMes(hoy));
-  const [hasta, setHasta] = useState(hoy);
+  // `rango` es lo que se teclea; `consultado`, lo que se pidió con Mostrar (y lo que recarga tras guardar).
+  const [rango, setRango] = useState<RangoFechas>({ desde: primerDiaDelMes(hoy), hasta: hoy });
+  const [consultado, setConsultado] = useState<RangoFechas>(rango);
+  const { confirmar, ventana } = useConfirmar();
   const [cuentas, setCuentas] = useState<CuentaTesoreria[]>([]);
   const [movimientos, setMovimientos] = useState<MovimientoManual[] | null>(null);
   const [editando, setEditando] = useState<MovimientoManual | null>(null);
@@ -31,12 +38,12 @@ export function PestanaMovimientos({ sucursal }: { sucursal: string | null }) {
     const esta = ++ultima.current;
     setError(null);
     try {
-      const lista = await listarMovimientos({ desde, hasta, sucursal });
+      const lista = await listarMovimientos({ desde: consultado.desde, hasta: consultado.hasta, sucursal });
       if (esta === ultima.current) setMovimientos(lista);
     } catch (err) {
       if (esta === ultima.current) setError(mensajeDe(err, "No se pudieron cargar los movimientos."));
     }
-  }, [desde, hasta, sucursal]);
+  }, [consultado, sucursal]);
 
   useEffect(() => {
     void cargar();
@@ -54,10 +61,15 @@ export function PestanaMovimientos({ sucursal }: { sucursal: string | null }) {
   }, [sucursal]);
 
   async function alEliminar(m: MovimientoManual) {
-    if (!window.confirm(`¿Eliminar el ${ETIQUETA_TIPO[m.tipo].toLowerCase()} de ${formatearPesos(m.montoCentavos)} del ${formatearFecha(m.fecha)}?`)) return;
+    const tipo = ETIQUETA_TIPO[m.tipo].toLowerCase();
+    const si = await confirmar({
+      titulo: `¿Eliminar el ${tipo} de ${formatearPesos(m.montoCentavos)} del ${formatearFecha(m.fecha)}?`,
+      descripcion: "No se puede deshacer.",
+      confirmar: "Eliminar movimiento",
+    });
+    if (!si) return;
     try {
       await eliminarMovimiento(m.id);
-      if (editando?.id === m.id) setEditando(null);
       void cargar();
     } catch (err) {
       setError(mensajeDe(err, "No se pudo eliminar el movimiento."));
@@ -66,70 +78,78 @@ export function PestanaMovimientos({ sucursal }: { sucursal: string | null }) {
 
   return (
     <div className="flex flex-col gap-5">
+      {/* Registrar: fijo arriba. Editar va en una ventana, así lo capturado aquí no se pierde. */}
       <FormularioMovimiento
-        key={editando?.id ?? "nuevo"}
+        key="nuevo"
         cuentas={cuentas}
-        movimiento={editando}
-        alGuardar={() => {
-          setEditando(null);
-          void cargar();
-        }}
-        alCancelar={editando ? () => setEditando(null) : undefined}
+        movimiento={null}
+        alGuardar={() => void cargar()}
       />
 
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="movs-desde" className="text-sm font-medium">Desde</label>
-          <input id="movs-desde" type="date" value={desde} onChange={(e) => e.target.value && setDesde(e.target.value)} className="rounded-md border px-3 py-2 text-sm" />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="movs-hasta" className="text-sm font-medium">Hasta</label>
-          <input id="movs-hasta" type="date" value={hasta} onChange={(e) => e.target.value && setHasta(e.target.value)} className="rounded-md border px-3 py-2 text-sm" />
-        </div>
-      </div>
+      <FiltroFechas id="movs" desde={rango.desde} hasta={rango.hasta} onCambio={setRango} onMostrar={setConsultado} />
 
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {error && <Aviso tono="error">{error}</Aviso>}
       {movimientos === null && !error && <p className="text-sm text-muted-foreground">Cargando…</p>}
-      {movimientos !== null && movimientos.length === 0 && (
-        <p className="text-sm text-muted-foreground">No hay movimientos en el rango.</p>
-      )}
-      {movimientos !== null && movimientos.length > 0 && (
-        <table className="w-full text-sm" aria-label="Movimientos registrados">
-          <thead>
-            <tr className="border-b text-left text-muted-foreground">
-              <th className="py-2 pr-4 font-medium">Fecha</th>
-              <th className="py-2 pr-4 font-medium">Tipo</th>
-              <th className="py-2 pr-4 font-medium">Cuenta</th>
-              <th className="py-2 pr-4 text-right font-medium">Monto</th>
-              <th className="py-2 pr-4 font-medium">Comentario</th>
-              <th className="py-2 pr-4 font-medium">Capturó</th>
-              <th className="py-2"><span className="sr-only">Acciones</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {movimientos.map((m) => (
-              <tr key={m.id} className="border-b last:border-0">
-                <td className="whitespace-nowrap py-2 pr-4">{formatearFecha(m.fecha)}</td>
-                <td className="whitespace-nowrap py-2 pr-4">{ETIQUETA_TIPO[m.tipo]}</td>
-                <td className="py-2 pr-4">{m.cuentaDestinoNombre ? `${m.cuentaNombre} → ${m.cuentaDestinoNombre}` : m.cuentaNombre}</td>
-                <td className={`whitespace-nowrap py-2 pr-4 text-right tabular-nums ${m.tipo === "retiro" ? "text-destructive" : ""}`}>
-                  {formatearPesos(m.tipo === "retiro" ? -m.montoCentavos : m.montoCentavos)}
-                </td>
-                <td className="py-2 pr-4">{m.comentario ?? "—"}</td>
-                <td className="py-2 pr-4">{m.capturo}</td>
-                <td className="whitespace-nowrap py-2 text-right">
-                  {m.editable && (
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setEditando(m)}>Editar</Button>
-                      <Button variant="outline" size="sm" onClick={() => void alEliminar(m)}>Eliminar</Button>
-                    </div>
-                  )}
-                </td>
+      {movimientos !== null && (
+        <CajaTabla>
+          <Tabla aria-label="Movimientos registrados">
+            <thead>
+              <tr>
+                <Th>Fecha</Th>
+                <Th>Tipo</Th>
+                <Th>Cuenta</Th>
+                <Th alinear="derecha">Monto</Th>
+                <Th>Comentario</Th>
+                <Th>Capturó</Th>
+                <Th><span className="sr-only">Acciones</span></Th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {movimientos.length === 0 && <FilaVacia columnas={7}>No hay movimientos en el rango.</FilaVacia>}
+              {movimientos.map((m) => (
+                <tr key={m.id}>
+                  <Td className="whitespace-nowrap">{formatearFecha(m.fecha)}</Td>
+                  <Td className="whitespace-nowrap">{ETIQUETA_TIPO[m.tipo]}</Td>
+                  <Td>{m.cuentaDestinoNombre ? `${m.cuentaNombre} → ${m.cuentaDestinoNombre}` : m.cuentaNombre}</Td>
+                  <TdMonto centavos={m.tipo === "retiro" ? -m.montoCentavos : m.montoCentavos} />
+                  <Td>{m.comentario ?? "—"}</Td>
+                  <Td>{m.capturo}</Td>
+                  <Td alinear="derecha" className="whitespace-nowrap">
+                    {m.editable && (
+                      <div className="flex justify-end gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setEditando(m)}>Editar</Button>
+                        <Button variant="outline" size="sm" onClick={() => void alEliminar(m)}>Eliminar</Button>
+                      </div>
+                    )}
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </Tabla>
+        </CajaTabla>
       )}
+
+      <Ventana
+        abierta={editando !== null}
+        alCerrar={() => setEditando(null)}
+        titulo={editando ? `Editar ${ETIQUETA_TIPO[editando.tipo].toLowerCase()}` : ""}
+        ancho="ancho"
+      >
+        {editando && (
+          <FormularioMovimiento
+            key={editando.id}
+            sinTitulo
+            cuentas={cuentas}
+            movimiento={editando}
+            alGuardar={() => {
+              setEditando(null);
+              void cargar();
+            }}
+            alCancelar={() => setEditando(null)}
+          />
+        )}
+      </Ventana>
+      {ventana}
     </div>
   );
 }
