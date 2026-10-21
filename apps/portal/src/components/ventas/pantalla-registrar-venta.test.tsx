@@ -112,27 +112,36 @@ describe("PantallaRegistrarVenta", () => {
         clienteId: "c1",
         numNota: "",
       });
-      const aviso = await screen.findByRole("note");
+      const aviso = await screen.findByRole("status");
       expect(aviso).toHaveTextContent(`Este cliente ya tiene 1 venta el ${hoy}`);
       expect(aviso).toHaveTextContent("TJ261006AP03");
       expect(aviso).toHaveTextContent("Ana Pérez");
       expect(aviso).toHaveTextContent("$270.00");
       expect(aviso).toHaveTextContent("Tablet");
+      expect(aviso).toHaveAttribute("data-tono", "advertencia");
     });
 
     it("sin ventas ese día no hay aviso", async () => {
       await prepararPantalla();
       await waitFor(() => expect(buscarVentas).toHaveBeenCalled());
-      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
     });
 
     it("si la búsqueda falla no hay aviso y se puede seguir capturando", async () => {
       buscarVentas.mockRejectedValue(new Error("red"));
       await prepararPantalla();
       await waitFor(() => expect(buscarVentas).toHaveBeenCalled());
-      expect(screen.queryByRole("note")).not.toBeInTheDocument();
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     });
+  });
+
+  it("lleva el encabezado común con su descripción", async () => {
+    await prepararPantalla();
+    expect(screen.getByRole("heading", { level: 1, name: "Registrar venta" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Captura una venta de la oficina: cliente, productos, condiciones y quién la entrega."),
+    ).toBeInTheDocument();
   });
 
   it("arma el payload sin precios, con el repartidor elegido, y muestra la venta creada", async () => {
@@ -167,6 +176,9 @@ describe("PantallaRegistrarVenta", () => {
     expect(resultado).toHaveTextContent("TJ261006OF01");
     expect(resultado).toHaveTextContent("$270.00");
     expect(resultado).toHaveTextContent("Pagada");
+    expect(resultado).toHaveAttribute("data-tono", "exito");
+    expect(resultado).toHaveTextContent("Si hay nota de papel, anota el folio en ella.");
+    expect(screen.getByRole("heading", { level: 1, name: "Registrar venta" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Registrar otra" })).toBeInTheDocument();
   });
 
