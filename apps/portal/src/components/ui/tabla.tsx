@@ -50,7 +50,7 @@ export function Th({ alinear = "izquierda", scope = "col", className, ...props }
       {...props}
       scope={scope}
       className={cn(
-        "sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-[12.5px] font-semibold whitespace-nowrap text-muted-foreground group-data-[densidad=compacta]/tabla:py-1.5",
+        "sticky top-0 z-[1] border-b bg-menu shadow-[inset_0_-1px_0_var(--border)] px-3 py-2 text-[12.5px] font-semibold whitespace-nowrap text-muted-foreground group-data-[densidad=compacta]/tabla:py-1.5",
         ALINEAR[alinear],
         className,
       )}

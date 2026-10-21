@@ -617,7 +617,7 @@ usuario con sesion pasa.
     (título + UNA línea que dice para qué sirve), `EstadoPantalla` (Cargando / sin permiso / elige sucursal, mismo texto
     en todas), `Tabla`/`Th`/`Td`/`TdMonto`/`CajaTabla`, `FiltroFechas` (botón **Mostrar**, atajos Hoy · Ayer · Esta
     semana · Este mes) + `BotonExcel`, `Aviso`, `Etiqueta`/`EtiquetaStatusVenta`, `Monto`, `Fecha`, `Campo` y sus
-    controles, `Pestanas`, `Ventana` (`ui/ventana.tsx`, Dialog de base-ui: formularios cortos de crear/editar),
+    controles, `Pestanas` (con `onCambio` opcional para avisar la pestaña elegida), `Ventana` (`ui/ventana.tsx`, Dialog de base-ui: formularios cortos de crear/editar),
     `Ayuda` (ⓘ con globito, Tooltip de base-ui; las explicaciones de permisos viven en `lib/explicacion-permisos.ts`).
     Para confirmar, `useConfirmar()` (pinta `{ventana}` en la pantalla), **nunca `window.confirm`**.
   - **Movimiento:** `Pantalla` entra con un desvanecido al montarse y `app/(portal)/template.tsx` hace lo mismo al
@@ -639,9 +639,10 @@ usuario con sesion pasa.
     `Placeholder` lleva `pronto: true` (una prueba lo exige).
   - **En `app/(portal)/layout.tsx`, el `AuthProvider` va DENTRO del `<Suspense>`** (arreglo del error de hidratación,
     Tarea 8). Todo lo que lea `useAuth` tiene que seguir dentro de ese Suspense.
-  - Siguen con el estilo de antes hasta su etapa: Tesorería, Reporte de Ventas, Clientes nuevos, Flujo,
-    Cuentas por Cobrar, Registrar venta, Promociones, Ruta diaria. **Recarga y Gastos son de Mario:**
-    no se tocan sin él.
+  - **Tesorería › Movimientos:** "Registrar operación" es un formulario fijo arriba; editar un movimiento abre una
+    `Ventana` y no toca lo que el de arriba tenga escrito. Consulta al entrar y al picar **Mostrar**.
+  - Siguen con el estilo de antes hasta su etapa: Registrar venta, Promociones, Ruta diaria. **Recarga y Gastos
+    son de Mario:** no se tocan sin él (Recarga conserva `window.confirm`, igual que Ruta diaria).
 
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
 `--`: sin él, npm se come los argumentos).

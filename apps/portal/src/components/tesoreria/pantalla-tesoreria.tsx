@@ -1,15 +1,17 @@
 "use client";
 
-import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, type ReactNode } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
+import { EstadoPantalla } from "@/components/ui/estado-pantalla";
+import { Pestanas } from "@/components/ui/pestanas";
 import { PestanaCuentas } from "./pestana-cuentas";
 import { PestanaMovimientos } from "./pestana-movimientos";
 import { PestanaSaldos } from "./pestana-saldos";
 import { PestanaVista } from "./pestana-vista";
 
-type Pestana = "tesoreria" | "movimientos" | "cuentas" | "saldos";
-const TODAS: { clave: Pestana; texto: string; permiso: string }[] = [
+type Clave = "tesoreria" | "movimientos" | "cuentas" | "saldos";
+const TODAS: { clave: Clave; texto: string; permiso: string }[] = [
   { clave: "tesoreria", texto: "Tesorería", permiso: "tesoreria.ver" },
   { clave: "movimientos", texto: "Movimientos", permiso: "tesoreria.gestionar" },
   { clave: "cuentas", texto: "Cuentas", permiso: "tesoreria.gestionar" },
@@ -25,83 +27,47 @@ export function PantallaTesoreria({
   vistaInicial: string | null;
 }) {
   const { puede, cargando } = useAuth();
-  const pestanas = TODAS.filter((p) => puede(p.permiso));
-  const [elegida, setElegida] = useState<Pestana | null>(null);
-  const botones = useRef<Partial<Record<Pestana, HTMLButtonElement | null>>>({});
+  const permitidas = TODAS.filter((p) => puede(p.permiso));
+  const [elegida, setElegida] = useState<Clave | null>(null);
 
-  if (cargando) return <Marco>Cargando…</Marco>;
-  if (pestanas.length === 0) return <Marco>No tienes permiso para ver la Tesorería</Marco>;
+  if (cargando) return <EstadoPantalla titulo="Tesorería" tipo="cargando" />;
+  if (permitidas.length === 0) return <EstadoPantalla titulo="Tesorería" tipo="sin-permiso" />;
 
   // La de la URL si se puede ver; si no, la primera permitida.
-  const actual: Pestana =
-    elegida ?? pestanas.find((p) => p.clave === vistaInicial)?.clave ?? pestanas[0].clave;
+  const inicial: Clave = permitidas.find((p) => p.clave === vistaInicial)?.clave ?? permitidas[0].clave;
+  const actual = elegida ?? inicial;
 
-  function cambiar(clave: Pestana) {
+  function alCambiarPestana(valor: string) {
+    const clave = permitidas.find((p) => p.clave === valor)?.clave;
+    if (!clave) return;
     setElegida(clave);
     const params = new URLSearchParams(window.location.search);
     params.set("vista", clave);
     window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
   }
 
-  function alTeclear(evento: KeyboardEvent<HTMLDivElement>) {
-    if (evento.key !== "ArrowLeft" && evento.key !== "ArrowRight") return;
-    evento.preventDefault();
-    const i = pestanas.findIndex((p) => p.clave === actual);
-    const paso = evento.key === "ArrowRight" ? 1 : pestanas.length - 1;
-    const siguiente = pestanas[(i + paso) % pestanas.length].clave;
-    cambiar(siguiente);
-    botones.current[siguiente]?.focus();
-  }
+  // La vista se queda montada para no perder el rango; las demás se montan al abrirse y se
+  // desmontan al salir, como antes.
+  const contenido: Record<Clave, ReactNode> = {
+    tesoreria: <PestanaVista sucursal={sucursal} activa={actual === "tesoreria"} />,
+    movimientos: actual === "movimientos" ? <PestanaMovimientos sucursal={sucursal} /> : null,
+    cuentas: actual === "cuentas" ? <PestanaCuentas sucursal={sucursal} /> : null,
+    saldos: actual === "saldos" ? <PestanaSaldos sucursal={sucursal} /> : null,
+  };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Tesorería</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div role="tablist" className="flex gap-2" onKeyDown={alTeclear}>
-          {pestanas.map(({ clave, texto }) => (
-            <button
-              key={clave}
-              type="button"
-              role="tab"
-              id={`pestana-${clave}`}
-              aria-controls={`panel-${clave}`}
-              aria-selected={actual === clave}
-              tabIndex={actual === clave ? 0 : -1}
-              ref={(el) => {
-                botones.current[clave] = el;
-              }}
-              onClick={() => cambiar(clave)}
-              className={`rounded-md border px-3 py-1.5 text-sm ${actual === clave ? "bg-muted font-medium" : ""}`}
-            >
-              {texto}
-            </button>
-          ))}
-        </div>
-        {/* La vista se queda montada para no perder el rango; Cuentas y Saldos se montan al abrirse. */}
-        {pestanas.map(({ clave }) => (
-          <div key={clave} role="tabpanel" id={`panel-${clave}`} aria-labelledby={`pestana-${clave}`} hidden={actual !== clave}>
-            {clave === "tesoreria" && <PestanaVista sucursal={sucursal} activa={actual === "tesoreria"} />}
-            {clave === "movimientos" && actual === clave && <PestanaMovimientos sucursal={sucursal} />}
-            {clave === "cuentas" && actual === clave && <PestanaCuentas sucursal={sucursal} />}
-            {clave === "saldos" && actual === clave && <PestanaSaldos sucursal={sucursal} />}
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-function Marco({ children }: { children: ReactNode }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Tesorería</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <p className="text-sm text-muted-foreground">{children}</p>
-      </CardContent>
-    </Card>
+    <Pantalla>
+      <EncabezadoPantalla
+        titulo="Tesorería"
+        descripcion="Las cuentas del negocio con su saldo, sus depósitos, retiros y traspasos, y la cobranza que entra sola."
+      />
+      <Pestanas
+        etiqueta="Tesorería"
+        conservarMontadas
+        valorInicial={inicial}
+        onCambio={alCambiarPestana}
+        pestanas={permitidas.map((p) => ({ valor: p.clave, etiqueta: p.texto, contenido: contenido[p.clave] }))}
+      />
+    </Pantalla>
   );
 }

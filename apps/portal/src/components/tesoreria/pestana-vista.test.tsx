@@ -64,6 +64,15 @@ describe("PestanaVista", () => {
     expect(lib.obtenerTesoreria).toHaveBeenLastCalledWith({ desde: HOY, hasta: HOY, sucursal: "TJ" });
   });
 
+  it("al volver a activarse con una fecha vacía no consulta", async () => {
+    const { rerender } = render(<PestanaVista sucursal="TJ" activa />);
+    await screen.findByText("ScotiaFiscal");
+    await userEvent.clear(screen.getByLabelText("Desde"));
+    rerender(<PestanaVista sucursal="TJ" activa={false} />);
+    rerender(<PestanaVista sucursal="TJ" activa />);
+    expect(lib.obtenerTesoreria).toHaveBeenCalledTimes(1);
+  });
+
   it("el total avisa cuántas cuentas tienen saldo", async () => {
     render(<PestanaVista sucursal={null} />);
     expect(await screen.findByText("Total Tesorería")).toBeInTheDocument();
@@ -162,5 +171,22 @@ describe("PestanaVista", () => {
       "Los gastos de ruta salen de la cuenta que recibe la cobranza en efectivo de su sucursal: configúrala en Cuentas → ¿A qué cuenta entra la cobranza?",
     );
     expect(aviso).not.toHaveTextContent("de cobranza de");
+  });
+
+  it("rango invertido: FiltroFechas muestra su error común y no consulta", async () => {
+    render(<PestanaVista sucursal={null} />);
+    await screen.findByText("ScotiaFiscal");
+    const desde = screen.getByLabelText("Desde");
+    await userEvent.clear(desde);
+    await userEvent.type(desde, "2099-01-01");
+    await userEvent.click(screen.getByRole("button", { name: "Mostrar" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("La fecha inicial no puede ser posterior a la final.");
+    expect(lib.obtenerTesoreria).toHaveBeenCalledTimes(1);
+  });
+
+  it("un error del servidor sale en un Aviso de error", async () => {
+    vi.mocked(lib.obtenerTesoreria).mockRejectedValue(new Error("boom"));
+    render(<PestanaVista sucursal={null} />);
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
   });
 });

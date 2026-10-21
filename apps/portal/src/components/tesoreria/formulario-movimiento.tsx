@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
+import { Campo, Entrada, Lista } from "@/components/ui/campo";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import { leerMontoCentavos, textoMonto } from "@/lib/cobranzas";
 import {
@@ -15,18 +17,18 @@ import {
 } from "@/lib/tesoreria";
 import { hoyEnTijuana } from "@/lib/ventas";
 
-const CLASE = "rounded-md border px-3 py-2 text-sm";
-
 interface Props {
   cuentas: CuentaTesoreria[];
   /** null = alta. Al editar, el tipo no cambia (spec §3.1). */
   movimiento: MovimientoManual | null;
   alGuardar: () => void;
   alCancelar?: () => void;
+  /** Dentro de la ventana de edición el título lo pone `Ventana`. */
+  sinTitulo?: boolean;
 }
 
 /** Registrar operación (T-29): depósito, retiro o traspaso de una cuenta a otra. */
-export function FormularioMovimiento({ cuentas, movimiento, alGuardar, alCancelar }: Props) {
+export function FormularioMovimiento({ cuentas, movimiento, alGuardar, alCancelar, sinTitulo = false }: Props) {
   const hoy = hoyEnTijuana();
   const [tipo, setTipo] = useState<TipoMovimiento>(movimiento?.tipo ?? "deposito");
   const [fecha, setFecha] = useState(movimiento?.fecha ?? hoy);
@@ -98,60 +100,57 @@ export function FormularioMovimiento({ cuentas, movimiento, alGuardar, alCancela
     );
   }
 
+  // El de arriba y el de la ventana de edición están a la vez en pantalla: ids distintos.
+  const id = movimiento ? "mov-editar" : "mov";
+
   return (
-    <form onSubmit={alEnviar} onChange={() => setTocado(true)} className="flex flex-col gap-4 rounded-md border p-4">
-      <h3 className="text-sm font-semibold">{movimiento ? `Editar ${ETIQUETA_TIPO[movimiento.tipo].toLowerCase()}` : "Registrar operación"}</h3>
+    <form onSubmit={alEnviar} onChange={() => setTocado(true)} className={`flex flex-col gap-4 ${sinTitulo ? "" : "rounded-[10px] border p-4"}`}>
+      {!sinTitulo && <h2 className="text-sm font-semibold">{movimiento ? `Editar ${ETIQUETA_TIPO[movimiento.tipo].toLowerCase()}` : "Registrar operación"}</h2>}
       <div className="flex flex-wrap items-end gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="mov-tipo" className="text-sm font-medium">Tipo</label>
-          <select id="mov-tipo" className={CLASE} value={tipo} disabled={enviando || movimiento !== null} onChange={(e) => setTipo(e.target.value as TipoMovimiento)}>
+        <Campo id={`${id}-tipo`} etiqueta="Tipo">
+          <Lista value={tipo} disabled={enviando || movimiento !== null} onChange={(e) => setTipo(e.target.value as TipoMovimiento)}>
             <option value="deposito">Depósito</option>
             <option value="retiro">Retiro</option>
             <option value="traspaso">Traspaso</option>
-          </select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="mov-fecha" className="text-sm font-medium">Fecha</label>
-          <input id="mov-fecha" type="date" className={CLASE} max={hoy} value={fecha} disabled={enviando} onChange={(e) => setFecha(e.target.value)} />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="mov-cuenta" className="text-sm font-medium">{tipo === "traspaso" ? "De" : "Cuenta"}</label>
-          <select id="mov-cuenta" className={`${CLASE} w-64`} value={cuentaId} disabled={enviando} onChange={(e) => setCuentaId(e.target.value)}>
+          </Lista>
+        </Campo>
+        <Campo id={`${id}-fecha`} etiqueta="Fecha">
+          <Entrada type="date" max={hoy} value={fecha} disabled={enviando} onChange={(e) => setFecha(e.target.value)} />
+        </Campo>
+        <Campo id={`${id}-cuenta`} etiqueta={tipo === "traspaso" ? "De" : "Cuenta"}>
+          <Lista className="w-64" value={cuentaId} disabled={enviando} onChange={(e) => setCuentaId(e.target.value)}>
             <option value="">Elige…</option>
             {opciones}
             {fantasma(movimiento?.cuentaId, movimiento?.cuentaNombre)}
-          </select>
-        </div>
+          </Lista>
+        </Campo>
         {tipo === "traspaso" && (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="mov-destino" className="text-sm font-medium">A</label>
-            <select id="mov-destino" className={`${CLASE} w-64`} value={destinoId} disabled={enviando} onChange={(e) => setDestinoId(e.target.value)}>
+          <Campo id={`${id}-destino`} etiqueta="A">
+            <Lista className="w-64" value={destinoId} disabled={enviando} onChange={(e) => setDestinoId(e.target.value)}>
               <option value="">Elige…</option>
               {opciones}
               {fantasma(movimiento?.cuentaDestinoId, movimiento?.cuentaDestinoNombre)}
-            </select>
-          </div>
+            </Lista>
+          </Campo>
         )}
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="mov-monto" className="text-sm font-medium">Monto</label>
-          <input id="mov-monto" inputMode="decimal" className={`${CLASE} w-36 text-right tabular-nums`} value={monto} disabled={enviando} onChange={(e) => setMonto(e.target.value)} />
-        </div>
-        <div className="flex min-w-48 flex-1 flex-col gap-1.5">
-          <label htmlFor="mov-comentario" className="text-sm font-medium">Comentario</label>
-          <input id="mov-comentario" maxLength={200} className={CLASE} value={comentario} disabled={enviando} onChange={(e) => setComentario(e.target.value)} />
-        </div>
+        <Campo id={`${id}-monto`} etiqueta="Monto">
+          <Entrada inputMode="decimal" className="w-36 text-right tabular-nums" value={monto} disabled={enviando} onChange={(e) => setMonto(e.target.value)} />
+        </Campo>
+        <Campo id={`${id}-comentario`} etiqueta="Comentario" className="min-w-48 flex-1">
+          <Entrada maxLength={200} value={comentario} disabled={enviando} onChange={(e) => setComentario(e.target.value)} />
+        </Campo>
       </div>
       {problema && <p className={`text-sm ${tocado ? "text-destructive" : "text-muted-foreground"}`}>{problema}</p>}
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      <div className="flex gap-2">
-        <Button type="submit" disabled={enviando || problema !== null}>
-          {enviando ? "Guardando…" : movimiento ? "Guardar" : "Registrar"}
-        </Button>
+      {error && <Aviso tono="error">{error}</Aviso>}
+      <div className="flex justify-end gap-2">
         {alCancelar && (
           <Button type="button" variant="outline" disabled={enviando} onClick={alCancelar}>
             Cancelar
           </Button>
         )}
+        <Button type="submit" disabled={enviando || problema !== null}>
+          {enviando ? "Guardando…" : movimiento ? "Guardar" : "Registrar"}
+        </Button>
       </div>
     </form>
   );

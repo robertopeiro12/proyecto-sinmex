@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import * as lib from "@/lib/tesoreria";
 import type { SaldosDelDia } from "@/lib/tesoreria";
+import { formatearFecha } from "@/lib/reportes";
 import { hoyEnTijuana } from "@/lib/ventas";
 import { PestanaSaldos } from "./pestana-saldos";
 
@@ -76,14 +77,25 @@ describe("PestanaSaldos", () => {
     expect(screen.getByRole("button", { name: "Guardar saldos" })).toBeDisabled();
   });
 
-  it("eliminar un saldo fijado pide confirmación y recarga", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("eliminar un saldo fijado pide confirmar en una ventana y recarga", async () => {
     vi.mocked(lib.eliminarSaldoFijado).mockResolvedValue({ id: "s1" });
     render(<PestanaSaldos sucursal={null} />);
     const lista = await screen.findByRole("table", { name: "Saldos fijados" });
     await userEvent.click(within(lista).getByRole("button", { name: "Eliminar" }));
-    expect(window.confirm).toHaveBeenCalled();
+    const ventana = await screen.findByRole("alertdialog", {
+      name: `¿Eliminar el saldo de "Efectivo TJ" del ${formatearFecha(HOY)}?`,
+    });
+    expect(within(ventana).getByText("La Tesorería volverá a usar el anterior.")).toBeInTheDocument();
+    await userEvent.click(within(ventana).getByRole("button", { name: "Eliminar saldo" }));
     expect(lib.eliminarSaldoFijado).toHaveBeenCalledWith("s1");
-    expect(lib.obtenerSaldosDelDia).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(lib.obtenerSaldosDelDia).toHaveBeenCalledTimes(2));
+  });
+
+  it("cancelar la confirmación no elimina el saldo", async () => {
+    render(<PestanaSaldos sucursal={null} />);
+    const lista = await screen.findByRole("table", { name: "Saldos fijados" });
+    await userEvent.click(within(lista).getByRole("button", { name: "Eliminar" }));
+    await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Cancelar" }));
+    expect(lib.eliminarSaldoFijado).not.toHaveBeenCalled();
   });
 });

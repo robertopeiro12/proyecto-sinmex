@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
+import { Entrada, Lista } from "@/components/ui/campo";
+import { CajaTabla, Tabla, Td, Th } from "@/components/ui/tabla";
 import { mensajeDe } from "@/lib/api";
 import { formatearFecha } from "@/lib/reportes";
 import {
@@ -86,74 +89,75 @@ export function SeccionDestinos({ sucursal, cuentas }: { sucursal: string | null
     }
   }
 
-  if (datos === null) return error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null;
+  if (datos === null) return error ? <Aviso tono="error">{error}</Aviso> : null;
 
   return (
     <section className="flex flex-col gap-3 border-t pt-5">
-      <h3 className="text-sm font-semibold">¿A qué cuenta entra la cobranza?</h3>
+      <h2 className="text-sm font-semibold">¿A qué cuenta entra la cobranza?</h2>
       <p className="text-xs text-muted-foreground">
         Los cobros del portal y de la tablet, y las ventas de contado, suman solos a esta cuenta según su sucursal y
         cómo se pagaron. Un cambio cuenta desde la fecha que elijas; lo anterior no se mueve.
       </p>
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {aviso && <p role="status" className="text-sm text-muted-foreground">{aviso}</p>}
-      <table className="w-full text-sm" aria-label="Destinos de la cobranza">
-        <thead>
-          <tr className="border-b text-left text-muted-foreground">
-            <th className="py-2 pr-4 font-medium">Sucursal</th>
-            {METODOS.map((m) => (
-              <th key={m} className="py-2 pr-4 font-medium">{ETIQUETA_METODO[m]}</th>
-            ))}
-            <th className="py-2 pr-4 font-medium">Desde</th>
-            <th className="py-2"><span className="sr-only">Acciones</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          {datos.map((s) => {
-            const opciones = cuentas.filter((c) => c.sucursalCodigo === s.sucursalCodigo || c.sucursalId === null);
-            return (
-              <tr key={s.sucursalId} className="border-b last:border-0">
-                <td className="whitespace-nowrap py-2 pr-4">{s.sucursalCodigo} · {s.sucursalNombre}</td>
-                {METODOS.map((m) => (
-                  <td key={m} className="py-2 pr-4">
-                    <select
-                      aria-label={`${ETIQUETA_METODO[m]} de ${s.sucursalCodigo}`}
-                      className="w-full min-w-40 rounded-md border px-2 py-1.5 text-sm"
-                      value={eleccion[`${s.sucursalId}:${m}`] ?? ""}
-                      onChange={(e) => setEleccion((p) => ({ ...p, [`${s.sucursalId}:${m}`]: e.target.value }))}
-                    >
-                      {!s.vigentes[m] && <option value="">Sin cuenta</option>}
-                      {s.vigentes[m] && !opciones.some((c) => c.id === s.vigentes[m]!.cuentaId) && (
-                        <option value={s.vigentes[m]!.cuentaId}>{s.vigentes[m]!.cuentaNombre}</option>
-                      )}
-                      {opciones.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.sucursalId === null ? `${c.nombre} · General` : c.nombre}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                ))}
-                <td className="py-2 pr-4">
-                  <input
-                    type="date"
-                    aria-label={`Desde, ${s.sucursalCodigo}`}
-                    max={hoy}
-                    value={desde[s.sucursalId] ?? hoy}
-                    onChange={(e) => e.target.value && setDesde((p) => ({ ...p, [s.sucursalId]: e.target.value }))}
-                    className="rounded-md border px-2 py-1.5 text-sm"
-                  />
-                </td>
-                <td className="py-2 text-right">
-                  <Button size="sm" variant="outline" disabled={guardando !== null} onClick={() => void guardarFila(s)}>
-                    {guardando === s.sucursalId ? "Guardando…" : "Guardar"}
-                  </Button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      {error && <Aviso tono="error">{error}</Aviso>}
+      {aviso && <Aviso tono="informacion">{aviso}</Aviso>}
+      <CajaTabla>
+        <Tabla aria-label="Destinos de la cobranza">
+          <thead>
+            <tr>
+              <Th>Sucursal</Th>
+              {METODOS.map((m) => (
+                <Th key={m}>{ETIQUETA_METODO[m]}</Th>
+              ))}
+              <Th>Desde</Th>
+              <Th><span className="sr-only">Acciones</span></Th>
+            </tr>
+          </thead>
+          <tbody>
+            {datos.map((s) => {
+              const opciones = cuentas.filter((c) => c.sucursalCodigo === s.sucursalCodigo || c.sucursalId === null);
+              return (
+                <tr key={s.sucursalId}>
+                  <Td className="whitespace-nowrap">{s.sucursalCodigo} · {s.sucursalNombre}</Td>
+                  {METODOS.map((m) => (
+                    <Td key={m}>
+                      <Lista
+                        aria-label={`${ETIQUETA_METODO[m]} de ${s.sucursalCodigo}`}
+                        className="w-full min-w-40"
+                        value={eleccion[`${s.sucursalId}:${m}`] ?? ""}
+                        onChange={(e) => setEleccion((p) => ({ ...p, [`${s.sucursalId}:${m}`]: e.target.value }))}
+                      >
+                        {!s.vigentes[m] && <option value="">Sin cuenta</option>}
+                        {s.vigentes[m] && !opciones.some((c) => c.id === s.vigentes[m]!.cuentaId) && (
+                          <option value={s.vigentes[m]!.cuentaId}>{s.vigentes[m]!.cuentaNombre}</option>
+                        )}
+                        {opciones.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.sucursalId === null ? `${c.nombre} · General` : c.nombre}
+                          </option>
+                        ))}
+                      </Lista>
+                    </Td>
+                  ))}
+                  <Td>
+                    <Entrada
+                      type="date"
+                      aria-label={`Desde, ${s.sucursalCodigo}`}
+                      max={hoy}
+                      value={desde[s.sucursalId] ?? hoy}
+                      onChange={(e) => e.target.value && setDesde((p) => ({ ...p, [s.sucursalId]: e.target.value }))}
+                    />
+                  </Td>
+                  <Td alinear="derecha">
+                    <Button size="sm" variant="outline" disabled={guardando !== null} onClick={() => void guardarFila(s)}>
+                      {guardando === s.sucursalId ? "Guardando…" : "Guardar"}
+                    </Button>
+                  </Td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </Tabla>
+      </CajaTabla>
       {datos.some((s) => s.historial.length > 0) && (
         <ul className="flex flex-col gap-1 text-xs text-muted-foreground">
           {datos.flatMap((s) =>

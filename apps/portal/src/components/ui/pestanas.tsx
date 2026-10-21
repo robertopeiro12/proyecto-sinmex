@@ -20,17 +20,23 @@ export function Pestanas({
   pestanas,
   valorInicial,
   conservarMontadas = false,
+  onCambio,
   etiqueta,
   className,
 }: {
   pestanas: Pestana[];
   valorInicial?: string;
   conservarMontadas?: boolean;
+  /** Avisa la pestaña a la que se pasó (clic o flechas); la pestaña sigue siendo no controlada. */
+  onCambio?: (valor: string) => void;
   etiqueta?: string;
   className?: string;
 }) {
   return (
-    <Tabs.Root defaultValue={valorInicial ?? pestanas[0]?.valor} className={cn("flex flex-col gap-4", className)}>
+    <Tabs.Root
+      defaultValue={valorInicial ?? pestanas[0]?.valor}
+      onValueChange={(valor) => onCambio?.(String(valor))}
+      className={cn("flex flex-col gap-4", className)}>
       <Tabs.List activateOnFocus aria-label={etiqueta} className="flex gap-1 border-b">
         {pestanas.map((p) => (
           <Tabs.Tab
