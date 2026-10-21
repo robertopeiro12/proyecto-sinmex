@@ -112,6 +112,17 @@ describe("PantallaProduccionDia", () => {
     expect((screen.getByLabelText("Fecha") as HTMLInputElement).max).toBe(HOY);
   });
 
+  it("teclear una fecha futura no la pide al servidor y se queda en hoy", async () => {
+    mockAuth([PERMISO]);
+    render(<PantallaProduccionDia sucursal={null} />);
+    await screen.findByRole("table", { name: "Producción del día" });
+    const fecha = screen.getByLabelText("Fecha") as HTMLInputElement;
+    fireEvent.change(fecha, { target: { value: "2999-01-01" } });
+    await waitFor(() => expect(fecha.value).toBe(HOY));
+    expect(lib.obtenerProduccion).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
   it("cambiar de fecha con cambios sin guardar pregunta; cancelar conserva la fecha", async () => {
     mockAuth([PERMISO]);
     render(<PantallaProduccionDia sucursal={null} />);

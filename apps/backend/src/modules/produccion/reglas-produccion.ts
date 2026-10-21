@@ -23,7 +23,7 @@ export const MENSAJE_PIEZAS_INVALIDAS =
 export const MENSAJE_PRESENTACION_REPETIDA = 'Una presentación viene repetida.';
 
 /** `AAAA-MM-DD` y un dia real del calendario (no 2026-02-30). */
-function esFechaReal(fecha: unknown): fecha is string {
+export function esFechaReal(fecha: unknown): fecha is string {
   if (typeof fecha !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha))
     return false;
   const [a, m, d] = fecha.split('-').map(Number);

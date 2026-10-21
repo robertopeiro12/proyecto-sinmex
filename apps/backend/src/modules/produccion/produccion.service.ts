@@ -23,6 +23,7 @@ import {
   type SucursalProduccion,
 } from './produccion.repository';
 import {
+  esFechaReal,
   MENSAJE_FECHA_INVALIDA,
   planDelDia,
   validarDia,
@@ -42,17 +43,6 @@ export interface DiaProduccion {
   lineas: LineaDelDia[];
   totalPiezas: number;
   actualizadoEn: string | null;
-}
-
-/** `AAAA-MM-DD` que existe en el calendario (el DTO ya comprobo el formato). */
-function esFechaReal(fecha: string): boolean {
-  const [anio, mes, dia] = fecha.split('-').map(Number);
-  const f = new Date(Date.UTC(anio, mes - 1, dia));
-  return (
-    f.getUTCFullYear() === anio &&
-    f.getUTCMonth() === mes - 1 &&
-    f.getUTCDate() === dia
-  );
 }
 
 /**
@@ -80,8 +70,8 @@ export class ProduccionService {
   /**
    * `PUT /produccion`: reemplaza el dia. Las reglas validan antes de abrir la
    * transaccion (fecha futura contra hoy en Tijuana, piezas, repetidas); dentro,
-   * con las filas vivas bloqueadas, se aplica `planDelDia`: crea, corrige o da
-   * de baja (0 o ausente = sin registro).
+   * con la fila de la sucursal y las filas vivas bloqueadas, se aplica
+   * `planDelDia`: crea, corrige o da de baja (0 o ausente = sin registro).
    */
   async guardar(
     usuarioId: string,
@@ -101,6 +91,7 @@ export class ProduccionService {
 
     try {
       return await this.repo.enTransaccion(async (trx) => {
+        await this.repo.bloquearSucursal(sucursal.id, trx);
         const vivas = await this.repo.bloquearVivas(dia, trx);
         await this.exigirPresentaciones(lineas, vivas, trx);
         const plan = planDelDia(vivas, lineas);
@@ -110,8 +101,9 @@ export class ProduccionService {
         return this.armarDia(sucursal, dto.fecha, trx);
       });
     } catch (error) {
-      // Dos primeros guardados simultaneos del mismo dia: no habia filas que
-      // bloquear y el indice unico parcial frena al segundo.
+      // Red de seguridad: con la sucursal bloqueada dos guardados del mismo dia
+      // ya no chocan; solo una escritura que no pase por aqui (sin el bloqueo)
+      // puede hacer que el indice unico parcial frene este guardado.
       if (esViolacionUnicidad(error))
         throw new ConflictException(MOTIVO_GUARDADO_SIMULTANEO);
       throw error;

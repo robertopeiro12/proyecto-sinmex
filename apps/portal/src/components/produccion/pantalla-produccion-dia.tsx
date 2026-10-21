@@ -81,6 +81,8 @@ function DiaDeProduccion({ sucursal }: { sucursal: string }) {
 
   async function cambiarFecha(nueva: string) {
     if (nueva === "" || nueva === fecha) return;
+    // El `max` del campo no impide teclear un día futuro: ni se pide ni se cambia.
+    if (nueva > hoy) return;
     if (cambios) {
       const si = await confirmar({
         titulo: "¿Descartar los cambios?",
@@ -152,7 +154,7 @@ function DiaDeProduccion({ sucursal }: { sucursal: string }) {
                   const nombre = `${l.producto} ${l.presentacion}`;
                   const mala = lectura(l.presentacionId) === null;
                   return (
-                    <Fila key={l.presentacionId} className="align-top">
+                    <Fila key={l.presentacionId} className="align-middle">
                       <Td>
                         {l.producto}
                         {!l.activa && <span className="text-muted-foreground"> (dada de baja)</span>}

@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsInt,
   IsObject,
@@ -11,6 +12,12 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { MENSAJE_PIEZAS_INVALIDAS } from '../reglas-produccion';
+
+/**
+ * Tope tecnico de lineas por guardado: el catalogo real es mucho menor, y un
+ * cuerpo enorme no debe alargar la transaccion (que tiene la sucursal bloqueada).
+ */
+const MAX_LINEAS = 500;
 
 /** El tope de la columna `produccion.piezas` (integer): mas alla seria un 500. */
 const MAX_INTEGER_POSTGRES = 2_147_483_647;
@@ -54,6 +61,9 @@ export class GuardarProduccionDto {
   sucursal!: string;
 
   @IsArray({ message: 'Las líneas deben ser una lista.' })
+  @ArrayMaxSize(MAX_LINEAS, {
+    message: `No se pueden guardar más de ${MAX_LINEAS} líneas.`,
+  })
   @IsObject({ each: true, message: 'Cada línea debe ser un objeto.' })
   @ValidateNested({ each: true })
   @Type(() => LineaProduccionDto)

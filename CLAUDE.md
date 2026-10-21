@@ -599,7 +599,8 @@ usuario con sesion pasa.
     `almacen_general.gestionar` (ya existía) y alcance de sucursal.
   - `PUT` reemplaza el día: **0 da de baja** la fila (no deja una con 0) y volver a capturarla crea otra. Fecha futura
     = 400 con `hoyEnTijuana`; "hoy" es el de Tijuana. Una presentación desactivada con piezas ese día sigue en el `GET`.
-    Un primer guardado concurrente da 409.
+    Dos guardados del mismo día y sucursal se serializan (fila de `sucursal` bloqueada `for no key update`, como el
+    vendedor en las cargas); el 409 del índice único queda como red de seguridad.
   - **Nube**: `20261023120000_produccion.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
     (pre-flight: tabla nueva; nada que contar).
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)

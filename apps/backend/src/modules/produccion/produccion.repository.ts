@@ -67,9 +67,27 @@ export class ProduccionRepository {
   }
 
   /**
-   * Las filas vivas del dia, bloqueadas (`for update`): dos guardados del mismo
-   * dia se aplican uno despues del otro. En el primer guardado no hay filas que
-   * bloquear; ahi la red es el indice unico parcial.
+   * Bloquea la fila de la sucursal hasta el fin de la transaccion: dos guardados
+   * del mismo dia y sucursal se aplican uno despues del otro, tambien el primero
+   * (cuando aun no hay filas de `produccion` que bloquear). Mismo patron que la
+   * fila del vendedor en las cargas: `for no key update` no frena los inserts
+   * que solo referencian a la sucursal. El indice unico parcial queda de red.
+   */
+  async bloquearSucursal(
+    sucursalId: string,
+    trx: Transaction<DB>,
+  ): Promise<void> {
+    await trx
+      .selectFrom('sucursal')
+      .select('id')
+      .where('id', '=', sucursalId)
+      .forNoKeyUpdate()
+      .execute();
+  }
+
+  /**
+   * Las filas vivas del dia, bloqueadas (`for update`), ya con la sucursal
+   * bloqueada por `bloquearSucursal`.
    */
   async bloquearVivas(
     dia: DiaSucursal,
@@ -159,7 +177,9 @@ export class ProduccionRepository {
   /**
    * Todas las presentaciones activas mas las que tengan piezas ese dia aunque ya
    * no esten activas (no se esconde lo capturado), en el orden del catalogo:
-   * producto y luego presentacion.
+   * producto y luego presentacion. `presentacion` no tiene un tamano numerico:
+   * se ordena por `volumen` (texto, "1 L" antes que "500 ml") igual que el
+   * catalogo de productos y el pull.
    */
   async lineasDelDia(
     dia: DiaSucursal,
