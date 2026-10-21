@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
+import { useConfirmar } from "@/components/ui/confirmar";
 import { renombrarPerfil, darDeBajaPerfil, type Perfil } from "@/lib/perfiles";
 
 interface Props {
@@ -16,6 +17,8 @@ export function ColumnaPerfil({ perfil, alCambiar }: Props) {
   const { enviando, error, enviar } = useEnvioFormulario(
     "No se pudo actualizar el perfil.",
   );
+
+  const { confirmar, ventana } = useConfirmar();
 
   if (perfil.esMaestro) {
     return <span>{perfil.nombre}</span>;
@@ -38,7 +41,12 @@ export function ColumnaPerfil({ perfil, alCambiar }: Props) {
   }
 
   async function confirmarBaja() {
-    if (!window.confirm(`¿Dar de baja el perfil "${perfil.nombre}"?`)) return;
+    const si = await confirmar({
+      titulo: `¿Dar de baja el perfil "${perfil.nombre}"?`,
+      descripcion: "Solo se puede si ningún usuario activo lo tiene.",
+      confirmar: "Dar de baja",
+    });
+    if (!si) return;
     await enviar(() => darDeBajaPerfil(perfil.id), alCambiar);
   }
 
@@ -56,7 +64,11 @@ export function ColumnaPerfil({ perfil, alCambiar }: Props) {
           }}
           className="w-32 rounded-md border px-2 py-1 text-sm font-normal"
         />
-        {error && <span className="text-xs text-destructive">{error}</span>}
+        {error && (
+          <span role="alert" className="text-xs text-destructive">
+            {error}
+          </span>
+        )}
       </div>
     );
   }
@@ -78,7 +90,12 @@ export function ColumnaPerfil({ perfil, alCambiar }: Props) {
       >
         Dar de baja
       </button>
-      {error && <span className="text-xs text-destructive">{error}</span>}
+      {error && (
+        <span role="alert" className="text-xs text-destructive">
+          {error}
+        </span>
+      )}
+      {ventana}
     </div>
   );
 }
