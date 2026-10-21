@@ -39,6 +39,7 @@ export const navSections: NavSection[] = [
     label: "Producción",
     items: [
       { label: "Peticiones", href: "/produccion/peticiones", pronto: true },
+      { label: "Producción del día", href: "/produccion/produccion-del-dia" },
       { label: "Recarga", href: "/produccion/recarga" },
       { label: "Corte", href: "/produccion/corte", pronto: true },
       { label: "Almacenes", href: "/produccion/almacenes", pronto: true },
