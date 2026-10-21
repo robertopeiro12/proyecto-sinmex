@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ErrorApi, type UsuarioSesion } from "@/lib/api";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -118,6 +118,39 @@ describe("PantallaUsuarios", () => {
     expect(await screen.findByText("jgarcia")).toBeInTheDocument();
     expect(screen.getByText("Auxiliar Administrativo")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nuevo usuario" })).toBeInTheDocument();
+  });
+
+  it("lleva el encabezado con la descripcion de la pantalla", async () => {
+    mockAuth(() => true);
+    listarUsuarios.mockResolvedValue([RESUMEN]);
+
+    render(<PantallaUsuarios sucursal={null} />);
+    await screen.findByText("jgarcia");
+
+    expect(screen.getByRole("heading", { name: "Usuarios" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Quién entra al portal, con qué perfil y en qué sucursal."),
+    ).toBeInTheDocument();
+  });
+
+  it("Nuevo usuario cambia la lista por el formulario y ← Volver a usuarios regresa sin guardar", async () => {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    listarUsuarios.mockResolvedValue([RESUMEN]);
+
+    render(<PantallaUsuarios sucursal="TJ" />);
+    await screen.findByText("jgarcia");
+
+    await usuario.click(screen.getByRole("button", { name: "Nuevo usuario" }));
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Nuevo usuario" })).toBeInTheDocument();
+    await usuario.type(await screen.findByLabelText("Login"), "a medias");
+
+    await usuario.click(screen.getByRole("button", { name: "← Volver a usuarios" }));
+    expect(await screen.findByRole("table")).toBeInTheDocument();
+    expect(crearUsuario).not.toHaveBeenCalled();
+    // La sucursal viene de fuera: volver recarga la lista con la misma.
+    expect(listarUsuarios).toHaveBeenLastCalledWith("TJ");
   });
 
   it("muestra el mensaje de error cuando la carga falla", async () => {
@@ -255,7 +288,6 @@ describe("PantallaUsuarios", () => {
   it("da de baja un usuario tras confirmar, y recarga la lista", async () => {
     const usuario = userEvent.setup();
     mockAuth(() => true);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     listarUsuarios.mockResolvedValueOnce([RESUMEN]);
     eliminarUsuario.mockResolvedValue(undefined);
     listarUsuarios.mockResolvedValueOnce([]);
@@ -264,6 +296,9 @@ describe("PantallaUsuarios", () => {
     await screen.findByText("jgarcia");
 
     await usuario.click(screen.getByRole("button", { name: "Eliminar" }));
+    const ventana = screen.getByRole("alertdialog", { name: '¿Dar de baja a "Juan García"?' });
+    expect(ventana).toHaveTextContent("Ya no podrá entrar al portal.");
+    await usuario.click(within(ventana).getByRole("button", { name: "Dar de baja" }));
 
     await waitFor(() => expect(eliminarUsuario).toHaveBeenCalledWith("1"));
     expect(await screen.findByText("No hay usuarios que mostrar.")).toBeInTheDocument();
@@ -272,13 +307,13 @@ describe("PantallaUsuarios", () => {
   it("no llama a eliminarUsuario si el usuario cancela la confirmacion", async () => {
     const usuario = userEvent.setup();
     mockAuth(() => true);
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     listarUsuarios.mockResolvedValue([RESUMEN]);
 
     render(<PantallaUsuarios sucursal={null} />);
     await screen.findByText("jgarcia");
 
     await usuario.click(screen.getByRole("button", { name: "Eliminar" }));
+    await usuario.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Cancelar" }));
 
     expect(eliminarUsuario).not.toHaveBeenCalled();
   });
@@ -286,7 +321,6 @@ describe("PantallaUsuarios", () => {
   it("muestra el mensaje exacto del servidor cuando la baja choca con una proteccion de D7", async () => {
     const usuario = userEvent.setup();
     mockAuth(() => true);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     listarUsuarios.mockResolvedValue([RESUMEN]);
     eliminarUsuario.mockRejectedValue(
       new ErrorApi("fallo", 409, "Debe quedar al menos un Administrador General activo."),
@@ -296,6 +330,7 @@ describe("PantallaUsuarios", () => {
     await screen.findByText("jgarcia");
 
     await usuario.click(screen.getByRole("button", { name: "Eliminar" }));
+    await usuario.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Dar de baja" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Debe quedar al menos un Administrador General activo.",

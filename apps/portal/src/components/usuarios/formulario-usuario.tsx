@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Campo, Entrada, Lista } from "@/components/ui/campo";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import { listarSucursales, type Sucursal } from "@/lib/sucursales";
@@ -141,44 +142,32 @@ export function FormularioUsuario({ usuario, alGuardar, alCancelar }: Props) {
   }
 
   return (
-    <form onSubmit={alEnviar} className="mb-6 flex flex-col gap-6 rounded-md border p-4">
-      <h2 className="text-sm font-semibold">
-        {esAlta ? "Nuevo usuario" : `Editar ${usuario.nombre}`}
-      </h2>
-
+    <form onSubmit={alEnviar} className="flex flex-col gap-6">
       <fieldset className="flex flex-col gap-4">
         <legend className="mb-1 text-sm font-semibold text-muted-foreground">
           Datos básicos
         </legend>
         <div className="flex flex-wrap gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="login" className="text-sm font-medium">
-              Login
-            </label>
-            <input
+          <Campo id="login" etiqueta="Login">
+            <Entrada
               id="login"
               required
               maxLength={60}
               disabled={enviando}
               value={login}
               onChange={(e) => setLogin(e.target.value)}
-              className="rounded-md border px-3 py-2 text-sm"
             />
-          </div>
-          <div className="flex flex-1 flex-col gap-1.5">
-            <label htmlFor="nombre" className="text-sm font-medium">
-              Nombre
-            </label>
-            <input
+          </Campo>
+          <Campo id="nombre" etiqueta="Nombre" className="flex-1">
+            <Entrada
               id="nombre"
               required
               maxLength={120}
               disabled={enviando}
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              className="rounded-md border px-3 py-2 text-sm"
             />
-          </div>
+          </Campo>
         </div>
       </fieldset>
 
@@ -186,11 +175,11 @@ export function FormularioUsuario({ usuario, alGuardar, alCancelar }: Props) {
         <legend className="mb-1 text-sm font-semibold text-muted-foreground">
           Contraseña
         </legend>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="contrasena" className="text-sm font-medium">
-            {esAlta ? "Contraseña" : "Nueva contraseña (déjalo en blanco para no cambiarla)"}
-          </label>
-          <input
+        <Campo
+          id="contrasena"
+          etiqueta={esAlta ? "Contraseña" : "Nueva contraseña (déjalo en blanco para no cambiarla)"}
+        >
+          <Entrada
             id="contrasena"
             type="password"
             required={esAlta}
@@ -199,9 +188,9 @@ export function FormularioUsuario({ usuario, alGuardar, alCancelar }: Props) {
             disabled={enviando}
             value={contrasena}
             onChange={(e) => setContrasena(e.target.value)}
-            className="w-64 rounded-md border px-3 py-2 text-sm"
+            className="w-64"
           />
-        </div>
+        </Campo>
       </fieldset>
 
       <fieldset className="flex flex-col gap-4">
@@ -209,17 +198,14 @@ export function FormularioUsuario({ usuario, alGuardar, alCancelar }: Props) {
           Perfil y sucursal
         </legend>
         <div className="flex flex-wrap gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="perfil" className="text-sm font-medium">
-              Perfil
-            </label>
-            <select
+          <Campo id="perfil" etiqueta="Perfil">
+            <Lista
               id="perfil"
               required
               disabled={enviando}
               value={perfilId}
               onChange={(e) => alElegirPerfil(e.target.value)}
-              className="w-56 rounded-md border px-3 py-2 text-sm"
+              className="w-56"
             >
               <option value="">Elige un perfil…</option>
               {catalogo.perfiles.map((p) => (
@@ -227,19 +213,16 @@ export function FormularioUsuario({ usuario, alGuardar, alCancelar }: Props) {
                   {p.nombre}
                 </option>
               ))}
-            </select>
-          </div>
+            </Lista>
+          </Campo>
           {eligeSucursal ? (
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="sucursal" className="text-sm font-medium">
-                Sucursal
-              </label>
-              <select
+            <Campo id="sucursal" etiqueta="Sucursal">
+              <Lista
                 id="sucursal"
                 disabled={enviando}
                 value={sucursalId}
                 onChange={(e) => setSucursalId(e.target.value)}
-                className="w-48 rounded-md border px-3 py-2 text-sm"
+                className="w-48"
               >
                 <option value="">General (todas)</option>
                 {sucursales.map((s) => (
@@ -248,8 +231,8 @@ export function FormularioUsuario({ usuario, alGuardar, alCancelar }: Props) {
                     {!s.activa ? " (inactiva)" : ""}
                   </option>
                 ))}
-              </select>
-            </div>
+              </Lista>
+            </Campo>
           ) : (
             <p className="self-end text-sm text-muted-foreground">
               Sucursal: {sesion?.sucursal?.codigo ?? "General"}
