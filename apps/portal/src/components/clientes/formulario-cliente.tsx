@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { AreaTexto, Campo, Casilla, Entrada, Lista } from "@/components/ui/campo";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import { listarSucursales, type Sucursal } from "@/lib/sucursales";
@@ -229,100 +230,78 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
   }
 
   return (
-    <form onSubmit={alEnviar} className="mb-6 flex flex-col gap-6 rounded-md border p-4">
-      <h2 className="text-sm font-semibold">
-        {esAlta ? "Nuevo cliente" : `Editar ${cliente.nombre}`}
-      </h2>
-
+    <form onSubmit={alEnviar} className="flex flex-col gap-6">
       <fieldset className="flex flex-col gap-4">
         <legend className="mb-1 text-sm font-semibold text-muted-foreground">
           Datos básicos
         </legend>
         <div className="flex flex-wrap gap-4">
-          <div className="flex flex-1 flex-col gap-1.5">
-            <label htmlFor="nombre" className="text-sm font-medium">
-              Nombre
-            </label>
-            <input
+          <Campo id="nombre" etiqueta="Nombre" className="flex-1">
+            <Entrada
               id="nombre"
               required
               maxLength={120}
               disabled={enviando}
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              className="rounded-md border px-3 py-2 text-sm"
             />
-          </div>
-          <div className="flex flex-1 flex-col gap-1.5">
-            <label htmlFor="domicilio" className="text-sm font-medium">
-              Domicilio / referencia
-            </label>
-            <input
+          </Campo>
+          <Campo id="domicilio" etiqueta="Domicilio / referencia" className="flex-1">
+            <Entrada
               id="domicilio"
               required
               maxLength={300}
               disabled={enviando}
               value={domicilio}
               onChange={(e) => setDomicilio(e.target.value)}
-              className="rounded-md border px-3 py-2 text-sm"
             />
-          </div>
+          </Campo>
         </div>
         <div className="flex flex-wrap items-end gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="telefono" className="text-sm font-medium">
-              Teléfono
-            </label>
-            <input
+          <Campo id="telefono" etiqueta="Teléfono">
+            <Entrada
               id="telefono"
               required
               maxLength={30}
               disabled={enviando}
               value={telefono}
               onChange={(e) => setTelefono(e.target.value)}
-              className="w-48 rounded-md border px-3 py-2 text-sm"
+              className="w-48"
             />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="encargado" className="text-sm font-medium">
-              Encargado
-            </label>
-            <input
+          </Campo>
+          <Campo id="encargado" etiqueta="Encargado">
+            <Entrada
               id="encargado"
               required={esAlta || cliente.encargado !== null}
               maxLength={120}
               disabled={enviando}
               value={encargado}
               onChange={(e) => setEncargado(e.target.value)}
-              className="w-48 rounded-md border px-3 py-2 text-sm"
+              className="w-48"
             />
-          </div>
+          </Campo>
           {esAlta && (
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="tipo" className="text-sm font-medium">
-                Tipo
-              </label>
-              <select
+            <Campo id="tipo" etiqueta="Tipo">
+              <Lista
                 id="tipo"
                 disabled={enviando}
                 value={tipo}
                 onChange={(e) => setTipo(e.target.value as "cliente" | "prospecto")}
-                className="w-40 rounded-md border px-3 py-2 text-sm"
+                className="w-40"
               >
                 <option value="cliente">Cliente</option>
                 <option value="prospecto">Prospecto</option>
-              </select>
-            </div>
+              </Lista>
+            </Campo>
           )}
-          <label className="flex items-center gap-2 pb-2 text-sm">
-            <input
-              type="checkbox"
+          <div className="flex h-9 items-center">
+            <Casilla
+              etiqueta="¿Requiere factura?"
               checked={factura}
               disabled={enviando}
               onChange={(e) => setFactura(e.target.checked)}
             />
-            ¿Requiere factura?
-          </label>
+          </div>
         </div>
         <SelectorTipoNegocio
           value={tipoNegocioId}
@@ -353,17 +332,14 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
           </p>
         )}
         {eligeSucursal && (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="sucursal" className="text-sm font-medium">
-              Sucursal
-            </label>
-            <select
+          <Campo id="sucursal" etiqueta="Sucursal">
+            <Lista
               id="sucursal"
               required
               disabled={enviando}
               value={sucursalId}
               onChange={(e) => setSucursalId(e.target.value)}
-              className="w-64 rounded-md border px-3 py-2 text-sm"
+              className="w-64"
             >
               <option value="">Elige una sucursal…</option>
               {sucursales.map((s) => (
@@ -371,8 +347,8 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
                   {s.codigo} · {s.nombre}
                 </option>
               ))}
-            </select>
-          </div>
+            </Lista>
+          </Campo>
         )}
       </fieldset>
 
@@ -380,17 +356,14 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
         <legend className="mb-1 text-sm font-semibold text-muted-foreground">
           Precio
         </legend>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="lista" className="text-sm font-medium">
-            Lista de precios
-          </label>
-          <select
+        <Campo id="lista" etiqueta="Lista de precios">
+          <Lista
             id="lista"
             required
             disabled={enviando}
             value={listaPrecioId}
             onChange={(e) => setListaPrecioId(e.target.value)}
-            className="w-64 rounded-md border px-3 py-2 text-sm"
+            className="w-64"
           >
             <option value="">Elige una lista…</option>
             {listas.map((l) => (
@@ -398,8 +371,8 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
                 {l.nombre}
               </option>
             ))}
-          </select>
-        </div>
+          </Lista>
+        </Campo>
         {productos.length > 0 && (
           <div>
             <p className="mb-2 text-sm font-medium">
@@ -417,7 +390,7 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
                         </span>
                       )}
                     </span>
-                    <input
+                    <Entrada
                       type="number"
                       min={0.01}
                       step="0.01"
@@ -426,7 +399,7 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
                       disabled={enviando}
                       value={overrides.get(presentacion.id) ?? ""}
                       onChange={(e) => cambiarOverride(presentacion.id, e.target.value)}
-                      className="w-32 rounded-md border px-2 py-1"
+                      className="w-32"
                     />
                   </div>
                 )),
@@ -441,11 +414,8 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
           Comisión y crédito
         </legend>
         <div className="flex flex-wrap gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="comision" className="text-sm font-medium">
-              % Comisión
-            </label>
-            <input
+          <Campo id="comision" etiqueta="% Comisión">
+            <Entrada
               id="comision"
               type="number"
               min={0}
@@ -454,14 +424,11 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
               disabled={enviando}
               value={pctComision}
               onChange={(e) => setPctComision(e.target.value)}
-              className="w-32 rounded-md border px-3 py-2 text-sm"
+              className="w-32"
             />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="credito" className="text-sm font-medium">
-              Plazo de crédito (días)
-            </label>
-            <input
+          </Campo>
+          <Campo id="credito" etiqueta="Plazo de crédito (días)">
+            <Entrada
               id="credito"
               type="number"
               min={0}
@@ -469,9 +436,9 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
               disabled={enviando}
               value={plazoCreditoDias}
               onChange={(e) => setPlazoCreditoDias(e.target.value)}
-              className="w-32 rounded-md border px-3 py-2 text-sm"
+              className="w-32"
             />
-          </div>
+          </Campo>
         </div>
       </fieldset>
 
@@ -480,11 +447,8 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
           Ubicación y notas
         </legend>
         <div className="flex flex-wrap gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="lat" className="text-sm font-medium">
-              Latitud
-            </label>
-            <input
+          <Campo id="lat" etiqueta="Latitud">
+            <Entrada
               id="lat"
               type="number"
               step="0.000001"
@@ -493,14 +457,11 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
               disabled={enviando}
               value={lat}
               onChange={(e) => setLat(e.target.value)}
-              className="w-40 rounded-md border px-3 py-2 text-sm"
+              className="w-40"
             />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="lng" className="text-sm font-medium">
-              Longitud
-            </label>
-            <input
+          </Campo>
+          <Campo id="lng" etiqueta="Longitud">
+            <Entrada
               id="lng"
               type="number"
               step="0.000001"
@@ -509,9 +470,9 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
               disabled={enviando}
               value={lng}
               onChange={(e) => setLng(e.target.value)}
-              className="w-40 rounded-md border px-3 py-2 text-sm"
+              className="w-40"
             />
-          </div>
+          </Campo>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-sm text-muted-foreground">
@@ -542,20 +503,16 @@ function FormularioDatosCliente({ cliente, alGuardar, alCancelar }: Props) {
             {avisoUbicar}
           </p>
         )}
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="comentarios" className="text-sm font-medium">
-            Comentarios
-          </label>
-          <textarea
+        <Campo id="comentarios" etiqueta="Comentarios">
+          <AreaTexto
             id="comentarios"
             maxLength={2000}
             disabled={enviando}
             rows={3}
             value={comentarios}
             onChange={(e) => setComentarios(e.target.value)}
-            className="rounded-md border px-3 py-2 text-sm"
           />
-        </div>
+        </Campo>
       </fieldset>
 
       {error && (

@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Aviso } from "@/components/ui/aviso";
+import { useConfirmar } from "@/components/ui/confirmar";
+import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
+import { EstadoPantalla } from "@/components/ui/estado-pantalla";
+import { CajaTabla } from "@/components/ui/tabla";
 import { ErrorApi } from "@/lib/api";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useCatalogo } from "@/components/catalogo/use-catalogo";
@@ -41,6 +45,7 @@ export function PantallaClientes({
     { mensajeError: "No se pudieron cargar los clientes.", deps: [sucursal, tipo] },
   );
 
+  const { confirmar, ventana } = useConfirmar();
   const [edicion, setEdicion] = useState<Edicion>(null);
   const [cargandoDetalleId, setCargandoDetalleId] = useState<string | null>(null);
   const [eliminandoId, setEliminandoId] = useState<string | null>(null);
@@ -74,9 +79,12 @@ export function PantallaClientes({
   }
 
   async function eliminar(item: ClienteResumen) {
-    if (!window.confirm(`¿Dar de baja a "${item.nombre}"? Se conserva su historial.`)) {
-      return;
-    }
+    const si = await confirmar({
+      titulo: `¿Dar de baja a "${item.nombre}"?`,
+      descripcion: "Se conserva su historial.",
+      confirmar: "Dar de baja",
+    });
+    if (!si) return;
     setEliminandoId(item.id);
     setErrorDetalle(null);
     try {
@@ -90,9 +98,12 @@ export function PantallaClientes({
   }
 
   async function convertir(item: ClienteResumen) {
-    if (!window.confirm(`¿Convertir a "${item.nombre}" en Cliente? No se puede deshacer.`)) {
-      return;
-    }
+    const si = await confirmar({
+      titulo: `¿Convertir a "${item.nombre}" en Cliente?`,
+      descripcion: "No se puede deshacer.",
+      confirmar: "Convertir en cliente",
+    });
+    if (!si) return;
     setConvirtiendoId(item.id);
     setErrorDetalle(null);
     try {
@@ -112,45 +123,52 @@ export function PantallaClientes({
     }
   }
 
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div className="flex items-center gap-3">
-          <CardTitle>Clientes</CardTitle>
-          <FiltroTipo valor={tipo} />
+  if (edicion !== null) {
+    return (
+      <Pantalla>
+        <Button variant="ghost" className="self-start" onClick={cerrar}>
+          ← Volver a clientes
+        </Button>
+        <EncabezadoPantalla
+          titulo={edicion === "nueva" ? "Nuevo cliente" : `Editar ${edicion.nombre}`}
+        />
+        <div key={edicion === "nueva" ? "nueva" : edicion.id}>
+          <FormularioCliente
+            cliente={edicion === "nueva" ? null : edicion}
+            alGuardar={alGuardar}
+            alCancelar={cerrar}
+          />
         </div>
-        {puedeGestionar && (
-          <Button size="sm" disabled={enCurso} onClick={() => setEdicion("nueva")}>
-            Nuevo cliente
-          </Button>
-        )}
-      </CardHeader>
+        {ventana}
+      </Pantalla>
+    );
+  }
 
-      <CardContent>
-        {edicion !== null && (
-          <div key={edicion === "nueva" ? "nueva" : edicion.id}>
-            <FormularioCliente
-              cliente={edicion === "nueva" ? null : edicion}
-              alGuardar={alGuardar}
-              alCancelar={cerrar}
-            />
-          </div>
-        )}
+  const error = catalogo.error ?? errorDetalle;
 
-        {errorDetalle && (
-          <p role="alert" className="mb-4 text-sm text-destructive">
-            {errorDetalle}
-          </p>
-        )}
+  return (
+    <Pantalla>
+      <EncabezadoPantalla
+        titulo="Clientes"
+        descripcion="Los clientes y prospectos de la sucursal: datos, ubicación, precios y promociones."
+        acciones={
+          <>
+            <FiltroTipo valor={tipo} />
+            {puedeGestionar && (
+              <Button disabled={enCurso} onClick={() => setEdicion("nueva")}>
+                Nuevo cliente
+              </Button>
+            )}
+          </>
+        }
+      />
 
-        {catalogo.cargando && <p className="text-muted-foreground">Cargando…</p>}
-        {catalogo.error && (
-          <p role="alert" className="text-sm text-destructive">
-            {catalogo.error}
-          </p>
-        )}
+      {error && <Aviso tono="error">{error}</Aviso>}
 
-        {!catalogo.cargando && !catalogo.error && (
+      {catalogo.cargando && <EstadoPantalla tipo="cargando" />}
+
+      {!catalogo.cargando && !catalogo.error && (
+        <CajaTabla>
           <TablaCatalogo
             items={catalogo.items}
             vacio="No hay clientes que mostrar."
@@ -203,8 +221,10 @@ export function PantallaClientes({
                 : undefined
             }
           />
-        )}
-      </CardContent>
-    </Card>
+        </CajaTabla>
+      )}
+
+      {ventana}
+    </Pantalla>
   );
 }

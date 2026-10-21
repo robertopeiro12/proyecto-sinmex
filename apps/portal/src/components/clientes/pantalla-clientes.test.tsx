@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorApi } from "@/lib/api";
@@ -24,10 +24,11 @@ vi.mock("@/lib/precios");
 vi.mock("@/lib/sucursales");
 vi.mock("@/lib/promociones");
 vi.mock("@/components/auth/auth-provider");
+const paramsUrl = new URLSearchParams("tipo=prospecto");
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
   usePathname: () => "/catalogo/clientes",
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => paramsUrl,
 }));
 
 const listarClientes = vi.mocked(clientesLib.listarClientes);
@@ -116,6 +117,39 @@ describe("PantallaClientes", () => {
     expect(screen.getByRole("button", { name: "Nuevo cliente" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Editar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Eliminar" })).toBeInTheDocument();
+  });
+
+  it("la lista muestra encabezado con descripción y el filtro", async () => {
+    mockAuth(() => true);
+    listarClientes.mockResolvedValue([RESUMEN]);
+
+    render(<PantallaClientes sucursal={null} tipo="todos" />);
+    await screen.findByText("Abarrotes Lupita");
+
+    expect(screen.getByRole("heading", { level: 1, name: "Clientes" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Los clientes y prospectos de la sucursal: datos, ubicación, precios y promociones."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Filtrar por tipo" })).toBeInTheDocument();
+  });
+
+  it("Nuevo cliente cambia la lista por el formulario y ← Volver a clientes regresa", async () => {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    listarClientes.mockResolvedValue([RESUMEN]);
+
+    render(<PantallaClientes sucursal={null} tipo="todos" />);
+    await screen.findByText("Abarrotes Lupita");
+
+    await usuario.click(screen.getByRole("button", { name: "Nuevo cliente" }));
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Nuevo cliente" })).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("button", { name: "← Volver a clientes" }));
+    expect(await screen.findByRole("table")).toBeInTheDocument();
+    expect(crearCliente).not.toHaveBeenCalled();
+    // El filtro de tipo vive en la URL: volver no la toca.
+    expect(paramsUrl.get("tipo")).toBe("prospecto");
   });
 
   it("oculta el alta, la edicion y la baja cuando el usuario no puede gestionar", async () => {
@@ -263,7 +297,6 @@ describe("PantallaClientes", () => {
   it("da de baja un cliente tras confirmar, y recarga la lista", async () => {
     const usuario = userEvent.setup();
     mockAuth(() => true);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     listarClientes.mockResolvedValueOnce([RESUMEN]);
     eliminarCliente.mockResolvedValue(undefined);
     listarClientes.mockResolvedValueOnce([]);
@@ -272,6 +305,9 @@ describe("PantallaClientes", () => {
     await screen.findByText("Abarrotes Lupita");
 
     await usuario.click(screen.getByRole("button", { name: "Eliminar" }));
+    const ventana = screen.getByRole("alertdialog", { name: '¿Dar de baja a "Abarrotes Lupita"?' });
+    expect(ventana).toHaveTextContent("Se conserva su historial.");
+    await usuario.click(within(ventana).getByRole("button", { name: "Dar de baja" }));
 
     await waitFor(() => expect(eliminarCliente).toHaveBeenCalledWith("1"));
     expect(await screen.findByText("No hay clientes que mostrar.")).toBeInTheDocument();
@@ -280,13 +316,13 @@ describe("PantallaClientes", () => {
   it("no llama a eliminarCliente si el usuario cancela la confirmacion", async () => {
     const usuario = userEvent.setup();
     mockAuth(() => true);
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     listarClientes.mockResolvedValue([RESUMEN]);
 
     render(<PantallaClientes sucursal={null} tipo="todos" />);
     await screen.findByText("Abarrotes Lupita");
 
     await usuario.click(screen.getByRole("button", { name: "Eliminar" }));
+    await usuario.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Cancelar" }));
 
     expect(eliminarCliente).not.toHaveBeenCalled();
   });
@@ -306,7 +342,6 @@ describe("PantallaClientes", () => {
   it("convierte un prospecto en cliente tras confirmar, y recarga la lista", async () => {
     const usuario = userEvent.setup();
     mockAuth(() => true);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     listarClientes.mockResolvedValueOnce([PROSPECTO]);
     convertirACliente.mockResolvedValue({ ...DETALLE, id: "2", tipo: "cliente" });
     listarClientes.mockResolvedValueOnce([
@@ -317,6 +352,9 @@ describe("PantallaClientes", () => {
     await screen.findByText("Tienda El Prospecto");
 
     await usuario.click(screen.getByRole("button", { name: "Convertir a Cliente" }));
+    const ventana = screen.getByRole("alertdialog", { name: '¿Convertir a "Tienda El Prospecto" en Cliente?' });
+    expect(ventana).toHaveTextContent("No se puede deshacer.");
+    await usuario.click(within(ventana).getByRole("button", { name: "Convertir en cliente" }));
 
     await waitFor(() => expect(convertirACliente).toHaveBeenCalledWith("2"));
     expect(
@@ -327,7 +365,6 @@ describe("PantallaClientes", () => {
   it("muestra el mensaje del servidor cuando no se puede convertir (T-70: falta el encargado)", async () => {
     const usuario = userEvent.setup();
     mockAuth(() => true);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     listarClientes.mockResolvedValue([PROSPECTO]);
     convertirACliente.mockRejectedValue(
       new ErrorApi(
@@ -340,6 +377,7 @@ describe("PantallaClientes", () => {
     render(<PantallaClientes sucursal={null} tipo="todos" />);
     await screen.findByText("Tienda El Prospecto");
     await usuario.click(screen.getByRole("button", { name: "Convertir a Cliente" }));
+    await usuario.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Convertir en cliente" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "hay que capturarle el encargado",
@@ -349,13 +387,13 @@ describe("PantallaClientes", () => {
   it("no llama a convertirACliente si el usuario cancela la confirmacion", async () => {
     const usuario = userEvent.setup();
     mockAuth(() => true);
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     listarClientes.mockResolvedValue([PROSPECTO]);
 
     render(<PantallaClientes sucursal={null} tipo="todos" />);
     await screen.findByText("Tienda El Prospecto");
 
     await usuario.click(screen.getByRole("button", { name: "Convertir a Cliente" }));
+    await usuario.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Cancelar" }));
 
     expect(convertirACliente).not.toHaveBeenCalled();
   });
