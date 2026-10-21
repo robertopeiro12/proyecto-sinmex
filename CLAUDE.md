@@ -617,7 +617,10 @@ usuario con sesion pasa.
     (título + UNA línea que dice para qué sirve), `EstadoPantalla` (Cargando / sin permiso / elige sucursal, mismo texto
     en todas), `Tabla`/`Th`/`Td`/`TdMonto`/`CajaTabla`, `FiltroFechas` (botón **Mostrar**, atajos Hoy · Ayer · Esta
     semana · Este mes) + `BotonExcel`, `Aviso`, `Etiqueta`/`EtiquetaStatusVenta`, `Monto`, `Fecha`, `Campo` y sus
-    controles, `Pestanas`. Para confirmar, `useConfirmar()` (pinta `{ventana}` en la pantalla), **nunca `window.confirm`**.
+    controles, `Pestanas`, `Ventana` (`ui/ventana.tsx`, Dialog de base-ui: formularios cortos de crear/editar). Para confirmar, `useConfirmar()` (pinta `{ventana}` en la pantalla), **nunca `window.confirm`**.
+  - **Formulario corto → `Ventana`; de varios bloques → pantalla completa con "← Volver a …"** (Clientes, Usuarios, como
+    editar una venta). `PantallaCatalogo` ya lo resuelve con sus props `descripcion`, `tituloFormulario`,
+    `formularioEn` (`"ventana"` por omisión o `"pantalla"`) y `baja` (botón que confirma con `useConfirmar`).
   - Formatos y rangos en un solo lugar: `lib/formato.ts` (`formatearPesos`, `formatearFecha`, `formatearFechaHora`,
     `plural`, `iniciales`) y `lib/fechas.ts` (`rangoSemana`, `rangoMes`, `diaAnterior`, `primerDiaDelMes`). Los archivos
     de antes (`lib/ventas.ts`, `lib/reportes.ts`, `lib/reporte-ventas.ts`, `lib/tesoreria.ts`) solo re-exportan.
@@ -630,8 +633,8 @@ usuario con sesion pasa.
     `Placeholder` lleva `pronto: true` (una prueba lo exige).
   - **En `app/(portal)/layout.tsx`, el `AuthProvider` va DENTRO del `<Suspense>`** (arreglo del error de hidratación,
     Tarea 8). Todo lo que lea `useAuth` tiene que seguir dentro de ese Suspense.
-  - Siguen con el estilo de antes hasta su etapa: catálogos, Tesorería, Reporte de Ventas, Clientes nuevos, Flujo,
-    Cuentas por Cobrar, Registrar venta, Perfiles, Precios, Promociones, Ruta diaria. **Recarga y Gastos son de Mario:**
+  - Siguen con el estilo de antes hasta su etapa: Tesorería, Reporte de Ventas, Clientes nuevos, Flujo,
+    Cuentas por Cobrar, Registrar venta, Promociones, Ruta diaria. **Recarga y Gastos son de Mario:**
     no se tocan sin él.
 
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
