@@ -8,8 +8,10 @@ export function PantallaProductos() {
   return (
     <PantallaCatalogo<Producto>
       titulo="Productos"
+      descripcion="Los sabores y sus presentaciones que se venden."
       permiso="producto.gestionar"
       etiquetaAlta="Nuevo producto"
+      tituloFormulario={(p) => (p ? `Editar ${p.nombre}` : "Nuevo producto")}
       vacio="No hay productos que mostrar."
       mensajeError="No se pudieron cargar los productos."
       cargar={listarProductos}

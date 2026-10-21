@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Campo, Casilla, Entrada, Lista } from "@/components/ui/campo";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import {
   crearCampoEgreso,
@@ -33,14 +34,9 @@ export function FormularioCampoEgreso({ campo, alGuardar, alCancelar }: Props) {
   }
 
   return (
-    <form onSubmit={alEnviar} className="mb-6 flex flex-col gap-4 rounded-md border p-4">
-      <h2 className="text-sm font-semibold">{campo ? `Editar ${campo.nombre}` : "Nuevo campo"}</h2>
-
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="campo-egreso-nombre" className="text-sm font-medium">
-          Nombre del campo
-        </label>
-        <input
+    <form onSubmit={alEnviar} className="flex flex-col gap-4">
+      <Campo id="campo-egreso-nombre" etiqueta="Nombre del campo">
+        <Entrada
           id="campo-egreso-nombre"
           required
           maxLength={80}
@@ -48,42 +44,37 @@ export function FormularioCampoEgreso({ campo, alGuardar, alCancelar }: Props) {
           placeholder="Gasolina, Hielo, Celular…"
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
-          className="w-96 max-w-full rounded-md border px-3 py-2 text-sm"
         />
-      </div>
+      </Campo>
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="campo-egreso-tipo" className="text-sm font-medium">
-          Tipo
-        </label>
-        <select
+      <Campo id="campo-egreso-tipo" etiqueta="Tipo">
+        <Lista
           id="campo-egreso-tipo"
           disabled={enviando}
           value={tipo}
           onChange={(e) => setTipo(e.target.value as TipoEgreso)}
-          className="w-60 rounded-md border px-3 py-2 text-sm"
+          className="w-60"
         >
           {TIPOS_EGRESO.map((t) => (
             <option key={t} value={t}>
               {ETIQUETA_TIPO_EGRESO[t]}
             </option>
           ))}
-        </select>
-      </div>
+        </Lista>
+      </Campo>
 
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
+      <div className="flex flex-col gap-1">
+        <Casilla
+          etiqueta="Se usa en la app"
           checked={seUsaEnApp}
           disabled={enviando}
           onChange={(e) => setSeUsaEnApp(e.target.checked)}
         />
-        Se usa en la app
-      </label>
-      <p className="text-xs text-muted-foreground">
-        El vendedor solo puede elegir en la tablet los campos con esta casilla. Si la cambias, los gastos ya capturados
-        sin red suben igual. Cambiar el nombre o el tipo no toca los gastos ya registrados: guardan su copia.
-      </p>
+        <p className="text-xs text-muted-foreground">
+          El vendedor solo puede elegir en la tablet los campos con esta casilla. Si la cambias, los gastos ya capturados
+          sin red suben igual. Cambiar el nombre o el tipo no toca los gastos ya registrados: guardan su copia.
+        </p>
+      </div>
 
       {error && (
         <p role="alert" className="text-sm text-destructive">
@@ -91,12 +82,12 @@ export function FormularioCampoEgreso({ campo, alGuardar, alCancelar }: Props) {
         </p>
       )}
 
-      <div className="flex gap-2">
-        <Button type="submit" disabled={enviando}>
-          {enviando ? "Guardando…" : "Guardar"}
-        </Button>
+      <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" disabled={enviando} onClick={alCancelar}>
           Cancelar
+        </Button>
+        <Button type="submit" disabled={enviando}>
+          {enviando ? "Guardando…" : "Guardar"}
         </Button>
       </div>
     </form>

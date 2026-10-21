@@ -1,8 +1,13 @@
 import type { ReactNode } from "react";
 
-/** La columna de una pantalla: lo de arriba a abajo, con 20 px entre cada cosa. */
+/**
+ * La columna de una pantalla: lo de arriba a abajo, con 20 px entre cada cosa. Entra con
+ * un desvanecido corto cada vez que se monta, así cambiar de la lista al formulario (o
+ * de "Cargando…" a la pantalla) no brinca. Quien cambia de vista con el mismo
+ * `<Pantalla>` le pone una `key` distinta para que cuente como vista nueva.
+ */
 export function Pantalla({ children }: { children: ReactNode }) {
-  return <div className="flex flex-col gap-5">{children}</div>;
+  return <div className="flex animate-in flex-col gap-5 fade-in duration-200 ease-out">{children}</div>;
 }
 
 /**

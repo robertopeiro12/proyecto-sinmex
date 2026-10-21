@@ -21,6 +21,8 @@ export function PantallaPromociones({ sucursal }: { sucursal: string | null }) {
       titulo="Promociones"
       permiso="promocion.gestionar"
       etiquetaAlta="Nueva promoción"
+      // Su formulario es largo y no cambia de forma hasta su etapa (la 4): reemplaza a la lista.
+      formularioEn="pantalla"
       vacio="No hay promociones en esta sucursal."
       mensajeError="No se pudieron cargar las promociones."
       cargar={() => listarPromociones({ sucursal })}

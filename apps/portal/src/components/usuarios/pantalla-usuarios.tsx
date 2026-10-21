@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Aviso } from "@/components/ui/aviso";
+import { useConfirmar } from "@/components/ui/confirmar";
+import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
+import { CajaTabla } from "@/components/ui/tabla";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useCatalogo } from "@/components/catalogo/use-catalogo";
 import { TablaCatalogo } from "@/components/catalogo/tabla-catalogo";
@@ -50,6 +53,7 @@ function Tabla({ sucursal }: { sucursal: string | null }) {
     deps: [sucursal],
   });
 
+  const { confirmar, ventana } = useConfirmar();
   const [edicion, setEdicion] = useState<Edicion>(null);
   const [cargandoDetalleId, setCargandoDetalleId] = useState<string | null>(null);
   const [eliminandoId, setEliminandoId] = useState<string | null>(null);
@@ -78,7 +82,12 @@ function Tabla({ sucursal }: { sucursal: string | null }) {
   }
 
   async function eliminar(item: UsuarioResumen) {
-    if (!window.confirm(`¿Dar de baja a "${item.nombre}"?`)) return;
+    const si = await confirmar({
+      titulo: `¿Dar de baja a "${item.nombre}"?`,
+      descripcion: "Ya no podrá entrar al portal.",
+      confirmar: "Dar de baja",
+    });
+    if (!si) return;
     setEliminandoId(item.id);
     setErrorDetalle(null);
     try {
@@ -102,40 +111,47 @@ function Tabla({ sucursal }: { sucursal: string | null }) {
     }
   }
 
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Usuarios</CardTitle>
-        <Button size="sm" disabled={enCurso} onClick={() => setEdicion("nueva")}>
-          Nuevo usuario
+  if (edicion !== null) {
+    return (
+      <Pantalla key="formulario">
+        <Button variant="ghost" className="self-start" onClick={cerrar}>
+          ← Volver a usuarios
         </Button>
-      </CardHeader>
+        <EncabezadoPantalla
+          titulo={edicion === "nueva" ? "Nuevo usuario" : `Editar ${edicion.nombre}`}
+        />
+        <div key={edicion === "nueva" ? "nueva" : edicion.id}>
+          <FormularioUsuario
+            usuario={edicion === "nueva" ? null : edicion}
+            alGuardar={alGuardar}
+            alCancelar={cerrar}
+          />
+        </div>
+        {ventana}
+      </Pantalla>
+    );
+  }
 
-      <CardContent>
-        {edicion !== null && (
-          <div key={edicion === "nueva" ? "nueva" : edicion.id}>
-            <FormularioUsuario
-              usuario={edicion === "nueva" ? null : edicion}
-              alGuardar={alGuardar}
-              alCancelar={cerrar}
-            />
-          </div>
-        )}
+  const error = catalogo.error ?? errorDetalle;
 
-        {errorDetalle && (
-          <p role="alert" className="mb-4 text-sm text-destructive">
-            {errorDetalle}
-          </p>
-        )}
+  return (
+    <Pantalla key="lista">
+      <EncabezadoPantalla
+        titulo="Usuarios"
+        descripcion="Quién entra al portal, con qué perfil y en qué sucursal."
+        acciones={
+          <Button disabled={enCurso} onClick={() => setEdicion("nueva")}>
+            Nuevo usuario
+          </Button>
+        }
+      />
 
-        {catalogo.cargando && <p className="text-muted-foreground">Cargando…</p>}
-        {catalogo.error && (
-          <p role="alert" className="text-sm text-destructive">
-            {catalogo.error}
-          </p>
-        )}
+      {error && <Aviso tono="error">{error}</Aviso>}
 
-        {!catalogo.cargando && !catalogo.error && (
+      {catalogo.cargando && <EstadoPantalla tipo="cargando" />}
+
+      {!catalogo.cargando && !catalogo.error && (
+        <CajaTabla>
           <TablaCatalogo
             items={catalogo.items}
             vacio="No hay usuarios que mostrar."
@@ -170,8 +186,9 @@ function Tabla({ sucursal }: { sucursal: string | null }) {
               </div>
             )}
           />
-        )}
-      </CardContent>
-    </Card>
+        </CajaTabla>
+      )}
+      {ventana}
+    </Pantalla>
   );
 }

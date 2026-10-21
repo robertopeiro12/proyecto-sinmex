@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
+import { Aviso } from "@/components/ui/aviso";
+import {
+  EncabezadoPantalla,
+  Pantalla,
+} from "@/components/ui/encabezado-pantalla";
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
+import { CajaTabla } from "@/components/ui/tabla";
 import { listarProductos, type Producto } from "@/lib/productos";
 import { listarSucursales, type Sucursal } from "@/lib/sucursales";
 import {
@@ -118,7 +117,10 @@ function MatrizPrecios({
     };
   }, [sucursalCodigo]);
 
-  function precioDe(presentacionId: string, listaPrecioId: string): number | null {
+  function precioDe(
+    presentacionId: string,
+    listaPrecioId: string,
+  ): number | null {
     return (
       precios.find(
         (p) =>
@@ -146,92 +148,76 @@ function MatrizPrecios({
   }
 
   if (cargando) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Listas de Precios</CardTitle>
-          <CardDescription>Precios en pesos mexicanos (MXN)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">Cargando…</p>
-        </CardContent>
-      </Card>
-    );
+    return <EstadoPantalla titulo="Listas de Precios" tipo="cargando" />;
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Listas de Precios</CardTitle>
-        <CardDescription>Precios en pesos mexicanos (MXN)</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {error && (
-          <p role="alert" className="mb-4 text-sm text-destructive">
-            {error}
-          </p>
-        )}
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-muted-foreground">
-                <th scope="col" className="py-2 font-medium">
-                  Producto
+    <Pantalla>
+      <EncabezadoPantalla
+        titulo="Listas de Precios"
+        descripcion="El precio de cada presentación en cada lista de la sucursal, en pesos mexicanos (MXN)."
+      />
+      {error && <Aviso tono="error">{error}</Aviso>}
+      <CajaTabla>
+        <table className="w-full text-sm">
+          <thead>
+            <tr>
+              <th scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold whitespace-nowrap text-muted-foreground">
+                Producto
+              </th>
+              <th scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold whitespace-nowrap text-muted-foreground">
+                Presentación
+              </th>
+              {listas.map((lista) => (
+                <th key={lista.id} scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold whitespace-nowrap text-muted-foreground">
+                  {lista.nombre}
                 </th>
-                <th scope="col" className="py-2 font-medium">
-                  Presentación
-                </th>
-                {listas.map((lista) => (
-                  <th key={lista.id} scope="col" className="py-2 font-medium">
-                    {lista.nombre}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {productos.flatMap((producto) =>
-                producto.presentaciones.map((presentacion) => (
-                  <tr key={presentacion.id} className="border-b last:border-0">
-                    <td className="py-2">
-                      {producto.nombre}
-                      {!producto.activo && (
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          Inactivo
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2">{presentacion.volumen}</td>
-                    {listas.map((lista) => (
-                      <td key={lista.id} className="py-2">
-                        <CeldaPrecio
-                          presentacionId={presentacion.id}
-                          listaPrecioId={lista.id}
-                          sucursalId={sucursalId}
-                          precioInicial={precioDe(presentacion.id, lista.id)}
-                          editable={puedeGestionar}
-                          alGuardar={(precio) =>
-                            alGuardarCelda(presentacion.id, lista.id, precio)
-                          }
-                        />
-                      </td>
-                    ))}
-                  </tr>
-                )),
-              )}
-              {productos.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={2 + listas.length}
-                    className="py-4 text-muted-foreground"
-                  >
-                    No hay productos en el catálogo.
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {productos.flatMap((producto) =>
+              producto.presentaciones.map((presentacion) => (
+                <tr key={presentacion.id} className="border-b last:border-0">
+                  <td className="px-3 py-2">
+                    {producto.nombre}
+                    {!producto.activo && (
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        Inactivo
+                      </span>
+                    )}
                   </td>
+                  <td className="px-3 py-2">{presentacion.volumen}</td>
+                  {listas.map((lista) => (
+                    <td key={lista.id} className="px-3 py-2">
+                      <CeldaPrecio
+                        presentacionId={presentacion.id}
+                        listaPrecioId={lista.id}
+                        sucursalId={sucursalId}
+                        precioInicial={precioDe(presentacion.id, lista.id)}
+                        editable={puedeGestionar}
+                        alGuardar={(precio) =>
+                          alGuardarCelda(presentacion.id, lista.id, precio)
+                        }
+                      />
+                    </td>
+                  ))}
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
+              )),
+            )}
+            {productos.length === 0 && (
+              <tr>
+                <td
+                  colSpan={2 + listas.length}
+                  className="px-3 py-4 text-muted-foreground"
+                >
+                  No hay productos en el catálogo.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </CajaTabla>
+    </Pantalla>
   );
 }

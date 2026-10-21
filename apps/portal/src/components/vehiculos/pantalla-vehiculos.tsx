@@ -8,8 +8,10 @@ export function PantallaVehiculos({ sucursal }: { sucursal: string | null }) {
   return (
     <PantallaCatalogo<Vehiculo>
       titulo="Vehículos"
+      descripcion="Las camionetas de cada sucursal, con sus placas y kilometraje."
       permiso="vehiculo.gestionar"
       etiquetaAlta="Nuevo vehículo"
+      tituloFormulario={(v) => (v ? `Editar ${v.nombre}` : "Nuevo vehículo")}
       vacio="No hay vehículos que mostrar."
       mensajeError="No se pudieron cargar los vehículos."
       cargar={() => listarVehiculos(sucursal)}

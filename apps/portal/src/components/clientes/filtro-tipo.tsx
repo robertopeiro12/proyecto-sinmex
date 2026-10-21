@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Lista } from "@/components/ui/campo";
 import type { TipoFiltro } from "@/lib/clientes";
 
 /**
@@ -28,15 +29,15 @@ export function FiltroTipo({ valor }: { valor: TipoFiltro }) {
   }
 
   return (
-    <select
+    <Lista
       aria-label="Filtrar por tipo"
       value={valor}
       onChange={(e) => cambiar(e.target.value as TipoFiltro)}
-      className="rounded-md border px-2 py-1 text-sm"
+      className="w-36"
     >
       <option value="todos">Todos</option>
       <option value="cliente">Clientes</option>
       <option value="prospecto">Prospectos</option>
-    </select>
+    </Lista>
   );
 }

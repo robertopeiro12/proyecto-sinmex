@@ -114,6 +114,10 @@ describe("PantallaPromociones", () => {
 
     await usuario.click(screen.getByRole("button", { name: "Nueva promoción" }));
 
+    // Modo "pantalla" (Etapa 2): el formulario reemplaza a la lista, sin ventana, con su propio h2.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "← Volver a promociones" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Nueva promoción" })).toBeInTheDocument();
     const selector = await screen.findByLabelText("Sucursal");
     expect(selector).toHaveValue("s-mx");

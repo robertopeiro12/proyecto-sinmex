@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Campo, Entrada, Lista } from "@/components/ui/campo";
 import {
   crearTipoNegocio,
   listarTiposNegocio,
@@ -69,18 +70,15 @@ export function SelectorTipoNegocio({ value, onChange, disabled }: Props) {
 
   if (creando) {
     return (
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="tipo-negocio-nuevo" className="text-sm font-medium">
-          Nuevo tipo de negocio
-        </label>
+      <Campo id="tipo-negocio-nuevo" etiqueta="Nuevo tipo de negocio" error={error}>
         <div className="flex gap-2">
-          <input
+          <Entrada
             id="tipo-negocio-nuevo"
             autoFocus
             disabled={guardando}
             value={nombreNuevo}
             onChange={(e) => setNombreNuevo(e.target.value)}
-            className="flex-1 rounded-md border px-3 py-2 text-sm"
+            className="flex-1"
             placeholder="Restaurante, tienda, ..."
           />
           <Button
@@ -104,22 +102,18 @@ export function SelectorTipoNegocio({ value, onChange, disabled }: Props) {
             Cancelar
           </Button>
         </div>
-        {error && <span className="text-xs text-destructive">{error}</span>}
-      </div>
+      </Campo>
     );
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor="tipo-negocio" className="text-sm font-medium">
-        Tipo de negocio
-      </label>
-      <select
+    <Campo id="tipo-negocio" etiqueta="Tipo de negocio">
+      <Lista
         id="tipo-negocio"
         disabled={disabled}
         value={value}
         onChange={(e) => alCambiarSelect(e.target.value)}
-        className="w-64 rounded-md border px-3 py-2 text-sm"
+        className="w-64"
       >
         <option value="">Sin especificar</option>
         {tipos.map((t) => (
@@ -128,7 +122,7 @@ export function SelectorTipoNegocio({ value, onChange, disabled }: Props) {
           </option>
         ))}
         <option value={NUEVO}>+ Nuevo tipo de negocio…</option>
-      </select>
-    </div>
+      </Lista>
+    </Campo>
   );
 }

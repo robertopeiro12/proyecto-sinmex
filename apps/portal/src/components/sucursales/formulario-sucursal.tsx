@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Campo, Casilla, Entrada } from "@/components/ui/campo";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import { crearSucursal, editarSucursal, type Sucursal } from "@/lib/sucursales";
 
@@ -35,20 +36,14 @@ export function FormularioSucursal({ sucursal, alGuardar, alCancelar }: Props) {
   }
 
   return (
-    <form
-      onSubmit={alEnviar}
-      className="mb-6 flex flex-col gap-4 rounded-md border p-4"
-    >
-      <h2 className="text-sm font-semibold">
-        {esAlta ? "Nueva sucursal" : `Editar ${sucursal.codigo}`}
-      </h2>
-
+    <form onSubmit={alEnviar} className="flex flex-col gap-4">
       <div className="flex flex-wrap gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="codigo" className="text-sm font-medium">
-            Código
-          </label>
-          <input
+        <Campo
+          id="codigo"
+          etiqueta="Código"
+          ayuda={!esAlta ? "El código no se puede cambiar." : undefined}
+        >
+          <Entrada
             id="codigo"
             name="codigo"
             required
@@ -59,20 +54,12 @@ export function FormularioSucursal({ sucursal, alGuardar, alCancelar }: Props) {
             disabled={enviando}
             value={codigo}
             onChange={(e) => setCodigo(e.target.value.toUpperCase())}
-            className="w-24 rounded-md border px-3 py-2 text-sm uppercase read-only:bg-muted read-only:text-muted-foreground"
+            className="w-24 uppercase read-only:bg-muted read-only:text-muted-foreground"
           />
-          {!esAlta && (
-            <span className="text-xs text-muted-foreground">
-              El código no se puede cambiar.
-            </span>
-          )}
-        </div>
+        </Campo>
 
-        <div className="flex flex-1 flex-col gap-1.5">
-          <label htmlFor="nombre" className="text-sm font-medium">
-            Nombre
-          </label>
-          <input
+        <Campo id="nombre" etiqueta="Nombre" className="flex-1">
+          <Entrada
             id="nombre"
             name="nombre"
             required
@@ -80,34 +67,27 @@ export function FormularioSucursal({ sucursal, alGuardar, alCancelar }: Props) {
             disabled={enviando}
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            className="rounded-md border px-3 py-2 text-sm"
           />
-        </div>
+        </Campo>
       </div>
 
       {!esAlta && (
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={activa}
-            disabled={enviando}
-            onChange={(e) => setActiva(e.target.checked)}
-          />
-          Activa
-        </label>
+        <Casilla
+          etiqueta="Activa"
+          checked={activa}
+          disabled={enviando}
+          onChange={(e) => setActiva(e.target.checked)}
+        />
       )}
 
       {!esAlta && (
         <div className="flex flex-col gap-1">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={controlInventario}
-              disabled={enviando}
-              onChange={(e) => setControlInventario(e.target.checked)}
-            />
-            Control de inventario en la app
-          </label>
+          <Casilla
+            etiqueta="Control de inventario en la app"
+            checked={controlInventario}
+            disabled={enviando}
+            onChange={(e) => setControlInventario(e.target.checked)}
+          />
           <span className="text-xs text-muted-foreground">
             Al prenderla, los vendedores de esta sucursal necesitan aceptar su carga para vender y no pueden vender
             más de lo que traen.
@@ -121,17 +101,12 @@ export function FormularioSucursal({ sucursal, alGuardar, alCancelar }: Props) {
         </p>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" disabled={enviando} onClick={alCancelar}>
+          Cancelar
+        </Button>
         <Button type="submit" disabled={enviando}>
           {enviando ? "Guardando…" : "Guardar"}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={enviando}
-          onClick={alCancelar}
-        >
-          Cancelar
         </Button>
       </div>
     </form>

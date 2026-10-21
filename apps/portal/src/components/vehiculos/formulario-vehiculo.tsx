@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Campo, Casilla, Entrada, Lista } from "@/components/ui/campo";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import { listarSucursales, type Sucursal } from "@/lib/sucursales";
@@ -91,20 +92,10 @@ export function FormularioVehiculo({
   }
 
   return (
-    <form
-      onSubmit={alEnviar}
-      className="mb-6 flex flex-col gap-4 rounded-md border p-4"
-    >
-      <h2 className="text-sm font-semibold">
-        {esAlta ? "Nuevo vehículo" : `Editar ${vehiculo.nombre}`}
-      </h2>
-
+    <form onSubmit={alEnviar} className="flex flex-col gap-4">
       <div className="flex flex-wrap gap-4">
-        <div className="flex flex-1 flex-col gap-1.5">
-          <label htmlFor="nombre" className="text-sm font-medium">
-            Nombre del vehículo
-          </label>
-          <input
+        <Campo id="nombre" etiqueta="Nombre del vehículo" className="flex-1">
+          <Entrada
             id="nombre"
             name="nombre"
             required
@@ -113,15 +104,11 @@ export function FormularioVehiculo({
             placeholder="Nissan 2019"
             value={nombre}
             onChange={(e) => setNombre(e.target.value)}
-            className="rounded-md border px-3 py-2 text-sm"
           />
-        </div>
+        </Campo>
 
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="placas" className="text-sm font-medium">
-            Placas
-          </label>
-          <input
+        <Campo id="placas" etiqueta="Placas">
+          <Entrada
             id="placas"
             name="placas"
             required={esAlta || vehiculo.placas !== null}
@@ -130,15 +117,12 @@ export function FormularioVehiculo({
             placeholder="ABC-123"
             value={placas}
             onChange={(e) => setPlacas(e.target.value)}
-            className="w-40 rounded-md border px-3 py-2 text-sm"
+            className="w-40"
           />
-        </div>
+        </Campo>
 
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="km" className="text-sm font-medium">
-            Kilometraje {esAlta ? "al alta" : "de alta"}
-          </label>
-          <input
+        <Campo id="km" etiqueta={`Kilometraje ${esAlta ? "al alta" : "de alta"}`}>
+          <Entrada
             id="km"
             name="km"
             type="number"
@@ -149,24 +133,21 @@ export function FormularioVehiculo({
             disabled={enviando}
             value={km}
             onChange={(e) => setKm(e.target.value)}
-            className="w-40 rounded-md border px-3 py-2 text-sm"
+            className="w-40"
           />
-        </div>
+        </Campo>
       </div>
 
       {eligeSucursal && (
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="sucursal" className="text-sm font-medium">
-            Sucursal
-          </label>
-          <select
+        <Campo id="sucursal" etiqueta="Sucursal">
+          <Lista
             id="sucursal"
             name="sucursal"
             required
             disabled={enviando}
             value={sucursalId}
             onChange={(e) => setSucursalId(e.target.value)}
-            className="w-64 rounded-md border px-3 py-2 text-sm"
+            className="w-64"
           >
             <option value="">Elige una sucursal…</option>
             {sucursales.map((s) => (
@@ -174,8 +155,8 @@ export function FormularioVehiculo({
                 {s.codigo} · {s.nombre}
               </option>
             ))}
-          </select>
-        </div>
+          </Lista>
+        </Campo>
       )}
 
       {!esAlta && (
@@ -186,15 +167,12 @@ export function FormularioVehiculo({
       )}
 
       {!esAlta && (
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={activo}
-            disabled={enviando}
-            onChange={(e) => setActivo(e.target.checked)}
-          />
-          Activo
-        </label>
+        <Casilla
+          etiqueta="Activo"
+          checked={activo}
+          disabled={enviando}
+          onChange={(e) => setActivo(e.target.checked)}
+        />
       )}
 
       {error && (
@@ -203,17 +181,12 @@ export function FormularioVehiculo({
         </p>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" disabled={enviando} onClick={alCancelar}>
+          Cancelar
+        </Button>
         <Button type="submit" disabled={enviando}>
           {enviando ? "Guardando…" : "Guardar"}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={enviando}
-          onClick={alCancelar}
-        >
-          Cancelar
         </Button>
       </div>
     </form>

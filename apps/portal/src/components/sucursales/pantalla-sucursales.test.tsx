@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ErrorApi } from "@/lib/api";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -91,17 +91,16 @@ describe("PantallaSucursales", () => {
     await screen.findByText("No hay sucursales que mostrar.");
 
     await usuario.click(screen.getByRole("button", { name: "Nueva sucursal" }));
-    await usuario.type(screen.getByLabelText("Código"), "MX");
-    await usuario.type(screen.getByLabelText("Nombre"), "Mexicali");
-    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+    const ventana = screen.getByRole("dialog", { name: "Nueva sucursal" });
+    await usuario.type(within(ventana).getByLabelText("Código"), "MX");
+    await usuario.type(within(ventana).getByLabelText("Nombre"), "Mexicali");
+    await usuario.click(within(ventana).getByRole("button", { name: "Guardar" }));
 
     await waitFor(() =>
       expect(crearSucursal).toHaveBeenCalledWith({ codigo: "MX", nombre: "Mexicali" }),
     );
     expect(await screen.findByText("Mexicali")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Nueva sucursal" }),
-    ).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
   it("edita una sucursal existente precargando sus datos", async () => {
@@ -115,12 +114,13 @@ describe("PantallaSucursales", () => {
     await screen.findByText("TJ");
 
     await usuario.click(screen.getByRole("button", { name: "Editar" }));
-    const campoNombre = screen.getByLabelText("Nombre") as HTMLInputElement;
+    const ventana = screen.getByRole("dialog", { name: "Editar TJ" });
+    const campoNombre = within(ventana).getByLabelText("Nombre") as HTMLInputElement;
     expect(campoNombre.value).toBe("Tijuana");
 
     await usuario.clear(campoNombre);
     await usuario.type(campoNombre, "Tijuana Centro");
-    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+    await usuario.click(within(ventana).getByRole("button", { name: "Guardar" }));
 
     await waitFor(() =>
       expect(editarSucursal).toHaveBeenCalledWith("1", {
@@ -144,11 +144,12 @@ describe("PantallaSucursales", () => {
     await screen.findByText("No hay sucursales que mostrar.");
 
     await usuario.click(screen.getByRole("button", { name: "Nueva sucursal" }));
-    await usuario.type(screen.getByLabelText("Código"), "MX");
-    await usuario.type(screen.getByLabelText("Nombre"), "Mexicali");
-    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+    const ventana = screen.getByRole("dialog", { name: "Nueva sucursal" });
+    await usuario.type(within(ventana).getByLabelText("Código"), "MX");
+    await usuario.type(within(ventana).getByLabelText("Nombre"), "Mexicali");
+    await usuario.click(within(ventana).getByRole("button", { name: "Guardar" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
+    expect(await within(ventana).findByRole("alert")).toHaveTextContent(
       "Ya existe una sucursal con el código MX.",
     );
   });
@@ -164,11 +165,12 @@ describe("PantallaSucursales", () => {
     expect(await screen.findByText("Apagado")).toBeInTheDocument();
 
     await usuario.click(screen.getByRole("button", { name: "Editar" }));
+    const ventana = screen.getByRole("dialog", { name: "Editar TJ" });
     expect(
-      screen.getByText(/necesitan aceptar su carga para vender/),
+      within(ventana).getByText(/necesitan aceptar su carga para vender/),
     ).toBeInTheDocument();
-    await usuario.click(screen.getByLabelText("Control de inventario en la app"));
-    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+    await usuario.click(within(ventana).getByLabelText("Control de inventario en la app"));
+    await usuario.click(within(ventana).getByRole("button", { name: "Guardar" }));
 
     await waitFor(() =>
       expect(editarSucursal).toHaveBeenCalledWith("1", {

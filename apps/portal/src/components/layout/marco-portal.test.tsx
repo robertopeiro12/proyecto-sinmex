@@ -107,6 +107,18 @@ describe("MarcoPortal", () => {
     expect(screen.getByRole("button", { name: "Esconder menú" })).toHaveFocus();
   });
 
+  it("el menú es un solo aside que se encoge y se estira (por eso puede animar su ancho)", async () => {
+    preparar();
+    const usuario = userEvent.setup();
+    renderizar();
+    const aside = screen.getByRole("navigation", { name: "Menú principal" }).closest("aside");
+    expect(aside).toHaveClass("w-64");
+    await waitFor(() => expect(aside).toHaveClass("transition-[width]"));
+    await usuario.click(screen.getByRole("button", { name: "Esconder menú" }));
+    expect(screen.getByRole("complementary", { name: "Menú escondido" })).toBe(aside);
+    expect(aside).toHaveClass("w-[60px]");
+  });
+
   it("Review Focus 2: sin localStorage el menú arranca abierto y se esconde igual", async () => {
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new Error("SecurityError");

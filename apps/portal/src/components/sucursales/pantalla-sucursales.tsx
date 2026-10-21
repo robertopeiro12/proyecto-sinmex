@@ -8,8 +8,10 @@ export function PantallaSucursales({ sucursal }: { sucursal: string | null }) {
   return (
     <PantallaCatalogo<Sucursal>
       titulo="Sucursales"
+      descripcion="Las sucursales de la empresa y su control de inventario en la app."
       permiso="sucursal.gestionar"
       etiquetaAlta="Nueva sucursal"
+      tituloFormulario={(s) => (s ? `Editar ${s.codigo}` : "Nueva sucursal")}
       vacio="No hay sucursales que mostrar."
       mensajeError="No se pudieron cargar las sucursales."
       cargar={() => listarSucursales(sucursal)}

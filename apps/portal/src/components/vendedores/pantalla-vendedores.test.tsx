@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ErrorApi, type UsuarioSesion } from "@/lib/api";
 import { useAuth } from "@/components/auth/auth-provider";
@@ -110,15 +110,16 @@ describe("PantallaVendedores", () => {
     await screen.findByText("No hay vendedores que mostrar.");
 
     await usuario.click(screen.getByRole("button", { name: "Nuevo vendedor" }));
+    const ventana = screen.getByRole("dialog", { name: "Nuevo vendedor" });
 
-    expect(screen.getByLabelText("Sucursal")).toBeInTheDocument();
+    expect(within(ventana).getByLabelText("Sucursal")).toBeInTheDocument();
 
-    await usuario.type(screen.getByLabelText("Nombre completo"), "Abraham Solis");
-    await usuario.type(screen.getByLabelText("Login (app)"), "asolis");
-    await usuario.type(screen.getByLabelText("Contraseña"), "x");
-    await usuario.selectOptions(screen.getByLabelText("Sucursal"), "suc-1");
+    await usuario.type(within(ventana).getByLabelText("Nombre completo"), "Abraham Solis");
+    await usuario.type(within(ventana).getByLabelText("Login (app)"), "asolis");
+    await usuario.type(within(ventana).getByLabelText("Contraseña"), "x");
+    await usuario.selectOptions(within(ventana).getByLabelText("Sucursal"), "suc-1");
 
-    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+    await usuario.click(within(ventana).getByRole("button", { name: "Guardar" }));
 
     await waitFor(() => expect(crearVendedor).toHaveBeenCalled());
     const payload = crearVendedor.mock.calls[0][0];
@@ -140,8 +141,9 @@ describe("PantallaVendedores", () => {
     render(<PantallaVendedores sucursal={null} />);
     await screen.findByText("No hay vendedores que mostrar.");
     await usuario.click(screen.getByRole("button", { name: "Nuevo vendedor" }));
+    const ventana = screen.getByRole("dialog", { name: "Nuevo vendedor" });
 
-    expect(screen.queryByLabelText("Sucursal")).not.toBeInTheDocument();
+    expect(within(ventana).queryByLabelText("Sucursal")).not.toBeInTheDocument();
   });
 
   it("edita un vendedor dejando la contraseña en blanco, y no la manda", async () => {
@@ -157,21 +159,22 @@ describe("PantallaVendedores", () => {
     await screen.findByText("Abraham Solis");
 
     await usuario.click(screen.getByRole("button", { name: "Editar" }));
+    const ventana = screen.getByRole("dialog", { name: "Editar Abraham Solis" });
 
-    const campoContrasena = screen.getByLabelText(
+    const campoContrasena = within(ventana).getByLabelText(
       "Nueva contraseña (déjalo en blanco para no cambiarla)",
     );
     expect(campoContrasena).toHaveValue("");
 
     // El desplegable de sucursal nunca aparece en edicion, ni para un
     // General: la sucursal de un vendedor es inmutable (D3).
-    expect(screen.queryByLabelText("Sucursal")).not.toBeInTheDocument();
-    expect(screen.getByText(/Sucursal: TJ/)).toBeInTheDocument();
+    expect(within(ventana).queryByLabelText("Sucursal")).not.toBeInTheDocument();
+    expect(within(ventana).getByText(/Sucursal: TJ/)).toBeInTheDocument();
 
-    const campoNombre = screen.getByLabelText("Nombre completo");
+    const campoNombre = within(ventana).getByLabelText("Nombre completo");
     await usuario.clear(campoNombre);
     await usuario.type(campoNombre, "Abraham Solis Jr");
-    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+    await usuario.click(within(ventana).getByRole("button", { name: "Guardar" }));
 
     await waitFor(() => expect(editarVendedor).toHaveBeenCalledWith("1", expect.anything()));
     const payload = editarVendedor.mock.calls[0][1];
@@ -194,14 +197,15 @@ describe("PantallaVendedores", () => {
     render(<PantallaVendedores sucursal={null} />);
     await screen.findByText("No hay vendedores que mostrar.");
     await usuario.click(screen.getByRole("button", { name: "Nuevo vendedor" }));
+    const ventana = screen.getByRole("dialog", { name: "Nuevo vendedor" });
 
-    await usuario.type(screen.getByLabelText("Nombre completo"), "Ana Ponce");
-    await usuario.type(screen.getByLabelText("Login (app)"), "aponce");
-    await usuario.type(screen.getByLabelText("Contraseña"), "x");
-    await usuario.selectOptions(screen.getByLabelText("Sucursal"), "suc-1");
-    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+    await usuario.type(within(ventana).getByLabelText("Nombre completo"), "Ana Ponce");
+    await usuario.type(within(ventana).getByLabelText("Login (app)"), "aponce");
+    await usuario.type(within(ventana).getByLabelText("Contraseña"), "x");
+    await usuario.selectOptions(within(ventana).getByLabelText("Sucursal"), "suc-1");
+    await usuario.click(within(ventana).getByRole("button", { name: "Guardar" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
+    expect(await within(ventana).findByRole("alert")).toHaveTextContent(
       "Ya hay un vendedor en esta sucursal con esas iniciales (AP).",
     );
   });

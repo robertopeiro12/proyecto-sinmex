@@ -1,13 +1,22 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import { Aviso } from "@/components/ui/aviso";
-import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
+import { Ayuda } from "@/components/ui/ayuda";
+import {
+  EncabezadoPantalla,
+  Pantalla,
+} from "@/components/ui/encabezado-pantalla";
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
-import { obtenerPerfiles, crearPerfil, type MatrizPerfiles } from "@/lib/perfiles";
+import { CajaTabla } from "@/components/ui/tabla";
+import {
+  obtenerPerfiles,
+  crearPerfil,
+  type MatrizPerfiles,
+} from "@/lib/perfiles";
+import { EXPLICACION_PERMISO } from "@/lib/explicacion-permisos";
 import { CeldaPermiso } from "./celda-permiso";
 import { ColumnaPerfil } from "./columna-perfil";
 
@@ -80,7 +89,10 @@ function Matriz() {
   if (error) {
     return (
       <Pantalla>
-        <EncabezadoPantalla titulo="Perfiles y Permisos" />
+        <EncabezadoPantalla
+          titulo="Perfiles y Permisos"
+          descripcion="Qué puede hacer cada perfil en el portal."
+        />
         <Aviso tono="error">{error}</Aviso>
       </Pantalla>
     );
@@ -93,93 +105,110 @@ function Matriz() {
   // la matriz aunque no tenga posicion fija: si se filtra, ese permiso nunca
   // se renderiza como fila y ningun administrador puede otorgarlo, sin que
   // nada avise del problema.
-  const gruposConocidos = ORDEN_GRUPOS.filter((g) => datos.permisos.some((p) => p.grupo === g));
-  const gruposDesconocidos = [...new Set(datos.permisos.map((p) => p.grupo))].filter(
-    (g) => !ORDEN_GRUPOS.includes(g),
+  const gruposConocidos = ORDEN_GRUPOS.filter((g) =>
+    datos.permisos.some((p) => p.grupo === g),
   );
+  const gruposDesconocidos = [
+    ...new Set(datos.permisos.map((p) => p.grupo)),
+  ].filter((g) => !ORDEN_GRUPOS.includes(g));
   const grupos = [...gruposConocidos, ...gruposDesconocidos];
   const columnas = datos.perfiles.length + 2; // Permiso + N perfiles + alta
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Perfiles y Permisos</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-muted-foreground">
-                <th scope="col" className="py-2 font-medium">
-                  Permiso
-                </th>
-                {datos.perfiles.map((perfil) => (
-                  <th key={perfil.id} scope="col" className="py-2 font-medium">
-                    <ColumnaPerfil perfil={perfil} alCambiar={() => void cargar()} />
-                  </th>
-                ))}
-                <th scope="col" className="py-2 font-medium">
-                  <input
-                    aria-label="Nombre del nuevo perfil"
-                    placeholder="Nuevo perfil…"
-                    value={nombreNuevo}
-                    disabled={creando}
-                    onChange={(e) => setNombreNuevo(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") void altaPerfil();
-                    }}
-                    className="w-32 rounded-md border px-2 py-1 text-sm font-normal"
+    <Pantalla>
+      <EncabezadoPantalla
+        titulo="Perfiles y Permisos"
+        descripcion="Qué puede hacer cada perfil en el portal."
+      />
+      <CajaTabla>
+        <table className="w-full text-sm">
+          <thead>
+            <tr>
+              <th scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold text-muted-foreground">
+                Permiso
+              </th>
+              {datos.perfiles.map((perfil) => (
+                <th key={perfil.id} scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold text-muted-foreground">
+                  <ColumnaPerfil
+                    perfil={perfil}
+                    alCambiar={() => void cargar()}
                   />
-                  {errorAlta && (
-                    <p role="alert" className="text-xs font-normal text-destructive">
-                      {errorAlta}
-                    </p>
-                  )}
                 </th>
-              </tr>
-            </thead>
-            <tbody>
-              {grupos.map((grupo) => (
-                <Fragment key={grupo}>
-                  <tr className="border-b bg-muted/50">
-                    <td colSpan={columnas} className="py-1 font-medium">
-                      {grupo}
-                    </td>
-                  </tr>
-                  {datos.permisos
-                    .filter((p) => p.grupo === grupo)
-                    .map((permiso) => (
-                      <tr key={permiso.id} className="border-b last:border-0">
-                        <th scope="row" className="py-2 text-left font-normal">
-                          {permiso.descripcion ?? permiso.clave}
-                        </th>
-                        {datos.perfiles.map((perfil) => (
-                          <td key={perfil.id} className="py-2">
-                            <CeldaPermiso
-                              perfilId={perfil.id}
-                              permisoId={permiso.id}
-                              habilitadoInicial={perfil.permisos.includes(permiso.clave)}
-                              editable={!perfil.esMaestro}
-                              etiqueta={`${permiso.descripcion ?? permiso.clave} · ${perfil.nombre}`}
-                            />
-                          </td>
-                        ))}
-                        <td />
-                      </tr>
-                    ))}
-                </Fragment>
               ))}
-              {datos.perfiles.length === 0 && (
-                <tr>
-                  <td colSpan={columnas} className="py-4 text-muted-foreground">
-                    No hay perfiles.
+              <th scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold text-muted-foreground">
+                <input
+                  aria-label="Nombre del nuevo perfil"
+                  placeholder="Nuevo perfil…"
+                  value={nombreNuevo}
+                  disabled={creando}
+                  onChange={(e) => setNombreNuevo(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void altaPerfil();
+                  }}
+                  className="w-32 rounded-md border px-2 py-1 text-sm font-normal"
+                />
+                {errorAlta && (
+                  <p
+                    role="alert"
+                    className="text-xs font-normal text-destructive"
+                  >
+                    {errorAlta}
+                  </p>
+                )}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {grupos.map((grupo) => (
+              <Fragment key={grupo}>
+                <tr className="border-b bg-muted/50">
+                  <td colSpan={columnas} className="px-3 py-1 font-medium">
+                    {grupo}
                   </td>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </CardContent>
-    </Card>
+                {datos.permisos
+                  .filter((p) => p.grupo === grupo)
+                  .map((permiso) => (
+                    <tr key={permiso.id} className="border-b last:border-0">
+                      <th scope="row" className="px-3 py-2 text-left font-normal">
+                        <span className="inline-flex items-start gap-1">
+                          <span>{permiso.descripcion ?? permiso.clave}</span>
+                          {EXPLICACION_PERMISO[permiso.clave] && (
+                            <Ayuda
+                              tema={permiso.descripcion ?? permiso.clave}
+                              texto={EXPLICACION_PERMISO[permiso.clave]}
+                            />
+                          )}
+                        </span>
+                      </th>
+                      {datos.perfiles.map((perfil) => (
+                        <td key={perfil.id} className="px-3 py-2">
+                          <CeldaPermiso
+                            perfilId={perfil.id}
+                            permisoId={permiso.id}
+                            habilitadoInicial={perfil.permisos.includes(
+                              permiso.clave,
+                            )}
+                            editable={!perfil.esMaestro}
+                            etiqueta={`${permiso.descripcion ?? permiso.clave} · ${perfil.nombre}`}
+                          />
+                        </td>
+                      ))}
+                      <td />
+                    </tr>
+                  ))}
+              </Fragment>
+            ))}
+            {datos.perfiles.length === 0 && (
+              <tr>
+                <td colSpan={columnas} className="px-3 py-4 text-muted-foreground">
+                  No hay perfiles.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </CajaTabla>
+    </Pantalla>
   );
 }

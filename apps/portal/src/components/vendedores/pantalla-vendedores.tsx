@@ -8,8 +8,10 @@ export function PantallaVendedores({ sucursal }: { sucursal: string | null }) {
   return (
     <PantallaCatalogo<Vendedor>
       titulo="Vendedores"
+      descripcion="Quién usa la app de la tablet, en qué sucursal y con qué contraseña."
       permiso="vendedor.gestionar"
       etiquetaAlta="Nuevo vendedor"
+      tituloFormulario={(v) => (v ? `Editar ${v.nombre}` : "Nuevo vendedor")}
       vacio="No hay vendedores que mostrar."
       mensajeError="No se pudieron cargar los vendedores."
       cargar={() => listarVendedores(sucursal)}

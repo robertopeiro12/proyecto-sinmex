@@ -57,4 +57,30 @@ describe("TablaCatalogo", () => {
     );
     expect(screen.getAllByRole("button", { name: "Editar" })).toHaveLength(2);
   });
+
+  it("pasa el className de la columna a su celda", () => {
+    render(
+      <TablaCatalogo
+        items={FILAS}
+        columnas={[{ encabezado: "Nombre", celda: (f: Fila) => f.nombre, className: "font-mono" }]}
+        vacio="Nada."
+      />,
+    );
+
+    expect(screen.getByRole("cell", { name: "Jamaica" })).toHaveClass("font-mono");
+  });
+
+  it("la columna de acciones tiene encabezado para lector de pantalla, alineado a la derecha", () => {
+    render(
+      <TablaCatalogo items={FILAS} columnas={COLUMNAS} vacio="Nada." acciones={() => <button>Editar</button>} />,
+    );
+
+    expect(screen.getByRole("columnheader", { name: "Acciones" })).toHaveClass("text-right");
+  });
+
+  it("el mensaje de vacio ocupa todas las columnas, contando la de acciones", () => {
+    render(<TablaCatalogo items={[]} columnas={COLUMNAS} vacio="Nada." acciones={() => null} />);
+
+    expect(screen.getByRole("cell", { name: "Nada." })).toHaveAttribute("colspan", "3");
+  });
 });

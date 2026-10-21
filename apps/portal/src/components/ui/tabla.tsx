@@ -78,7 +78,7 @@ export function TdMonto({ centavos, className, ...props }: Omit<ComponentProps<"
 
 /** `interactiva`: la fila se puede picar y lleva un tono suave al pasar el mouse. */
 export function Fila({ interactiva = false, className, ...props }: ComponentProps<"tr"> & { interactiva?: boolean }) {
-  return <tr {...props} className={cn(interactiva && "hover:bg-menu", className)} />;
+  return <tr {...props} className={cn(interactiva && "cursor-pointer transition-colors hover:bg-menu", className)} />;
 }
 
 export function FilaVacia({ columnas, children }: { columnas: number; children: ReactNode }) {
