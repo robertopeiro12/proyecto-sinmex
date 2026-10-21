@@ -122,18 +122,18 @@ function Matriz() {
         <table className="w-full text-sm">
           <thead>
             <tr>
-              <th scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold whitespace-nowrap text-muted-foreground">
+              <th scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold text-muted-foreground">
                 Permiso
               </th>
               {datos.perfiles.map((perfil) => (
-                <th key={perfil.id} scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold whitespace-nowrap text-muted-foreground">
+                <th key={perfil.id} scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold text-muted-foreground">
                   <ColumnaPerfil
                     perfil={perfil}
                     alCambiar={() => void cargar()}
                   />
                 </th>
               ))}
-              <th scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold whitespace-nowrap text-muted-foreground">
+              <th scope="col" className="sticky top-0 z-[1] border-b bg-menu px-3 py-2 text-left text-[12.5px] font-semibold text-muted-foreground">
                 <input
                   aria-label="Nombre del nuevo perfil"
                   placeholder="Nuevo perfil…"
