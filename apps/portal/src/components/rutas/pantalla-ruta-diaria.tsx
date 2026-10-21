@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Aviso } from "@/components/ui/aviso";
+import { Campo, Entrada, Lista } from "@/components/ui/campo";
+import { useConfirmar, type OpcionesConfirmar } from "@/components/ui/confirmar";
+import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
+import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { mensajeDe } from "@/lib/api";
 import { listarClientes, type ClienteResumen } from "@/lib/clientes";
 import {
@@ -23,7 +27,13 @@ import { hoyEnTijuana } from "@/lib/ventas";
 import { CarteraRuta } from "./cartera-ruta";
 import { ListaRutaDiaria } from "./lista-ruta-diaria";
 
-export const AVISO_CAMBIOS = "Hay cambios sin guardar en la ruta. ¿Descartarlos?";
+const PREGUNTA_DESCARTAR: OpcionesConfirmar = {
+  titulo: "¿Descartar los cambios de la ruta?",
+  descripcion: "Hay cambios sin guardar en la ruta.",
+  confirmar: "Descartar cambios",
+};
+
+const DESCRIPCION = "Los clientes que visita cada vendedor en un día, en el orden en que los atiende.";
 
 /**
  * Operación → Ruta Diaria (T-37, D17). La oficina arma la ruta de un vendedor
@@ -47,7 +57,8 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiando, setCopiando] = useState(false);
-  const [aviso, setAviso] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<{ tono: "exito" | "informacion"; texto: string } | null>(null);
+  const { confirmar, ventana } = useConfirmar();
 
   const vendedor = vendedores.find((v) => v.id === vendedorId) ?? null;
   // La cartera es la de la sucursal DEL VENDEDOR: el PUT rechaza clientes de otra.
@@ -71,13 +82,16 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
     if (!permitido) return;
     let vigente = true;
     listarVendedores(sucursal)
-      .then((lista) => {
+      .then(async (lista) => {
         if (!vigente) return;
         // Un vendedor desactivado no sale a repartir: no se le arma ruta.
         const activos = lista.filter((v) => v.activo);
         const { vendedorId: elegido, sucio: conCambios } = vigenteRef.current;
         const desaparece = elegido !== "" && !activos.some((v) => v.id === elegido);
-        if (desaparece && conCambios && !window.confirm(AVISO_CAMBIOS)) {
+        const descartar = !(desaparece && conCambios) || (await confirmar(PREGUNTA_DESCARTAR));
+        // Mientras la ventana estaba abierta pudo cambiar la sucursal otra vez: manda la última.
+        if (!vigente) return;
+        if (!descartar) {
           // Cambió la sucursal del selector global pero el usuario no quiere perder la ruta:
           // el vendedor se queda en la lista (aunque sea de otra sucursal) hasta guardar o descartar.
           const elQueSeQueda = vendedoresRef.current.find((v) => v.id === elegido);
@@ -94,7 +108,7 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
     return () => {
       vigente = false;
     };
-  }, [permitido, sucursal]);
+  }, [permitido, sucursal, confirmar]);
 
   useEffect(() => {
     if (!vendedorId || !sucursalVendedor) {
@@ -139,17 +153,19 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
     return () => window.removeEventListener("beforeunload", avisar);
   }, [sucio]);
 
-  function puedeDescartar(): boolean {
-    return !sucio || window.confirm(AVISO_CAMBIOS);
+  async function puedeDescartar(): Promise<boolean> {
+    return !sucio || (await confirmar(PREGUNTA_DESCARTAR));
   }
 
-  function cambiarVendedor(id: string) {
-    if (ocupado || id === vendedorId || !puedeDescartar()) return;
+  // El valor nuevo se captura al preguntar y solo se aplica si confirman; mientras la
+  // ventana está abierta el selector sigue mostrando lo de hoy (es controlado).
+  async function cambiarVendedor(id: string) {
+    if (ocupado || id === vendedorId || !(await puedeDescartar())) return;
     setVendedorId(id);
   }
 
-  function cambiarFecha(valor: string) {
-    if (ocupado || valor === "" || valor === fecha || !puedeDescartar()) return;
+  async function cambiarFecha(valor: string) {
+    if (ocupado || valor === "" || valor === fecha || !(await puedeDescartar())) return;
     setFecha(valor);
   }
 
@@ -172,7 +188,7 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
       const editables = aEditables(ruta);
       setOriginal(editables);
       setFilas(editables);
-      setAviso("Ruta guardada.");
+      setAviso({ tono: "exito", texto: "Ruta guardada." });
     } catch (err) {
       // El PUT es una transacción: si falló, la ruta del servidor no cambió. Las
       // ediciones locales se quedan para quitar la fila problemática y reintentar.
@@ -195,11 +211,11 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
       const anterior = await obtenerRutaAnterior(paraVendedor, paraFecha);
       if (vigenteRef.current.vendedorId !== paraVendedor || vigenteRef.current.fecha !== paraFecha) return;
       if (anterior.fecha === null) {
-        setAviso("Este vendedor no tiene una ruta anterior.");
+        setAviso({ tono: "informacion", texto: "Este vendedor no tiene una ruta anterior." });
         return;
       }
       setFilas((actuales) => cargarAnterior(actuales, anterior.clientes, cartera));
-      setAviso(`Se cargó la ruta del ${anterior.fecha}. Revísala y guarda.`);
+      setAviso({ tono: "informacion", texto: `Se cargó la ruta del ${anterior.fecha}. Revísala y guarda.` });
     } catch (err) {
       if (vigenteRef.current.vendedorId === paraVendedor && vigenteRef.current.fecha === paraFecha) {
         setError(mensajeDe(err, "No se pudo leer la ruta anterior."));
@@ -209,119 +225,72 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
     }
   }
 
-  if (cargandoSesion) {
-    // Mientras /auth/me no contesta, `puede()` da false a todos: sin esto, quien
-    // si tiene el permiso ve "No tienes permiso" un instante (como PantallaPerfiles).
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Ruta Diaria</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">Cargando…</p>
-        </CardContent>
-      </Card>
-    );
-  }
+  if (cargandoSesion) return <EstadoPantalla tipo="cargando" titulo="Ruta Diaria" />;
 
   if (!permitido) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Ruta Diaria</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">No tienes permiso para gestionar la ruta diaria</p>
-        </CardContent>
-      </Card>
+      <Pantalla>
+        <EncabezadoPantalla titulo="Ruta Diaria" descripcion={DESCRIPCION} />
+        <p className="text-sm text-muted-foreground">No tienes permiso para gestionar la ruta diaria</p>
+      </Pantalla>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Ruta Diaria</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-end gap-4">
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="ruta-vendedor" className="text-sm font-medium">
-              Vendedor
-            </label>
-            <select
-              id="ruta-vendedor"
-              value={vendedorId}
-              disabled={ocupado}
-              onChange={(e) => cambiarVendedor(e.target.value)}
-              className="rounded-md border px-3 py-2 text-sm"
-            >
-              <option value="">Elige un vendedor</option>
-              {vendedores.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.nombre} · {v.sucursalCodigo}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="ruta-fecha" className="text-sm font-medium">
-              Fecha
-            </label>
-            <input
-              id="ruta-fecha"
-              type="date"
-              value={fecha}
-              disabled={ocupado}
-              onChange={(e) => cambiarFecha(e.target.value)}
-              className="rounded-md border px-3 py-2 text-sm"
-            />
-          </div>
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!vendedor || cargando || ocupado}
-              onClick={() => void copiarDeAyer()}
-            >
-              Copiar de ayer
-            </Button>
-            <Button type="button" disabled={!vendedor || !sucio || ocupado} onClick={() => void guardar()}>
-              {guardando ? "Guardando…" : "Guardar ruta"}
-            </Button>
-          </div>
+    <Pantalla>
+      <EncabezadoPantalla titulo="Ruta Diaria" descripcion={DESCRIPCION} />
+      <div className="flex flex-wrap items-end gap-4">
+        <Campo id="ruta-vendedor" etiqueta="Vendedor">
+          <Lista value={vendedorId} disabled={ocupado} onChange={(e) => void cambiarVendedor(e.target.value)}>
+            <option value="">Elige un vendedor</option>
+            {vendedores.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.nombre} · {v.sucursalCodigo}
+              </option>
+            ))}
+          </Lista>
+        </Campo>
+        <Campo id="ruta-fecha" etiqueta="Fecha">
+          <Entrada type="date" value={fecha} disabled={ocupado} onChange={(e) => void cambiarFecha(e.target.value)} />
+        </Campo>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!vendedor || cargando || ocupado}
+            onClick={() => void copiarDeAyer()}
+          >
+            Copiar de ayer
+          </Button>
+          <Button type="button" disabled={!vendedor || !sucio || ocupado} onClick={() => void guardar()}>
+            {guardando ? "Guardando…" : "Guardar ruta"}
+          </Button>
         </div>
+      </div>
 
-        {sucio ? <p className="text-sm font-medium text-amber-700">Cambios sin guardar</p> : null}
-        {aviso ? (
-          <p role="status" className="text-sm text-muted-foreground">
-            {aviso}
-          </p>
-        ) : null}
-        {error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
+      {sucio ? <Aviso tono="advertencia">Cambios sin guardar</Aviso> : null}
+      {aviso ? <Aviso tono={aviso.tono}>{aviso.texto}</Aviso> : null}
+      {error ? <Aviso tono="error">{error}</Aviso> : null}
 
-        {!vendedor ? (
-          <p className="text-sm text-muted-foreground">Elige un vendedor para ver su ruta.</p>
-        ) : cargando ? (
-          <p className="text-sm text-muted-foreground">Cargando…</p>
-        ) : (
-          <div className="grid gap-6 md:grid-cols-2">
-            <CarteraRuta
-              cartera={cartera}
-              enRuta={enRuta}
-              onAgregar={(c) => setFilas((actuales) => agregarFila(actuales, { id: c.id, nombre: c.nombre }))}
-            />
-            <ListaRutaDiaria
-              filas={filas}
-              onMover={(desde, hasta) => setFilas((actuales) => moverFila(actuales, desde, hasta))}
-              onQuitar={(indice) => setFilas((actuales) => quitarFila(actuales, indice))}
-            />
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      {!vendedor ? (
+        <p className="text-sm text-muted-foreground">Elige un vendedor para ver su ruta.</p>
+      ) : cargando ? (
+        <EstadoPantalla tipo="cargando" />
+      ) : (
+        <div className="grid gap-6 md:grid-cols-2">
+          <CarteraRuta
+            cartera={cartera}
+            enRuta={enRuta}
+            onAgregar={(c) => setFilas((actuales) => agregarFila(actuales, { id: c.id, nombre: c.nombre }))}
+          />
+          <ListaRutaDiaria
+            filas={filas}
+            onMover={(desde, hasta) => setFilas((actuales) => moverFila(actuales, desde, hasta))}
+            onQuitar={(indice) => setFilas((actuales) => quitarFila(actuales, indice))}
+          />
+        </div>
+      )}
+      {ventana}
+    </Pantalla>
   );
 }

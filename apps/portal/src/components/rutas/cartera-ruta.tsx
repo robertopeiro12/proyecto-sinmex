@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Campo, Entrada } from "@/components/ui/campo";
 import type { ClienteResumen } from "@/lib/clientes";
 import { filtrarCartera } from "@/lib/rutas";
 
@@ -23,24 +24,21 @@ export function CarteraRuta({
 
   return (
     <section aria-label="Cartera de clientes" className="flex flex-col gap-2">
-      <h3 className="text-sm font-medium">Cartera de clientes</h3>
-      <label htmlFor="buscar-cartera" className="text-sm font-medium">
-        Buscar cliente
-      </label>
-      <input
-        id="buscar-cartera"
-        autoComplete="off"
-        placeholder="Escribe el nombre del cliente"
-        value={busqueda}
-        onChange={(e) => setBusqueda(e.target.value)}
-        className="rounded-md border px-3 py-2 text-sm"
-      />
+      <h2 className="text-base font-semibold">Cartera de clientes</h2>
+      <Campo id="buscar-cartera" etiqueta="Buscar cliente">
+        <Entrada
+          autoComplete="off"
+          placeholder="Escribe el nombre del cliente"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+        />
+      </Campo>
       {visibles.length === 0 ? (
         <p className="text-sm text-muted-foreground">Ningún cliente disponible.</p>
       ) : (
-        <ul className="flex max-h-[28rem] flex-col gap-1 overflow-y-auto">
+        <ul className="max-h-[28rem] divide-y overflow-y-auto rounded-[10px] border">
           {visibles.map((c) => (
-            <li key={c.id} className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
+            <li key={c.id} className="flex items-center gap-2 px-3 py-1.5 text-sm">
               <span className="flex-1">{c.nombre}</span>
               <Button type="button" size="sm" aria-label={`Agregar ${c.nombre}`} onClick={() => onAgregar(c)}>
                 Agregar
