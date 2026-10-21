@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Pestanas } from "./pestanas";
@@ -59,5 +59,17 @@ describe("Pestanas", () => {
     expect(document.getElementById(asignar.getAttribute("aria-controls") ?? "")).toHaveAttribute("hidden");
     await usuario.click(asignar);
     expect(screen.getByLabelText("Marcado")).toHaveValue("nuevo");
+  });
+
+  it("onCambio avisa la pestaña nueva con clic y con las flechas", async () => {
+    const usuario = userEvent.setup();
+    const onCambio = vi.fn();
+    render(<Pestanas pestanas={PESTANAS} onCambio={onCambio} />);
+    await usuario.click(screen.getByRole("tab", { name: "Buscar y corregir" }));
+    expect(onCambio).toHaveBeenLastCalledWith("buscar");
+    screen.getByRole("tab", { name: "Buscar y corregir" }).focus();
+    await usuario.keyboard("{ArrowLeft}");
+    expect(onCambio).toHaveBeenLastCalledWith("asignar");
+    expect(onCambio).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode, type SyntheticEvent } from "react";
+import { useState, type ReactNode, } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
@@ -37,12 +37,9 @@ export function PantallaTesoreria({
   const inicial: Clave = permitidas.find((p) => p.clave === vistaInicial)?.clave ?? permitidas[0].clave;
   const actual = elegida ?? inicial;
 
-  // `Pestanas` no avisa del cambio (el spec no pide tocarla): lo leemos del propio botón de la
-  // pestaña, al picarlo o al llegar a él con las flechas (la pestaña se activa al enfocarla).
-  function alCambiarPestana(evento: SyntheticEvent<HTMLDivElement>) {
-    const boton = (evento.target as HTMLElement).closest('[role="tab"]');
-    const clave = permitidas.find((p) => p.texto === boton?.textContent)?.clave;
-    if (!clave || clave === actual) return;
+  function alCambiarPestana(valor: string) {
+    const clave = permitidas.find((p) => p.clave === valor)?.clave;
+    if (!clave) return;
     setElegida(clave);
     const params = new URLSearchParams(window.location.search);
     params.set("vista", clave);
@@ -64,14 +61,13 @@ export function PantallaTesoreria({
         titulo="Tesorería"
         descripcion="Las cuentas del negocio con su saldo, sus depósitos, retiros y traspasos, y la cobranza que entra sola."
       />
-      <div onClick={alCambiarPestana} onFocus={alCambiarPestana}>
-        <Pestanas
-          etiqueta="Tesorería"
-          conservarMontadas
-          valorInicial={inicial}
-          pestanas={permitidas.map((p) => ({ valor: p.clave, etiqueta: p.texto, contenido: contenido[p.clave] }))}
-        />
-      </div>
+      <Pestanas
+        etiqueta="Tesorería"
+        conservarMontadas
+        valorInicial={inicial}
+        onCambio={alCambiarPestana}
+        pestanas={permitidas.map((p) => ({ valor: p.clave, etiqueta: p.texto, contenido: contenido[p.clave] }))}
+      />
     </Pantalla>
   );
 }
