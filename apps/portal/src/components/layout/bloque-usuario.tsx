@@ -23,7 +23,7 @@ export function BloqueUsuario({
     <Menu.Root>
       <Menu.Trigger
         aria-label={`${usuario.nombre}, ${usuario.perfil}. Abrir opciones`}
-        className="flex w-full shrink-0 items-center gap-2.5 border-t px-3 py-3 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-sucursal focus-visible:ring-inset"
+        className="flex w-full shrink-0 items-center gap-2.5 border-t px-3 py-3 text-left outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-sucursal focus-visible:ring-inset"
       >
         <span
           aria-hidden

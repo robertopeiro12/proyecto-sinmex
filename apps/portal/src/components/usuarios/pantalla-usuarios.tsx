@@ -113,7 +113,7 @@ function Tabla({ sucursal }: { sucursal: string | null }) {
 
   if (edicion !== null) {
     return (
-      <Pantalla>
+      <Pantalla key="formulario">
         <Button variant="ghost" className="self-start" onClick={cerrar}>
           ← Volver a usuarios
         </Button>
@@ -135,7 +135,7 @@ function Tabla({ sucursal }: { sucursal: string | null }) {
   const error = catalogo.error ?? errorDetalle;
 
   return (
-    <Pantalla>
+    <Pantalla key="lista">
       <EncabezadoPantalla
         titulo="Usuarios"
         descripcion="Quién entra al portal, con qué perfil y en qué sucursal."

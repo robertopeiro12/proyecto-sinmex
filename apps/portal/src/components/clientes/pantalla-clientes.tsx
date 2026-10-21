@@ -125,7 +125,7 @@ export function PantallaClientes({
 
   if (edicion !== null) {
     return (
-      <Pantalla>
+      <Pantalla key="formulario">
         <Button variant="ghost" className="self-start" onClick={cerrar}>
           ← Volver a clientes
         </Button>
@@ -147,7 +147,7 @@ export function PantallaClientes({
   const error = catalogo.error ?? errorDetalle;
 
   return (
-    <Pantalla>
+    <Pantalla key="lista">
       <EncabezadoPantalla
         titulo="Clientes"
         descripcion="Los clientes y prospectos de la sucursal: datos, ubicación, precios y promociones."

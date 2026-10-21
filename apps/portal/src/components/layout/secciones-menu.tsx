@@ -65,17 +65,17 @@ export function SeccionesMenu({ pathname, sucursal }: { pathname: string; sucurs
             open={abierta}
             onOpenChange={(abrir) => alternar(seccion.label, abrir)}
           >
-            <Collapsible.Trigger className="flex w-full items-center justify-between rounded-md px-2 py-2 text-sm font-semibold outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-sucursal">
+            <Collapsible.Trigger className="flex w-full items-center justify-between rounded-md px-2 py-2 text-sm font-semibold outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-sucursal">
               {seccion.label}
               <ChevronDown
                 aria-hidden
                 className={cn(
-                  "size-4 text-muted-foreground transition-transform duration-150",
+                  "size-4 text-muted-foreground transition-transform duration-200 ease-out",
                   !abierta && "-rotate-90",
                 )}
               />
             </Collapsible.Trigger>
-            <Collapsible.Panel className="h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] duration-150 data-[ending-style]:h-0 data-[starting-style]:h-0">
+            <Collapsible.Panel className="h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] duration-200 ease-out data-[ending-style]:h-0 data-[starting-style]:h-0">
               <ul className="mb-1.5 flex flex-col gap-px">
                 {seccion.items.map((item) => {
                   const activo = actual?.item.href === item.href;
@@ -85,7 +85,7 @@ export function SeccionesMenu({ pathname, sucursal }: { pathname: string; sucurs
                         href={`${item.href}${sufijo}`}
                         aria-current={activo ? "page" : undefined}
                         className={cn(
-                          "flex items-center justify-between gap-2 rounded-md py-1.5 pr-2 pl-5 text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-sucursal",
+                          "flex items-center justify-between gap-2 rounded-md py-1.5 pr-2 pl-5 text-sm outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-sucursal",
                           activo && "bg-background font-semibold shadow-[inset_3px_0_0_var(--suc)]",
                         )}
                       >

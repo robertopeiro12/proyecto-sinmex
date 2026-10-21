@@ -141,7 +141,7 @@ export function PantallaCatalogo<T extends { id: string }>({
 
   if (formularioEn === "pantalla" && catalogo.edicion !== null) {
     return (
-      <Pantalla>
+      <Pantalla key="formulario">
         <Button variant="ghost" className="self-start" onClick={cerrar}>
           ← Volver a {titulo.toLowerCase()}
         </Button>
@@ -153,7 +153,7 @@ export function PantallaCatalogo<T extends { id: string }>({
   const error = catalogo.error ?? errorBaja;
 
   return (
-    <Pantalla>
+    <Pantalla key="lista">
       <EncabezadoPantalla
         titulo={titulo}
         descripcion={descripcion}

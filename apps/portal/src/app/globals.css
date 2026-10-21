@@ -168,6 +168,21 @@
   html {
     @apply font-sans;
   }
+  /* Tailwind 4 dejó la flecha en los botones: la manita avisa que algo se puede picar. Lo
+     deshabilitado se queda con la flecha (los botones comunes ya ignoran el mouse ahí). */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="menuitem"]:not([aria-disabled="true"]),
+  [role="menuitemradio"]:not([aria-disabled="true"]),
+  select:not(:disabled),
+  summary,
+  input[type="checkbox"]:not(:disabled),
+  input[type="radio"]:not(:disabled),
+  label:has(> input[type="checkbox"]:not(:disabled)),
+  label:has(> input[type="radio"]:not(:disabled)) {
+    cursor: pointer;
+  }
   /* Movimiento solo cuando el usuario actua, y nunca si pidio menos movimiento (spec §2.1). */
   @media (prefers-reduced-motion: reduce) {
     *,

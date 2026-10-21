@@ -4,6 +4,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import { Aviso } from "@/components/ui/aviso";
+import { Ayuda } from "@/components/ui/ayuda";
 import {
   EncabezadoPantalla,
   Pantalla,
@@ -15,6 +16,7 @@ import {
   crearPerfil,
   type MatrizPerfiles,
 } from "@/lib/perfiles";
+import { EXPLICACION_PERMISO } from "@/lib/explicacion-permisos";
 import { CeldaPermiso } from "./celda-permiso";
 import { ColumnaPerfil } from "./columna-perfil";
 
@@ -169,7 +171,15 @@ function Matriz() {
                   .map((permiso) => (
                     <tr key={permiso.id} className="border-b last:border-0">
                       <th scope="row" className="px-3 py-2 text-left font-normal">
-                        {permiso.descripcion ?? permiso.clave}
+                        <span className="inline-flex items-start gap-1">
+                          <span>{permiso.descripcion ?? permiso.clave}</span>
+                          {EXPLICACION_PERMISO[permiso.clave] && (
+                            <Ayuda
+                              tema={permiso.descripcion ?? permiso.clave}
+                              texto={EXPLICACION_PERMISO[permiso.clave]}
+                            />
+                          )}
+                        </span>
                       </th>
                       {datos.perfiles.map((perfil) => (
                         <td key={perfil.id} className="px-3 py-2">

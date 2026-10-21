@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type CSSProperties, type RefObject, type R
 import { useAuth } from "@/components/auth/auth-provider";
 import { guardarLocal, leerLocal } from "@/lib/almacen-local";
 import { iniciales } from "@/lib/formato";
+import { cn } from "@/lib/utils";
 import { BloqueSucursal } from "./bloque-sucursal";
 import { BloqueUsuario } from "./bloque-usuario";
 import { tituloDePestana } from "./nav-config";
@@ -22,7 +23,7 @@ function BotonMenu({ etiqueta, onClick, boton }: { etiqueta: string; onClick: ()
       aria-label={etiqueta}
       title={etiqueta}
       onClick={onClick}
-      className="grid size-8 place-items-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-sucursal"
+      className="grid size-8 place-items-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-sucursal"
     >
       <IconoMenu aria-hidden className="size-4" />
     </button>
@@ -42,9 +43,13 @@ export function MarcoPortal({ children }: { children: ReactNode }) {
   const sucursal = useSucursalActual();
   // En el servidor no hay localStorage: se arranca abierto y se ajusta al montar.
   const [escondido, setEscondido] = useState(false);
+  // Hasta leer lo guardado el menú no se anima: si venía escondido no debe encogerse en cada carga.
+  const [animar, setAnimar] = useState(false);
 
   useEffect(() => {
     setEscondido(leerLocal(CLAVE_MENU_ESCONDIDO) === "1");
+    const cuadro = requestAnimationFrame(() => setAnimar(true));
+    return () => cancelAnimationFrame(cuadro);
   }, []);
 
   // El botón ☰ que se ve tras el cambio es otro (el anterior se desmonta): el foco pasa a él.
@@ -71,37 +76,46 @@ export function MarcoPortal({ children }: { children: ReactNode }) {
     <div className="flex min-h-dvh" style={estilo}>
       {/* React 19 sube este <title> al <head>; app/layout.tsx ya no fija uno propio. */}
       <title>{titulo}</title>
-      {escondido ? (
-        <aside
-          aria-label="Menú escondido"
-          className="sticky top-0 flex h-dvh w-[60px] shrink-0 flex-col items-center gap-3 border-r bg-menu py-3.5"
-        >
-          <BotonMenu etiqueta="Mostrar menú" onClick={alternarMenu} boton={botonMenu} />
-          <span title={sucursal.nombre} className="rounded-md bg-sucursal px-1.5 py-1 text-xs font-bold text-white">
-            {sucursal.siglas}
-          </span>
-          {usuario && (
-            <span
-              title={usuario.nombre}
-              className="mt-auto grid size-[34px] place-items-center rounded-full bg-foreground text-[13px] font-semibold text-background"
-            >
-              {iniciales(usuario.nombre)}
+      {/* Un solo <aside> para los dos estados: su ancho cambia suave (256 ↔ 60 px) y lo de
+          adentro entra con un desvanecido. Cada contenido tiene su ancho fijo y el aside lo
+          recorta mientras crece o se encoge, así el texto no se reacomoda a medio camino. */}
+      <aside
+        aria-label={escondido ? "Menú escondido" : undefined}
+        className={cn(
+          "sticky top-0 h-dvh shrink-0 overflow-hidden border-r bg-menu",
+          animar && "transition-[width] duration-200 ease-out",
+          escondido ? "w-[60px]" : "w-64",
+        )}
+      >
+        {escondido ? (
+          <div key="franja" className="flex h-full w-[60px] animate-in flex-col items-center gap-3 py-3.5 fade-in duration-200">
+            <BotonMenu etiqueta="Mostrar menú" onClick={alternarMenu} boton={botonMenu} />
+            <span title={sucursal.nombre} className="rounded-md bg-sucursal px-1.5 py-1 text-xs font-bold text-white">
+              {sucursal.siglas}
             </span>
-          )}
-        </aside>
-      ) : (
-        <aside className="sticky top-0 flex h-dvh w-64 shrink-0 flex-col border-r bg-menu">
-          <div className="flex items-center justify-between px-4 pt-4 pb-3">
-            <span className="font-titulo text-xl font-bold">JAWA</span>
-            <BotonMenu etiqueta="Esconder menú" onClick={alternarMenu} boton={botonMenu} />
+            {usuario && (
+              <span
+                title={usuario.nombre}
+                className="mt-auto grid size-[34px] place-items-center rounded-full bg-foreground text-[13px] font-semibold text-background"
+              >
+                {iniciales(usuario.nombre)}
+              </span>
+            )}
           </div>
-          <BloqueSucursal sucursal={sucursal} />
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-            <SeccionesMenu pathname={pathname} sucursal={params.get("sucursal")} />
+        ) : (
+          <div key="menu" className="flex h-full w-64 animate-in flex-col fade-in duration-200">
+            <div className="flex items-center justify-between px-4 pt-4 pb-3">
+              <span className="font-titulo text-xl font-bold">JAWA</span>
+              <BotonMenu etiqueta="Esconder menú" onClick={alternarMenu} boton={botonMenu} />
+            </div>
+            <BloqueSucursal sucursal={sucursal} />
+            <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+              <SeccionesMenu pathname={pathname} sucursal={params.get("sucursal")} />
+            </div>
+            <BloqueUsuario usuario={usuario} onCerrarSesion={() => void cerrarSesion()} />
           </div>
-          <BloqueUsuario usuario={usuario} onCerrarSesion={() => void cerrarSesion()} />
-        </aside>
-      )}
+        )}
+      </aside>
       <main className="min-w-0 flex-1 border-t-[3px] border-sucursal px-8 py-7">{children}</main>
     </div>
   );

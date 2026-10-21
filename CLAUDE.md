@@ -617,7 +617,13 @@ usuario con sesion pasa.
     (título + UNA línea que dice para qué sirve), `EstadoPantalla` (Cargando / sin permiso / elige sucursal, mismo texto
     en todas), `Tabla`/`Th`/`Td`/`TdMonto`/`CajaTabla`, `FiltroFechas` (botón **Mostrar**, atajos Hoy · Ayer · Esta
     semana · Este mes) + `BotonExcel`, `Aviso`, `Etiqueta`/`EtiquetaStatusVenta`, `Monto`, `Fecha`, `Campo` y sus
-    controles, `Pestanas`, `Ventana` (`ui/ventana.tsx`, Dialog de base-ui: formularios cortos de crear/editar). Para confirmar, `useConfirmar()` (pinta `{ventana}` en la pantalla), **nunca `window.confirm`**.
+    controles, `Pestanas`, `Ventana` (`ui/ventana.tsx`, Dialog de base-ui: formularios cortos de crear/editar),
+    `Ayuda` (ⓘ con globito, Tooltip de base-ui; las explicaciones de permisos viven en `lib/explicacion-permisos.ts`).
+    Para confirmar, `useConfirmar()` (pinta `{ventana}` en la pantalla), **nunca `window.confirm`**.
+  - **Movimiento:** `Pantalla` entra con un desvanecido al montarse y `app/(portal)/template.tsx` hace lo mismo al
+    navegar; si una pantalla cambia de vista con el mismo `<Pantalla>` (lista ↔ formulario), cada vista lleva su `key`.
+    El menú lateral es un solo `<aside>` que anima su ancho. La manita del mouse la pone `globals.css` (Tailwind 4 ya no
+    la pone en botones); `prefers-reduced-motion` apaga todo.
   - **Formulario corto → `Ventana`; de varios bloques → pantalla completa con "← Volver a …"** (Clientes, Usuarios, como
     editar una venta). `PantallaCatalogo` ya lo resuelve con sus props `descripcion`, `tituloFormulario`,
     `formularioEn` (`"ventana"` por omisión o `"pantalla"`) y `baja` (botón que confirma con `useConfirmar`).
