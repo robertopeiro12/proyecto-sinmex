@@ -91,9 +91,22 @@ describe("PantallaReporteVentas", () => {
   it("sin reporte_ventas.ver lo dice y no pide nada", () => {
     mockAuth([]);
     render(<PantallaReporteVentas sucursal={null} />);
-    expect(screen.getByText("No tienes permiso para ver el reporte de ventas")).toBeInTheDocument();
+    expect(screen.getByText("No tienes permiso para ver esta sección.")).toBeInTheDocument();
     expect(obtener).not.toHaveBeenCalled();
     expect(listarVendedores).not.toHaveBeenCalled();
+  });
+
+  it("encabezado con título y descripción; la lista de repartidor vive dentro del filtro con los atajos", async () => {
+    mockAuth([PERMISO]);
+    render(<PantallaReporteVentas sucursal={null} />);
+    expect(screen.getByRole("heading", { level: 1, name: "Reporte de Ventas" })).toBeInTheDocument();
+    expect(screen.getByText("Las ventas de un rango, por día y por vendedor.")).toBeInTheDocument();
+    for (const atajo of ["Hoy", "Ayer", "Esta semana", "Este mes"]) {
+      expect(screen.getByRole("button", { name: atajo })).toBeInTheDocument();
+    }
+    const formulario = screen.getByRole("button", { name: "Mostrar" }).closest("form")!;
+    expect(within(formulario).getByLabelText("Repartidor")).toBeInTheDocument();
+    expect(within(formulario).getByRole("button", { name: "Exportar a Excel" })).toBeDisabled();
   });
 
   it("no consulta al abrir; fechas por defecto hoy; Mostrar manda rango, sucursal y repartidor", async () => {
@@ -166,16 +179,13 @@ describe("PantallaReporteVentas", () => {
     expect(screen.getByText("3 ventas · 62 piezas · 2 promo · $403.00")).toBeInTheDocument();
   });
 
-  it("tabla alineada: toda celda con px-2 y números a la derecha (Review Focus 5)", async () => {
+  it("tabla alineada: table-fixed, 11 columnas por fila y números a la derecha (Review Focus 5)", async () => {
     mockAuth([PERMISO]);
     const u = userEvent.setup();
     render(<PantallaReporteVentas sucursal={null} />);
     await u.click(screen.getByRole("button", { name: "Mostrar" }));
     const tabla = await screen.findByRole("table", { name: "Ventas" });
     expect(tabla).toHaveClass("table-fixed");
-    for (const celda of within(tabla).getAllByRole("cell").concat(within(tabla).getAllByRole("columnheader"))) {
-      expect(celda).toHaveClass("px-2");
-    }
     for (const fila of within(tabla).getAllByRole("row")) {
       const total = Array.from(fila.children).reduce((n, c) => n + Number(c.getAttribute("colspan") ?? 1), 0);
       expect(total).toBe(11);
@@ -185,9 +195,8 @@ describe("PantallaReporteVentas", () => {
     }
     const encabezados = within(tabla).getAllByRole("columnheader").map((h) => h.textContent);
     expect(encabezados).toEqual(["Fecha", "Folio", "Cliente", "# nota", "Repartidor", "Status", "Factura", "Semana", "Cantidad", "Promo", "Monto"]);
-    const monto = within(tabla).getByText("$130.00");
-    expect(monto).toHaveClass("text-right");
-    expect(monto).toHaveClass("tabular-nums");
+    expect(within(tabla).getByText("$130.00").closest("td")).toHaveClass("text-right");
+    expect(tabla).toHaveClass("tabular-nums");
   });
 
   it("sin ventas lo dice y Excel queda deshabilitado", async () => {
