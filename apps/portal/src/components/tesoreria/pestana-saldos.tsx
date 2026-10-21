@@ -38,7 +38,7 @@ export function PestanaSaldos({ sucursal }: { sucursal: string | null }) {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [aviso, setAviso] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<{ tono: "exito" | "informacion"; texto: string } | null>(null);
   const ultima = useRef(0);
   const { confirmar, ventana } = useConfirmar();
 
@@ -100,7 +100,7 @@ export function PestanaSaldos({ sucursal }: { sucursal: string | null }) {
     setError(null);
     setAviso(null);
     if (cambiadas.length === 0) {
-      setAviso("No hay cambios que guardar.");
+      setAviso({ tono: "informacion", texto: "No hay cambios que guardar." });
       return;
     }
     setGuardando(true);
@@ -118,9 +118,10 @@ export function PestanaSaldos({ sucursal }: { sucursal: string | null }) {
         }),
       });
       await cargar(fecha);
-      setAviso(
-        `Se ${r.guardados === 1 ? "guardó 1 saldo" : `guardaron ${r.guardados} saldos`} del ${formatearFecha(fecha)}.`,
-      );
+      setAviso({
+        tono: "exito",
+        texto: `Se ${r.guardados === 1 ? "guardó 1 saldo" : `guardaron ${r.guardados} saldos`} del ${formatearFecha(fecha)}.`,
+      });
     } catch (err) {
       setError(mensajeDe(err, "No se pudieron guardar los saldos."));
     } finally {
@@ -222,14 +223,14 @@ export function PestanaSaldos({ sucursal }: { sucursal: string | null }) {
             <Button disabled={guardando || hayInvalidas} onClick={() => void alGuardar()}>
               {guardando ? "Guardando…" : "Guardar saldos"}
             </Button>
-            {aviso && <p className="text-sm text-muted-foreground">{aviso}</p>}
+            {aviso && <Aviso tono={aviso.tono}>{aviso.texto}</Aviso>}
           </div>
         </>
       )}
 
       {dia && dia.saldos.length > 0 && (
         <div className="flex flex-col gap-2">
-          <h3 className="text-sm font-semibold">Saldos fijados</h3>
+          <h2 className="text-sm font-semibold">Saldos fijados</h2>
           <CajaTabla>
             <Tabla aria-label="Saldos fijados">
               <thead>

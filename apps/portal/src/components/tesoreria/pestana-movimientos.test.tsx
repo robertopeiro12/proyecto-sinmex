@@ -85,6 +85,17 @@ describe("PestanaMovimientos", () => {
     expect(screen.getByLabelText("Monto")).toHaveValue("77");
   });
 
+  it("registrar con el formulario de arriba no abre ninguna ventana y sigue diciendo Registrar operación", async () => {
+    render(<PestanaMovimientos sucursal={null} />);
+    await screen.findByRole("table", { name: "Movimientos registrados" });
+    await userEvent.selectOptions(screen.getByLabelText("Cuenta"), "a");
+    await userEvent.type(screen.getByLabelText("Monto"), "10");
+    await userEvent.click(screen.getByRole("button", { name: "Registrar" }));
+    expect(lib.crearMovimiento).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Registrar operación" })).toBeInTheDocument();
+  });
+
   it("guardar la edición cierra la ventana y recarga la lista", async () => {
     vi.mocked(lib.editarMovimiento).mockResolvedValue(MOV);
     render(<PestanaMovimientos sucursal={null} />);

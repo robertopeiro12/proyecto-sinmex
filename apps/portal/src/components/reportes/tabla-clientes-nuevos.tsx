@@ -8,7 +8,7 @@ import { nombreConBaja, type ClienteNuevo } from "@/lib/reporte-clientes-nuevos"
  * anchos se midieron con celdas de `px-2`; las piezas comunes llevan `px-3`, así que
  * aquí se vuelve a `px-2`. Textos largos se cortan con `title`.
  */
-const TH = "bg-background px-2 py-2 font-medium text-foreground";
+const TH = "px-2 py-2";
 const TD = "px-2 py-1.5";
 
 function Texto({ valor }: { valor: string | null }) {

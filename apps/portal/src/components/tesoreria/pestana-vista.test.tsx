@@ -64,6 +64,15 @@ describe("PestanaVista", () => {
     expect(lib.obtenerTesoreria).toHaveBeenLastCalledWith({ desde: HOY, hasta: HOY, sucursal: "TJ" });
   });
 
+  it("al volver a activarse con una fecha vacía no consulta", async () => {
+    const { rerender } = render(<PestanaVista sucursal="TJ" activa />);
+    await screen.findByText("ScotiaFiscal");
+    await userEvent.clear(screen.getByLabelText("Desde"));
+    rerender(<PestanaVista sucursal="TJ" activa={false} />);
+    rerender(<PestanaVista sucursal="TJ" activa />);
+    expect(lib.obtenerTesoreria).toHaveBeenCalledTimes(1);
+  });
+
   it("el total avisa cuántas cuentas tienen saldo", async () => {
     render(<PestanaVista sucursal={null} />);
     expect(await screen.findByText("Total Tesorería")).toBeInTheDocument();

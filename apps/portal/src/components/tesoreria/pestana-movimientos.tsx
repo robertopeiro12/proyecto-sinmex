@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
 import { useConfirmar } from "@/components/ui/confirmar";
+import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { FiltroFechas } from "@/components/ui/filtro-fechas";
 import { CajaTabla, FilaVacia, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
 import { Ventana } from "@/components/ui/ventana";
@@ -31,6 +32,8 @@ export function PestanaMovimientos({ sucursal }: { sucursal: string | null }) {
   const [cuentas, setCuentas] = useState<CuentaTesoreria[]>([]);
   const [movimientos, setMovimientos] = useState<MovimientoManual[] | null>(null);
   const [editando, setEditando] = useState<MovimientoManual | null>(null);
+  // El título se guarda al abrir para que no se vacíe durante la animación de salida, cuando `editando` ya es null.
+  const [tituloVentana, setTituloVentana] = useState("");
   const [error, setError] = useState<string | null>(null);
   const ultima = useRef(0);
 
@@ -44,6 +47,11 @@ export function PestanaMovimientos({ sucursal }: { sucursal: string | null }) {
       if (esta === ultima.current) setError(mensajeDe(err, "No se pudieron cargar los movimientos."));
     }
   }, [consultado, sucursal]);
+
+  function abrirEdicion(m: MovimientoManual) {
+    setTituloVentana(`Editar ${ETIQUETA_TIPO[m.tipo].toLowerCase()}`);
+    setEditando(m);
+  }
 
   useEffect(() => {
     void cargar();
@@ -89,7 +97,7 @@ export function PestanaMovimientos({ sucursal }: { sucursal: string | null }) {
       <FiltroFechas id="movs" desde={rango.desde} hasta={rango.hasta} onCambio={setRango} onMostrar={setConsultado} />
 
       {error && <Aviso tono="error">{error}</Aviso>}
-      {movimientos === null && !error && <p className="text-sm text-muted-foreground">Cargando…</p>}
+      {movimientos === null && !error && <EstadoPantalla tipo="cargando" />}
       {movimientos !== null && (
         <CajaTabla>
           <Tabla aria-label="Movimientos registrados">
@@ -117,7 +125,7 @@ export function PestanaMovimientos({ sucursal }: { sucursal: string | null }) {
                   <Td alinear="derecha" className="whitespace-nowrap">
                     {m.editable && (
                       <div className="flex justify-end gap-2">
-                        <Button variant="outline" size="sm" onClick={() => setEditando(m)}>Editar</Button>
+                        <Button variant="outline" size="sm" onClick={() => abrirEdicion(m)}>Editar</Button>
                         <Button variant="outline" size="sm" onClick={() => void alEliminar(m)}>Eliminar</Button>
                       </div>
                     )}
@@ -132,7 +140,7 @@ export function PestanaMovimientos({ sucursal }: { sucursal: string | null }) {
       <Ventana
         abierta={editando !== null}
         alCerrar={() => setEditando(null)}
-        titulo={editando ? `Editar ${ETIQUETA_TIPO[editando.tipo].toLowerCase()}` : ""}
+        titulo={tituloVentana}
         ancho="ancho"
       >
         {editando && (

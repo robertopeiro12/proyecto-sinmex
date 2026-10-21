@@ -10,7 +10,7 @@ import { ETIQUETA_STATUS } from "@/lib/ventas";
  * con celdas de `px-2` y letra de 13 px (T-49): las piezas comunes llevan `px-3`
  * y 14 px, así que aquí se vuelve a `px-2`/`py-1.5` para que nada cambie de ancho.
  */
-const TH = "bg-background px-2 py-2 font-medium text-foreground";
+const TH = "px-2 py-2";
 const TD = "px-2 py-1.5";
 
 export function TablaReporteVentas({ reporte }: { reporte: ReporteVentas }) {
@@ -105,7 +105,7 @@ export function ResumenRepartidores({ reporte }: { reporte: ReporteVentas }) {
           <col className="w-20" />
           <col className="w-24" />
           <col className="w-20" />
-          <col className="w-26" />
+          <col className="w-30" />
         </colgroup>
         <thead>
           <tr>

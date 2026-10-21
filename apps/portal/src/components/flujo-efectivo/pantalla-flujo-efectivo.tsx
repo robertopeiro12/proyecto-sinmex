@@ -149,7 +149,7 @@ export function PantallaFlujoEfectivo({ sucursal }: { sucursal: string | null })
             {`Del ${formatearFecha(flujo.desde)} al ${formatearFecha(flujo.hasta)} · Sucursal: ${consultado!.sucursal}`}
           </p>
 
-          <CajaTabla className="max-w-3xl">
+          <CajaTabla className="w-fit max-w-full">
             <Tabla aria-label="Flujo de Efectivo">
               <tbody>
                 {filasResumen(flujo).map((f) => (

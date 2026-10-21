@@ -642,7 +642,7 @@ usuario con sesion pasa.
   - **Tesorería › Movimientos:** "Registrar operación" es un formulario fijo arriba; editar un movimiento abre una
     `Ventana` y no toca lo que el de arriba tenga escrito. Consulta al entrar y al picar **Mostrar**.
   - Siguen con el estilo de antes hasta su etapa: Registrar venta, Promociones, Ruta diaria. **Recarga y Gastos
-    son de Mario:** no se tocan sin él (conservan `window.confirm`, igual que Ruta diaria).
+    son de Mario:** no se tocan sin él (Recarga conserva `window.confirm`, igual que Ruta diaria).
 
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
 `--`: sin él, npm se come los argumentos).

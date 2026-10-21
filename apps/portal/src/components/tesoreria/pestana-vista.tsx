@@ -71,7 +71,8 @@ export function PestanaVista({ sucursal, activa = true }: { sucursal: string | n
   // aun sin "Mostrar") para no ensenar numeros viejos tras guardar saldos en la pestaña Saldos.
   const eraActiva = useRef(activa);
   useEffect(() => {
-    if (activa && !eraActiva.current) void consultar(rango.desde, rango.hasta);
+    // Con una fecha vacía (FiltroFechas la deja pasar) no hay rango que repetir: no se consulta.
+    if (activa && !eraActiva.current && rango.desde && rango.hasta) void consultar(rango.desde, rango.hasta);
     eraActiva.current = activa;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activa]);

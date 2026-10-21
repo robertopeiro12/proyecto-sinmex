@@ -266,7 +266,7 @@ describe("PantallaReporteVentas", () => {
     expect(tabla).toHaveClass("min-w-[61rem]");
     expect(tabla.querySelectorAll("col")[10]).toHaveClass("w-28");
     const resumen = screen.getByRole("table", { name: "Resumen por repartidor" });
-    expect(resumen.querySelectorAll("col")[4]).toHaveClass("w-26");
+    expect(resumen.querySelectorAll("col")[4]).toHaveClass("w-30");
   });
 
   it("M-2: muestra el rango y filtros consultados aunque se editen las fechas", async () => {

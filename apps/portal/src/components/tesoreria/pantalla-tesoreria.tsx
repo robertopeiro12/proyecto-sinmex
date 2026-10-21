@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode, } from "react";
+import { useState, type ReactNode } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";

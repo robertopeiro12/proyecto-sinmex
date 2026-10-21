@@ -93,7 +93,7 @@ export function SeccionDestinos({ sucursal, cuentas }: { sucursal: string | null
 
   return (
     <section className="flex flex-col gap-3 border-t pt-5">
-      <h3 className="text-sm font-semibold">¿A qué cuenta entra la cobranza?</h3>
+      <h2 className="text-sm font-semibold">¿A qué cuenta entra la cobranza?</h2>
       <p className="text-xs text-muted-foreground">
         Los cobros del portal y de la tablet, y las ventas de contado, suman solos a esta cuenta según su sucursal y
         cómo se pagaron. Un cambio cuenta desde la fecha que elijas; lo anterior no se mueve.
