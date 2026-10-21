@@ -145,6 +145,11 @@ export function PantallaCatalogo<T extends { id: string }>({
         <Button variant="ghost" className="self-start" onClick={cerrar}>
           ← Volver a {titulo.toLowerCase()}
         </Button>
+        {tituloFormulario && (
+          <EncabezadoPantalla
+            titulo={tituloFormulario(catalogo.edicion === "nueva" ? null : catalogo.edicion)}
+          />
+        )}
         {contenidoFormulario}
       </Pantalla>
     );

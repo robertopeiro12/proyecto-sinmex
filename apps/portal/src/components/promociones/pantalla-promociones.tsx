@@ -19,10 +19,12 @@ export function PantallaPromociones({ sucursal }: { sucursal: string | null }) {
   return (
     <PantallaCatalogo<Promocion>
       titulo="Promociones"
+      descripcion="Los regalos por compra que la app aplica sola en cada venta."
       permiso="promocion.gestionar"
       etiquetaAlta="Nueva promoción"
       // Su formulario es largo y no cambia de forma hasta su etapa (la 4): reemplaza a la lista.
       formularioEn="pantalla"
+      tituloFormulario={(p) => (p ? "Editar promoción" : "Nueva promoción")}
       vacio="No hay promociones en esta sucursal."
       mensajeError="No se pudieron cargar las promociones."
       cargar={() => listarPromociones({ sucursal })}

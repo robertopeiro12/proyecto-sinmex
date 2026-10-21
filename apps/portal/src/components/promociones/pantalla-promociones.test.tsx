@@ -86,6 +86,10 @@ describe("PantallaPromociones", () => {
     render(<PantallaPromociones sucursal="TJ" />);
 
     expect(await screen.findByText(base.texto)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Promociones" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Los regalos por compra que la app aplica sola en cada venta."),
+    ).toBeInTheDocument();
     expect(screen.getByText(PROSPECTO.texto)).toBeInTheDocument();
     expect(screen.getByText("Todos los clientes")).toBeInTheDocument();
     expect(screen.getByText("Prospectos (primera venta)")).toBeInTheDocument();
@@ -114,13 +118,38 @@ describe("PantallaPromociones", () => {
 
     await usuario.click(screen.getByRole("button", { name: "Nueva promoción" }));
 
-    // Modo "pantalla" (Etapa 2): el formulario reemplaza a la lista, sin ventana, con su propio h2.
+    // Modo "pantalla" (Etapa 2): el formulario reemplaza a la lista, sin ventana, con h1 del título.
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "← Volver a promociones" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Nueva promoción" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Nueva promoción" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "Nueva promoción" })).toHaveLength(1);
     const selector = await screen.findByLabelText("Sucursal");
     expect(selector).toHaveValue("s-mx");
+  });
+
+  it("← Volver regresa a la lista sin guardar nada", async () => {
+    const usuario = userEvent.setup();
+    render(<PantallaPromociones sucursal="TJ" />);
+    await screen.findByText(base.texto);
+    await usuario.click(screen.getByRole("button", { name: "Nueva promoción" }));
+
+    await usuario.click(screen.getByRole("button", { name: "← Volver a promociones" }));
+
+    expect(screen.getByRole("heading", { level: 1, name: "Promociones" })).toBeInTheDocument();
+    expect(promocionesLib.crearPromocion).not.toHaveBeenCalled();
+    expect(promocionesLib.editarPromocion).not.toHaveBeenCalled();
+  });
+
+  it("Editar abre la pantalla completa con h1 'Editar promoción'", async () => {
+    const usuario = userEvent.setup();
+    render(<PantallaPromociones sucursal="TJ" />);
+    await screen.findByText(base.texto);
+
+    await usuario.click(screen.getAllByRole("button", { name: "Editar" })[0]);
+
+    expect(screen.getByRole("heading", { level: 1, name: "Editar promoción" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "Editar promoción" })).toHaveLength(1);
   });
 
   it("recarga al cambiar el selector global", async () => {

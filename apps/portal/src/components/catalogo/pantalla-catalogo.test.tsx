@@ -229,6 +229,7 @@ describe("PantallaCatalogo", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Nombre")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Nuevo sabor" })).toBeInTheDocument();
 
     await usuario.click(screen.getByRole("button", { name: "← Volver a sabores" }));
     expect(screen.getByRole("table")).toBeInTheDocument();
