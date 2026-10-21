@@ -12,7 +12,7 @@ const filas: FilaEditable[] = [
 describe("ListaRutaDiaria", () => {
   it("numera las filas y marca las que agregó el vendedor, sin botón de quitar", () => {
     render(<ListaRutaDiaria filas={filas} onMover={vi.fn()} onQuitar={vi.fn()} />);
-    expect(screen.getByText("Ruta del día")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "Ruta del día" })).toBeInTheDocument();
     expect(screen.getAllByRole("listitem").map((li) => li.textContent)).toEqual([
       expect.stringContaining("1Abarrotes A"),
       expect.stringContaining("2Tienda B"),

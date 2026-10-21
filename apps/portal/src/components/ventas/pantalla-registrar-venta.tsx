@@ -2,7 +2,9 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Aviso } from "@/components/ui/aviso";
+import { Campo, Entrada } from "@/components/ui/campo";
+import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import { ErrorApi } from "@/lib/api";
@@ -35,6 +37,8 @@ import { BuscadorCliente } from "./buscador-cliente";
 import { CamposCondicionesVenta } from "./campos-condiciones-venta";
 import { SelectorRepartidor } from "./selector-repartidor";
 import { TablaProductosVenta } from "./tabla-productos-venta";
+
+const DESCRIPCION = "Captura una venta de la oficina: cliente, productos, condiciones y quién la entrega.";
 
 /**
  * Registrar venta desde el portal (T-17, parte 1, §3 del spec).
@@ -209,127 +213,108 @@ export function PantallaRegistrarVenta({ sucursal }: { sucursal: string | null }
 
   if (resultado) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Registrar venta</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div role="status" className="rounded-md border p-4 text-sm">
-            <p className="font-semibold">Venta registrada</p>
-            <p>
-              Folio <span className="font-mono">{resultado.folio}</span> ·{" "}
-              {formatearPesos(resultado.montoCentavos)} · {ETIQUETA_STATUS[resultado.status]}
-            </p>
-            <p className="text-muted-foreground">
-              Si hay nota de papel, anota el folio en ella.
-            </p>
-          </div>
-          <div>
-            <Button onClick={registrarOtra}>Registrar otra</Button>
-          </div>
-        </CardContent>
-      </Card>
+      <Pantalla>
+        <EncabezadoPantalla titulo="Registrar venta" descripcion={DESCRIPCION} />
+        <Aviso tono="exito">
+          <p className="font-semibold">Venta registrada</p>
+          <p>
+            Folio <span className="font-mono">{resultado.folio}</span> ·{" "}
+            {formatearPesos(resultado.montoCentavos)} · {ETIQUETA_STATUS[resultado.status]}
+          </p>
+          <p>Si hay nota de papel, anota el folio en ella.</p>
+        </Aviso>
+        <div>
+          <Button onClick={registrarOtra}>Registrar otra</Button>
+        </div>
+      </Pantalla>
     );
   }
 
   const mensajeError = errorLocal ?? error;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Registrar venta</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={alEnviar} className="flex flex-col gap-5">
-          {errorCarga && <p className="text-sm text-destructive">{errorCarga}</p>}
+    <Pantalla>
+      <EncabezadoPantalla titulo="Registrar venta" descripcion={DESCRIPCION} />
+      <form onSubmit={alEnviar} className="flex flex-col gap-5">
+        {errorCarga && <Aviso tono="error">{errorCarga}</Aviso>}
 
-          <div className="flex flex-wrap gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="fecha" className="text-sm font-medium">
-                Fecha
-              </label>
-              <input
-                id="fecha"
-                type="date"
-                required
-                max={hoyEnTijuana()}
-                disabled={enviando}
-                value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
-                className="rounded-md border px-3 py-2 text-sm"
-              />
-            </div>
-
-            <BuscadorCliente
-              clientes={clientes}
-              cliente={cliente}
-              onElegir={elegirCliente}
-              onQuitar={quitarCliente}
+        <div className="flex flex-wrap gap-4">
+          <Campo id="fecha" etiqueta="Fecha">
+            <Entrada
+              type="date"
+              required
+              max={hoyEnTijuana()}
               disabled={enviando}
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
             />
+          </Campo>
 
-            <SelectorRepartidor
-              repartidores={repartidores}
-              valor={repartidor}
-              onCambio={setRepartidor}
-              disabled={enviando || !cliente}
-              conOficina
-            />
-          </div>
-
-          {cliente && ventasDelDia.length > 0 && (
-            <div role="note" className="rounded-md border border-amber-400 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/50 dark:bg-amber-950/40 dark:text-amber-200">
-              <p className="font-semibold">
-                Este cliente ya tiene {ventasDelDia.length}{" "}
-                {ventasDelDia.length === 1 ? "venta" : "ventas"} el {fecha}. Revisa que no sea la misma.
-              </p>
-              <ul className="mt-1 list-disc pl-5">
-                {ventasDelDia.map((v) => (
-                  <li key={v.id}>
-                    <span className="font-mono">{v.folio}</span> · {v.repartidor ?? "Oficina"} ·{" "}
-                    {formatearPesos(v.montoCentavos)} · {ETIQUETA_ORIGEN[v.origen]}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {cliente && (
-            <TablaProductosVenta
-              filas={filas}
-              captura={captura}
-              onCambio={(id, campo, valor) => setCaptura((actual) => conCaptura(actual, id, campo, valor))}
-              disabled={enviando}
-            />
-          )}
-
-          <p className="text-right text-base font-semibold">Total: {formatearPesos(totalCentavos)}</p>
-
-          <CamposCondicionesVenta
-            valores={condiciones}
-            onCambio={(cambio) => setCondiciones((actual) => ({ ...actual, ...cambio }))}
+          <BuscadorCliente
+            clientes={clientes}
+            cliente={cliente}
+            onElegir={elegirCliente}
+            onQuitar={quitarCliente}
             disabled={enviando}
           />
 
-          {mensajeError && (
-            <p role="alert" className="text-sm text-destructive">
-              {mensajeError}
-            </p>
-          )}
+          <SelectorRepartidor
+            repartidores={repartidores}
+            valor={repartidor}
+            onCambio={setRepartidor}
+            disabled={enviando || !cliente}
+            conOficina
+          />
+        </div>
 
-          {cargandoSesion ? null : puedeRegistrar ? (
-            <div>
-              <Button type="submit" disabled={enviando}>
-                {enviando ? "Grabando…" : "Grabar"}
-              </Button>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No tienes permiso para registrar ventas.
+        {cliente && ventasDelDia.length > 0 && (
+          <Aviso tono="advertencia">
+            <p className="font-semibold">
+              Este cliente ya tiene {ventasDelDia.length}{" "}
+              {ventasDelDia.length === 1 ? "venta" : "ventas"} el {fecha}. Revisa que no sea la misma.
             </p>
-          )}
-        </form>
-      </CardContent>
-    </Card>
+            <ul className="mt-1 list-disc pl-5">
+              {ventasDelDia.map((v) => (
+                <li key={v.id}>
+                  <span className="font-mono">{v.folio}</span> · {v.repartidor ?? "Oficina"} ·{" "}
+                  {formatearPesos(v.montoCentavos)} · {ETIQUETA_ORIGEN[v.origen]}
+                </li>
+              ))}
+            </ul>
+          </Aviso>
+        )}
+
+        {cliente && (
+          <TablaProductosVenta
+            filas={filas}
+            captura={captura}
+            onCambio={(id, campo, valor) => setCaptura((actual) => conCaptura(actual, id, campo, valor))}
+            disabled={enviando}
+          />
+        )}
+
+        <p className="text-right text-base font-semibold">Total: {formatearPesos(totalCentavos)}</p>
+
+        <CamposCondicionesVenta
+          valores={condiciones}
+          onCambio={(cambio) => setCondiciones((actual) => ({ ...actual, ...cambio }))}
+          disabled={enviando}
+        />
+
+        {mensajeError && <Aviso tono="error">{mensajeError}</Aviso>}
+
+        {cargandoSesion ? null : puedeRegistrar ? (
+          <div>
+            <Button type="submit" disabled={enviando}>
+              {enviando ? "Grabando…" : "Grabar"}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No tienes permiso para registrar ventas.
+          </p>
+        )}
+      </form>
+    </Pantalla>
   );
 }

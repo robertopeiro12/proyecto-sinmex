@@ -19,15 +19,15 @@ export function ListaRutaDiaria({
 }) {
   return (
     <section aria-label="Ruta del día" className="flex flex-col gap-2">
-      <h3 className="text-sm font-medium">
+      <h2 className="text-base font-semibold">
         {armadaPorElVendedor(filas) ? "Ruta armada por el vendedor" : "Ruta del día"}
-      </h3>
+      </h2>
       {filas.length === 0 ? (
         <p className="text-sm text-muted-foreground">Sin clientes en la ruta. Agrégalos desde la cartera.</p>
       ) : (
-        <ol className="flex flex-col gap-1">
+        <ol className="divide-y overflow-hidden rounded-[10px] border">
           {filas.map((f, i) => (
-            <li key={f.clienteId} className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm">
+            <li key={f.clienteId} className="flex items-center gap-2 px-3 py-1.5 text-sm">
               <span className="w-6 text-right tabular-nums">{i + 1}</span>
               <span className="flex-1">{f.clienteNombre}</span>
               {f.origen === "vendedor" ? (

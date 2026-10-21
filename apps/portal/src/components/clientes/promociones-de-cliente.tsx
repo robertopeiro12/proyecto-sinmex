@@ -136,12 +136,17 @@ export function PromocionesDeCliente({ clienteId, clienteNombre }: Props) {
       )}
 
       {editando !== null ? (
-        <FormularioPromocion
-          promocion={editando === "nueva" ? null : editando}
-          contexto={{ tipo: "cliente", clienteId, clienteNombre }}
-          alGuardar={alGuardar}
-          alCancelar={() => setEditando(null)}
-        />
+        <div className="flex flex-col gap-3">
+          <h4 className="text-sm font-medium">
+            {editando === "nueva" ? "Nueva promoción" : "Editar promoción"}
+          </h4>
+          <FormularioPromocion
+            promocion={editando === "nueva" ? null : editando}
+            contexto={{ tipo: "cliente", clienteId, clienteNombre }}
+            alGuardar={alGuardar}
+            alCancelar={() => setEditando(null)}
+          />
+        </div>
       ) : (
         <div>
           <Button type="button" variant="outline" onClick={() => setEditando("nueva")}>

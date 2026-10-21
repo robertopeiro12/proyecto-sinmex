@@ -641,8 +641,11 @@ usuario con sesion pasa.
     Tarea 8). Todo lo que lea `useAuth` tiene que seguir dentro de ese Suspense.
   - **Tesorería › Movimientos:** "Registrar operación" es un formulario fijo arriba; editar un movimiento abre una
     `Ventana` y no toca lo que el de arriba tenga escrito. Consulta al entrar y al picar **Mostrar**.
-  - Siguen con el estilo de antes hasta su etapa: Registrar venta, Promociones, Ruta diaria. **Recarga y Gastos
-    son de Mario:** no se tocan sin él (Recarga conserva `window.confirm`, igual que Ruta diaria).
+  - Todas las pantallas propias del portal **dentro del marco** ya usan las piezas comunes (el login y los
+    placeholders "Pronto" conservan su aspecto; Recarga y Gastos son de Mario) (Etapa 4: Registrar venta, Promociones, Ruta
+    diaria). Registrar venta y Editar venta comparten los campos; Ruta diaria confirma con `useConfirmar` al descartar
+    cambios. El modo `pantalla` de `PantallaCatalogo` pinta `EncabezadoPantalla` con `tituloFormulario` (el `h1`).
+  - **Recarga y Gastos son de Mario:** no se tocan sin él. Recarga conserva su `window.confirm` (el único que queda).
 
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
 `--`: sin él, npm se come los argumentos).

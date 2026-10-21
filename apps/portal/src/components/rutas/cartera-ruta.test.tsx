@@ -19,6 +19,7 @@ describe("CarteraRuta", () => {
     const usuario = userEvent.setup();
     render(<CarteraRuta cartera={cartera} enRuta={new Set(["x"])} onAgregar={vi.fn()} />);
 
+    expect(screen.getByRole("heading", { level: 2, name: "Cartera de clientes" })).toBeInTheDocument();
     expect(screen.queryByText("Ya en ruta")).toBeNull();
     await usuario.type(screen.getByLabelText("Buscar cliente"), "dona");
     expect(screen.getByText("Abarrotes Doña Lupe")).toBeInTheDocument();

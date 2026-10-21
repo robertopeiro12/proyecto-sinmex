@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
+import { Campo, Casilla, Entrada, Lista } from "@/components/ui/campo";
 import { useAuth } from "@/components/auth/auth-provider";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import { listarProductos, type Producto } from "@/lib/productos";
@@ -30,8 +32,6 @@ interface Props {
   alGuardar: () => void;
   alCancelar: () => void;
 }
-
-const CLASE_SELECT = "w-64 rounded-md border px-3 py-2 text-sm";
 
 export function FormularioPromocion({ promocion, contexto, alGuardar, alCancelar }: Props) {
   const { usuario } = useAuth();
@@ -184,8 +184,6 @@ export function FormularioPromocion({ promocion, contexto, alGuardar, alCancelar
       onChange={() => setTocado(true)}
       className="mb-6 flex flex-col gap-4 rounded-md border p-4"
     >
-      <h2 className="text-sm font-semibold">{esAlta ? "Nueva promoción" : "Editar promoción"}</h2>
-
       {esAlta && !deCliente && (
         <fieldset className="flex flex-col gap-1.5">
           <legend className="text-sm font-medium">Para quién</legend>
@@ -233,17 +231,13 @@ export function FormularioPromocion({ promocion, contexto, alGuardar, alCancelar
       )}
 
       {eligeSucursal && (
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="sucursal" className="text-sm font-medium">
-            Sucursal
-          </label>
-          <select
-            id="sucursal"
+        <Campo id="sucursal" etiqueta="Sucursal">
+          <Lista
             required
             disabled={enviando}
             value={sucursalElegida}
             onChange={(e) => setSucursalId(e.target.value)}
-            className={CLASE_SELECT}
+            className="w-64"
           >
             <option value="">Elige una sucursal…</option>
             {sucursales.map((s) => (
@@ -252,27 +246,23 @@ export function FormularioPromocion({ promocion, contexto, alGuardar, alCancelar
               </option>
             ))}
             <option value="todas">Todas las sucursales — crea una por sucursal</option>
-          </select>
-        </div>
+          </Lista>
+        </Campo>
       )}
 
       <div className="flex flex-wrap items-end gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="compra-tipo" className="text-sm font-medium">
-            Qué compra
-          </label>
-          <select
-            id="compra-tipo"
+        <Campo id="compra-tipo" etiqueta="Qué compra">
+          <Lista
             disabled={enviando}
             value={compraTipo}
             onChange={(e) => setCompraTipo(e.target.value as CompraPromocion)}
-            className={CLASE_SELECT}
+            className="w-64"
           >
             <option value="cualquiera">Cualquier producto</option>
             <option value="producto">Un producto</option>
             <option value="presentacion">Una presentación</option>
-          </select>
-        </div>
+          </Lista>
+        </Campo>
 
         {compraTipo === "producto" && (
           <SelectorProducto
@@ -306,22 +296,18 @@ export function FormularioPromocion({ promocion, contexto, alGuardar, alCancelar
       </div>
 
       <div className="flex flex-wrap items-end gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="regalo-tipo" className="text-sm font-medium">
-            Qué regala
-          </label>
-          <select
-            id="regalo-tipo"
+        <Campo id="regalo-tipo" etiqueta="Qué regala">
+          <Lista
             disabled={enviando}
             value={regaloTipo}
             onChange={(e) => setRegaloTipo(e.target.value as RegaloPromocion)}
-            className={CLASE_SELECT}
+            className="w-64"
           >
             <option value="mismo">Del mismo</option>
             <option value="producto">Un producto</option>
             <option value="presentacion">Una presentación</option>
-          </select>
-        </div>
+          </Lista>
+        </Campo>
 
         {regaloTipo === "producto" && (
           <SelectorProducto
@@ -355,27 +341,21 @@ export function FormularioPromocion({ promocion, contexto, alGuardar, alCancelar
       </div>
 
       {audiencia !== "prospecto" && (
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={seRepite}
-            disabled={enviando}
-            onChange={(e) => setSeRepite(e.target.checked)}
-          />
-          Se repite por bloques
-        </label>
+        <Casilla
+          etiqueta="Se repite por bloques"
+          checked={seRepite}
+          disabled={enviando}
+          onChange={(e) => setSeRepite(e.target.checked)}
+        />
       )}
 
       {!esAlta && (
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={activo}
-            disabled={enviando}
-            onChange={(e) => setActivo(e.target.checked)}
-          />
-          Activa
-        </label>
+        <Casilla
+          etiqueta="Activa"
+          checked={activo}
+          disabled={enviando}
+          onChange={(e) => setActivo(e.target.checked)}
+        />
       )}
 
       {/* La frase tal como la verá el vendedor (D11); si la regla no cuadra, en su lugar va el porqué. */}
@@ -390,11 +370,7 @@ export function FormularioPromocion({ promocion, contexto, alGuardar, alCancelar
         {problema ?? frase}
       </p>
 
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {error && <Aviso tono="error">{error}</Aviso>}
 
       <div className="flex gap-2">
         <Button type="submit" disabled={enviando || problema !== null || falta}>
@@ -434,16 +410,12 @@ function SelectorProducto(p: {
   productos: Producto[];
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={p.id} className="text-sm font-medium">
-        {p.etiqueta}
-      </label>
-      <select
-        id={p.id}
+    <Campo id={p.id} etiqueta={p.etiqueta}>
+      <Lista
         disabled={p.deshabilitado}
         value={p.valor}
         onChange={(e) => p.alCambiar(e.target.value)}
-        className={CLASE_SELECT}
+        className="w-64"
       >
         <option value="">Elige un producto…</option>
         {p.productos.map((x) => (
@@ -451,8 +423,8 @@ function SelectorProducto(p: {
             {x.nombre}
           </option>
         ))}
-      </select>
-    </div>
+      </Lista>
+    </Campo>
   );
 }
 
@@ -465,16 +437,12 @@ function SelectorPresentacion(p: {
   presentaciones: { id: string; etiqueta: string }[];
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={p.id} className="text-sm font-medium">
-        {p.etiqueta}
-      </label>
-      <select
-        id={p.id}
+    <Campo id={p.id} etiqueta={p.etiqueta}>
+      <Lista
         disabled={p.deshabilitado}
         value={p.valor}
         onChange={(e) => p.alCambiar(e.target.value)}
-        className={CLASE_SELECT}
+        className="w-64"
       >
         <option value="">Elige una presentación…</option>
         {p.presentaciones.map((x) => (
@@ -482,8 +450,8 @@ function SelectorPresentacion(p: {
             {x.etiqueta}
           </option>
         ))}
-      </select>
-    </div>
+      </Lista>
+    </Campo>
   );
 }
 
@@ -496,20 +464,16 @@ function Cantidad(p: {
   minimo: number;
 }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={p.id} className="text-sm font-medium">
-        {p.etiqueta}
-      </label>
-      <input
-        id={p.id}
+    <Campo id={p.id} etiqueta={p.etiqueta}>
+      <Entrada
         type="number"
         min={p.minimo}
         step={1}
         disabled={p.deshabilitado}
         value={p.valor}
         onChange={(e) => p.alCambiar(e.target.value)}
-        className="w-28 rounded-md border px-3 py-2 text-sm"
+        className="w-28"
       />
-    </div>
+    </Campo>
   );
 }

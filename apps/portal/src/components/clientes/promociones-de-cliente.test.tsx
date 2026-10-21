@@ -155,4 +155,17 @@ describe("PromocionesDeCliente", () => {
     await waitFor(() => expect(promocionesLib.listarPromociones).toHaveBeenCalledTimes(2));
     expect(screen.queryByText(/Formulario de promoción/)).not.toBeInTheDocument();
   });
+
+  it("el formulario embebido lleva su título: Nueva o Editar promoción", async () => {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    render(<PromocionesDeCliente clienteId="c1" clienteNombre="Abarrotes Lupita" />);
+    await screen.findByText("Por cada 20 Jawa, 1 Jawa gratis");
+
+    await usuario.click(screen.getByRole("button", { name: "Nueva promoción para este cliente" }));
+    expect(screen.getByRole("heading", { level: 4, name: "Nueva promoción" })).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("button", { name: "Editar" }));
+    expect(screen.getByRole("heading", { level: 4, name: "Editar promoción" })).toBeInTheDocument();
+  });
 });
