@@ -70,8 +70,20 @@ describe("PantallaCuentasPorCobrar", () => {
   it("sin cuentas_cobrar.ver lo dice y no pide nada", () => {
     mockAuth([]);
     render(<PantallaCuentasPorCobrar sucursal={null} />);
-    expect(screen.getByText("No tienes permiso para ver cuentas por cobrar")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Cuentas por Cobrar" })).toBeInTheDocument();
+    expect(screen.getByText("No tienes permiso para ver esta sección.")).toBeInTheDocument();
     expect(obtener).not.toHaveBeenCalled();
+  });
+
+  it("encabezado con su descripción y el filtro Solo vencidas", async () => {
+    mockAuth(["cuentas_cobrar.ver"]);
+    render(<PantallaCuentasPorCobrar sucursal={null} />);
+    expect(screen.getByRole("heading", { level: 1, name: "Cuentas por Cobrar" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Cuánto debe cada cliente, con sus notas pendientes y vencidas."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Solo vencidas" })).not.toBeChecked();
+    await screen.findByText("$377.00");
   });
 
   it("pide al abrir y muestra totales y una fila por cliente", async () => {

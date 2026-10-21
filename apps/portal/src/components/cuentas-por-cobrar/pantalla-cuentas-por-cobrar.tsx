@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
+import { Aviso } from "@/components/ui/aviso";
+import { BotonExcel } from "@/components/ui/boton-excel";
+import { Casilla } from "@/components/ui/campo";
+import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
+import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { mensajeDe } from "@/lib/api";
 import {
   definicionExcelCuentasPorCobrar,
@@ -53,32 +56,9 @@ export function PantallaCuentasPorCobrar({ sucursal }: { sucursal: string | null
     );
   }, [permitido, sucursal, soloVencidas]);
 
-  if (cargandoSesion) {
-    // Mientras /auth/me no contesta, `puede()` da false a todos (como PantallaKilometraje).
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Cuentas por Cobrar</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">Cargando…</p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!permitido) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Cuentas por Cobrar</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">No tienes permiso para ver cuentas por cobrar</p>
-        </CardContent>
-      </Card>
-    );
-  }
+  // Mientras /auth/me no contesta, `puede()` da false a todos (como PantallaKilometraje).
+  if (cargandoSesion) return <EstadoPantalla titulo="Cuentas por Cobrar" tipo="cargando" />;
+  if (!permitido) return <EstadoPantalla titulo="Cuentas por Cobrar" tipo="sin-permiso" />;
 
   async function alExportar() {
     if (!datos) return;
@@ -103,84 +83,70 @@ export function PantallaCuentasPorCobrar({ sucursal }: { sucursal: string | null
   const hayNotas = datos !== null && datos.clientes.length > 0;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Cuentas por Cobrar</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-5">
-        {actualizando && <p className="text-sm text-muted-foreground">Actualizando…</p>}
+    <Pantalla>
+      <EncabezadoPantalla
+        titulo="Cuentas por Cobrar"
+        descripcion="Cuánto debe cada cliente, con sus notas pendientes y vencidas."
+        acciones={<BotonExcel exportando={exportando} disabled={!hayNotas || cargando} onClick={() => void alExportar()} />}
+      />
 
-        {datos && (
-          <div
-            data-testid="totales-cuentas"
-            aria-busy={actualizando}
-            className={`flex flex-wrap gap-8 ${actualizando ? "opacity-60" : ""}`}
-          >
-            <div>
-              <p className="text-sm text-muted-foreground">Total por cobrar</p>
-              <p className="text-2xl font-semibold" data-total="total">{formatearPesos(datos.totalCentavos)}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Vencido</p>
-              <p
-                className={`text-2xl font-semibold ${datos.vencidoCentavos > 0 ? "text-destructive" : ""}`}
-                data-total="vencido"
-              >
-                {formatearPesos(datos.vencidoCentavos)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Notas</p>
-              <p className="text-2xl font-semibold">
-                {plural(datos.notas, "nota", "notas")} de {plural(datos.clientes.length, "cliente", "clientes")}
-              </p>
-            </div>
+      <div className="flex flex-wrap items-center gap-4 rounded-[10px] border p-3.5">
+        <Casilla
+          etiqueta="Solo vencidas"
+          checked={soloVencidas}
+          onChange={(e) => setSoloVencidas(e.target.checked)}
+        />
+      </div>
+
+      {error && <Aviso tono="error">{error}</Aviso>}
+
+      {actualizando && <p className="text-sm text-muted-foreground">Actualizando…</p>}
+
+      {datos && (
+        <div
+          data-testid="totales-cuentas"
+          aria-busy={actualizando}
+          className={`flex flex-wrap gap-8 ${actualizando ? "opacity-60" : ""}`}
+        >
+          <div>
+            <p className="text-sm text-muted-foreground">Total por cobrar</p>
+            <p className="text-2xl font-semibold" data-total="total">{formatearPesos(datos.totalCentavos)}</p>
           </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={soloVencidas} onChange={(e) => setSoloVencidas(e.target.checked)} />
-            Solo vencidas
-          </label>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={!hayNotas || exportando || cargando}
-            onClick={() => void alExportar()}
-          >
-            Exportar a Excel
-          </Button>
+          <div>
+            <p className="text-sm text-muted-foreground">Vencido</p>
+            <p
+              className={`text-2xl font-semibold ${datos.vencidoCentavos > 0 ? "text-destructive" : ""}`}
+              data-total="vencido"
+            >
+              {formatearPesos(datos.vencidoCentavos)}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Notas</p>
+            <p className="text-2xl font-semibold">
+              {plural(datos.notas, "nota", "notas")} de {plural(datos.clientes.length, "cliente", "clientes")}
+            </p>
+          </div>
         </div>
+      )}
 
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        )}
+      {cargando && !datos && <p className="text-sm text-muted-foreground">Cargando…</p>}
 
-        {cargando && !datos && <p className="text-sm text-muted-foreground">Cargando…</p>}
-
-        {datos && (
-          <div
-            data-testid="tabla-cuentas"
-            aria-busy={actualizando}
-            className={actualizando ? "opacity-60" : undefined}
-          >
-            {hayNotas ? (
-              <TablaCuentasPorCobrar
-                clientes={datos.clientes}
-                sucursal={sucursal}
-                puedeCobrar={puede("cobranza.registrar")}
-              />
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                {consultadoConVencidas ? "No hay notas vencidas." : "No hay cuentas por cobrar."}
-              </p>
-            )}
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      {datos && (
+        <div data-testid="tabla-cuentas" aria-busy={actualizando} className={actualizando ? "opacity-60" : undefined}>
+          {hayNotas ? (
+            <TablaCuentasPorCobrar
+              clientes={datos.clientes}
+              sucursal={sucursal}
+              puedeCobrar={puede("cobranza.registrar")}
+            />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {consultadoConVencidas ? "No hay notas vencidas." : "No hay cuentas por cobrar."}
+            </p>
+          )}
+        </div>
+      )}
+    </Pantalla>
   );
 }
