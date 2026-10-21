@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
+import { Campo, Casilla, Entrada } from "@/components/ui/campo";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import { crearProducto, editarProducto, type Producto } from "@/lib/productos";
 
@@ -82,19 +83,9 @@ export function FormularioProducto({ producto, alGuardar, alCancelar }: Props) {
   const hayAlgunVolumen = filas.some((f) => f.volumen.trim() !== "");
 
   return (
-    <form
-      onSubmit={alEnviar}
-      className="mb-6 flex flex-col gap-4 rounded-md border p-4"
-    >
-      <h2 className="text-sm font-semibold">
-        {esAlta ? "Nuevo producto" : `Editar ${producto.nombre}`}
-      </h2>
-
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="nombre" className="text-sm font-medium">
-          Nombre del producto
-        </label>
-        <input
+    <form onSubmit={alEnviar} className="flex flex-col gap-4">
+      <Campo id="nombre" etiqueta="Nombre del producto">
+        <Entrada
           id="nombre"
           name="nombre"
           required
@@ -102,22 +93,21 @@ export function FormularioProducto({ producto, alGuardar, alCancelar }: Props) {
           disabled={enviando}
           value={nombre}
           onChange={(e) => setNombre(e.target.value)}
-          className="rounded-md border px-3 py-2 text-sm"
         />
-      </div>
+      </Campo>
 
       <fieldset className="flex flex-col gap-2">
-        <legend className="text-sm font-medium">Presentaciones</legend>
+        <legend className="text-[13px] font-semibold">Presentaciones</legend>
         {filas.map((fila) => (
           <div key={fila.clave} className="flex items-center gap-2">
-            <input
+            <Entrada
               aria-label="Descripción del volumen"
               maxLength={40}
               disabled={enviando}
               placeholder="500 ml"
               value={fila.volumen}
               onChange={(e) => cambiarVolumen(fila.clave, e.target.value)}
-              className="flex-1 rounded-md border px-3 py-2 text-sm"
+              className="flex-1"
             />
             <Button
               type="button"
@@ -146,15 +136,12 @@ export function FormularioProducto({ producto, alGuardar, alCancelar }: Props) {
       </fieldset>
 
       {!esAlta && (
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={activo}
-            disabled={enviando}
-            onChange={(e) => setActivo(e.target.checked)}
-          />
-          Activo
-        </label>
+        <Casilla
+          etiqueta="Activo"
+          checked={activo}
+          disabled={enviando}
+          onChange={(e) => setActivo(e.target.checked)}
+        />
       )}
 
       {error && (
@@ -163,17 +150,12 @@ export function FormularioProducto({ producto, alGuardar, alCancelar }: Props) {
         </p>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" disabled={enviando} onClick={alCancelar}>
+          Cancelar
+        </Button>
         <Button type="submit" disabled={enviando || !hayAlgunVolumen}>
           {enviando ? "Guardando…" : "Guardar"}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={enviando}
-          onClick={alCancelar}
-        >
-          Cancelar
         </Button>
       </div>
     </form>
