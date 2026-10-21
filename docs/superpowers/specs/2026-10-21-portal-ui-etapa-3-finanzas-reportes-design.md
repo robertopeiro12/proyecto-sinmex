@@ -91,8 +91,8 @@ Revisables por Roberto en el PR. Describen lo que la pantalla ya hace.
 
 ## 6. Pruebas y revisión
 
-- Las pruebas de pantalla existentes siguen pasando; donde cambia algo a propósito (botón "Consultar"/"Buscar" →
-  **Mostrar**, `window.confirm` → `alertdialog`, editar movimiento en `dialog`) se ajustan en el mismo commit.
+- Las pruebas de pantalla existentes siguen pasando; donde cambia algo a propósito (`window.confirm` → `alertdialog`,
+  editar movimiento en `dialog`, textos que pone `FiltroFechas`) se ajustan en el mismo commit.
 - Pruebas nuevas: editar un movimiento abre la ventana y "Registrar operación" no cambia de papel; las 3 confirmaciones
   de Tesorería (confirmar y cancelar); las pestañas comunes conservan `?vista=` y solo muestran las permitidas.
 - `npm test --workspace=apps/portal`, `tsc --noEmit`, lint y `next build` limpios.
@@ -101,6 +101,24 @@ Revisables por Roberto en el PR. Describen lo que la pantalla ya hace.
 - Al terminar: CLAUDE.md (quitar estas pantallas de "Siguen con el estilo de antes") y el vault ([[Portal Web]] y
   bitácora).
 
-## 7. Fuera de alcance
+## 7. Decisiones de Claude (revisión del constructor, 2026-10-21)
+
+Lo que el diseño no decía y se resolvió conservando el comportamiento de hoy:
+
+1. **Cuándo cargan los datos:** cada pantalla conserva cuándo consulta hoy (al entrar y/o al picar **Mostrar**, que ya es
+   el botón de todas); solo cambia el aspecto del filtro.
+2. **Tesorería:** la vista principal se queda montada con `conservarMontadas` de `Pestanas` y conserva su mecanismo de
+   hoy (`activa`: al volver a la pestaña vuelve a consultar el rango). No hay disparador nuevo.
+3. **Movimientos:** `FormularioMovimiento` se usa dos veces: fijo arriba solo para registrar (ya no recibe un movimiento
+   a editar) y dentro de la `Ventana` para editar. Al guardar la edición: se cierra la ventana, se recarga la lista y el
+   aviso de éxito (si lo hay hoy) sale en la pantalla, no dentro de la ventana.
+4. **Cuentas:** el servidor sigue siendo el único candado (403 al tocar una cuenta general sin ser General, 409 al
+   eliminar la que hoy recibe cobranza) y su mensaje se muestra como hoy; no se esconden botones nuevos.
+5. **Cuentas por Cobrar y Reportes:** conservan su filtro, su permiso, el "elige sucursal" y lo que muestra cada uno.
+6. **Sin `Ayuda` (ⓘ)** en estas pantallas; solo la línea de descripción.
+7. Se conservan los `aria-label` de las tablas y las consultas de las pruebas; el `h2` de la `Card` pasa a ser el `h1`
+   del encabezado.
+
+## 8. Fuera de alcance
 
 Cambiar cálculos, columnas o lo que exporta un Excel; gráficas o tarjetas de indicadores nuevas; la Etapa 4.
