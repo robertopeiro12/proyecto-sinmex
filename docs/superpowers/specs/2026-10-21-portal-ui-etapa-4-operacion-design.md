@@ -72,6 +72,24 @@ primero, como editar venta y Clientes).
   elegidos no cambian (los selectores son controlados). En el cambio de sucursal, la pregunta se hace dentro del `.then`
   respetando la guarda `vigente` de hoy.
 
+## 6.1 Decisiones de Claude (revisión del constructor, 2026-10-21)
+
+1. **Ruta diaria, después de "Descartar cambios":** la elección nueva (vendedor, fecha o la lista de vendedores tras
+   cambiar de sucursal) se aplica por el mismo camino de hoy, con los valores capturados al momento de preguntar. Si se
+   cancela, no cambia nada. Si llega otra pregunta mientras una sigue abierta, `useConfirmar` ya contesta "no" a la
+   anterior (Etapa 1), así que solo cuenta la última; el cambio de sucursal conserva su guarda `vigente`.
+2. **`useConfirmar` no cambia:** ya acepta `titulo`, `descripcion` y `confirmar` (texto del botón) y vive dentro de la
+   pantalla (no hay proveedor); la pregunta del cambio de sucursal se hace desde la misma pantalla.
+3. **Modo pantalla de `PantallaCatalogo`:** Clientes y Usuarios tienen pantalla propia y no lo usan; `tituloFormulario`
+   ya existe como prop. El cambio solo afecta a Promociones (y a la prueba del modo pantalla de `pantalla-catalogo`).
+4. **Registrar venta y editar venta comparten** `campos-condiciones-venta` y `selector-repartidor`: editar venta también
+   cambia de aspecto, a propósito (queda parejo); sus pruebas deben seguir pasando.
+5. **Ruta diaria, aspecto:** las dos listas (ruta y cartera) van en cajas con borde de 10 px como `CajaTabla`, renglones
+   separados por línea, botones `Button` comunes y el buscador de la cartera con `Entrada`; el orden y los controles de
+   cada renglón no cambian. "Cambios sin guardar" va donde está hoy (junto a los botones), como `Aviso tono="advertencia"`.
+6. **Registrar venta, al grabar:** hoy cambia a una vista "Venta registrada" (folio, monto, status, "Si hay nota de papel,
+   anota el folio en ella.") con "Registrar otra". Se queda igual, con `Aviso tono="exito"` y el encabezado común.
+
 ## 7. Pruebas y revisión
 
 - Las pruebas existentes siguen pasando; las que simulan `window.confirm` pasan a la ventana (`alertdialog`).
