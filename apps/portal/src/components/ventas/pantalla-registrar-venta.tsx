@@ -235,88 +235,86 @@ export function PantallaRegistrarVenta({ sucursal }: { sucursal: string | null }
   return (
     <Pantalla>
       <EncabezadoPantalla titulo="Registrar venta" descripcion={DESCRIPCION} />
-      <div>
-        <form onSubmit={alEnviar} className="flex flex-col gap-5">
-          {errorCarga && <Aviso tono="error">{errorCarga}</Aviso>}
+      <form onSubmit={alEnviar} className="flex flex-col gap-5">
+        {errorCarga && <Aviso tono="error">{errorCarga}</Aviso>}
 
-          <div className="flex flex-wrap gap-4">
-            <Campo id="fecha" etiqueta="Fecha">
-              <Entrada
-                type="date"
-                required
-                max={hoyEnTijuana()}
-                disabled={enviando}
-                value={fecha}
-                onChange={(e) => setFecha(e.target.value)}
-              />
-            </Campo>
-
-            <BuscadorCliente
-              clientes={clientes}
-              cliente={cliente}
-              onElegir={elegirCliente}
-              onQuitar={quitarCliente}
+        <div className="flex flex-wrap gap-4">
+          <Campo id="fecha" etiqueta="Fecha">
+            <Entrada
+              type="date"
+              required
+              max={hoyEnTijuana()}
               disabled={enviando}
+              value={fecha}
+              onChange={(e) => setFecha(e.target.value)}
             />
+          </Campo>
 
-            <SelectorRepartidor
-              repartidores={repartidores}
-              valor={repartidor}
-              onCambio={setRepartidor}
-              disabled={enviando || !cliente}
-              conOficina
-            />
-          </div>
-
-          {cliente && ventasDelDia.length > 0 && (
-            <Aviso tono="advertencia">
-              <p className="font-semibold">
-                Este cliente ya tiene {ventasDelDia.length}{" "}
-                {ventasDelDia.length === 1 ? "venta" : "ventas"} el {fecha}. Revisa que no sea la misma.
-              </p>
-              <ul className="mt-1 list-disc pl-5">
-                {ventasDelDia.map((v) => (
-                  <li key={v.id}>
-                    <span className="font-mono">{v.folio}</span> · {v.repartidor ?? "Oficina"} ·{" "}
-                    {formatearPesos(v.montoCentavos)} · {ETIQUETA_ORIGEN[v.origen]}
-                  </li>
-                ))}
-              </ul>
-            </Aviso>
-          )}
-
-          {cliente && (
-            <TablaProductosVenta
-              filas={filas}
-              captura={captura}
-              onCambio={(id, campo, valor) => setCaptura((actual) => conCaptura(actual, id, campo, valor))}
-              disabled={enviando}
-            />
-          )}
-
-          <p className="text-right text-base font-semibold">Total: {formatearPesos(totalCentavos)}</p>
-
-          <CamposCondicionesVenta
-            valores={condiciones}
-            onCambio={(cambio) => setCondiciones((actual) => ({ ...actual, ...cambio }))}
+          <BuscadorCliente
+            clientes={clientes}
+            cliente={cliente}
+            onElegir={elegirCliente}
+            onQuitar={quitarCliente}
             disabled={enviando}
           />
 
-          {mensajeError && <Aviso tono="error">{mensajeError}</Aviso>}
+          <SelectorRepartidor
+            repartidores={repartidores}
+            valor={repartidor}
+            onCambio={setRepartidor}
+            disabled={enviando || !cliente}
+            conOficina
+          />
+        </div>
 
-          {cargandoSesion ? null : puedeRegistrar ? (
-            <div>
-              <Button type="submit" disabled={enviando}>
-                {enviando ? "Grabando…" : "Grabar"}
-              </Button>
-            </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              No tienes permiso para registrar ventas.
+        {cliente && ventasDelDia.length > 0 && (
+          <Aviso tono="advertencia">
+            <p className="font-semibold">
+              Este cliente ya tiene {ventasDelDia.length}{" "}
+              {ventasDelDia.length === 1 ? "venta" : "ventas"} el {fecha}. Revisa que no sea la misma.
             </p>
-          )}
-        </form>
-      </div>
+            <ul className="mt-1 list-disc pl-5">
+              {ventasDelDia.map((v) => (
+                <li key={v.id}>
+                  <span className="font-mono">{v.folio}</span> · {v.repartidor ?? "Oficina"} ·{" "}
+                  {formatearPesos(v.montoCentavos)} · {ETIQUETA_ORIGEN[v.origen]}
+                </li>
+              ))}
+            </ul>
+          </Aviso>
+        )}
+
+        {cliente && (
+          <TablaProductosVenta
+            filas={filas}
+            captura={captura}
+            onCambio={(id, campo, valor) => setCaptura((actual) => conCaptura(actual, id, campo, valor))}
+            disabled={enviando}
+          />
+        )}
+
+        <p className="text-right text-base font-semibold">Total: {formatearPesos(totalCentavos)}</p>
+
+        <CamposCondicionesVenta
+          valores={condiciones}
+          onCambio={(cambio) => setCondiciones((actual) => ({ ...actual, ...cambio }))}
+          disabled={enviando}
+        />
+
+        {mensajeError && <Aviso tono="error">{mensajeError}</Aviso>}
+
+        {cargandoSesion ? null : puedeRegistrar ? (
+          <div>
+            <Button type="submit" disabled={enviando}>
+              {enviando ? "Grabando…" : "Grabar"}
+            </Button>
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No tienes permiso para registrar ventas.
+          </p>
+        )}
+      </form>
     </Pantalla>
   );
 }

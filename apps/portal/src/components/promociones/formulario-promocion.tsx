@@ -33,8 +33,6 @@ interface Props {
   alCancelar: () => void;
 }
 
-const CLASE_SELECT = "w-64";
-
 export function FormularioPromocion({ promocion, contexto, alGuardar, alCancelar }: Props) {
   const { usuario } = useAuth();
   const esAlta = promocion === null;
@@ -239,7 +237,7 @@ export function FormularioPromocion({ promocion, contexto, alGuardar, alCancelar
             disabled={enviando}
             value={sucursalElegida}
             onChange={(e) => setSucursalId(e.target.value)}
-            className={CLASE_SELECT}
+            className="w-64"
           >
             <option value="">Elige una sucursal…</option>
             {sucursales.map((s) => (
@@ -258,7 +256,7 @@ export function FormularioPromocion({ promocion, contexto, alGuardar, alCancelar
             disabled={enviando}
             value={compraTipo}
             onChange={(e) => setCompraTipo(e.target.value as CompraPromocion)}
-            className={CLASE_SELECT}
+            className="w-64"
           >
             <option value="cualquiera">Cualquier producto</option>
             <option value="producto">Un producto</option>
@@ -303,7 +301,7 @@ export function FormularioPromocion({ promocion, contexto, alGuardar, alCancelar
             disabled={enviando}
             value={regaloTipo}
             onChange={(e) => setRegaloTipo(e.target.value as RegaloPromocion)}
-            className={CLASE_SELECT}
+            className="w-64"
           >
             <option value="mismo">Del mismo</option>
             <option value="producto">Un producto</option>
@@ -417,7 +415,7 @@ function SelectorProducto(p: {
         disabled={p.deshabilitado}
         value={p.valor}
         onChange={(e) => p.alCambiar(e.target.value)}
-        className={CLASE_SELECT}
+        className="w-64"
       >
         <option value="">Elige un producto…</option>
         {p.productos.map((x) => (
@@ -444,7 +442,7 @@ function SelectorPresentacion(p: {
         disabled={p.deshabilitado}
         value={p.valor}
         onChange={(e) => p.alCambiar(e.target.value)}
-        className={CLASE_SELECT}
+        className="w-64"
       >
         <option value="">Elige una presentación…</option>
         {p.presentaciones.map((x) => (

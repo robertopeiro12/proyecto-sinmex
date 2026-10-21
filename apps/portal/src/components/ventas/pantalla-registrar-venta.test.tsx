@@ -124,7 +124,7 @@ describe("PantallaRegistrarVenta", () => {
     it("sin ventas ese día no hay aviso", async () => {
       await prepararPantalla();
       await waitFor(() => expect(buscarVentas).toHaveBeenCalled());
-      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Este cliente ya tiene/)).not.toBeInTheDocument();
     });
 
     it("si la búsqueda falla no hay aviso y se puede seguir capturando", async () => {

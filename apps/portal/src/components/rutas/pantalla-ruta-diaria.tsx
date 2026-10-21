@@ -161,7 +161,8 @@ export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
   // ventana está abierta el selector sigue mostrando lo de hoy (es controlado).
   async function cambiarVendedor(id: string) {
     if (ocupado || id === vendedorId || !(await puedeDescartar())) return;
-    setVendedorId(id);
+    // La lista pudo cambiar mientras la ventana estaba abierta: no dejar un id que ya no está.
+    setVendedorId(vendedoresRef.current.some((v) => v.id === id) ? id : "");
   }
 
   async function cambiarFecha(valor: string) {
