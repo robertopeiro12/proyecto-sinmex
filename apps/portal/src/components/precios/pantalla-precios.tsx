@@ -155,7 +155,7 @@ function MatrizPrecios({
     <Pantalla>
       <EncabezadoPantalla
         titulo="Listas de Precios"
-        descripcion="El precio de cada presentación en cada lista de la sucursal."
+        descripcion="El precio de cada presentación en cada lista de la sucursal, en pesos mexicanos (MXN)."
       />
       {error && <Aviso tono="error">{error}</Aviso>}
       <CajaTabla>
