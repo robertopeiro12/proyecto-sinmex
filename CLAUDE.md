@@ -603,6 +603,16 @@ usuario con sesion pasa.
     vendedor en las cargas); el 409 del índice único queda como red de seguridad.
   - **Nube**: `20261023120000_produccion.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
     (pre-flight: tabla nueva; nada que contar).
+- **Retorno del vendedor.** El almacenista captura en el portal las piezas **buenas** que regresó cada vendedor (*Producción →
+  Retorno*). T-24 resta cargas − retornos; el corte de T-27 (pieza 3) leerá este retorno validado. La merma retornada no va
+  aquí (T-35 / T-27). Spec: `docs/superpowers/specs/2026-10-22-retorno-del-vendedor-design.md`.
+  - Tabla `retorno`: una fila **viva** por fecha, vendedor y presentación, piezas > 0; `sucursal_id` sale del vendedor.
+    Backend en `modules/produccion/` (`GET`/`PUT /retornos`), permiso `retorno.gestionar` y alcance de sucursal.
+  - `PUT` reemplaza el día del vendedor: **0 da de baja** la fila. Fecha futura = 400 (hoy de Tijuana). Dos guardados se
+    serializan bloqueando la fila del vendedor. **No se valida retorno <= cargado**; `cargadas` (cargas **aceptadas** de ese
+    día) es solo referencia.
+  - **Nube**: `20261024120000_retorno.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
+    (pre-flight: tabla nueva; nada que contar).
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
   - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).
