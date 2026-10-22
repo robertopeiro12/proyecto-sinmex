@@ -306,6 +306,20 @@ export interface Promocion {
   updated_at: Generated<Timestamp>;
 }
 
+export interface Retorno {
+  actualizado_por_usuario_id: string | null;
+  capturo_usuario_id: string;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  fecha: Timestamp;
+  id: Generated<string>;
+  piezas: number;
+  presentacion_id: string;
+  sucursal_id: string;
+  updated_at: Generated<Timestamp>;
+  vendedor_id: string;
+}
+
 export interface Ruta {
   cliente_id: string;
   created_at: Generated<Timestamp>;
@@ -582,6 +596,7 @@ export interface DB {
   produccion: Produccion;
   producto: Producto;
   promocion: Promocion;
+  retorno: Retorno;
   ruta: Ruta;
   saldo_favor_movimiento: SaldoFavorMovimiento;
   sesion_refresh: SesionRefresh;

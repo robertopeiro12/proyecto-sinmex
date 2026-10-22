@@ -25,16 +25,14 @@ import {
 import {
   esFechaReal,
   MENSAJE_FECHA_INVALIDA,
+  MOTIVO_GUARDADO_SIMULTANEO,
+  MOTIVO_PRESENTACION_INEXISTENTE,
   planDelDia,
   validarDia,
 } from './reglas-produccion';
 
 export const MOTIVO_ELIGE_SUCURSAL = 'Elige la sucursal.';
 export const MOTIVO_SUCURSAL_INEXISTENTE = 'No existe esa sucursal.';
-export const MOTIVO_PRESENTACION_INEXISTENTE =
-  'Una de las presentaciones no existe.';
-export const MOTIVO_GUARDADO_SIMULTANEO =
-  'Otra captura guardó este día al mismo tiempo; vuelve a guardar.';
 
 /** La respuesta del `GET` y del `PUT /produccion` (camelCase). */
 export interface DiaProduccion {

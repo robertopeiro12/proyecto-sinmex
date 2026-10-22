@@ -17,6 +17,10 @@ export interface FilaViva {
 }
 
 export const MENSAJE_FECHA_INVALIDA = 'La fecha no es válida.';
+export const MOTIVO_PRESENTACION_INEXISTENTE =
+  'Una de las presentaciones no existe.';
+export const MOTIVO_GUARDADO_SIMULTANEO =
+  'Otra captura guardó este día al mismo tiempo; vuelve a guardar.';
 export const MENSAJE_FECHA_FUTURA = 'La fecha no puede ser posterior a hoy.';
 export const MENSAJE_PIEZAS_INVALIDAS =
   'Las piezas deben ser un número entero mayor o igual a 0.';

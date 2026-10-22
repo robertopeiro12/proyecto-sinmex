@@ -5,6 +5,9 @@ import { CargasService } from './cargas.service';
 import { ProduccionController } from './produccion.controller';
 import { ProduccionRepository } from './produccion.repository';
 import { ProduccionService } from './produccion.service';
+import { RetornosController } from './retornos.controller';
+import { RetornosRepository } from './retornos.repository';
+import { RetornosService } from './retornos.service';
 
 // T-27 pieza 1: la carga y las recargas del vendedor (tabla `carga`). Exporta
 // `CargasService` para que sincronizacion/ baje las cargas en el pull y atienda
@@ -12,13 +15,18 @@ import { ProduccionService } from './produccion.service';
 // aqui, nunca al reves).
 //
 // T-25: la produccion por dia (tabla `produccion`), solo para el portal.
+//
+// Retorno del vendedor (tabla `retorno`), solo para el portal: lee las cargas
+// aceptadas como referencia, no las toca.
 @Module({
-  controllers: [CargasController, ProduccionController],
+  controllers: [CargasController, ProduccionController, RetornosController],
   providers: [
     CargasService,
     CargasRepository,
     ProduccionService,
     ProduccionRepository,
+    RetornosService,
+    RetornosRepository,
   ],
   exports: [CargasService],
 })
