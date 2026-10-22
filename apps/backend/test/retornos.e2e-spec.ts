@@ -11,9 +11,11 @@ import {
   type Database,
 } from './../src/database/database.tokens';
 import { PasswordService } from './../src/modules/auth/password.service';
-import { MOTIVO_GUARDADO_SIMULTANEO } from './../src/modules/produccion/produccion.service';
 import type { DiaRetorno } from './../src/modules/produccion/retornos.service';
-import { MENSAJE_FECHA_FUTURA } from './../src/modules/produccion/reglas-produccion';
+import {
+  MENSAJE_FECHA_FUTURA,
+  MOTIVO_GUARDADO_SIMULTANEO,
+} from './../src/modules/produccion/reglas-produccion';
 
 /**
  * Retorno del vendedor, de punta a punta: permiso, alcance (vendedor de otra
@@ -639,6 +641,70 @@ describe('Retorno del vendedor desde el portal (e2e)', () => {
         )
       ).body as DiaRetorno;
       expect(linea(otro, inactiva)).toBeUndefined();
+    });
+  });
+
+  describe('presentaciones dadas de baja', () => {
+    it('una dada de baja (ella o su producto) que venia en una carga aceptada ese dia se muestra y se le captura retorno; sin carga es 400', async () => {
+      const dia = diaDeLaCorrida(5);
+      const bajaPresentacion = await crearPresentacion(
+        `${PRODUCTO}-baja-pr`,
+        '1 L',
+      );
+      const bajaProducto = await crearPresentacion(
+        `${PRODUCTO}-baja-prod`,
+        '1 L',
+      );
+      const bajaSinCarga = await crearPresentacion(
+        `${PRODUCTO}-baja-sin`,
+        '1 L',
+      );
+      await crearCarga({
+        vendedorId: vendedorTj2,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'aceptada',
+        lineas: [
+          { presentacionId: bajaPresentacion, piezas: 4 },
+          { presentacionId: bajaProducto, piezas: 5 },
+        ],
+      });
+      await db
+        .updateTable('presentacion')
+        .set({ deleted_at: sql<Date>`now()` })
+        .where('id', 'in', [bajaPresentacion, bajaSinCarga])
+        .execute();
+      await db
+        .updateTable('producto')
+        .set({ deleted_at: sql<Date>`now()` })
+        .where('nombre', '=', `${PRODUCTO}-baja-prod`)
+        .execute();
+
+      const leido = (
+        await leer(cookieGeneral, { fecha: dia, vendedor: vendedorTj2 }).expect(
+          200,
+        )
+      ).body as DiaRetorno;
+      expect(linea(leido, bajaPresentacion)?.cargadas).toBe(4);
+      expect(linea(leido, bajaProducto)?.cargadas).toBe(5);
+      expect(linea(leido, bajaSinCarga)).toBeUndefined();
+
+      const res = await guardar(cookieGeneral, {
+        fecha: dia,
+        vendedor: vendedorTj2,
+        lineas: [
+          { presentacionId: bajaPresentacion, piezas: 1 },
+          { presentacionId: bajaProducto, piezas: 2 },
+        ],
+      }).expect(200);
+      expect(linea(res.body as DiaRetorno, bajaPresentacion)?.piezas).toBe(1);
+      expect(linea(res.body as DiaRetorno, bajaProducto)?.piezas).toBe(2);
+
+      await guardar(cookieGeneral, {
+        fecha: dia,
+        vendedor: vendedorTj2,
+        lineas: [{ presentacionId: bajaSinCarga, piezas: 1 }],
+      }).expect(400);
     });
   });
 

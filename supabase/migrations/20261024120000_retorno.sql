@@ -30,7 +30,8 @@ create table retorno (
 -- y si dos capturas chocaran, esto lo impide. Parcial para poder recapturar.
 create unique index uq_retorno_dia_vendedor_presentacion
   on retorno (fecha, vendedor_id, presentacion_id) where deleted_at is null;
--- La pantalla lee el dia de una sucursal.
+-- La pantalla no lo usa (lee por vendedor y fecha con el indice unico de arriba);
+-- sirve a lectores por sucursal y dia, como T-24 y el corte.
 create index idx_retorno_sucursal_fecha on retorno (sucursal_id, fecha);
 
 create trigger trg_retorno_updated before update on retorno

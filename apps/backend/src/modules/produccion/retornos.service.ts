@@ -11,12 +11,10 @@ import { esViolacionUnicidad } from '../../database/errores-postgres';
 import { resolverAlcance } from '../sucursales/alcance-sucursal';
 import type { ConsultaRetornoDto, GuardarRetornoDto } from './dto/retorno.dto';
 import {
-  MOTIVO_GUARDADO_SIMULTANEO,
-  MOTIVO_PRESENTACION_INEXISTENTE,
-} from './produccion.service';
-import {
   esFechaReal,
   MENSAJE_FECHA_INVALIDA,
+  MOTIVO_GUARDADO_SIMULTANEO,
+  MOTIVO_PRESENTACION_INEXISTENTE,
   planDelDia,
   validarDia,
   type LineaPedida,

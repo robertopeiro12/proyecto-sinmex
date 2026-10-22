@@ -121,6 +121,18 @@ describe("PantallaRetorno", () => {
     expect(await screen.findByText("Retorno guardado.")).toBeInTheDocument();
   });
 
+  it("con una entrada inválida deshabilita Guardar y avisa en la fila", async () => {
+    mockAuth([PERMISO]);
+    render(<PantallaRetorno sucursal={null} />);
+    await elegir("Ana Pérez");
+    await screen.findByRole("table", TABLA);
+    await userEvent.type(piezas("Horchata 1 L"), "1.5");
+    expect(screen.getByRole("button", { name: "Guardar retorno" })).toBeDisabled();
+    expect(piezas("Horchata 1 L")).toHaveAttribute("aria-invalid", "true");
+    expect(within(screen.getByRole("row", { name: /Horchata/ })).getByText("Solo piezas enteras")).toBeInTheDocument();
+    expect(lib.guardarRetorno).not.toHaveBeenCalled();
+  });
+
   it("la fecha no permite mañana y una futura tecleada no se consulta", async () => {
     mockAuth([PERMISO]);
     render(<PantallaRetorno sucursal={null} />);

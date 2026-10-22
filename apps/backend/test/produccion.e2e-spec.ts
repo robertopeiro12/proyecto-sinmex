@@ -11,11 +11,11 @@ import {
   type Database,
 } from './../src/database/database.tokens';
 import { PasswordService } from './../src/modules/auth/password.service';
+import type { DiaProduccion } from './../src/modules/produccion/produccion.service';
 import {
+  MENSAJE_FECHA_FUTURA,
   MOTIVO_GUARDADO_SIMULTANEO,
-  type DiaProduccion,
-} from './../src/modules/produccion/produccion.service';
-import { MENSAJE_FECHA_FUTURA } from './../src/modules/produccion/reglas-produccion';
+} from './../src/modules/produccion/reglas-produccion';
 
 /**
  * Produccion por dia (T-25), de punta a punta: permiso, alcance (otra sucursal =
