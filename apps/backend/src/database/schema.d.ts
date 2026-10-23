@@ -201,6 +201,28 @@ export interface MotivoVisita {
   nombre: string;
 }
 
+export interface MovimientoInventario {
+  cliente_id: string | null;
+  comentario: string | null;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  fecha: Timestamp;
+  id: string;
+  registrado_en: Timestamp;
+  sucursal_id: string;
+  tipo: string;
+  updated_at: Generated<Timestamp>;
+  vendedor_id: string;
+}
+
+export interface MovimientoInventarioLinea {
+  id: Generated<string>;
+  movimiento_id: string;
+  piezas: number;
+  presentacion_id: string;
+  sentido: string;
+}
+
 export interface Perfil {
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -372,6 +394,7 @@ export interface SesionVendedor {
 export interface Sucursal {
   activa: Generated<boolean>;
   codigo: string;
+  consumo_diario_max: Generated<number>;
   control_inventario: Generated<boolean>;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -587,6 +610,8 @@ export interface DB {
   jornada: Jornada;
   lista_precio: ListaPrecio;
   motivo_visita: MotivoVisita;
+  movimiento_inventario: MovimientoInventario;
+  movimiento_inventario_linea: MovimientoInventarioLinea;
   perfil: Perfil;
   perfil_permiso: PerfilPermiso;
   permiso: Permiso;
