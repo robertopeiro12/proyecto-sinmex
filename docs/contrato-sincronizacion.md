@@ -1209,7 +1209,7 @@ sincronizar.
 | Reporte de Kilometraje del portal (lee `jornada`) y reproceso de las jornadas que llegaron antes de T-38 | Portal (siguiente paso de T-38) |
 | Eliminar una cobranza con autorización (el saldo a favor y la cobranza desde el portal ya están: T-21) | **T-34** |
 | Permisos granulares en estos endpoints | **T-8** |
-| Movimientos del día de la tablet (merma de 3 tipos, cambios físicos, consumo propio) y corte de inventario | **T-27** piezas 2 y 3 |
+| Cambios físicos y merma de almacén (fuera de T-27: serían otro `tipo` de `movimiento`, aditivo); el corte de inventario | Los dos primeros, futuro; el corte, **T-27** pieza 3 |
 
 El envelope está diseñado para que todo eso **quepa encima sin romper la
 versión 1**: los `tipo` nuevos y los campos nuevos dentro de `datos` son
