@@ -110,8 +110,8 @@ describe("PantallaPromociones", () => {
     const usuario = userEvent.setup();
     mockAuth(() => true, GENERAL);
     vi.mocked(sucursalesLib.listarSucursales).mockResolvedValue([
-      { id: "s-tj", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false },
-      { id: "s-mx", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false },
+      { id: "s-tj", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false, consumoDiarioMax: 1 },
+      { id: "s-mx", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false, consumoDiarioMax: 1 },
     ]);
     render(<PantallaPromociones sucursal="MX" />);
     await screen.findByText(base.texto);
