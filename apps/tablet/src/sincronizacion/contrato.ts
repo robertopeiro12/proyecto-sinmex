@@ -52,7 +52,9 @@ export type TipoOperacion =
   /** T-37. Un cliente que el vendedor agrego a su ruta del dia. */
   | 'ruta-alta'
   /** T-39. Una visita sin venta: el servidor la proyecta a `visita` con id = clave. */
-  | 'visita';
+  | 'visita'
+  /** T-27 pieza 2. Merma del cliente, del trayecto o consumo: se proyecta a `movimiento_inventario`. */
+  | 'movimiento';
 
 export type EstadoOperacion = 'aplicada' | 'duplicada' | 'rechazada';
 
@@ -139,6 +141,8 @@ export const CODIGOS_RECHAZO = [
   'campo-egreso-inexistente',
   /** T-30/T-31: el id del gasto ya lo ocupa otro registro. Motivo neutro. */
   'gasto-id-ocupado',
+  /** T-27 pieza 2: el id del movimiento ya lo ocupa otro registro. Motivo neutro. */
+  'movimiento-id-ocupado',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -180,6 +184,13 @@ export interface VendedorPull extends FilaSincronizable {
    * no lo manda y la tablet conserva el valor que ya tenia (0 la primera vez).
    */
   control_inventario?: boolean;
+  /**
+   * T-27 pieza 2 (D4): el consumo propio maximo por dia de su sucursal.
+   * **Opcional en la copia de la tablet, obligatorio en el servidor** (regla §3):
+   * un servidor anterior no lo manda y la tablet conserva el que tenia (1 la
+   * primera vez).
+   */
+  consumo_diario_max?: number;
 }
 
 export interface VehiculoPull extends FilaSincronizable {
@@ -746,6 +757,23 @@ export type DatosGasto = {
   registrado_en: string;
   /** Hasta 200 caracteres. */
   comentario?: string | null;
+};
+
+/**
+ * `datos` de un movimiento de inventario (T-27 pieza 2). Ver la copia normativa
+ * en el backend: `merma_cliente` lleva `cliente_id` en el sobre y al menos una
+ * linea `recibido`; `merma_trayecto` y `consumo`, sin cliente y solo `entregado`.
+ */
+export type DatosMovimiento = {
+  tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo';
+  /** Hasta 300 caracteres. */
+  comentario?: string | null;
+  registrado_en: string;
+  lineas: {
+    presentacion_id: string;
+    sentido: 'recibido' | 'entregado';
+    piezas: number;
+  }[];
 };
 
 export interface ResultadoOperacion {

@@ -34,10 +34,10 @@ apps/tablet/
 │       ├── _layout.tsx        # guardia de sesion + del kilometraje inicial
 │       ├── index.tsx          # la ruta del dia (pantalla principal, T-37)
 │       ├── agregar-a-ruta.tsx # clientes existentes que el vendedor suma a su ruta
-│       ├── operacion/         # todos los clientes -> ficha -> venta / cobranza / visita
+│       ├── operacion/         # todos los clientes -> ficha -> venta / cobranza / visita / merma
 │       ├── gastos/            # Gastos de hoy y Registrar gasto (T-30/T-31)
 │       ├── inventario/        # Inventario y el detalle de una carga (T-27)
-│       ├── pendiente/         # secciones del menu que aun no existen (merma)
+│       ├── merma/             # Merma y consumo: trayecto y consumo propio (T-27 pieza 2)
 │       ├── prospectos.tsx
 │       ├── ruta.tsx           # Ruta y GPS (T-41)
 │       └── cerrar-dia.tsx     # km final (el corte es T-33)
@@ -350,6 +350,26 @@ Spec: `docs/superpowers/specs/2026-10-22-t-27-carga-y-recarga-design.md`.
 - `ventas.registrar()` publica un cambio de catálogo tras grabar; el `sincronizar` del proveedor reutiliza la corrida en
   curso (`src/sincronizacion/una-a-la-vez.ts`) para no renovar el refresh token dos veces a la vez.
 
+## Merma y consumo (T-27 pieza 2)
+
+Spec: `docs/superpowers/specs/2026-10-23-t-27-merma-y-consumo-design.md`.
+
+- **Migración 018**: `movimiento` y `movimiento_linea` (los escribe la tablet y los sube el push como `tipo:
+  'movimiento'`, entre gastos y rutas) y `vendedor.consumo_diario_max` (el límite de su sucursal; baja en el pull).
+- **Ficha → "Merma"** (`operacion/[clienteId]/merma.tsx`, también para un prospecto): por presentación "Recibí dañado"
+  y "Le entregué" (con "Te quedan N" si el control está prendido), comentario y "Registrar merma". La ficha muestra
+  "Movimientos de hoy".
+- **Menú → "Merma y consumo"** (`merma/index.tsx`): "Merma del trayecto" y "Consumo propio" (con "Te quedan N de
+  consumo hoy"; con límite 0 no aparece) abren `merma/registrar.tsx`; debajo, los movimientos de hoy con su subida.
+- **Inventario**: Cargado − Vendido − Regalado − Merma entregada − Merma del trayecto − Consumo = Existencia, y "Por
+  regresar a la planta" (piezas buenas, que nunca bajan de 0, y merma). La merma recibida del cliente no suma a la
+  existencia.
+- `movimientos.registrar()` valida forma, límite de consumo, carga pendiente y faltantes **dentro de su transacción**
+  (como la venta) y publica un cambio de catálogo; la carga pendiente solo bloquea lo que saca piezas. `ventas.registrar()`
+  también resta los movimientos. Un movimiento grabado no se edita ni se borra.
+- Lógica con pruebas: `src/datos/movimientos-reglas.ts`, `src/datos/inventario-reglas.ts`,
+  `src/datos/repositorios/movimientos.ts`, `src/estado/movimiento.ts`, `src/sincronizacion/fuente-movimientos.ts`.
+
 ## Pruebas
 
 `npm test --workspace=apps/tablet` corre Jest con `ts-jest` en Node puro y prueba
@@ -383,5 +403,5 @@ solo cuando el portal suba a React 19.2.x, que no es alcance de T-04.
   implementar la sincronizacion. T-07 debe llamar a `gestor.renovar()` al
   conectarse: es lo que corre hacia adelante la ventana offline de la tablet.
 - **T-14** — folios (ver `ADR-0001`).
-- **T-27 (piezas 2 y 3) / T-33 / T-41** — merma, movimientos del día y corte de inventario, Ruta y GPS. Los gastos
-  (T-30/T-31) y la carga e Inventario (T-27 pieza 1) ya tienen pantalla.
+- **T-27 (pieza 3) / T-33 / T-41** — corte de inventario, corte del día, Ruta y GPS. Los gastos (T-30/T-31), la carga e
+  Inventario (T-27 pieza 1) y la merma y el consumo (T-27 pieza 2) ya tienen pantalla.

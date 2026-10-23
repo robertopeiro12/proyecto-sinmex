@@ -55,7 +55,7 @@ describe("PantallaVendedores", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(sucursalesLib.listarSucursales).mockResolvedValue([
-      { id: "suc-1", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false },
+      { id: "suc-1", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false, consumoDiarioMax: 1 },
     ]);
   });
 

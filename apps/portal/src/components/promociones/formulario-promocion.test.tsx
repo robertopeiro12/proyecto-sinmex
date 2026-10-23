@@ -98,9 +98,9 @@ describe("FormularioPromocion", () => {
     mockAuth(ATADO);
     vi.mocked(productosLib.listarProductos).mockResolvedValue(PRODUCTOS);
     vi.mocked(sucursalesLib.listarSucursales).mockResolvedValue([
-      { id: "s-tj", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false },
-      { id: "s-mx", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false },
-      { id: "s-xx", codigo: "XX", nombre: "Cerrada", activa: false, controlInventario: false },
+      { id: "s-tj", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false, consumoDiarioMax: 1 },
+      { id: "s-mx", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false, consumoDiarioMax: 1 },
+      { id: "s-xx", codigo: "XX", nombre: "Cerrada", activa: false, controlInventario: false, consumoDiarioMax: 1 },
     ]);
     vi.mocked(promocionesLib.crearPromocion).mockResolvedValue([]);
     vi.mocked(promocionesLib.editarPromocion).mockResolvedValue(EXISTENTE);

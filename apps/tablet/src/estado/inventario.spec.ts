@@ -7,6 +7,7 @@ import {
   cuerpoRespuesta,
   existencias,
   faltantesDeCaptura,
+  filasPorRegresar,
   MENSAJE_CARGA_CAMBIO,
   MENSAJE_CARGA_ELIMINADA,
   MENSAJE_SESION_CARGA,
@@ -230,5 +231,20 @@ describe('crearRespondedorCarga', () => {
     await expect(
       respondedor.responder(pasos([{ tipo: 'invalida', mensaje: 'Aceptar una carga no lleva motivo.' }])),
     ).resolves.toEqual({ estado: 'invalida', mensaje: 'Aceptar una carga no lleva motivo.' });
+  });
+});
+
+describe('filasPorRegresar (T-27 pieza 2)', () => {
+  it('piezas buenas = la existencia (nunca negativa) y la merma; sin nada que regresar no sale', () => {
+    expect(
+      filasPorRegresar([
+        { presentacionId: 'pre-1', etiqueta: 'Jamaica 1 L', existencia: 23, mermaPorRegresar: 4 },
+        { presentacionId: 'pre-2', etiqueta: 'Jamaica 500 ml', existencia: -1, mermaPorRegresar: 0 },
+        { presentacionId: 'pre-3', etiqueta: 'Horchata 1 L', existencia: 0, mermaPorRegresar: 2 },
+      ]),
+    ).toEqual([
+      { presentacionId: 'pre-1', etiqueta: 'Jamaica 1 L', buenas: 23, merma: 4 },
+      { presentacionId: 'pre-3', etiqueta: 'Horchata 1 L', buenas: 0, merma: 2 },
+    ]);
   });
 });

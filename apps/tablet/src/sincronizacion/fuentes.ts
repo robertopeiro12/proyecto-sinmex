@@ -2,6 +2,7 @@ import type { FuenteOperaciones } from './motor';
 import { fuenteCobranzas } from './fuente-cobranzas';
 import { fuenteGastos } from './fuente-gastos';
 import { fuenteJornadas } from './fuente-jornadas';
+import { fuenteMovimientos } from './fuente-movimientos';
 import { fuenteProspectos } from './fuente-prospectos';
 import { fuenteRutas } from './fuente-rutas';
 import { fuenteVentas } from './fuente-ventas';
@@ -25,6 +26,10 @@ import type { FuentesConPendientes } from './pendientes';
  *   su alta ya aplicada (el alcance se comprueba una vez por lote, como la venta de bienvenida de T-75).
  * - Gastos despues de visitas (T-30/T-31, D5): no dependen de ningun cliente;
  *   van antes de las altas de ruta para que el orden del spec quede fijo.
+ * - Movimientos despues de gastos (T-27 pieza 2): no dependen de nada que suba
+ *   despues; la merma a un prospecto capturado sin red necesita su alta ya
+ *   aplicada (van despues de prospectos, como la visita). Antes de las altas de
+ *   ruta para que el orden del spec quede fijo.
  * - Altas de ruta (T-37) no dependen de nadie: al final.
  *
  * Vive aqui y no en `proveedor-sesion.tsx` para que el orden tenga prueba.
@@ -37,6 +42,7 @@ export function fuentesDelPush(datos: FuentesConPendientes): FuenteOperaciones[]
     fuenteCobranzas(datos.cobranzas),
     fuenteVisitas(datos.visitas),
     fuenteGastos(datos.gastos),
+    fuenteMovimientos(datos.movimientos),
     fuenteRutas(datos.rutas),
   ];
 }

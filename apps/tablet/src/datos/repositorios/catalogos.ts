@@ -32,12 +32,13 @@ import { aplicarSnapshotRutas, type FilaRutaPull } from './rutas';
 export interface SnapshotCatalogos {
   sucursales?: Omit<Sucursal, 'sincronizado_en'>[];
   /**
-   * T-27: `control_inventario` es opcional aqui: un servidor anterior no lo manda
-   * y el login sin red no lo conoce. Ausente, el upsert conserva lo que habia (0
-   * en una fila nueva); ver NO_BORRAR_CON_NULO.
+   * T-27: `control_inventario` (pieza 1) y `consumo_diario_max` (pieza 2) son
+   * opcionales aqui: un servidor anterior no los manda y el login sin red no los
+   * conoce. Ausentes, el upsert conserva lo que habia (0 y 1 en una fila nueva);
+   * ver NO_BORRAR_CON_NULO.
    */
-  vendedores?: (Omit<Vendedor, 'sincronizado_en' | 'control_inventario'> &
-    Partial<Pick<Vendedor, 'control_inventario'>>)[];
+  vendedores?: (Omit<Vendedor, 'sincronizado_en' | 'control_inventario' | 'consumo_diario_max'> &
+    Partial<Pick<Vendedor, 'control_inventario' | 'consumo_diario_max'>>)[];
   vehiculos?: Omit<Vehiculo, 'sincronizado_en'>[];
   productos?: Omit<Producto, 'sincronizado_en'>[];
   presentaciones?: Omit<Presentacion, 'sincronizado_en'>[];
@@ -94,6 +95,8 @@ const COLUMNAS = {
     'folio_segmento',
     // T-27 (D7): la casilla de su sucursal. El login sin red no la pisa.
     'control_inventario',
+    // T-27 pieza 2 (D4): el limite de consumo de su sucursal. El login sin red no lo pisa.
+    'consumo_diario_max',
   ],
   vehiculo: ['id', 'nombre', 'sucursal_id', 'activo'],
   producto: ['id', 'nombre', 'activo'],
@@ -174,9 +177,10 @@ const COLUMNAS = {
  * `not null`. Un `null` del login sin red fallaria el `not null`, y un 0 apagaria
  * el control hasta el siguiente pull. Por eso cada columna lleva el valor (SQL
  * literal, de esta constante) con que nace una fila NUEVA que no lo trae.
+ * T-27 pieza 2: `consumo_diario_max`, igual; nace en 1, el default del servidor.
  */
 const NO_BORRAR_CON_NULO: Record<string, Record<string, string>> = {
-  vendedor: { folio_segmento: 'null', control_inventario: '0' },
+  vendedor: { folio_segmento: 'null', control_inventario: '0', consumo_diario_max: '1' },
 };
 
 /**

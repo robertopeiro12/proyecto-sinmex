@@ -5,6 +5,7 @@ import {
   existencias,
   type CargaInventario,
   type Existencia,
+  type LineaMovimientoInventario,
   type LineaVentaInventario,
 } from '../inventario-reglas';
 import type { Booleano, Carga, CargaDetalle, EstadoCarga, FechaISO, MomentoISO } from '../tipos';
@@ -39,7 +40,10 @@ export interface CargaConLineas extends Carga {
   lineas: LineaCargaConEtiqueta[];
 }
 
-/** Una fila de la tabla de Inventario: Cargado − Vendido − Regalado = Existencia. */
+/**
+ * Una fila de la tabla de Inventario: Cargado − Vendido − Regalado − Merma
+ * entregada − Merma del trayecto − Consumo = Existencia, y la merma por regresar.
+ */
 export interface FilaInventario extends Existencia {
   presentacionId: string;
   etiqueta: string;
@@ -138,20 +142,27 @@ export function aplicarSnapshotCargas(
 }
 
 /**
- * Lo que el inventario de hoy necesita, leido de SQLite: la casilla del
- * vendedor, sus cargas del dia (con lineas) y las lineas de sus ventas del dia.
+ * Lo que el inventario de hoy necesita, leido de SQLite: la casilla y el limite
+ * de consumo del vendedor, sus cargas del dia (con lineas), las lineas de sus
+ * ventas del dia y, desde la pieza 2, las de sus movimientos del dia.
  *
- * La usa `ventas.registrar` DENTRO de su transaccion (Review Focus 1: la
- * existencia que valida es la del momento de grabar) y este repositorio para
- * las pantallas.
+ * La usan `ventas.registrar` y `movimientos.registrar` DENTRO de su transaccion
+ * (vale la existencia del momento de grabar) y este repositorio para las
+ * pantallas.
  */
 export function leerInventarioDelDia(
   bd: BaseDatos,
   vendedorId: string,
   fecha: FechaISO,
-): { controlInventario: boolean; cargas: CargaInventario[]; ventas: LineaVentaInventario[] } {
-  const vendedor = bd.getFirstSync<{ control_inventario: number }>(
-    'select control_inventario from vendedor where id = $id',
+): {
+  controlInventario: boolean;
+  consumoDiarioMax: number;
+  cargas: CargaInventario[];
+  ventas: LineaVentaInventario[];
+  movimientos: LineaMovimientoInventario[];
+} {
+  const vendedor = bd.getFirstSync<{ control_inventario: number; consumo_diario_max: number }>(
+    'select control_inventario, consumo_diario_max from vendedor where id = $id',
     { $id: vendedorId },
   );
   const cargas = bd.getAllSync<Carga>(
@@ -171,11 +182,36 @@ export function leerInventarioDelDia(
       where v.vendedor_id = $vendedor_id and v.fecha = $fecha`,
     { $vendedor_id: vendedorId, $fecha: fecha },
   );
+  // T-27 pieza 2: todos los del dia, suban o no (las piezas ya salieron).
+  const movimientos = bd.getAllSync<LineaMovimientoInventario>(
+    `select m.fecha, m.tipo, l.sentido, l.presentacion_id, l.piezas
+       from movimiento_linea l
+       join movimiento m on m.id = l.movimiento_id
+      where m.vendedor_id = $vendedor_id and m.fecha = $fecha`,
+    { $vendedor_id: vendedorId, $fecha: fecha },
+  );
   return {
     controlInventario: vendedor?.control_inventario === 1,
+    // Un vendedor que no esta en la tablet no tiene consumo (registrar ya lo rechaza antes).
+    consumoDiarioMax: vendedor?.consumo_diario_max ?? 0,
     cargas: cargas.map((c) => ({ ...c, lineas: detalle.filter((d) => d.carga_id === c.id) })),
     ventas,
+    movimientos,
   };
+}
+
+/**
+ * "Producto volumen" de todo el catalogo local (es chico); tambien de las dadas
+ * de baja. La usan las cargas y los movimientos (T-27 pieza 2) para nombrar sus
+ * lineas.
+ */
+export function etiquetasDelCatalogo(bd: BaseDatos): Map<string, string> {
+  const filas = bd.getAllSync<{ id: string; etiqueta: string }>(
+    `select pr.id, p.nombre || ' ' || pr.volumen as etiqueta
+       from presentacion pr
+       join producto p on p.id = pr.producto_id`,
+  );
+  return new Map(filas.map((f) => [f.id, f.etiqueta]));
 }
 
 export type RepositorioCargas = ReturnType<typeof crearRepositorioCargas>;
@@ -189,19 +225,9 @@ export function crearRepositorioCargas(
   { bd, reloj }: DepsRepositorio,
   { catalogos }: { catalogos: RepositorioCatalogos },
 ) {
-  /** "Producto volumen" de todo el catalogo local (es chico); tambien de las dadas de baja. */
-  function etiquetasDelCatalogo(): Map<string, string> {
-    const filas = bd.getAllSync<{ id: string; etiqueta: string }>(
-      `select pr.id, p.nombre || ' ' || pr.volumen as etiqueta
-         from presentacion pr
-         join producto p on p.id = pr.producto_id`,
-    );
-    return new Map(filas.map((f) => [f.id, f.etiqueta]));
-  }
-
   function conLineas(cargas: readonly Carga[]): CargaConLineas[] {
     if (cargas.length === 0) return [];
-    const nombres = etiquetasDelCatalogo();
+    const nombres = etiquetasDelCatalogo(bd);
     return cargas.map((c) => ({
       ...c,
       lineas: bd
@@ -252,7 +278,7 @@ export function crearRepositorioCargas(
           cargas: inventario.cargas,
           hoy,
         }),
-        existencias: existencias(inventario.cargas, inventario.ventas, hoy),
+        existencias: existencias(inventario.cargas, inventario.ventas, hoy, inventario.movimientos),
       };
     },
 
@@ -260,8 +286,8 @@ export function crearRepositorioCargas(
     filasInventario(vendedorId: string): FilaInventario[] {
       const hoy = reloj.hoy();
       const inventario = leerInventarioDelDia(bd, vendedorId, hoy);
-      const nombres = etiquetasDelCatalogo();
-      return [...existencias(inventario.cargas, inventario.ventas, hoy)]
+      const nombres = etiquetasDelCatalogo(bd);
+      return [...existencias(inventario.cargas, inventario.ventas, hoy, inventario.movimientos)]
         .map(([presentacionId, e]) => ({
           presentacionId,
           etiqueta: nombres.get(presentacionId) ?? PRODUCTO_FUERA_DE_CATALOGO,

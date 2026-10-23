@@ -112,6 +112,9 @@ export function crearRepositorioVentas(
      * el folio: vale la existencia del momento de grabar (Review Focus 1), no la
      * que pinto la pantalla, y un rechazo no quema numero.
      *
+     * T-27 pieza 2 (D5): la existencia ya resta la merma entregada, la del
+     * trayecto y el consumo del dia.
+     *
      * @throws {ErrorVenta} si la captura no se puede grabar.
      * @throws {ErrorFolio} si el vendedor no tiene segmento o llego al tope del dia.
      * @throws {ErrorJornada} si el dia de hoy ya esta cerrado (T-38, D6).
@@ -242,7 +245,7 @@ export function crearRepositorioVentas(
         }
         const faltantes = faltantesDeVenta({
           controlInventario: inventario.controlInventario,
-          existencias: existencias(inventario.cargas, inventario.ventas, fecha),
+          existencias: existencias(inventario.cargas, inventario.ventas, fecha, inventario.movimientos),
           lineas: resumen.lineas.map((l) => ({ presentacionId: l.presentacionId, cantidad: l.cantidad })),
           regalos: regalos.map((r) => ({ presentacionId: r.presentacionId, cantidad: r.cantidad })),
         });

@@ -1,9 +1,12 @@
 import { Transform } from 'class-transformer';
 import {
   IsBoolean,
+  IsInt,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
 
@@ -35,4 +38,15 @@ export class EditarSucursalDto {
   @IsOptional()
   @IsBoolean()
   controlInventario?: boolean;
+
+  /**
+   * T-27 pieza 2 (D4): "Consumo propio máximo por día". Piezas que cada vendedor
+   * de la sucursal puede registrar como consumo propio en un dia; 0 lo apaga.
+   * Mismo rango que el check de la base.
+   */
+  @IsOptional()
+  @IsInt({ message: 'El consumo propio máximo es un número entero.' })
+  @Min(0, { message: 'El consumo propio máximo va de 0 a 99.' })
+  @Max(99, { message: 'El consumo propio máximo va de 0 a 99.' })
+  consumoDiarioMax?: number;
 }

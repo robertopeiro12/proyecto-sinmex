@@ -90,6 +90,35 @@ describe('prepararProyeccion', () => {
     ).toMatchObject({ ok: false, codigo: 'datos-invalidos' });
   });
 
+  it('un movimiento pasa por prepararMovimiento y sale como proyeccion de movimiento (T-27 pieza 2)', () => {
+    const r = prepararProyeccion(
+      op({
+        tipo: 'movimiento',
+        clave: 'c0ffee00-0000-4000-8000-000000002701',
+        folio: null,
+        clienteId: null,
+        datos: {
+          tipo: 'merma_trayecto',
+          registrado_en: '2026-10-23T18:40:00.000Z',
+          lineas: [{ presentacion_id: PRE_A, sentido: 'entregado', piezas: 2 }],
+        },
+      }),
+    );
+    expect(r).toEqual({
+      ok: true,
+      proyeccion: {
+        tipo: 'movimiento',
+        clienteId: null,
+        movimiento: {
+          tipo: 'merma_trayecto',
+          comentario: null,
+          registradoEn: '2026-10-23T18:40:00.000Z',
+          lineas: [{ presentacionId: PRE_A, sentido: 'entregado', piezas: 2 }],
+        },
+      },
+    });
+  });
+
   it('una jornada pasa por prepararJornada y sale como proyeccion de jornada (T-38)', () => {
     const VEHICULO = '106c93f1-0c9a-4efc-b167-8c73eea9b023';
     const r = prepararProyeccion(
