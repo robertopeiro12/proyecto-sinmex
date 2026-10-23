@@ -135,22 +135,6 @@ export function filtrarParaAgregar<T extends Pick<Cliente, 'id' | 'nombre' | 'ti
     .slice(0, limite);
 }
 
-/** Las secciones del menu que todavia no existen, con el ticket que las trae. */
-export const SECCIONES_PENDIENTES = {
-  merma: {
-    titulo: 'Merma, promoción y consumo',
-    ticket: 'T-27 / T-31',
-    descripcion:
-      'Registros que afectan el inventario y el corte. La promoción entrega producto a $0 y el consumo propio se registra antes de enviar el sobrante.',
-  },
-} as const;
-
-export type SeccionPendiente = keyof typeof SECCIONES_PENDIENTES;
-
-export function esSeccionPendiente(seccion: string): seccion is SeccionPendiente {
-  return Object.prototype.hasOwnProperty.call(SECCIONES_PENDIENTES, seccion);
-}
-
 /**
  * Ancho del menu lateral (rediseno del menu, 2026-10-18): el 82% de la pantalla
  * con tope de 320dp. En el celular deja ver una franja de la ruta oscurecida
@@ -172,8 +156,10 @@ export interface EntradaMenu {
 
 /**
  * Las entradas del menu, en el orden del spec (D16). Con el dia cerrado se
- * deshabilita solo lo que captura (gastos, merma; T-30/T-31 dio a Gastos su pantalla y T-27 a Inventario); lo que consulta
- * se sigue viendo. Ruta y GPS es la pantalla pendiente de T-41 que ya existe.
+ * deshabilita solo lo que captura (gastos, merma y consumo); lo que consulta se
+ * sigue viendo. T-30/T-31 dio a Gastos su pantalla, T-27 a Inventario y la
+ * pieza 2 a Merma y consumo. Ruta y GPS es la pantalla pendiente de T-41 que ya
+ * existe.
  */
 export function entradasMenu(diaCerrado: boolean): EntradaMenu[] {
   return [
@@ -208,9 +194,10 @@ export function entradasMenu(diaCerrado: boolean): EntradaMenu[] {
     },
     {
       clave: 'merma',
-      titulo: SECCIONES_PENDIENTES.merma.titulo,
-      descripcion: `Pendiente: ${SECCIONES_PENDIENTES.merma.ticket}`,
-      destino: '/(jornada)/pendiente/merma',
+      titulo: 'Merma y consumo',
+      descripcion: 'Merma del trayecto y consumo propio',
+      destino: '/(jornada)/merma',
+      // Captura (como Gastos): con el dia cerrado no se registra.
       deshabilitada: diaCerrado,
     },
     {
