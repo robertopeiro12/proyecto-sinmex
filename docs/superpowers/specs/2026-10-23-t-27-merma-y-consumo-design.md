@@ -182,3 +182,19 @@ relea). Error → `ErrorMovimiento` con el detalle; nada queda escrito.
 - Migración `20261025120000_movimiento_inventario.sql` a `sinmex dev` después del merge, con el protocolo de push
   (pre-flight: tablas nuevas y una columna con default; nada que contar).
 - Backend antes que la app. Una app vieja no manda movimientos.
+
+## Enmiendas de implementación (2026-10-23)
+
+- El tipo `merma` del contrato queda reservado sin proyección; la merma viaja como `movimiento` (D7).
+- La ficha del prospecto también ofrece "Merma" (revierte T-75 D6; aprobado por Mario con el plan, Review Focus 4).
+- La forma del movimiento se valida antes de la transacción, sin leer la base; el servidor acepta como máximo 200
+  líneas por movimiento.
+- `cliente-inexistente` nunca se emite para un movimiento: el alcance del lote rechaza un cliente vivo de otra sucursal
+  o dado de baja como `cliente-fuera-de-alcance`; un prospecto se acepta.
+- El límite de consumo cuenta piezas; con límite 0 el botón no aparece y el repositorio dice "Tu sucursal no tiene
+  consumo propio".
+- La carga pendiente solo bloquea los movimientos que sacan piezas; una merma del cliente solo con "Recibí dañado"
+  entra.
+- "Por regresar a la planta": las piezas buenas son max(0, existencia).
+- `ventas.registrar()` también resta los movimientos al calcular la existencia y los faltantes.
+- La pantalla "Próximamente" (`pendiente/[seccion].tsx`) se eliminó: el menú ya no tiene secciones sin pantalla.

@@ -524,7 +524,7 @@ usuario con sesion pasa.
     con `versionCatalogos`/`ultimaSincronizacion` (no al enfocar). Los topes compartidos viven en
     `src/datos/reglas-gasto.ts` y la lógica pura en `src/estado/gasto.ts` (`montoACentavos` exacto, `validarGasto`,
     `camposParaGasto`, `faltantesVisiblesGasto`, `puedeRegistrarGasto`), con pruebas. Un gasto grabado no se edita ni
-    se borra en la app. El botón de la ficha queda en "Merma, promoción y consumo" (T-27).
+    se borra en la app. La ficha ya no tiene ese botón: su "Merma" es de T-27 pieza 2.
   - **Nube**: la migración `20261020120000_gastos_ruta.sql` se sube a `sinmex dev` después del merge, con el protocolo
     de push (pre-flight: tablas nuevas, inserts de permisos y semilla; no hay nada que contar). Esta rama lleva el
     fix de PR #139 (migración de T-72 renombrada a `20261019130000`).
@@ -558,8 +558,8 @@ usuario con sesion pasa.
 - **Carga y recarga del vendedor (T-27 pieza 1 / T-26).** Producción registra en el portal la carga de la mañana y cada
   recarga; la carga baja a la tablet, el vendedor la **acepta o la rechaza** con red y, con el control de inventario de
   su sucursal prendido, no vende con una carga pendiente ni deja una presentación en negativo. Spec:
-  `docs/superpowers/specs/2026-10-22-t-27-carga-y-recarga-design.md`. Piezas 2 (movimientos del día) y 3 (corte de
-  inventario) son otros PR.
+  `docs/superpowers/specs/2026-10-22-t-27-carga-y-recarga-design.md`. La pieza 2 (merma y consumo) está abajo; la 3 (corte de
+  inventario) es otro PR.
   - **Servidor**: `sucursal.control_inventario` (apagada por defecto, D7), `carga` (numerada por vendedor y día;
     `uq_carga_vendedor_fecha_numero` parcial: una baja libera su número; `ck_carga_motivo`, `ck_carga_respondida`) y
     `carga_detalle` (piezas > 0). Permiso `carga.gestionar` (ya existía, grupo Produccion/Almacen). Backend en
@@ -591,6 +591,35 @@ usuario con sesion pasa.
   - **Nube**: `20261022120000_carga_vendedor.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
     (pre-flight: tablas nuevas y una columna con default; nada que contar). Backend antes que la app. **No prender la
     casilla de una sucursal hasta que sus tablets tengan la versión nueva** y producción esté capturando cargas.
+- **Merma y consumo en la tablet (T-27 pieza 2).** La tablet registra lo que sale o entra a la camioneta sin ser venta:
+  **merma del cliente** (en la ficha, también de un prospecto, "Merma": "Recibí dañado" —al menos una pieza— y "Le
+  entregué", la reposición de cualquier sabor), **merma del trayecto** y **consumo propio** (menú → "Merma y consumo").
+  Una sola operación `movimiento` con `tipo`; un movimiento grabado no se edita ni se borra en la app (D6). Spec:
+  `docs/superpowers/specs/2026-10-23-t-27-merma-y-consumo-design.md`.
+  - **Servidor**: `sucursal.consumo_diario_max` (0–99, default 1), `movimiento_inventario` (`id` = clave, `fecha` =
+    `fecha_operacion`, `ck_movimiento_cliente`: solo la merma del cliente lleva cliente, trigger de `updated_at`) y
+    `movimiento_inventario_linea` (`sentido` recibido|entregado, `uq_movimiento_linea`). Proyección en
+    `modules/inventario/` (`datos-movimiento.ts`, `movimientos.service.ts`, exportado por `InventarioModule`);
+    `sincronizacion/despacho-movimiento.ts` revisa el sobre (la forma, antes de la transacción y sin leer la base;
+    máximo 200 líneas). Rechazos: `datos-invalidos` (forma, cliente según el tipo, presentación que nunca existió),
+    `cliente-fuera-de-alcance` (nunca `cliente-inexistente`) y el nuevo `movimiento-id-ocupado`. **El servidor no
+    revisa el límite de consumo ni la existencia** (lo exige la tablet).
+  - **Contrato** (aditivo, `CONTRATO_ACTUAL` sigue en 1): tipo `movimiento` (el tipo `merma` queda reservado, sin
+    proyección), `VendedorPull.consumo_diario_max`. Cambiar el límite en el portal toca `vendedor.updated_at` de la
+    sucursal (como `control_inventario`). Orden del push: `… → gastos → movimientos → rutas`.
+  - **Portal**: *Catálogo › Sucursales*: "Consumo propio máximo por día" (0–99) en la edición
+    (`components/sucursales/consumo-diario.ts`).
+  - **Tablet** (migración local 018): `movimiento`, `movimiento_linea`, `vendedor.consumo_diario_max` (el login sin red
+    no lo pisa). Reglas en `src/datos/inventario-reglas.ts` (`existencias` resta merma entregada, del trayecto y consumo,
+    y da `mermaPorRegresar`; `faltantesDeMovimiento`, `consumoDelDia`) y `src/datos/movimientos-reglas.ts`
+    (`validarMovimiento`, `consumoRestante`, `motivoDeConsumo`); pantalla en `src/estado/movimiento.ts` (guardia de doble
+    toque `crearGuardiaRegistro`). **`movimientos.registrar()` revisa forma, límite de consumo (piezas), carga pendiente
+    y faltantes dentro de su transacción**; lo que solo recibe merma no se bloquea. `ventas.registrar()` también resta
+    los movimientos. Pantallas: ficha → "Merma" y "Movimientos de hoy"; menú → "Merma y consumo" (+ `merma/registrar`;
+    con límite de consumo 0 el botón no aparece); Inventario con Merma entregada, Merma del trayecto, Consumo y "Por
+    regresar a la planta". La pantalla "Próximamente" (`pendiente/[seccion]`) ya no existe.
+  - **Nube**: `20261025120000_movimiento_inventario.sql` se sube a `sinmex dev` después del merge, con el protocolo de
+    push (pre-flight: tablas nuevas y una columna con default; nada que contar). Backend antes que la app.
 - **Producción por día (T-25).** Producción captura en el portal lo producido por sabor y tamaño (*Producción → Producción
   del día*, `/produccion/produccion-del-dia`); es la entrada del Almacén General, pero **aún no alimenta inventario**
   (T-24) ni almacenes (T-63). Spec: `docs/superpowers/specs/2026-10-21-t25-produccion-por-dia-design.md`.

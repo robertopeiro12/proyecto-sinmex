@@ -1204,8 +1204,8 @@ sincronizar.
 | Resolución de conflictos (portal y tablet tocan lo mismo) | **T-43** |
 | Subir el orden en que el vendedor arrastró su ruta (hoy se queda en la tablet, D4) | Futuro, aditivo |
 | Sincronización automática 11:00/14:00 | **T-44** |
-| Forma de `datos` para merma (la de `ruta` sigue reservada sin forma; la visita es `visita` y el gasto `gasto`, §6) | **T-33** |
-| Proyección de `merma` a su tabla de negocio (las de `venta`, `cobranza`, `jornada`, `ruta-alta`, `visita` y `gasto` ya existen, §7) | El mismo |
+| Forma de `datos` de la merma: ya es la operación `movimiento` (§6, T-27 pieza 2); el tipo `merma` sigue reservado sin proyección, igual que `ruta` | Hecho (T-27 pieza 2) |
+| Proyección del tipo `merma` reservado (las de `venta`, `cobranza`, `jornada`, `ruta-alta`, `visita`, `gasto` y `movimiento` ya existen, §7) | Ninguna prevista |
 | Reporte de Kilometraje del portal (lee `jornada`) y reproceso de las jornadas que llegaron antes de T-38 | Portal (siguiente paso de T-38) |
 | Eliminar una cobranza con autorización (el saldo a favor y la cobranza desde el portal ya están: T-21) | **T-34** |
 | Permisos granulares en estos endpoints | **T-8** |
