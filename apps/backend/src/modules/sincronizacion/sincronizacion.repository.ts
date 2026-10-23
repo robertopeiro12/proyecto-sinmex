@@ -129,6 +129,9 @@ export class SincronizacionRepository {
         // `vendedor.updated_at` (SucursalesRepository.actualizar), asi que el
         // corte incremental de abajo la trae.
         'sucursal.control_inventario as control_inventario',
+        // T-27 pieza 2 (D4): el limite de consumo es de la sucursal, con el
+        // mismo toque de `vendedor.updated_at` que la casilla.
+        'sucursal.consumo_diario_max as consumo_diario_max',
       ])
       .where('vendedor.id', '=', vendedorId);
     if (desde) q = q.where('vendedor.updated_at', '>', desde);
@@ -142,6 +145,7 @@ export class SincronizacionRepository {
       // ficha, asi que no ve si otro vendedor comparte sus iniciales (T-14).
       folio_segmento: f.folio_segmento,
       control_inventario: f.control_inventario,
+      consumo_diario_max: f.consumo_diario_max,
       activo: bandera(f.activo, f.deleted_at),
     }));
   }

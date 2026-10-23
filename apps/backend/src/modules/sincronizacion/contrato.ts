@@ -68,7 +68,14 @@ export const MAX_BYTES_POR_LOTE = 1_000_000;
  *        cobrado (ver {@link DatosGasto}); se proyecta a la tabla `gasto` con
  *        `id = clave`. El tipo ya existia: fijar su forma es aditivo y no sube
  *        la version.
- * TODO: T-33 — `merma` (los 3 tipos de merma del documento de julio 2026).
+ * Reservado: `merma` — sin forma ni proyeccion; se guarda en el buzon tal cual.
+ *        La merma de T-27 pieza 2 viaja como `movimiento` (no reutiliza este
+ *        tipo: una tablet que ya lo hubiera mandado con datos libres seguiria
+ *        entrando igual).
+ * Hecho: T-27 pieza 2 — `movimiento`, la merma del cliente, la merma del
+ *        trayecto o el consumo propio (ver {@link DatosMovimiento}); se proyecta
+ *        a `movimiento_inventario` con `id = clave`. Tipo nuevo = cambio aditivo:
+ *        no sube la version.
  * Hecho: T-39 — `visita`, una visita sin venta con su motivo (ver
  *        {@link DatosVisita}); se proyecta a la tabla `visita` con `id = clave`.
  *        **No** reutiliza `ruta`, que sigue reservado y se guarda sin proyectar.
@@ -95,6 +102,7 @@ export const TIPOS_OPERACION = [
   'prospecto',
   'ruta-alta',
   'visita',
+  'movimiento',
 ] as const;
 
 export type TipoOperacion = (typeof TIPOS_OPERACION)[number];
@@ -259,6 +267,12 @@ export const CODIGOS_RECHAZO = [
    * mismo vendedor con la misma clave es `duplicada`, no esto. Motivo neutro.
    */
   'gasto-id-ocupado',
+  /**
+   * El id del movimiento de inventario (su clave) ya esta ocupado por otro
+   * registro. T-27 pieza 2. El mismo vendedor con la misma clave es `duplicada`,
+   * no esto. Motivo neutro.
+   */
+  'movimiento-id-ocupado',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -537,6 +551,36 @@ export type DatosGasto = {
   comentario?: string | null;
 };
 
+/**
+ * `datos` de una operacion `tipo: "movimiento"` (T-27 pieza 2): piezas que salen
+ * o entran a la camioneta por razones distintas a la venta.
+ *
+ * - `merma_cliente`: el sobre **lleva** `cliente_id`; al menos una linea
+ *   `recibido` (lo danado que devolvio) y, opcional, lineas `entregado` (la
+ *   reposicion, de cualquier sabor y tamano).
+ * - `merma_trayecto` y `consumo`: el sobre **no** lleva `cliente_id`; solo lineas
+ *   `entregado`, al menos una.
+ *
+ * Sin folio. La `clave` **es el id** de la fila `movimiento_inventario`: debe ser
+ * uuid. El dia es `fecha_operacion`. El servidor **no** revisa el limite de
+ * consumo ni la existencia: lo exige la tablet.
+ *
+ * Es `type` y no `interface` por la misma razon que {@link DatosVenta}.
+ */
+export type DatosMovimiento = {
+  tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo';
+  /** Hasta 300 caracteres; se recorta y uno vacio es `null`. */
+  comentario?: string | null;
+  /** Instante ISO-8601 con zona en que el vendedor lo guardo. */
+  registrado_en: string;
+  /** De 1 a 200; una presentacion una sola vez por sentido; piezas enteras 1..99 999. */
+  lineas: {
+    presentacion_id: string;
+    sentido: 'recibido' | 'entregado';
+    piezas: number;
+  }[];
+};
+
 export interface ResultadoOperacion {
   clave: string;
   tipo: string;
@@ -628,6 +672,13 @@ export interface VendedorPull extends FilaSincronizable {
    * vendedores de esa sucursal, asi que baja en el pull incremental. Aditivo.
    */
   control_inventario: boolean;
+  /**
+   * T-27 pieza 2 (D4): piezas de consumo propio que puede registrar en un dia,
+   * de SU sucursal (0..99; 0 = no se ofrece). Cambiarlo en el portal toca
+   * `updated_at` de los vendedores de esa sucursal, asi que baja en el pull
+   * incremental. Aditivo.
+   */
+  consumo_diario_max: number;
 }
 
 export interface VehiculoPull extends FilaSincronizable {

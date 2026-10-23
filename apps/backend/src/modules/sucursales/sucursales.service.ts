@@ -69,7 +69,8 @@ export class SucursalesService {
     if (
       dto.nombre === undefined &&
       dto.activa === undefined &&
-      dto.controlInventario === undefined
+      dto.controlInventario === undefined &&
+      dto.consumoDiarioMax === undefined
     ) {
       throw new BadRequestException('No hay nada que actualizar.');
     }
@@ -91,6 +92,7 @@ export class SucursalesService {
       nombre?: string;
       activa?: boolean;
       control_inventario?: boolean;
+      consumo_diario_max?: number;
     } = {};
     if (dto.nombre !== undefined) {
       cambios.nombre = dto.nombre;
@@ -101,11 +103,16 @@ export class SucursalesService {
     if (dto.controlInventario !== undefined) {
       cambios.control_inventario = dto.controlInventario;
     }
+    if (dto.consumoDiarioMax !== undefined) {
+      cambios.consumo_diario_max = dto.consumoDiarioMax;
+    }
 
-    // T-27: si la peticion trae la casilla se toca a los vendedores, siempre y
-    // dentro de la misma transaccion. Comparar contra el valor leido antes
-    // dejaba que dos administradores simultaneos se saltaran el toque.
-    const tocarVendedores = dto.controlInventario !== undefined;
+    // T-27: si la peticion trae la casilla o el limite de consumo se toca a los
+    // vendedores, siempre y dentro de la misma transaccion. Comparar contra el
+    // valor leido antes dejaba que dos administradores simultaneos se saltaran el
+    // toque. Los dos bajan en `VendedorPull` (Review Focus 5 de la pieza 2).
+    const tocarVendedores =
+      dto.controlInventario !== undefined || dto.consumoDiarioMax !== undefined;
     return this.repo.actualizar(id, cambios, tocarVendedores);
   }
 
