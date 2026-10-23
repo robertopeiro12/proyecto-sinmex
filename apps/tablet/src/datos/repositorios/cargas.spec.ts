@@ -145,8 +145,14 @@ describe('el inventario del dia', () => {
       firma: FIRMA_DE_PRUEBA,
     });
     expect(cargas.filasInventario('ven-1')).toEqual([
-      { presentacionId: 'pre-1', etiqueta: 'Jamaica 1 L', cargado: 24, vendido: 10, regalado: 1, existencia: 13 },
-      { presentacionId: 'pre-2', etiqueta: 'Jamaica 500 ml', cargado: 12, vendido: 0, regalado: 0, existencia: 12 },
+      {
+        presentacionId: 'pre-1', etiqueta: 'Jamaica 1 L', cargado: 24, vendido: 10, regalado: 1,
+        mermaEntregada: 0, mermaTrayecto: 0, consumo: 0, mermaRecibida: 0, existencia: 13, mermaPorRegresar: 0,
+      },
+      {
+        presentacionId: 'pre-2', etiqueta: 'Jamaica 500 ml', cargado: 12, vendido: 0, regalado: 0,
+        mermaEntregada: 0, mermaTrayecto: 0, consumo: 0, mermaRecibida: 0, existencia: 12, mermaPorRegresar: 0,
+      },
     ]);
   });
 

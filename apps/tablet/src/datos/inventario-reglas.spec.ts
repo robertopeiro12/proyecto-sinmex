@@ -1,11 +1,14 @@
 import {
   bloqueoDeVenta,
   cargaPendiente,
+  consumoDelDia,
   existencias,
+  faltantesDeMovimiento,
   faltantesDeVenta,
   MOTIVO_CARGA_PENDIENTE,
   textoFaltante,
   type CargaInventario,
+  type LineaMovimientoInventario,
   type LineaVentaInventario,
 } from './inventario-reglas';
 
@@ -46,8 +49,16 @@ describe('existencias', () => {
       [venta(), venta({ cantidad: 3, cantidad_promocion: 0 }), venta({ fecha: '2026-10-21', cantidad: 50 })],
       HOY,
     );
-    expect(e.get('horchata')).toEqual({ cargado: 30, vendido: 8, regalado: 1, existencia: 21 });
-    expect(e.get('jamaica')).toEqual({ cargado: 6, vendido: 0, regalado: 0, existencia: 6 });
+    expect(e.get('horchata')).toEqual({
+      cargado: 30, vendido: 8, regalado: 1,
+      mermaEntregada: 0, mermaTrayecto: 0, consumo: 0, mermaRecibida: 0,
+      existencia: 21, mermaPorRegresar: 0,
+    });
+    expect(e.get('jamaica')).toEqual({
+      cargado: 6, vendido: 0, regalado: 0,
+      mermaEntregada: 0, mermaTrayecto: 0, consumo: 0, mermaRecibida: 0,
+      existencia: 6, mermaPorRegresar: 0,
+    });
   });
 
   it('lo vendido sin carga queda en negativo (venta con el control apagado)', () => {
@@ -55,7 +66,12 @@ describe('existencias', () => {
       cargado: 0,
       vendido: 4,
       regalado: 0,
+      mermaEntregada: 0,
+      mermaTrayecto: 0,
+      consumo: 0,
+      mermaRecibida: 0,
       existencia: -4,
+      mermaPorRegresar: 0,
     });
   });
 });
@@ -168,5 +184,72 @@ describe('Review Focus 5: con el control apagado no hay bloqueo ni faltantes', (
         regalos: [{ presentacionId: 'horchata', cantidad: 50 }],
       }),
     ).toEqual([]);
+  });
+});
+
+function movimiento(extra: Partial<LineaMovimientoInventario> = {}): LineaMovimientoInventario {
+  return { fecha: HOY, tipo: 'merma_trayecto', sentido: 'entregado', presentacion_id: 'horchata', piezas: 1, ...extra };
+}
+
+describe('existencias con movimientos (T-27 pieza 2)', () => {
+  it('resta merma entregada, merma del trayecto y consumo de hoy; la merma recibida no suma', () => {
+    const e = existencias([carga()], [venta()], HOY, [
+      movimiento({ tipo: 'merma_cliente', sentido: 'recibido', piezas: 4 }),
+      movimiento({ tipo: 'merma_cliente', sentido: 'entregado', piezas: 2 }),
+      movimiento({ tipo: 'merma_trayecto', piezas: 1 }),
+      movimiento({ tipo: 'consumo', piezas: 1 }),
+      movimiento({ tipo: 'consumo', piezas: 9, fecha: '2026-10-21' }),
+    ]);
+    // 20 − 5 − 1 − 2 − 1 − 1 = 10; regresa como merma 4 recibidas + 1 del trayecto.
+    expect(e.get('horchata')).toEqual({
+      cargado: 20, vendido: 5, regalado: 1,
+      mermaEntregada: 2, mermaTrayecto: 1, consumo: 1, mermaRecibida: 4,
+      existencia: 10, mermaPorRegresar: 5,
+    });
+  });
+
+  it('la merma recibida de una presentacion que no se cargo solo aparece para regresar', () => {
+    const e = existencias([], [], HOY, [
+      movimiento({ tipo: 'merma_cliente', sentido: 'recibido', presentacion_id: 'jamaica', piezas: 3 }),
+    ]);
+    expect(e.get('jamaica')).toMatchObject({ existencia: 0, mermaRecibida: 3, mermaPorRegresar: 3 });
+  });
+});
+
+describe('faltantesDeMovimiento (D5)', () => {
+  it('cuenta las piezas que salen contra la existencia que ya resta los movimientos', () => {
+    const disponibles = existencias([carga()], [], HOY, [movimiento({ tipo: 'consumo', piezas: 18 })]);
+    expect(
+      faltantesDeMovimiento({
+        controlInventario: true,
+        existencias: disponibles,
+        lineasQueSalen: [{ presentacionId: 'horchata', cantidad: 3 }],
+      }),
+    ).toEqual([{ presentacionId: 'horchata', faltan: 1 }]);
+  });
+
+  it('con el control apagado no hay faltantes', () => {
+    expect(
+      faltantesDeMovimiento({
+        controlInventario: false,
+        existencias: new Map(),
+        lineasQueSalen: [{ presentacionId: 'horchata', cantidad: 3 }],
+      }),
+    ).toEqual([]);
+  });
+});
+
+describe('consumoDelDia (D4)', () => {
+  it('suma las piezas de consumo de hoy, nada mas', () => {
+    expect(
+      consumoDelDia(
+        [
+          movimiento({ tipo: 'consumo', piezas: 2 }),
+          movimiento({ tipo: 'consumo', piezas: 5, fecha: '2026-10-21' }),
+          movimiento({ tipo: 'merma_trayecto', piezas: 7 }),
+        ],
+        HOY,
+      ),
+    ).toBe(2);
   });
 });
