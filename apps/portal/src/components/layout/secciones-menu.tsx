@@ -77,7 +77,7 @@ export function SeccionesMenu({ pathname, sucursal }: { pathname: string; sucurs
             </Collapsible.Trigger>
             <Collapsible.Panel className="h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] duration-200 ease-out data-[ending-style]:h-0 data-[starting-style]:h-0">
               <ul className="mb-1.5 flex flex-col gap-px">
-                {seccion.items.map((item) => {
+                {seccion.items.filter((item) => !item.oculto).map((item) => {
                   const activo = actual?.item.href === item.href;
                   return (
                     <li key={item.href}>
