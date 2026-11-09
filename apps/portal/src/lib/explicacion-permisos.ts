@@ -12,6 +12,8 @@ export const EXPLICACION_PERMISO: Record<string, string> = {
     "Puede cambiar los precios de cada producto, por lista y por sucursal, en la matriz de precios.",
   "producto.gestionar":
     "Puede agregar, editar o dar de baja los productos del catálogo (los sabores y sus presentaciones).",
+  "dashboard.ver":
+    "Puede ver el Dashboard: lo que llevan hoy los vendedores en ruta.",
   "reporte_ventas.ver": "Puede consultar el reporte de ventas de la empresa.",
   "sucursal.gestionar":
     "Puede dar de alta o editar las sucursales (Tijuana, Mexicali, etc.).",
