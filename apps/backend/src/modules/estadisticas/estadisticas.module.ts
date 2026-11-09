@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ReporteClientesNuevosRepository } from './reporte-clientes-nuevos.repository';
 import { ReporteClientesNuevosService } from './reporte-clientes-nuevos.service';
+import { DashboardController } from './dashboard.controller';
+import { DashboardService } from './dashboard.service';
 import { DetalleRepository } from './detalle.repository';
 import { FlujoDiarioController } from './flujo-diario.controller';
 import { FlujoDiarioRepository } from './flujo-diario.repository';
@@ -15,7 +17,7 @@ import { ReporteVentasService } from './reporte-ventas.service';
 // T-49, Ventas (lee `venta_nota`);
 // T-51, Clientes nuevos (lee `cliente`). Ninguno escribe nada.
 @Module({
-  controllers: [ReportesController, FlujoDiarioController],
+  controllers: [ReportesController, FlujoDiarioController, DashboardController],
   providers: [
     ReporteKilometrajeService,
     ReporteKilometrajeRepository,
@@ -24,6 +26,7 @@ import { ReporteVentasService } from './reporte-ventas.service';
     ReporteClientesNuevosService,
     ReporteClientesNuevosRepository,
     FlujoDiarioService,
+    DashboardService,
     FlujoDiarioRepository,
     DetalleRepository,
   ],

@@ -1,4 +1,5 @@
 import {
+  armarDashboard,
   armarFlujoDiario,
   resumir,
   sumar,
@@ -162,5 +163,61 @@ describe('armarFlujoDiario', () => {
       '2026-11-05Ana',
     ]);
     expect(f.porDia.map((r) => r.fecha)).toEqual(['2026-11-07', '2026-11-05']);
+  });
+});
+
+describe('armarDashboard', () => {
+  it('cuenta en ruta y terminaron por bloque y en total; ruta con ceros es en ruta', () => {
+    const d = armarDashboard('2026-11-09', [
+      fila({
+        fecha: '2026-11-09',
+        vendedorId: 'b',
+        vendedor: 'Beto',
+        sucursalCodigo: 'TJ',
+        jornadaCerrada: false,
+        clientesEnRuta: 4,
+      }),
+      fila({
+        fecha: '2026-11-09',
+        vendedorId: 'a',
+        vendedor: 'Ana',
+        sucursalCodigo: 'TJ',
+        jornadaCerrada: true,
+        montoCentavos: 500,
+        contadoCentavos: 500,
+      }),
+      fila({
+        fecha: '2026-11-09',
+        vendedorId: 'c',
+        vendedor: 'Carla',
+        sucursalCodigo: 'MX',
+        jornadaCerrada: true,
+      }),
+    ]);
+    expect(d.fecha).toBe('2026-11-09');
+    expect(d.vendedores.map((v) => v.vendedor)).toEqual([
+      'Carla',
+      'Ana',
+      'Beto',
+    ]);
+    expect(
+      d.bloques.map((b) => [b.sucursalCodigo, b.enRuta, b.terminaron]),
+    ).toEqual([
+      ['MX', 0, 1],
+      ['TJ', 1, 1],
+    ]);
+    expect(d.bloques[1].totales.cobranzaCentavos).toBe(500);
+    expect(d.total).toMatchObject({
+      rutas: 3,
+      enRuta: 1,
+      terminaron: 2,
+      montoCentavos: 500,
+    });
+  });
+
+  it('sin filas: total en ceros y sin bloques', () => {
+    const d = armarDashboard('2026-11-09', []);
+    expect(d.bloques).toEqual([]);
+    expect(d.total).toMatchObject({ rutas: 0, enRuta: 0, terminaron: 0 });
   });
 });

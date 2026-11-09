@@ -201,3 +201,54 @@ export function armarFlujoDiario(
     ),
   };
 }
+
+export interface Dashboard {
+  /** Hoy de Tijuana. */
+  fecha: string;
+  /** Orden: sucursal, vendedor. */
+  vendedores: ResumenVendedorDia[];
+  bloques: {
+    sucursalCodigo: string;
+    totales: Totales;
+    enRuta: number;
+    terminaron: number;
+  }[];
+  total: Totales & { enRuta: number; terminaron: number };
+}
+
+const contarEstatus = (rs: ResumenVendedorDia[]) => ({
+  enRuta: rs.filter((r) => r.estatus === 'en_ruta').length,
+  terminaron: rs.filter((r) => r.estatus === 'terminado').length,
+});
+
+/** Las filas ya son de un solo dia (hoy): un renglon por vendedor. */
+export function armarDashboard(
+  fecha: string,
+  filas: FilaVendedorDia[],
+): Dashboard {
+  const vendedores = filas
+    .map(resumir)
+    .sort(
+      (a, b) =>
+        cmp(a.sucursalCodigo, b.sucursalCodigo) ||
+        cmp(a.vendedor, b.vendedor) ||
+        cmp(a.vendedorId, b.vendedorId),
+    );
+  const codigos = [...new Set(vendedores.map((r) => r.sucursalCodigo))].sort(
+    cmp,
+  );
+  const bloques = codigos.map((sucursalCodigo) => {
+    const suyos = vendedores.filter((r) => r.sucursalCodigo === sucursalCodigo);
+    return {
+      sucursalCodigo,
+      totales: sumar(suyos),
+      ...contarEstatus(suyos),
+    };
+  });
+  return {
+    fecha,
+    vendedores,
+    bloques,
+    total: { ...sumar(vendedores), ...contarEstatus(vendedores) },
+  };
+}

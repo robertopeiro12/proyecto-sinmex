@@ -59,7 +59,7 @@ export class FlujoDiarioService {
     return armarFlujoDiario(q.desde, q.hasta, filas, oficina);
   }
 
-  private async alcanceDe(usuarioId: string, sucursal: string | undefined) {
+  async alcanceDe(usuarioId: string, sucursal: string | undefined) {
     // El guard valido la firma del token, no que el usuario siga existiendo.
     const usuario = await this.repo.buscarSucursalUsuario(usuarioId);
     if (!usuario) throw new UnauthorizedException('Sesion invalida.');
