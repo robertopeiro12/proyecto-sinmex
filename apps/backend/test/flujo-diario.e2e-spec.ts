@@ -12,6 +12,10 @@ import {
 } from './../src/database/database.tokens';
 import { PasswordService } from './../src/modules/auth/password.service';
 import type {
+  DetalleDia,
+  DetalleVendedorDia,
+} from './../src/modules/estadisticas/reglas-detalle';
+import type {
   FlujoDiario,
   ResumenVendedorDia,
 } from './../src/modules/estadisticas/reglas-flujo-diario';
@@ -38,6 +42,7 @@ describe('Flujo diario (e2e)', () => {
   let cookieConExcepcion: string;
   let productoId: string;
   let presentacionId: string;
+  let presentacionMediaId: string;
   let motivoId: string;
   let campoId: string;
   let vehiculoId: string;
@@ -45,6 +50,10 @@ describe('Flujo diario (e2e)', () => {
   let beto: string;
   let carla: string;
   let dani: string;
+  let eva: string;
+  let vendedorOtra: string;
+  let idOtra: string;
+  let c1Id: string;
   let folios = 0;
 
   const iniciarSesion = async (login: string): Promise<string> => {
@@ -128,7 +137,12 @@ describe('Flujo diario (e2e)', () => {
     monto: string;
     contado?: boolean;
     borrada?: boolean;
-    lineas?: { cantidad: number; promo?: number; borrada?: boolean }[];
+    lineas?: {
+      cantidad: number;
+      promo?: number;
+      borrada?: boolean;
+      media?: boolean;
+    }[];
   }): Promise<string> => {
     const { id } = await db
       .insertInto('venta_nota')
@@ -154,7 +168,7 @@ describe('Flujo diario (e2e)', () => {
         .insertInto('venta_nota_detalle')
         .values({
           venta_nota_id: id,
-          presentacion_id: presentacionId,
+          presentacion_id: l.media ? presentacionMediaId : presentacionId,
           cantidad: l.cantidad,
           cantidad_promocion: l.promo ?? 0,
           precio: '6.50',
@@ -173,6 +187,7 @@ describe('Flujo diario (e2e)', () => {
     origen: 'venta_contado' | 'cobro' | 'saldo_favor';
     cobroId?: string | null;
     borrado?: boolean;
+    saldo?: string;
   }): Promise<void> => {
     await db
       .insertInto('cobranza_abono')
@@ -183,7 +198,7 @@ describe('Flujo diario (e2e)', () => {
         fecha_operacion: a.fecha,
         monto: a.monto,
         tipo: 'abono',
-        saldo_pendiente: '0.00',
+        saldo_pendiente: a.saldo ?? '0.00',
         metodo_pago: a.origen === 'saldo_favor' ? 'saldo_favor' : 'efectivo',
         origen: a.origen,
         cobro_id: a.cobroId ?? null,
@@ -300,6 +315,13 @@ describe('Flujo diario (e2e)', () => {
         .returning('id')
         .executeTakeFirstOrThrow()
     ).id;
+    presentacionMediaId = (
+      await db
+        .insertInto('presentacion')
+        .values({ producto_id: productoId, volumen: '500 ml' })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
     motivoId = (
       await db
         .insertInto('motivo_visita')
@@ -330,7 +352,9 @@ describe('Flujo diario (e2e)', () => {
     beto = await sembrarVendedor('Beto');
     carla = await sembrarVendedor('Carla');
     dani = await sembrarVendedor('Dani');
+    eva = await sembrarVendedor('Eva');
     const c1 = await sembrarCliente('Cliente 1');
+    c1Id = c1;
     const c2 = await sembrarCliente('Cliente 2');
     const c3 = await sembrarCliente('Cliente 3');
     const c4 = await sembrarCliente('Cliente 4');
@@ -529,6 +553,148 @@ describe('Flujo diario (e2e)', () => {
         cerrada_en: '2018-05-09T22:00:00Z',
       })
       .execute();
+
+    // Eva, 05-14 (detalle): contado a c1 con 2 lineas y una promocion, un venta
+    // eliminada, cobro de 130 a c4 (100 a la nota de Carla, que queda en 50, y 30 a
+    // favor), cobro de oficina de 40, gasto con comentario, visita sin venta y jornada.
+    const ventaEva = await sembrarVenta({
+      clienteId: c1,
+      fecha: '2018-05-14',
+      vendedor: eva,
+      monto: '130.00',
+      lineas: [{ cantidad: 12 }, { cantidad: 8, media: true }],
+    });
+    await sembrarAbono({
+      ventaId: ventaEva,
+      vendedor: eva,
+      fecha: '2018-05-14',
+      monto: '130.00',
+      origen: 'venta_contado',
+    });
+    await db
+      .insertInto('venta_nota_promocion')
+      .values({
+        venta_nota_id: ventaEva,
+        presentacion_id: presentacionId,
+        cantidad: 2,
+        promocion_texto: 'Lleva 10 y regalo 2',
+      })
+      .execute();
+    const ventaEvaBorrada = await sembrarVenta({
+      clienteId: c1,
+      fecha: '2018-05-14',
+      vendedor: eva,
+      monto: '66.00',
+      borrada: true,
+      lineas: [{ cantidad: 9 }],
+    });
+    await sembrarAbono({
+      ventaId: ventaEvaBorrada,
+      vendedor: eva,
+      fecha: '2018-05-14',
+      monto: '66.00',
+      origen: 'venta_contado',
+    });
+    const cobroEva = await sembrarCobro(db, {
+      clienteId: c4,
+      vendedorId: eva,
+      monto: '130.00',
+      fecha: '2018-05-14',
+    });
+    await sembrarAbono({
+      ventaId: notaCarla,
+      vendedor: eva,
+      fecha: '2018-05-14',
+      monto: '100.00',
+      origen: 'cobro',
+      cobroId: cobroEva,
+      saldo: '50.00',
+    });
+    const cobroOficinaEva = await sembrarCobro(db, {
+      clienteId: c4,
+      vendedorId: null,
+      monto: '40.00',
+      fecha: '2018-05-14',
+    });
+    await sembrarAbono({
+      ventaId: notaCarla,
+      vendedor: null,
+      fecha: '2018-05-14',
+      monto: '40.00',
+      origen: 'cobro',
+      cobroId: cobroOficinaEva,
+      saldo: '10.00',
+    });
+    await db
+      .insertInto('gasto')
+      .values({
+        id: randomUUID(),
+        sucursal_id: idFd,
+        vendedor_id: eva,
+        campo_egreso_id: campoId,
+        campo_nombre: `fd ${SUFIJO} Hielo`,
+        comentario: 'Bolsas grandes',
+        tipo: 'operacion',
+        fecha: '2018-05-14',
+        registrado_en: '2018-05-14T18:00:00.000Z',
+        monto: '45.00',
+        metodo: 'efectivo_cobranza_dia',
+        origen: 'app',
+      })
+      .execute();
+    await db
+      .insertInto('visita')
+      .values({
+        id: randomUUID(),
+        vendedor_id: eva,
+        sucursal_id: idFd,
+        cliente_id: c2,
+        motivo_visita_id: motivoId,
+        fecha: '2018-05-14',
+        visitada_en: '2018-05-14T16:15:00.000Z',
+        atendio: 'La encargada',
+        observaciones: 'Volver el jueves',
+        direccion_texto: 'sembrada',
+      })
+      .execute();
+    await db
+      .insertInto('jornada')
+      .values({
+        vendedor_id: eva,
+        vehiculo_id: vehiculoId,
+        sucursal_id: idFd,
+        fecha: '2018-05-14',
+        km_inicial: 10,
+        km_final: 20,
+        abierta_en: '2018-05-14T15:00:00Z',
+        cerrada_en: '2018-05-14T22:00:00Z',
+      })
+      .execute();
+
+    // Vendedor de otra sucursal.
+    idOtra = (
+      await db
+        .insertInto('sucursal')
+        .values({ codigo: 'FX', nombre: 'Prueba Flujo Diario Otra' })
+        .onConflict((oc) =>
+          oc.column('codigo').doUpdateSet({ deleted_at: null }),
+        )
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+    vendedorOtra = (
+      await db
+        .insertInto('vendedor')
+        .values({
+          login: `e2e-fd-otra-${SUFIJO}`,
+          nombre: `Otra ${SUFIJO}`,
+          password_hash: 'x',
+          sucursal_id: idOtra,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+    vendedorIds.push(vendedorOtra);
   });
 
   afterAll(async () => {
@@ -554,6 +720,10 @@ describe('Flujo diario (e2e)', () => {
         .execute();
       await borrarCobrosDe(db, clienteIds);
       await db
+        .deleteFrom('venta_nota_promocion')
+        .where('venta_nota_id', 'in', notas)
+        .execute();
+      await db
         .deleteFrom('venta_nota_detalle')
         .where('venta_nota_id', 'in', notas)
         .execute();
@@ -572,6 +742,7 @@ describe('Flujo diario (e2e)', () => {
       .execute();
     await db.deleteFrom('producto').where('id', '=', productoId).execute();
     await db.deleteFrom('vendedor').where('id', 'in', vendedorIds).execute();
+    await db.deleteFrom('sucursal').where('codigo', '=', 'FX').execute();
     await db
       .deleteFrom('usuario_permiso')
       .where('usuario_id', 'in', usuarioIds)
@@ -726,6 +897,7 @@ describe('Flujo diario (e2e)', () => {
         if (x.fecha === '2018-05-08') expect(x.vendedorId).toBe(carla);
       }
       expect(r.porDia.map((d) => d.fecha)).toEqual([
+        '2018-05-14',
         '2018-05-09',
         '2018-05-08',
         '2018-05-07',
@@ -739,6 +911,274 @@ describe('Flujo diario (e2e)', () => {
       const dia = r.porDia.find((d) => d.fecha === '2018-05-08');
       expect(dia?.oficinaCentavos).toBe(0);
       expect(dia?.totales.cobranzaCentavos).toBe(20000);
+    });
+  });
+
+  describe('detalle', () => {
+    const detalleVendedor = (cookie: string, q: Record<string, string>) =>
+      request(app.getHttpServer())
+        .get(
+          `/reportes/flujo-diario/vendedor?${new URLSearchParams(q).toString()}`,
+        )
+        .set('Cookie', cookie);
+    const detalleDia = (cookie: string, q: Record<string, string>) =>
+      request(app.getHttpServer())
+        .get(`/reportes/flujo-diario/dia?${new URLSearchParams(q).toString()}`)
+        .set('Cookie', cookie);
+
+    it('vendedor-dia: ventas con lineas, pagos, a favor, gasto con comentario, visitas, promociones y corte', async () => {
+      const d = (
+        await detalleVendedor(cookieGeneral, {
+          fecha: '2018-05-14',
+          vendedor: eva,
+        }).expect(200)
+      ).body as DetalleVendedorDia;
+      expect(d.vendedorId).toBe(eva);
+      expect(d.notas).toHaveLength(1);
+      expect(d.notas[0]).toMatchObject({
+        contadoCredito: 'contado',
+        piezas: 20,
+        totalCentavos: 13000,
+        pendienteCentavos: 0,
+      });
+      expect(d.notas[0].lineas).toEqual([
+        {
+          producto: `Horchata fd ${SUFIJO} 1 L`,
+          cantidad: 12,
+          precioCentavos: 650,
+        },
+        {
+          producto: `Horchata fd ${SUFIJO} 500 ml`,
+          cantidad: 8,
+          precioCentavos: 650,
+        },
+      ]);
+      expect(d.porProducto).toEqual([
+        {
+          presentacion: '1 L',
+          producto: `Horchata fd ${SUFIJO} 1 L`,
+          piezas: 12,
+        },
+        {
+          presentacion: '500 ml',
+          producto: `Horchata fd ${SUFIJO} 500 ml`,
+          piezas: 8,
+        },
+      ]);
+      expect(d.cobranza.contado).toHaveLength(1);
+      expect(d.cobranza.contado[0]).toMatchObject({
+        montoCentavos: 13000,
+        metodo: 'efectivo',
+        liquidada: true,
+      });
+      expect(d.cobranza.anteriores).toHaveLength(1);
+      expect(d.cobranza.anteriores[0]).toMatchObject({
+        montoCentavos: 10000,
+        saldoPendienteCentavos: 5000,
+        liquidada: false,
+      });
+      expect(d.cobranza.aFavor).toEqual([
+        { cliente: `Cliente 4 ${SUFIJO}`, montoCentavos: 3000 },
+      ]);
+      expect(d.gastos).toEqual([
+        {
+          descripcion: `fd ${SUFIJO} Hielo · Bolsas grandes`,
+          montoCentavos: 4500,
+        },
+      ]);
+      expect(d.notasCredito).toEqual([]);
+      expect(d.promociones).toEqual([
+        {
+          cliente: `Cliente 1 ${SUFIJO}`,
+          producto: `Horchata fd ${SUFIJO} 1 L`,
+          cantidad: 2,
+        },
+      ]);
+      // La visita sin venta (9:15 de Tijuana = 16:15Z) sale antes que la venta.
+      expect(d.visitas[0]).toEqual({
+        cliente: `Cliente 2 ${SUFIJO}`,
+        vendio: false,
+        hora: '2018-05-14T16:15:00.000Z',
+        motivo: `fd ${SUFIJO} Cerrado`,
+        atendio: 'La encargada',
+        comentario: 'Volver el jueves',
+      });
+      expect(d.visitas.some((v) => v.vendio)).toBe(true);
+      expect(d.visitas).toHaveLength(2);
+      expect(d.corte).toEqual({
+        contadoCentavos: 13000,
+        anterioresCentavos: 10000,
+        aFavorCentavos: 3000,
+        gastoCentavos: 4500,
+        tesoreriaCentavos: 21500,
+      });
+    });
+
+    it('el corte y las listas suman lo mismo que el renglon del reporte', async () => {
+      const d = (
+        await detalleVendedor(cookieGeneral, {
+          fecha: '2018-05-14',
+          vendedor: eva,
+        }).expect(200)
+      ).body as DetalleVendedorDia;
+      const r = renglon(await deFd(), eva, '2018-05-14');
+      const suma = (xs: { montoCentavos: number }[]) =>
+        xs.reduce((s, x) => s + x.montoCentavos, 0);
+      expect(suma(d.cobranza.contado)).toBe(r?.contadoCentavos);
+      expect(suma(d.cobranza.anteriores)).toBe(r?.anterioresCentavos);
+      expect(suma(d.cobranza.aFavor)).toBe(r?.aFavorCentavos);
+      expect(suma(d.gastos)).toBe(r?.gastoCentavos);
+      expect(d.corte?.tesoreriaCentavos).toBe(r?.tesoreriaCentavos);
+      expect(d.porProducto.reduce((s, p) => s + p.piezas, 0)).toBe(r?.piezas);
+      // Lo mismo para Carla (sin jornada: corte null, listas igual).
+      const c = (
+        await detalleVendedor(cookieGeneral, {
+          fecha: '2018-05-08',
+          vendedor: carla,
+        }).expect(200)
+      ).body as DetalleVendedorDia;
+      const rc = renglon(await deFd(), carla, '2018-05-08');
+      expect(c.corte).toBeNull();
+      expect(suma(c.cobranza.anteriores)).toBe(rc?.anterioresCentavos);
+      expect(suma(c.cobranza.aFavor)).toBe(rc?.aFavorCentavos);
+      expect(suma(c.cobranza.contado)).toBe(rc?.contadoCentavos);
+    });
+
+    it('venta a credito aparece en notasCredito con su pendiente; la venta eliminada en ninguna lista', async () => {
+      const c = (
+        await detalleVendedor(cookieGeneral, {
+          fecha: '2018-05-01',
+          vendedor: carla,
+        }).expect(200)
+      ).body as DetalleVendedorDia;
+      expect(c.notasCredito).toHaveLength(1);
+      expect(c.notasCredito[0]).toMatchObject({ totalCentavos: 15000 });
+      const e = (
+        await detalleVendedor(cookieGeneral, {
+          fecha: '2018-05-08',
+          vendedor: carla,
+        }).expect(200)
+      ).body as DetalleVendedorDia;
+      expect(e.notas).toEqual([]);
+      expect(e.cobranza.contado).toEqual([]);
+      expect(e.porProducto).toEqual([]);
+      const eva14 = (
+        await detalleVendedor(cookieGeneral, {
+          fecha: '2018-05-14',
+          vendedor: eva,
+        }).expect(200)
+      ).body as DetalleVendedorDia;
+      expect(JSON.stringify(eva14)).not.toContain('6600');
+      expect(eva14.notas).toHaveLength(1);
+    });
+
+    it('vendedor de otra sucursal, inexistente o fuera del alcance es 404; uuid malo 400', async () => {
+      const q = { fecha: '2018-05-14', vendedor: vendedorOtra };
+      const r = await detalleVendedor(cookieFd, q).expect(404);
+      expect(JSON.stringify(r.body)).toContain('No encontramos ese vendedor.');
+      await detalleVendedor(cookieFd, {
+        fecha: '2018-05-14',
+        vendedor: randomUUID(),
+      }).expect(404);
+      await detalleVendedor(cookieGeneral, {
+        fecha: '2018-05-14',
+        vendedor: eva,
+        sucursal: 'FX',
+      }).expect(404);
+      await detalleVendedor(cookieFd, {
+        fecha: '2018-05-14',
+        vendedor: eva,
+        sucursal: 'FX',
+      }).expect(403);
+      await detalleVendedor(cookieGeneral, q).expect(200);
+      await detalleVendedor(cookieGeneral, {
+        fecha: '2018-05-14',
+        vendedor: 'eva',
+      }).expect(400);
+      await detalleVendedor(cookieSinPermiso, {
+        fecha: '2018-05-14',
+        vendedor: eva,
+      }).expect(403);
+    });
+
+    it('dia de sucursal: por presentacion, cobranza con oficina (cobrador null), a favor, gastos, visitas', async () => {
+      const d = (
+        await detalleDia(cookieGeneral, {
+          fecha: '2018-05-14',
+          sucursal: CODIGO,
+        }).expect(200)
+      ).body as DetalleDia;
+      expect(d.sucursalCodigo).toBe(CODIGO);
+      expect(d.porPresentacion).toEqual([
+        { presentacion: '1 L', piezas: 12 },
+        { presentacion: '500 ml', piezas: 8 },
+      ]);
+      expect(d.porVendedor).toEqual([
+        { vendedor: `Eva ${SUFIJO}`, presentacion: '1 L', piezas: 12 },
+        { vendedor: `Eva ${SUFIJO}`, presentacion: '500 ml', piezas: 8 },
+      ]);
+      expect(d.porCliente).toEqual([
+        { cliente: `Cliente 1 ${SUFIJO}`, presentacion: '1 L', piezas: 12 },
+        { cliente: `Cliente 1 ${SUFIJO}`, presentacion: '500 ml', piezas: 8 },
+      ]);
+      const oficina = d.cobranza.filter((p) => p.cobrador === null);
+      expect(oficina).toHaveLength(1);
+      expect(oficina[0]).toMatchObject({
+        montoCentavos: 4000,
+        saldoPendienteCentavos: 1000,
+      });
+      expect(d.cobranza.map((p) => p.cobrador)).toEqual([
+        `Eva ${SUFIJO}`,
+        `Eva ${SUFIJO}`,
+        null,
+      ]);
+      expect(d.aFavor).toEqual([
+        {
+          cobrador: `Eva ${SUFIJO}`,
+          cliente: `Cliente 4 ${SUFIJO}`,
+          montoCentavos: 3000,
+        },
+      ]);
+      expect(d.gastos).toEqual([
+        {
+          vendedor: `Eva ${SUFIJO}`,
+          descripcion: `fd ${SUFIJO} Hielo · Bolsas grandes`,
+          montoCentavos: 4500,
+        },
+      ]);
+      expect(d.visitas).toHaveLength(2);
+      expect(d.promociones).toEqual([
+        { producto: `Horchata fd ${SUFIJO} 1 L`, cantidad: 2 },
+      ]);
+      // Cuadra con el renglon "Por dia" (cobranza = vendedores + oficina).
+      const dia = (await deFd()).porDia.find((x) => x.fecha === '2018-05-14');
+      const total =
+        d.cobranza.reduce((s, p) => s + p.montoCentavos, 0) +
+        d.aFavor.reduce((s, p) => s + p.montoCentavos, 0);
+      // Ventas de contado de Eva (13000) + anteriores 10000 + a favor 3000 + oficina 4000.
+      expect(total).toBe(dia?.totales.cobranzaCentavos);
+      expect(c1Id).toBeDefined();
+    });
+
+    it('dia: sucursal fuera del alcance 403, "todas" 400, codigo desconocido 404, atado sin pedirla usa la suya', async () => {
+      await detalleDia(cookieFd, {
+        fecha: '2018-05-14',
+        sucursal: 'FX',
+      }).expect(403);
+      await detalleDia(cookieGeneral, {
+        fecha: '2018-05-14',
+        sucursal: 'todas',
+      }).expect(400);
+      await detalleDia(cookieGeneral, {
+        fecha: '2018-05-14',
+        sucursal: 'QQ',
+      }).expect(404);
+      await detalleDia(cookieGeneral, { fecha: '2018-05-14' }).expect(400);
+      await detalleDia(cookieGeneral, { sucursal: CODIGO }).expect(400);
+      await detalleDia(cookieFd, {
+        fecha: '2018-05-14',
+        sucursal: CODIGO,
+      }).expect(200);
     });
   });
 });

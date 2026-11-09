@@ -1,4 +1,4 @@
-import { IsOptional, IsString, Matches } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, Matches } from 'class-validator';
 
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -27,4 +27,28 @@ export class FlujoDiarioDto {
   @IsOptional()
   @IsString()
   vendedor?: string;
+}
+
+/** `GET /reportes/flujo-diario/vendedor`: un vendedor en un dia. */
+export class DetalleVendedorDto {
+  @Matches(RE_FECHA, { message: 'La fecha debe tener el formato AAAA-MM-DD.' })
+  fecha!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'Falta el vendedor.' })
+  vendedor!: string;
+
+  @IsOptional()
+  @IsString()
+  sucursal?: string;
+}
+
+/** `GET /reportes/flujo-diario/dia`: una sucursal en un dia. */
+export class DetalleDiaDto {
+  @Matches(RE_FECHA, { message: 'La fecha debe tener el formato AAAA-MM-DD.' })
+  fecha!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'Falta la sucursal.' })
+  sucursal!: string;
 }

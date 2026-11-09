@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ReporteClientesNuevosRepository } from './reporte-clientes-nuevos.repository';
 import { ReporteClientesNuevosService } from './reporte-clientes-nuevos.service';
+import { DetalleRepository } from './detalle.repository';
 import { FlujoDiarioController } from './flujo-diario.controller';
 import { FlujoDiarioRepository } from './flujo-diario.repository';
 import { FlujoDiarioService } from './flujo-diario.service';
@@ -24,6 +25,7 @@ import { ReporteVentasService } from './reporte-ventas.service';
     ReporteClientesNuevosRepository,
     FlujoDiarioService,
     FlujoDiarioRepository,
+    DetalleRepository,
   ],
 })
 export class EstadisticasModule {}
