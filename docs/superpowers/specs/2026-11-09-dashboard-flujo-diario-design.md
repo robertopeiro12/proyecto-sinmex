@@ -1,6 +1,6 @@
 # Dashboard y Flujo diario — diseño
 
-Fecha: 2026-11-09 · Autor: Claude con Roberto · Estado: revisado por un constructor; para aprobación de Roberto
+Fecha: 2026-11-09 · Autor: Claude con Roberto · Estado: aprobado por Roberto
 
 Maquetas aprobadas por Roberto (ábrelas en el navegador):
 
@@ -142,16 +142,17 @@ Montos en centavos enteros en la API, como el resto del portal.
 - **Se actualiza solo** cada 60 s mientras la pestaña está visible (decisión de Claude), sin perder el renglón ni la
   pestaña de detalle abiertos.
 - **Resumen** (una fila de cifras): Venta general (pzs), Monto, Cobranza, Gasto, **Tesorería**, Vendedores (cuántos y
-  "3 en ruta · 1 terminó · 1 sin salir"). Con "Todas": un resumen por sucursal y uno total.
-- **Quiénes salen** [viejo: "Vendedores en ruta"]: vendedores activos de la sucursal con ruta diaria hoy **o** con
-  cualquier movimiento hoy (venta, cobro, visita, gasto, jornada) (decisión de Claude). Sin ninguno: `EstadoPantalla`
+  "4 en ruta · 1 terminó"). Con "Todas": un resumen por sucursal y uno total.
+- **Quiénes salen** [viejo: "Vendedores en ruta"]: vendedores activos de la sucursal con ruta diaria hoy, aunque no
+  hayan vendido nada (como el viejo), **más** los que tengan algún movimiento hoy sin ruta (venta, cobro, visita, gasto,
+  jornada), para no esconder datos (decisión de Claude). Sin ninguno: `EstadoPantalla`
   / "No hay vendedores en ruta hoy".
 - **Columnas** (en este orden): Vendedor · Ruta asignada · Vehículo · Inventario ("Pronto") · Mermas, cambios, promos
   (botón "Ver") · Venta general (número que se pica) · Cobranza · Gasto · Notas de venta ("Ver") · Notas ant.
   asignadas (número) · Ruta (x / y con barrita) · Estatus · Corte ("Ver" si terminó; "—" si no).
-- **Estatus** (`Etiqueta`): *Terminó* (éxito) si tiene `jornada` del día; *En ruta* (información) si tiene algún
-  movimiento hoy y no ha cerrado; *No ha salido* (advertencia) si no tiene ninguno. (decisión de Claude: la jornada
-  abierta no llega al servidor hasta T-43, así que "En ruta" se deduce de los movimientos.)
+- **Estatus** (`Etiqueta`), igual que el viejo: *En ruta* (información) mientras no haya cerrado su día, aunque no
+  haya vendido; *Terminó* (éxito) cuando llega su `jornada` del día. No hay "No ha salido" (el viejo no lo tiene). El
+  resumen de arriba dice "N en ruta · N terminaron".
 - **Pestañas del detalle**: Venta general · Cobranza · Gastos · Notas de venta · Visitas · Mermas, cambios y
   promociones · Corte · Inventario (pronto, deshabilitada).
 - **Notas de venta**: ver sección 6.
@@ -164,8 +165,10 @@ Montos en centavos enteros en la API, como el resto del portal.
 - `FiltroFechas` (Desde, Hasta, Hoy · Ayer · Esta semana · Este mes, Mostrar) + selector **Vendedor** (Todos / uno).
   Abre en **Ayer** (de Tijuana) y consulta sola al entrar.
 - **Resumen** del periodo: Venta general, Monto, Cobranza, Gasto, Tesorería, Visitas (x / y y número de rutas).
-- **Pestaña "Por vendedor"** — un renglón por vendedor y día; columnas: Fecha · Vendedor · Ruta asignada · Venta
-  general · Monto · Cobranza · Gasto · Tesorería · Notas de venta · Ruta ("Ver") · Mermas, cambios, promos ("Ver") ·
+- **Pestaña "Por vendedor"** — un renglón por vendedor y día (los que tuvieron ruta diaria ese día aunque no vendieran,
+  más los que tuvieron movimiento sin ruta); columnas: Fecha · Vendedor · Ruta asignada · Venta
+  general · Monto · Cobranza · Gasto · Tesorería · Notas de venta ("Ver"; el número del viejo llega con la
+  pieza 6, sección 6) · Ruta ("Ver") · Mermas, cambios, promos ("Ver") ·
   Inventario ("Pronto"). Renglón de total. Detalle: las mismas pestañas del Dashboard **sin** Corte y con Notas de
   venta solo de consulta.
 - **Pestaña "Por día"** — un renglón por día (con "Todas": por día dentro de cada bloque de sucursal); columnas [viejo]:
@@ -176,7 +179,8 @@ Montos en centavos enteros en la API, como el resto del portal.
   - **Cobranza**: Cobrador · Cliente · Folio · Importe · Liquidada; la oficina sale como "Oficina" [viejo].
   - **Gastos**: Vendedor · Descripción · Gasto. **Visitas**: Vendedor · Cliente · Vendió · Hora · Motivo · Comentario.
     **Mermas**, **Promociones**: Producto · Cantidad.
-- **# Rutas** = vendedores con movimiento ese día (decisión de Claude; el viejo contaba rutas abiertas).
+- **# Rutas** = vendedores con ruta diaria ese día (aunque no vendieran) más los que tuvieron movimiento sin ruta, como
+  el viejo (el 07/11 dice 4 rutas con 3 vendedores vendiendo).
 - **La oficina en "Por día"** (decisión de Claude): solo su **cobranza** se suma (cobros sin vendedor, por sucursal del cliente), como el viejo; Tesorería del día = cobranza de vendedores + oficina − gastos de los vendedores. Las ventas de mostrador (`vendedor_id` nulo) y los gastos de oficina **no** entran al Flujo diario: se ven en *Ventas* y *Finanzas › Gastos*. El selector de vendedor ya no tiene la opción "Oficina" que tenía T-49.
 - El rango máximo es el mismo de T-49 (366 días).
 
@@ -204,6 +208,10 @@ Un constructor leyó este documento y preguntó cinco cosas:
    la regla de la sección 5.1.
 4. **Pago de más (saldo a favor)** → decisión de Claude: cuenta, con su renglón en el detalle.
 5. **La oficina en "Por día"** → decisión de Claude: solo su cobranza (sección 5.3).
+
+Al revisar sus decisiones contra el sistema viejo (pedido de Roberto: "tienen que cuadrar con lo que ya se muestra"),
+Claude ajustó tres: Estatus solo *En ruta* / *Terminó*; el número de Notas de venta espera a la pieza 6; los renglones y
+"# Rutas" cuentan a los vendedores con ruta aunque no vendan. Roberto aprobó el documento el 2026-11-09.
 
 **Pendiente de Roberto** (no bloquea el plan): si el vehículo se asigna en Ruta diaria.
 
