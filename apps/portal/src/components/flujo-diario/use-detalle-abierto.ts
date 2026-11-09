@@ -9,10 +9,10 @@ export type EstadoDetalle<D> =
   | { tipo: "error"; mensaje: string };
 
 /**
- * El renglón abierto. `pestana` es la que se VE (también la que el usuario eligió dentro del
- * detalle, vía `cambiarPestana`). `vez` cambia solo cuando el renglón manda a una pestaña
- * (abrirlo, picar un número): úsala de `key` del detalle para que vuelva a montarse ahí;
- * un cambio de pestaña hecho dentro del detalle no lo vuelve a montar.
+ * El renglón cuyo detalle está en la ventana. `pestana` es la que se VE (también la que el
+ * usuario eligió dentro, vía `cambiarPestana`; el título de la ventana la sigue). `vez` cambia
+ * solo cuando el renglón manda a una pestaña (picar el nombre o un número): úsala de `key` del
+ * detalle para que vuelva a montarse ahí; un cambio de pestaña hecho dentro no lo vuelve a montar.
  */
 export interface RenglonAbierto<P extends string> {
   clave: string;
@@ -21,8 +21,9 @@ export interface RenglonAbierto<P extends string> {
 }
 
 /**
- * Un renglón abierto a la vez, con su detalle pedido al abrirlo (spec §8: sin N+1). Picar el
- * renglón lo abre o lo cierra; picar un número abre su pestaña (o cierra si ya era esa).
+ * Un renglón abierto a la vez, en una ventana, con su detalle pedido al abrirlo (spec §8: sin
+ * N+1). Picar el renglón (o su nombre) abre en la pestaña por defecto; picar un número abre en
+ * su pestaña. La ventana se cierra con su ✕, Escape o un clic fuera (`cerrar`).
  * Solo la última petición escribe: una lenta que llega tarde no pisa a la nueva.
  */
 export function useDetalleAbierto<D, P extends string>(pedir: (clave: string) => Promise<D>, pestanaPorDefecto: P) {
@@ -54,22 +55,16 @@ export function useDetalleAbierto<D, P extends string>(pedir: (clave: string) =>
     setAbierto({ clave, pestana, vez: ++veces.current });
   }
 
-  /** El renglón (o su nombre): abre en la pestaña por defecto o cierra. */
-  function alternar(clave: string) {
-    if (abierto?.clave === clave) return cerrar();
-    mostrar(clave, pestanaPorDefecto);
-    void cargar(clave);
+  /** Un número o un "Ver": abre la ventana en esa pestaña (ya abierta en ese renglón, solo la cambia). */
+  function abrirEn(clave: string, pestana: P) {
+    const mismo = abierto?.clave === clave;
+    mostrar(clave, pestana);
+    if (!mismo) void cargar(clave);
   }
 
-  /** Un número o un "Ver": abre en esa pestaña; si ya se estaba viendo esa, cierra. */
-  function abrirEn(clave: string, pestana: P) {
-    if (abierto?.clave === clave) {
-      if (abierto.pestana === pestana) return cerrar();
-      mostrar(clave, pestana);
-      return;
-    }
-    mostrar(clave, pestana);
-    void cargar(clave);
+  /** El renglón (o su nombre): abre la ventana en la pestaña por defecto. */
+  function abrir(clave: string) {
+    abrirEn(clave, pestanaPorDefecto);
   }
 
   /** El usuario cambió de pestaña dentro del detalle: se recuerda, sin volver a montarlo. */
@@ -77,10 +72,10 @@ export function useDetalleAbierto<D, P extends string>(pedir: (clave: string) =>
     setAbierto((antes) => (antes ? { ...antes, pestana } : antes));
   }
 
-  /** Vuelve a pedir el detalle abierto (la actualización del Dashboard), sin cerrarlo ni cambiar de pestaña. */
+  /** Vuelve a pedir el detalle abierto (la actualización del Dashboard), sin cerrar la ventana ni cambiar de pestaña. */
   function recargar() {
     if (abierto) void cargar(abierto.clave, true);
   }
 
-  return { abierto, estado, alternar, abrirEn, cambiarPestana, recargar, cerrar };
+  return { abierto, estado, abrir, abrirEn, cambiarPestana, recargar, cerrar };
 }

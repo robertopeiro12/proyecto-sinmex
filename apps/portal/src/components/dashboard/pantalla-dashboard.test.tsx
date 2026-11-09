@@ -170,14 +170,17 @@ describe("PantallaDashboard", () => {
     render(<PantallaDashboard sucursal="TJ" />);
     await u.click(await screen.findByRole("button", { name: "RBlas" }));
     expect(obtenerDetalle).toHaveBeenCalledWith({ vendedor: "rblas", sucursal: "TJ", fecha: "2026-11-09" });
-    await u.click(await screen.findByRole("tab", { name: "Cobranza" }));
-    expect(screen.getByRole("tab", { name: "Cobranza" })).toHaveAttribute("aria-selected", "true");
+    const ventana = await screen.findByRole("dialog", { name: "Venta general · RBlas · 09/11/2026" });
+    await u.click(await within(ventana).findByRole("tab", { name: "Cobranza" }));
+    expect(within(ventana).getByRole("tab", { name: "Cobranza" })).toHaveAttribute("aria-selected", "true");
 
     await avanzar(60_000);
     expect(obtenerDashboard).toHaveBeenCalledTimes(2);
     expect(obtenerDetalle).toHaveBeenCalledTimes(2);
-    expect(await screen.findByRole("tab", { name: "Cobranza" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("button", { name: "RBlas" })).toHaveAttribute("aria-expanded", "true");
+    // La ventana sigue abierta, en Cobranza, sin "Cargando…" mientras llega.
+    const sigue = screen.getByRole("dialog", { name: "Cobranza · RBlas · 09/11/2026" });
+    expect(await within(sigue).findByRole("tab", { name: "Cobranza" })).toHaveAttribute("aria-selected", "true");
+    expect(within(sigue).queryByText("Cargando…")).not.toBeInTheDocument();
   });
 
   it("guardar la revisión de notas de papel vuelve a pedir el detalle abierto, sin cerrarlo", async () => {
@@ -199,7 +202,8 @@ describe("PantallaDashboard", () => {
       notas: [{ folio: "TJ261109RB10", entregada: true }],
     });
     await vi.waitFor(() => expect(obtenerDetalle).toHaveBeenCalledTimes(2));
-    expect(screen.getByRole("tab", { name: "Notas de ventas" })).toHaveAttribute("aria-selected", "true");
+    const ventana = screen.getByRole("dialog", { name: "Notas de ventas · RBlas · 09/11/2026" });
+    expect(within(ventana).getByRole("tab", { name: "Notas de ventas" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("Estatus En ruta / Terminó; Corte «Ver» solo del que terminó y abre la pestaña Corte", async () => {
@@ -226,6 +230,7 @@ describe("PantallaDashboard", () => {
     expect(within(rblas).getAllByRole("cell")[2]).toHaveTextContent("—");
 
     await u.click(within(rblas).getByRole("button", { name: "Corte de RBlas" }));
+    await screen.findByRole("dialog", { name: "Corte · RBlas · 09/11/2026" });
     expect(await screen.findByRole("tab", { name: "Corte" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("table", { name: "Corte" })).toBeInTheDocument();
   });
@@ -236,6 +241,7 @@ describe("PantallaDashboard", () => {
     render(<PantallaDashboard sucursal="TJ" />);
     const tabla = await screen.findByRole("table", { name: "Vendedores de hoy" });
     await u.click(within(tabla).getByRole("button", { name: "Ruta de Ricardo" }));
+    await screen.findByRole("dialog", { name: "Ruta · Ricardo · 09/11/2026" });
     expect(await screen.findByRole("tab", { name: "Ruta" })).toHaveAttribute("aria-selected", "true");
   });
 

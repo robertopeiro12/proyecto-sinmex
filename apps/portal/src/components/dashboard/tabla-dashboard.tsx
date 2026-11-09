@@ -3,10 +3,14 @@
 import { Fragment, useEffect, useRef } from "react";
 import { Etiqueta } from "@/components/ui/etiqueta";
 import { CajaTabla, Fila, FilaGrupo, FilaTotal, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
-import { DetalleVendedor, type PestanaDetalleVendedor } from "@/components/flujo-diario/detalle-vendedor";
-import { FilaDetalle } from "@/components/flujo-diario/fila-detalle";
+import {
+  DetalleVendedor,
+  ETIQUETA_PESTANA_VENDEDOR,
+  type PestanaDetalleVendedor,
+} from "@/components/flujo-diario/detalle-vendedor";
 import { Barra, BotonNumero, BotonRenglon, BotonVer, formatearPiezas, Pronto } from "@/components/flujo-diario/piezas";
 import { useDetalleAbierto } from "@/components/flujo-diario/use-detalle-abierto";
+import { VentanaDetalle } from "@/components/flujo-diario/ventana-detalle";
 import {
   agruparPorSucursal,
   etiquetaRutaAsignada,
@@ -16,15 +20,15 @@ import {
   type ResumenVendedorDia,
   type Totales,
 } from "@/lib/flujo-diario";
-import { formatearPesos, plural } from "@/lib/formato";
+import { formatearFecha, formatearPesos, plural } from "@/lib/formato";
 
 const COLUMNAS = 13;
 
 /**
  * La tabla del Dashboard (spec §5.2): un renglón por vendedor de hoy; con varias sucursales,
- * un bloque por sucursal con su subtotal y un total. El detalle se abre bajo el renglón.
+ * un bloque por sucursal con su subtotal y un total. El detalle se abre en una ventana.
  * `actualizacion` cambia con cada consulta automática: el detalle abierto se vuelve a pedir
- * sin cerrarse ni cambiar de pestaña.
+ * sin cerrar la ventana ni cambiar de pestaña.
  */
 export function TablaDashboard({
   dashboard,
@@ -35,7 +39,7 @@ export function TablaDashboard({
   actualizacion: number;
   nombreSucursal: (codigo: string) => string;
 }) {
-  const { abierto, estado, alternar, abrirEn, cambiarPestana, recargar, cerrar } = useDetalleAbierto<
+  const { abierto, estado, abrir, abrirEn, cambiarPestana, recargar, cerrar } = useDetalleAbierto<
     DetalleVendedorDia,
     PestanaDetalleVendedor
   >((clave) => {
@@ -61,84 +65,88 @@ export function TablaDashboard({
 
   function renglon(f: ResumenVendedorDia) {
     const clave = f.vendedorId;
-    const estaAbierto = abierto?.clave === clave;
-    const abrir = (p: PestanaDetalleVendedor) => abrirEn(clave, p);
+    const verEn = (p: PestanaDetalleVendedor) => abrirEn(clave, p);
     const terminado = f.estatus === "terminado";
     return (
-      <Fragment key={clave}>
-        <Fila interactiva onClick={() => alternar(clave)} className={estaAbierto ? "bg-menu" : undefined}>
-          <Td>
-            <BotonRenglon abierto={estaAbierto} onClick={() => alternar(clave)}>
-              {f.vendedor}
-            </BotonRenglon>
-          </Td>
-          <Td className={f.clientesEnRuta === 0 ? "text-muted-foreground" : undefined}>
-            {etiquetaRutaAsignada(f.clientesEnRuta)}
-          </Td>
-          <Td className={f.vehiculo ? undefined : "text-muted-foreground"}>{f.vehiculo ?? "—"}</Td>
-          <Td alinear="centro">
-            <Pronto />
-          </Td>
-          <Td alinear="centro">
-            <BotonVer etiqueta={`Mermas/Cambios/Promociones de ${f.vendedor}`} onClick={() => abrir("mermas")} />
-          </Td>
-          <Td alinear="derecha">
-            <BotonNumero cero={f.piezas === 0} etiqueta={`Venta general de ${f.vendedor}`} onClick={() => abrir("venta")}>
-              {formatearPiezas(f.piezas)}
-            </BotonNumero>
-          </Td>
-          <Td alinear="derecha" className="whitespace-nowrap">
-            <BotonNumero cero={f.cobranzaCentavos === 0} etiqueta={`Cobranza de ${f.vendedor}`} onClick={() => abrir("cobranza")}>
-              {formatearPesos(f.cobranzaCentavos)}
-            </BotonNumero>
-          </Td>
-          <Td alinear="derecha" className="whitespace-nowrap">
-            <BotonNumero cero={f.gastoCentavos === 0} etiqueta={`Gastos de ${f.vendedor}`} onClick={() => abrir("gastos")}>
-              {formatearPesos(f.gastoCentavos)}
-            </BotonNumero>
-          </Td>
-          <Td alinear="centro">
-            <BotonVer etiqueta={`Notas de ventas de ${f.vendedor}`} onClick={() => abrir("notas")} />
-          </Td>
-          {/* Las notas asignadas llegan con la pieza 6 (spec §6). */}
-          <Td alinear="centro" className="text-muted-foreground">
-            —
-          </Td>
-          <Td>
-            <RutaXY
-              atendidos={f.atendidosEnRuta}
-              clientes={f.clientesEnRuta}
-              etiqueta={`Ruta de ${f.vendedor}`}
-              onClick={() => abrir("visitas")}
-            />
-          </Td>
-          <Td>
-            <Etiqueta tono={terminado ? "exito" : "informacion"}>{terminado ? "Terminó" : "En ruta"}</Etiqueta>
-          </Td>
-          <Td alinear="centro" className={terminado ? undefined : "text-muted-foreground"}>
-            {terminado ? <BotonVer etiqueta={`Corte de ${f.vendedor}`} onClick={() => abrir("corte")} /> : "—"}
-          </Td>
-        </Fila>
-        {estaAbierto && (
-          <FilaDetalle columnas={COLUMNAS} estado={estado}>
-            {(detalle) => (
-              <DetalleVendedor
-                key={abierto.vez}
-                detalle={detalle}
-                modo="dashboard"
-                pestanaInicial={abierto.pestana}
-                onCambioPestana={cambiarPestana}
-                onNotasGuardadas={recargar}
-              />
-            )}
-          </FilaDetalle>
-        )}
-      </Fragment>
+      <Fila key={clave} interactiva onClick={() => abrir(clave)}>
+        <Td>
+          <BotonRenglon onClick={() => abrir(clave)}>{f.vendedor}</BotonRenglon>
+        </Td>
+        <Td className={f.clientesEnRuta === 0 ? "text-muted-foreground" : undefined}>
+          {etiquetaRutaAsignada(f.clientesEnRuta)}
+        </Td>
+        <Td className={f.vehiculo ? undefined : "text-muted-foreground"}>{f.vehiculo ?? "—"}</Td>
+        <Td alinear="centro">
+          <Pronto />
+        </Td>
+        <Td alinear="centro">
+          <BotonVer etiqueta={`Mermas/Cambios/Promociones de ${f.vendedor}`} onClick={() => verEn("mermas")} />
+        </Td>
+        <Td alinear="derecha">
+          <BotonNumero cero={f.piezas === 0} etiqueta={`Venta general de ${f.vendedor}`} onClick={() => verEn("venta")}>
+            {formatearPiezas(f.piezas)}
+          </BotonNumero>
+        </Td>
+        <Td alinear="derecha" className="whitespace-nowrap">
+          <BotonNumero cero={f.cobranzaCentavos === 0} etiqueta={`Cobranza de ${f.vendedor}`} onClick={() => verEn("cobranza")}>
+            {formatearPesos(f.cobranzaCentavos)}
+          </BotonNumero>
+        </Td>
+        <Td alinear="derecha" className="whitespace-nowrap">
+          <BotonNumero cero={f.gastoCentavos === 0} etiqueta={`Gastos de ${f.vendedor}`} onClick={() => verEn("gastos")}>
+            {formatearPesos(f.gastoCentavos)}
+          </BotonNumero>
+        </Td>
+        <Td alinear="centro">
+          <BotonVer etiqueta={`Notas de ventas de ${f.vendedor}`} onClick={() => verEn("notas")} />
+        </Td>
+        {/* Las notas asignadas llegan con la pieza 6 (spec §6). */}
+        <Td alinear="centro" className="text-muted-foreground">
+          —
+        </Td>
+        <Td>
+          <RutaXY
+            atendidos={f.atendidosEnRuta}
+            clientes={f.clientesEnRuta}
+            etiqueta={`Ruta de ${f.vendedor}`}
+            onClick={() => verEn("visitas")}
+          />
+        </Td>
+        <Td>
+          <Etiqueta tono={terminado ? "exito" : "informacion"}>{terminado ? "Terminó" : "En ruta"}</Etiqueta>
+        </Td>
+        <Td alinear="centro" className={terminado ? undefined : "text-muted-foreground"}>
+          {terminado ? <BotonVer etiqueta={`Corte de ${f.vendedor}`} onClick={() => verEn("corte")} /> : "—"}
+        </Td>
+      </Fila>
     );
   }
 
+  const filaAbierta = abierto && dashboard.vendedores.find((f) => f.vendedorId === abierto.clave);
+
   return (
     <CajaTabla>
+      <VentanaDetalle
+        abierta={!!abierto}
+        alCerrar={cerrar}
+        titulo={
+          abierto && filaAbierta
+            ? `${ETIQUETA_PESTANA_VENDEDOR[abierto.pestana]} · ${filaAbierta.vendedor} · ${formatearFecha(dashboard.fecha)}`
+            : ""
+        }
+        estado={estado}
+      >
+        {(detalle) => (
+          <DetalleVendedor
+            key={abierto?.vez}
+            detalle={detalle}
+            modo="dashboard"
+            pestanaInicial={abierto?.pestana}
+            onCambioPestana={cambiarPestana}
+            onNotasGuardadas={recargar}
+          />
+        )}
+      </VentanaDetalle>
       <Tabla aria-label="Vendedores de hoy" className="min-w-[76rem] table-fixed">
         <colgroup>
           <col />

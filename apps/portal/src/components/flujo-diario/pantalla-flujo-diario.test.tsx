@@ -145,18 +145,23 @@ describe("PantallaFlujoDiario", () => {
     expect(within(total).getByText("150")).toBeInTheDocument();
   });
 
-  it("picar Ricardo pide su detalle con la fecha y sucursal del renglón y abre Venta general", async () => {
+  it("picar Ricardo pide su detalle con la fecha y sucursal del renglón y abre una ventana en Venta general", async () => {
     mockAuth([PERMISO]);
     obtenerFlujo.mockResolvedValue(DOS_SUCURSALES);
     const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PantallaFlujoDiario sucursal={null} />);
-    await u.click(await screen.findByRole("button", { name: "Ricardo" }));
+    const nombre = await screen.findByRole("button", { name: "Ricardo" });
+    // El nombre es un botón sin flechita ni "abierto": el detalle ya no se despliega bajo el renglón.
+    expect(nombre).not.toHaveAttribute("aria-expanded");
+    expect(nombre).toHaveTextContent(/^Ricardo$/);
+    await u.click(nombre);
     expect(obtenerDetalle).toHaveBeenCalledWith({ fecha: "2026-11-09", vendedor: "ricardo", sucursal: "TJ" });
-    expect(await screen.findByRole("tab", { name: "Venta general" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.queryByRole("tab", { name: "Corte" })).not.toBeInTheDocument();
-    // Picar otra vez lo cierra.
-    await u.click(screen.getByRole("button", { name: "Ricardo" }));
-    expect(screen.queryByRole("tab", { name: "Venta general" })).not.toBeInTheDocument();
+    const ventana = await screen.findByRole("dialog", { name: "Venta general · Ricardo · 09/11/2026" });
+    expect(await within(ventana).findByRole("tab", { name: "Venta general" })).toHaveAttribute("aria-selected", "true");
+    expect(within(ventana).queryByRole("tab", { name: "Corte" })).not.toBeInTheDocument();
+    // La ✕ la cierra.
+    await u.click(within(ventana).getByRole("button", { name: "Cerrar" }));
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
   it("la cobranza de arriba dice de quién es, sin avisos sueltos bajo la tabla", async () => {
@@ -168,34 +173,48 @@ describe("PantallaFlujoDiario", () => {
     expect(screen.queryByText(/«Por día» suma también/)).not.toBeInTheDocument();
   });
 
-  it("picar la Cobranza del renglón abre esa pestaña; mientras llega dice Cargando… en el renglón", async () => {
+  it("picar la Cobranza abre la ventana «Cobranza · Ricardo · 09/11/2026» en esa pestaña; Cargando… va dentro", async () => {
     mockAuth([PERMISO]);
     let soltar: (d: DetalleVendedorDia) => void = () => {};
     obtenerDetalle.mockImplementationOnce(() => new Promise((r) => { soltar = r; }));
     const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PantallaFlujoDiario sucursal="TJ" />);
     await u.click(await screen.findByRole("button", { name: "Cobranza de Ricardo" }));
-    const tabla = screen.getByRole("table", { name: "Por vendedor" });
-    expect(within(tabla).getByText("Cargando…")).toBeInTheDocument();
+    const ventana = await screen.findByRole("dialog", { name: "Cobranza · Ricardo · 09/11/2026" });
+    expect(within(ventana).getByText("Cargando…")).toBeInTheDocument();
     await act(async () => { soltar(DETALLE); });
-    expect(screen.getByRole("tab", { name: "Cobranza" })).toHaveAttribute("aria-selected", "true");
+    expect(within(ventana).getByRole("tab", { name: "Cobranza" })).toHaveAttribute("aria-selected", "true");
+    expect(within(ventana).queryByText("Cargando…")).not.toBeInTheDocument();
   });
 
-  it("picar un número abre su pestaña aunque se haya cambiado de pestaña dentro del detalle", async () => {
+  it("el error del detalle sale dentro de la ventana", async () => {
+    mockAuth([PERMISO]);
+    obtenerDetalle.mockRejectedValueOnce(new Error("red"));
+    const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PantallaFlujoDiario sucursal="TJ" />);
+    await u.click(await screen.findByRole("button", { name: "Gastos de Ricardo" }));
+    const ventana = await screen.findByRole("dialog", { name: "Gastos · Ricardo · 09/11/2026" });
+    expect(await within(ventana).findByText("No se pudo cargar el detalle.")).toBeInTheDocument();
+  });
+
+  it("cambiar de pestaña dentro de la ventana cambia el título; Escape la cierra y el número vuelve a abrir su pestaña", async () => {
     mockAuth([PERMISO]);
     const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PantallaFlujoDiario sucursal="TJ" />);
     await u.click(await screen.findByRole("button", { name: "Cobranza de Ricardo" }));
-    expect(await screen.findByRole("tab", { name: "Cobranza" })).toHaveAttribute("aria-selected", "true");
-    await u.click(screen.getByRole("tab", { name: "Gastos" }));
-    expect(screen.getByRole("tab", { name: "Gastos" })).toHaveAttribute("aria-selected", "true");
-    // Antes el renglón recordaba "Cobranza" y este clic cerraba el detalle.
+    const ventana = await screen.findByRole("dialog", { name: "Cobranza · Ricardo · 09/11/2026" });
+    expect(await within(ventana).findByRole("tab", { name: "Cobranza" })).toHaveAttribute("aria-selected", "true");
+    await u.click(within(ventana).getByRole("tab", { name: "Gastos" }));
+    expect(within(ventana).getByRole("tab", { name: "Gastos" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("dialog", { name: "Gastos · Ricardo · 09/11/2026" })).toBe(ventana);
+
+    await u.keyboard("{Escape}");
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    // Al volver a picar la Cobranza abre en Cobranza, no en la última que se vio.
     await u.click(screen.getByRole("button", { name: "Cobranza de Ricardo" }));
-    expect(screen.getByRole("tab", { name: "Cobranza" })).toHaveAttribute("aria-selected", "true");
-    // Y ahora sí, otra vez el mismo número lo cierra.
-    await u.click(screen.getByRole("button", { name: "Cobranza de Ricardo" }));
-    expect(screen.queryByRole("tab", { name: "Cobranza" })).not.toBeInTheDocument();
-    expect(obtenerDetalle).toHaveBeenCalledTimes(1);
+    const otra = await screen.findByRole("dialog", { name: "Cobranza · Ricardo · 09/11/2026" });
+    expect(await within(otra).findByRole("tab", { name: "Cobranza" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("Por día: picar la fecha pide el detalle de ese día y sucursal", async () => {
@@ -213,8 +232,10 @@ describe("PantallaFlujoDiario", () => {
     const botones = within(tabla).getAllByRole("button", { name: "09/11/2026" });
     await u.click(botones[1]);
     expect(obtenerDetalleDia).toHaveBeenCalledWith({ fecha: "2026-11-09", sucursal: "MX", vendedor: null });
-    await u.click(await screen.findByRole("tab", { name: "Mermas" }));
-    expect(screen.getByText("Todavía no se registran mermas en el sistema.")).toBeInTheDocument();
+    const ventana = await screen.findByRole("dialog", { name: "Ventas · Mexicali · 09/11/2026" });
+    await u.click(await within(ventana).findByRole("tab", { name: "Mermas" }));
+    expect(screen.getByRole("dialog", { name: "Mermas · Mexicali · 09/11/2026" })).toBe(ventana);
+    expect(within(ventana).getByText("Todavía no se registran mermas en el sistema.")).toBeInTheDocument();
   });
 
   it("Por día es de toda la sucursal: sin selector de vendedor y su consulta ignora al vendedor elegido", async () => {
@@ -240,6 +261,9 @@ describe("PantallaFlujoDiario", () => {
     const tabla = screen.getByRole("table", { name: "Por día" });
     await u.click(within(tabla).getByRole("button", { name: "09/11/2026" }));
     expect(obtenerDetalleDia).toHaveBeenCalledWith({ fecha: "2026-11-09", sucursal: "TJ", vendedor: null });
+    await screen.findByRole("dialog", { name: "Ventas · Tijuana · 09/11/2026" });
+    await u.keyboard("{Escape}");
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     await u.click(screen.getByRole("tab", { name: "Por vendedor" }));
     expect(screen.getByLabelText("Vendedor")).toHaveValue("ricardo");
   });

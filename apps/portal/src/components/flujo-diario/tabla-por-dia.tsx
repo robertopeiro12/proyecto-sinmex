@@ -11,10 +11,10 @@ import {
   type Totales,
 } from "@/lib/flujo-diario";
 import { formatearFecha, formatearPesos } from "@/lib/formato";
-import { DetalleDia, type PestanaDetalleDia } from "./detalle-dia";
-import { FilaDetalle } from "./fila-detalle";
+import { DetalleDia, ETIQUETA_PESTANA_DIA, type PestanaDetalleDia } from "./detalle-dia";
 import { Barra, BotonNumero, BotonRenglon, BotonVer, formatearPiezas, Pronto } from "./piezas";
 import { useDetalleAbierto } from "./use-detalle-abierto";
+import { VentanaDetalle } from "./ventana-detalle";
 
 const COLUMNAS = 11;
 const claveDe = (d: ResumenDia) => `${d.fecha}|${d.sucursalCodigo}`;
@@ -31,7 +31,7 @@ export function TablaPorDia({
   flujo: FlujoDiario;
   nombreSucursal: (codigo: string) => string;
 }) {
-  const { abierto, estado, alternar, abrirEn, cambiarPestana } = useDetalleAbierto<DatosDetalleDia, PestanaDetalleDia>((clave) => {
+  const { abierto, estado, abrir, abrirEn, cambiarPestana, cerrar } = useDetalleAbierto<DatosDetalleDia, PestanaDetalleDia>((clave) => {
     const dia = flujo.porDia.find((d) => claveDe(d) === clave)!;
     return obtenerDetalleDia({ fecha: dia.fecha, sucursal: dia.sucursalCodigo, vendedor: null });
   }, "ventas");
@@ -41,67 +41,71 @@ export function TablaPorDia({
 
   function renglon(d: ResumenDia) {
     const clave = claveDe(d);
-    const estaAbierto = abierto?.clave === clave;
     const t = d.totales;
     const fecha = formatearFecha(d.fecha);
-    const abrir = (p: PestanaDetalleDia) => abrirEn(clave, p);
+    const verEn = (p: PestanaDetalleDia) => abrirEn(clave, p);
     return (
-      <Fragment key={clave}>
-        <Fila interactiva onClick={() => alternar(clave)} className={estaAbierto ? "bg-menu" : undefined}>
-          <Td className="whitespace-nowrap">
-            <BotonRenglon abierto={estaAbierto} onClick={() => alternar(clave)}>
-              {fecha}
-            </BotonRenglon>
-          </Td>
-          <Td alinear="centro">{t.rutas}</Td>
-          <Td alinear="derecha">
-            <BotonNumero cero={t.piezas === 0} etiqueta={`Ventas del ${fecha}`} onClick={() => abrir("ventas")}>
-              {formatearPiezas(t.piezas)}
-            </BotonNumero>
-          </Td>
-          <TdMonto centavos={t.montoCentavos} className={t.montoCentavos === 0 ? "text-muted-foreground" : undefined} />
-          <Td alinear="derecha" className="whitespace-nowrap">
-            <BotonNumero cero={t.cobranzaCentavos === 0} etiqueta={`Cobranza del ${fecha}`} onClick={() => abrir("cobranza")}>
-              {formatearPesos(t.cobranzaCentavos)}
-            </BotonNumero>
-          </Td>
-          <Td alinear="derecha" className="whitespace-nowrap">
-            <BotonNumero cero={t.gastoCentavos === 0} etiqueta={`Gastos del ${fecha}`} onClick={() => abrir("gastos")}>
-              {formatearPesos(t.gastoCentavos)}
-            </BotonNumero>
-          </Td>
-          <TdMonto centavos={t.tesoreriaCentavos} className="font-bold" />
-          <Td alinear="centro">
-            <BotonVer etiqueta={`Mermas del ${fecha}`} onClick={() => abrir("mermas")} />
-          </Td>
-          <Td alinear="centro">
-            <BotonVer etiqueta={`Promociones del ${fecha}`} onClick={() => abrir("promociones")} />
-          </Td>
-          <Td>
-            <VisitasRuta totales={t} onClick={() => abrir("visitas")} />
-          </Td>
-          <Td alinear="centro">
-            <Pronto />
-          </Td>
-        </Fila>
-        {estaAbierto && (
-          <FilaDetalle columnas={COLUMNAS} estado={estado}>
-            {(detalle) => (
-              <DetalleDia
-                key={abierto.vez}
-                detalle={detalle}
-                pestanaInicial={abierto.pestana}
-                onCambioPestana={cambiarPestana}
-              />
-            )}
-          </FilaDetalle>
-        )}
-      </Fragment>
+      <Fila key={clave} interactiva onClick={() => abrir(clave)}>
+        <Td className="whitespace-nowrap">
+          <BotonRenglon onClick={() => abrir(clave)}>{fecha}</BotonRenglon>
+        </Td>
+        <Td alinear="centro">{t.rutas}</Td>
+        <Td alinear="derecha">
+          <BotonNumero cero={t.piezas === 0} etiqueta={`Ventas del ${fecha}`} onClick={() => verEn("ventas")}>
+            {formatearPiezas(t.piezas)}
+          </BotonNumero>
+        </Td>
+        <TdMonto centavos={t.montoCentavos} className={t.montoCentavos === 0 ? "text-muted-foreground" : undefined} />
+        <Td alinear="derecha" className="whitespace-nowrap">
+          <BotonNumero cero={t.cobranzaCentavos === 0} etiqueta={`Cobranza del ${fecha}`} onClick={() => verEn("cobranza")}>
+            {formatearPesos(t.cobranzaCentavos)}
+          </BotonNumero>
+        </Td>
+        <Td alinear="derecha" className="whitespace-nowrap">
+          <BotonNumero cero={t.gastoCentavos === 0} etiqueta={`Gastos del ${fecha}`} onClick={() => verEn("gastos")}>
+            {formatearPesos(t.gastoCentavos)}
+          </BotonNumero>
+        </Td>
+        <TdMonto centavos={t.tesoreriaCentavos} className="font-bold" />
+        <Td alinear="centro">
+          <BotonVer etiqueta={`Mermas del ${fecha}`} onClick={() => verEn("mermas")} />
+        </Td>
+        <Td alinear="centro">
+          <BotonVer etiqueta={`Promociones del ${fecha}`} onClick={() => verEn("promociones")} />
+        </Td>
+        <Td>
+          <VisitasRuta totales={t} onClick={() => verEn("visitas")} />
+        </Td>
+        <Td alinear="centro">
+          <Pronto />
+        </Td>
+      </Fila>
     );
   }
 
+  const diaAbierto = abierto && flujo.porDia.find((d) => claveDe(d) === abierto.clave);
+
   return (
     <CajaTabla>
+      <VentanaDetalle
+        abierta={!!abierto}
+        alCerrar={cerrar}
+        titulo={
+          abierto && diaAbierto
+            ? `${ETIQUETA_PESTANA_DIA[abierto.pestana]} · ${nombreSucursal(diaAbierto.sucursalCodigo)} · ${formatearFecha(diaAbierto.fecha)}`
+            : ""
+        }
+        estado={estado}
+      >
+        {(detalle) => (
+          <DetalleDia
+            key={abierto?.vez}
+            detalle={detalle}
+            pestanaInicial={abierto?.pestana}
+            onCambioPestana={cambiarPestana}
+          />
+        )}
+      </VentanaDetalle>
       <Tabla aria-label="Por día" className="min-w-[72rem] table-fixed">
         <colgroup>
           <col className="w-32" />

@@ -27,11 +27,25 @@ export type PestanaDetalleVendedor =
   | "corte"
   | "inventario";
 
+/** El nombre de cada pestaña: lo usan las pestañas y el título de la ventana. */
+export const ETIQUETA_PESTANA_VENDEDOR: Record<PestanaDetalleVendedor, string> = {
+  venta: "Venta general",
+  cobranza: "Cobranza",
+  gastos: "Gastos",
+  notas: "Notas de ventas",
+  visitas: "Ruta",
+  mermas: "Mermas/Cambios/Promociones",
+  corte: "Corte",
+  inventario: "Inventario",
+};
+
+const E = ETIQUETA_PESTANA_VENDEDOR;
+
 /**
- * El detalle de un vendedor en un día, abierto bajo su renglón (spec §5.2 y §5.3). Lo usan
+ * El detalle de un vendedor en un día, en la ventana de su renglón (spec §5.2 y §5.3). Lo usan
  * el Flujo diario (`modo="flujo"`, sin Corte) y el Dashboard (`modo="dashboard"`).
  * `pestanaInicial`: picar un número del renglón abre su pestaña (Cobranza, Gastos…).
- * `onCambioPestana`: avisa la pestaña que eligió el usuario, para que el renglón la recuerde.
+ * `onCambioPestana`: avisa la pestaña que eligió el usuario, para que el título de la ventana la siga.
  * `onNotasGuardadas`: en el Dashboard, tras guardar la casilla Entregada de las notas.
  */
 export function DetalleVendedor({
@@ -49,20 +63,20 @@ export function DetalleVendedor({
   onNotasGuardadas?: () => void;
 }) {
   const pestanas = [
-    { valor: "venta", etiqueta: "Venta general", contenido: <PestanaVentaGeneral detalle={detalle} /> },
-    { valor: "cobranza", etiqueta: "Cobranza", contenido: <PestanaCobranza detalle={detalle} /> },
-    { valor: "gastos", etiqueta: "Gastos", contenido: <PestanaGastos gastos={detalle.gastos} /> },
-    { valor: "notas", etiqueta: "Notas de ventas", contenido: <PestanaNotasCredito detalle={detalle} modo={modo} onGuardadas={onNotasGuardadas} /> },
-    { valor: "visitas", etiqueta: "Ruta", contenido: <PestanaVisitas visitas={detalle.visitas} /> },
+    { valor: "venta", etiqueta: E.venta, contenido: <PestanaVentaGeneral detalle={detalle} /> },
+    { valor: "cobranza", etiqueta: E.cobranza, contenido: <PestanaCobranza detalle={detalle} /> },
+    { valor: "gastos", etiqueta: E.gastos, contenido: <PestanaGastos gastos={detalle.gastos} /> },
+    { valor: "notas", etiqueta: E.notas, contenido: <PestanaNotasCredito detalle={detalle} modo={modo} onGuardadas={onNotasGuardadas} /> },
+    { valor: "visitas", etiqueta: E.visitas, contenido: <PestanaVisitas visitas={detalle.visitas} /> },
     {
       valor: "mermas",
-      etiqueta: "Mermas/Cambios/Promociones",
+      etiqueta: E.mermas,
       contenido: <PestanaMermas promociones={detalle.promociones} />,
     },
     ...(modo === "dashboard"
-      ? [{ valor: "corte", etiqueta: "Corte", contenido: <PestanaCorte corte={detalle.corte} /> }]
+      ? [{ valor: "corte", etiqueta: E.corte, contenido: <PestanaCorte corte={detalle.corte} /> }]
       : []),
-    { valor: "inventario", etiqueta: "Inventario · pronto", contenido: null, deshabilitada: true },
+    { valor: "inventario", etiqueta: `${E.inventario} · pronto`, contenido: null, deshabilitada: true },
   ];
   // Solo cuenta al montarse (Pestanas no es controlada): quien quiera mandar a otra pestaña
   // le cambia la `key`. Así recordar la que eligió el usuario no la vuelve a fijar.

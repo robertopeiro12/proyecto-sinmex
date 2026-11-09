@@ -92,11 +92,6 @@ export function SinDatos({ children }: { children: ReactNode }) {
   return <p className="text-sm text-muted-foreground">{children}</p>;
 }
 
-/** El contenedor del detalle abierto bajo un renglón: raya del color de la sucursal a la izquierda. */
-export function MarcoDetalle({ children }: { children: ReactNode }) {
-  return <div className="border-l-[3px] border-sucursal bg-card px-[18px] pt-4 pb-5 whitespace-normal">{children}</div>;
-}
-
 /** Suma de centavos. */
 export const sumar = <T,>(filas: T[], valor: (f: T) => number): number => filas.reduce((s, f) => s + valor(f), 0);
 
@@ -208,29 +203,18 @@ export function BotonVer({ etiqueta, onClick }: { etiqueta: string; onClick: () 
   );
 }
 
-/** El nombre (o la fecha) que abre y cierra el renglón: "▸ Ricardo". */
-export function BotonRenglon({
-  abierto,
-  children,
-  onClick,
-}: {
-  abierto: boolean;
-  children: ReactNode;
-  onClick: () => void;
-}) {
+/** El nombre (o la fecha) del renglón: abre su detalle en una ventana, en la pestaña por defecto. */
+export function BotonRenglon({ children, onClick }: { children: ReactNode; onClick: () => void }) {
   return (
     <button
       type="button"
-      aria-expanded={abierto}
+      aria-haspopup="dialog"
       onClick={(e) => {
         e.stopPropagation();
         onClick();
       }}
-      className="inline-flex items-baseline gap-1 rounded text-left font-semibold outline-none focus-visible:ring-2 focus-visible:ring-sucursal"
+      className="rounded text-left font-semibold outline-none hover:underline focus-visible:ring-2 focus-visible:ring-sucursal"
     >
-      <span aria-hidden className="inline-block w-2.5 shrink-0 text-muted-foreground">
-        {abierto ? "▾" : "▸"}
-      </span>
       {children}
     </button>
   );

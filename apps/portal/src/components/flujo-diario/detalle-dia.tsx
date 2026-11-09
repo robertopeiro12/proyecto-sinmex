@@ -22,6 +22,18 @@ import {
 
 export type PestanaDetalleDia = "ventas" | "cobranza" | "gastos" | "mermas" | "promociones" | "visitas";
 
+/** El nombre de cada pestaña: lo usan las pestañas y el título de la ventana. */
+export const ETIQUETA_PESTANA_DIA: Record<PestanaDetalleDia, string> = {
+  ventas: "Ventas",
+  cobranza: "Cobranza",
+  gastos: "Gastos",
+  mermas: "Mermas",
+  promociones: "Promociones",
+  visitas: "Visitas",
+};
+
+const E = ETIQUETA_PESTANA_DIA;
+
 /**
  * El detalle de un día de una sucursal en "Por día" (spec §5.3). La cobranza incluye la
  * de la oficina ("Oficina"); las mermas todavía no existen en la base (spec §6).
@@ -33,7 +45,7 @@ export function DetalleDia({
 }: {
   detalle: DatosDetalleDia;
   pestanaInicial?: PestanaDetalleDia;
-  /** Avisa la pestaña que eligió el usuario, para que el renglón la recuerde. */
+  /** Avisa la pestaña que eligió el usuario, para que el título de la ventana la siga. */
   onCambioPestana?: (pestana: PestanaDetalleDia) => void;
 }) {
   // Solo cuenta al montarse (Pestanas no es controlada); para mandar a otra pestaña se cambia la `key`.
@@ -44,16 +56,16 @@ export function DetalleDia({
       valorInicial={inicial}
       onCambio={(valor) => onCambioPestana?.(valor as PestanaDetalleDia)}
       pestanas={[
-        { valor: "ventas", etiqueta: "Ventas", contenido: <PestanaVentas detalle={detalle} /> },
-        { valor: "cobranza", etiqueta: "Cobranza", contenido: <PestanaCobranzaDia detalle={detalle} /> },
-        { valor: "gastos", etiqueta: "Gastos", contenido: <PestanaGastosDia gastos={detalle.gastos} /> },
+        { valor: "ventas", etiqueta: E.ventas, contenido: <PestanaVentas detalle={detalle} /> },
+        { valor: "cobranza", etiqueta: E.cobranza, contenido: <PestanaCobranzaDia detalle={detalle} /> },
+        { valor: "gastos", etiqueta: E.gastos, contenido: <PestanaGastosDia gastos={detalle.gastos} /> },
         {
           valor: "mermas",
-          etiqueta: "Mermas",
+          etiqueta: E.mermas,
           contenido: <SinDatos>Todavía no se registran mermas en el sistema.</SinDatos>,
         },
-        { valor: "promociones", etiqueta: "Promociones", contenido: <PestanaPromocionesDia detalle={detalle} /> },
-        { valor: "visitas", etiqueta: "Visitas", contenido: <PestanaVisitasDia visitas={detalle.visitas} /> },
+        { valor: "promociones", etiqueta: E.promociones, contenido: <PestanaPromocionesDia detalle={detalle} /> },
+        { valor: "visitas", etiqueta: E.visitas, contenido: <PestanaVisitasDia visitas={detalle.visitas} /> },
       ]}
     />
   );
