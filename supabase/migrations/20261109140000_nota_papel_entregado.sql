@@ -19,6 +19,10 @@ alter table venta_nota
 -- tablet baja la nota otra vez cuando cambia (pull incremental). Si el update
 -- solo cambia las columnas papel_*, se conserva updated_at; cualquier otro
 -- update (aun uno que no cambia nada, como reescribir el status en T-34) la mueve.
+-- OJO: compara VALORES, no las columnas del SET. Un update que junte la marca de
+-- papel con una reescritura forzada (`status = status`, el mecanismo de T-34)
+-- se ve como "solo cambio papel" y NO mueve updated_at: la tablet no volveria a
+-- bajar la nota. Nunca combines las dos cosas en el mismo update; hazlas por separado.
 create or replace function set_updated_at_venta_nota()
 returns trigger
 language plpgsql

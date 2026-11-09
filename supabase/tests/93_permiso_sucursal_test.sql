@@ -7,14 +7,13 @@ select is(
   'sucursal.gestionar existe y vive en el grupo General'
 );
 
--- T-05 sembro 22 permisos desde el documento del cliente; T-08a agrego 23o
--- (sucursal.gestionar); T-18 agrego 24o (precio.gestionar); T-08b agrega 25o
--- (perfil.gestionar); T-13 agrega 26o (usuario.gestionar); T-19 agrega 27o
--- (venta.asignar_factura); T-22 agrega 28o (cuentas_cobrar.ver); T-28 agrega
--- 29o y 30o (tesoreria.ver y tesoreria.gestionar); T-39 agrega 31o
--- (motivo_visita.gestionar); T-30/T-31 agrega 32o y 33o
--- (campo_egreso.gestionar y gasto.ver); el Dashboard agrega 35o
--- (dashboard.ver) y la casilla Entregada 36o (nota_papel.revisar).
+-- T-05 sembro 22 permisos desde el documento del cliente; despues se agregaron:
+-- 23 sucursal.gestionar (T-08a), 24 precio.gestionar (T-18), 25 perfil.gestionar
+-- (T-08b), 26 usuario.gestionar (T-13), 27 venta.asignar_factura (T-19),
+-- 28 cuentas_cobrar.ver (T-22), 29 tesoreria.ver y 30 tesoreria.gestionar (T-28),
+-- 31 motivo_visita.gestionar (T-39), 32 flujo_efectivo.ver (T-32),
+-- 33 campo_egreso.gestionar y 34 gasto.ver (T-30/T-31), 35 dashboard.ver
+-- (Dashboard) y 36 nota_papel.revisar (casilla Entregada de las notas).
 select is(
   (select count(*)::int from permiso where deleted_at is null),
   36,
