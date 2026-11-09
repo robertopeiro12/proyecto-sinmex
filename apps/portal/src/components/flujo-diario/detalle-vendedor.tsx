@@ -154,7 +154,7 @@ function PorProducto({ detalle }: { detalle: DetalleVendedorDia }) {
             {ordenados.map((g) => (
               <Fragment key={g.presentacion}>
                 <FilaGrupo columnas={3}>
-                  <span className="text-[12.5px]">{`${g.presentacion} · ${formatearPiezas(g.total)}`}</span>
+                  <span className="text-[12.5px]">{g.presentacion}</span>
                 </FilaGrupo>
                 {g.productos.map((p) => (
                   <tr key={p.producto}>

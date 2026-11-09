@@ -77,8 +77,10 @@ describe("DetalleVendedor", () => {
     const u = userEvent.setup();
     render(<DetalleVendedor detalle={DETALLE} modo="flujo" />);
     expect(screen.getByRole("radio", { name: "Por producto" })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByText("600 ml · 390")).toBeInTheDocument();
-    expect(screen.getByText("500 ml · 240")).toBeInTheDocument();
+    // El encabezado de cada presentación lleva solo su nombre (el total ya se ve en sus renglones).
+    expect(screen.getByText("600 ml")).toBeInTheDocument();
+    expect(screen.getByText("500 ml")).toBeInTheDocument();
+    expect(screen.queryByText("600 ml · 390")).not.toBeInTheDocument();
     expect(screen.getByText("Peñafiel 600 ml")).toBeInTheDocument();
     await u.click(screen.getByRole("radio", { name: "Por cliente" }));
     expect(screen.getByRole("radio", { name: "Por cliente" })).toHaveAttribute("aria-checked", "true");
