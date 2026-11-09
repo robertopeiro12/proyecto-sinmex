@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Etiqueta } from "@/components/ui/etiqueta";
 import { Monto } from "@/components/ui/monto";
 import { Pestanas } from "@/components/ui/pestanas";
 import { SelectorSegmentado } from "@/components/ui/selector-segmentado";
@@ -181,8 +180,9 @@ function TablaPorQuien({
   );
 }
 
+/** Quién cobró, en texto como los demás; sin vendedor = "Oficina". */
 function Cobrador({ nombre }: { nombre: string | null }) {
-  return nombre ?? <Etiqueta tono="neutro">Oficina</Etiqueta>;
+  return <span className="whitespace-nowrap">{nombre ?? "Oficina"}</span>;
 }
 
 function PestanaCobranzaDia({ detalle }: { detalle: DatosDetalleDia }) {
