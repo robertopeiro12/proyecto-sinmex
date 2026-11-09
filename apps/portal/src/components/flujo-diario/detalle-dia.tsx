@@ -76,7 +76,7 @@ type Vista = "presentacion" | "producto" | "vendedor" | "cliente";
 function PestanaVentas({ detalle }: { detalle: DatosDetalleDia }) {
   const [vista, setVista] = useState<Vista>("presentacion");
   return (
-    <div className="flex max-w-3xl flex-col gap-3.5">
+    <div className="flex mx-auto w-full max-w-5xl flex-col gap-3.5">
       <div>
         <SelectorSegmentado<Vista>
           etiqueta="Ver las ventas"
@@ -191,7 +191,7 @@ function PestanaCobranzaDia({ detalle }: { detalle: DatosDetalleDia }) {
   const totalAFavor = sumar(aFavor, (a) => a.montoCentavos);
   const total = sumar(cobranza, (p) => p.montoCentavos) + totalAFavor;
   return (
-    <div className="flex max-w-4xl flex-col gap-4">
+    <div className="flex mx-auto w-full max-w-5xl flex-col gap-4">
       <TituloBloque extra={<>incluye a la oficina · <Monto centavos={total} /></>}>Cobranza</TituloBloque>
       {cobranza.length > 0 && (
         <CajaTabla>
@@ -222,7 +222,7 @@ function PestanaCobranzaDia({ detalle }: { detalle: DatosDetalleDia }) {
         </CajaTabla>
       )}
       {aFavor.length > 0 && (
-        <div className="max-w-xl">
+        <div className="mx-auto w-full max-w-xl">
           <TituloBloque tenue>{`Quedó a favor del cliente · ${formatearPesos(totalAFavor)}`}</TituloBloque>
           <CajaTabla>
             <Tabla densidad="compacta" aria-label="Quedó a favor del cliente">
@@ -255,7 +255,7 @@ function PestanaCobranzaDia({ detalle }: { detalle: DatosDetalleDia }) {
 function PestanaGastosDia({ gastos }: { gastos: DatosDetalleDia["gastos"] }) {
   if (gastos.length === 0) return <SinDatos>Sin gastos este día.</SinDatos>;
   return (
-    <div className="max-w-2xl">
+    <div className="mx-auto w-full max-w-5xl">
       <CajaTabla>
         <Tabla densidad="compacta" aria-label="Gastos del día">
           <thead>
@@ -287,7 +287,7 @@ function PestanaGastosDia({ gastos }: { gastos: DatosDetalleDia["gastos"] }) {
 function PestanaPromocionesDia({ detalle }: { detalle: DatosDetalleDia }) {
   if (detalle.promociones.length === 0) return <SinDatos>Sin promociones este día.</SinDatos>;
   return (
-    <div className="max-w-xl">
+    <div className="mx-auto w-full max-w-xl">
       <CajaTabla>
         <Tabla densidad="compacta" aria-label="Promociones del día">
           <thead>

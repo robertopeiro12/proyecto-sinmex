@@ -23,7 +23,7 @@ const TITULO = "font-titulo text-[19px] leading-snug font-bold";
  *
  * `ancho="detalle"`: la ventana grande del detalle de un renglón (Flujo diario, Dashboard),
  * como las del sistema viejo. Trae su ✕, el título queda fijo arriba y el contenido se
- * desplaza dentro; se ancla arriba (no al centro) para no brincar al cambiar de pestaña.
+ * desplaza dentro; va al centro y crece con su contenido hasta el 88 % del alto de la pantalla.
  */
 export function Ventana({
   abierta,
@@ -49,7 +49,7 @@ export function Ventana({
       <Dialog.Portal>
         <Dialog.Backdrop className={FONDO} />
         {detalle ? (
-          <Dialog.Popup className={`${POPUP} top-[5dvh] ${ANCHOS[ancho]} overflow-hidden`}>
+          <Dialog.Popup className={`${POPUP} top-1/2 max-h-[88dvh] -translate-y-1/2 ${ANCHOS[ancho]} overflow-hidden`}>
             <div className="flex items-start justify-between gap-4 border-b px-[22px] pt-[18px] pb-3">
               <Dialog.Title className={TITULO}>{titulo}</Dialog.Title>
               <Dialog.Close
@@ -59,7 +59,9 @@ export function Ventana({
                 <X aria-hidden className="size-[18px]" />
               </Dialog.Close>
             </div>
-            <div className="min-h-0 overflow-y-auto px-[22px] pt-4 pb-6">{children}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto px-[22px] pt-4 pb-6">
+              <div className="mx-auto w-full max-w-5xl">{children}</div>
+            </div>
           </Dialog.Popup>
         ) : (
           <Dialog.Popup

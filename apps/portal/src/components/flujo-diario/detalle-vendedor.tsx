@@ -98,7 +98,7 @@ function PestanaVentaGeneral({ detalle }: { detalle: DetalleVendedorDia }) {
   const piezas = detalle.porProducto.reduce((s, p) => s + p.piezas, 0);
   const clientes = new Set(detalle.notas.map((n) => n.cliente)).size;
   return (
-    <div className="flex max-w-3xl flex-col gap-3.5">
+    <div className="flex mx-auto w-full max-w-5xl flex-col gap-3.5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SelectorSegmentado<Vista>
           etiqueta="Ver la venta"

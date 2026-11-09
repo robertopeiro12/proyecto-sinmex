@@ -46,16 +46,16 @@ export function PestanaCobranza({ detalle }: { detalle: DetalleVendedorDia }) {
     <div className="flex flex-col gap-4">
       <TituloBloque extra={<Monto centavos={totalContado + totalAnteriores + totalAFavor} />}>Cobranza</TituloBloque>
       {/* Una debajo de la otra, como el sistema viejo (Roberto, 2026-11-09). */}
-      <div className="max-w-4xl">
+      <div className="mx-auto w-full max-w-5xl">
         <TituloBloque tenue>{`Cobranza ventas de contado · ${formatearPesos(totalContado)}`}</TituloBloque>
         <TablaPagos titulo="Cobranza ventas de contado" pagos={contado} notas={detalle.notas} total={totalContado} />
       </div>
-      <div className="max-w-4xl">
+      <div className="mx-auto w-full max-w-5xl">
         <TituloBloque tenue>{`Cobranza ventas anteriores · ${formatearPesos(totalAnteriores)}`}</TituloBloque>
         <TablaPagos titulo="Cobranza ventas anteriores" pagos={anteriores} notas={detalle.notas} total={totalAnteriores} />
       </div>
       {aFavor.length > 0 && (
-        <div className="max-w-4xl">
+        <div className="mx-auto w-full max-w-5xl">
           <TituloBloque tenue>{`Quedó a favor del cliente · ${formatearPesos(totalAFavor)}`}</TituloBloque>
           <CajaTabla>
             <Tabla densidad="compacta" aria-label="Quedó a favor del cliente">
@@ -152,7 +152,7 @@ function TablaPagos({
 export function PestanaGastos({ gastos }: { gastos: DetalleVendedorDia["gastos"] }) {
   if (gastos.length === 0) return <SinDatos>Sin gastos este día.</SinDatos>;
   return (
-    <div className="max-w-xl">
+    <div className="mx-auto w-full max-w-xl">
       <CajaTabla>
         <Tabla densidad="compacta" aria-label="Gastos">
           <thead>
@@ -201,7 +201,7 @@ export function PestanaNotasCredito({
   const noEntregadas = detalle.notasCredito.filter((n) => n.entregada !== true);
   if (detalle.notasCredito.length === 0) return <SinDatos>No hay notas pendientes.</SinDatos>;
   return (
-    <div className="flex max-w-2xl flex-col gap-5">
+    <div className="flex mx-auto w-full max-w-5xl flex-col gap-5">
       {entregadas.length > 0 && <TablaNotas titulo="Notas pendientes nuevas entregadas" notas={entregadas} />}
       {noEntregadas.length > 0 && <TablaNotas titulo="Notas nuevas NO entregadas" notas={noEntregadas} />}
     </div>
@@ -279,7 +279,7 @@ function NotasDashboard({ detalle, onGuardadas }: { detalle: DetalleVendedorDia;
   }
 
   return (
-    <div className="flex max-w-2xl flex-col gap-5">
+    <div className="flex mx-auto w-full max-w-5xl flex-col gap-5">
       {notas.length > 0 && (
         <div>
           <TituloBloque extra={plural(notas.length, "nota", "notas")}>{TITULO_POR_ENTREGAR}</TituloBloque>
@@ -431,7 +431,7 @@ export function PestanaMermas({ promociones }: { promociones: DetalleVendedorDia
     porCliente.set(p.cliente, lista);
   }
   return (
-    <div className="flex max-w-xl flex-col gap-2">
+    <div className="flex mx-auto w-full max-w-xl flex-col gap-2">
       {[...porCliente.entries()].map(([cliente, productos]) => (
         <section key={cliente} className="flex flex-col gap-2">
           <h3 className="rounded-lg bg-menu px-3 py-2 text-[13.5px] font-semibold">{cliente}</h3>
@@ -476,7 +476,7 @@ export function PestanaCorte({ corte }: { corte: Corte | null }) {
     </tr>
   );
   return (
-    <div className="max-w-md">
+    <div className="mx-auto w-full max-w-xl">
       <TituloBloque extra="terminó su ruta">Corte</TituloBloque>
       <CajaTabla>
         <Tabla aria-label="Corte">
