@@ -45,4 +45,10 @@ describe("SelectorSegmentado", () => {
     await usuario.keyboard("{ArrowRight}");
     expect(onCambio).toHaveBeenLastCalledWith("producto");
   });
+
+  it("si el valor no coincide con ninguna, la primera es tabulable", () => {
+    render(<SelectorSegmentado etiqueta="Agrupar" opciones={OPCIONES} valor={"otro" as "producto"} onCambio={() => {}} />);
+    expect(screen.getByRole("radio", { name: "Por producto" })).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("radio", { name: "Por cliente" })).toHaveAttribute("tabindex", "-1");
+  });
 });

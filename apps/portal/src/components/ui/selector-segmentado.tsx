@@ -19,6 +19,8 @@ export function SelectorSegmentado<T extends string>({
   onCambio: (v: T) => void;
   etiqueta: string;
 }) {
+  // Si `valor` no coincide con ninguna opción, la primera es la tabulable.
+  const hayElegida = opciones.some((o) => o.valor === valor);
   const botones = useRef<(HTMLButtonElement | null)[]>([]);
 
   function alTeclear(e: KeyboardEvent<HTMLButtonElement>, indice: number) {
@@ -46,13 +48,13 @@ export function SelectorSegmentado<T extends string>({
             type="button"
             role="radio"
             aria-checked={elegida}
-            tabIndex={elegida ? 0 : -1}
+            tabIndex={elegida || (!hayElegida && i === 0) ? 0 : -1}
             onClick={() => onCambio(o.valor)}
             onKeyDown={(e) => alTeclear(e, i)}
             className={cn(
               "rounded-md px-3.5 py-1.5 text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sucursal",
               elegida
-                ? "bg-white text-foreground shadow-sm"
+                ? "bg-card text-card-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
             )}>
             {o.texto}
