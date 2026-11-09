@@ -76,6 +76,7 @@ function PestanaVentas({ detalle }: { detalle: DatosDetalleDia }) {
   const [vista, setVista] = useState<Vista>("presentacion");
   return (
     <div className="flex mx-auto w-full max-w-5xl flex-col gap-3.5">
+      <TituloBloque>Ventas por día</TituloBloque>
       <div>
         <SelectorSegmentado<Vista>
           etiqueta="Ver las ventas"
@@ -192,7 +193,7 @@ function PestanaCobranzaDia({ detalle }: { detalle: DatosDetalleDia }) {
   const total = sumar(cobranza, (p) => p.montoCentavos) + totalAFavor;
   return (
     <div className="flex mx-auto w-full max-w-5xl flex-col gap-4">
-      <TituloBloque extra={<>incluye a la oficina · <Monto centavos={total} /></>}>Cobranza</TituloBloque>
+      <TituloBloque extra={<>incluye a la oficina · <Monto centavos={total} /></>}>Cobranza por día</TituloBloque>
       {cobranza.length > 0 && (
         <CajaTabla>
           <Tabla densidad="compacta" aria-label="Cobranza del día">
@@ -256,6 +257,7 @@ function PestanaGastosDia({ gastos }: { gastos: DatosDetalleDia["gastos"] }) {
   if (gastos.length === 0) return <SinDatos>Sin gastos este día.</SinDatos>;
   return (
     <div className="mx-auto w-full max-w-5xl">
+      <TituloBloque>Gastos por día</TituloBloque>
       <CajaTabla>
         <Tabla densidad="compacta" aria-label="Gastos del día">
           <thead>
@@ -288,6 +290,7 @@ function PestanaPromocionesDia({ detalle }: { detalle: DatosDetalleDia }) {
   if (detalle.promociones.length === 0) return <SinDatos>Sin promociones este día.</SinDatos>;
   return (
     <div className="mx-auto w-full max-w-xl">
+      <TituloBloque>Promociones</TituloBloque>
       <CajaTabla>
         <Tabla densidad="compacta" aria-label="Promociones del día">
           <thead>
@@ -313,33 +316,36 @@ function PestanaPromocionesDia({ detalle }: { detalle: DatosDetalleDia }) {
 function PestanaVisitasDia({ visitas }: { visitas: DatosDetalleDia["visitas"] }) {
   if (visitas.length === 0) return <SinDatos>Sin visitas este día.</SinDatos>;
   return (
-    <CajaTabla>
-      <Tabla densidad="compacta" aria-label="Visitas del día">
-        <thead>
-          <tr>
-            <Th>Vendedor</Th>
-            <Th>Cliente</Th>
-            <Th>Vendió</Th>
-            <Th>Hora</Th>
-            <Th>Motivo</Th>
-            <Th>Comentario</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {visitas.map((v, i) => (
-            <tr key={`${v.vendedor}-${v.cliente}-${i}`}>
-              <Td>{v.vendedor}</Td>
-              <Td>{v.cliente}</Td>
-              <Td>
-                <EtiquetaVendio vendio={v.vendio} />
-              </Td>
-              <Td className="whitespace-nowrap">{horaTijuana(v.hora)}</Td>
-              <Td>{v.motivo ?? ""}</Td>
-              <Td>{v.comentario ?? ""}</Td>
+    <div>
+      <TituloBloque>Visitas por día</TituloBloque>
+      <CajaTabla>
+        <Tabla densidad="compacta" aria-label="Visitas del día">
+          <thead>
+            <tr>
+              <Th>Vendedor</Th>
+              <Th>Cliente</Th>
+              <Th>Vendió</Th>
+              <Th>Hora</Th>
+              <Th>Motivo</Th>
+              <Th>Comentario</Th>
             </tr>
-          ))}
-        </tbody>
-      </Tabla>
-    </CajaTabla>
+          </thead>
+          <tbody>
+            {visitas.map((v, i) => (
+              <tr key={`${v.vendedor}-${v.cliente}-${i}`}>
+                <Td>{v.vendedor}</Td>
+                <Td>{v.cliente}</Td>
+                <Td>
+                  <EtiquetaVendio vendio={v.vendio} />
+                </Td>
+                <Td className="whitespace-nowrap">{horaTijuana(v.hora)}</Td>
+                <Td>{v.motivo ?? ""}</Td>
+                <Td>{v.comentario ?? ""}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </Tabla>
+      </CajaTabla>
+    </div>
   );
 }
