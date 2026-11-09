@@ -43,7 +43,10 @@ export class DetalleVendedorDto {
   sucursal?: string;
 }
 
-/** `GET /reportes/flujo-diario/dia`: una sucursal en un dia. */
+/**
+ * `GET /reportes/flujo-diario/dia`: una sucursal en un dia. Con `vendedor`
+ * (uuid, lo valida el servicio), solo lo de ese vendedor y sin la oficina.
+ */
 export class DetalleDiaDto {
   @Matches(RE_FECHA, { message: 'La fecha debe tener el formato AAAA-MM-DD.' })
   fecha!: string;
@@ -51,4 +54,8 @@ export class DetalleDiaDto {
   @IsString()
   @IsNotEmpty({ message: 'Falta la sucursal.' })
   sucursal!: string;
+
+  @IsOptional()
+  @IsString()
+  vendedor?: string;
 }

@@ -1157,6 +1157,65 @@ describe('Flujo diario (e2e)', () => {
       expect(total).toBe(dia?.totales.cobranzaCentavos);
     });
 
+    it('dia con vendedor: solo lo suyo, sin la oficina; cuadra con su renglon "Por dia"', async () => {
+      const d = (
+        await detalleDia(cookieGeneral, {
+          fecha: '2018-05-08',
+          sucursal: CODIGO,
+          vendedor: carla,
+        }).expect(200)
+      ).body as DetalleDia;
+      expect(d.cobranza.every((p) => p.cobrador === `Carla ${SUFIJO}`)).toBe(
+        true,
+      );
+      expect(d.aFavor.every((p) => p.cobrador === `Carla ${SUFIJO}`)).toBe(
+        true,
+      );
+      const dia = (await deFd({ vendedor: carla })).porDia.find(
+        (x) => x.fecha === '2018-05-08',
+      );
+      const total =
+        d.cobranza.reduce((s, p) => s + p.montoCentavos, 0) +
+        d.aFavor.reduce((s, p) => s + p.montoCentavos, 0);
+      expect(total).toBe(dia?.totales.cobranzaCentavos);
+      expect(total).toBe(20000);
+
+      // Eva el 14: sin el cobro de la oficina (40), con sus gastos y visitas.
+      const e = (
+        await detalleDia(cookieGeneral, {
+          fecha: '2018-05-14',
+          sucursal: CODIGO,
+          vendedor: eva,
+        }).expect(200)
+      ).body as DetalleDia;
+      expect(e.cobranza.map((p) => p.cobrador)).toEqual([
+        `Eva ${SUFIJO}`,
+        `Eva ${SUFIJO}`,
+      ]);
+      expect(e.gastos).toHaveLength(1);
+      expect(e.visitas).toHaveLength(2);
+      expect(e.promociones).toHaveLength(1);
+    });
+
+    it('dia con vendedor: uuid malo 400; de otra sucursal o inexistente 404', async () => {
+      await detalleDia(cookieGeneral, {
+        fecha: '2018-05-14',
+        sucursal: CODIGO,
+        vendedor: 'eva',
+      }).expect(400);
+      const r = await detalleDia(cookieGeneral, {
+        fecha: '2018-05-14',
+        sucursal: CODIGO,
+        vendedor: vendedorOtra,
+      }).expect(404);
+      expect(JSON.stringify(r.body)).toContain('No encontramos ese vendedor.');
+      await detalleDia(cookieFd, {
+        fecha: '2018-05-14',
+        sucursal: CODIGO,
+        vendedor: randomUUID(),
+      }).expect(404);
+    });
+
     it('un vendedor dado de baja con historia se puede abrir', async () => {
       await db
         .updateTable('vendedor')

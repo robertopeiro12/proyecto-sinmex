@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment } from "react";
-import { Monto } from "@/components/ui/monto";
 import { CajaTabla, Fila, FilaGrupo, FilaTotal, FilaVacia, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
 import {
   agruparPorSucursal,
@@ -22,18 +21,22 @@ const claveDe = (d: ResumenDia) => `${d.fecha}|${d.sucursalCodigo}`;
 
 /**
  * "Por día" (spec §5.3): un renglón por día (por sucursal con "Todas"). La cobranza suma
- * también la de la oficina.
+ * también la de la oficina, salvo con un vendedor elegido: entonces el renglón y su
+ * detalle son solo de ese vendedor.
  */
 export function TablaPorDia({
   flujo,
+  vendedor,
   nombreSucursal,
 }: {
   flujo: FlujoDiario;
+  /** El vendedor con que se consultó el flujo (`null` = todos). */
+  vendedor: string | null;
   nombreSucursal: (codigo: string) => string;
 }) {
   const { abierto, estado, alternar, abrirEn, cambiarPestana } = useDetalleAbierto<DatosDetalleDia, PestanaDetalleDia>((clave) => {
     const dia = flujo.porDia.find((d) => claveDe(d) === clave)!;
-    return obtenerDetalleDia({ fecha: dia.fecha, sucursal: dia.sucursalCodigo });
+    return obtenerDetalleDia({ fecha: dia.fecha, sucursal: dia.sucursalCodigo, vendedor });
   }, "ventas");
 
   const grupos = agruparPorSucursal(flujo.porDia);
@@ -187,9 +190,7 @@ function RenglonTotal({ texto, totales }: { texto: string; totales: Totales }) {
       <TdMonto centavos={totales.montoCentavos} />
       <TdMonto centavos={totales.cobranzaCentavos} />
       <TdMonto centavos={totales.gastoCentavos} />
-      <Td alinear="derecha" className="whitespace-nowrap">
-        <Monto centavos={totales.tesoreriaCentavos} />
-      </Td>
+      <TdMonto centavos={totales.tesoreriaCentavos} />
       <Td colSpan={2} />
       <Td>
         <VisitasRuta totales={totales} />

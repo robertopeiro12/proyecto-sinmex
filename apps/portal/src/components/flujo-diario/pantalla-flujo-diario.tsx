@@ -11,7 +11,7 @@ import { Pestanas } from "@/components/ui/pestanas";
 import { mensajeDe } from "@/lib/api";
 import { diaAnterior, type RangoFechas } from "@/lib/fechas";
 import { obtenerFlujoDiario, type FlujoDiario } from "@/lib/flujo-diario";
-import { plural } from "@/lib/formato";
+import { formatearPesos, plural } from "@/lib/formato";
 import { listarSucursales, type Sucursal } from "@/lib/sucursales";
 import { listarVendedores, type Vendedor } from "@/lib/vendedores";
 import { hoyEnTijuana } from "@/lib/ventas";
@@ -36,7 +36,10 @@ export function PantallaFlujoDiario({ sucursal }: { sucursal: string | null }) {
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
   // `numero` cambia en cada consulta: las tablas se vuelven a montar y cierran su detalle
   // (la pestaña Por vendedor / Por día se conserva).
-  const [consultado, setConsultado] = useState<{ flujo: FlujoDiario; numero: number } | null>(null);
+  // `vendedor` es el de esa consulta (no el que el filtro tenga ahora): el detalle de un día lo usa.
+  const [consultado, setConsultado] = useState<{ flujo: FlujoDiario; numero: number; vendedor: string | null } | null>(null);
+  // Las cifras de arriba siguen a la pestaña: "Por día" suma también la oficina.
+  const [pestana, setPestana] = useState<"vendedor" | "dia">("vendedor");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Solo la última consulta escribe: una lenta que llega tarde no pisa a la nueva.
@@ -86,9 +89,10 @@ export function PantallaFlujoDiario({ sucursal }: { sucursal: string | null }) {
     const esta = ++ultima.current;
     setCargando(true);
     try {
-      const flujo = await obtenerFlujoDiario({ desde, hasta, sucursal, vendedor: vendedor || null });
+      const elegido = vendedor || null;
+      const flujo = await obtenerFlujoDiario({ desde, hasta, sucursal, vendedor: elegido });
       if (esta !== ultima.current) return;
-      setConsultado({ flujo, numero: esta });
+      setConsultado({ flujo, numero: esta, vendedor: elegido });
     } catch (err) {
       if (esta !== ultima.current) return;
       setConsultado(null);
@@ -100,7 +104,8 @@ export function PantallaFlujoDiario({ sucursal }: { sucursal: string | null }) {
 
   const flujo = consultado?.flujo ?? null;
   const actualizando = cargando && consultado !== null;
-  const total = flujo?.totalPorVendedor;
+  const total = pestana === "dia" ? flujo?.totalPorDia : flujo?.totalPorVendedor;
+  const oficina = flujo?.porDia.reduce((s, d) => s + d.oficinaCentavos, 0) ?? 0;
 
   return (
     <Pantalla>
@@ -148,6 +153,8 @@ export function PantallaFlujoDiario({ sucursal }: { sucursal: string | null }) {
           />
           <Pestanas
             etiqueta="Ver el flujo"
+            valorInicial={pestana}
+            onCambio={(v) => setPestana(v === "dia" ? "dia" : "vendedor")}
             pestanas={[
               {
                 valor: "vendedor",
@@ -165,7 +172,19 @@ export function PantallaFlujoDiario({ sucursal }: { sucursal: string | null }) {
               {
                 valor: "dia",
                 etiqueta: "Por día",
-                contenido: <TablaPorDia key={consultado!.numero} flujo={flujo} nombreSucursal={nombreSucursal} />,
+                contenido: (
+                  <div className="flex flex-col gap-3">
+                    <TablaPorDia
+                      key={consultado!.numero}
+                      flujo={flujo}
+                      vendedor={consultado!.vendedor}
+                      nombreSucursal={nombreSucursal}
+                    />
+                    {oficina > 0 && (
+                      <Aviso tono="informacion">Incluye {formatearPesos(oficina)} que cobró la oficina.</Aviso>
+                    )}
+                  </div>
+                ),
               },
             ]}
           />

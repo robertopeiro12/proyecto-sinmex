@@ -120,6 +120,17 @@ describe("DetalleVendedor", () => {
     expect(within(screen.getByRole("tabpanel")).getByText("Don Gallo")).toBeInTheDocument();
   });
 
+  it("la cantidad de una promoción lleva separador de miles", async () => {
+    const u = userEvent.setup();
+    const muchas: DetalleVendedorDia = {
+      ...DETALLE,
+      promociones: [{ cliente: "Don Gallo", producto: "Horchata 500 ml", cantidad: 1200 }],
+    };
+    render(<DetalleVendedor detalle={muchas} modo="flujo" />);
+    await u.click(screen.getByRole("tab", { name: "Mermas, cambios y promociones" }));
+    expect(within(screen.getByRole("table", { name: "Promociones de Don Gallo" })).getByText("1,200")).toBeInTheDocument();
+  });
+
   it("sin datos: los textos de vacío", async () => {
     const u = userEvent.setup();
     const vacio: DetalleVendedorDia = { ...DETALLE, notasCredito: [], promociones: [] };

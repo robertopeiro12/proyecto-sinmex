@@ -71,23 +71,33 @@ export class FlujoDiarioService {
     if (error) throw new BadRequestException(error);
   }
 
+  private idVendedor(crudo: string): string {
+    const limpio = crudo.trim();
+    if (!isUUID(limpio))
+      throw new BadRequestException('El vendedor no es válido.');
+    return limpio.toLowerCase();
+  }
+
+  /** `codigo` null = cualquier sucursal (General sin filtro). */
+  private async vendedorEnAlcance(id: string, codigo: string | null) {
+    const vendedor = await this.detalle.buscarVendedor(id);
+    // Otra sucursal se contesta igual que un vendedor inexistente.
+    if (!vendedor || (codigo !== null && codigo !== vendedor.codigo))
+      throw new NotFoundException('No encontramos ese vendedor.');
+    return vendedor;
+  }
+
   async detalleVendedor(
     usuarioId: string,
     q: DetalleVendedorDto,
   ): Promise<DetalleVendedorDia> {
     this.validarDia(q.fecha);
-    const crudo = q.vendedor.trim();
-    if (!isUUID(crudo))
-      throw new BadRequestException('El vendedor no es válido.');
+    const id = this.idVendedor(q.vendedor);
     const alcance = await this.alcanceDe(usuarioId, q.sucursal);
-
-    const vendedor = await this.detalle.buscarVendedor(crudo.toLowerCase());
-    // Otra sucursal se contesta igual que un vendedor inexistente.
-    if (
-      !vendedor ||
-      (alcance.tipo === 'una' && alcance.codigo !== vendedor.codigo)
-    )
-      throw new NotFoundException('No encontramos ese vendedor.');
+    const vendedor = await this.vendedorEnAlcance(
+      id,
+      alcance.tipo === 'una' ? alcance.codigo : null,
+    );
 
     const [filas, jornadaCerrada] = await Promise.all([
       this.detalle.filas({ vendedorId: vendedor.id }, q.fecha),
@@ -106,13 +116,22 @@ export class FlujoDiarioService {
 
   async detalleDia(usuarioId: string, q: DetalleDiaDto): Promise<DetalleDia> {
     this.validarDia(q.fecha);
+    const crudo = q.vendedor?.trim();
+    const id = crudo ? this.idVendedor(crudo) : null;
     const alcance = await this.alcanceDe(usuarioId, q.sucursal);
     if (alcance.tipo === 'todas')
       throw new BadRequestException('Elige una sucursal.');
     if (!(await this.detalle.existeSucursal(alcance.codigo)))
       throw new NotFoundException('No encontramos esa sucursal.');
+    // Con un vendedor, el dia es solo suyo: sin la oficina, igual que su
+    // renglon "Por dia" (`flujo` con vendedor).
+    const vendedor = id
+      ? await this.vendedorEnAlcance(id, alcance.codigo)
+      : null;
     const filas = await this.detalle.filas(
-      { sucursalCodigo: alcance.codigo },
+      vendedor
+        ? { vendedorId: vendedor.id }
+        : { sucursalCodigo: alcance.codigo },
       q.fecha,
     );
     return armarDetalleDia(

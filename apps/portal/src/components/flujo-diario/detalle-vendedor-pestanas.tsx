@@ -9,6 +9,7 @@ import {
   BotonFolio,
   EtiquetaVendio,
   FilaLineas,
+  formatearPiezas,
   horaTijuana,
   SinDatos,
   sumar,
@@ -246,7 +247,7 @@ export function PestanaMermas({ promociones }: { promociones: DetalleVendedorDia
                 {productos.map((p, i) => (
                   <tr key={`${p.producto}-${i}`}>
                     <Td>{p.producto}</Td>
-                    <Td alinear="derecha">{p.cantidad}</Td>
+                    <Td alinear="derecha">{formatearPiezas(p.cantidad)}</Td>
                   </tr>
                 ))}
               </tbody>

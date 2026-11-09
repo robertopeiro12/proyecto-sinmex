@@ -182,7 +182,7 @@ export interface DetalleDia {
   promociones: { producto: string; cantidad: number }[];
 }
 
-/* ---- Filas planas que entrega el repositorio ---- */
+/* ---- Consultas ---- */
 
 function consulta(ruta: string, params: Record<string, string | null>): string {
   const q = new URLSearchParams();
@@ -221,15 +221,20 @@ export function obtenerDetalleVendedor(f: {
   );
 }
 
-/** `sucursal` es obligatoria: un código. */
+/**
+ * `sucursal` es obligatoria: un código. Con `vendedor`, el día trae solo lo de ese
+ * vendedor y sin la oficina (igual que su renglón "Por día").
+ */
 export function obtenerDetalleDia(f: {
   fecha: string;
   sucursal: string;
+  vendedor: string | null;
 }): Promise<DetalleDia> {
   return apiFetch<DetalleDia>(
     consulta("/reportes/flujo-diario/dia", {
       fecha: f.fecha,
       sucursal: f.sucursal,
+      vendedor: f.vendedor,
     }),
   );
 }

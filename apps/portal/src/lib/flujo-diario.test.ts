@@ -96,9 +96,21 @@ describe("fetchers", () => {
     expect(apiFetch).toHaveBeenLastCalledWith(
       "/reportes/flujo-diario/vendedor?fecha=2026-11-09&vendedor=v1",
     );
-    await obtenerDetalleDia({ fecha: "2026-11-09", sucursal: "TJ" });
+    await obtenerDetalleDia({
+      fecha: "2026-11-09",
+      sucursal: "TJ",
+      vendedor: null,
+    });
     expect(apiFetch).toHaveBeenLastCalledWith(
       "/reportes/flujo-diario/dia?fecha=2026-11-09&sucursal=TJ",
+    );
+    await obtenerDetalleDia({
+      fecha: "2026-11-09",
+      sucursal: "TJ",
+      vendedor: "v1",
+    });
+    expect(apiFetch).toHaveBeenLastCalledWith(
+      "/reportes/flujo-diario/dia?fecha=2026-11-09&sucursal=TJ&vendedor=v1",
     );
   });
   it("dashboard", async () => {

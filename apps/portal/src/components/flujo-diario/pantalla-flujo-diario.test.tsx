@@ -212,8 +212,62 @@ describe("PantallaFlujoDiario", () => {
     const tabla = screen.getByRole("table", { name: "Por día" });
     const botones = within(tabla).getAllByRole("button", { name: "09/11/2026" });
     await u.click(botones[1]);
-    expect(obtenerDetalleDia).toHaveBeenCalledWith({ fecha: "2026-11-09", sucursal: "MX" });
+    expect(obtenerDetalleDia).toHaveBeenCalledWith({ fecha: "2026-11-09", sucursal: "MX", vendedor: null });
     await u.click(await screen.findByRole("tab", { name: "Mermas" }));
     expect(screen.getByText("Todavía no se registran mermas en el sistema.")).toBeInTheDocument();
+  });
+
+  it("Por día con un vendedor elegido: el detalle del día se pide solo de ese vendedor", async () => {
+    mockAuth([PERMISO]);
+    listarVendedores.mockResolvedValue([
+      { id: "ricardo", nombre: "Ricardo", login: "ricardo", sucursalId: "1", sucursalCodigo: "TJ", folioSegmento: "RI", activo: true },
+    ]);
+    obtenerDetalleDia.mockResolvedValue({
+      fecha: "2026-11-09", sucursalCodigo: "TJ", porPresentacion: [], porProducto: [], porVendedor: [], porCliente: [],
+      cobranza: [], aFavor: [], gastos: [], visitas: [], promociones: [],
+    });
+    const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PantallaFlujoDiario sucursal="TJ" />);
+    await screen.findByRole("option", { name: "Ricardo" });
+    await u.selectOptions(screen.getByLabelText("Vendedor"), "ricardo");
+    await u.click(screen.getByRole("button", { name: "Mostrar" }));
+    expect(obtenerFlujo).toHaveBeenLastCalledWith({ desde: "2026-11-08", hasta: "2026-11-08", sucursal: "TJ", vendedor: "ricardo" });
+    await screen.findByRole("table", { name: "Por vendedor" });
+    // Cambiar el filtro sin picar Mostrar no cambia lo que se consultó.
+    await u.selectOptions(screen.getByLabelText("Vendedor"), "");
+    await u.click(screen.getByRole("tab", { name: "Por día" }));
+    const tabla = screen.getByRole("table", { name: "Por día" });
+    await u.click(within(tabla).getByRole("button", { name: "09/11/2026" }));
+    expect(obtenerDetalleDia).toHaveBeenCalledWith({ fecha: "2026-11-09", sucursal: "TJ", vendedor: "ricardo" });
+  });
+
+  it("las cifras de arriba siguen a la pestaña; Por día avisa lo que cobró la oficina", async () => {
+    mockAuth([PERMISO]);
+    const CON_OFICINA: FlujoDiario = {
+      ...UNA_SUCURSAL,
+      porDia: [{ ...UNA_SUCURSAL.porDia[0], totales: { ...TOT_TJ, cobranzaCentavos: 54000 }, oficinaCentavos: 4000 }],
+      totalPorDia: { ...TOT_TJ, cobranzaCentavos: 54000, tesoreriaCentavos: 53000 },
+    };
+    obtenerFlujo.mockResolvedValue(CON_OFICINA);
+    const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PantallaFlujoDiario sucursal="TJ" />);
+    await screen.findByRole("table", { name: "Por vendedor" });
+    const cobranza = () => screen.getByText("Cobranza", { selector: "dt" }).nextElementSibling;
+    expect(cobranza()).toHaveTextContent("$500.00");
+    expect(screen.queryByText(/^Incluye .* que cobró la oficina\.$/)).not.toBeInTheDocument();
+    await u.click(screen.getByRole("tab", { name: "Por día" }));
+    expect(cobranza()).toHaveTextContent("$540.00");
+    expect(screen.getByText("Incluye $40.00 que cobró la oficina.")).toBeInTheDocument();
+    await u.click(screen.getByRole("tab", { name: "Por vendedor" }));
+    expect(cobranza()).toHaveTextContent("$500.00");
+  });
+
+  it("Por día sin cobranza de la oficina no lleva el aviso", async () => {
+    mockAuth([PERMISO]);
+    const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PantallaFlujoDiario sucursal="TJ" />);
+    await screen.findByRole("table", { name: "Por vendedor" });
+    await u.click(screen.getByRole("tab", { name: "Por día" }));
+    expect(screen.queryByText(/^Incluye .* que cobró la oficina\.$/)).not.toBeInTheDocument();
   });
 });

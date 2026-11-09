@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment } from "react";
-import { Monto } from "@/components/ui/monto";
 import { CajaTabla, Fila, FilaGrupo, FilaTotal, FilaVacia, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
 import {
   agruparPorSucursal,
@@ -171,9 +170,7 @@ function RenglonTotal({ texto, totales }: { texto: string; totales: Totales }) {
       <TdMonto centavos={totales.montoCentavos} />
       <TdMonto centavos={totales.cobranzaCentavos} />
       <TdMonto centavos={totales.gastoCentavos} />
-      <Td alinear="derecha" className="whitespace-nowrap">
-        <Monto centavos={totales.tesoreriaCentavos} />
-      </Td>
+      <TdMonto centavos={totales.tesoreriaCentavos} />
       <Td colSpan={4} />
     </FilaTotal>
   );
