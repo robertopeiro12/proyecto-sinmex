@@ -625,23 +625,67 @@ usuario con sesion pasa.
   - **Todo reporte del portal exporta con `apps/portal/src/lib/excel/`** (`exportarExcel(definición)`), que carga
     `exceljs` solo al exportar. `uuid` de `exceljs` va forzado a `^11.1.1` con `overrides` en el `package.json`
     raíz (aviso de seguridad heredado).
-  - **Reporte de Ventas (T-49):** `GET /reportes/ventas`, mismo `ReportesController`, pero con **su propio permiso**
-    `reporte_ventas.ver` (no `reportes.ver`). Pantalla en *Operación → Reporte de Ventas*.
+  - **Flujo diario y Dashboard (2026-11-09; reemplazan a la pantalla del Reporte de Ventas de T-49).** Spec:
+    `docs/superpowers/specs/2026-11-09-dashboard-flujo-diario-design.md`. Backend en `modules/estadisticas/`
+    (`flujo-diario.*`, `dashboard.*`, `detalle.repository.ts`; reglas puras en `reglas-flujo-diario.ts` y
+    `reglas-detalle.ts`). Solo lectura.
+    - **Endpoints.** *Operación → Flujo diario* (`/operacion/reporte-de-ventas`, pestañas *Por vendedor* y *Por día*):
+      `GET /reportes/flujo-diario`, `/reportes/flujo-diario/vendedor` y `/reportes/flujo-diario/dia`, permiso
+      `reporte_ventas.ver`. *Operación → Dashboard* (`/operacion`, el de **hoy**): `GET /dashboard` y
+      `/dashboard/vendedor`, permiso **`dashboard.ver`** (migración `20261109120000_permiso_dashboard.sql`).
+    - **"Hoy" y "ayer" de Tijuana los calcula el servidor** para el Dashboard (nunca el reloj del navegador ni UTC);
+      Flujo diario abre en ayer.
+    - **Cobranza = contado + cobro de notas de días anteriores + lo que quedó a favor**, de **todos** los métodos de pago
+      (efectivo, transferencia y cheque), y **nunca** `saldo_favor` (no es dinero nuevo). La misma lectura de `cobro` /
+      abonos de contado que usan Tesorería y Flujo de Efectivo. Tesorería del día = cobranza − gastos. La cobranza de
+      la **oficina** (cobros sin vendedor, por la sucursal del cliente) solo suma en la pestaña *Por día*; las ventas de
+      mostrador (sin vendedor) **no entran** al Flujo diario. *Por día* es de **toda la sucursal** (Roberto, 2026-11-09):
+      el selector de vendedor solo aparece en *Por vendedor*, y con un vendedor elegido el portal consulta dos veces (el
+      filtrado para *Por vendedor*, sin vendedor para *Por día*). El backend acepta `vendedor` opcional en
+      `/reportes/flujo-diario/dia` (ajeno = 404, sin oficina), pero el portal no lo manda. Las cifras de arriba siguen
+      a la pestaña y la Cobranza dice de quién es en una línea bajo la cifra ("Solo lo que cobraron los vendedores" /
+      "Vendedores $X · Oficina $Y"), en vez de avisos bajo la tabla.
+    - **Dashboard:** `/dashboard/vendedor` acepta `fecha` (solo hoy o ayer de Tijuana; otra = 400) y el portal manda la
+      del Dashboard pintado, para que a la medianoche el detalle no cambie de día. No lista a un vendedor inactivo o
+      dado de baja cuya única razón para salir es la ruta diaria (el Flujo diario sí, es historia).
+    - **Casilla "Entregada" (nota de papel):** `venta_nota.papel_entregado` (null = sin revisar) +
+      `papel_revisado_en`/`papel_revisado_por_usuario_id`. `PUT /dashboard/notas-entregadas` (permiso
+      `nota_papel.revisar`, 204) manda **todas** las notas a crédito del día (sin marcar = `false`); un folio que no es
+      venta viva a crédito de ese vendedor de hoy o antes = 400 y no se guarda nada. **No mueve `updated_at`**: el
+      trigger `set_updated_at_venta_nota()` lo conserva cuando solo cambian las columnas `papel_*`. El detalle trae
+      `notasCredito[].entregada` y `notasNoEntregadas` (días anteriores, `false` y con pendiente).
+    - **Pestaña "Ruta"** (la ventana "Visitas" del viejo, que se abre al picar *Ruta*, también el "x / y" del
+      Dashboard): los clientes de su **ruta diaria en su orden** con lo que pasó en cada uno, o `visitado: false` →
+      "Cliente no visitado"; después los atendidos fuera de ruta, por hora (`armarDetalleVendedor`).
+    - **Liquidada** se lee de `abono.saldo_pendiente` (la nota quedó en cero con ese abono), no se recalcula.
+    - **Alcance:** un parámetro `sucursal` ajeno responde **403**; un `vendedor` ajeno responde **404** (no confirma que
+      exista). Con "Todas" hay un bloque por sucursal.
+    - **Los tipos están duplicados** en `apps/portal/src/lib/flujo-diario.ts` y `reglas-flujo-diario.ts` del backend
+      (el portal no importa del backend): si cambias uno, cambia el otro en el mismo commit.
+    - **Portal** (`components/flujo-diario/`, `components/dashboard/`, `ui/selector-segmentado.tsx`, `Pestanas` con
+      `deshabilitada`): el scroll horizontal de la tabla del Dashboard (13 columnas) se **aceptó** a propósito; no
+      lo "arregles" quitando columnas.
+    - **Nube**: `20261109120000_permiso_dashboard.sql`, `20261109130000_indices_flujo_diario.sql` (índices parciales de
+      `venta_nota (vendedor_id, fecha)` y `cobro (vendedor_id, fecha_pago)` para las sumas por vendedor y día) y
+      `20261109140000_nota_papel_entregado.sql` (columnas nulas, un check que todas las filas cumplen en null, el
+      trigger nuevo de `venta_nota` y un permiso) se suben a `sinmex dev` después del merge, con el protocolo de push
+      (pre-flight: nada que contar).
+  - **`GET /reportes/ventas` (T-49) se queda** con su permiso `reporte_ventas.ver` y `lib/reporte-ventas.ts`: son la
+    base del Excel de ventas de *Información → Reportes* (pieza 4). Su pantalla y `components/reporte-ventas/` se borraron.
     - Cuenta ventas vivas de **cualquier status**; la sucursal es **la de la venta** (`venta_nota.sucursal_id`), no la
       del cliente como en Cuentas por Cobrar (T-22). Piezas = líneas **vivas** de `venta_nota_detalle`.
-    - Agrupa por día (subtotales) y trae `porRepartidor` ("resultados por vendedor y por día", fuente de julio).
-      `repartidor=oficina` filtra ventas de mostrador.
+    - Agrupa por día (subtotales) y trae `porRepartidor`. `repartidor=oficina` filtra ventas de mostrador.
   - **El portal se usa en computadora, no en celular.** Una tabla ancha tiene que caber desde **1366 px** de ventana
     (≈1012 px de caja, por la barra lateral `w-64` y el `p-8`). Medir el texto en el navegador antes de fijar anchos
-    de columna: la primera versión de T-49 se desplazaba de lado incluso a 1440 px. Ver
-    `components/reporte-ventas/tabla-reporte-ventas.tsx` (`table-fixed`, `colgroup`, `min-w`, scroll en su caja).
+    de columna: la primera versión de T-49 se desplazaba de lado incluso a 1440 px. Patrón: `table-fixed`, `colgroup`,
+    `min-w`, scroll en su caja (ver `components/gastos/` o `components/flujo-diario/`).
 
 - **Portal UI (piezas comunes, Etapa 1).** Spec: `docs/superpowers/specs/2026-10-20-portal-ui-etapa-1-design.md`.
   - **Toda pantalla nueva, o una vieja que se toque, usa `apps/portal/src/components/ui/`**: `EncabezadoPantalla`
     (título + UNA línea que dice para qué sirve), `EstadoPantalla` (Cargando / sin permiso / elige sucursal, mismo texto
     en todas), `Tabla`/`Th`/`Td`/`TdMonto`/`CajaTabla`, `FiltroFechas` (botón **Mostrar**, atajos Hoy · Ayer · Esta
     semana · Este mes) + `BotonExcel`, `Aviso`, `Etiqueta`/`EtiquetaStatusVenta`, `Monto`, `Fecha`, `Campo` y sus
-    controles, `Pestanas` (con `onCambio` opcional para avisar la pestaña elegida), `Ventana` (`ui/ventana.tsx`, Dialog de base-ui: formularios cortos de crear/editar),
+    controles, `Pestanas` (con `onCambio` opcional para avisar la pestaña elegida), `SelectorSegmentado` (`ui/selector-segmentado.tsx`: 2–3 opciones excluyentes en tira, `radiogroup` con flechas; el "Por producto / Por cliente" del Dashboard), `Ventana` (`ui/ventana.tsx`, Dialog de base-ui: formularios cortos de crear/editar),
     `Ayuda` (ⓘ con globito, Tooltip de base-ui; las explicaciones de permisos viven en `lib/explicacion-permisos.ts`).
     Para confirmar, `useConfirmar()` (pinta `{ventana}` en la pantalla), **nunca `window.confirm`**.
   - **Movimiento:** `Pantalla` entra con un desvanecido al montarse y `app/(portal)/template.tsx` hace lo mismo al

@@ -76,4 +76,23 @@ describe("Ventana", () => {
     );
     expect(screen.getByRole("dialog")).toHaveClass("w-[min(44rem,92vw)]");
   });
+
+  it("ancho='detalle' es grande, con ✕ que cierra (las demás no la traen)", async () => {
+    const usuario = userEvent.setup();
+    const alCerrar = vi.fn();
+    const { rerender } = render(
+      <Ventana abierta alCerrar={alCerrar} titulo="Cobranza · Ricardo" ancho="detalle">
+        <p>Contenido</p>
+      </Ventana>,
+    );
+    expect(screen.getByRole("dialog", { name: "Cobranza · Ricardo" })).toHaveClass("w-[min(72rem,94vw)]");
+    await usuario.click(screen.getByRole("button", { name: "Cerrar" }));
+    expect(alCerrar).toHaveBeenCalledTimes(1);
+    rerender(
+      <Ventana abierta alCerrar={alCerrar} titulo="Editar Jamaica">
+        <p>Contenido</p>
+      </Ventana>,
+    );
+    expect(screen.queryByRole("button", { name: "Cerrar" })).not.toBeInTheDocument();
+  });
 });
