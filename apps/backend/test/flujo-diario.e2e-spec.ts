@@ -23,8 +23,11 @@ import { borrarCobrosDe, sembrarCobro } from './apoyo-cobros';
 
 const SUFIJO = `${Date.now()}-${process.pid}`;
 const PASSWORD = 'contrasena-de-prueba';
-// Codigo propio (las otras suites usan ZV y otros) y fechas de 2018.
-const CODIGO = 'FD';
+// Codigo propio (las otras suites usan ZV y otros; ZR/ZS no los usa nadie) y fechas de 2018.
+// Codigos que ordenan despues de TJ: varias suites toman "la primera sucursal por
+// codigo" y, si fuera la nuestra, le meterian vendedores que rompen la limpieza.
+const CODIGO = 'ZR';
+const CODIGO_OTRA = 'ZS';
 const DESDE = '2018-05-01';
 const HASTA = '2018-05-31';
 
@@ -673,7 +676,7 @@ describe('Flujo diario (e2e)', () => {
     idOtra = (
       await db
         .insertInto('sucursal')
-        .values({ codigo: 'FX', nombre: 'Prueba Flujo Diario Otra' })
+        .values({ codigo: CODIGO_OTRA, nombre: 'Prueba Flujo Diario Otra' })
         .onConflict((oc) =>
           oc.column('codigo').doUpdateSet({ deleted_at: null }),
         )
@@ -740,7 +743,7 @@ describe('Flujo diario (e2e)', () => {
       .execute();
     await db.deleteFrom('producto').where('id', '=', productoId).execute();
     await db.deleteFrom('vendedor').where('id', 'in', vendedorIds).execute();
-    await db.deleteFrom('sucursal').where('codigo', '=', 'FX').execute();
+    await db.deleteFrom('sucursal').where('codigo', '=', CODIGO_OTRA).execute();
     await db
       .deleteFrom('usuario_permiso')
       .where('usuario_id', 'in', usuarioIds)
@@ -788,7 +791,7 @@ describe('Flujo diario (e2e)', () => {
       expect(JSON.stringify(malo.body)).toContain('El vendedor no es válido.');
     });
 
-    it('atado a FD: "todas" o nada le da FD; pedir otra sucursal es 403', async () => {
+    it('atado a ZR: "todas" o nada le da ZR; pedir otra sucursal es 403', async () => {
       for (const q of [{}, { sucursal: 'todas' }]) {
         const r = (
           await pedir(cookieFd, { desde: DESDE, hasta: HASTA, ...q }).expect(
@@ -1081,12 +1084,12 @@ describe('Flujo diario (e2e)', () => {
       await detalleVendedor(cookieGeneral, {
         fecha: '2018-05-14',
         vendedor: eva,
-        sucursal: 'FX',
+        sucursal: CODIGO_OTRA,
       }).expect(404);
       await detalleVendedor(cookieFd, {
         fecha: '2018-05-14',
         vendedor: eva,
-        sucursal: 'FX',
+        sucursal: CODIGO_OTRA,
       }).expect(403);
       await detalleVendedor(cookieGeneral, q).expect(200);
       await detalleVendedor(cookieGeneral, {
@@ -1239,10 +1242,10 @@ describe('Flujo diario (e2e)', () => {
       }
     });
 
-    it('dia: sucursal fuera del alcance 403, "todas" 400, codigo desconocido 404, atado a FD con su sucursal 200', async () => {
+    it('dia: sucursal fuera del alcance 403, "todas" 400, codigo desconocido 404, atado a ZR con su sucursal 200', async () => {
       await detalleDia(cookieFd, {
         fecha: '2018-05-14',
-        sucursal: 'FX',
+        sucursal: CODIGO_OTRA,
       }).expect(403);
       await detalleDia(cookieGeneral, {
         fecha: '2018-05-14',

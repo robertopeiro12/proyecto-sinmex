@@ -17,7 +17,11 @@ import { hoyEnTijuana } from './../src/modules/sincronizacion/operaciones';
 
 const SUFIJO = `${Date.now()}-${process.pid}`;
 const PASSWORD = 'contrasena-de-prueba';
-const CODIGO = 'DB';
+// Codigos que ordenan despues de TJ: varias suites toman "la primera sucursal por
+// codigo" (auth-vendedor, prospectos, visita...) y, si fuera la nuestra, le meterian
+// vendedores que rompen nuestra limpieza (FK de vendedor).
+const CODIGO = 'ZW';
+const CODIGO_OTRA = 'ZX';
 
 describe('Dashboard (e2e)', () => {
   let app: INestApplication<App>;
@@ -158,7 +162,7 @@ describe('Dashboard (e2e)', () => {
     db = app.get<Database>(DB_CONNECTION);
 
     idDb = await sucursal(CODIGO, 'Prueba Dashboard');
-    idOtra = await sucursal('DX', 'Prueba Dashboard Otra');
+    idOtra = await sucursal(CODIGO_OTRA, 'Prueba Dashboard Otra');
     generalId = await crearUsuario(
       `e2e-db-gen-${SUFIJO}`,
       'Administrador General',
@@ -232,7 +236,7 @@ describe('Dashboard (e2e)', () => {
     await db.deleteFrom('usuario').where('id', 'in', usuarioIds).execute();
     await db
       .deleteFrom('sucursal')
-      .where('codigo', 'in', [CODIGO, 'DX'])
+      .where('codigo', 'in', [CODIGO, CODIGO_OTRA])
       .execute();
     await app.close();
   });
@@ -264,7 +268,7 @@ describe('Dashboard (e2e)', () => {
     expect(r.fecha).toBe(hoyEnTijuana());
   });
 
-  it('atado a otra sucursal: pedir DB es 403; sin parametro ve la suya', async () => {
+  it('atado a otra sucursal: pedir ZW es 403; sin parametro ve la suya', async () => {
     await pedir(cookieOtra, '', { sucursal: CODIGO }).expect(403);
     const r = (await pedir(cookieDb, '').expect(200)).body as Dashboard;
     expect(r.vendedores.map((v) => v.vendedorId)).toEqual([ana]);
