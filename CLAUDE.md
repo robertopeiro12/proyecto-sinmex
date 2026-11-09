@@ -639,7 +639,7 @@ usuario con sesion pasa.
     (título + UNA línea que dice para qué sirve), `EstadoPantalla` (Cargando / sin permiso / elige sucursal, mismo texto
     en todas), `Tabla`/`Th`/`Td`/`TdMonto`/`CajaTabla`, `FiltroFechas` (botón **Mostrar**, atajos Hoy · Ayer · Esta
     semana · Este mes) + `BotonExcel`, `Aviso`, `Etiqueta`/`EtiquetaStatusVenta`, `Monto`, `Fecha`, `Campo` y sus
-    controles, `Pestanas` (con `onCambio` opcional para avisar la pestaña elegida), `Ventana` (`ui/ventana.tsx`, Dialog de base-ui: formularios cortos de crear/editar),
+    controles, `Pestanas` (con `onCambio` opcional para avisar la pestaña elegida), `SelectorSegmentado` (`ui/selector-segmentado.tsx`: 2–3 opciones excluyentes en tira, `radiogroup` con flechas; el "Por producto / Por cliente" del Dashboard), `Ventana` (`ui/ventana.tsx`, Dialog de base-ui: formularios cortos de crear/editar),
     `Ayuda` (ⓘ con globito, Tooltip de base-ui; las explicaciones de permisos viven en `lib/explicacion-permisos.ts`).
     Para confirmar, `useConfirmar()` (pinta `{ventana}` en la pantalla), **nunca `window.confirm`**.
   - **Movimiento:** `Pantalla` entra con un desvanecido al montarse y `app/(portal)/template.tsx` hace lo mismo al
