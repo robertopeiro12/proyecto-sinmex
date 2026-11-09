@@ -792,7 +792,7 @@ describe('Flujo diario (e2e)', () => {
     });
 
     it('atado a ZR: "todas" o nada le da ZR; pedir otra sucursal es 403', async () => {
-      for (const q of [{}, { sucursal: 'todas' }]) {
+      for (const q of [{}, { sucursal: 'todas' }] as Record<string, string>[]) {
         const r = (
           await pedir(cookieFd, { desde: DESDE, hasta: HASTA, ...q }).expect(
             200,
