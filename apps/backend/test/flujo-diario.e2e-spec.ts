@@ -394,12 +394,14 @@ describe('Flujo diario (e2e)', () => {
       origen: 'cobro',
       cobroId: cobroCarla,
     });
-    // Un cobro borrado el 05-10 y una venta eliminada el 05-09: no cuentan ni dan renglon.
+    // Mismo dia que el cobro vivo (05-08): un cobro borrado con su abono, una venta
+    // eliminada con su abono de contado vivo y un pago de saldo a favor con vendedor.
+    // Ninguno debe mover contado, anteriores ni aFavor.
     const cobroBorrado = await sembrarCobro(db, {
       clienteId: c4,
       vendedorId: carla,
       monto: '99.00',
-      fecha: '2018-05-10',
+      fecha: '2018-05-08',
     });
     await db
       .updateTable('cobro')
@@ -409,7 +411,7 @@ describe('Flujo diario (e2e)', () => {
     await sembrarAbono({
       ventaId: notaCarla,
       vendedor: carla,
-      fecha: '2018-05-10',
+      fecha: '2018-05-08',
       monto: '99.00',
       origen: 'cobro',
       cobroId: cobroBorrado,
@@ -417,7 +419,7 @@ describe('Flujo diario (e2e)', () => {
     });
     const ventaEliminada = await sembrarVenta({
       clienteId: c4,
-      fecha: '2018-05-09',
+      fecha: '2018-05-08',
       vendedor: carla,
       monto: '77.00',
       borrada: true,
@@ -426,9 +428,30 @@ describe('Flujo diario (e2e)', () => {
     await sembrarAbono({
       ventaId: ventaEliminada,
       vendedor: carla,
-      fecha: '2018-05-09',
+      fecha: '2018-05-08',
       monto: '77.00',
       origen: 'venta_contado',
+    });
+    const cobroSaldoCarla = await db
+      .insertInto('cobro')
+      .values({
+        cliente_id: c4,
+        vendedor_id: carla,
+        origen: 'saldo_favor',
+        metodo_pago: 'saldo_favor',
+        monto: '33.00',
+        fecha_pago: '2018-05-08',
+        fecha_operacion: '2018-05-08',
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    await sembrarAbono({
+      ventaId: notaCarla,
+      vendedor: carla,
+      fecha: '2018-05-08',
+      monto: '33.00',
+      origen: 'saldo_favor',
+      cobroId: cobroSaldoCarla.id,
     });
 
     // Oficina, 05-08: cobro sin vendedor de 80, un saldo a favor aplicado y una venta de mostrador de contado.
@@ -667,10 +690,16 @@ describe('Flujo diario (e2e)', () => {
       });
     });
 
-    it('cobro borrado y venta eliminada: ni cuentan ni dan renglon', async () => {
+    it('cobro borrado, venta eliminada y saldo a favor del mismo dia no mueven las sumas', async () => {
       const r = await deFd();
-      expect(renglon(r, carla, '2018-05-09')).toBeUndefined();
-      expect(renglon(r, carla, '2018-05-10')).toBeUndefined();
+      expect(renglon(r, carla, '2018-05-08')).toMatchObject({
+        contadoCentavos: 0,
+        anterioresCentavos: 15000,
+        aFavorCentavos: 5000,
+        piezas: 0,
+        montoCentavos: 0,
+        cobranzaCentavos: 20000,
+      });
     });
 
     it('Dani: gasto y jornada cerrada dan terminado y el vehiculo', async () => {
