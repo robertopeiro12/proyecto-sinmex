@@ -39,6 +39,7 @@ describe("buscarItemActual", () => {
     expect(buscarItemActual("/operacion")?.item.label).toBe("Dashboard");
     expect(buscarItemActual("/operacion/ventas/algo")?.item.label).toBe("Ventas");
     expect(buscarItemActual("/operacionx")).toBeNull();
+    expect(buscarItemActual("/operacion/reporte-de-ventas")?.item.label).toBe("Flujo diario");
     expect(buscarItemActual("/login")).toBeNull();
   });
 });
