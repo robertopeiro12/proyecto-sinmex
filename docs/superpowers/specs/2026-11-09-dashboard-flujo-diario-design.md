@@ -226,3 +226,29 @@ Claude ajustó tres: Estatus solo *En ruta* / *Terminó*; el número de Notas de
 - Anchos de columna, orden de los renglones (propuesta: por nombre de vendedor; en el Dashboard, quizá por estatus).
 - Rendimiento: el viejo tardaba mucho. Una consulta por pantalla y rango, sin N+1; el detalle puede pedirse al abrirlo.
 - Después: actualizar en el vault la nota de dominio afectada y `Estado del proyecto`, y `CLAUDE.md` (bloque Reportes).
+
+## 9. Ajustes tras la revisión de Roberto en el navegador (2026-11-09)
+
+Roberto revisó las dos pantallas con datos de ejemplo y pidió que la información se despliegue **exactamente como el
+sistema viejo** (palabras, columnas, qué se pica), con el diseño del portal. Cambió respecto a las secciones 5–6:
+
+- **El detalle se abre en una ventana** centrada (como las ventanitas del viejo), directo en lo que se picó, con las
+  pestañas arriba para cambiar sin cerrarla. Ya no se abre debajo del renglón.
+- **Palabras del viejo:** "Notas de ventas", "Mermas/Cambios/Promociones", "Cobranza ventas de contado" / "Cobranza
+  ventas anteriores", Corte con "Ventas contado" / "Ventas anteriores", "Resultados por vendedor" / "Resultados por día",
+  "# Rutas", "Visitas/Ruta", "Ventas/Cobranza/Gastos/Visitas por día", "Cliente: …" en mermas, "Vendedores en ruta".
+- **Pestaña "Ruta"** (la ventana "Visitas" del viejo, que se abre al picar Ruta y el x / y del Dashboard): la ruta diaria
+  completa en su orden con "Cliente no visitado", y después los atendidos fuera de ruta.
+- **Casilla "Entregada"** (sección 6 ya no espera a la pieza 6 para las notas nuevas): en el Dashboard, "Notas pendientes
+  nuevas por entregar" con casilla, **Guardar revisión** y **Cancelar** (permiso `nota_papel.revisar`); "Notas nuevas
+  NO entregadas" de días anteriores marcadas como no entregadas. En el Flujo diario, "Notas pendientes nuevas
+  entregadas" / "Notas nuevas NO entregadas" (Folio · Cliente · Pendiente $). Una nota sin revisar cuenta como NO
+  entregada; una nota de un día anterior que nadie revisó no se puede marcar después (decisión de Roberto: la oficina
+  revisa el mismo día). Marcar la casilla no le reenvía la nota a la tablet (trigger de `updated_at`).
+- **"Por día" es de toda la sucursal:** el selector de vendedor solo está en "Resultados por vendedor"; la Cobranza de
+  arriba dice de quién es ("Solo lo que cobraron los vendedores" / "Vendedores $X · Oficina $Y").
+- **Venta general › Por cliente:** el folio va primero y se abre a Producto · Cantidad; en Cobranza, a Producto ·
+  Cantidad · Precio (solo las ventas de contado, como el viejo). Por producto: encabezado por presentación sin total.
+- Sin "· N rutas" en los totales del Flujo diario; sin montos repetidos junto a títulos que ya tienen su Total.
+- **Menú** en el orden del viejo (Operación, Catálogo, Producción, Información) y lo nuevo después; Finanzas al final.
+- Se queda: el selector en "Ventas por día" y "Venta general" (Por producto | Por cliente).
