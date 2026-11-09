@@ -138,7 +138,10 @@ export function TablaPorVendedor({
             <Th alinear="derecha">Tesorería</Th>
             <Th alinear="centro" className="whitespace-normal">Notas de ventas</Th>
             <Th alinear="centro">Ruta</Th>
-            <Th alinear="centro" className="whitespace-normal">Mermas/Cambios/Promociones</Th>
+            <Th alinear="centro" className="whitespace-normal">
+              {/* Sin espacios no se parte: <wbr /> deja cortar después de cada diagonal. */}
+              Mermas/<wbr />Cambios/<wbr />Promociones
+            </Th>
             <Th alinear="centro">Inventario</Th>
           </tr>
         </thead>

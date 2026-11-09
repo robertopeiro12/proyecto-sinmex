@@ -169,7 +169,10 @@ export function TablaDashboard({
             <Th>Ruta asignada</Th>
             <Th>Vehículo</Th>
             <Th alinear="centro">Inventario</Th>
-            <Th alinear="centro" className="whitespace-normal">Mermas/Cambios/Promociones</Th>
+            <Th alinear="centro" className="whitespace-normal">
+              {/* Sin espacios no se parte: <wbr /> deja cortar después de cada diagonal. */}
+              Mermas/<wbr />Cambios/<wbr />Promociones
+            </Th>
             <Th alinear="derecha" className="whitespace-normal">Venta general</Th>
             <Th alinear="derecha">Cobranza</Th>
             <Th alinear="derecha">Gasto</Th>
