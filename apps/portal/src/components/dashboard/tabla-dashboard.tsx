@@ -80,7 +80,7 @@ export function TablaDashboard({
             <Pronto />
           </Td>
           <Td alinear="centro">
-            <BotonVer etiqueta={`Mermas, cambios y promociones de ${f.vendedor}`} onClick={() => abrir("mermas")} />
+            <BotonVer etiqueta={`Mermas/Cambios/Promociones de ${f.vendedor}`} onClick={() => abrir("mermas")} />
           </Td>
           <Td alinear="derecha">
             <BotonNumero cero={f.piezas === 0} etiqueta={`Venta general de ${f.vendedor}`} onClick={() => abrir("venta")}>
@@ -98,7 +98,7 @@ export function TablaDashboard({
             </BotonNumero>
           </Td>
           <Td alinear="centro">
-            <BotonVer etiqueta={`Notas de venta de ${f.vendedor}`} onClick={() => abrir("notas")} />
+            <BotonVer etiqueta={`Notas de ventas de ${f.vendedor}`} onClick={() => abrir("notas")} />
           </Td>
           {/* Las notas asignadas llegan con la pieza 6 (spec §6). */}
           <Td alinear="centro" className="text-muted-foreground">
@@ -155,11 +155,11 @@ export function TablaDashboard({
             <Th>Ruta asignada</Th>
             <Th>Vehículo</Th>
             <Th alinear="centro">Inventario</Th>
-            <Th alinear="centro" className="whitespace-normal">Mermas, cambios, promos</Th>
+            <Th alinear="centro" className="whitespace-normal">Mermas/Cambios/Promociones</Th>
             <Th alinear="derecha" className="whitespace-normal">Venta general</Th>
             <Th alinear="derecha">Cobranza</Th>
             <Th alinear="derecha">Gasto</Th>
-            <Th alinear="centro" className="whitespace-normal">Notas de venta</Th>
+            <Th alinear="centro" className="whitespace-normal">Notas de ventas</Th>
             <Th alinear="centro" className="whitespace-normal">Notas ant. asignadas</Th>
             <Th>Ruta</Th>
             <Th>Estatus</Th>

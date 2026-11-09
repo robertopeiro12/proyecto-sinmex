@@ -119,15 +119,15 @@ export function TablaPorDia({
         <thead>
           <tr>
             <Th>Fecha</Th>
-            <Th alinear="centro">Rutas</Th>
-            <Th alinear="derecha" className="whitespace-normal">Ventas (piezas)</Th>
+            <Th alinear="centro"># Rutas</Th>
+            <Th alinear="derecha">Ventas</Th>
             <Th alinear="derecha">Monto</Th>
             <Th alinear="derecha">Cobranza</Th>
             <Th alinear="derecha">Gastos</Th>
             <Th alinear="derecha">Tesorería</Th>
             <Th alinear="centro">Mermas</Th>
             <Th alinear="centro">Promociones</Th>
-            <Th>Visitas / ruta</Th>
+            <Th>Visitas/Ruta</Th>
             <Th alinear="centro">Inventario</Th>
           </tr>
         </thead>

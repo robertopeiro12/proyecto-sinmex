@@ -76,13 +76,13 @@ export function TablaPorVendedor({
           </Td>
           <TdMonto centavos={f.tesoreriaCentavos} className="font-bold" />
           <Td alinear="centro">
-            <BotonVer etiqueta={`Notas de venta de ${f.vendedor}`} onClick={() => abrir("notas")} />
+            <BotonVer etiqueta={`Notas de ventas de ${f.vendedor}`} onClick={() => abrir("notas")} />
           </Td>
           <Td alinear="centro">
             <BotonVer etiqueta={`Ruta de ${f.vendedor}`} onClick={() => abrir("visitas")} />
           </Td>
           <Td alinear="centro">
-            <BotonVer etiqueta={`Mermas, cambios y promociones de ${f.vendedor}`} onClick={() => abrir("mermas")} />
+            <BotonVer etiqueta={`Mermas/Cambios/Promociones de ${f.vendedor}`} onClick={() => abrir("mermas")} />
           </Td>
           <Td alinear="centro">
             <Pronto />
@@ -132,9 +132,9 @@ export function TablaPorVendedor({
             <Th alinear="derecha">Cobranza</Th>
             <Th alinear="derecha">Gasto</Th>
             <Th alinear="derecha">Tesorería</Th>
-            <Th alinear="centro" className="whitespace-normal">Notas de venta</Th>
+            <Th alinear="centro" className="whitespace-normal">Notas de ventas</Th>
             <Th alinear="centro">Ruta</Th>
-            <Th alinear="centro" className="whitespace-normal">Mermas, cambios, promos</Th>
+            <Th alinear="centro" className="whitespace-normal">Mermas/Cambios/Promociones</Th>
             <Th alinear="centro">Inventario</Th>
           </tr>
         </thead>

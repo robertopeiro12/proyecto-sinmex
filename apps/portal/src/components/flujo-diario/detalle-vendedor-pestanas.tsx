@@ -168,26 +168,38 @@ export function PestanaGastos({ gastos }: { gastos: DetalleVendedorDia["gastos"]
 }
 
 /** Hoy, las notas nuevas a crédito del día (spec §6); las asignadas llegan con la pieza 6. */
-export function PestanaNotasCredito({ notas }: { notas: DetalleVendedorDia["notasCredito"] }) {
-  if (notas.length === 0) return <SinDatos>Sin notas a crédito este día.</SinDatos>;
+/**
+ * Las notas a crédito del día, con las palabras del sistema viejo: en el Dashboard son las
+ * "pendientes nuevas por entregar" (la casilla Entregada llega con las notas asignadas,
+ * pieza 6); en el Flujo diario, "pendientes nuevas".
+ */
+export function PestanaNotasCredito({
+  notas,
+  modo,
+}: {
+  notas: DetalleVendedorDia["notasCredito"];
+  modo: "flujo" | "dashboard";
+}) {
+  if (notas.length === 0) return <SinDatos>No hay notas pendientes.</SinDatos>;
+  const titulo = modo === "dashboard" ? "Notas pendientes nuevas por entregar" : "Notas pendientes nuevas";
   return (
     <div className="max-w-2xl">
-      <TituloBloque extra={plural(notas.length, "nota", "notas")}>Notas a crédito del día</TituloBloque>
+      <TituloBloque extra={plural(notas.length, "nota", "notas")}>{titulo}</TituloBloque>
       <CajaTabla>
-        <Tabla densidad="compacta" aria-label="Notas a crédito">
+        <Tabla densidad="compacta" aria-label={titulo}>
           <thead>
             <tr>
-              <Th>Folio</Th>
               <Th>Cliente</Th>
-              <Th alinear="derecha">Total</Th>
+              <Th>Folio</Th>
+              <Th alinear="derecha">Monto</Th>
               <Th alinear="derecha">Pendiente</Th>
             </tr>
           </thead>
           <tbody>
             {notas.map((n) => (
               <tr key={n.folio}>
-                <Td className="font-mono text-[12.5px] whitespace-nowrap">{n.folio}</Td>
                 <Td>{n.cliente}</Td>
+                <Td className="font-mono text-[12.5px] whitespace-nowrap">{n.folio}</Td>
                 <TdMonto centavos={n.totalCentavos} />
                 <TdMonto centavos={n.pendienteCentavos} />
               </tr>

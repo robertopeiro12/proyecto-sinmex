@@ -48,11 +48,11 @@ export function DetalleVendedor({
     { valor: "venta", etiqueta: "Venta general", contenido: <PestanaVentaGeneral detalle={detalle} /> },
     { valor: "cobranza", etiqueta: "Cobranza", contenido: <PestanaCobranza detalle={detalle} /> },
     { valor: "gastos", etiqueta: "Gastos", contenido: <PestanaGastos gastos={detalle.gastos} /> },
-    { valor: "notas", etiqueta: "Notas de venta", contenido: <PestanaNotasCredito notas={detalle.notasCredito} /> },
+    { valor: "notas", etiqueta: "Notas de ventas", contenido: <PestanaNotasCredito notas={detalle.notasCredito} modo={modo} /> },
     { valor: "visitas", etiqueta: "Visitas", contenido: <PestanaVisitas visitas={detalle.visitas} /> },
     {
       valor: "mermas",
-      etiqueta: "Mermas, cambios y promociones",
+      etiqueta: "Mermas/Cambios/Promociones",
       contenido: <PestanaMermas promociones={detalle.promociones} />,
     },
     ...(modo === "dashboard"

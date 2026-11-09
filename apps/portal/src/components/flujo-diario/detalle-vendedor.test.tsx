@@ -130,16 +130,32 @@ describe("DetalleVendedor", () => {
     expect(within(screen.getByRole("table", { name: "Corte" })).getByText("Quedó a favor del cliente")).toBeInTheDocument();
   });
 
-  it("Visitas en hora de Tijuana; Notas de venta y promociones por cliente", async () => {
+  it("Visitas en hora de Tijuana; Notas de ventas y promociones por cliente", async () => {
     const u = userEvent.setup();
     render(<DetalleVendedor detalle={DETALLE} modo="flujo" />);
     await u.click(screen.getByRole("tab", { name: "Visitas" }));
     expect(screen.getByText("8:42")).toBeInTheDocument();
     expect(screen.getByText("Pasar el jueves")).toBeInTheDocument();
-    await u.click(screen.getByRole("tab", { name: "Notas de venta" }));
+    await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
     expect(within(screen.getByRole("tabpanel")).getByText("TJ261109RB10")).toBeInTheDocument();
-    await u.click(screen.getByRole("tab", { name: "Mermas, cambios y promociones" }));
+    // Las palabras del sistema viejo: título y columnas Cliente · Folio · Monto · Pendiente.
+    expect(screen.getByText("Notas pendientes nuevas")).toBeInTheDocument();
+    const notas = screen.getByRole("table", { name: "Notas pendientes nuevas" });
+    expect(within(notas).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
+      "Cliente",
+      "Folio",
+      "Monto",
+      "Pendiente",
+    ]);
+    await u.click(screen.getByRole("tab", { name: "Mermas/Cambios/Promociones" }));
     expect(within(screen.getByRole("tabpanel")).getByText("Don Gallo")).toBeInTheDocument();
+  });
+
+  it("en el Dashboard las notas nuevas son las que faltan por entregar, como el viejo", async () => {
+    const u = userEvent.setup();
+    render(<DetalleVendedor detalle={DETALLE} modo="dashboard" />);
+    await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
+    expect(screen.getByText("Notas pendientes nuevas por entregar")).toBeInTheDocument();
   });
 
   it("la cantidad de una promoción lleva separador de miles", async () => {
@@ -149,7 +165,7 @@ describe("DetalleVendedor", () => {
       promociones: [{ cliente: "Don Gallo", producto: "Horchata 500 ml", cantidad: 1200 }],
     };
     render(<DetalleVendedor detalle={muchas} modo="flujo" />);
-    await u.click(screen.getByRole("tab", { name: "Mermas, cambios y promociones" }));
+    await u.click(screen.getByRole("tab", { name: "Mermas/Cambios/Promociones" }));
     expect(within(screen.getByRole("table", { name: "Promociones de Don Gallo" })).getByText("1,200")).toBeInTheDocument();
   });
 
@@ -157,9 +173,9 @@ describe("DetalleVendedor", () => {
     const u = userEvent.setup();
     const vacio: DetalleVendedorDia = { ...DETALLE, notasCredito: [], promociones: [] };
     render(<DetalleVendedor detalle={vacio} modo="flujo" />);
-    await u.click(screen.getByRole("tab", { name: "Notas de venta" }));
-    expect(screen.getByText("Sin notas a crédito este día.")).toBeInTheDocument();
-    await u.click(screen.getByRole("tab", { name: "Mermas, cambios y promociones" }));
+    await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
+    expect(screen.getByText("No hay notas pendientes.")).toBeInTheDocument();
+    await u.click(screen.getByRole("tab", { name: "Mermas/Cambios/Promociones" }));
     expect(screen.getByText("Sin promociones este día.")).toBeInTheDocument();
   });
 });
