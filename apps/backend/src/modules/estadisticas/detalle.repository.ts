@@ -10,6 +10,7 @@ import type {
   NotaNoEntregada,
   PagoFila,
   PromoFila,
+  RutaFila,
   VentaFila,
   VisitaSinVentaFila,
 } from './reglas-detalle';
@@ -25,6 +26,8 @@ export interface FilasDetalle {
   aFavor: AFavorFila[];
   gastos: GastoFila[];
   visitasSinVenta: VisitaSinVentaFila[];
+  /** Solo para un vendedor: su ruta diaria de ese dia. */
+  ruta: RutaFila[];
   promociones: PromoFila[];
 }
 
@@ -88,6 +91,7 @@ export class DetalleRepository {
       gastos,
       visitas,
       promos,
+      ruta,
     ] = await Promise.all([
       this.ventas(cond, fecha),
       this.lineas(cond, fecha),
@@ -97,6 +101,9 @@ export class DetalleRepository {
       this.gastos(cond, fecha),
       this.visitas(cond, fecha),
       this.promociones(cond, fecha),
+      'vendedorId' in a
+        ? this.ruta(a.vendedorId, fecha)
+        : Promise.resolve<RutaFila[]>([]),
     ]);
     return {
       ventas,
@@ -106,6 +113,7 @@ export class DetalleRepository {
       gastos,
       visitasSinVenta: visitas,
       promociones: promos,
+      ruta,
     };
   }
 
@@ -411,13 +419,14 @@ export class DetalleRepository {
   private async visitas(cond: RawBuilder<unknown>, fecha: string) {
     const r = await sql<{
       vendedor: string;
+      cliente_id: string;
       cliente: string;
       hora: string;
       motivo: string;
       atendio: string | null;
       comentario: string | null;
     }>`
-      select v.nombre as vendedor, cl.nombre as cliente,
+      select v.nombre as vendedor, cl.id as cliente_id, cl.nombre as cliente,
              ${iso('vi.visitada_en')} as hora, m.nombre as motivo,
              vi.atendio, vi.observaciones as comentario
         from visita vi
@@ -427,7 +436,32 @@ export class DetalleRepository {
         join motivo_visita m on m.id = vi.motivo_visita_id
        where vi.fecha = ${fecha}::date and ${cond}
     `.execute(this.db);
-    return r.rows.map<VisitaSinVentaFila>((x) => ({ ...x }));
+    return r.rows.map<VisitaSinVentaFila>((x) => ({
+      vendedor: x.vendedor,
+      clienteId: x.cliente_id,
+      cliente: x.cliente,
+      hora: x.hora,
+      motivo: x.motivo,
+      atendio: x.atendio,
+      comentario: x.comentario,
+    }));
+  }
+
+  /** La ruta diaria viva del vendedor ese dia, en su orden (T-37). */
+  private async ruta(vendedorId: string, fecha: string): Promise<RutaFila[]> {
+    const r = await sql<{ cliente_id: string; cliente: string; orden: number }>`
+      select r.cliente_id, cl.nombre as cliente, r.orden
+        from ruta r
+        join cliente cl on cl.id = r.cliente_id
+       where r.deleted_at is null and r.tipo = 'diaria'
+         and r.vendedor_id = ${vendedorId}::uuid and r.fecha = ${fecha}::date
+       order by r.orden, cl.nombre
+    `.execute(this.db);
+    return r.rows.map((x) => ({
+      clienteId: x.cliente_id,
+      cliente: x.cliente,
+      orden: Number(x.orden),
+    }));
   }
 
   private async promociones(cond: RawBuilder<unknown>, fecha: string) {

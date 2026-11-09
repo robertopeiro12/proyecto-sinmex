@@ -105,7 +105,12 @@ export function TablaDashboard({
             —
           </Td>
           <Td>
-            <RutaXY atendidos={f.atendidosEnRuta} clientes={f.clientesEnRuta} />
+            <RutaXY
+              atendidos={f.atendidosEnRuta}
+              clientes={f.clientesEnRuta}
+              etiqueta={`Ruta de ${f.vendedor}`}
+              onClick={() => abrir("visitas")}
+            />
           </Td>
           <Td>
             <Etiqueta tono={terminado ? "exito" : "informacion"}>{terminado ? "Terminó" : "En ruta"}</Etiqueta>
@@ -188,11 +193,24 @@ export function TablaDashboard({
   );
 }
 
-/** "6 / 16" con su barrita: clientes de la ruta del día atendidos contra los de la ruta. */
-function RutaXY({ atendidos, clientes }: { atendidos: number; clientes: number }) {
+/**
+ * "6 / 16" con su barrita: clientes de la ruta del día atendidos contra los de la ruta. Se pica y
+ * abre la pestaña Ruta (las visitas), como en el sistema viejo.
+ */
+function RutaXY({
+  atendidos,
+  clientes,
+  etiqueta,
+  onClick,
+}: {
+  atendidos: number;
+  clientes: number;
+  etiqueta: string;
+  onClick: () => void;
+}) {
   return (
-    <div className="flex flex-col gap-1">
-      <span className={clientes === 0 ? "text-muted-foreground" : undefined}>{`${atendidos} / ${clientes}`}</span>
+    <div className="flex flex-col items-start gap-1">
+      <BotonNumero cero={false} etiqueta={etiqueta} onClick={onClick}>{`${atendidos} / ${clientes}`}</BotonNumero>
       <Barra valor={atendidos} maximo={clientes} className="w-12" />
     </div>
   );

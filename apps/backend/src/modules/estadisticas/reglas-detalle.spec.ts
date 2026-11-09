@@ -124,6 +124,7 @@ describe('armarDetalleVendedor', () => {
       visitasSinVenta: [
         {
           vendedor: 'Ana',
+          clienteId: 'cD',
           cliente: 'D',
           hora: '2026-11-07T16:15:00.000Z',
           motivo: 'Cerrado',
@@ -294,5 +295,59 @@ describe('armarDetalleDia agrupa por id', () => {
     );
     expect(d.porCliente).toHaveLength(2);
     expect(d.porVendedor).toHaveLength(2);
+  });
+});
+
+describe('Ruta (visitas) como el sistema viejo', () => {
+  it('la ruta completa en su orden, los no visitados marcados y los de fuera de ruta al final', () => {
+    const d = armarDetalleVendedor(base, {
+      ...vacio,
+      ruta: [
+        { clienteId: 'c1', cliente: 'Uno', orden: 1 },
+        { clienteId: 'c2', cliente: 'Dos', orden: 2 },
+        { clienteId: 'c3', cliente: 'Tres', orden: 3 },
+      ],
+      ventas: [
+        venta({
+          ventaId: 'a',
+          clienteId: 'c2',
+          cliente: 'Dos',
+          hora: '2026-11-07T18:00:00.000Z',
+        }),
+        venta({
+          ventaId: 'b',
+          clienteId: 'c9',
+          cliente: 'Fuera',
+          hora: '2026-11-07T19:00:00.000Z',
+        }),
+      ],
+      visitasSinVenta: [
+        {
+          vendedor: 'Ana',
+          clienteId: 'c3',
+          cliente: 'Tres',
+          hora: '2026-11-07T17:00:00.000Z',
+          motivo: 'Tenía producto',
+          atendio: 'Mimi',
+          comentario: 'Aún tenía',
+        },
+      ],
+    });
+    expect(d.visitas.map((v) => [v.cliente, v.visitado, v.vendio])).toEqual([
+      ['Uno', false, false],
+      ['Dos', true, true],
+      ['Tres', true, false],
+      ['Fuera', true, true],
+    ]);
+    expect(d.visitas[0]).toMatchObject({
+      hora: null,
+      motivo: null,
+      atendio: null,
+      comentario: null,
+    });
+    expect(d.visitas[2]).toMatchObject({
+      motivo: 'Tenía producto',
+      atendio: 'Mimi',
+    });
   });
 });

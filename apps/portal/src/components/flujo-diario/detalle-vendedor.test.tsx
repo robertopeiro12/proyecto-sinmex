@@ -64,8 +64,9 @@ const DETALLE: DetalleVendedorDia = {
   notasCredito: [{ folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null }],
   notasNoEntregadas: [],
   visitas: [
-    { cliente: "Tyco Cge", vendio: true, hora: "2026-11-09T16:42:00.000Z", motivo: null, atendio: null, comentario: null },
-    { cliente: "Abarrotes Mary", vendio: false, hora: "2026-11-09T17:15:00.000Z", motivo: "Tiene producto", atendio: "Mary", comentario: "Pasar el jueves" },
+    { cliente: "Schlage Tecate", visitado: false, vendio: false, hora: null, motivo: null, atendio: null, comentario: null },
+    { cliente: "Tyco Cge", visitado: true, vendio: true, hora: "2026-11-09T16:42:00.000Z", motivo: null, atendio: null, comentario: null },
+    { cliente: "Abarrotes Mary", visitado: true, vendio: false, hora: "2026-11-09T17:15:00.000Z", motivo: "Tiene producto", atendio: "Mary", comentario: "Pasar el jueves" },
   ],
   promociones: [{ cliente: "Don Gallo", producto: "Horchata 500 ml", cantidad: 4 }],
   corte: null,
@@ -163,11 +164,16 @@ describe("DetalleVendedor", () => {
     expect(within(screen.getByRole("table", { name: "Corte" })).getByText("Quedó a favor del cliente")).toBeInTheDocument();
   });
 
-  it("Visitas en hora de Tijuana; Notas de ventas y promociones por cliente", async () => {
+  it("Ruta (las visitas, como el viejo) en hora de Tijuana; Notas de ventas y promociones por cliente", async () => {
     const u = userEvent.setup();
     render(<DetalleVendedor detalle={DETALLE} modo="flujo" />);
-    await u.click(screen.getByRole("tab", { name: "Visitas" }));
+    expect(screen.queryByRole("tab", { name: "Visitas" })).not.toBeInTheDocument();
+    await u.click(screen.getByRole("tab", { name: "Ruta" }));
     expect(screen.getByText("8:42")).toBeInTheDocument();
+    // El cliente de la ruta que no se visitó: Vendió No y "Cliente no visitado" en la hora.
+    const noVisitado = within(screen.getByRole("table", { name: "Ruta" })).getByText("Schlage Tecate").closest("tr")!;
+    expect(noVisitado).toHaveTextContent("No");
+    expect(noVisitado).toHaveTextContent("Cliente no visitado");
     expect(screen.getByText("Pasar el jueves")).toBeInTheDocument();
     await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
     expect(within(screen.getByRole("tabpanel")).getByText("TJ261109RB10")).toBeInTheDocument();

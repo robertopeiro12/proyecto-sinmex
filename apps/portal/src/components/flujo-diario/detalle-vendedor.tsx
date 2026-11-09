@@ -53,7 +53,7 @@ export function DetalleVendedor({
     { valor: "cobranza", etiqueta: "Cobranza", contenido: <PestanaCobranza detalle={detalle} /> },
     { valor: "gastos", etiqueta: "Gastos", contenido: <PestanaGastos gastos={detalle.gastos} /> },
     { valor: "notas", etiqueta: "Notas de ventas", contenido: <PestanaNotasCredito detalle={detalle} modo={modo} onGuardadas={onNotasGuardadas} /> },
-    { valor: "visitas", etiqueta: "Visitas", contenido: <PestanaVisitas visitas={detalle.visitas} /> },
+    { valor: "visitas", etiqueta: "Ruta", contenido: <PestanaVisitas visitas={detalle.visitas} /> },
     {
       valor: "mermas",
       etiqueta: "Mermas/Cambios/Promociones",

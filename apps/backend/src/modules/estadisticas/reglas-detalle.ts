@@ -37,8 +37,10 @@ export interface Corte {
 
 export interface VisitaDetalle {
   cliente: string;
+  /** false = cliente de su ruta que no visitó (el viejo: "Cliente no visitado"). */
+  visitado: boolean;
   vendio: boolean;
-  /** ISO (UTC); el portal la pinta en hora de Tijuana. */
+  /** ISO (UTC); el portal la pinta en hora de Tijuana. null si no se visitó. */
   hora: string | null;
   motivo: string | null;
   atendio: string | null;
@@ -157,11 +159,19 @@ export interface GastoFila {
 
 export interface VisitaSinVentaFila {
   vendedor: string;
+  clienteId: string;
   cliente: string;
   hora: string;
   motivo: string;
   atendio: string | null;
   comentario: string | null;
+}
+
+/** Un cliente de la ruta diaria del vendedor ese dia, en su orden. */
+export interface RutaFila {
+  clienteId: string;
+  cliente: string;
+  orden: number;
 }
 
 export interface PromoFila {
@@ -265,6 +275,8 @@ export function armarDetalleVendedor(
     promociones: PromoFila[];
     /** Las trae aparte el servicio; sin ellas, ninguna. */
     noEntregadas?: NotaNoEntregada[];
+    /** Su ruta diaria de ese dia; sin ella, solo los clientes que atendió. */
+    ruta?: RutaFila[];
   },
 ): DetalleVendedorDia {
   const ventas = [...filas.ventas].sort(
@@ -313,9 +325,14 @@ export function armarDetalleVendedor(
   const suma = (xs: { montoCentavos: number }[]) =>
     xs.reduce((s, x) => s + x.montoCentavos, 0);
 
-  const visitas: VisitaDetalle[] = mezclarVisitas([
+  // Como el viejo (ventana "Visitas", aqui la pestaña "Ruta"): los clientes de su ruta en su
+  // orden, con lo que paso en cada uno o "Cliente no visitado"; despues los que atendio fuera
+  // de ruta, por hora.
+  const atendidos = mezclarVisitas([
     ...ventas.map((v) => ({
+      clienteId: v.clienteId,
       cliente: v.cliente,
+      visitado: true,
       vendio: true,
       hora: v.hora,
       motivo: null,
@@ -323,7 +340,9 @@ export function armarDetalleVendedor(
       comentario: null,
     })),
     ...filas.visitasSinVenta.map((v) => ({
+      clienteId: v.clienteId,
       cliente: v.cliente,
+      visitado: true,
       vendio: false,
       hora: v.hora,
       motivo: v.motivo,
@@ -331,6 +350,35 @@ export function armarDetalleVendedor(
       comentario: v.comentario,
     })),
   ]);
+  const ruta = [...(filas.ruta ?? [])].sort((a, b) => a.orden - b.orden);
+  const enRuta = new Set(ruta.map((r) => r.clienteId));
+  const sinId = (a: (typeof atendidos)[number]): VisitaDetalle => ({
+    cliente: a.cliente,
+    visitado: a.visitado,
+    vendio: a.vendio,
+    hora: a.hora,
+    motivo: a.motivo,
+    atendio: a.atendio,
+    comentario: a.comentario,
+  });
+  const visitas: VisitaDetalle[] = [
+    ...ruta.flatMap((r): VisitaDetalle[] => {
+      const suyos = atendidos.filter((a) => a.clienteId === r.clienteId);
+      if (suyos.length > 0) return suyos.map(sinId);
+      return [
+        {
+          cliente: r.cliente,
+          visitado: false,
+          vendio: false,
+          hora: null,
+          motivo: null,
+          atendio: null,
+          comentario: null,
+        },
+      ];
+    }),
+    ...atendidos.filter((a) => !enRuta.has(a.clienteId)).map(sinId),
+  ];
 
   let corte: Corte | null = null;
   if (base.jornadaCerrada) {
@@ -459,6 +507,7 @@ export function armarDetalleDia(
     ...filas.ventas.map((v) => ({
       vendedor: v.vendedor,
       cliente: v.cliente,
+      visitado: true,
       vendio: true,
       hora: v.hora,
       motivo: null as string | null,
@@ -467,6 +516,7 @@ export function armarDetalleDia(
     ...filas.visitasSinVenta.map((v) => ({
       vendedor: v.vendedor,
       cliente: v.cliente,
+      visitado: true,
       vendio: false,
       hora: v.hora,
       motivo: v.motivo,

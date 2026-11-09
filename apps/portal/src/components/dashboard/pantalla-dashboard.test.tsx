@@ -230,6 +230,15 @@ describe("PantallaDashboard", () => {
     expect(screen.getByRole("table", { name: "Corte" })).toBeInTheDocument();
   });
 
+  it("picar la Ruta x / y abre la pestaña Ruta (las visitas), como el viejo", async () => {
+    mockAuth([PERMISO]);
+    const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PantallaDashboard sucursal="TJ" />);
+    const tabla = await screen.findByRole("table", { name: "Vendedores de hoy" });
+    await u.click(within(tabla).getByRole("button", { name: "Ruta de Ricardo" }));
+    expect(await screen.findByRole("tab", { name: "Ruta" })).toHaveAttribute("aria-selected", "true");
+  });
+
   it("el resumen dice cuántos vendedores en ruta y cuántos terminaron", async () => {
     mockAuth([PERMISO]);
     render(<PantallaDashboard sucursal="TJ" />);

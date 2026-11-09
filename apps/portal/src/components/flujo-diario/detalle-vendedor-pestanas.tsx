@@ -373,14 +373,22 @@ function NotasDashboard({ detalle, onGuardadas }: { detalle: DetalleVendedorDia;
   );
 }
 
+/**
+ * La pestaña "Ruta" (la ventana "Visitas" del sistema viejo, que se abre al picar Ruta): los
+ * clientes de su ruta en su orden, con "Cliente no visitado" en los que faltaron, y después los
+ * que atendió fuera de ruta.
+ */
 export function PestanaVisitas({ visitas }: { visitas: VisitaDetalle[] }) {
-  if (visitas.length === 0) return <SinDatos>Sin visitas este día.</SinDatos>;
+  if (visitas.length === 0) return <SinDatos>Sin ruta ni visitas este día.</SinDatos>;
+  const visitados = visitas.filter((v) => v.visitado).length;
   const conVenta = visitas.filter((v) => v.vendio).length;
   return (
     <div>
-      <TituloBloque extra={`${conVenta} con venta · ${visitas.length - conVenta} sin venta`}>Visitas</TituloBloque>
+      <TituloBloque extra={`${visitados} visitados · ${conVenta} con venta · ${visitas.length - visitados} no visitados`}>
+        Ruta
+      </TituloBloque>
       <CajaTabla>
-        <Tabla densidad="compacta" aria-label="Visitas">
+        <Tabla densidad="compacta" aria-label="Ruta">
           <thead>
             <tr>
               <Th>Cliente</Th>
@@ -398,7 +406,9 @@ export function PestanaVisitas({ visitas }: { visitas: VisitaDetalle[] }) {
                 <Td>
                   <EtiquetaVendio vendio={v.vendio} />
                 </Td>
-                <Td className="whitespace-nowrap">{horaTijuana(v.hora)}</Td>
+                <Td className={`whitespace-nowrap ${v.visitado ? "" : "text-muted-foreground"}`}>
+                  {v.visitado ? horaTijuana(v.hora) : "Cliente no visitado"}
+                </Td>
                 <Td>{v.motivo ?? ""}</Td>
                 <Td>{v.atendio ?? ""}</Td>
                 <Td>{v.comentario ?? ""}</Td>

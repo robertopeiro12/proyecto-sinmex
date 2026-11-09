@@ -998,6 +998,7 @@ describe('Flujo diario (e2e)', () => {
       // La visita sin venta (9:15 de Tijuana = 16:15Z) sale antes que la venta.
       expect(d.visitas[0]).toEqual({
         cliente: `Cliente 2 ${SUFIJO}`,
+        visitado: true,
         vendio: false,
         hora: '2018-05-14T16:15:00.000Z',
         motivo: `fd ${SUFIJO} Cerrado`,
@@ -1013,6 +1014,22 @@ describe('Flujo diario (e2e)', () => {
         gastoCentavos: 4500,
         tesoreriaCentavos: 21500,
       });
+    });
+
+    it('Ruta: los clientes de su ruta en su orden y "Cliente no visitado" (como el viejo)', async () => {
+      const d = (
+        await detalleVendedor(cookieGeneral, {
+          fecha: '2018-05-07',
+          vendedor: ana,
+        }).expect(200)
+      ).body as DetalleVendedorDia;
+      // Ana 05-07: ruta c1, c2, c3; vendio a c1, visita sin venta a c2, c3 sin visitar.
+      expect(d.visitas.map((v) => [v.cliente, v.visitado, v.vendio])).toEqual([
+        [`Cliente 1 ${SUFIJO}`, true, true],
+        [`Cliente 2 ${SUFIJO}`, true, false],
+        [`Cliente 3 ${SUFIJO}`, false, false],
+      ]);
+      expect(d.visitas[2].hora).toBeNull();
     });
 
     it('el corte y las listas suman lo mismo que el renglon del reporte', async () => {

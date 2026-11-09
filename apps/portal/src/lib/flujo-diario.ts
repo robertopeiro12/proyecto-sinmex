@@ -131,8 +131,10 @@ export interface Corte {
 
 export interface VisitaDetalle {
   cliente: string;
+  /** false = cliente de su ruta que no visitó (el viejo: "Cliente no visitado"). */
+  visitado: boolean;
   vendio: boolean;
-  /** ISO (UTC); el portal la pinta en hora de Tijuana. */
+  /** ISO (UTC); el portal la pinta en hora de Tijuana. null si no se visitó. */
   hora: string | null;
   motivo: string | null;
   atendio: string | null;

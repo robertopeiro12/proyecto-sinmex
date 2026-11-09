@@ -652,6 +652,9 @@ usuario con sesion pasa.
       venta viva a crédito de ese vendedor de hoy o antes = 400 y no se guarda nada. **No mueve `updated_at`**: el
       trigger `set_updated_at_venta_nota()` lo conserva cuando solo cambian las columnas `papel_*`. El detalle trae
       `notasCredito[].entregada` y `notasNoEntregadas` (días anteriores, `false` y con pendiente).
+    - **Pestaña "Ruta"** (la ventana "Visitas" del viejo, que se abre al picar *Ruta*, también el "x / y" del
+      Dashboard): los clientes de su **ruta diaria en su orden** con lo que pasó en cada uno, o `visitado: false` →
+      "Cliente no visitado"; después los atendidos fuera de ruta, por hora (`armarDetalleVendedor`).
     - **Liquidada** se lee de `abono.saldo_pendiente` (la nota quedó en cero con ese abono), no se recalcula.
     - **Alcance:** un parámetro `sucursal` ajeno responde **403**; un `vendedor` ajeno responde **404** (no confirma que
       exista). Con "Todas" hay un bloque por sucursal.
