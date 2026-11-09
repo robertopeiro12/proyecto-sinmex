@@ -12,7 +12,7 @@ export const navSections: NavSection[] = [
   {
     label: "Operación",
     items: [
-      { label: "Dashboard", href: "/operacion", pronto: true },
+      { label: "Dashboard", href: "/operacion" },
       { label: "Registrar venta", href: "/operacion/registrar-venta" },
       { label: "Ventas", href: "/operacion/ventas" },
       { label: "Facturas", href: "/operacion/facturas" },

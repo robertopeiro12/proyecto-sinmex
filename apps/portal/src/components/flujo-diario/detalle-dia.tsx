@@ -29,14 +29,20 @@ export type PestanaDetalleDia = "ventas" | "cobranza" | "gastos" | "mermas" | "p
 export function DetalleDia({
   detalle,
   pestanaInicial = "ventas",
+  onCambioPestana,
 }: {
   detalle: DatosDetalleDia;
   pestanaInicial?: PestanaDetalleDia;
+  /** Avisa la pestaña que eligió el usuario, para que el renglón la recuerde. */
+  onCambioPestana?: (pestana: PestanaDetalleDia) => void;
 }) {
+  // Solo cuenta al montarse (Pestanas no es controlada); para mandar a otra pestaña se cambia la `key`.
+  const [inicial] = useState(pestanaInicial);
   return (
     <Pestanas
       etiqueta="Detalle del día"
-      valorInicial={pestanaInicial}
+      valorInicial={inicial}
+      onCambio={(valor) => onCambioPestana?.(valor as PestanaDetalleDia)}
       pestanas={[
         { valor: "ventas", etiqueta: "Ventas", contenido: <PestanaVentas detalle={detalle} /> },
         { valor: "cobranza", etiqueta: "Cobranza", contenido: <PestanaCobranzaDia detalle={detalle} /> },

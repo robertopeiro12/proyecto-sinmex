@@ -31,7 +31,7 @@ export function TablaPorDia({
   flujo: FlujoDiario;
   nombreSucursal: (codigo: string) => string;
 }) {
-  const { abierto, estado, alternar, abrirEn } = useDetalleAbierto<DatosDetalleDia, PestanaDetalleDia>((clave) => {
+  const { abierto, estado, alternar, abrirEn, cambiarPestana } = useDetalleAbierto<DatosDetalleDia, PestanaDetalleDia>((clave) => {
     const dia = flujo.porDia.find((d) => claveDe(d) === clave)!;
     return obtenerDetalleDia({ fecha: dia.fecha, sucursal: dia.sucursalCodigo });
   }, "ventas");
@@ -86,7 +86,14 @@ export function TablaPorDia({
         </Fila>
         {estaAbierto && (
           <FilaDetalle columnas={COLUMNAS} estado={estado}>
-            {(detalle) => <DetalleDia key={abierto.pestana} detalle={detalle} pestanaInicial={abierto.pestana} />}
+            {(detalle) => (
+              <DetalleDia
+                key={abierto.vez}
+                detalle={detalle}
+                pestanaInicial={abierto.pestana}
+                onCambioPestana={cambiarPestana}
+              />
+            )}
           </FilaDetalle>
         )}
       </Fragment>

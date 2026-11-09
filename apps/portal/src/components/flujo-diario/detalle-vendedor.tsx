@@ -31,15 +31,18 @@ export type PestanaDetalleVendedor =
  * El detalle de un vendedor en un día, abierto bajo su renglón (spec §5.2 y §5.3). Lo usan
  * el Flujo diario (`modo="flujo"`, sin Corte) y el Dashboard (`modo="dashboard"`).
  * `pestanaInicial`: picar un número del renglón abre su pestaña (Cobranza, Gastos…).
+ * `onCambioPestana`: avisa la pestaña que eligió el usuario, para que el renglón la recuerde.
  */
 export function DetalleVendedor({
   detalle,
   modo,
   pestanaInicial = "venta",
+  onCambioPestana,
 }: {
   detalle: DetalleVendedorDia;
   modo: "flujo" | "dashboard";
   pestanaInicial?: PestanaDetalleVendedor;
+  onCambioPestana?: (pestana: PestanaDetalleVendedor) => void;
 }) {
   const pestanas = [
     { valor: "venta", etiqueta: "Venta general", contenido: <PestanaVentaGeneral detalle={detalle} /> },
@@ -57,8 +60,17 @@ export function DetalleVendedor({
       : []),
     { valor: "inventario", etiqueta: "Inventario · pronto", contenido: null, deshabilitada: true },
   ];
-  const inicial = pestanaInicial === "corte" && modo !== "dashboard" ? "venta" : pestanaInicial;
-  return <Pestanas etiqueta={`Detalle de ${detalle.vendedor}`} pestanas={pestanas} valorInicial={inicial} />;
+  // Solo cuenta al montarse (Pestanas no es controlada): quien quiera mandar a otra pestaña
+  // le cambia la `key`. Así recordar la que eligió el usuario no la vuelve a fijar.
+  const [inicial] = useState(() => (pestanaInicial === "corte" && modo !== "dashboard" ? "venta" : pestanaInicial));
+  return (
+    <Pestanas
+      etiqueta={`Detalle de ${detalle.vendedor}`}
+      pestanas={pestanas}
+      valorInicial={inicial}
+      onCambio={(valor) => onCambioPestana?.(valor as PestanaDetalleVendedor)}
+    />
+  );
 }
 
 type Vista = "producto" | "cliente";

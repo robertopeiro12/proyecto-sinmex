@@ -181,6 +181,23 @@ describe("PantallaFlujoDiario", () => {
     expect(screen.getByRole("tab", { name: "Cobranza" })).toHaveAttribute("aria-selected", "true");
   });
 
+  it("picar un número abre su pestaña aunque se haya cambiado de pestaña dentro del detalle", async () => {
+    mockAuth([PERMISO]);
+    const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PantallaFlujoDiario sucursal="TJ" />);
+    await u.click(await screen.findByRole("button", { name: "Cobranza de Ricardo" }));
+    expect(await screen.findByRole("tab", { name: "Cobranza" })).toHaveAttribute("aria-selected", "true");
+    await u.click(screen.getByRole("tab", { name: "Gastos" }));
+    expect(screen.getByRole("tab", { name: "Gastos" })).toHaveAttribute("aria-selected", "true");
+    // Antes el renglón recordaba "Cobranza" y este clic cerraba el detalle.
+    await u.click(screen.getByRole("button", { name: "Cobranza de Ricardo" }));
+    expect(screen.getByRole("tab", { name: "Cobranza" })).toHaveAttribute("aria-selected", "true");
+    // Y ahora sí, otra vez el mismo número lo cierra.
+    await u.click(screen.getByRole("button", { name: "Cobranza de Ricardo" }));
+    expect(screen.queryByRole("tab", { name: "Cobranza" })).not.toBeInTheDocument();
+    expect(obtenerDetalle).toHaveBeenCalledTimes(1);
+  });
+
   it("Por día: picar la fecha pide el detalle de ese día y sucursal", async () => {
     mockAuth([PERMISO]);
     obtenerFlujo.mockResolvedValue(DOS_SUCURSALES);

@@ -31,7 +31,7 @@ export function TablaPorVendedor({
   flujo: FlujoDiario;
   nombreSucursal: (codigo: string) => string;
 }) {
-  const { abierto, estado, alternar, abrirEn } = useDetalleAbierto<
+  const { abierto, estado, alternar, abrirEn, cambiarPestana } = useDetalleAbierto<
     Awaited<ReturnType<typeof obtenerDetalleVendedor>>,
     PestanaDetalleVendedor
   >((clave) => {
@@ -91,7 +91,15 @@ export function TablaPorVendedor({
         </Fila>
         {estaAbierto && (
           <FilaDetalle columnas={COLUMNAS} estado={estado}>
-            {(detalle) => <DetalleVendedor key={abierto.pestana} detalle={detalle} modo="flujo" pestanaInicial={abierto.pestana} />}
+            {(detalle) => (
+              <DetalleVendedor
+                key={abierto.vez}
+                detalle={detalle}
+                modo="flujo"
+                pestanaInicial={abierto.pestana}
+                onCambioPestana={cambiarPestana}
+              />
+            )}
           </FilaDetalle>
         )}
       </Fragment>
