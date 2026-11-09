@@ -37,11 +37,12 @@ const iso = (col: string) =>
 export class DetalleRepository {
   constructor(@Inject(DB_CONNECTION) private readonly db: Database) {}
 
+  /** Tambien un vendedor dado de baja: tiene historia en el reporte. */
   async buscarVendedor(id: string) {
     const r = await sql<{ id: string; nombre: string; codigo: string }>`
       select v.id, v.nombre, s.codigo
         from vendedor v join sucursal s on s.id = v.sucursal_id
-       where v.id = ${id}::uuid and v.deleted_at is null
+       where v.id = ${id}::uuid
     `.execute(this.db);
     return r.rows[0] ?? null;
   }
@@ -114,12 +115,14 @@ export class DetalleRepository {
       cliente: string;
       vendedor_id: string;
       vendedor: string;
+      cliente_id: string;
       contado_credito: 'contado' | 'credito';
       total: string;
       pendiente: string;
       hora: string;
     }>`
-      select vn.id, vn.folio, cl.nombre as cliente, v.id as vendedor_id,
+      select vn.id, vn.folio, cl.nombre as cliente, cl.id as cliente_id,
+             v.id as vendedor_id,
              v.nombre as vendedor, vn.contado_credito,
              vn.monto_total::text as total,
              greatest(vn.monto_total - coalesce((
@@ -134,6 +137,7 @@ export class DetalleRepository {
         left join lateral (
           select so.ocurrido_en from sync_operacion so
            where so.entidad_tabla = 'venta_nota' and so.entidad_id = vn.id
+             and so.vendedor_id = vn.vendedor_id
            order by so.ocurrido_en limit 1
         ) op on true
        where vn.deleted_at is null and vn.fecha = ${fecha}::date and ${cond}
@@ -144,6 +148,7 @@ export class DetalleRepository {
       cliente: x.cliente,
       vendedorId: x.vendedor_id,
       vendedor: x.vendedor,
+      clienteId: x.cliente_id,
       contadoCredito: x.contado_credito,
       totalCentavos: aCentavos(x.total),
       pendienteCentavos: aCentavos(x.pendiente),

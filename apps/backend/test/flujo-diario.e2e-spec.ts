@@ -53,7 +53,6 @@ describe('Flujo diario (e2e)', () => {
   let eva: string;
   let vendedorOtra: string;
   let idOtra: string;
-  let c1Id: string;
   let folios = 0;
 
   const iniciarSesion = async (login: string): Promise<string> => {
@@ -354,7 +353,6 @@ describe('Flujo diario (e2e)', () => {
     dani = await sembrarVendedor('Dani');
     eva = await sembrarVendedor('Eva');
     const c1 = await sembrarCliente('Cliente 1');
-    c1Id = c1;
     const c2 = await sembrarCliente('Cliente 2');
     const c3 = await sembrarCliente('Cliente 3');
     const c4 = await sembrarCliente('Cliente 4');
@@ -955,14 +953,14 @@ describe('Flujo diario (e2e)', () => {
       ]);
       expect(d.porProducto).toEqual([
         {
-          presentacion: '1 L',
-          producto: `Horchata fd ${SUFIJO} 1 L`,
-          piezas: 12,
-        },
-        {
           presentacion: '500 ml',
           producto: `Horchata fd ${SUFIJO} 500 ml`,
           piezas: 8,
+        },
+        {
+          presentacion: '1 L',
+          producto: `Horchata fd ${SUFIJO} 1 L`,
+          piezas: 12,
         },
       ]);
       expect(d.cobranza.contado).toHaveLength(1);
@@ -1068,7 +1066,7 @@ describe('Flujo diario (e2e)', () => {
           vendedor: eva,
         }).expect(200)
       ).body as DetalleVendedorDia;
-      expect(JSON.stringify(eva14)).not.toContain('6600');
+      expect(eva14.notas.map((n) => n.totalCentavos)).toEqual([13000]);
       expect(eva14.notas).toHaveLength(1);
     });
 
@@ -1110,16 +1108,16 @@ describe('Flujo diario (e2e)', () => {
       ).body as DetalleDia;
       expect(d.sucursalCodigo).toBe(CODIGO);
       expect(d.porPresentacion).toEqual([
-        { presentacion: '1 L', piezas: 12 },
         { presentacion: '500 ml', piezas: 8 },
+        { presentacion: '1 L', piezas: 12 },
       ]);
       expect(d.porVendedor).toEqual([
-        { vendedor: `Eva ${SUFIJO}`, presentacion: '1 L', piezas: 12 },
         { vendedor: `Eva ${SUFIJO}`, presentacion: '500 ml', piezas: 8 },
+        { vendedor: `Eva ${SUFIJO}`, presentacion: '1 L', piezas: 12 },
       ]);
       expect(d.porCliente).toEqual([
-        { cliente: `Cliente 1 ${SUFIJO}`, presentacion: '1 L', piezas: 12 },
         { cliente: `Cliente 1 ${SUFIJO}`, presentacion: '500 ml', piezas: 8 },
+        { cliente: `Cliente 1 ${SUFIJO}`, presentacion: '1 L', piezas: 12 },
       ]);
       const oficina = d.cobranza.filter((p) => p.cobrador === null);
       expect(oficina).toHaveLength(1);
@@ -1157,10 +1155,32 @@ describe('Flujo diario (e2e)', () => {
         d.aFavor.reduce((s, p) => s + p.montoCentavos, 0);
       // Ventas de contado de Eva (13000) + anteriores 10000 + a favor 3000 + oficina 4000.
       expect(total).toBe(dia?.totales.cobranzaCentavos);
-      expect(c1Id).toBeDefined();
     });
 
-    it('dia: sucursal fuera del alcance 403, "todas" 400, codigo desconocido 404, atado sin pedirla usa la suya', async () => {
+    it('un vendedor dado de baja con historia se puede abrir', async () => {
+      await db
+        .updateTable('vendedor')
+        .set({ deleted_at: new Date() })
+        .where('id', '=', dani)
+        .execute();
+      try {
+        const d = (
+          await detalleVendedor(cookieGeneral, {
+            fecha: '2018-05-09',
+            vendedor: dani,
+          }).expect(200)
+        ).body as DetalleVendedorDia;
+        expect(d.gastos).toHaveLength(1);
+      } finally {
+        await db
+          .updateTable('vendedor')
+          .set({ deleted_at: null })
+          .where('id', '=', dani)
+          .execute();
+      }
+    });
+
+    it('dia: sucursal fuera del alcance 403, "todas" 400, codigo desconocido 404, atado a FD con su sucursal 200', async () => {
       await detalleDia(cookieFd, {
         fecha: '2018-05-14',
         sucursal: 'FX',

@@ -96,6 +96,7 @@ export interface VentaFila {
   cliente: string;
   vendedorId: string;
   vendedor: string;
+  clienteId: string;
   contadoCredito: 'contado' | 'credito';
   totalCentavos: number;
   pendienteCentavos: number;
@@ -151,8 +152,31 @@ export interface PromoFila {
   cantidad: number;
 }
 
+/**
+ * Mililitros de una etiqueta de volumen: "500 ml" = 500, "1 Lt" / "1 L" = 1000,
+ * "1.5 Lt" = 1500. `null` si no se entiende.
+ */
+export function mililitros(etiqueta: string): number | null {
+  const m = /^\s*(\d+(?:[.,]\d+)?)\s*(ml|l|lt|lts|litro|litros)\s*$/i.exec(
+    etiqueta,
+  );
+  if (!m) return null;
+  const n = Number(m[1].replace(',', '.'));
+  return m[2].toLowerCase() === 'ml' ? n : n * 1000;
+}
+
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 /** Los null (Oficina) al final. */
+/** Por volumen numerico; lo que no se entiende, al final y por texto. */
+export function cmpVolumen(a: string, b: string): number {
+  const x = mililitros(a);
+  const y = mililitros(b);
+  if (x !== null && y !== null) return x - y || cmp(a, b);
+  if (x !== null) return -1;
+  if (y !== null) return 1;
+  return cmp(a, b);
+}
+
 const cmpNulo = (a: string | null, b: string | null) =>
   a === b ? 0 : a === null ? 1 : b === null ? -1 : cmp(a, b);
 
@@ -236,7 +260,7 @@ export function armarDetalleVendedor(
     (x) => `${x.presentacion}|${x.producto}`,
   ).sort(
     (a, b) =>
-      cmp(a.presentacion, b.presentacion) ||
+      cmpVolumen(a.presentacion, b.presentacion) ||
       b.piezas - a.piezas ||
       cmp(a.producto, b.producto),
   );
@@ -363,7 +387,7 @@ export function armarDetalleDia(
       piezas: linea.cantidad,
     })),
     (x) => x.presentacion,
-  ).sort((a, b) => cmp(a.presentacion, b.presentacion));
+  ).sort((a, b) => cmpVolumen(a.presentacion, b.presentacion));
 
   const porProducto = agrupar(
     conVenta.map(({ linea }) => ({
@@ -375,25 +399,32 @@ export function armarDetalleDia(
 
   const porVendedor = agrupar(
     conVenta.map(({ venta, linea }) => ({
+      vendedorId: venta.vendedorId,
       vendedor: venta.vendedor,
       presentacion: linea.presentacion,
       piezas: linea.cantidad,
     })),
-    (x) => `${x.vendedor}|${x.presentacion}`,
+    (x) => `${x.vendedorId}|${x.presentacion}`,
   ).sort(
     (a, b) =>
-      cmp(a.vendedor, b.vendedor) || cmp(a.presentacion, b.presentacion),
+      cmp(a.vendedor, b.vendedor) ||
+      cmp(a.vendedorId, b.vendedorId) ||
+      cmpVolumen(a.presentacion, b.presentacion),
   );
 
   const porCliente = agrupar(
     conVenta.map(({ venta, linea }) => ({
+      clienteId: venta.clienteId,
       cliente: venta.cliente,
       presentacion: linea.presentacion,
       piezas: linea.cantidad,
     })),
-    (x) => `${x.cliente}|${x.presentacion}`,
+    (x) => `${x.clienteId}|${x.presentacion}`,
   ).sort(
-    (a, b) => cmp(a.cliente, b.cliente) || cmp(a.presentacion, b.presentacion),
+    (a, b) =>
+      cmp(a.cliente, b.cliente) ||
+      cmp(a.clienteId, b.clienteId) ||
+      cmpVolumen(a.presentacion, b.presentacion),
   );
 
   const promos = new Map<string, number>();
@@ -424,8 +455,16 @@ export function armarDetalleDia(
     sucursalCodigo: base.sucursalCodigo,
     porPresentacion,
     porProducto,
-    porVendedor,
-    porCliente,
+    porVendedor: porVendedor.map(({ vendedor, presentacion, piezas }) => ({
+      vendedor,
+      presentacion,
+      piezas,
+    })),
+    porCliente: porCliente.map(({ cliente, presentacion, piezas }) => ({
+      cliente,
+      presentacion,
+      piezas,
+    })),
     cobranza: [...filas.pagos]
       .sort(
         (a, b) =>

@@ -1,5 +1,6 @@
 import {
   armarDetalleDia,
+  cmpVolumen,
   armarDetalleVendedor,
   type PagoFila,
   type VentaFila,
@@ -37,6 +38,7 @@ const venta = (extra: Partial<VentaFila>): VentaFila => ({
   cliente: 'C',
   vendedorId: 'v1',
   vendedor: 'Ana',
+  clienteId: 'c1',
   contadoCredito: 'contado',
   totalCentavos: 1000,
   pendienteCentavos: 0,
@@ -208,5 +210,43 @@ describe('armarDetalleDia', () => {
       },
     );
     expect(d.cobranza.map((p) => p.cobrador)).toEqual(['Ana', null]);
+  });
+});
+
+describe('volumen', () => {
+  it('ordena por mililitros, no por texto', () => {
+    const l = ['1.5 Lt', '355 ml', '1 Lt', '600 ml', '500 ml', 'Galon'];
+    expect([...l].sort(cmpVolumen)).toEqual([
+      '355 ml',
+      '500 ml',
+      '600 ml',
+      '1 Lt',
+      '1.5 Lt',
+      'Galon',
+    ]);
+  });
+});
+
+describe('armarDetalleDia agrupa por id', () => {
+  it('dos clientes con el mismo nombre no se mezclan', () => {
+    const d = armarDetalleDia(
+      { fecha: '2026-11-07', sucursalCodigo: 'TJ' },
+      {
+        ...vacio,
+        ventas: [
+          venta({ ventaId: 'a', clienteId: 'c1', vendedorId: 'v1' }),
+          venta({ ventaId: 'b', clienteId: 'c2', vendedorId: 'v2' }),
+        ],
+        lineas: ['a', 'b'].map((ventaId) => ({
+          ventaId,
+          presentacion: '1 L',
+          producto: 'Agua 1 L',
+          cantidad: 2,
+          precioCentavos: 1,
+        })),
+      },
+    );
+    expect(d.porCliente).toHaveLength(2);
+    expect(d.porVendedor).toHaveLength(2);
   });
 });
