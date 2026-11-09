@@ -1,0 +1,229 @@
+<h2>Dashboard — con el diseño de nuestro portal</h2>
+<p class="subtitle">Del sistema viejo solo los datos y su estructura; todo lo demás son nuestras piezas (EncabezadoPantalla, Tabla, Pestanas, Etiqueta). Tijuana elegida en la barra lateral. Números de ejemplo.</p>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700&family=Public+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  .jw { --bg:#ffffff; --fg:#18211d; --muted:#5f6b65; --menu:#f2f4f1; --accent:#e8ece7; --border:#dde2dd; --suc:#1d5b79;
+        --ok:#1f7a4d; --ok-s:#e6f3ec; --warn:#8a4f06; --warn-s:#fdf3e1; --info:#3d5566; --info-s:#eaf0f4;
+        font-family:"Public Sans", system-ui, sans-serif; color:var(--fg); font-size:14px; font-variant-numeric:tabular-nums;
+        display:flex; border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--bg); min-width:1100px }
+  .jw * { box-sizing:border-box }
+  .jw aside { width:232px; background:var(--menu); border-right:1px solid var(--border); padding:16px 10px; flex-shrink:0 }
+  .jw .logo { font-family:"Bricolage Grotesque"; font-size:20px; font-weight:700; padding:0 8px 12px }
+  .jw .suc-b { margin:0 4px 14px; padding:10px 12px; border-radius:8px; background:#fff; border:1px solid var(--border) }
+  .jw .suc-b small { display:block; color:var(--muted); font-size:11px }
+  .jw .suc-b b { font-family:"Bricolage Grotesque"; color:var(--suc); font-size:17px }
+  .jw .sec { font-size:13px; font-weight:600; padding:7px 8px }
+  .jw .it { font-size:13px; padding:6px 8px 6px 18px; border-radius:6px; color:var(--muted) }
+  .jw .it.on { background:#fff; color:var(--fg); font-weight:600; box-shadow:inset 3px 0 0 var(--suc) }
+  .jw main { flex:1; min-width:0; border-top:3px solid var(--suc); padding:26px 28px; display:flex; flex-direction:column; gap:20px }
+  .jw h1 { font-family:"Bricolage Grotesque"; font-size:28px; font-weight:700; margin:0; line-height:1.15 }
+  .jw .desc { color:var(--muted); font-size:14px; margin-top:6px }
+  .jw .hdr { display:flex; justify-content:space-between; align-items:flex-end; gap:16px }
+  .jw .vivo { font-size:12.5px; color:var(--muted); display:flex; align-items:center; gap:6px }
+  .jw .vivo i { width:8px; height:8px; border-radius:50%; background:var(--ok); display:inline-block }
+  .jw .res { display:grid; grid-template-columns:repeat(6,1fr); border:1px solid var(--border); border-radius:10px; overflow:hidden }
+  .jw .res div { padding:12px 14px; border-right:1px solid var(--border) } .jw .res div:last-child { border-right:0 }
+  .jw .res span { display:block; font-size:12px; color:var(--muted); margin-bottom:3px }
+  .jw .res b { font-size:18px; font-weight:700 }
+  .jw .res b.em { color:var(--suc) }
+  .jw .caja { border:1px solid var(--border); border-radius:10px; overflow:auto }
+  .jw table { width:100%; border-collapse:collapse; font-size:13px }
+  .jw th { background:var(--menu); color:var(--muted); font-size:12.5px; font-weight:600; text-align:left; padding:8px 8px; border-bottom:1px solid var(--border); white-space:normal; line-height:1.25 }
+  .jw td { padding:9px 8px; border-bottom:1px solid var(--border); vertical-align:middle; white-space:nowrap }
+  .jw .det td, .jw .mini td { white-space:normal } .jw .det td.fol, .jw .det td.r { white-space:nowrap }
+  .jw .r { text-align:right } .jw .c { text-align:center }
+  .jw tr.f:hover td { background:var(--menu) }
+  .jw tr.abierta > td { background:var(--menu) }
+  .jw .nom { font-weight:600 } .jw .sub { color:var(--muted); font-size:12px }
+  .jw .num-b { display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:6px; border:1px solid var(--border); background:#fff; font-weight:600; font-size:13px }
+  .jw .num-b:hover { border-color:var(--muted) }
+  .jw .num-b.cero { color:var(--muted); font-weight:400; border-color:transparent; background:transparent }
+  .jw .ver { font-size:12.5px; color:var(--fg); text-decoration:underline; text-decoration-color:var(--border); text-underline-offset:3px }
+  .jw .tag { display:inline-flex; border-radius:999px; padding:2px 10px; font-size:12px; font-weight:600; white-space:nowrap }
+  .jw .ok { background:var(--ok-s); color:var(--ok) } .jw .warn { background:var(--warn-s); color:var(--warn) } .jw .info { background:var(--info-s); color:var(--info) } .jw .neu { background:var(--menu); color:var(--muted) }
+  .jw .bar { height:5px; border-radius:3px; background:var(--accent); width:48px; margin-top:4px } .jw .bar i { display:block; height:5px; border-radius:3px; background:var(--suc) }
+  .jw .det { padding:16px 18px 20px; background:#fff; border-left:3px solid var(--suc) }
+  .jw .tabs { display:flex; gap:4px; border-bottom:1px solid var(--border); margin-bottom:16px }
+  .jw .tab { padding:8px 12px; font-size:13.5px; font-weight:500; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px }
+  .jw .tab.on { color:var(--fg); border-color:var(--suc) }
+  .jw .tab .n { font-size:11.5px; background:var(--menu); border-radius:999px; padding:0 6px; margin-left:4px; color:var(--muted) }
+  .jw .seg { display:inline-flex; border:1px solid var(--border); border-radius:8px; padding:2px; background:var(--menu); gap:2px }
+  .jw .seg span { padding:5px 14px; border-radius:6px; font-size:13px; font-weight:500; color:var(--muted) }
+  .jw .seg span.on { background:#fff; color:var(--fg); box-shadow:0 1px 2px rgba(0,0,0,.08) }
+  .jw .two { display:grid; grid-template-columns:1fr 1fr; gap:20px }
+  .jw .h3 { font-weight:600; font-size:13.5px; margin:0 0 8px; display:flex; justify-content:space-between; align-items:baseline }
+  .jw .h3 small { font-weight:400; color:var(--muted); font-size:12.5px }
+  .jw .mini th, .jw .mini td { padding:6px 10px; font-size:13px }
+  .jw .tot td { font-weight:700; border-top:2px solid var(--border); border-bottom:0 }
+  .jw .pbar { display:flex; align-items:center; gap:8px } .jw .pbar .bar { flex:1; width:auto; margin:0 }
+  .jw .fol { font-family:ui-monospace, monospace; font-size:12.5px }
+  .jw .prod-in td { background:var(--menu); color:var(--muted); font-size:12.5px; padding:5px 10px 5px 30px }
+  .jw .chk { display:inline-block; width:16px; height:16px; border:1.5px solid var(--muted); border-radius:4px; vertical-align:middle }
+  .jw .chk.on { background:var(--fg); border-color:var(--fg); position:relative } .jw .chk.on::after { content:"✓"; color:#fff; font-size:11px; position:absolute; left:2px; top:-1px }
+  .jw .btn { display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:8px; font-size:13.5px; font-weight:600; background:var(--fg); color:#fff }
+  .jw .btn.out { background:#fff; color:var(--fg); border:1px solid var(--border) }
+  .jw .clih { font-weight:600; font-size:13.5px; padding:8px 12px; background:var(--menu); border-radius:8px; margin:14px 0 8px }
+  .jw .corte td { padding:7px 12px; font-size:14px } .jw .corte .t td { border-top:2px solid var(--fg); font-weight:700; font-size:15px; border-bottom:0 }
+  .lbl { font-size:11px; color:#6b7280; text-transform:uppercase; letter-spacing:.04em; margin:22px 0 8px }
+</style>
+
+<div class="jw">
+  <aside>
+    <div class="logo">JAWA</div>
+    <div class="suc-b"><small>Sucursal</small><b>Tijuana</b></div>
+    <div class="sec">Operación ▾</div>
+    <div class="it on">Dashboard</div>
+    <div class="it">Flujo diario</div>
+    <div class="it">Ventas</div>
+    <div class="it">Cobranza</div>
+    <div class="it">Ruta diaria</div>
+    <div class="it">…</div>
+    <div class="sec">Catálogo ▸</div>
+    <div class="sec">Producción ▸</div>
+    <div class="sec">Finanzas ▸</div>
+    <div class="sec">Información ▸</div>
+  </aside>
+  <main>
+    <div class="hdr">
+      <div><h1>Dashboard</h1><div class="desc">Lo que llevan hoy los vendedores en ruta. Pica un vendedor o un número para ver el detalle.</div></div>
+      <div class="vivo"><i></i> Hoy, lunes 9 de noviembre · se actualiza solo · hace 1 min</div>
+    </div>
+
+    <div class="res">
+      <div><span>Venta general</span><b>1,377 pzs</b></div>
+      <div><span>Monto</span><b>$14,250.00</b></div>
+      <div><span>Cobranza</span><b>$4,986.50</b></div>
+      <div><span>Gasto</span><b>$10.00</b></div>
+      <div><span>Tesorería</span><b class="em">$4,976.50</b></div>
+      <div><span>Vendedores</span><b>5</b><span style="margin:2px 0 0">3 en ruta · 1 terminó · 1 sin salir</span></div>
+    </div>
+
+    <div class="caja">
+      <table>
+        <tr><th>Vendedor</th><th>Ruta asignada</th><th>Vehículo</th><th class="c">Inventario</th><th class="c">Mermas,<br>cambios,<br>promos</th><th class="r">Venta<br>general</th><th class="r">Cobranza</th><th class="r">Gasto</th><th class="c">Notas de<br>venta</th><th class="c">Notas ant.<br>asignadas</th><th>Ruta</th><th>Estatus</th><th class="c">Corte</th></tr>
+        <tr class="f"><td><div class="nom">Ricardo</div></td><td>Ruta 5 (TKT)</td><td>BK-4537A</td><td class="c sub">Pronto</td><td class="c"><span class="ver">Ver</span></td><td class="r"><span class="num-b">402</span></td><td class="r"><span class="num-b">$1,340.00</span></td><td class="r sub">$0.00</td><td class="c"><span class="ver">Ver</span></td><td class="c">6</td><td>6 / 16<div class="bar"><i style="width:37%"></i></div></td><td><span class="tag info">En ruta</span></td><td class="c sub">—</td></tr>
+        <tr class="f abierta"><td><div class="nom">▾ RBlas</div></td><td>Ruta 1 (Otay)</td><td class="sub">Sin vehículo</td><td class="c sub">Pronto</td><td class="c"><span class="ver">Ver</span></td><td class="r"><span class="num-b">675</span></td><td class="r"><span class="num-b">$2,796.50</span></td><td class="r"><span class="num-b">$10.00</span></td><td class="c"><span class="ver">Ver</span></td><td class="c">1</td><td>15 / 15<div class="bar"><i style="width:100%"></i></div></td><td><span class="tag ok">Terminó</span></td><td class="c"><span class="ver">Ver</span></td></tr>
+        <tr><td colspan="13" style="padding:0"><div class="det">
+          <div class="tabs"><span class="tab on">Venta general</span><span class="tab">Cobranza</span><span class="tab">Gastos</span><span class="tab">Notas de venta</span><span class="tab">Visitas</span><span class="tab">Mermas, cambios y promociones</span><span class="tab">Corte</span><span class="tab" style="opacity:.5">Inventario · pronto</span></div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px">
+            <div class="seg"><span class="on">Por producto</span><span>Por cliente</span></div>
+            <div class="sub">675 piezas · 9 notas · 8 clientes</div>
+          </div>
+          <div class="two">
+            <div>
+              <div class="h3">Por producto <small>agrupado por presentación</small></div>
+              <div class="caja"><table class="mini">
+                <tr><th>Producto</th><th>Piezas</th><th class="r"></th></tr>
+                <tr><td colspan="3" style="background:#fafbfa; font-weight:600; font-size:12.5px">600 ml · 390</td></tr>
+                <tr><td>Peñafiel 600 ml</td><td style="width:55%"><div class="pbar"><div class="bar"><i style="width:100%"></i></div></div></td><td class="r">390</td></tr>
+                <tr><td colspan="3" style="background:#fafbfa; font-weight:600; font-size:12.5px">500 ml · 285</td></tr>
+                <tr><td>Agua 500 ml</td><td><div class="pbar"><div class="bar"><i style="width:46%"></i></div></div></td><td class="r">180</td></tr>
+                <tr><td>Jamaica 500 ml</td><td><div class="pbar"><div class="bar"><i style="width:15%"></i></div></div></td><td class="r">60</td></tr>
+                <tr><td>Horchata 500 ml</td><td><div class="pbar"><div class="bar"><i style="width:12%"></i></div></div></td><td class="r">45</td></tr>
+                <tr class="tot"><td>Total</td><td></td><td class="r">675</td></tr>
+              </table></div>
+            </div>
+            <div>
+              <div class="h3">Así se ve "Por cliente" <small>pica una nota para ver sus productos</small></div>
+              <div class="caja"><table class="mini">
+                <tr><th>Cliente</th><th>Folio</th><th class="r">Piezas</th><th class="r">Total</th><th></th></tr>
+                <tr><td>Tyco Cge</td><td class="fol">TJ0911RB02</td><td class="r">483</td><td class="r">$6,522.00</td><td><span class="tag warn">Crédito</span></td></tr>
+                <tr class="abierta"><td>▾ Don Gallo</td><td class="fol">TJ0911RB10</td><td class="r">80</td><td class="r">$920.00</td><td><span class="tag warn">Crédito</span></td></tr>
+                <tr class="prod-in"><td colspan="5">Horchata 500 ml × 40 · Jamaica 500 ml × 40</td></tr>
+                <tr><td>5 Esquinas</td><td class="fol">TJ0911RB07</td><td class="r">40</td><td class="r">$460.00</td><td><span class="tag ok">Contado</span></td></tr>
+                <tr><td colspan="5" class="sub">… 5 notas más</td></tr>
+              </table></div>
+            </div>
+          </div>
+        </div></td></tr>
+        <tr class="f"><td><div class="nom">HAntonio</div></td><td>Ruta 3 (Playas)</td><td class="sub">Sin vehículo</td><td class="c sub">Pronto</td><td class="c"><span class="ver">Ver</span></td><td class="r"><span class="num-b">300</span></td><td class="r"><span class="num-b">$850.00</span></td><td class="r sub">$0.00</td><td class="c"><span class="ver">Ver</span></td><td class="c">10</td><td>4 / 24<div class="bar"><i style="width:17%"></i></div></td><td><span class="tag info">En ruta</span></td><td class="c sub">—</td></tr>
+        <tr class="f"><td><div class="nom">MJuan Ramon</div></td><td>Ruta 2 Mariano y Lago</td><td class="sub">Sin vehículo</td><td class="c sub">Pronto</td><td class="c"><span class="ver">Ver</span></td><td class="r"><span class="num-b cero">0</span></td><td class="r sub">$0.00</td><td class="r sub">$0.00</td><td class="c"><span class="ver">Ver</span></td><td class="c">4</td><td>0 / 18<div class="bar"><i style="width:0"></i></div></td><td><span class="tag info">En ruta</span></td><td class="c sub">—</td></tr>
+        <tr class="f"><td><div class="nom">YDaniel</div></td><td>Ruta 4 (Rosarito)</td><td class="sub">Sin vehículo</td><td class="c sub">Pronto</td><td class="c"><span class="ver">Ver</span></td><td class="r"><span class="num-b cero">0</span></td><td class="r sub">$0.00</td><td class="r sub">$0.00</td><td class="c"><span class="ver">Ver</span></td><td class="c">4</td><td>0 / 8<div class="bar"><i style="width:0"></i></div></td><td><span class="tag warn">No ha salido</span></td><td class="c sub">—</td></tr>
+      </table>
+    </div>
+  </main>
+</div>
+
+<div class="lbl">Las demás pestañas del detalle, con el mismo diseño</div>
+<div class="jw" style="display:block; padding:20px 24px; min-width:0">
+  <div class="two">
+    <div>
+      <div class="h3">Cobranza <small>$2,796.50</small></div>
+      <div class="h3" style="font-weight:500; color:#5f6b65; font-size:12.5px">Ventas de contado · $1,874.00</div>
+      <div class="caja"><table class="mini">
+        <tr><th>Folio</th><th>Cliente</th><th class="r">Importe</th><th>Liquidada</th></tr>
+        <tr class="abierta"><td class="fol">▾ TJ0911RB07</td><td>5 Esquinas</td><td class="r">$460.00</td><td><span class="tag ok">Sí</span></td></tr>
+        <tr class="prod-in"><td colspan="4">Horchata 500 ml × 20 a $11.50 · Jamaica 500 ml × 20 a $11.50</td></tr>
+        <tr><td class="fol">▸ TJ0911RB09</td><td>mariscos titanic</td><td class="r">$1,414.00</td><td><span class="tag ok">Sí</span></td></tr>
+      </table></div>
+      <div class="h3" style="font-weight:500; color:#5f6b65; font-size:12.5px; margin-top:14px">Notas de días anteriores · $922.50</div>
+      <div class="caja"><table class="mini">
+        <tr><th>Folio</th><th>Cliente</th><th class="r">Importe</th><th>Liquidada</th></tr>
+        <tr><td class="fol">TJ2410RA23</td><td>Elotes y tamales el Paino</td><td class="r">$500.00</td><td><span class="tag ok">Sí</span></td></tr>
+        <tr><td class="fol">TJ3110RA31</td><td>Aqui es Texcoco</td><td class="r">$172.50</td><td><span class="tag ok">Sí</span></td></tr>
+        <tr><td class="fol">TJ3110RA33</td><td>mariscos titanic</td><td class="r">$250.00</td><td><span class="tag info">Abonado</span> <span class="sub">resta $150.00</span></td></tr>
+      </table></div>
+    </div>
+    <div>
+      <div class="h3">Corte <small>terminó su ruta</small></div>
+      <div class="caja"><table class="corte">
+        <tr><td>Ventas de contado</td><td class="r">$1,874.00</td></tr>
+        <tr><td>Notas de días anteriores</td><td class="r">$922.50</td></tr>
+        <tr><td>Gasto</td><td class="r">− $10.00</td></tr>
+        <tr class="t"><td>Tesorería</td><td class="r">$2,786.50</td></tr>
+      </table></div>
+      <div class="h3" style="margin-top:18px">Gastos <small>$10.00</small></div>
+      <div class="caja"><table class="mini"><tr><th>Descripción</th><th class="r">Gasto</th></tr><tr><td>Hielo</td><td class="r">$10.00</td></tr></table></div>
+    </div>
+  </div>
+
+  <div class="h3" style="margin-top:22px">Notas de venta <small>¿regresó la nota de papel?</small></div>
+  <div class="two">
+    <div>
+      <div class="caja"><table class="mini">
+        <tr><th colspan="3">Asignadas cobradas</th></tr>
+        <tr><td>Aqui es Texcoco</td><td class="fol">TJ3110RA31</td><td class="r">$172.50</td></tr>
+        <tr><th colspan="3">Asignadas NO entregadas</th></tr>
+        <tr><td>Mini super Lupita</td><td class="fol">TJ2810RA14</td><td class="r">$310.00</td></tr>
+        <tr><th colspan="3">Nuevas NO entregadas</th></tr>
+        <tr><td colspan="3" class="sub">Ninguna</td></tr>
+      </table></div>
+    </div>
+    <div>
+      <div class="caja"><table class="mini">
+        <tr><th>Por entregar</th><th>Folio</th><th class="r">Pendiente</th><th class="c">Entregada</th></tr>
+        <tr><td>Don Gallo <span class="tag neu">nueva</span></td><td class="fol">TJ0911RB10</td><td class="r">$920.00</td><td class="c"><span class="chk on"></span></td></tr>
+        <tr><td>Tyco Cge <span class="tag neu">nueva</span></td><td class="fol">TJ0911RB02</td><td class="r">$6,522.00</td><td class="c"><span class="chk"></span></td></tr>
+        <tr><td>Comedor Aeropuerto <span class="tag neu">asignada</span></td><td class="fol">TJ0411RA21</td><td class="r">$525.00</td><td class="c"><span class="chk on"></span></td></tr>
+      </table></div>
+      <div style="margin-top:10px"><span class="btn">Guardar revisión</span></div>
+    </div>
+  </div>
+
+  <div class="two" style="margin-top:22px">
+    <div>
+      <div class="h3">Visitas <small>15 de 15</small></div>
+      <div class="caja"><table class="mini">
+        <tr><th>Cliente</th><th>Vendió</th><th>Hora</th><th>Motivo</th><th>Atendió</th><th>Comentario</th></tr>
+        <tr><td>Tyco Cge</td><td><span class="tag ok">Sí</span></td><td>8:42</td><td></td><td></td><td></td></tr>
+        <tr><td>Abarrotes Mary</td><td><span class="tag neu">No</span></td><td>9:15</td><td>Tiene producto</td><td>Mary</td><td>Pasar el jueves</td></tr>
+      </table></div>
+    </div>
+    <div>
+      <div class="h3">Mermas, cambios y promociones</div>
+      <div class="clih" style="margin-top:0">Mermas de almacén</div>
+      <div class="sub" style="padding:0 12px">Jamaica 500 ml × 2</div>
+      <div class="clih">Elotes y tamales el Paino</div>
+      <div class="two" style="gap:12px">
+        <div class="caja"><table class="mini"><tr><th>Cambios (entregó)</th><th class="r">Cant.</th></tr><tr><td>Limonada 500 ml</td><td class="r">2</td></tr></table></div>
+        <div class="caja"><table class="mini"><tr><th>Cambios recibidos</th><th class="r">Cant.</th></tr><tr><td>Horchata 500 ml</td><td class="r">2</td></tr></table></div>
+      </div>
+      <div class="clih">Don Gallo</div>
+      <div class="caja"><table class="mini"><tr><th>Promociones</th><th class="r">Cant.</th></tr><tr><td>Horchata 500 ml</td><td class="r">4</td></tr></table></div>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:14px">Con "Todas" en la barra lateral la misma tabla se parte en un bloque por sucursal (lo que elegiste); aquí se ve el caso normal, una sucursal. Sin Buscar vendedor ni campana por ahora.</p>
