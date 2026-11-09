@@ -166,7 +166,6 @@ export function mililitros(etiqueta: string): number | null {
 }
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-/** Los null (Oficina) al final. */
 /** Por volumen numerico; lo que no se entiende, al final y por texto. */
 export function cmpVolumen(a: string, b: string): number {
   const x = mililitros(a);
@@ -177,6 +176,7 @@ export function cmpVolumen(a: string, b: string): number {
   return cmp(a, b);
 }
 
+/** Los null (Oficina) al final. */
 const cmpNulo = (a: string | null, b: string | null) =>
   a === b ? 0 : a === null ? 1 : b === null ? -1 : cmp(a, b);
 
