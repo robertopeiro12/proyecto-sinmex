@@ -47,11 +47,11 @@ export function PestanaCobranza({ detalle }: { detalle: DetalleVendedorDia }) {
       <TituloBloque extra={<Monto centavos={totalContado + totalAnteriores + totalAFavor} />}>Cobranza</TituloBloque>
       {/* Una debajo de la otra, como el sistema viejo (Roberto, 2026-11-09). */}
       <div className="mx-auto w-full max-w-5xl">
-        <TituloBloque tenue>{`Cobranza ventas de contado · ${formatearPesos(totalContado)}`}</TituloBloque>
+        <TituloBloque tenue>Cobranza ventas de contado</TituloBloque>
         <TablaPagos titulo="Cobranza ventas de contado" pagos={contado} notas={detalle.notas} total={totalContado} />
       </div>
       <div className="mx-auto w-full max-w-5xl">
-        <TituloBloque tenue>{`Cobranza ventas anteriores · ${formatearPesos(totalAnteriores)}`}</TituloBloque>
+        <TituloBloque tenue>Cobranza ventas anteriores</TituloBloque>
         <TablaPagos titulo="Cobranza ventas anteriores" pagos={anteriores} notas={detalle.notas} total={totalAnteriores} />
       </div>
       {aFavor.length > 0 && (
