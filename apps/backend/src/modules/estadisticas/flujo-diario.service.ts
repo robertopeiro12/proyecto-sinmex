@@ -71,7 +71,7 @@ export class FlujoDiarioService {
     if (error) throw new BadRequestException(error);
   }
 
-  private idVendedor(crudo: string): string {
+  idVendedor(crudo: string): string {
     const limpio = crudo.trim();
     if (!isUUID(limpio))
       throw new BadRequestException('El vendedor no es válido.');
@@ -79,7 +79,7 @@ export class FlujoDiarioService {
   }
 
   /** `codigo` null = cualquier sucursal (General sin filtro). */
-  private async vendedorEnAlcance(id: string, codigo: string | null) {
+  async vendedorEnAlcance(id: string, codigo: string | null) {
     const vendedor = await this.detalle.buscarVendedor(id);
     // Otra sucursal se contesta igual que un vendedor inexistente.
     if (!vendedor || (codigo !== null && codigo !== vendedor.codigo))
@@ -99,9 +99,10 @@ export class FlujoDiarioService {
       alcance.tipo === 'una' ? alcance.codigo : null,
     );
 
-    const [filas, jornadaCerrada] = await Promise.all([
+    const [filas, jornadaCerrada, noEntregadas] = await Promise.all([
       this.detalle.filas({ vendedorId: vendedor.id }, q.fecha),
       this.detalle.tieneJornada(vendedor.id, q.fecha),
+      this.detalle.notasNoEntregadas(vendedor.id, q.fecha),
     ]);
     return armarDetalleVendedor(
       {
@@ -110,7 +111,7 @@ export class FlujoDiarioService {
         vendedor: vendedor.nombre,
         jornadaCerrada,
       },
-      filas,
+      { ...filas, noEntregadas },
     );
   }
 

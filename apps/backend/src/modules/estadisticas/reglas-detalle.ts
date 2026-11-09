@@ -62,11 +62,27 @@ export interface DetalleVendedorDia {
     cliente: string;
     totalCentavos: number;
     pendienteCentavos: number;
+    /** La nota de papel: true entregada, false no, null sin revisar. */
+    entregada: boolean | null;
   }[];
+  /**
+   * Notas a credito de dias ANTERIORES del vendedor marcadas como no
+   * entregadas y con algo pendiente. Orden: fecha, folio.
+   */
+  notasNoEntregadas: NotaNoEntregada[];
   visitas: VisitaDetalle[];
   promociones: { cliente: string; producto: string; cantidad: number }[];
   /** `null` sin jornada cerrada. */
   corte: Corte | null;
+}
+
+export interface NotaNoEntregada {
+  folio: string;
+  cliente: string;
+  /** `AAAA-MM-DD`. */
+  fecha: string;
+  totalCentavos: number;
+  pendienteCentavos: number;
 }
 
 export interface DetalleDia {
@@ -102,6 +118,8 @@ export interface VentaFila {
   pendienteCentavos: number;
   /** ISO. */
   hora: string;
+  /** `venta_nota.papel_entregado`. */
+  entregada: boolean | null;
 }
 
 export interface LineaFila {
@@ -245,6 +263,8 @@ export function armarDetalleVendedor(
     gastos: GastoFila[];
     visitasSinVenta: VisitaSinVentaFila[];
     promociones: PromoFila[];
+    /** Las trae aparte el servicio; sin ellas, ninguna. */
+    noEntregadas?: NotaNoEntregada[];
   },
 ): DetalleVendedorDia {
   const ventas = [...filas.ventas].sort(
@@ -358,7 +378,11 @@ export function armarDetalleVendedor(
         cliente: v.cliente,
         totalCentavos: v.totalCentavos,
         pendienteCentavos: v.pendienteCentavos,
+        entregada: v.entregada,
       })),
+    notasNoEntregadas: [...(filas.noEntregadas ?? [])].sort(
+      (a, b) => cmp(a.fecha, b.fecha) || cmp(a.folio, b.folio),
+    ),
     visitas,
     promociones: [...filas.promociones].sort(
       (a, b) => cmp(a.cliente, b.cliente) || cmp(a.producto, b.producto),

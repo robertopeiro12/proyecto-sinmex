@@ -43,6 +43,7 @@ const venta = (extra: Partial<VentaFila>): VentaFila => ({
   totalCentavos: 1000,
   pendienteCentavos: 0,
   hora: '2026-11-07T18:00:00.000Z',
+  entregada: null,
   ...extra,
 });
 
@@ -163,6 +164,51 @@ describe('armarDetalleVendedor', () => {
     expect(d.notas[1]).toMatchObject({ piezas: 3 });
     expect(d.porProducto).toEqual([
       { presentacion: '1 L', producto: 'Agua 1 L', piezas: 3 },
+    ]);
+  });
+
+  it('notasCredito lleva si la nota de papel se entrego (null = sin revisar)', () => {
+    const d = armarDetalleVendedor(base, {
+      ...vacio,
+      ventas: [
+        venta({ folio: 'TJ1', contadoCredito: 'credito', entregada: true }),
+        venta({
+          ventaId: 'x2',
+          folio: 'TJ2',
+          contadoCredito: 'credito',
+          entregada: false,
+        }),
+        venta({ ventaId: 'x3', folio: 'TJ3', contadoCredito: 'credito' }),
+      ],
+    });
+    expect(d.notasCredito.map((n) => [n.folio, n.entregada])).toEqual([
+      ['TJ1', true],
+      ['TJ2', false],
+      ['TJ3', null],
+    ]);
+  });
+
+  it('notasNoEntregadas por fecha y folio; sin filas, vacia', () => {
+    expect(armarDetalleVendedor(base, vacio).notasNoEntregadas).toEqual([]);
+    const nota = (folio: string, fecha: string) => ({
+      folio,
+      cliente: 'C',
+      fecha,
+      totalCentavos: 1000,
+      pendienteCentavos: 500,
+    });
+    const d = armarDetalleVendedor(base, {
+      ...vacio,
+      noEntregadas: [
+        nota('TJ9', '2026-11-05'),
+        nota('TJ2', '2026-11-03'),
+        nota('TJ1', '2026-11-05'),
+      ],
+    });
+    expect(d.notasNoEntregadas.map((n) => n.folio)).toEqual([
+      'TJ2',
+      'TJ1',
+      'TJ9',
     ]);
   });
 });

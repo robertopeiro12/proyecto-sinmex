@@ -7,6 +7,7 @@ import type {
   GastoFila,
   LineaFila,
   MetodoPago,
+  NotaNoEntregada,
   PagoFila,
   PromoFila,
   VentaFila,
@@ -120,8 +121,9 @@ export class DetalleRepository {
       total: string;
       pendiente: string;
       hora: string;
+      entregada: boolean | null;
     }>`
-      select vn.id, vn.folio, cl.nombre as cliente, cl.id as cliente_id,
+      select vn.id, vn.folio, vn.papel_entregado as entregada, cl.nombre as cliente, cl.id as cliente_id,
              v.id as vendedor_id,
              v.nombre as vendedor, vn.contado_credito,
              vn.monto_total::text as total,
@@ -153,7 +155,88 @@ export class DetalleRepository {
       totalCentavos: aCentavos(x.total),
       pendienteCentavos: aCentavos(x.pendiente),
       hora: x.hora,
+      entregada: x.entregada,
     }));
+  }
+
+  /**
+   * Notas a credito vivas del vendedor de dias anteriores a `fecha`, marcadas
+   * como NO entregadas (`papel_entregado = false`) y con algo pendiente
+   * (monto - abonos vivos).
+   */
+  async notasNoEntregadas(
+    vendedorId: string,
+    fecha: string,
+  ): Promise<NotaNoEntregada[]> {
+    const r = await sql<{
+      folio: string;
+      cliente: string;
+      fecha: string;
+      total: string;
+      pendiente: string;
+    }>`
+      select n.folio, n.cliente, n.fecha, n.total, n.pendiente::text as pendiente
+        from (
+          select vn.folio, cl.nombre as cliente,
+                 to_char(vn.fecha, 'YYYY-MM-DD') as fecha,
+                 vn.monto_total::text as total,
+                 vn.monto_total - coalesce((
+                   select sum(a.monto) from cobranza_abono a
+                    where a.venta_nota_id = vn.id and a.deleted_at is null
+                 ), 0) as pendiente
+            from venta_nota vn
+            join cliente cl on cl.id = vn.cliente_id
+           where vn.deleted_at is null and vn.vendedor_id = ${vendedorId}::uuid
+             and vn.contado_credito = 'credito'
+             and vn.fecha < ${fecha}::date
+             and vn.papel_entregado = false
+        ) n
+       where n.pendiente > 0
+       order by n.fecha, n.folio
+    `.execute(this.db);
+    return r.rows.map((x) => ({
+      folio: x.folio,
+      cliente: x.cliente,
+      fecha: x.fecha,
+      totalCentavos: aCentavos(x.total),
+      pendienteCentavos: aCentavos(x.pendiente),
+    }));
+  }
+
+  /**
+   * Marca la nota de papel de varias ventas del vendedor, en una transaccion:
+   * si algun folio no es una venta viva a credito de ese vendedor con fecha
+   * <= `hasta`, no se guarda nada y se devuelve ese folio. No mueve
+   * `updated_at` (lo cuida el trigger de `venta_nota`).
+   */
+  async marcarPapel(
+    vendedorId: string,
+    hasta: string,
+    usuarioId: string,
+    notas: { folio: string; entregada: boolean }[],
+  ): Promise<{ invalido: string | null }> {
+    return this.db.transaction().execute(async (trx) => {
+      const folios = notas.map((n) => n.folio);
+      const r = await sql<{ id: string; folio: string }>`
+        select vn.id, vn.folio from venta_nota vn
+         where vn.folio = any(${folios}::text[])
+           and vn.deleted_at is null and vn.vendedor_id = ${vendedorId}::uuid
+           and vn.contado_credito = 'credito' and vn.fecha <= ${hasta}::date
+         for update
+      `.execute(trx);
+      const porFolio = new Map(r.rows.map((x) => [x.folio, x.id]));
+      const invalido = folios.find((f) => !porFolio.has(f));
+      if (invalido !== undefined) return { invalido };
+      for (const n of notas)
+        await sql`
+          update venta_nota
+             set papel_entregado = ${n.entregada},
+                 papel_revisado_en = now(),
+                 papel_revisado_por_usuario_id = ${usuarioId}::uuid
+           where id = ${porFolio.get(n.folio)}::uuid
+        `.execute(trx);
+      return { invalido: null };
+    });
   }
 
   private async lineas(cond: RawBuilder<unknown>, fecha: string) {

@@ -1,4 +1,16 @@
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsBoolean,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
 
 /** `GET /dashboard`. Sin fecha: es siempre hoy. */
 export class DashboardDto {
@@ -25,4 +37,27 @@ export class DashboardVendedorDto {
   @IsOptional()
   @IsString()
   sucursal?: string;
+}
+
+export class NotaEntregadaDto {
+  @IsString()
+  @IsNotEmpty({ message: 'Falta el folio.' })
+  @MaxLength(40, { message: 'El folio no es válido.' })
+  folio!: string;
+
+  @IsBoolean({ message: 'Entregada debe ser sí o no.' })
+  entregada!: boolean;
+}
+
+/** `PUT /dashboard/notas-entregadas`: la casilla "Entregada" de las notas. */
+export class NotasEntregadasDto {
+  @IsUUID(undefined, { message: 'El vendedor no es válido.' })
+  vendedor!: string;
+
+  @IsArray()
+  @ArrayMinSize(1, { message: 'Marca al menos una nota.' })
+  @ArrayMaxSize(200, { message: 'No más de 200 notas a la vez.' })
+  @ValidateNested({ each: true })
+  @Type(() => NotaEntregadaDto)
+  notas!: NotaEntregadaDto[];
 }

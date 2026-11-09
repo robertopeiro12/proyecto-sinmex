@@ -398,4 +398,243 @@ describe('Dashboard (e2e)', () => {
     expect(fila).toMatchObject({ montoCentavos: 2000, clientesEnRuta: 1 });
     expect(conVenta.vendedores.map((v) => v.vendedorId)).not.toContain(baja);
   });
+
+  describe('notas de papel entregadas', () => {
+    let beto: string;
+    const hoy = () => hoyEnTijuana();
+    const menos = (dias: number) => {
+      const d = new Date(`${hoyEnTijuana()}T12:00:00Z`);
+      d.setUTCDate(d.getUTCDate() - dias);
+      return d.toISOString().slice(0, 10);
+    };
+    let nHoy: { id: string; folio: string };
+    let nAyer: { id: string; folio: string };
+    let nViejaFalsa: { id: string; folio: string };
+    let nViejaPagada: { id: string; folio: string };
+    let nViejaSinRevisar: { id: string; folio: string };
+    let nContado: { id: string; folio: string };
+    let nAjena: { id: string; folio: string };
+    let nBorrada: { id: string; folio: string };
+    let nFutura: { id: string; folio: string };
+
+    const credito = async (
+      fecha: string,
+      vendedorId: string,
+      monto: string,
+      opciones: {
+        abono?: string;
+        contado?: boolean;
+        papel?: boolean;
+        borrada?: boolean;
+        sucursalId?: string;
+      } = {},
+    ) => {
+      const folio =
+        `ZPE${Math.random().toString(36).slice(2, 8)}${SUFIJO}`.slice(0, 30);
+      const { id } = await db
+        .insertInto('venta_nota')
+        .values({
+          folio,
+          fecha,
+          cliente_id: clienteId,
+          vendedor_id: vendedorId,
+          monto_total: monto,
+          contado_credito: opciones.contado ? 'contado' : 'credito',
+          semana: 1,
+          mes: 1,
+          status: opciones.contado ? 'pagada' : 'pendiente',
+          sucursal_id: opciones.sucursalId ?? idDb,
+          origen: 'portal',
+          capturo_usuario_id: generalId,
+          deleted_at: opciones.borrada ? new Date() : null,
+          ...(opciones.papel === undefined
+            ? {}
+            : {
+                papel_entregado: opciones.papel,
+                papel_revisado_en: new Date(),
+              }),
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      if (opciones.abono)
+        await db
+          .insertInto('cobranza_abono')
+          .values({
+            venta_nota_id: id,
+            vendedor_id: vendedorId,
+            fecha_pago: fecha,
+            fecha_operacion: fecha,
+            monto: opciones.abono,
+            tipo: 'abono',
+            saldo_pendiente: '0.00',
+            metodo_pago: 'efectivo',
+            origen: 'venta_contado',
+          })
+          .execute();
+      return { id, folio };
+    };
+
+    const guardar = (cookie: string, body: unknown) =>
+      request(app.getHttpServer())
+        .put('/dashboard/notas-entregadas')
+        .set('Cookie', cookie)
+        .send(body as object);
+
+    const papel = (id: string) =>
+      db
+        .selectFrom('venta_nota')
+        .select([
+          'papel_entregado',
+          'papel_revisado_en',
+          'papel_revisado_por_usuario_id',
+          'updated_at',
+        ])
+        .where('id', '=', id)
+        .executeTakeFirstOrThrow();
+
+    beforeAll(async () => {
+      beto = await vendedor('Beto', idDb);
+      nHoy = await credito(hoy(), beto, '100.00');
+      nAyer = await credito(menos(1), beto, '80.00', { abono: '30.00' });
+      nViejaFalsa = await credito(menos(3), beto, '60.00', {
+        papel: false,
+        abono: '10.00',
+      });
+      nViejaPagada = await credito(menos(2), beto, '40.00', {
+        papel: false,
+        abono: '40.00',
+      });
+      nViejaSinRevisar = await credito(menos(2), beto, '45.00');
+      nContado = await credito(hoy(), beto, '20.00', { contado: true });
+      nBorrada = await credito(hoy(), beto, '25.00', { borrada: true });
+      nFutura = await credito('2099-02-02', beto, '25.00');
+      nAjena = await credito(hoy(), ajeno, '50.00', { sucursalId: idOtra });
+    });
+
+    it('sin nota_papel.revisar es 403', async () => {
+      await guardar(cookieSinPermiso, {
+        vendedor: beto,
+        notas: [{ folio: nHoy.folio, entregada: true }],
+      }).expect(403);
+    });
+
+    it('vendedor de otra sucursal es 404; vendedor invalido o sin notas es 400', async () => {
+      await guardar(cookieDb, {
+        vendedor: ajeno,
+        notas: [{ folio: nAjena.folio, entregada: true }],
+      }).expect(404);
+      await guardar(cookieGeneral, {
+        vendedor: 'beto',
+        notas: [{ folio: nHoy.folio, entregada: true }],
+      }).expect(400);
+      await guardar(cookieGeneral, { vendedor: beto, notas: [] }).expect(400);
+    });
+
+    it.each([
+      ['ajena', () => nAjena],
+      ['de contado', () => nContado],
+      ['borrada', () => nBorrada],
+      ['de un dia futuro', () => nFutura],
+    ])('una nota %s es 400 y no se guarda nada', async (_n, nota) => {
+      const r = await guardar(cookieGeneral, {
+        vendedor: beto,
+        notas: [
+          { folio: nHoy.folio, entregada: true },
+          { folio: nota().folio, entregada: true },
+        ],
+      }).expect(400);
+      expect(JSON.stringify(r.body)).toContain(
+        `La nota ${nota().folio} no se puede revisar.`,
+      );
+      expect((await papel(nHoy.id)).papel_entregado).toBeNull();
+    });
+
+    it('guarda true y false sin tocar updated_at, y el detalle lo refleja', async () => {
+      const antes = await papel(nHoy.id);
+      const antesAyer = await papel(nAyer.id);
+      await guardar(cookieGeneral, {
+        vendedor: beto,
+        notas: [
+          { folio: nHoy.folio, entregada: true },
+          { folio: nAyer.folio, entregada: false },
+        ],
+      }).expect(204);
+      const despues = await papel(nHoy.id);
+      expect(despues.papel_entregado).toBe(true);
+      expect(despues.papel_revisado_en).not.toBeNull();
+      expect(despues.papel_revisado_por_usuario_id).toBe(generalId);
+      expect(despues.updated_at).toEqual(antes.updated_at);
+      const ayer = await papel(nAyer.id);
+      expect(ayer.papel_entregado).toBe(false);
+      expect(ayer.updated_at).toEqual(antesAyer.updated_at);
+
+      const d = (
+        await pedir(cookieGeneral, '/vendedor', { vendedor: beto }).expect(200)
+      ).body as DetalleVendedorDia;
+      expect(d.notasCredito).toEqual([
+        expect.objectContaining({ folio: nHoy.folio, entregada: true }),
+      ]);
+      const dAyer = (
+        await pedir(cookieGeneral, '/vendedor', {
+          vendedor: beto,
+          fecha: menos(1),
+        }).expect(200)
+      ).body as DetalleVendedorDia;
+      expect(dAyer.notasCredito).toEqual([
+        expect.objectContaining({ folio: nAyer.folio, entregada: false }),
+      ]);
+    });
+
+    it('una nota sin revisar sale con entregada null; se puede volver a marcar', async () => {
+      const d = (
+        await request(app.getHttpServer())
+          .get(
+            `/reportes/flujo-diario/vendedor?${new URLSearchParams({ fecha: menos(2), vendedor: beto }).toString()}`,
+          )
+          .set('Cookie', cookieGeneral)
+          .expect(200)
+      ).body as DetalleVendedorDia;
+      const sin = d.notasCredito.find(
+        (n) => n.folio === nViejaSinRevisar.folio,
+      );
+      expect(sin?.entregada).toBeNull();
+      await guardar(cookieGeneral, {
+        vendedor: beto,
+        notas: [{ folio: nAyer.folio, entregada: true }],
+      }).expect(204);
+      expect((await papel(nAyer.id)).papel_entregado).toBe(true);
+      // Se regresa a false para la prueba de abajo.
+      await guardar(cookieGeneral, {
+        vendedor: beto,
+        notas: [{ folio: nAyer.folio, entregada: false }],
+      }).expect(204);
+    });
+
+    it('notasNoEntregadas: a credito, de dias anteriores, entregada false y con pendiente, por fecha', async () => {
+      const d = (
+        await pedir(cookieGeneral, '/vendedor', { vendedor: beto }).expect(200)
+      ).body as DetalleVendedorDia;
+      expect(d.notasNoEntregadas).toEqual([
+        {
+          folio: nViejaFalsa.folio,
+          cliente: `Cliente db ${SUFIJO}`,
+          fecha: menos(3),
+          totalCentavos: 6000,
+          pendienteCentavos: 5000,
+        },
+        {
+          folio: nAyer.folio,
+          cliente: `Cliente db ${SUFIJO}`,
+          fecha: menos(1),
+          totalCentavos: 8000,
+          pendienteCentavos: 5000,
+        },
+      ]);
+      // Ni la pagada, ni la sin revisar, ni la de hoy.
+      const folios = d.notasNoEntregadas.map((n) => n.folio);
+      expect(folios).not.toContain(nViejaPagada.folio);
+      expect(folios).not.toContain(nViejaSinRevisar.folio);
+      expect(folios).not.toContain(nHoy.folio);
+    });
+  });
 });

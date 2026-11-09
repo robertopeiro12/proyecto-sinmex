@@ -1,7 +1,11 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Put, Query } from '@nestjs/common';
 import { RequierePermiso } from '../auth/requiere-permiso.decorator';
 import { UsuarioActual } from '../auth/usuario-actual.decorator';
-import { DashboardDto, DashboardVendedorDto } from './dto/dashboard.dto';
+import {
+  DashboardDto,
+  DashboardVendedorDto,
+  NotasEntregadasDto,
+} from './dto/dashboard.dto';
 import { DashboardService } from './dashboard.service';
 import type { DetalleVendedorDia } from './reglas-detalle';
 import type { Dashboard } from './reglas-flujo-diario';
@@ -28,5 +32,16 @@ export class DashboardController {
     @Query() q: DashboardVendedorDto,
   ): Promise<DetalleVendedorDia> {
     return this.servicio.detalle(usuarioId, q);
+  }
+
+  /** Casilla "Entregada" de las notas a credito (la nota de papel). */
+  @Put('notas-entregadas')
+  @HttpCode(204)
+  @RequierePermiso('nota_papel.revisar')
+  async notasEntregadas(
+    @UsuarioActual() usuarioId: string,
+    @Body() body: NotasEntregadasDto,
+  ): Promise<void> {
+    await this.servicio.marcarNotasEntregadas(usuarioId, body);
   }
 }
