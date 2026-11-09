@@ -3,6 +3,11 @@ export type NavItem = {
   href: string;
   /** La pantalla todavía es un "Próximamente" (`Placeholder`): el menú la marca "Pronto". */
   pronto?: true;
+  /**
+   * Fuera del menú, pero la pantalla y su código se quedan (se entra por la dirección).
+   * Tesorería y Flujo de Efectivo, por ADR-0015 del vault: el cliente no los quiere por ahora.
+   */
+  oculto?: true;
 };
 export type NavSection = { label: string; items: NavItem[] };
 
@@ -76,9 +81,9 @@ export const navSections: NavSection[] = [
     // No existe en el viejo.
     label: "Finanzas",
     items: [
-      { label: "Tesorería", href: "/finanzas/tesoreria" },
+      { label: "Tesorería", href: "/finanzas/tesoreria", oculto: true },
       { label: "Gastos", href: "/finanzas/gastos" },
-      { label: "Flujo de Efectivo", href: "/finanzas/flujo-efectivo" },
+      { label: "Flujo de Efectivo", href: "/finanzas/flujo-efectivo", oculto: true },
     ],
   },
 ];

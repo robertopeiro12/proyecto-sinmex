@@ -57,6 +57,11 @@ describe("buscarItemActual", () => {
 });
 
 describe("tituloDePestana", () => {
+  it("una pantalla oculta del menú conserva su título", () => {
+    expect(tituloDePestana("/finanzas/tesoreria", "Tijuana")).toBe("Tesorería | JAWA Tijuana");
+    expect(tituloDePestana("/finanzas/flujo-efectivo", null)).toBe("Flujo de Efectivo | JAWA");
+  });
+
   it("pantalla | JAWA y la sucursal; con todas, sin sucursal", () => {
     expect(tituloDePestana("/operacion/ventas", "Tijuana")).toBe("Ventas | JAWA Tijuana");
     expect(tituloDePestana("/operacion/ventas", null)).toBe("Ventas | JAWA");
