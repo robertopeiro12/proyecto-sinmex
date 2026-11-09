@@ -646,6 +646,12 @@ usuario con sesion pasa.
     - **Dashboard:** `/dashboard/vendedor` acepta `fecha` (solo hoy o ayer de Tijuana; otra = 400) y el portal manda la
       del Dashboard pintado, para que a la medianoche el detalle no cambie de día. No lista a un vendedor inactivo o
       dado de baja cuya única razón para salir es la ruta diaria (el Flujo diario sí, es historia).
+    - **Casilla "Entregada" (nota de papel):** `venta_nota.papel_entregado` (null = sin revisar) +
+      `papel_revisado_en`/`papel_revisado_por_usuario_id`. `PUT /dashboard/notas-entregadas` (permiso
+      `nota_papel.revisar`, 204) manda **todas** las notas a crédito del día (sin marcar = `false`); un folio que no es
+      venta viva a crédito de ese vendedor de hoy o antes = 400 y no se guarda nada. **No mueve `updated_at`**: el
+      trigger `set_updated_at_venta_nota()` lo conserva cuando solo cambian las columnas `papel_*`. El detalle trae
+      `notasCredito[].entregada` y `notasNoEntregadas` (días anteriores, `false` y con pendiente).
     - **Liquidada** se lee de `abono.saldo_pendiente` (la nota quedó en cero con ese abono), no se recalcula.
     - **Alcance:** un parámetro `sucursal` ajeno responde **403**; un `vendedor` ajeno responde **404** (no confirma que
       exista). Con "Todas" hay un bloque por sucursal.
@@ -654,10 +660,11 @@ usuario con sesion pasa.
     - **Portal** (`components/flujo-diario/`, `components/dashboard/`, `ui/selector-segmentado.tsx`, `Pestanas` con
       `deshabilitada`): el scroll horizontal de la tabla del Dashboard (13 columnas) se **aceptó** a propósito; no
       lo "arregles" quitando columnas.
-    - **Nube**: `20261109120000_permiso_dashboard.sql` y `20261109130000_indices_flujo_diario.sql` (índices parciales de
-      `venta_nota (vendedor_id, fecha)` y `cobro (vendedor_id, fecha_pago)` para las sumas por vendedor y día) se suben a
-      `sinmex dev` después del merge, con el protocolo de push (pre-flight: un insert de permiso y solo índices; nada
-      que contar).
+    - **Nube**: `20261109120000_permiso_dashboard.sql`, `20261109130000_indices_flujo_diario.sql` (índices parciales de
+      `venta_nota (vendedor_id, fecha)` y `cobro (vendedor_id, fecha_pago)` para las sumas por vendedor y día) y
+      `20261109140000_nota_papel_entregado.sql` (columnas nulas, un check que todas las filas cumplen en null, el
+      trigger nuevo de `venta_nota` y un permiso) se suben a `sinmex dev` después del merge, con el protocolo de push
+      (pre-flight: nada que contar).
   - **`GET /reportes/ventas` (T-49) se queda** con su permiso `reporte_ventas.ver` y `lib/reporte-ventas.ts`: son la
     base del Excel de ventas de *Información → Reportes* (pieza 4). Su pantalla y `components/reporte-ventas/` se borraron.
     - Cuenta ventas vivas de **cualquier status**; la sucursal es **la de la venta** (`venta_nota.sucursal_id`), no la
