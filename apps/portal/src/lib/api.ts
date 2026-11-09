@@ -171,6 +171,11 @@ export async function apiFetch<T>(ruta: string, init: RequestInit = {}): Promise
   return (await pedir(ruta, init)).json() as Promise<T>;
 }
 
+/** Para lo que la API contesta sin cuerpo (204): no intenta leer JSON. */
+export async function apiFetchSinCuerpo(ruta: string, init: RequestInit = {}): Promise<void> {
+  await pedir(ruta, init);
+}
+
 /**
  * Lo mismo, pero devuelve los bytes: para lo que la API sirve como archivo.
  *

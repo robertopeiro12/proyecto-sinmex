@@ -1,9 +1,21 @@
 "use client";
 
 import { Fragment, useState } from "react";
+import { useAuth } from "@/components/auth/auth-provider";
+import { Aviso } from "@/components/ui/aviso";
+import { Button } from "@/components/ui/button";
+import { Casilla } from "@/components/ui/campo";
+import { Fecha } from "@/components/ui/fecha";
 import { Monto } from "@/components/ui/monto";
 import { CajaTabla, FilaTotal, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
-import type { Corte, DetalleVendedorDia, PagoDetalle, VisitaDetalle } from "@/lib/flujo-diario";
+import { mensajeDe } from "@/lib/api";
+import {
+  guardarNotasEntregadas,
+  type Corte,
+  type DetalleVendedorDia,
+  type PagoDetalle,
+  type VisitaDetalle,
+} from "@/lib/flujo-diario";
 import { formatearPesos, plural } from "@/lib/formato";
 import {
   BotonFolio,
@@ -167,23 +179,37 @@ export function PestanaGastos({ gastos }: { gastos: DetalleVendedorDia["gastos"]
   );
 }
 
-/** Hoy, las notas nuevas a crédito del día (spec §6); las asignadas llegan con la pieza 6. */
 /**
- * Las notas a crédito del día, con las palabras del sistema viejo: en el Dashboard son las
- * "pendientes nuevas por entregar" (la casilla Entregada llega con las notas asignadas,
- * pieza 6); en el Flujo diario, "pendientes nuevas".
+ * Las notas a crédito del día, con las palabras del sistema viejo. En el Dashboard son las
+ * "pendientes nuevas por entregar", con la casilla Entregada (¿el vendedor regresó la nota de
+ * papel?) y "Guardar revisión"; debajo, las nuevas NO entregadas de días anteriores. En el
+ * Flujo diario, solo consulta: entregadas y NO entregadas (sin revisar cuenta como no).
+ * Las notas asignadas llegan con la pieza 6.
  */
 export function PestanaNotasCredito({
-  notas,
+  detalle,
   modo,
+  onGuardadas,
 }: {
-  notas: DetalleVendedorDia["notasCredito"];
+  detalle: DetalleVendedorDia;
   modo: "flujo" | "dashboard";
+  onGuardadas?: () => void;
 }) {
-  if (notas.length === 0) return <SinDatos>No hay notas pendientes.</SinDatos>;
-  const titulo = modo === "dashboard" ? "Notas pendientes nuevas por entregar" : "Notas pendientes nuevas";
+  if (modo === "dashboard") return <NotasDashboard detalle={detalle} onGuardadas={onGuardadas} />;
+  const entregadas = detalle.notasCredito.filter((n) => n.entregada === true);
+  const noEntregadas = detalle.notasCredito.filter((n) => n.entregada !== true);
+  if (detalle.notasCredito.length === 0) return <SinDatos>No hay notas pendientes.</SinDatos>;
   return (
-    <div className="max-w-2xl">
+    <div className="flex max-w-2xl flex-col gap-5">
+      {entregadas.length > 0 && <TablaNotas titulo="Notas pendientes nuevas entregadas" notas={entregadas} />}
+      {noEntregadas.length > 0 && <TablaNotas titulo="Notas nuevas NO entregadas" notas={noEntregadas} />}
+    </div>
+  );
+}
+
+function TablaNotas({ titulo, notas }: { titulo: string; notas: DetalleVendedorDia["notasCredito"] }) {
+  return (
+    <div>
       <TituloBloque extra={plural(notas.length, "nota", "notas")}>{titulo}</TituloBloque>
       <CajaTabla>
         <Tabla densidad="compacta" aria-label={titulo}>
@@ -207,6 +233,129 @@ export function PestanaNotasCredito({
           </tbody>
         </Tabla>
       </CajaTabla>
+    </div>
+  );
+}
+
+const TITULO_POR_ENTREGAR = "Notas pendientes nuevas por entregar";
+const TITULO_NO_ENTREGADAS = "Notas nuevas NO entregadas";
+
+function NotasDashboard({ detalle, onGuardadas }: { detalle: DetalleVendedorDia; onGuardadas?: () => void }) {
+  const { puede } = useAuth();
+  const puedeRevisar = puede("nota_papel.revisar");
+  // Lo que el usuario cambió y aún no llega del servidor: sobrevive a la actualización
+  // automática del Dashboard (cada 60 s), que trae otra vez el detalle.
+  const [marcas, setMarcas] = useState<ReadonlyMap<string, boolean>>(() => new Map());
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { notasCredito: notas, notasNoEntregadas } = detalle;
+
+  if (notas.length === 0 && notasNoEntregadas.length === 0) return <SinDatos>No hay notas pendientes.</SinDatos>;
+
+  const marcada = (n: (typeof notas)[number]) => marcas.get(n.folio) ?? n.entregada === true;
+
+  function marcar(folio: string, valor: boolean) {
+    setMarcas((antes) => new Map(antes).set(folio, valor));
+  }
+
+  async function guardar() {
+    setGuardando(true);
+    setError(null);
+    try {
+      // Guardar es la revisión completa: la que queda sin marcar es "no entregada".
+      await guardarNotasEntregadas({
+        vendedor: detalle.vendedorId,
+        notas: notas.map((n) => ({ folio: n.folio, entregada: marcada(n) })),
+      });
+      onGuardadas?.();
+    } catch (err) {
+      setError(mensajeDe(err, "No se pudo guardar la revisión."));
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="flex max-w-2xl flex-col gap-5">
+      {notas.length > 0 && (
+        <div>
+          <TituloBloque extra={plural(notas.length, "nota", "notas")}>{TITULO_POR_ENTREGAR}</TituloBloque>
+          <CajaTabla>
+            <Tabla densidad="compacta" aria-label={TITULO_POR_ENTREGAR}>
+              <thead>
+                <tr>
+                  <Th>Cliente</Th>
+                  <Th>Folio</Th>
+                  <Th alinear="derecha">Monto</Th>
+                  <Th alinear="derecha">Pendiente</Th>
+                  <Th alinear="centro">Entregada</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {notas.map((n) => (
+                  <tr key={n.folio}>
+                    <Td>{n.cliente}</Td>
+                    <Td className="font-mono text-[12.5px] whitespace-nowrap">{n.folio}</Td>
+                    <TdMonto centavos={n.totalCentavos} />
+                    <TdMonto centavos={n.pendienteCentavos} />
+                    <Td alinear="centro">
+                      <Casilla
+                        aria-label={`Entregada ${n.folio}`}
+                        checked={marcada(n)}
+                        disabled={!puedeRevisar || guardando}
+                        onChange={(e) => marcar(n.folio, e.target.checked)}
+                      />
+                    </Td>
+                  </tr>
+                ))}
+              </tbody>
+            </Tabla>
+          </CajaTabla>
+          {error && (
+            <Aviso tono="error" className="mt-2.5">
+              {error}
+            </Aviso>
+          )}
+          {puedeRevisar && (
+            <div className="mt-2.5 flex justify-end">
+              <Button onClick={() => void guardar()} disabled={guardando}>
+                {guardando ? "Guardando…" : "Guardar revisión"}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+      {notasNoEntregadas.length > 0 && (
+        <div>
+          <TituloBloque extra={plural(notasNoEntregadas.length, "nota", "notas")}>{TITULO_NO_ENTREGADAS}</TituloBloque>
+          <CajaTabla>
+            <Tabla densidad="compacta" aria-label={TITULO_NO_ENTREGADAS}>
+              <thead>
+                <tr>
+                  <Th>Cliente</Th>
+                  <Th>Folio</Th>
+                  <Th>Fecha</Th>
+                  <Th alinear="derecha">Monto</Th>
+                  <Th alinear="derecha">Pendiente</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {notasNoEntregadas.map((n) => (
+                  <tr key={n.folio}>
+                    <Td>{n.cliente}</Td>
+                    <Td className="font-mono text-[12.5px] whitespace-nowrap">{n.folio}</Td>
+                    <Td>
+                      <Fecha valor={n.fecha} />
+                    </Td>
+                    <TdMonto centavos={n.totalCentavos} />
+                    <TdMonto centavos={n.pendienteCentavos} />
+                  </tr>
+                ))}
+              </tbody>
+            </Tabla>
+          </CajaTabla>
+        </div>
+      )}
     </div>
   );
 }

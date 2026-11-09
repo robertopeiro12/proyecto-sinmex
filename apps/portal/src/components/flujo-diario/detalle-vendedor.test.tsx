@@ -1,8 +1,32 @@
-import { describe, expect, it } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useAuth } from "@/components/auth/auth-provider";
+import { ErrorApi } from "@/lib/api";
+import * as fd from "@/lib/flujo-diario";
 import type { DetalleVendedorDia } from "@/lib/flujo-diario";
 import { DetalleVendedor } from "./detalle-vendedor";
+
+vi.mock("@/components/auth/auth-provider");
+vi.mock("@/lib/flujo-diario", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/flujo-diario")>();
+  return { ...real, guardarNotasEntregadas: vi.fn() };
+});
+const guardarNotasEntregadas = vi.mocked(fd.guardarNotasEntregadas);
+
+function mockAuth(permisos: string[]) {
+  vi.mocked(useAuth).mockReturnValue({
+    usuario: null,
+    cargando: false,
+    cerrarSesion: vi.fn(),
+    puede: (clave: string) => permisos.includes(clave),
+  });
+}
+
+beforeEach(() => {
+  guardarNotasEntregadas.mockReset();
+  mockAuth(["nota_papel.revisar"]);
+});
 
 const DETALLE: DetalleVendedorDia = {
   fecha: "2026-11-09",
@@ -37,7 +61,8 @@ const DETALLE: DetalleVendedorDia = {
     aFavor: [{ cliente: "Aqui es Texcoco", montoCentavos: 5000 }],
   },
   gastos: [{ descripcion: "Hielo", montoCentavos: 1000 }],
-  notasCredito: [{ folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000 }],
+  notasCredito: [{ folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null }],
+  notasNoEntregadas: [],
   visitas: [
     { cliente: "Tyco Cge", vendio: true, hora: "2026-11-09T16:42:00.000Z", motivo: null, atendio: null, comentario: null },
     { cliente: "Abarrotes Mary", vendio: false, hora: "2026-11-09T17:15:00.000Z", motivo: "Tiene producto", atendio: "Mary", comentario: "Pasar el jueves" },
@@ -147,8 +172,9 @@ describe("DetalleVendedor", () => {
     await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
     expect(within(screen.getByRole("tabpanel")).getByText("TJ261109RB10")).toBeInTheDocument();
     // Las palabras del sistema viejo: título y columnas Cliente · Folio · Monto · Pendiente.
-    expect(screen.getByText("Notas pendientes nuevas")).toBeInTheDocument();
-    const notas = screen.getByRole("table", { name: "Notas pendientes nuevas" });
+    // Sin revisar (null) cuenta como NO entregada.
+    expect(screen.getByText("Notas nuevas NO entregadas")).toBeInTheDocument();
+    const notas = screen.getByRole("table", { name: "Notas nuevas NO entregadas" });
     expect(within(notas).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
       "Cliente",
       "Folio",
@@ -159,11 +185,141 @@ describe("DetalleVendedor", () => {
     expect(within(screen.getByRole("tabpanel")).getByText("Don Gallo")).toBeInTheDocument();
   });
 
-  it("en el Dashboard las notas nuevas son las que faltan por entregar, como el viejo", async () => {
+  it("en el Dashboard las notas nuevas son las que faltan por entregar, con su casilla Entregada", async () => {
     const u = userEvent.setup();
+    const detalle: DetalleVendedorDia = {
+      ...DETALLE,
+      notasCredito: [
+        { folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null },
+        { folio: "TJ261109RB11", cliente: "Mary", totalCentavos: 10000, pendienteCentavos: 5000, entregada: true },
+      ],
+    };
+    render(<DetalleVendedor detalle={detalle} modo="dashboard" />);
+    await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
+    const tabla = screen.getByRole("table", { name: "Notas pendientes nuevas por entregar" });
+    expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
+      "Cliente",
+      "Folio",
+      "Monto",
+      "Pendiente",
+      "Entregada",
+    ]);
+    // Empieza con lo guardado: null = sin marcar.
+    expect(within(tabla).getByRole("checkbox", { name: "Entregada TJ261109RB10" })).not.toBeChecked();
+    expect(within(tabla).getByRole("checkbox", { name: "Entregada TJ261109RB11" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "Guardar revisión" })).toBeInTheDocument();
+    // Sin notas NO entregadas de días anteriores, esa lista no sale.
+    expect(screen.queryByText("Notas nuevas NO entregadas")).not.toBeInTheDocument();
+  });
+
+  it("Guardar revisión manda todas las casillas y avisa para volver a pedir el detalle", async () => {
+    const u = userEvent.setup();
+    const guardadas = vi.fn();
+    guardarNotasEntregadas.mockResolvedValue(undefined);
+    const detalle: DetalleVendedorDia = {
+      ...DETALLE,
+      notasCredito: [
+        { folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null },
+        { folio: "TJ261109RB11", cliente: "Mary", totalCentavos: 10000, pendienteCentavos: 5000, entregada: true },
+      ],
+    };
+    render(<DetalleVendedor detalle={detalle} modo="dashboard" onNotasGuardadas={guardadas} />);
+    await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
+    await u.click(screen.getByRole("checkbox", { name: "Entregada TJ261109RB10" }));
+    await u.click(screen.getByRole("checkbox", { name: "Entregada TJ261109RB11" }));
+    await u.click(screen.getByRole("button", { name: "Guardar revisión" }));
+    expect(guardarNotasEntregadas).toHaveBeenCalledWith({
+      vendedor: "ricardo",
+      notas: [
+        { folio: "TJ261109RB10", entregada: true },
+        { folio: "TJ261109RB11", entregada: false },
+      ],
+    });
+    await waitFor(() => expect(guardadas).toHaveBeenCalledTimes(1));
+  });
+
+  it("si Guardar falla, avisa el error y no recarga", async () => {
+    const u = userEvent.setup();
+    const guardadas = vi.fn();
+    guardarNotasEntregadas.mockRejectedValue(new ErrorApi("x", 400, "La nota TJ261109RB10 no se puede revisar."));
+    render(<DetalleVendedor detalle={DETALLE} modo="dashboard" onNotasGuardadas={guardadas} />);
+    await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
+    await u.click(screen.getByRole("button", { name: "Guardar revisión" }));
+    expect(await screen.findByText("La nota TJ261109RB10 no se puede revisar.")).toBeInTheDocument();
+    expect(guardadas).not.toHaveBeenCalled();
+  });
+
+  it("sin nota_papel.revisar: casillas deshabilitadas y sin botón Guardar", async () => {
+    const u = userEvent.setup();
+    mockAuth([]);
     render(<DetalleVendedor detalle={DETALLE} modo="dashboard" />);
     await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
-    expect(screen.getByText("Notas pendientes nuevas por entregar")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Entregada TJ261109RB10" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Guardar revisión" })).not.toBeInTheDocument();
+  });
+
+  it("Dashboard: debajo, las notas nuevas NO entregadas de días anteriores", async () => {
+    const u = userEvent.setup();
+    const detalle: DetalleVendedorDia = {
+      ...DETALLE,
+      notasCredito: [],
+      notasNoEntregadas: [
+        { folio: "TJ261105RB03", cliente: "Tacos Beto", fecha: "2026-11-05", totalCentavos: 30000, pendienteCentavos: 12000 },
+      ],
+    };
+    render(<DetalleVendedor detalle={detalle} modo="dashboard" />);
+    await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
+    expect(screen.queryByRole("table", { name: "Notas pendientes nuevas por entregar" })).not.toBeInTheDocument();
+    const tabla = screen.getByRole("table", { name: "Notas nuevas NO entregadas" });
+    expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
+      "Cliente",
+      "Folio",
+      "Fecha",
+      "Monto",
+      "Pendiente",
+    ]);
+    expect(within(tabla).getByText("Tacos Beto")).toBeInTheDocument();
+    expect(within(tabla).getByText("$120.00")).toBeInTheDocument();
+  });
+
+  it("Flujo diario: entregadas y NO entregadas, solo consulta", async () => {
+    const u = userEvent.setup();
+    const detalle: DetalleVendedorDia = {
+      ...DETALLE,
+      notasCredito: [
+        { folio: "TJ1", cliente: "Uno", totalCentavos: 1000, pendienteCentavos: 1000, entregada: true },
+        { folio: "TJ2", cliente: "Dos", totalCentavos: 2000, pendienteCentavos: 2000, entregada: false },
+        { folio: "TJ3", cliente: "Tres", totalCentavos: 3000, pendienteCentavos: 3000, entregada: null },
+      ],
+    };
+    render(<DetalleVendedor detalle={detalle} modo="flujo" />);
+    await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
+    const entregadas = screen.getByRole("table", { name: "Notas pendientes nuevas entregadas" });
+    expect(within(entregadas).getByText("TJ1")).toBeInTheDocument();
+    expect(within(entregadas).queryByText("TJ2")).not.toBeInTheDocument();
+    const no = screen.getByRole("table", { name: "Notas nuevas NO entregadas" });
+    expect(within(no).getByText("TJ2")).toBeInTheDocument();
+    expect(within(no).getByText("TJ3")).toBeInTheDocument();
+    expect(within(no).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
+      "Cliente",
+      "Folio",
+      "Monto",
+      "Pendiente",
+    ]);
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Guardar revisión" })).not.toBeInTheDocument();
+  });
+
+  it("Flujo diario: con todas entregadas, no sale la lista de NO entregadas", async () => {
+    const u = userEvent.setup();
+    const detalle: DetalleVendedorDia = {
+      ...DETALLE,
+      notasCredito: [{ folio: "TJ1", cliente: "Uno", totalCentavos: 1000, pendienteCentavos: 1000, entregada: true }],
+    };
+    render(<DetalleVendedor detalle={detalle} modo="flujo" />);
+    await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
+    expect(screen.getByRole("table", { name: "Notas pendientes nuevas entregadas" })).toBeInTheDocument();
+    expect(screen.queryByText("Notas nuevas NO entregadas")).not.toBeInTheDocument();
   });
 
   it("la cantidad de una promoción lleva separador de miles", async () => {

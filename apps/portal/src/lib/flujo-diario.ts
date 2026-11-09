@@ -1,4 +1,4 @@
-import { apiFetch } from "./api";
+import { apiFetch, apiFetchSinCuerpo } from "./api";
 import { formatearPesos, plural } from "./formato";
 
 /*
@@ -156,11 +156,27 @@ export interface DetalleVendedorDia {
     cliente: string;
     totalCentavos: number;
     pendienteCentavos: number;
+    /** La nota de papel: true entregada, false no, null sin revisar. */
+    entregada: boolean | null;
   }[];
+  /**
+   * Notas a credito de dias ANTERIORES del vendedor marcadas como no
+   * entregadas y con algo pendiente. Orden: fecha, folio.
+   */
+  notasNoEntregadas: NotaNoEntregada[];
   visitas: VisitaDetalle[];
   promociones: { cliente: string; producto: string; cantidad: number }[];
   /** `null` sin jornada cerrada. */
   corte: Corte | null;
+}
+
+export interface NotaNoEntregada {
+  folio: string;
+  cliente: string;
+  /** `AAAA-MM-DD`. */
+  fecha: string;
+  totalCentavos: number;
+  pendienteCentavos: number;
 }
 
 export interface DetalleDia {
@@ -259,6 +275,20 @@ export function obtenerDetalleDashboard(f: {
       fecha: f.fecha,
     }),
   );
+}
+
+/**
+ * La casilla "Entregada" de las notas a crédito (permiso `nota_papel.revisar`). Manda todas las
+ * del vendedor; una que no se puede revisar tumba el lote (400) y no se guarda nada. Responde 204.
+ */
+export function guardarNotasEntregadas(datos: {
+  vendedor: string;
+  notas: { folio: string; entregada: boolean }[];
+}): Promise<void> {
+  return apiFetchSinCuerpo("/dashboard/notas-entregadas", {
+    method: "PUT",
+    body: JSON.stringify(datos),
+  });
 }
 
 /** Agrupa respetando el orden de llegada (el servidor ya ordena por sucursal). */

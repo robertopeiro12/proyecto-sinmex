@@ -10,7 +10,7 @@ import { PantallaDashboard } from "./pantalla-dashboard";
 vi.mock("@/components/auth/auth-provider");
 vi.mock("@/lib/flujo-diario", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/flujo-diario")>();
-  return { ...real, obtenerDashboard: vi.fn(), obtenerDetalleDashboard: vi.fn() };
+  return { ...real, obtenerDashboard: vi.fn(), obtenerDetalleDashboard: vi.fn(), guardarNotasEntregadas: vi.fn() };
 });
 vi.mock("@/lib/sucursales", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/sucursales")>();
@@ -19,6 +19,7 @@ vi.mock("@/lib/sucursales", async (importOriginal) => {
 
 const obtenerDashboard = vi.mocked(fd.obtenerDashboard);
 const obtenerDetalle = vi.mocked(fd.obtenerDetalleDashboard);
+const guardarNotasEntregadas = vi.mocked(fd.guardarNotasEntregadas);
 const listarSucursales = vi.mocked(sucursalesLib.listarSucursales);
 
 function fila(p: Partial<ResumenVendedorDia>): ResumenVendedorDia {
@@ -65,7 +66,7 @@ const DETALLE: DetalleVendedorDia = {
   fecha: "2026-11-09", vendedorId: "rblas", vendedor: "RBlas",
   porProducto: [], notas: [],
   cobranza: { contado: [], anteriores: [], aFavor: [] },
-  gastos: [], notasCredito: [], visitas: [], promociones: [],
+  gastos: [], notasCredito: [], notasNoEntregadas: [], visitas: [], promociones: [],
   corte: { contadoCentavos: 279650, anterioresCentavos: 0, aFavorCentavos: 0, gastoCentavos: 1000, tesoreriaCentavos: 278650 },
 };
 
@@ -177,6 +178,28 @@ describe("PantallaDashboard", () => {
     expect(obtenerDetalle).toHaveBeenCalledTimes(2);
     expect(await screen.findByRole("tab", { name: "Cobranza" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("button", { name: "RBlas" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("guardar la revisión de notas de papel vuelve a pedir el detalle abierto, sin cerrarlo", async () => {
+    mockAuth([PERMISO, "nota_papel.revisar"]);
+    const conNota: DetalleVendedorDia = {
+      ...DETALLE,
+      notasCredito: [{ folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null }],
+    };
+    obtenerDetalle.mockResolvedValue(conNota);
+    guardarNotasEntregadas.mockResolvedValue(undefined);
+    const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PantallaDashboard sucursal="TJ" />);
+    await u.click(await screen.findByRole("button", { name: "RBlas" }));
+    await u.click(await screen.findByRole("tab", { name: "Notas de ventas" }));
+    await u.click(screen.getByRole("checkbox", { name: "Entregada TJ261109RB10" }));
+    await u.click(screen.getByRole("button", { name: "Guardar revisión" }));
+    expect(guardarNotasEntregadas).toHaveBeenCalledWith({
+      vendedor: "rblas",
+      notas: [{ folio: "TJ261109RB10", entregada: true }],
+    });
+    await vi.waitFor(() => expect(obtenerDetalle).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("tab", { name: "Notas de ventas" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("Estatus En ruta / Terminó; Corte «Ver» solo del que terminó y abre la pestaña Corte", async () => {

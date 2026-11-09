@@ -123,6 +123,7 @@ export function TablaDashboard({
                 modo="dashboard"
                 pestanaInicial={abierto.pestana}
                 onCambioPestana={cambiarPestana}
+                onNotasGuardadas={recargar}
               />
             )}
           </FilaDetalle>

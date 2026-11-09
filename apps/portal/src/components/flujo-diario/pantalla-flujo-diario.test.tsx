@@ -80,7 +80,7 @@ const DETALLE: DetalleVendedorDia = {
   porProducto: [{ presentacion: "500 ml", producto: "Horchata 500 ml", piezas: 100 }],
   notas: [],
   cobranza: { contado: [], anteriores: [], aFavor: [] },
-  gastos: [], notasCredito: [], visitas: [], promociones: [], corte: null,
+  gastos: [], notasCredito: [], notasNoEntregadas: [], visitas: [], promociones: [], corte: null,
 };
 
 function mockAuth(permisos: string[]) {

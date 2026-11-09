@@ -9,14 +9,16 @@ import {
   obtenerDetalleDia,
   obtenerDetalleVendedor,
   obtenerFlujoDiario,
+  guardarNotasEntregadas,
   type PagoDetalle,
 } from "./flujo-diario";
 
 vi.mock("./api", async (importOriginal) => {
   const real = await importOriginal<typeof import("./api")>();
-  return { ...real, apiFetch: vi.fn() };
+  return { ...real, apiFetch: vi.fn(), apiFetchSinCuerpo: vi.fn() };
 });
 const apiFetch = vi.mocked(api.apiFetch);
+const apiFetchSinCuerpo = vi.mocked(api.apiFetchSinCuerpo);
 
 const pago = (saldo: number): PagoDetalle => ({
   folio: "TJ261013AP01",
@@ -127,5 +129,16 @@ describe("fetchers", () => {
     expect(apiFetch).toHaveBeenLastCalledWith(
       "/dashboard/vendedor?vendedor=v1&sucursal=MX&fecha=2026-11-09",
     );
+  });
+  it("guardarNotasEntregadas: PUT sin cuerpo de respuesta (204)", async () => {
+    apiFetchSinCuerpo.mockResolvedValue(undefined);
+    await guardarNotasEntregadas({
+      vendedor: "v1",
+      notas: [{ folio: "TJ1", entregada: true }],
+    });
+    expect(apiFetchSinCuerpo).toHaveBeenCalledWith("/dashboard/notas-entregadas", {
+      method: "PUT",
+      body: JSON.stringify({ vendedor: "v1", notas: [{ folio: "TJ1", entregada: true }] }),
+    });
   });
 });

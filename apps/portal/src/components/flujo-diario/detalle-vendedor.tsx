@@ -32,23 +32,27 @@ export type PestanaDetalleVendedor =
  * el Flujo diario (`modo="flujo"`, sin Corte) y el Dashboard (`modo="dashboard"`).
  * `pestanaInicial`: picar un número del renglón abre su pestaña (Cobranza, Gastos…).
  * `onCambioPestana`: avisa la pestaña que eligió el usuario, para que el renglón la recuerde.
+ * `onNotasGuardadas`: en el Dashboard, tras guardar la casilla Entregada de las notas.
  */
 export function DetalleVendedor({
   detalle,
   modo,
   pestanaInicial = "venta",
   onCambioPestana,
+  onNotasGuardadas,
 }: {
   detalle: DetalleVendedorDia;
   modo: "flujo" | "dashboard";
   pestanaInicial?: PestanaDetalleVendedor;
   onCambioPestana?: (pestana: PestanaDetalleVendedor) => void;
+  /** Dashboard: se guardó la casilla Entregada; quien abrió el detalle lo vuelve a pedir. */
+  onNotasGuardadas?: () => void;
 }) {
   const pestanas = [
     { valor: "venta", etiqueta: "Venta general", contenido: <PestanaVentaGeneral detalle={detalle} /> },
     { valor: "cobranza", etiqueta: "Cobranza", contenido: <PestanaCobranza detalle={detalle} /> },
     { valor: "gastos", etiqueta: "Gastos", contenido: <PestanaGastos gastos={detalle.gastos} /> },
-    { valor: "notas", etiqueta: "Notas de ventas", contenido: <PestanaNotasCredito notas={detalle.notasCredito} modo={modo} /> },
+    { valor: "notas", etiqueta: "Notas de ventas", contenido: <PestanaNotasCredito detalle={detalle} modo={modo} onGuardadas={onNotasGuardadas} /> },
     { valor: "visitas", etiqueta: "Visitas", contenido: <PestanaVisitas visitas={detalle.visitas} /> },
     {
       valor: "mermas",
