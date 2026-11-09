@@ -173,6 +173,8 @@ describe("DetalleVendedor", () => {
     await u.click(screen.getByRole("tab", { name: "Ruta" }));
     expect(screen.getByText("8:42")).toBeInTheDocument();
     // El cliente de la ruta que no se visitó: Vendió No y "Cliente no visitado" en la hora.
+    // El conteo es de clientes (como el x / y del Dashboard), no de renglones.
+    expect(screen.getByText("2 clientes visitados · 1 con venta · 1 no visitado")).toBeInTheDocument();
     const noVisitado = within(screen.getByRole("table", { name: "Ruta" })).getByText("Schlage Tecate").closest("tr")!;
     expect(noVisitado).toHaveTextContent("No");
     expect(noVisitado).toHaveTextContent("Cliente no visitado");

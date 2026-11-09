@@ -183,6 +183,35 @@ describe("PantallaDashboard", () => {
     expect(within(sigue).queryByText("Cargando…")).not.toBeInTheDocument();
   });
 
+  it("cerrar la ventana con casillas sin guardar pregunta antes; sin cambios cierra directo", async () => {
+    mockAuth([PERMISO, "nota_papel.revisar"]);
+    const conNota: DetalleVendedorDia = {
+      ...DETALLE,
+      notasCredito: [{ folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null }],
+    };
+    obtenerDetalle.mockResolvedValue(conNota);
+    const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PantallaDashboard sucursal="TJ" />);
+    await u.click(await screen.findByRole("button", { name: "RBlas" }));
+    await u.click(await screen.findByRole("tab", { name: "Notas de ventas" }));
+    await u.click(screen.getByRole("checkbox", { name: "Entregada TJ261109RB10" }));
+    await u.click(screen.getByRole("button", { name: "Cerrar" }));
+    // Pregunta; "Cancelar" deja la ventana abierta con la casilla como estaba.
+    const pregunta = await screen.findByRole("alertdialog", { name: "¿Cerrar sin guardar la revisión?" });
+    await u.click(within(pregunta).getByRole("button", { name: "Cancelar" }));
+    expect(screen.getByRole("checkbox", { name: "Entregada TJ261109RB10" })).toBeChecked();
+    // "Cerrar sin guardar" sí la cierra.
+    await u.click(screen.getByRole("button", { name: "Cerrar" }));
+    await u.click(await screen.findByRole("button", { name: "Cerrar sin guardar" }));
+    await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: /Notas de ventas · RBlas/ })).not.toBeInTheDocument());
+    // Sin cambios: cierra sin preguntar.
+    await u.click(screen.getByRole("button", { name: "RBlas" }));
+    await screen.findByRole("dialog", { name: /RBlas/ });
+    await u.click(screen.getByRole("button", { name: "Cerrar" }));
+    await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: /RBlas/ })).not.toBeInTheDocument());
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
   it("guardar la revisión de notas de papel vuelve a pedir el detalle abierto, sin cerrarlo", async () => {
     mockAuth([PERMISO, "nota_papel.revisar"]);
     const conNota: DetalleVendedorDia = {
@@ -240,7 +269,7 @@ describe("PantallaDashboard", () => {
     const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PantallaDashboard sucursal="TJ" />);
     const tabla = await screen.findByRole("table", { name: "Vendedores de hoy" });
-    await u.click(within(tabla).getByRole("button", { name: "Ruta de Ricardo" }));
+    await u.click(within(tabla).getByRole("button", { name: "Ruta de Ricardo: 6 / 16" }));
     await screen.findByRole("dialog", { name: "Ruta · Ricardo · 09/11/2026" });
     expect(await screen.findByRole("tab", { name: "Ruta" })).toHaveAttribute("aria-selected", "true");
   });

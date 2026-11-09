@@ -175,6 +175,7 @@ export function BotonNumero({
     <button
       type="button"
       aria-label={etiqueta}
+      aria-haspopup="dialog"
       onClick={(e) => {
         e.stopPropagation();
         onClick();
@@ -192,6 +193,7 @@ export function BotonVer({ etiqueta, onClick }: { etiqueta: string; onClick: () 
     <button
       type="button"
       aria-label={etiqueta}
+      aria-haspopup="dialog"
       onClick={(e) => {
         e.stopPropagation();
         onClick();

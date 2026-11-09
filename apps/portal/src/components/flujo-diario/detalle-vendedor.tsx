@@ -54,6 +54,7 @@ export function DetalleVendedor({
   pestanaInicial = "venta",
   onCambioPestana,
   onNotasGuardadas,
+  onCambiosPendientes,
 }: {
   detalle: DetalleVendedorDia;
   modo: "flujo" | "dashboard";
@@ -61,12 +62,14 @@ export function DetalleVendedor({
   onCambioPestana?: (pestana: PestanaDetalleVendedor) => void;
   /** Dashboard: se guardó la casilla Entregada; quien abrió el detalle lo vuelve a pedir. */
   onNotasGuardadas?: () => void;
+  /** Dashboard: hay casillas Entregada cambiadas sin guardar (para preguntar antes de cerrar). */
+  onCambiosPendientes?: (hay: boolean) => void;
 }) {
   const pestanas = [
     { valor: "venta", etiqueta: E.venta, contenido: <PestanaVentaGeneral detalle={detalle} /> },
     { valor: "cobranza", etiqueta: E.cobranza, contenido: <PestanaCobranza detalle={detalle} /> },
     { valor: "gastos", etiqueta: E.gastos, contenido: <PestanaGastos gastos={detalle.gastos} /> },
-    { valor: "notas", etiqueta: E.notas, contenido: <PestanaNotasCredito detalle={detalle} modo={modo} onGuardadas={onNotasGuardadas} /> },
+    { valor: "notas", etiqueta: E.notas, contenido: <PestanaNotasCredito detalle={detalle} modo={modo} onGuardadas={onNotasGuardadas} onCambiosPendientes={onCambiosPendientes} /> },
     { valor: "visitas", etiqueta: E.visitas, contenido: <PestanaVisitas visitas={detalle.visitas} /> },
     {
       valor: "mermas",

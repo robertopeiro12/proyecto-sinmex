@@ -1,6 +1,7 @@
 "use client";
 
-import { Fragment, useEffect, useRef } from "react";
+import { Fragment, useCallback, useEffect, useRef } from "react";
+import { useConfirmar } from "@/components/ui/confirmar";
 import { Etiqueta } from "@/components/ui/etiqueta";
 import { CajaTabla, Fila, FilaGrupo, FilaTotal, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
 import {
@@ -108,7 +109,7 @@ export function TablaDashboard({
           <RutaXY
             atendidos={f.atendidosEnRuta}
             clientes={f.clientesEnRuta}
-            etiqueta={`Ruta de ${f.vendedor}`}
+            etiqueta={`Ruta de ${f.vendedor}: ${f.atendidosEnRuta} / ${f.clientesEnRuta}`}
             onClick={() => verEn("visitas")}
           />
         </Td>
@@ -124,11 +125,33 @@ export function TablaDashboard({
 
   const filaAbierta = visto && dashboard.vendedores.find((f) => f.vendedorId === visto.clave);
 
+  // Casillas Entregada cambiadas sin guardar: cerrar la ventana pregunta antes de perderlas.
+  const pendientes = useRef(false);
+  const avisarPendientes = useCallback((hay: boolean) => {
+    pendientes.current = hay;
+  }, []);
+  const { confirmar, ventana: preguntaCerrar } = useConfirmar();
+  async function alCerrar() {
+    if (
+      pendientes.current &&
+      !(await confirmar({
+        titulo: "¿Cerrar sin guardar la revisión?",
+        descripcion: "Las casillas de Entregada que cambiaste no se guardan.",
+        confirmar: "Cerrar sin guardar",
+        tono: "normal",
+      }))
+    )
+      return;
+    pendientes.current = false;
+    cerrar();
+  }
+
   return (
     <CajaTabla>
+      {preguntaCerrar}
       <VentanaDetalle
         abierta={!!abierto}
-        alCerrar={cerrar}
+        alCerrar={() => void alCerrar()}
         titulo={
           visto && filaAbierta
             ? `${ETIQUETA_PESTANA_VENDEDOR[visto.pestana]} · ${filaAbierta.vendedor} · ${formatearFecha(dashboard.fecha)}`
@@ -144,6 +167,7 @@ export function TablaDashboard({
             pestanaInicial={visto?.pestana}
             onCambioPestana={cambiarPestana}
             onNotasGuardadas={recargar}
+            onCambiosPendientes={avisarPendientes}
           />
         )}
       </VentanaDetalle>

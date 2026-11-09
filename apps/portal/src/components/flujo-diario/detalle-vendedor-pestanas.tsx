@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
@@ -191,12 +191,14 @@ export function PestanaNotasCredito({
   detalle,
   modo,
   onGuardadas,
+  onCambiosPendientes,
 }: {
   detalle: DetalleVendedorDia;
   modo: "flujo" | "dashboard";
   onGuardadas?: () => void;
+  onCambiosPendientes?: (hay: boolean) => void;
 }) {
-  if (modo === "dashboard") return <NotasDashboard detalle={detalle} onGuardadas={onGuardadas} />;
+  if (modo === "dashboard") return <NotasDashboard detalle={detalle} onGuardadas={onGuardadas} onCambiosPendientes={onCambiosPendientes} />;
   const entregadas = detalle.notasCredito.filter((n) => n.entregada === true);
   const noEntregadas = detalle.notasCredito.filter((n) => n.entregada !== true);
   if (detalle.notasCredito.length === 0) return <SinDatos>No hay notas pendientes.</SinDatos>;
@@ -240,7 +242,15 @@ function TablaNotas({ titulo, notas }: { titulo: string; notas: DetalleVendedorD
 const TITULO_POR_ENTREGAR = "Notas pendientes nuevas por entregar";
 const TITULO_NO_ENTREGADAS = "Notas nuevas NO entregadas";
 
-function NotasDashboard({ detalle, onGuardadas }: { detalle: DetalleVendedorDia; onGuardadas?: () => void }) {
+function NotasDashboard({
+  detalle,
+  onGuardadas,
+  onCambiosPendientes,
+}: {
+  detalle: DetalleVendedorDia;
+  onGuardadas?: () => void;
+  onCambiosPendientes?: (hay: boolean) => void;
+}) {
   const { puede } = useAuth();
   const puedeRevisar = puede("nota_papel.revisar");
   // Lo que el usuario cambió y aún no guarda: sobrevive a la actualización automática del
@@ -249,11 +259,16 @@ function NotasDashboard({ detalle, onGuardadas }: { detalle: DetalleVendedorDia;
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { notasCredito: notas, notasNoEntregadas } = detalle;
-
-  if (notas.length === 0 && notasNoEntregadas.length === 0) return <SinDatos>No hay notas pendientes.</SinDatos>;
-
   const marcada = (n: (typeof notas)[number]) => marcas.get(n.folio) ?? n.entregada === true;
   const hayCambios = notas.some((n) => marcada(n) !== (n.entregada === true));
+
+  // Quien abrió la ventana pregunta antes de cerrarla si quedaron casillas sin guardar.
+  useEffect(() => {
+    onCambiosPendientes?.(hayCambios);
+  }, [hayCambios, onCambiosPendientes]);
+  useEffect(() => () => onCambiosPendientes?.(false), [onCambiosPendientes]);
+
+  if (notas.length === 0 && notasNoEntregadas.length === 0) return <SinDatos>No hay notas pendientes.</SinDatos>;
 
   function marcar(folio: string, valor: boolean) {
     setMarcas((antes) => new Map(antes).set(folio, valor));
@@ -379,11 +394,16 @@ function NotasDashboard({ detalle, onGuardadas }: { detalle: DetalleVendedorDia;
  */
 export function PestanaVisitas({ visitas }: { visitas: VisitaDetalle[] }) {
   if (visitas.length === 0) return <SinDatos>Sin ruta ni visitas este día.</SinDatos>;
-  const visitados = visitas.filter((v) => v.visitado).length;
-  const conVenta = visitas.filter((v) => v.vendio).length;
+  // Por cliente, no por renglón (un cliente con venta y visita sale dos veces): cuadra con el x / y.
+  const clientes = (cumple: (v: VisitaDetalle) => boolean) => new Set(visitas.filter(cumple).map((v) => v.cliente)).size;
+  const visitados = clientes((v) => v.visitado);
+  const conVenta = clientes((v) => v.vendio);
+  const noVisitados = clientes((v) => !v.visitado);
   return (
     <div>
-      <TituloBloque extra={`${visitados} visitados · ${conVenta} con venta · ${visitas.length - visitados} no visitados`}>
+      <TituloBloque
+        extra={`${plural(visitados, "cliente visitado", "clientes visitados")} · ${conVenta} con venta · ${plural(noVisitados, "no visitado", "no visitados")}`}
+      >
         Ruta
       </TituloBloque>
       <CajaTabla>
