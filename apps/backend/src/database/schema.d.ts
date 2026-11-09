@@ -524,6 +524,9 @@ export interface VentaNota {
   monto_total: Generated<Numeric>;
   num_nota: string | null;
   origen: Generated<string>;
+  papel_entregado: boolean | null;
+  papel_revisado_en: Timestamp | null;
+  papel_revisado_por_usuario_id: string | null;
   pct_comision: Numeric | null;
   semana: number;
   status: string;
