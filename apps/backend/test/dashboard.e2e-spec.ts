@@ -207,7 +207,10 @@ describe('Dashboard (e2e)', () => {
   });
 
   afterAll(async () => {
-    await db.deleteFrom('ruta').where('vendedor_id', 'in', vendedorIds).execute();
+    await db
+      .deleteFrom('ruta')
+      .where('vendedor_id', 'in', vendedorIds)
+      .execute();
     await db
       .deleteFrom('cobranza_abono')
       .where('vendedor_id', 'in', vendedorIds)
@@ -378,8 +381,9 @@ describe('Dashboard (e2e)', () => {
       )
       .set('Cookie', cookieGeneral)
       .expect(200);
-    const ids = (flujo.body as { porVendedor: { vendedorId: string }[] })
-      .porVendedor.map((v) => v.vendedorId);
+    const ids = (
+      flujo.body as { porVendedor: { vendedorId: string }[] }
+    ).porVendedor.map((v) => v.vendedorId);
     expect(ids).toEqual(expect.arrayContaining([inactivo, baja]));
 
     await venta(hoy, inactivo, '20.00');
