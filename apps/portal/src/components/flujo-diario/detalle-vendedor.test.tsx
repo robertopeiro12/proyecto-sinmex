@@ -70,8 +70,8 @@ describe("DetalleVendedor", () => {
     const filas = within(productos).getAllByRole("row");
     expect(filas[1]).toHaveTextContent("Horchata 500 ml");
     expect(filas[1]).toHaveTextContent("20");
-    expect(filas[1]).toHaveTextContent("$11.50");
-    expect(filas[1]).toHaveTextContent("$230.00");
+    // Como el viejo: en Ventas por cliente solo Producto y Cantidad.
+    expect(within(productos).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Producto", "Cantidad"]);
     // Picar el folio otra vez la cierra; picar en cualquier parte del renglón también la abre.
     await u.click(folio);
     expect(screen.queryByRole("table", { name: "Productos de TJ261109RB07" })).not.toBeInTheDocument();
@@ -95,11 +95,16 @@ describe("DetalleVendedor", () => {
     expect(within(panel).getByText("$760.00")).toBeInTheDocument();
     // Como el viejo: una lista debajo de la otra, cada una con su renglón Total.
     const tablas = within(panel).getAllByRole("table").map((t) => t.getAttribute("aria-label"));
-    expect(tablas).toEqual(["Ventas de contado", "Notas de días anteriores", "Quedó a favor del cliente"]);
-    const contado = within(panel).getByRole("table", { name: "Ventas de contado" });
+    expect(tablas).toEqual(["Cobranza ventas de contado", "Cobranza ventas anteriores", "Quedó a favor del cliente"]);
+    const contado = within(panel).getByRole("table", { name: "Cobranza ventas de contado" });
     expect(within(contado).getAllByRole("row").at(-1)).toHaveTextContent("Total$460.00");
-    const anteriores = within(panel).getByRole("table", { name: "Notas de días anteriores" });
+    const anteriores = within(panel).getByRole("table", { name: "Cobranza ventas anteriores" });
     expect(within(anteriores).getAllByRole("row").at(-1)).toHaveTextContent("Total$250.00");
+    // En la cobranza el folio de contado se abre a Producto · Cantidad · Precio, como el viejo.
+    await u.click(within(contado).getByRole("button", { name: /TJ261109RB07/ }));
+    const productos = screen.getByRole("table", { name: "Productos de TJ261109RB07" });
+    expect(within(productos).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Producto", "Cantidad", "Precio"]);
+    expect(within(productos).getAllByRole("row")[1]).toHaveTextContent("$11.50");
   });
 
   it("modo flujo no tiene Corte; Inventario está deshabilitada", () => {
@@ -124,6 +129,9 @@ describe("DetalleVendedor", () => {
     expect(within(tabla).getByText("$2,786.50")).toBeInTheDocument();
     expect(within(tabla).getByText("− $10.00")).toBeInTheDocument();
     expect(within(tabla).queryByText("Quedó a favor del cliente")).not.toBeInTheDocument();
+    // Las palabras del corte del sistema viejo.
+    expect(within(tabla).getByText("Ventas contado")).toBeInTheDocument();
+    expect(within(tabla).getByText("Ventas anteriores")).toBeInTheDocument();
     unmount();
     render(<DetalleVendedor detalle={{ ...DETALLE, corte: { ...corte, aFavorCentavos: 5000 } }} modo="dashboard" />);
     await u.click(screen.getByRole("tab", { name: "Corte" }));
@@ -166,7 +174,11 @@ describe("DetalleVendedor", () => {
     };
     render(<DetalleVendedor detalle={muchas} modo="flujo" />);
     await u.click(screen.getByRole("tab", { name: "Mermas/Cambios/Promociones" }));
-    expect(within(screen.getByRole("table", { name: "Promociones de Don Gallo" })).getByText("1,200")).toBeInTheDocument();
+    const promos = screen.getByRole("table", { name: "Promociones de Don Gallo" });
+    expect(within(promos).getAllByRole("row")[1]).toHaveTextContent("Horchata 500 ml1,200");
+    // Como el viejo: Producto · Cantidad y su Total.
+    expect(within(promos).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Producto", "Cantidad"]);
+    expect(within(promos).getAllByRole("row").at(-1)).toHaveTextContent("Total1,200");
   });
 
   it("sin datos: los textos de vacío", async () => {

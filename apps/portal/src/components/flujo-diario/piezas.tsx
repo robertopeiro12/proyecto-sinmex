@@ -128,21 +128,23 @@ export function BotonFolio({ folio, abierta, onClick }: { folio: string; abierta
 /** Las clases del renglón que se abre al picarlo en cualquier parte. */
 export const RENGLON_QUE_ABRE = "cursor-pointer transition-colors hover:bg-menu";
 
-/** Los productos de una nota abierta, en una tablita: Producto · Cantidad · Precio · Importe. */
-export function FilaProductos({ columnas, nota }: { columnas: number; nota: NotaDetalle }) {
+/**
+ * Los productos de una nota abierta, en una tablita, con las columnas del sistema viejo:
+ * Producto · Cantidad en Ventas por cliente; Producto · Cantidad · Precio en la Cobranza.
+ */
+export function FilaProductos({ columnas, nota, conPrecio = false }: { columnas: number; nota: NotaDetalle; conPrecio?: boolean }) {
   return (
     <tr>
       <td colSpan={columnas} className="border-b bg-menu py-2 pr-3 pl-8">
         {nota.lineas.length === 0 ? (
           <span className="text-[12.5px] text-muted-foreground">Sin productos.</span>
         ) : (
-          <table aria-label={`Productos de ${nota.folio}`} className="w-auto min-w-[60%] text-[12.5px] tabular-nums">
+          <table aria-label={`Productos de ${nota.folio}`} className="w-auto min-w-[50%] text-[12.5px] tabular-nums">
             <thead>
               <tr className="text-muted-foreground">
                 <th scope="col" className="py-0.5 pr-6 text-left font-semibold">Producto</th>
                 <th scope="col" className="py-0.5 pr-6 text-right font-semibold">Cantidad</th>
-                <th scope="col" className="py-0.5 pr-6 text-right font-semibold">Precio</th>
-                <th scope="col" className="py-0.5 text-right font-semibold">Importe</th>
+                {conPrecio && <th scope="col" className="py-0.5 text-right font-semibold">Precio</th>}
               </tr>
             </thead>
             <tbody>
@@ -150,8 +152,7 @@ export function FilaProductos({ columnas, nota }: { columnas: number; nota: Nota
                 <tr key={`${l.producto}-${i}`}>
                   <td className="py-0.5 pr-6">{l.producto}</td>
                   <td className="py-0.5 pr-6 text-right">{formatearPiezas(l.cantidad)}</td>
-                  <td className="py-0.5 pr-6 text-right">{formatearPesos(l.precioCentavos)}</td>
-                  <td className="py-0.5 text-right">{formatearPesos(l.precioCentavos * l.cantidad)}</td>
+                  {conPrecio && <td className="py-0.5 text-right">{formatearPesos(l.precioCentavos)}</td>}
                 </tr>
               ))}
             </tbody>

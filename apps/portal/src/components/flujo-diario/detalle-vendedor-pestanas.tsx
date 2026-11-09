@@ -23,7 +23,7 @@ import {
  * Las pestañas del detalle de un vendedor, salvo Venta general (en detalle-vendedor.tsx).
  */
 
-/** Ventas de contado + Notas de días anteriores + Quedó a favor del cliente = la Cobranza del renglón. */
+/** Cobranza ventas de contado + ventas anteriores + Quedó a favor del cliente = la Cobranza del renglón (palabras del sistema viejo). */
 export function PestanaCobranza({ detalle }: { detalle: DetalleVendedorDia }) {
   const { contado, anteriores, aFavor } = detalle.cobranza;
   const totalContado = sumar(contado, (p) => p.montoCentavos);
@@ -35,12 +35,12 @@ export function PestanaCobranza({ detalle }: { detalle: DetalleVendedorDia }) {
       <TituloBloque extra={<Monto centavos={totalContado + totalAnteriores + totalAFavor} />}>Cobranza</TituloBloque>
       {/* Una debajo de la otra, como el sistema viejo (Roberto, 2026-11-09). */}
       <div className="max-w-4xl">
-        <TituloBloque tenue>{`Ventas de contado · ${formatearPesos(totalContado)}`}</TituloBloque>
-        <TablaPagos titulo="Ventas de contado" pagos={contado} notas={detalle.notas} total={totalContado} />
+        <TituloBloque tenue>{`Cobranza ventas de contado · ${formatearPesos(totalContado)}`}</TituloBloque>
+        <TablaPagos titulo="Cobranza ventas de contado" pagos={contado} notas={detalle.notas} total={totalContado} />
       </div>
       <div className="max-w-4xl">
-        <TituloBloque tenue>{`Notas de días anteriores · ${formatearPesos(totalAnteriores)}`}</TituloBloque>
-        <TablaPagos titulo="Notas de días anteriores" pagos={anteriores} notas={detalle.notas} total={totalAnteriores} />
+        <TituloBloque tenue>{`Cobranza ventas anteriores · ${formatearPesos(totalAnteriores)}`}</TituloBloque>
+        <TablaPagos titulo="Cobranza ventas anteriores" pagos={anteriores} notas={detalle.notas} total={totalAnteriores} />
       </div>
       {aFavor.length > 0 && (
         <div className="max-w-4xl">
@@ -122,7 +122,7 @@ function TablaPagos({
                   <TdImporte pago={p} />
                   <TdLiquidada pago={p} />
                 </tr>
-                {estaAbierta && nota && <FilaProductos columnas={4} nota={nota} />}
+                {estaAbierta && nota && <FilaProductos columnas={4} nota={nota} conPrecio />}
               </Fragment>
             );
           })}
@@ -249,7 +249,7 @@ export function PestanaVisitas({ visitas }: { visitas: VisitaDetalle[] }) {
   );
 }
 
-/** Hoy solo hay promociones (las mermas y cambios no existen en la base): un bloque por cliente. */
+/** Hoy solo hay promociones (las mermas y cambios no existen en la base): un bloque por cliente, como el viejo. */
 export function PestanaMermas({ promociones }: { promociones: DetalleVendedorDia["promociones"] }) {
   if (promociones.length === 0) return <SinDatos>Sin promociones este día.</SinDatos>;
   const porCliente = new Map<string, { producto: string; cantidad: number }[]>();
@@ -263,12 +263,13 @@ export function PestanaMermas({ promociones }: { promociones: DetalleVendedorDia
       {[...porCliente.entries()].map(([cliente, productos]) => (
         <section key={cliente} className="flex flex-col gap-2">
           <h3 className="rounded-lg bg-menu px-3 py-2 text-[13.5px] font-semibold">{cliente}</h3>
+          <TituloBloque tenue>Promociones</TituloBloque>
           <CajaTabla>
             <Tabla densidad="compacta" aria-label={`Promociones de ${cliente}`}>
               <thead>
                 <tr>
-                  <Th>Promociones</Th>
-                  <Th alinear="derecha">Cant.</Th>
+                  <Th>Producto</Th>
+                  <Th alinear="derecha">Cantidad</Th>
                 </tr>
               </thead>
               <tbody>
@@ -278,6 +279,10 @@ export function PestanaMermas({ promociones }: { promociones: DetalleVendedorDia
                     <Td alinear="derecha">{formatearPiezas(p.cantidad)}</Td>
                   </tr>
                 ))}
+                <FilaTotal>
+                  <Td>Total</Td>
+                  <Td alinear="derecha">{formatearPiezas(productos.reduce((s, p) => s + p.cantidad, 0))}</Td>
+                </FilaTotal>
               </tbody>
             </Tabla>
           </CajaTabla>
@@ -287,7 +292,7 @@ export function PestanaMermas({ promociones }: { promociones: DetalleVendedorDia
   );
 }
 
-/** Solo en el Dashboard: Ventas de contado + Notas de días anteriores (+ a favor) − Gasto = Tesorería. */
+/** Solo en el Dashboard: Ventas contado + Ventas anteriores (+ a favor) − Gasto = Tesorería (palabras del viejo). */
 export function PestanaCorte({ corte }: { corte: Corte | null }) {
   if (!corte) return <SinDatos>El vendedor no ha terminado su ruta.</SinDatos>;
   const renglon = (texto: string, valor: string) => (
@@ -304,8 +309,8 @@ export function PestanaCorte({ corte }: { corte: Corte | null }) {
       <CajaTabla>
         <Tabla aria-label="Corte">
           <tbody>
-            {renglon("Ventas de contado", formatearPesos(corte.contadoCentavos))}
-            {renglon("Notas de días anteriores", formatearPesos(corte.anterioresCentavos))}
+            {renglon("Ventas contado", formatearPesos(corte.contadoCentavos))}
+            {renglon("Ventas anteriores", formatearPesos(corte.anterioresCentavos))}
             {corte.aFavorCentavos > 0 && renglon("Quedó a favor del cliente", formatearPesos(corte.aFavorCentavos))}
             {renglon("Gasto", `− ${formatearPesos(corte.gastoCentavos)}`)}
             <FilaTotal className="[&>td]:border-foreground">
