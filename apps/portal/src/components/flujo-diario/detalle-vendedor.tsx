@@ -7,7 +7,7 @@ import { SelectorSegmentado } from "@/components/ui/selector-segmentado";
 import { CajaTabla, FilaGrupo, FilaTotal, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
 import type { DetalleVendedorDia, NotaDetalle } from "@/lib/flujo-diario";
 import { plural } from "@/lib/formato";
-import { Barra, BotonFolio, FilaLineas, formatearPiezas, SinDatos, textoLineas, TituloBloque } from "./piezas";
+import { Barra, BotonFolio, FilaProductos, formatearPiezas, RENGLON_QUE_ABRE, SinDatos, TituloBloque } from "./piezas";
 import {
   PestanaCobranza,
   PestanaCorte,
@@ -173,13 +173,13 @@ function PorCliente({ notas }: { notas: NotaDetalle[] }) {
     });
   return (
     <div>
-      <TituloBloque extra="pica una nota para ver sus productos">Por cliente</TituloBloque>
+      <TituloBloque extra="pica un folio para ver sus productos">Por cliente</TituloBloque>
       <CajaTabla>
         <Tabla densidad="compacta" aria-label="Por cliente">
           <thead>
             <tr>
-              <Th>Cliente</Th>
               <Th>Folio</Th>
+              <Th>Cliente</Th>
               <Th alinear="derecha">Piezas</Th>
               <Th alinear="derecha">Total</Th>
               <Th>
@@ -192,11 +192,11 @@ function PorCliente({ notas }: { notas: NotaDetalle[] }) {
               const abierta = abiertas.has(n.folio);
               return (
                 <Fragment key={n.folio}>
-                  <tr className={abierta ? "bg-menu" : undefined}>
-                    <Td>{n.cliente}</Td>
+                  <tr className={`${RENGLON_QUE_ABRE} ${abierta ? "bg-menu" : ""}`} onClick={() => alternar(n.folio)}>
                     <Td className="whitespace-nowrap">
                       <BotonFolio folio={n.folio} abierta={abierta} onClick={() => alternar(n.folio)} />
                     </Td>
+                    <Td>{n.cliente}</Td>
                     <Td alinear="derecha">{formatearPiezas(n.piezas)}</Td>
                     <TdMonto centavos={n.totalCentavos} />
                     <Td>
@@ -205,7 +205,7 @@ function PorCliente({ notas }: { notas: NotaDetalle[] }) {
                       </Etiqueta>
                     </Td>
                   </tr>
-                  {abierta && <FilaLineas columnas={5} texto={textoLineas(n)} />}
+                  {abierta && <FilaProductos columnas={5} nota={n} />}
                 </Fragment>
               );
             })}

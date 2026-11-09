@@ -57,11 +57,26 @@ describe("DetalleVendedor", () => {
     await u.click(screen.getByRole("radio", { name: "Por cliente" }));
     expect(screen.getByRole("radio", { name: "Por cliente" })).toHaveAttribute("aria-checked", "true");
     const tabla = screen.getByRole("table", { name: "Por cliente" });
+    // Como el sistema viejo: el folio va primero.
+    expect(within(tabla).getAllByRole("columnheader")[0]).toHaveTextContent("Folio");
     expect(within(tabla).getByText("Don Gallo")).toBeInTheDocument();
     expect(within(tabla).getByText("Crédito")).toBeInTheDocument();
-    // La nota se abre a sus productos.
-    await u.click(within(tabla).getByRole("button", { name: /TJ261109RB07/ }));
-    expect(screen.getByText("Horchata 500 ml × 20 a $11.50 · Jamaica 500 ml × 20 a $11.50")).toBeInTheDocument();
+    // La nota se abre a sus productos, en una tablita con cantidad, precio e importe.
+    const folio = within(tabla).getByRole("button", { name: /TJ261109RB07/ });
+    expect(folio).toHaveAttribute("aria-expanded", "false");
+    await u.click(folio);
+    expect(folio).toHaveAttribute("aria-expanded", "true");
+    const productos = screen.getByRole("table", { name: "Productos de TJ261109RB07" });
+    const filas = within(productos).getAllByRole("row");
+    expect(filas[1]).toHaveTextContent("Horchata 500 ml");
+    expect(filas[1]).toHaveTextContent("20");
+    expect(filas[1]).toHaveTextContent("$11.50");
+    expect(filas[1]).toHaveTextContent("$230.00");
+    // Picar el folio otra vez la cierra; picar en cualquier parte del renglón también la abre.
+    await u.click(folio);
+    expect(screen.queryByRole("table", { name: "Productos de TJ261109RB07" })).not.toBeInTheDocument();
+    await u.click(within(tabla).getByText("5 Esquinas"));
+    expect(screen.getByRole("table", { name: "Productos de TJ261109RB07" })).toBeInTheDocument();
   });
 
   it("Cobranza: Sí, Abonado con lo que resta, el método si no es efectivo y lo que quedó a favor", async () => {

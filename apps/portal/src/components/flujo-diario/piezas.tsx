@@ -1,3 +1,4 @@
+import { ChevronRight } from "lucide-react";
 import type { ReactNode } from "react";
 import { Etiqueta } from "@/components/ui/etiqueta";
 import { Monto } from "@/components/ui/monto";
@@ -103,33 +104,59 @@ export const sumar = <T,>(filas: T[], valor: (f: T) => number): number => filas.
 export const formatearPiezas = (n: number): string => n.toLocaleString("en-US");
 
 /** "Horchata 500 ml × 20 a $11.50 · Jamaica 500 ml × 20 a $11.50". */
-export function textoLineas(nota: NotaDetalle): string {
-  return nota.lineas.map((l) => `${l.producto} × ${l.cantidad} a ${formatearPesos(l.precioCentavos)}`).join(" · ");
-}
-
-/** "▸ TJ261109RB07": abre la nota a sus productos. */
+/**
+ * El folio que abre la nota a sus productos (como el botón ≡ del sistema viejo): un botón
+ * con su flecha, a la vista. El renglón entero también la abre (`alPicarRenglon`).
+ */
 export function BotonFolio({ folio, abierta, onClick }: { folio: string; abierta: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
       aria-expanded={abierta}
-      onClick={onClick}
-      className="rounded font-mono text-[12.5px] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-sucursal"
+      onClick={(e) => {
+        e.stopPropagation(); // el renglón también abre: que no se cuente dos veces
+        onClick();
+      }}
+      className="inline-flex items-center gap-1 rounded-md border bg-card px-1.5 py-0.5 font-mono text-[12.5px] whitespace-nowrap outline-none transition-colors hover:border-muted-foreground focus-visible:ring-2 focus-visible:ring-sucursal"
     >
-      <span aria-hidden className="mr-1 inline-block w-2.5 text-muted-foreground">
-        {abierta ? "▾" : "▸"}
-      </span>
+      <ChevronRight aria-hidden className={`size-3.5 text-muted-foreground transition-transform ${abierta ? "rotate-90" : ""}`} />
       {folio}
     </button>
   );
 }
 
-/** El renglón de los productos de una nota abierta. */
-export function FilaLineas({ columnas, texto }: { columnas: number; texto: string }) {
+/** Las clases del renglón que se abre al picarlo en cualquier parte. */
+export const RENGLON_QUE_ABRE = "cursor-pointer transition-colors hover:bg-menu";
+
+/** Los productos de una nota abierta, en una tablita: Producto · Cantidad · Precio · Importe. */
+export function FilaProductos({ columnas, nota }: { columnas: number; nota: NotaDetalle }) {
   return (
     <tr>
-      <td colSpan={columnas} className="border-b bg-menu py-1.5 pr-3 pl-8 text-[12.5px] text-muted-foreground">
-        {texto || "Sin productos."}
+      <td colSpan={columnas} className="border-b bg-menu py-2 pr-3 pl-8">
+        {nota.lineas.length === 0 ? (
+          <span className="text-[12.5px] text-muted-foreground">Sin productos.</span>
+        ) : (
+          <table aria-label={`Productos de ${nota.folio}`} className="w-auto min-w-[60%] text-[12.5px] tabular-nums">
+            <thead>
+              <tr className="text-muted-foreground">
+                <th scope="col" className="py-0.5 pr-6 text-left font-semibold">Producto</th>
+                <th scope="col" className="py-0.5 pr-6 text-right font-semibold">Cantidad</th>
+                <th scope="col" className="py-0.5 pr-6 text-right font-semibold">Precio</th>
+                <th scope="col" className="py-0.5 text-right font-semibold">Importe</th>
+              </tr>
+            </thead>
+            <tbody>
+              {nota.lineas.map((l, i) => (
+                <tr key={`${l.producto}-${i}`}>
+                  <td className="py-0.5 pr-6">{l.producto}</td>
+                  <td className="py-0.5 pr-6 text-right">{formatearPiezas(l.cantidad)}</td>
+                  <td className="py-0.5 pr-6 text-right">{formatearPesos(l.precioCentavos)}</td>
+                  <td className="py-0.5 text-right">{formatearPesos(l.precioCentavos * l.cantidad)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </td>
     </tr>
   );

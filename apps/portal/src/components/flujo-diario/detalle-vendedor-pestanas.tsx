@@ -8,14 +8,14 @@ import { formatearPesos, plural } from "@/lib/formato";
 import {
   BotonFolio,
   EtiquetaVendio,
-  FilaLineas,
+  FilaProductos,
   formatearPiezas,
   horaTijuana,
   SinDatos,
   sumar,
   TdImporte,
   TdLiquidada,
-  textoLineas,
+  RENGLON_QUE_ABRE,
   TituloBloque,
 } from "./piezas";
 
@@ -99,7 +99,10 @@ function TablaPagos({
             const estaAbierta = abierta === i;
             return (
               <Fragment key={`${p.folio}-${i}`}>
-                <tr className={estaAbierta ? "bg-menu" : undefined}>
+                <tr
+                  className={nota ? `${RENGLON_QUE_ABRE} ${estaAbierta ? "bg-menu" : ""}` : undefined}
+                  onClick={nota ? () => setAbierta(estaAbierta ? null : i) : undefined}
+                >
                   <Td className="whitespace-nowrap">
                     {nota ? (
                       <BotonFolio folio={p.folio} abierta={estaAbierta} onClick={() => setAbierta(estaAbierta ? null : i)} />
@@ -111,7 +114,7 @@ function TablaPagos({
                   <TdImporte pago={p} />
                   <TdLiquidada pago={p} />
                 </tr>
-                {estaAbierta && nota && <FilaLineas columnas={4} texto={textoLineas(nota)} />}
+                {estaAbierta && nota && <FilaProductos columnas={4} nota={nota} />}
               </Fragment>
             );
           })}
