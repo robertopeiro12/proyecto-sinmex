@@ -35,9 +35,9 @@ export function PantallaFlujoDiario({ sucursal }: { sucursal: string | null }) {
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
   // `numero` cambia en cada consulta: las tablas se vuelven a montar y cierran su detalle
-  // (la pestaña Por vendedor / Por día se conserva).
-  // `vendedor` es el de esa consulta (no el que el filtro tenga ahora): el detalle de un día lo usa.
-  const [consultado, setConsultado] = useState<{ flujo: FlujoDiario; numero: number; vendedor: string | null } | null>(null);
+  // (la pestaña Por vendedor / Por día se conserva). "Por día" es de toda la sucursal, así
+  // que con un vendedor elegido se consultan dos: `porVendedor` (filtrado) y `porDia` (todos).
+  const [consultado, setConsultado] = useState<{ porVendedor: FlujoDiario; porDia: FlujoDiario; numero: number } | null>(null);
   // Las cifras de arriba siguen a la pestaña: "Por día" suma también la oficina.
   const [pestana, setPestana] = useState<"vendedor" | "dia">("vendedor");
   const [cargando, setCargando] = useState(false);
@@ -89,10 +89,12 @@ export function PantallaFlujoDiario({ sucursal }: { sucursal: string | null }) {
     const esta = ++ultima.current;
     setCargando(true);
     try {
-      const elegido = vendedor || null;
-      const flujo = await obtenerFlujoDiario({ desde, hasta, sucursal, vendedor: elegido });
+      const [filtrado, todos] = await Promise.all([
+        vendedor ? obtenerFlujoDiario({ desde, hasta, sucursal, vendedor }) : null,
+        obtenerFlujoDiario({ desde, hasta, sucursal, vendedor: null }),
+      ]);
       if (esta !== ultima.current) return;
-      setConsultado({ flujo, numero: esta, vendedor: elegido });
+      setConsultado({ porVendedor: filtrado ?? todos, porDia: todos, numero: esta });
     } catch (err) {
       if (esta !== ultima.current) return;
       setConsultado(null);
@@ -102,10 +104,15 @@ export function PantallaFlujoDiario({ sucursal }: { sucursal: string | null }) {
     }
   }
 
-  const flujo = consultado?.flujo ?? null;
   const actualizando = cargando && consultado !== null;
-  const total = pestana === "dia" ? flujo?.totalPorDia : flujo?.totalPorVendedor;
-  const oficina = flujo?.porDia.reduce((s, d) => s + d.oficinaCentavos, 0) ?? 0;
+  const total = pestana === "dia" ? consultado?.porDia.totalPorDia : consultado?.porVendedor.totalPorVendedor;
+  const oficina = consultado?.porDia.porDia.reduce((s, d) => s + d.oficinaCentavos, 0) ?? 0;
+  const detalleCobranza =
+    pestana === "vendedor"
+      ? "Solo lo que cobraron los vendedores"
+      : oficina > 0 && total
+        ? `Vendedores ${formatearPesos(total.cobranzaCentavos - oficina)} · Oficina ${formatearPesos(oficina)}`
+        : undefined;
 
   return (
     <Pantalla>
@@ -124,16 +131,19 @@ export function PantallaFlujoDiario({ sucursal }: { sucursal: string | null }) {
         }}
         onMostrar={(r) => void alMostrar(r)}
       >
-        <Campo id="fd-vendedor" etiqueta="Vendedor">
-          <Lista value={vendedor} onChange={(e) => setVendedor(e.target.value)}>
-            <option value="">Todos</option>
-            {vendedores.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.activo ? nombreVendedor(v) : `${nombreVendedor(v)} (inactivo)`}
-              </option>
-            ))}
-          </Lista>
-        </Campo>
+        {/* "Por día" es de toda la sucursal: el vendedor solo filtra "Por vendedor". */}
+        {pestana === "vendedor" && (
+          <Campo id="fd-vendedor" etiqueta="Vendedor">
+            <Lista value={vendedor} onChange={(e) => setVendedor(e.target.value)}>
+              <option value="">Todos</option>
+              {vendedores.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.activo ? nombreVendedor(v) : `${nombreVendedor(v)} (inactivo)`}
+                </option>
+              ))}
+            </Lista>
+          </Campo>
+        )}
       </FiltroFechas>
 
       {error && <Aviso tono="error">{error}</Aviso>}
@@ -141,10 +151,11 @@ export function PantallaFlujoDiario({ sucursal }: { sucursal: string | null }) {
       {cargando && !consultado && <p className="text-sm text-muted-foreground">Cargando…</p>}
       {actualizando && <p className="text-sm text-muted-foreground">Actualizando…</p>}
 
-      {flujo && total && (
+      {consultado && total && (
         <div aria-busy={actualizando} className={`flex flex-col gap-5 ${actualizando ? "opacity-60" : ""}`}>
           <ResumenCifras
             totales={total}
+            detalleCobranza={detalleCobranza}
             ultima={{
               titulo: "Visitas",
               valor: `${total.atendidosEnRuta} / ${total.clientesEnRuta}`,
@@ -153,38 +164,20 @@ export function PantallaFlujoDiario({ sucursal }: { sucursal: string | null }) {
           />
           <Pestanas
             etiqueta="Ver el flujo"
-            valorInicial={pestana}
+            valorInicial="vendedor"
             onCambio={(v) => setPestana(v === "dia" ? "dia" : "vendedor")}
             pestanas={[
               {
                 valor: "vendedor",
                 etiqueta: "Por vendedor",
                 contenido: (
-                  <div className="flex flex-col gap-3">
-                    <TablaPorVendedor key={consultado!.numero} flujo={flujo} nombreSucursal={nombreSucursal} />
-                    <Aviso tono="informacion">
-                      La cobranza de esta pestaña es la de los vendedores. «Por día» suma también lo que cobró la
-                      oficina.
-                    </Aviso>
-                  </div>
+                  <TablaPorVendedor key={consultado.numero} flujo={consultado.porVendedor} nombreSucursal={nombreSucursal} />
                 ),
               },
               {
                 valor: "dia",
                 etiqueta: "Por día",
-                contenido: (
-                  <div className="flex flex-col gap-3">
-                    <TablaPorDia
-                      key={consultado!.numero}
-                      flujo={flujo}
-                      vendedor={consultado!.vendedor}
-                      nombreSucursal={nombreSucursal}
-                    />
-                    {oficina > 0 && (
-                      <Aviso tono="informacion">Incluye {formatearPesos(oficina)} que cobró la oficina.</Aviso>
-                    )}
-                  </div>
-                ),
+                contenido: <TablaPorDia key={consultado.numero} flujo={consultado.porDia} nombreSucursal={nombreSucursal} />,
               },
             ]}
           />

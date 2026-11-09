@@ -159,13 +159,13 @@ describe("PantallaFlujoDiario", () => {
     expect(screen.queryByRole("tab", { name: "Venta general" })).not.toBeInTheDocument();
   });
 
-  it("el aviso de la cobranza de los vendedores va bajo Por vendedor", async () => {
+  it("la cobranza de arriba dice de quién es, sin avisos sueltos bajo la tabla", async () => {
     mockAuth([PERMISO]);
     render(<PantallaFlujoDiario sucursal="TJ" />);
     await screen.findByRole("table", { name: "Por vendedor" });
-    expect(
-      screen.getByText("La cobranza de esta pestaña es la de los vendedores. «Por día» suma también lo que cobró la oficina."),
-    ).toBeInTheDocument();
+    const cobranza = screen.getByText("Cobranza", { selector: "dt" });
+    expect(cobranza.parentElement).toHaveTextContent("Solo lo que cobraron los vendedores");
+    expect(screen.queryByText(/«Por día» suma también/)).not.toBeInTheDocument();
   });
 
   it("picar la Cobranza del renglón abre esa pestaña; mientras llega dice Cargando… en el renglón", async () => {
@@ -217,7 +217,7 @@ describe("PantallaFlujoDiario", () => {
     expect(screen.getByText("Todavía no se registran mermas en el sistema.")).toBeInTheDocument();
   });
 
-  it("Por día con un vendedor elegido: el detalle del día se pide solo de ese vendedor", async () => {
+  it("Por día es de toda la sucursal: sin selector de vendedor y su consulta ignora al vendedor elegido", async () => {
     mockAuth([PERMISO]);
     listarVendedores.mockResolvedValue([
       { id: "ricardo", nombre: "Ricardo", login: "ricardo", sucursalId: "1", sucursalCodigo: "TJ", folioSegmento: "RI", activo: true },
@@ -231,17 +231,20 @@ describe("PantallaFlujoDiario", () => {
     await screen.findByRole("option", { name: "Ricardo" });
     await u.selectOptions(screen.getByLabelText("Vendedor"), "ricardo");
     await u.click(screen.getByRole("button", { name: "Mostrar" }));
-    expect(obtenerFlujo).toHaveBeenLastCalledWith({ desde: "2026-11-08", hasta: "2026-11-08", sucursal: "TJ", vendedor: "ricardo" });
+    // Por vendedor con el filtro, y Por día siempre de todos.
+    expect(obtenerFlujo).toHaveBeenCalledWith({ desde: "2026-11-08", hasta: "2026-11-08", sucursal: "TJ", vendedor: "ricardo" });
+    expect(obtenerFlujo).toHaveBeenLastCalledWith({ desde: "2026-11-08", hasta: "2026-11-08", sucursal: "TJ", vendedor: null });
     await screen.findByRole("table", { name: "Por vendedor" });
-    // Cambiar el filtro sin picar Mostrar no cambia lo que se consultó.
-    await u.selectOptions(screen.getByLabelText("Vendedor"), "");
     await u.click(screen.getByRole("tab", { name: "Por día" }));
+    expect(screen.queryByLabelText("Vendedor")).not.toBeInTheDocument();
     const tabla = screen.getByRole("table", { name: "Por día" });
     await u.click(within(tabla).getByRole("button", { name: "09/11/2026" }));
-    expect(obtenerDetalleDia).toHaveBeenCalledWith({ fecha: "2026-11-09", sucursal: "TJ", vendedor: "ricardo" });
+    expect(obtenerDetalleDia).toHaveBeenCalledWith({ fecha: "2026-11-09", sucursal: "TJ", vendedor: null });
+    await u.click(screen.getByRole("tab", { name: "Por vendedor" }));
+    expect(screen.getByLabelText("Vendedor")).toHaveValue("ricardo");
   });
 
-  it("las cifras de arriba siguen a la pestaña; Por día avisa lo que cobró la oficina", async () => {
+  it("las cifras de arriba siguen a la pestaña; en Por día la cobranza se desglosa en vendedores y oficina", async () => {
     mockAuth([PERMISO]);
     const CON_OFICINA: FlujoDiario = {
       ...UNA_SUCURSAL,
@@ -252,22 +255,37 @@ describe("PantallaFlujoDiario", () => {
     const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PantallaFlujoDiario sucursal="TJ" />);
     await screen.findByRole("table", { name: "Por vendedor" });
-    const cobranza = () => screen.getByText("Cobranza", { selector: "dt" }).nextElementSibling;
-    expect(cobranza()).toHaveTextContent("$500.00");
-    expect(screen.queryByText(/^Incluye .* que cobró la oficina\.$/)).not.toBeInTheDocument();
+    const cifra = () => screen.getByText("Cobranza", { selector: "dt" }).parentElement;
+    expect(cifra()).toHaveTextContent("$500.00");
     await u.click(screen.getByRole("tab", { name: "Por día" }));
-    expect(cobranza()).toHaveTextContent("$540.00");
-    expect(screen.getByText("Incluye $40.00 que cobró la oficina.")).toBeInTheDocument();
+    expect(cifra()).toHaveTextContent("$540.00");
+    expect(cifra()).toHaveTextContent("Vendedores $500.00 · Oficina $40.00");
     await u.click(screen.getByRole("tab", { name: "Por vendedor" }));
-    expect(cobranza()).toHaveTextContent("$500.00");
+    expect(cifra()).toHaveTextContent("$500.00");
+    expect(cifra()).toHaveTextContent("Solo lo que cobraron los vendedores");
   });
 
-  it("Por día sin cobranza de la oficina no lleva el aviso", async () => {
+  it("Por día sin cobranza de la oficina no menciona a la oficina", async () => {
     mockAuth([PERMISO]);
     const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PantallaFlujoDiario sucursal="TJ" />);
     await screen.findByRole("table", { name: "Por vendedor" });
     await u.click(screen.getByRole("tab", { name: "Por día" }));
-    expect(screen.queryByText(/^Incluye .* que cobró la oficina\.$/)).not.toBeInTheDocument();
+    expect(screen.getByText("Cobranza", { selector: "dt" }).parentElement).not.toHaveTextContent("Oficina");
+  });
+
+  it("cambiar de pestaña no hace que las pestañas avisen que cambió su valor inicial", async () => {
+    mockAuth([PERMISO]);
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PantallaFlujoDiario sucursal="TJ" />);
+    await screen.findByRole("table", { name: "Por vendedor" });
+    await u.click(screen.getByRole("tab", { name: "Por día" }));
+    await u.click(screen.getByRole("tab", { name: "Por vendedor" }));
+    const mensajes = [...error.mock.calls, ...warn.mock.calls].map((c) => c.join(" "));
+    expect(mensajes.filter((m) => m.includes("default value"))).toEqual([]);
+    error.mockRestore();
+    warn.mockRestore();
   });
 });

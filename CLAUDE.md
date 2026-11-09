@@ -637,9 +637,12 @@ usuario con sesion pasa.
       (efectivo, transferencia y cheque), y **nunca** `saldo_favor` (no es dinero nuevo). La misma lectura de `cobro` /
       abonos de contado que usan Tesorería y Flujo de Efectivo. Tesorería del día = cobranza − gastos. La cobranza de
       la **oficina** (cobros sin vendedor, por la sucursal del cliente) solo suma en la pestaña *Por día*; las ventas de
-      mostrador (sin vendedor) **no entran** al Flujo diario. Con un `vendedor` elegido, *Por día* y su detalle
-      (`/reportes/flujo-diario/dia?vendedor=…`, opcional, mismo alcance: ajeno = 404) son solo de ese vendedor, **sin**
-      la oficina. Las cifras de arriba siguen a la pestaña.
+      mostrador (sin vendedor) **no entran** al Flujo diario. *Por día* es de **toda la sucursal** (Roberto, 2026-11-09):
+      el selector de vendedor solo aparece en *Por vendedor*, y con un vendedor elegido el portal consulta dos veces (el
+      filtrado para *Por vendedor*, sin vendedor para *Por día*). El backend acepta `vendedor` opcional en
+      `/reportes/flujo-diario/dia` (ajeno = 404, sin oficina), pero el portal no lo manda. Las cifras de arriba siguen
+      a la pestaña y la Cobranza dice de quién es en una línea bajo la cifra ("Solo lo que cobraron los vendedores" /
+      "Vendedores $X · Oficina $Y"), en vez de avisos bajo la tabla.
     - **Dashboard:** `/dashboard/vendedor` acepta `fecha` (solo hoy o ayer de Tijuana; otra = 400) y el portal manda la
       del Dashboard pintado, para que a la medianoche el detalle no cambie de día. No lista a un vendedor inactivo o
       dado de baja cuya única razón para salir es la ruta diaria (el Flujo diario sí, es historia).

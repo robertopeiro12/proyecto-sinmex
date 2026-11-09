@@ -11,9 +11,12 @@ import { formatearPiezas } from "./piezas";
 export function ResumenCifras({
   totales,
   ultima,
+  detalleCobranza,
 }: {
   totales: Totales;
   ultima: { titulo: string; valor: string; detalle?: string };
+  /** Una línea bajo la Cobranza que dice de quién es (Flujo diario: vendedores / oficina). */
+  detalleCobranza?: string;
 }) {
   return (
     <dl className="grid grid-cols-3 overflow-hidden rounded-[10px] border xl:grid-cols-6">
@@ -21,7 +24,7 @@ export function ResumenCifras({
       <Cifra titulo="Monto">
         <Monto centavos={totales.montoCentavos} />
       </Cifra>
-      <Cifra titulo="Cobranza">
+      <Cifra titulo="Cobranza" detalle={detalleCobranza}>
         <Monto centavos={totales.cobranzaCentavos} />
       </Cifra>
       <Cifra titulo="Gasto">

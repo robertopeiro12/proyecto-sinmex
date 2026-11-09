@@ -20,23 +20,20 @@ const COLUMNAS = 11;
 const claveDe = (d: ResumenDia) => `${d.fecha}|${d.sucursalCodigo}`;
 
 /**
- * "Por día" (spec §5.3): un renglón por día (por sucursal con "Todas"). La cobranza suma
- * también la de la oficina, salvo con un vendedor elegido: entonces el renglón y su
- * detalle son solo de ese vendedor.
+ * "Por día" (spec §5.3): un renglón por día (por sucursal con "Todas"), de toda la sucursal:
+ * no se filtra por vendedor y la cobranza suma también la de la oficina.
  */
 export function TablaPorDia({
   flujo,
-  vendedor,
   nombreSucursal,
 }: {
+  /** Consultado sin vendedor. */
   flujo: FlujoDiario;
-  /** El vendedor con que se consultó el flujo (`null` = todos). */
-  vendedor: string | null;
   nombreSucursal: (codigo: string) => string;
 }) {
   const { abierto, estado, alternar, abrirEn, cambiarPestana } = useDetalleAbierto<DatosDetalleDia, PestanaDetalleDia>((clave) => {
     const dia = flujo.porDia.find((d) => claveDe(d) === clave)!;
-    return obtenerDetalleDia({ fecha: dia.fecha, sucursal: dia.sucursalCodigo, vendedor });
+    return obtenerDetalleDia({ fecha: dia.fecha, sucursal: dia.sucursalCodigo, vendedor: null });
   }, "ventas");
 
   const grupos = agruparPorSucursal(flujo.porDia);
