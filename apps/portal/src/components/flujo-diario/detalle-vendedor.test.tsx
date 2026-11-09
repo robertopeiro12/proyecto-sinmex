@@ -244,9 +244,59 @@ describe("DetalleVendedor", () => {
     guardarNotasEntregadas.mockRejectedValue(new ErrorApi("x", 400, "La nota TJ261109RB10 no se puede revisar."));
     render(<DetalleVendedor detalle={DETALLE} modo="dashboard" onNotasGuardadas={guardadas} />);
     await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
+    await u.click(screen.getByRole("checkbox", { name: "Entregada TJ261109RB10" }));
     await u.click(screen.getByRole("button", { name: "Guardar revisión" }));
     expect(await screen.findByText("La nota TJ261109RB10 no se puede revisar.")).toBeInTheDocument();
     expect(guardadas).not.toHaveBeenCalled();
+  });
+
+  it("Guardar y Cancelar empiezan deshabilitados; Cancelar regresa las casillas a lo guardado", async () => {
+    const u = userEvent.setup();
+    const detalle: DetalleVendedorDia = {
+      ...DETALLE,
+      notasCredito: [
+        { folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null },
+        { folio: "TJ261109RB11", cliente: "Mary", totalCentavos: 10000, pendienteCentavos: 5000, entregada: true },
+      ],
+    };
+    render(<DetalleVendedor detalle={detalle} modo="dashboard" />);
+    await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
+    const guardarBtn = screen.getByRole("button", { name: "Guardar revisión" });
+    const cancelar = screen.getByRole("button", { name: "Cancelar" });
+    expect(guardarBtn).toBeDisabled();
+    expect(cancelar).toBeDisabled();
+    const rb10 = screen.getByRole("checkbox", { name: "Entregada TJ261109RB10" });
+    const rb11 = screen.getByRole("checkbox", { name: "Entregada TJ261109RB11" });
+    await u.click(rb10);
+    await u.click(rb11);
+    expect(guardarBtn).toBeEnabled();
+    expect(cancelar).toBeEnabled();
+    await u.click(cancelar);
+    expect(rb10).not.toBeChecked();
+    expect(rb11).toBeChecked();
+    expect(guardarBtn).toBeDisabled();
+    expect(cancelar).toBeDisabled();
+    // Volver a dejar una casilla como estaba tampoco cuenta como cambio.
+    await u.click(rb10);
+    await u.click(rb10);
+    expect(guardarBtn).toBeDisabled();
+    expect(guardarNotasEntregadas).not.toHaveBeenCalled();
+  });
+
+  it("tras guardar bien, se olvidan las marcas locales y se ve lo que diga el servidor", async () => {
+    const u = userEvent.setup();
+    guardarNotasEntregadas.mockResolvedValue(undefined);
+    const nota = { folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000 };
+    const { rerender } = render(
+      <DetalleVendedor detalle={{ ...DETALLE, notasCredito: [{ ...nota, entregada: null }] }} modo="dashboard" />,
+    );
+    await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
+    await u.click(screen.getByRole("checkbox", { name: "Entregada TJ261109RB10" }));
+    await u.click(screen.getByRole("button", { name: "Guardar revisión" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Guardar revisión" })).toBeDisabled());
+    // Llega el detalle nuevo: otra persona la dejó como NO entregada después.
+    rerender(<DetalleVendedor detalle={{ ...DETALLE, notasCredito: [{ ...nota, entregada: false }] }} modo="dashboard" />);
+    expect(screen.getByRole("checkbox", { name: "Entregada TJ261109RB10" })).not.toBeChecked();
   });
 
   it("sin nota_papel.revisar: casillas deshabilitadas y sin botón Guardar", async () => {

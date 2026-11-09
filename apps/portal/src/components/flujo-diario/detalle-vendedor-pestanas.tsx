@@ -182,7 +182,8 @@ export function PestanaGastos({ gastos }: { gastos: DetalleVendedorDia["gastos"]
 /**
  * Las notas a crédito del día, con las palabras del sistema viejo. En el Dashboard son las
  * "pendientes nuevas por entregar", con la casilla Entregada (¿el vendedor regresó la nota de
- * papel?) y "Guardar revisión"; debajo, las nuevas NO entregadas de días anteriores. En el
+ * papel?), "Cancelar" (regresa a lo guardado) y "Guardar revisión", como el CANCELAR / GUARDAR del
+ * viejo; los dos solo se activan con cambios. Debajo, las nuevas NO entregadas de días anteriores. En el
  * Flujo diario, solo consulta: entregadas y NO entregadas (sin revisar cuenta como no).
  * Las notas asignadas llegan con la pieza 6.
  */
@@ -243,8 +244,8 @@ const TITULO_NO_ENTREGADAS = "Notas nuevas NO entregadas";
 function NotasDashboard({ detalle, onGuardadas }: { detalle: DetalleVendedorDia; onGuardadas?: () => void }) {
   const { puede } = useAuth();
   const puedeRevisar = puede("nota_papel.revisar");
-  // Lo que el usuario cambió y aún no llega del servidor: sobrevive a la actualización
-  // automática del Dashboard (cada 60 s), que trae otra vez el detalle.
+  // Lo que el usuario cambió y aún no guarda: sobrevive a la actualización automática del
+  // Dashboard (cada 60 s), que trae otra vez el detalle. Al guardar bien se olvida.
   const [marcas, setMarcas] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -253,6 +254,7 @@ function NotasDashboard({ detalle, onGuardadas }: { detalle: DetalleVendedorDia;
   if (notas.length === 0 && notasNoEntregadas.length === 0) return <SinDatos>No hay notas pendientes.</SinDatos>;
 
   const marcada = (n: (typeof notas)[number]) => marcas.get(n.folio) ?? n.entregada === true;
+  const hayCambios = notas.some((n) => marcada(n) !== (n.entregada === true));
 
   function marcar(folio: string, valor: boolean) {
     setMarcas((antes) => new Map(antes).set(folio, valor));
@@ -267,6 +269,7 @@ function NotasDashboard({ detalle, onGuardadas }: { detalle: DetalleVendedorDia;
         vendedor: detalle.vendedorId,
         notas: notas.map((n) => ({ folio: n.folio, entregada: marcada(n) })),
       });
+      setMarcas(new Map());
       onGuardadas?.();
     } catch (err) {
       setError(mensajeDe(err, "No se pudo guardar la revisión."));
@@ -317,8 +320,18 @@ function NotasDashboard({ detalle, onGuardadas }: { detalle: DetalleVendedorDia;
             </Aviso>
           )}
           {puedeRevisar && (
-            <div className="mt-2.5 flex justify-end">
-              <Button onClick={() => void guardar()} disabled={guardando}>
+            <div className="mt-2.5 flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setMarcas(new Map());
+                  setError(null);
+                }}
+                disabled={guardando || !hayCambios}
+              >
+                Cancelar
+              </Button>
+              <Button onClick={() => void guardar()} disabled={guardando || !hayCambios}>
                 {guardando ? "Guardando…" : "Guardar revisión"}
               </Button>
             </div>
