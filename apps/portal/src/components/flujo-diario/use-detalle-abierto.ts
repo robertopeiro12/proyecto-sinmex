@@ -77,5 +77,11 @@ export function useDetalleAbierto<D, P extends string>(pedir: (clave: string) =>
     if (abierto) void cargar(abierto.clave, true);
   }
 
-  return { abierto, estado, abrir, abrirEn, cambiarPestana, recargar, cerrar };
+  // Lo último que se abrió: la ventana lo sigue mostrando mientras se desvanece al cerrarse
+  // (si no, el título se vacía y el detalle salta a su pestaña por defecto un instante).
+  const ultimo = useRef<RenglonAbierto<P> | null>(null);
+  if (abierto) ultimo.current = abierto;
+  const visto = abierto ?? ultimo.current;
+
+  return { abierto, visto, estado, abrir, abrirEn, cambiarPestana, recargar, cerrar };
 }

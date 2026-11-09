@@ -31,7 +31,7 @@ export function TablaPorDia({
   flujo: FlujoDiario;
   nombreSucursal: (codigo: string) => string;
 }) {
-  const { abierto, estado, abrir, abrirEn, cambiarPestana, cerrar } = useDetalleAbierto<DatosDetalleDia, PestanaDetalleDia>((clave) => {
+  const { abierto, visto, estado, abrir, abrirEn, cambiarPestana, cerrar } = useDetalleAbierto<DatosDetalleDia, PestanaDetalleDia>((clave) => {
     const dia = flujo.porDia.find((d) => claveDe(d) === clave)!;
     return obtenerDetalleDia({ fecha: dia.fecha, sucursal: dia.sucursalCodigo, vendedor: null });
   }, "ventas");
@@ -83,7 +83,7 @@ export function TablaPorDia({
     );
   }
 
-  const diaAbierto = abierto && flujo.porDia.find((d) => claveDe(d) === abierto.clave);
+  const diaAbierto = visto && flujo.porDia.find((d) => claveDe(d) === visto.clave);
 
   return (
     <CajaTabla>
@@ -91,17 +91,17 @@ export function TablaPorDia({
         abierta={!!abierto}
         alCerrar={cerrar}
         titulo={
-          abierto && diaAbierto
-            ? `${ETIQUETA_PESTANA_DIA[abierto.pestana]} · ${nombreSucursal(diaAbierto.sucursalCodigo)} · ${formatearFecha(diaAbierto.fecha)}`
+          visto && diaAbierto
+            ? `${ETIQUETA_PESTANA_DIA[visto.pestana]} · ${nombreSucursal(diaAbierto.sucursalCodigo)} · ${formatearFecha(diaAbierto.fecha)}`
             : ""
         }
         estado={estado}
       >
         {(detalle) => (
           <DetalleDia
-            key={abierto?.vez}
+            key={visto?.vez}
             detalle={detalle}
-            pestanaInicial={abierto?.pestana}
+            pestanaInicial={visto?.pestana}
             onCambioPestana={cambiarPestana}
           />
         )}

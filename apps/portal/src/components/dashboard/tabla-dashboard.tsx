@@ -39,7 +39,7 @@ export function TablaDashboard({
   actualizacion: number;
   nombreSucursal: (codigo: string) => string;
 }) {
-  const { abierto, estado, abrir, abrirEn, cambiarPestana, recargar, cerrar } = useDetalleAbierto<
+  const { abierto, visto, estado, abrir, abrirEn, cambiarPestana, recargar, cerrar } = useDetalleAbierto<
     DetalleVendedorDia,
     PestanaDetalleVendedor
   >((clave) => {
@@ -122,7 +122,7 @@ export function TablaDashboard({
     );
   }
 
-  const filaAbierta = abierto && dashboard.vendedores.find((f) => f.vendedorId === abierto.clave);
+  const filaAbierta = visto && dashboard.vendedores.find((f) => f.vendedorId === visto.clave);
 
   return (
     <CajaTabla>
@@ -130,18 +130,18 @@ export function TablaDashboard({
         abierta={!!abierto}
         alCerrar={cerrar}
         titulo={
-          abierto && filaAbierta
-            ? `${ETIQUETA_PESTANA_VENDEDOR[abierto.pestana]} · ${filaAbierta.vendedor} · ${formatearFecha(dashboard.fecha)}`
+          visto && filaAbierta
+            ? `${ETIQUETA_PESTANA_VENDEDOR[visto.pestana]} · ${filaAbierta.vendedor} · ${formatearFecha(dashboard.fecha)}`
             : ""
         }
         estado={estado}
       >
         {(detalle) => (
           <DetalleVendedor
-            key={abierto?.vez}
+            key={visto?.vez}
             detalle={detalle}
             modo="dashboard"
-            pestanaInicial={abierto?.pestana}
+            pestanaInicial={visto?.pestana}
             onCambioPestana={cambiarPestana}
             onNotasGuardadas={recargar}
           />

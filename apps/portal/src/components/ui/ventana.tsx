@@ -13,7 +13,7 @@ const ANCHOS = {
 const FONDO =
   "fixed inset-0 z-50 bg-[rgb(15_20_18/0.45)] transition-opacity duration-150 data-[ending-style]:opacity-0 data-[starting-style]:opacity-0";
 const POPUP =
-  "fixed left-1/2 z-50 flex max-h-[90dvh] -translate-x-1/2 flex-col rounded-xl bg-background shadow-[0_20px_50px_rgb(0_0_0/0.25)] outline-none transition-[opacity,scale] duration-150 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0";
+  "fixed left-1/2 z-50 flex -translate-x-1/2 flex-col rounded-xl bg-background shadow-[0_20px_50px_rgb(0_0_0/0.25)] outline-none transition-[opacity,scale] duration-150 data-[ending-style]:opacity-0 data-[starting-style]:scale-95 data-[starting-style]:opacity-0";
 const TITULO = "font-titulo text-[19px] leading-snug font-bold";
 
 /**
@@ -65,7 +65,7 @@ export function Ventana({
           </Dialog.Popup>
         ) : (
           <Dialog.Popup
-            className={`${POPUP} top-1/2 ${ANCHOS[ancho]} -translate-y-1/2 gap-2.5 overflow-y-auto p-[22px]`}
+            className={`${POPUP} top-1/2 max-h-[90dvh] ${ANCHOS[ancho]} -translate-y-1/2 gap-2.5 overflow-y-auto p-[22px]`}
           >
             <Dialog.Title className={TITULO}>{titulo}</Dialog.Title>
             {children}
