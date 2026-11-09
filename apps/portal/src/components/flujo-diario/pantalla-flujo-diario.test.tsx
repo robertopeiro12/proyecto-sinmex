@@ -227,7 +227,7 @@ describe("PantallaFlujoDiario", () => {
     const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PantallaFlujoDiario sucursal={null} />);
     await screen.findByRole("table", { name: "Por vendedor" });
-    await u.click(screen.getByRole("tab", { name: "Por día" }));
+    await u.click(screen.getByRole("tab", { name: "Resultados por día" }));
     const tabla = screen.getByRole("table", { name: "Por día" });
     const botones = within(tabla).getAllByRole("button", { name: "09/11/2026" });
     await u.click(botones[1]);
@@ -256,7 +256,7 @@ describe("PantallaFlujoDiario", () => {
     expect(obtenerFlujo).toHaveBeenCalledWith({ desde: "2026-11-08", hasta: "2026-11-08", sucursal: "TJ", vendedor: "ricardo" });
     expect(obtenerFlujo).toHaveBeenLastCalledWith({ desde: "2026-11-08", hasta: "2026-11-08", sucursal: "TJ", vendedor: null });
     await screen.findByRole("table", { name: "Por vendedor" });
-    await u.click(screen.getByRole("tab", { name: "Por día" }));
+    await u.click(screen.getByRole("tab", { name: "Resultados por día" }));
     expect(screen.queryByLabelText("Vendedor")).not.toBeInTheDocument();
     const tabla = screen.getByRole("table", { name: "Por día" });
     await u.click(within(tabla).getByRole("button", { name: "09/11/2026" }));
@@ -264,7 +264,7 @@ describe("PantallaFlujoDiario", () => {
     await screen.findByRole("dialog", { name: "Ventas · Tijuana · 09/11/2026" });
     await u.keyboard("{Escape}");
     await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    await u.click(screen.getByRole("tab", { name: "Por vendedor" }));
+    await u.click(screen.getByRole("tab", { name: "Resultados por vendedor" }));
     expect(screen.getByLabelText("Vendedor")).toHaveValue("ricardo");
   });
 
@@ -281,10 +281,10 @@ describe("PantallaFlujoDiario", () => {
     await screen.findByRole("table", { name: "Por vendedor" });
     const cifra = () => screen.getByText("Cobranza", { selector: "dt" }).parentElement;
     expect(cifra()).toHaveTextContent("$500.00");
-    await u.click(screen.getByRole("tab", { name: "Por día" }));
+    await u.click(screen.getByRole("tab", { name: "Resultados por día" }));
     expect(cifra()).toHaveTextContent("$540.00");
     expect(cifra()).toHaveTextContent("Vendedores $500.00 · Oficina $40.00");
-    await u.click(screen.getByRole("tab", { name: "Por vendedor" }));
+    await u.click(screen.getByRole("tab", { name: "Resultados por vendedor" }));
     expect(cifra()).toHaveTextContent("$500.00");
     expect(cifra()).toHaveTextContent("Solo lo que cobraron los vendedores");
   });
@@ -294,7 +294,7 @@ describe("PantallaFlujoDiario", () => {
     const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PantallaFlujoDiario sucursal="TJ" />);
     await screen.findByRole("table", { name: "Por vendedor" });
-    await u.click(screen.getByRole("tab", { name: "Por día" }));
+    await u.click(screen.getByRole("tab", { name: "Resultados por día" }));
     expect(screen.getByText("Cobranza", { selector: "dt" }).parentElement).not.toHaveTextContent("Oficina");
   });
 
@@ -305,8 +305,8 @@ describe("PantallaFlujoDiario", () => {
     const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PantallaFlujoDiario sucursal="TJ" />);
     await screen.findByRole("table", { name: "Por vendedor" });
-    await u.click(screen.getByRole("tab", { name: "Por día" }));
-    await u.click(screen.getByRole("tab", { name: "Por vendedor" }));
+    await u.click(screen.getByRole("tab", { name: "Resultados por día" }));
+    await u.click(screen.getByRole("tab", { name: "Resultados por vendedor" }));
     const mensajes = [...error.mock.calls, ...warn.mock.calls].map((c) => c.join(" "));
     expect(mensajes.filter((m) => m.includes("default value"))).toEqual([]);
     error.mockRestore();

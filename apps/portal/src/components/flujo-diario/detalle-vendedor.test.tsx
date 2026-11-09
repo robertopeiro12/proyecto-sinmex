@@ -177,18 +177,18 @@ describe("DetalleVendedor", () => {
     expect(screen.getByText("Pasar el jueves")).toBeInTheDocument();
     await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
     expect(within(screen.getByRole("tabpanel")).getByText("TJ261109RB10")).toBeInTheDocument();
-    // Las palabras del sistema viejo: título y columnas Cliente · Folio · Monto · Pendiente.
+    // Las columnas del Reporte de Ventas viejo: Folio · Cliente · Pendiente $.
     // Sin revisar (null) cuenta como NO entregada.
     expect(screen.getByText("Notas nuevas NO entregadas")).toBeInTheDocument();
     const notas = screen.getByRole("table", { name: "Notas nuevas NO entregadas" });
     expect(within(notas).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
-      "Cliente",
       "Folio",
-      "Monto",
-      "Pendiente",
+      "Cliente",
+      "Pendiente $",
     ]);
     await u.click(screen.getByRole("tab", { name: "Mermas/Cambios/Promociones" }));
-    expect(within(screen.getByRole("tabpanel")).getByText("Don Gallo")).toBeInTheDocument();
+    // Como el viejo: "Cliente: Don Gallo".
+    expect(within(screen.getByRole("tabpanel")).getByText("Cliente: Don Gallo")).toBeInTheDocument();
   });
 
   it("en el Dashboard las notas nuevas son las que faltan por entregar, con su casilla Entregada", async () => {
@@ -357,10 +357,9 @@ describe("DetalleVendedor", () => {
     expect(within(no).getByText("TJ2")).toBeInTheDocument();
     expect(within(no).getByText("TJ3")).toBeInTheDocument();
     expect(within(no).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
-      "Cliente",
       "Folio",
-      "Monto",
-      "Pendiente",
+      "Cliente",
+      "Pendiente $",
     ]);
     expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Guardar revisión" })).not.toBeInTheDocument();

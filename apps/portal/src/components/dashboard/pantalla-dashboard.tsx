@@ -156,7 +156,11 @@ export function PantallaDashboard({ sucursal }: { sucursal: string | null }) {
             ) : (
               <Resumen totales={dashboard.total} enRuta={dashboard.total.enRuta} terminaron={dashboard.total.terminaron} />
             )}
-            <TablaDashboard dashboard={dashboard} actualizacion={consultado!.numero} nombreSucursal={nombreSucursal} />
+            {/* El título de la tabla del Dashboard viejo. */}
+            <section aria-label="Vendedores en ruta" className="flex flex-col gap-2">
+              <h2 className="text-sm font-semibold">Vendedores en ruta</h2>
+              <TablaDashboard dashboard={dashboard} actualizacion={consultado!.numero} nombreSucursal={nombreSucursal} />
+            </section>
           </>
         ))}
     </Pantalla>

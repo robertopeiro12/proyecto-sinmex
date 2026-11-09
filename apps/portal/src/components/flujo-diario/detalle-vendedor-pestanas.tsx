@@ -216,18 +216,17 @@ function TablaNotas({ titulo, notas }: { titulo: string; notas: DetalleVendedorD
         <Tabla densidad="compacta" aria-label={titulo}>
           <thead>
             <tr>
-              <Th>Cliente</Th>
+              {/* Las columnas del Reporte de Ventas viejo: Folio · Cliente · Pendiente $. */}
               <Th>Folio</Th>
-              <Th alinear="derecha">Monto</Th>
-              <Th alinear="derecha">Pendiente</Th>
+              <Th>Cliente</Th>
+              <Th alinear="derecha">Pendiente $</Th>
             </tr>
           </thead>
           <tbody>
             {notas.map((n) => (
               <tr key={n.folio}>
-                <Td>{n.cliente}</Td>
                 <Td className="font-mono text-[12.5px] whitespace-nowrap">{n.folio}</Td>
-                <TdMonto centavos={n.totalCentavos} />
+                <Td>{n.cliente}</Td>
                 <TdMonto centavos={n.pendienteCentavos} />
               </tr>
             ))}
@@ -434,7 +433,7 @@ export function PestanaMermas({ promociones }: { promociones: DetalleVendedorDia
     <div className="flex mx-auto w-full max-w-xl flex-col gap-2">
       {[...porCliente.entries()].map(([cliente, productos]) => (
         <section key={cliente} className="flex flex-col gap-2">
-          <h3 className="rounded-lg bg-menu px-3 py-2 text-[13.5px] font-semibold">{cliente}</h3>
+          <h3 className="rounded-lg bg-menu px-3 py-2 text-[13.5px] font-semibold">{`Cliente: ${cliente}`}</h3>
           <TituloBloque tenue>Promociones</TituloBloque>
           <CajaTabla>
             <Tabla densidad="compacta" aria-label={`Promociones de ${cliente}`}>

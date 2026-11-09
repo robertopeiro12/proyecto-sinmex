@@ -306,6 +306,10 @@ function PestanaPromocionesDia({ detalle }: { detalle: DatosDetalleDia }) {
                 <Td alinear="derecha">{formatearPiezas(p.cantidad)}</Td>
               </tr>
             ))}
+            <FilaTotal>
+              <Td>Total</Td>
+              <Td alinear="derecha">{formatearPiezas(detalle.promociones.reduce((s, p) => s + p.cantidad, 0))}</Td>
+            </FilaTotal>
           </tbody>
         </Tabla>
       </CajaTabla>

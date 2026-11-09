@@ -169,14 +169,14 @@ export function PantallaFlujoDiario({ sucursal }: { sucursal: string | null }) {
             pestanas={[
               {
                 valor: "vendedor",
-                etiqueta: "Por vendedor",
+                etiqueta: "Resultados por vendedor",
                 contenido: (
                   <TablaPorVendedor key={consultado.numero} flujo={consultado.porVendedor} nombreSucursal={nombreSucursal} />
                 ),
               },
               {
                 valor: "dia",
-                etiqueta: "Por día",
+                etiqueta: "Resultados por día",
                 contenido: <TablaPorDia key={consultado.numero} flujo={consultado.porDia} nombreSucursal={nombreSucursal} />,
               },
             ]}
