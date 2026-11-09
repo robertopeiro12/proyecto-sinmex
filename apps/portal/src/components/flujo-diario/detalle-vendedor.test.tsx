@@ -93,6 +93,13 @@ describe("DetalleVendedor", () => {
     expect(within(panel).getByText("Aqui es Texcoco")).toBeInTheDocument();
     // Total = contado + anteriores + a favor.
     expect(within(panel).getByText("$760.00")).toBeInTheDocument();
+    // Como el viejo: una lista debajo de la otra, cada una con su renglón Total.
+    const tablas = within(panel).getAllByRole("table").map((t) => t.getAttribute("aria-label"));
+    expect(tablas).toEqual(["Ventas de contado", "Notas de días anteriores", "Quedó a favor del cliente"]);
+    const contado = within(panel).getByRole("table", { name: "Ventas de contado" });
+    expect(within(contado).getAllByRole("row").at(-1)).toHaveTextContent("Total$460.00");
+    const anteriores = within(panel).getByRole("table", { name: "Notas de días anteriores" });
+    expect(within(anteriores).getAllByRole("row").at(-1)).toHaveTextContent("Total$250.00");
   });
 
   it("modo flujo no tiene Corte; Inventario está deshabilitada", () => {

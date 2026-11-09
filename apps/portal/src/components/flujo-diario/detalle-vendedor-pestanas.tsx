@@ -33,18 +33,17 @@ export function PestanaCobranza({ detalle }: { detalle: DetalleVendedorDia }) {
   return (
     <div className="flex flex-col gap-4">
       <TituloBloque extra={<Monto centavos={totalContado + totalAnteriores + totalAFavor} />}>Cobranza</TituloBloque>
-      <div className="grid gap-5 lg:grid-cols-2">
-        <div>
-          <TituloBloque tenue>{`Ventas de contado · ${formatearPesos(totalContado)}`}</TituloBloque>
-          <TablaPagos titulo="Ventas de contado" pagos={contado} notas={detalle.notas} />
-        </div>
-        <div>
-          <TituloBloque tenue>{`Notas de días anteriores · ${formatearPesos(totalAnteriores)}`}</TituloBloque>
-          <TablaPagos titulo="Notas de días anteriores" pagos={anteriores} notas={detalle.notas} />
-        </div>
+      {/* Una debajo de la otra, como el sistema viejo (Roberto, 2026-11-09). */}
+      <div className="max-w-4xl">
+        <TituloBloque tenue>{`Ventas de contado · ${formatearPesos(totalContado)}`}</TituloBloque>
+        <TablaPagos titulo="Ventas de contado" pagos={contado} notas={detalle.notas} total={totalContado} />
+      </div>
+      <div className="max-w-4xl">
+        <TituloBloque tenue>{`Notas de días anteriores · ${formatearPesos(totalAnteriores)}`}</TituloBloque>
+        <TablaPagos titulo="Notas de días anteriores" pagos={anteriores} notas={detalle.notas} total={totalAnteriores} />
       </div>
       {aFavor.length > 0 && (
-        <div className="max-w-xl">
+        <div className="max-w-4xl">
           <TituloBloque tenue>{`Quedó a favor del cliente · ${formatearPesos(totalAFavor)}`}</TituloBloque>
           <CajaTabla>
             <Tabla densidad="compacta" aria-label="Quedó a favor del cliente">
@@ -75,16 +74,25 @@ function TablaPagos({
   titulo,
   pagos,
   notas,
+  total,
 }: {
   titulo: string;
   pagos: PagoDetalle[];
   notas: DetalleVendedorDia["notas"];
+  total: number;
 }) {
   const [abierta, setAbierta] = useState<number | null>(null);
   if (pagos.length === 0) return <SinDatos>Ninguna.</SinDatos>;
   return (
     <CajaTabla>
-      <Tabla densidad="compacta" aria-label={titulo}>
+      {/* Mismos anchos en contado y anteriores: una debajo de la otra se leen como una lista. */}
+      <Tabla densidad="compacta" aria-label={titulo} className="table-fixed">
+        <colgroup>
+          <col className="w-[10rem]" />
+          <col />
+          <col className="w-[8rem]" />
+          <col className="w-[14rem]" />
+        </colgroup>
         <thead>
           <tr>
             <Th>Folio</Th>
@@ -118,6 +126,11 @@ function TablaPagos({
               </Fragment>
             );
           })}
+          <FilaTotal>
+            <Td colSpan={2}>Total</Td>
+            <TdMonto centavos={total} />
+            <Td />
+          </FilaTotal>
         </tbody>
       </Tabla>
     </CajaTabla>
