@@ -9,8 +9,20 @@ import { buscarItemActual, navSections, tituloDePestana } from "./nav-config";
 const PAGINAS = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "app", "(portal)");
 
 describe("navSections", () => {
-  it("en el orden del spec", () => {
-    expect(navSections.map((s) => s.label)).toEqual(["Operación", "Finanzas", "Producción", "Información", "Catálogo"]);
+  it("en el orden del sistema viejo, y lo nuevo después", () => {
+    expect(navSections.map((s) => s.label)).toEqual(["Operación", "Catálogo", "Producción", "Información", "Finanzas"]);
+    const operacion = navSections[0].items.map((i) => i.label);
+    expect(operacion.slice(0, 7)).toEqual([
+      "Dashboard",
+      "Flujo diario",
+      "Peticiones",
+      "Procesos",
+      "Notificaciones",
+      "Ruta Diaria",
+      "Ruta Semanal",
+    ]);
+    expect(navSections[1].items.slice(0, 3).map((i) => i.label)).toEqual(["Clientes", "Vendedores", "Vehículos"]);
+    expect(navSections[2].items.slice(0, 3).map((i) => i.label)).toEqual(["Peticiones", "Recarga", "Corte"]);
   });
 
   it("toda pantalla que todavía es Placeholder lleva pronto, y ninguna otra", () => {
