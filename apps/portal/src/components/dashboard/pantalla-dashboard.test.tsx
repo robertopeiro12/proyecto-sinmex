@@ -168,7 +168,7 @@ describe("PantallaDashboard", () => {
     const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PantallaDashboard sucursal="TJ" />);
     await u.click(await screen.findByRole("button", { name: "RBlas" }));
-    expect(obtenerDetalle).toHaveBeenCalledWith({ vendedor: "rblas", sucursal: "TJ" });
+    expect(obtenerDetalle).toHaveBeenCalledWith({ vendedor: "rblas", sucursal: "TJ", fecha: "2026-11-09" });
     await u.click(await screen.findByRole("tab", { name: "Cobranza" }));
     expect(screen.getByRole("tab", { name: "Cobranza" })).toHaveAttribute("aria-selected", "true");
 
@@ -221,7 +221,8 @@ describe("PantallaDashboard", () => {
       total: { ...TOT, rutas: 0, piezas: 0, enRuta: 0, terminaron: 0 },
     });
     render(<PantallaDashboard sucursal="TJ" />);
-    expect(await screen.findByText("No hay vendedores en ruta hoy.")).toBeInTheDocument();
+    const aviso = await screen.findByText("No hay vendedores en ruta hoy.");
+    expect(aviso.closest("[data-tono]")).toHaveAttribute("data-tono", "informacion");
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 

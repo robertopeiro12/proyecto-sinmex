@@ -1,6 +1,7 @@
 import {
   armarDashboard,
   armarFlujoDiario,
+  fechaValidaDashboard,
   resumir,
   sumar,
   type FilaVendedorDia,
@@ -219,5 +220,20 @@ describe('armarDashboard', () => {
     const d = armarDashboard('2026-11-09', []);
     expect(d.bloques).toEqual([]);
     expect(d.total).toMatchObject({ rutas: 0, enRuta: 0, terminaron: 0 });
+  });
+});
+
+describe('fechaValidaDashboard', () => {
+  it('hoy y ayer valen; otro dia, un formato raro o mañana no', () => {
+    expect(fechaValidaDashboard('2026-11-09', '2026-11-09')).toBe(true);
+    expect(fechaValidaDashboard('2026-11-08', '2026-11-09')).toBe(true);
+    expect(fechaValidaDashboard('2026-11-07', '2026-11-09')).toBe(false);
+    expect(fechaValidaDashboard('2026-11-10', '2026-11-09')).toBe(false);
+    expect(fechaValidaDashboard('2026-11-9', '2026-11-09')).toBe(false);
+  });
+
+  it('ayer cruza mes y año', () => {
+    expect(fechaValidaDashboard('2026-02-28', '2026-03-01')).toBe(true);
+    expect(fechaValidaDashboard('2025-12-31', '2026-01-01')).toBe(true);
   });
 });

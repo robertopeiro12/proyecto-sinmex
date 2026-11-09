@@ -6,7 +6,8 @@ import { DashboardService } from './dashboard.service';
 import type { DetalleVendedorDia } from './reglas-detalle';
 import type { Dashboard } from './reglas-flujo-diario';
 
-// El dia no se manda: siempre es hoy de Tijuana.
+// El dia del Dashboard lo pone el servidor (hoy de Tijuana); el detalle acepta
+// la fecha del renglon (hoy o ayer), para no cambiar de dia a la medianoche.
 @Controller('dashboard')
 export class DashboardController {
   constructor(private readonly servicio: DashboardService) {}

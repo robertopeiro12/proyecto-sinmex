@@ -221,6 +221,18 @@ const contarEstatus = (rs: ResumenVendedorDia[]) => ({
   terminaron: rs.filter((r) => r.estatus === 'terminado').length,
 });
 
+/**
+ * El dia que el portal puede pedir en el detalle del Dashboard: hoy o ayer de
+ * Tijuana. Ayer existe para el renglon que se pinto antes de la medianoche: su
+ * detalle sigue siendo de ese dia.
+ */
+export function fechaValidaDashboard(fecha: string, hoy: string): boolean {
+  if (fecha === hoy) return true;
+  const d = new Date(`${hoy}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - 1);
+  return fecha === d.toISOString().slice(0, 10);
+}
+
 /** Las filas ya son de un solo dia (hoy): un renglon por vendedor. */
 export function armarDashboard(
   fecha: string,

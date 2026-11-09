@@ -127,7 +127,7 @@ export function PantallaDashboard({ sucursal }: { sucursal: string | null }) {
 
       {dashboard &&
         (dashboard.vendedores.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No hay vendedores en ruta hoy.</p>
+          <Aviso tono="informacion">No hay vendedores en ruta hoy.</Aviso>
         ) : (
           <>
             {varias ? (

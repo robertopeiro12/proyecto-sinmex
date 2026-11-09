@@ -243,14 +243,20 @@ export function obtenerDashboard(sucursal: string | null): Promise<Dashboard> {
   return apiFetch<Dashboard>(consulta("/dashboard", { sucursal }));
 }
 
+/**
+ * `fecha` es la del Dashboard que se está viendo (`dashboard.fecha`): cerca de la
+ * medianoche el detalle sigue siendo del mismo día que el renglón.
+ */
 export function obtenerDetalleDashboard(f: {
   vendedor: string;
   sucursal: string | null;
+  fecha: string;
 }): Promise<DetalleVendedorDia> {
   return apiFetch<DetalleVendedorDia>(
     consulta("/dashboard/vendedor", {
       vendedor: f.vendedor,
       sucursal: f.sucursal,
+      fecha: f.fecha,
     }),
   );
 }

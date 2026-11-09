@@ -207,6 +207,7 @@ describe('Dashboard (e2e)', () => {
   });
 
   afterAll(async () => {
+    await db.deleteFrom('ruta').where('vendedor_id', 'in', vendedorIds).execute();
     await db
       .deleteFrom('cobranza_abono')
       .where('vendedor_id', 'in', vendedorIds)
@@ -281,18 +282,112 @@ describe('Dashboard (e2e)', () => {
 
   it('servicio con ahora a las 23:30 del 15 en Tijuana: hoy es el 15', async () => {
     const ahora = new Date('2030-06-16T06:30:00Z');
-    const dia9 = '2030-06-15';
-    await venta(dia9, ana, '50.00');
+    const dia15 = '2030-06-15';
+    await venta(dia15, ana, '50.00');
     await venta('2030-06-16', ana, '70.00');
     const d = await app
       .get(DashboardService)
       .dashboard(generalId, { sucursal: CODIGO }, ahora);
-    expect(d.fecha).toBe(dia9);
+    expect(d.fecha).toBe(dia15);
     expect(d.vendedores).toHaveLength(1);
     expect(d.vendedores[0].montoCentavos).toBe(5000);
     const det = await app
       .get(DashboardService)
       .detalle(generalId, { vendedor: ana, sucursal: CODIGO }, ahora);
-    expect(det.fecha).toBe(dia9);
+    expect(det.fecha).toBe(dia15);
+  });
+
+  it('detalle con fecha: hoy y ayer valen; otro dia es 400', async () => {
+    const ayer = new Date(`${hoyEnTijuana()}T12:00:00Z`);
+    ayer.setUTCDate(ayer.getUTCDate() - 1);
+    const fechaAyer = ayer.toISOString().slice(0, 10);
+    const r = (
+      await pedir(cookieGeneral, '/vendedor', {
+        vendedor: ana,
+        sucursal: CODIGO,
+        fecha: fechaAyer,
+      }).expect(200)
+    ).body as DetalleVendedorDia;
+    expect(r.fecha).toBe(fechaAyer);
+    const h = (
+      await pedir(cookieGeneral, '/vendedor', {
+        vendedor: ana,
+        sucursal: CODIGO,
+        fecha: hoyEnTijuana(),
+      }).expect(200)
+    ).body as DetalleVendedorDia;
+    expect(h.fecha).toBe(hoyEnTijuana());
+    const malo = await pedir(cookieGeneral, '/vendedor', {
+      vendedor: ana,
+      sucursal: CODIGO,
+      fecha: '2018-05-01',
+    }).expect(400);
+    expect(JSON.stringify(malo.body)).toContain(
+      'La fecha no es válida para el Dashboard.',
+    );
+  });
+
+  it('servicio a las 00:10 del 16: el detalle con la fecha del renglon (15) sigue siendo el 15', async () => {
+    const ahora = new Date('2030-06-16T07:10:00Z');
+    const det = await app
+      .get(DashboardService)
+      .detalle(
+        generalId,
+        { vendedor: ana, sucursal: CODIGO, fecha: '2030-06-15' },
+        ahora,
+      );
+    expect(det.fecha).toBe('2030-06-15');
+    expect(det.notas.map((n) => n.totalCentavos)).toEqual([5000]);
+  });
+
+  it('un vendedor inactivo o dado de baja con solo ruta hoy no sale; con una venta hoy, si', async () => {
+    const hoy = hoyEnTijuana();
+    const inactivo = await vendedor('Inactivo', idDb);
+    const baja = await vendedor('Baja', idDb);
+    await db
+      .updateTable('vendedor')
+      .set({ activo: false })
+      .where('id', '=', inactivo)
+      .execute();
+    await db
+      .updateTable('vendedor')
+      .set({ deleted_at: new Date() })
+      .where('id', '=', baja)
+      .execute();
+    for (const v of [inactivo, baja])
+      await db
+        .insertInto('ruta')
+        .values({
+          vendedor_id: v,
+          cliente_id: clienteId,
+          fecha: hoy,
+          tipo: 'diaria',
+          orden: 1,
+        })
+        .execute();
+
+    const sinVenta = (
+      await pedir(cookieGeneral, '', { sucursal: CODIGO }).expect(200)
+    ).body as Dashboard;
+    expect(sinVenta.vendedores.map((v) => v.vendedorId)).toEqual([ana]);
+
+    // El Flujo diario (historia) si los muestra.
+    const flujo = await request(app.getHttpServer())
+      .get(
+        `/reportes/flujo-diario?${new URLSearchParams({ desde: hoy, hasta: hoy, sucursal: CODIGO }).toString()}`,
+      )
+      .set('Cookie', cookieGeneral)
+      .expect(200);
+    const ids = (flujo.body as { porVendedor: { vendedorId: string }[] })
+      .porVendedor.map((v) => v.vendedorId);
+    expect(ids).toEqual(expect.arrayContaining([inactivo, baja]));
+
+    await venta(hoy, inactivo, '20.00');
+    const conVenta = (
+      await pedir(cookieGeneral, '', { sucursal: CODIGO }).expect(200)
+    ).body as Dashboard;
+    const fila = conVenta.vendedores.find((v) => v.vendedorId === inactivo);
+    expect(fila).toMatchObject({ montoCentavos: 2000, clientesEnRuta: 1 });
+    expect(conVenta.vendedores.map((v) => v.vendedorId)).not.toContain(baja);
   });
 });

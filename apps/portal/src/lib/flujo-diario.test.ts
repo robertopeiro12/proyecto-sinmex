@@ -119,9 +119,13 @@ describe("fetchers", () => {
     expect(apiFetch).toHaveBeenLastCalledWith("/dashboard");
     await obtenerDashboard("TJ");
     expect(apiFetch).toHaveBeenLastCalledWith("/dashboard?sucursal=TJ");
-    await obtenerDetalleDashboard({ vendedor: "v1", sucursal: "MX" });
+    await obtenerDetalleDashboard({
+      vendedor: "v1",
+      sucursal: "MX",
+      fecha: "2026-11-09",
+    });
     expect(apiFetch).toHaveBeenLastCalledWith(
-      "/dashboard/vendedor?vendedor=v1&sucursal=MX",
+      "/dashboard/vendedor?vendedor=v1&sucursal=MX&fecha=2026-11-09",
     );
   });
 });

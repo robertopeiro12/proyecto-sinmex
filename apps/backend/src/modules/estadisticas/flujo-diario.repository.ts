@@ -30,13 +30,24 @@ export class FlujoDiarioRepository {
    * (no se copia): lo borrado o editado deja de contar solo (T-17, T-34).
    */
   async filas(
-    f: FiltroFlujoDiario & { vendedorId: string | null },
+    f: FiltroFlujoDiario & {
+      vendedorId: string | null;
+      /**
+       * Solo el Dashboard: la ruta diaria no basta para listar a un vendedor
+       * inactivo o dado de baja (si tiene otro movimiento, si sale). El Flujo
+       * diario es historia y los conserva.
+       */
+      soloVigentesEnRuta?: boolean;
+    },
   ): Promise<FilaVendedorDia[]> {
     const condiciones = [sql`true`];
     if (f.codigoSucursal !== null)
       condiciones.push(sql`s.codigo = ${f.codigoSucursal}`);
     if (f.vendedorId !== null)
       condiciones.push(sql`v.id = ${f.vendedorId}::uuid`);
+    const rutaVigente = f.soloVigentesEnRuta
+      ? sql`and vr.activo and vr.deleted_at is null`
+      : sql``;
 
     const r = await sql<{
       fecha: string;
@@ -55,9 +66,11 @@ export class FlujoDiarioRepository {
       vehiculo: string | null;
     }>`
       with dias as (
-        select vendedor_id, fecha from ruta
-         where tipo = 'diaria' and deleted_at is null
-           and fecha between ${f.desde}::date and ${f.hasta}::date
+        select ru.vendedor_id, ru.fecha from ruta ru
+          join vendedor vr on vr.id = ru.vendedor_id
+         where ru.tipo = 'diaria' and ru.deleted_at is null
+           and ru.fecha between ${f.desde}::date and ${f.hasta}::date
+           ${rutaVigente}
         union
         select vendedor_id, fecha from venta_nota
          where deleted_at is null and vendedor_id is not null

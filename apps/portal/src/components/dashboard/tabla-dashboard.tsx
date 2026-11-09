@@ -42,7 +42,8 @@ export function TablaDashboard({
     const fila = dashboard.vendedores.find((f) => f.vendedorId === clave);
     if (!fila) return Promise.reject(new Error("Este vendedor ya no está en el Dashboard."));
     // La sucursal del renglón: así funciona también con "Todas".
-    return obtenerDetalleDashboard({ vendedor: fila.vendedorId, sucursal: fila.sucursalCodigo });
+    // La fecha del Dashboard pintado: a la medianoche el detalle no salta al día siguiente.
+    return obtenerDetalleDashboard({ vendedor: fila.vendedorId, sucursal: fila.sucursalCodigo, fecha: dashboard.fecha });
   }, "venta");
 
   // Tras cada actualización: el detalle abierto se vuelve a pedir; si su vendedor ya no salió, se cierra.

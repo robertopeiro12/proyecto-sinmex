@@ -8,11 +8,19 @@ export class DashboardDto {
   sucursal?: string;
 }
 
-/** `GET /dashboard/vendedor`. El vendedor (uuid) lo valida el servicio. */
+/**
+ * `GET /dashboard/vendedor`. El vendedor (uuid) y la fecha (hoy o ayer de
+ * Tijuana; sin ella, hoy) los valida el servicio.
+ */
 export class DashboardVendedorDto {
   @IsString()
   @IsNotEmpty({ message: 'Falta el vendedor.' })
   vendedor!: string;
+
+  /** La del Dashboard que se esta viendo: su detalle no cambia de dia a la medianoche. */
+  @IsOptional()
+  @IsString()
+  fecha?: string;
 
   @IsOptional()
   @IsString()
