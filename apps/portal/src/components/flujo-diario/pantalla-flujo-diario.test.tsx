@@ -141,7 +141,7 @@ describe("PantallaFlujoDiario", () => {
     const tabla = await screen.findByRole("table", { name: "Por vendedor" });
     expect(await within(tabla).findByRole("rowheader", { name: "Tijuana" })).toBeInTheDocument();
     expect(within(tabla).getByRole("rowheader", { name: "Mexicali" })).toBeInTheDocument();
-    const total = within(tabla).getByText(/^Total · 2 rutas$/).closest("tr")!;
+    const total = within(tabla).getByText(/^Total$/).closest("tr")!;
     expect(within(total).getByText("150")).toBeInTheDocument();
   });
 

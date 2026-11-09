@@ -10,7 +10,7 @@ import {
   type ResumenVendedorDia,
   type Totales,
 } from "@/lib/flujo-diario";
-import { formatearFecha, formatearPesos, plural } from "@/lib/formato";
+import { formatearFecha, formatearPesos } from "@/lib/formato";
 import { DetalleVendedor, ETIQUETA_PESTANA_VENDEDOR, type PestanaDetalleVendedor } from "./detalle-vendedor";
 import { BotonNumero, BotonRenglon, BotonVer, formatearPiezas, Pronto } from "./piezas";
 import { useDetalleAbierto } from "./use-detalle-abierto";
@@ -169,7 +169,7 @@ export function TablaPorVendedor({
 function RenglonTotal({ texto, totales }: { texto: string; totales: Totales }) {
   return (
     <FilaTotal>
-      <Td colSpan={3}>{`${texto} · ${plural(totales.rutas, "ruta", "rutas")}`}</Td>
+      <Td colSpan={3}>{texto}</Td>
       <Td alinear="derecha">{formatearPiezas(totales.piezas)}</Td>
       <TdMonto centavos={totales.montoCentavos} />
       <TdMonto centavos={totales.cobranzaCentavos} />
