@@ -206,7 +206,8 @@ export class DetalleRepository {
   /**
    * Marca la nota de papel de varias ventas del vendedor, en una transaccion:
    * si algun folio no es una venta viva a credito de ese vendedor con fecha
-   * <= `hasta`, no se guarda nada y se devuelve ese folio. No mueve
+   * <= `hasta`, no se guarda nada y se devuelve ese folio. Solo escribe las
+   * que cambian de valor (conservan quien y cuando las marco). No mueve
    * `updated_at` (lo cuida el trigger de `venta_nota`).
    */
   async marcarPapel(
@@ -227,14 +228,20 @@ export class DetalleRepository {
       const porFolio = new Map(r.rows.map((x) => [x.folio, x.id]));
       const invalido = folios.find((f) => !porFolio.has(f));
       if (invalido !== undefined) return { invalido };
-      for (const n of notas)
-        await sql`
-          update venta_nota
-             set papel_entregado = ${n.entregada},
-                 papel_revisado_en = now(),
-                 papel_revisado_por_usuario_id = ${usuarioId}::uuid
-           where id = ${porFolio.get(n.folio)}::uuid
-        `.execute(trx);
+      // Solo las que de verdad cambian: quien y cuando quedan del primero que
+      // la marco con ese valor (guardar dos veces lo mismo no reescribe nada).
+      await sql`
+        update venta_nota vn
+           set papel_entregado = m.entregada,
+               papel_revisado_en = now(),
+               papel_revisado_por_usuario_id = ${usuarioId}::uuid
+          from unnest(
+                 ${notas.map((n) => porFolio.get(n.folio))}::uuid[],
+                 ${notas.map((n) => n.entregada)}::boolean[]
+               ) as m(id, entregada)
+         where vn.id = m.id
+           and vn.papel_entregado is distinct from m.entregada
+      `.execute(trx);
       return { invalido: null };
     });
   }

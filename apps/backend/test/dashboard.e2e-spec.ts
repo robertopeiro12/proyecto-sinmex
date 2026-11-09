@@ -610,6 +610,41 @@ describe('Dashboard (e2e)', () => {
       }).expect(204);
     });
 
+    it('guardar otra vez con los mismos valores no reescribe quien ni cuando; un cambio si', async () => {
+      await guardar(cookieGeneral, {
+        vendedor: beto,
+        notas: [{ folio: nHoy.folio, entregada: true }],
+      }).expect(204);
+      const primera = await papel(nHoy.id);
+      expect(primera.papel_entregado).toBe(true);
+      // Otro usuario con el permiso guarda la misma revision.
+      await guardar(cookieDb, {
+        vendedor: beto,
+        notas: [{ folio: nHoy.folio, entregada: true }],
+      }).expect(204);
+      const segunda = await papel(nHoy.id);
+      expect(segunda.papel_revisado_en).toEqual(primera.papel_revisado_en);
+      expect(segunda.papel_revisado_por_usuario_id).toBe(
+        primera.papel_revisado_por_usuario_id,
+      );
+      // Cambiar el valor si registra a quien lo cambio.
+      await guardar(cookieDb, {
+        vendedor: beto,
+        notas: [{ folio: nHoy.folio, entregada: false }],
+      }).expect(204);
+      const tercera = await papel(nHoy.id);
+      expect(tercera.papel_entregado).toBe(false);
+      expect(tercera.papel_revisado_por_usuario_id).not.toBe(
+        primera.papel_revisado_por_usuario_id,
+      );
+      expect(tercera.updated_at).toEqual(primera.updated_at);
+      // Se deja como estaba.
+      await guardar(cookieGeneral, {
+        vendedor: beto,
+        notas: [{ folio: nHoy.folio, entregada: true }],
+      }).expect(204);
+    });
+
     it('notasNoEntregadas: a credito, de dias anteriores, entregada false y con pendiente, por fecha', async () => {
       const d = (
         await pedir(cookieGeneral, '/vendedor', { vendedor: beto }).expect(200)
