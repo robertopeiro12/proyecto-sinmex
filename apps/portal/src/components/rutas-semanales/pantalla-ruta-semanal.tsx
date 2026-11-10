@@ -1,0 +1,219 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { useAuth } from "@/components/auth/auth-provider";
+import { Aviso } from "@/components/ui/aviso";
+import { Button } from "@/components/ui/button";
+import { Campo, Entrada } from "@/components/ui/campo";
+import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
+import { EstadoPantalla } from "@/components/ui/estado-pantalla";
+import { Pestanas } from "@/components/ui/pestanas";
+import { CajaTabla, FilaVacia, Tabla, Td, Th } from "@/components/ui/tabla";
+import { Ventana } from "@/components/ui/ventana";
+import { mensajeDe } from "@/lib/api";
+import {
+  crearRutaSemanal,
+  diaDeHoy,
+  listarRutasSemanales,
+  rutasDelDia,
+  type RutaSemanalResumen,
+} from "@/lib/rutas-semanales";
+import { hoyEnTijuana } from "@/lib/ventas";
+import { EditarRutaSemanal } from "./editar-ruta-semanal";
+
+const TITULO = "Ruta Semanal";
+const DESCRIPCION = "Las rutas con nombre de cada día de la semana y los clientes que visitan.";
+const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+/**
+ * Operación → Ruta Semanal: una pestaña por día (lunes a sábado), las rutas de ese día
+ * y "Crear ruta". Picar una ruta abre su edición a pantalla completa.
+ */
+export function PantallaRutaSemanal({ sucursal }: { sucursal: string | null }) {
+  const { usuario, puede, cargando } = useAuth();
+
+  if (cargando) return <EstadoPantalla titulo={TITULO} tipo="cargando" />;
+  if (!puede("ruta_semanal.gestionar")) return <EstadoPantalla titulo={TITULO} tipo="sin-permiso" />;
+
+  const codigo =
+    usuario?.sucursal?.codigo ?? (sucursal && sucursal.toLowerCase() !== "todas" ? sucursal.toUpperCase() : null);
+  if (!codigo) return <EstadoPantalla titulo={TITULO} tipo="elige-sucursal" />;
+
+  return <RutasSemanales key={codigo} sucursal={codigo} />;
+}
+
+function RutasSemanales({ sucursal }: { sucursal: string }) {
+  const [rutas, setRutas] = useState<RutaSemanalResumen[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [dia, setDia] = useState(() => diaDeHoy(hoyEnTijuana()));
+  const [editando, setEditando] = useState<string | null>(null);
+  const [creando, setCreando] = useState(false);
+
+  const cargar = useCallback(() => {
+    setError(null);
+    return listarRutasSemanales(sucursal)
+      .then(setRutas)
+      .catch((err: unknown) => setError(mensajeDe(err, "No se pudieron cargar las rutas.")));
+  }, [sucursal]);
+
+  useEffect(() => {
+    void cargar();
+  }, [cargar]);
+
+  if (editando) {
+    return (
+      <EditarRutaSemanal
+        key={editando}
+        id={editando}
+        sucursal={sucursal}
+        onVolver={() => {
+          setEditando(null);
+          void cargar();
+        }}
+      />
+    );
+  }
+
+  return (
+    <Pantalla>
+      <EncabezadoPantalla
+        titulo={TITULO}
+        descripcion={DESCRIPCION}
+        acciones={
+          <Button type="button" onClick={() => setCreando(true)}>
+            Crear ruta
+          </Button>
+        }
+      />
+      {error ? <Aviso tono="error">{error}</Aviso> : null}
+      {rutas === null ? (
+        error ? null : (
+          <EstadoPantalla tipo="cargando" />
+        )
+      ) : (
+        <Pestanas
+          etiqueta="Día de la semana"
+          valorInicial={String(dia)}
+          onCambio={(valor) => setDia(Number(valor))}
+          pestanas={DIAS.map((nombre, i) => ({
+            valor: String(i + 1),
+            etiqueta: nombre,
+            contenido: <RutasDelDia rutas={rutasDelDia(rutas, i + 1)} onAbrir={setEditando} />,
+          }))}
+        />
+      )}
+      <VentanaCrear
+        abierta={creando}
+        sucursal={sucursal}
+        diaSemana={dia}
+        alCerrar={() => setCreando(false)}
+        alCrear={(id) => {
+          setCreando(false);
+          setEditando(id);
+        }}
+      />
+    </Pantalla>
+  );
+}
+
+function RutasDelDia({ rutas, onAbrir }: { rutas: RutaSemanalResumen[]; onAbrir: (id: string) => void }) {
+  return (
+    <CajaTabla>
+      <Tabla className="table-fixed">
+        <colgroup>
+          <col />
+          <col className="w-32" />
+        </colgroup>
+        <thead>
+          <tr>
+            <Th>Ruta</Th>
+            <Th alinear="derecha">Clientes</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {rutas.length === 0 ? (
+            <FilaVacia columnas={2}>Sin rutas este día.</FilaVacia>
+          ) : (
+            rutas.map((r) => (
+              <tr key={r.id}>
+                <Td>
+                  <button
+                    type="button"
+                    className="cursor-pointer font-medium underline-offset-2 hover:underline focus-visible:underline"
+                    onClick={() => onAbrir(r.id)}
+                  >
+                    {r.nombre}
+                  </button>
+                </Td>
+                <Td alinear="derecha">{r.clientes}</Td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </Tabla>
+    </CajaTabla>
+  );
+}
+
+function VentanaCrear({
+  abierta,
+  sucursal,
+  diaSemana,
+  alCerrar,
+  alCrear,
+}: {
+  abierta: boolean;
+  sucursal: string;
+  diaSemana: number;
+  alCerrar: () => void;
+  alCrear: (id: string) => void;
+}) {
+  const [nombre, setNombre] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+
+  function cerrar() {
+    setNombre("");
+    setError(null);
+    alCerrar();
+  }
+
+  async function crear(e: React.FormEvent) {
+    e.preventDefault();
+    setGuardando(true);
+    setError(null);
+    try {
+      const nueva = await crearRutaSemanal({ sucursal, diaSemana, nombre: nombre.trim() });
+      setNombre("");
+      alCrear(nueva.id);
+    } catch (err) {
+      setError(mensajeDe(err, "No se pudo crear la ruta."));
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <Ventana abierta={abierta} alCerrar={cerrar} titulo={`Crear ruta del ${DIAS[diaSemana - 1].toLowerCase()}`}>
+      <form onSubmit={(e) => void crear(e)} className="flex flex-col gap-3">
+        <Campo id="nueva-ruta-nombre" etiqueta="Nombre">
+          <Entrada
+            autoComplete="off"
+            maxLength={80}
+            value={nombre}
+            onChange={(e) => setNombre(e.target.value)}
+          />
+        </Campo>
+        {error ? <Aviso tono="error">{error}</Aviso> : null}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={cerrar}>
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={guardando || nombre.trim() === ""}>
+            Crear ruta
+          </Button>
+        </div>
+      </form>
+    </Ventana>
+  );
+}
