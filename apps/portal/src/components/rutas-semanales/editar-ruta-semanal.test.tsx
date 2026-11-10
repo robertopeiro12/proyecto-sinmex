@@ -154,4 +154,32 @@ describe("EditarRutaSemanal", () => {
     expect(semanalesLib.renombrarRutaSemanal).toHaveBeenCalledWith("r1", "Zona Norte");
     expect(await within(document.body).findByText("Nombre guardado.")).toBeInTheDocument();
   });
+
+  it("el aviso de guardado se limpia al agregar, quitar o tocar el nombre", async () => {
+    vi.mocked(semanalesLib.guardarClientesRutaSemanal).mockResolvedValue(
+      detalle([{ clienteId: "a", nombre: "Abarrotes A", valido: true }, { clienteId: "b", nombre: "Tienda B", valido: true }]),
+    );
+    const { usuario } = await abrir();
+    await usuario.click(screen.getByRole("button", { name: "Agregar Tienda B" }));
+    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(await screen.findByText("Ruta guardada.")).toBeInTheDocument();
+
+    await usuario.click(screen.getByRole("button", { name: "Quitar Tienda B" }));
+    expect(screen.queryByText("Ruta guardada.")).toBeNull();
+
+    await usuario.click(screen.getByRole("button", { name: "Agregar Dulcería D" }));
+    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(await screen.findByText("Ruta guardada.")).toBeInTheDocument();
+    await usuario.type(screen.getByLabelText("Nombre de la ruta"), "x");
+    expect(screen.queryByText("Ruta guardada.")).toBeNull();
+  });
+
+  it("un nombre escrito y sin guardar cuenta como cambio pendiente al salir", async () => {
+    const { usuario, volver } = await abrir();
+    await usuario.type(screen.getByLabelText("Nombre de la ruta"), " Norte");
+    expect(screen.getByText("Cambios sin guardar")).toBeInTheDocument();
+    await usuario.click(screen.getByRole("button", { name: "← Volver a Ruta Semanal" }));
+    expect(await screen.findByText("¿Descartar los cambios de la ruta?")).toBeInTheDocument();
+    expect(volver).not.toHaveBeenCalled();
+  });
 });

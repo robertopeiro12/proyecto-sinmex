@@ -154,6 +154,19 @@ describe("PantallaRutaSemanal", () => {
     await vi.waitFor(() => expect(semanalesLib.listarRutasSemanales).toHaveBeenCalledTimes(2));
   });
 
+  it("Eliminar se deshabilita mientras se borra", async () => {
+    let terminar: () => void = () => {};
+    vi.mocked(semanalesLib.eliminarRutaSemanal).mockReturnValue(new Promise<void>((r) => (terminar = r)));
+    const usuario = userEvent.setup();
+    render(<PantallaRutaSemanal sucursal="TJ" />);
+    const boton = await screen.findByRole("button", { name: "Eliminar" });
+    await usuario.click(boton);
+    await usuario.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Eliminar" }));
+    await vi.waitFor(() => expect(screen.getByRole("button", { name: "Eliminar" })).toBeDisabled());
+    terminar();
+    await vi.waitFor(() => expect(semanalesLib.listarRutasSemanales).toHaveBeenCalledTimes(2));
+  });
+
   it("Eliminar cancelado no elimina", async () => {
     const usuario = userEvent.setup();
     render(<PantallaRutaSemanal sucursal="TJ" />);

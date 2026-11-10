@@ -14,6 +14,14 @@ export interface RutaSemanalResumen {
   sucursalCodigo: string;
 }
 
+/** Nombres de los días de ruta: índice 0 = lunes … 5 = sábado (el domingo no es día de ruta). */
+export const DIAS_SEMANA = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado"] as const;
+
+/** Nombre en minúsculas de `diaSemana` (1 = lunes … 6 = sábado); `""` si viene fuera de 1–6. */
+export function nombreDiaSemana(diaSemana: number): string {
+  return DIAS_SEMANA[diaSemana - 1] ?? "";
+}
+
 /** `valido = false`: dado de baja, vuelto prospecto o de otra sucursal. */
 export interface ClienteDeRutaSemanal {
   clienteId: string;

@@ -6,6 +6,7 @@ import {
   eliminarRutaSemanal,
   guardarClientesRutaSemanal,
   listarRutasSemanales,
+  nombreDiaSemana,
   obtenerRutaSemanal,
   renombrarRutaSemanal,
   rutasDelDia,
@@ -72,5 +73,14 @@ describe("lib/rutas-semanales", () => {
     });
     await eliminarRutaSemanal("r1");
     expect(sinCuerpo).toHaveBeenCalledWith("/rutas/semanales/r1", { method: "DELETE" });
+  });
+});
+
+describe("nombreDiaSemana", () => {
+  it("1 = lunes … 6 = sábado y fuera de 1–6 no truena", () => {
+    expect(nombreDiaSemana(1)).toBe("lunes");
+    expect(nombreDiaSemana(6)).toBe("sábado");
+    expect(nombreDiaSemana(0)).toBe("");
+    expect(nombreDiaSemana(7)).toBe("");
   });
 });

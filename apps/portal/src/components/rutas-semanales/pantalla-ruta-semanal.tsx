@@ -15,7 +15,9 @@ import { mensajeDe } from "@/lib/api";
 import {
   crearRutaSemanal,
   diaDeHoy,
+  DIAS_SEMANA,
   listarRutasSemanales,
+  nombreDiaSemana,
   rutasDelDia,
   type RutaSemanalResumen,
 } from "@/lib/rutas-semanales";
@@ -25,7 +27,7 @@ import { EditarRutaSemanal } from "./editar-ruta-semanal";
 
 const TITULO = "Ruta Semanal";
 const DESCRIPCION = "Las rutas con nombre de cada día de la semana y los clientes que visitan.";
-const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+const capitalizar = (texto: string) => texto.charAt(0).toUpperCase() + texto.slice(1);
 
 /**
  * Operación → Ruta Semanal: una pestaña por día (lunes a sábado), las rutas de ese día
@@ -54,6 +56,7 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
   const [editando, setEditando] = useState<string | null>(null);
   const [creando, setCreando] = useState(false);
   const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
+  const [eliminando, setEliminando] = useState(false);
   const { confirmar, ventana } = useConfirmar();
 
   const cargar = useCallback(() => {
@@ -69,9 +72,14 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
 
   async function eliminar(ruta: RutaSemanalResumen) {
     setErrorEliminar(null);
-    const resultado = await confirmarYEliminarRuta(confirmar, ruta);
-    if (resultado.estado === "eliminada") await cargar();
-    else if (resultado.estado === "error") setErrorEliminar(resultado.mensaje);
+    setEliminando(true);
+    try {
+      const resultado = await confirmarYEliminarRuta(confirmar, ruta);
+      if (resultado.estado === "eliminada") await cargar();
+      else if (resultado.estado === "error") setErrorEliminar(resultado.mensaje);
+    } finally {
+      setEliminando(false);
+    }
   }
 
   if (editando) {
@@ -110,10 +118,10 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
           etiqueta="Día de la semana"
           valorInicial={String(diaInicial)}
           onCambio={(valor) => setDia(Number(valor))}
-          pestanas={DIAS.map((nombre, i) => ({
+          pestanas={DIAS_SEMANA.map((nombre, i) => ({
             valor: String(i + 1),
-            etiqueta: nombre,
-            contenido: <RutasDelDia rutas={rutasDelDia(rutas, i + 1)} onAbrir={setEditando} onEliminar={(r) => void eliminar(r)} />,
+            etiqueta: capitalizar(nombre),
+            contenido: <RutasDelDia rutas={rutasDelDia(rutas, i + 1)} eliminando={eliminando} onAbrir={setEditando} onEliminar={(r) => void eliminar(r)} />,
           }))}
         />
       )}
@@ -134,10 +142,12 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
 
 function RutasDelDia({
   rutas,
+  eliminando,
   onAbrir,
   onEliminar,
 }: {
   rutas: RutaSemanalResumen[];
+  eliminando: boolean;
   onAbrir: (id: string) => void;
   onEliminar: (ruta: RutaSemanalResumen) => void;
 }) {
@@ -177,7 +187,7 @@ function RutasDelDia({
                     <Button type="button" size="sm" variant="outline" onClick={() => onAbrir(r.id)}>
                       Editar
                     </Button>
-                    <Button type="button" size="sm" variant="outline" onClick={() => onEliminar(r)}>
+                    <Button type="button" size="sm" variant="outline" disabled={eliminando} onClick={() => onEliminar(r)}>
                       Eliminar
                     </Button>
                   </div>
@@ -230,7 +240,7 @@ function VentanaCrear({
   }
 
   return (
-    <Ventana abierta={abierta} alCerrar={cerrar} titulo={`Crear ruta del ${DIAS[diaSemana - 1].toLowerCase()}`}>
+    <Ventana abierta={abierta} alCerrar={cerrar} titulo={`Crear ruta del ${nombreDiaSemana(diaSemana)}`}>
       <form onSubmit={(e) => void crear(e)} className="flex flex-col gap-3">
         <Campo id="nueva-ruta-nombre" etiqueta="Nombre">
           <Entrada

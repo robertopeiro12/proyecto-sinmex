@@ -13,6 +13,7 @@ import { mensajeDe } from "@/lib/api";
 import { listarClientes, type ClienteResumen } from "@/lib/clientes";
 import {
   guardarClientesRutaSemanal,
+  nombreDiaSemana,
   obtenerRutaSemanal,
   renombrarRutaSemanal,
   type ClienteDeRutaSemanal,
@@ -20,8 +21,6 @@ import {
 } from "@/lib/rutas-semanales";
 
 import { confirmarYEliminarRuta } from "./eliminar-ruta";
-
-const DIAS = ["", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
 const mismaLista = (a: ClienteDeRutaSemanal[], b: ClienteDeRutaSemanal[]) =>
   a.length === b.length && a.every((c, i) => c.clienteId === b[i].clienteId);
@@ -51,7 +50,10 @@ export function EditarRutaSemanal({
   const [aviso, setAviso] = useState<string | null>(null);
   const { confirmar, ventana } = useConfirmar();
 
-  const sucio = !mismaLista(original, lista);
+  const listaSucia = !mismaLista(original, lista);
+  // Un nombre escrito y sin guardar también es un cambio pendiente.
+  const nombreSucio = ruta !== null && nombre.trim() !== "" && nombre.trim() !== ruta.nombre;
+  const sucio = listaSucia || nombreSucio;
   const enRuta = useMemo(() => new Set(lista.map((c) => c.clienteId)), [lista]);
 
   useEffect(() => {
@@ -166,14 +168,14 @@ export function EditarRutaSemanal({
       </div>
       <EncabezadoPantalla
         titulo={ruta?.nombre ?? "Ruta Semanal"}
-        descripcion={ruta ? `Los clientes que se visitan cada ${DIAS[ruta.diaSemana]}, en el orden en que se agregan.` : undefined}
+        descripcion={ruta ? `Los clientes que se visitan cada ${nombreDiaSemana(ruta.diaSemana)}, en el orden en que se agregan.` : undefined}
         acciones={
           ruta ? (
             <>
               <Button type="button" variant="outline" disabled={ocupado} onClick={() => void eliminar()}>
                 Eliminar ruta
               </Button>
-              <Button type="button" disabled={!sucio || ocupado} onClick={() => void guardar()}>
+              <Button type="button" disabled={!listaSucia || ocupado} onClick={() => void guardar()}>
                 Guardar
               </Button>
             </>
@@ -194,7 +196,10 @@ export function EditarRutaSemanal({
                 maxLength={80}
                 value={nombre}
                 disabled={ocupado}
-                onChange={(e) => setNombre(e.target.value)}
+                onChange={(e) => {
+                  setAviso(null);
+                  setNombre(e.target.value);
+                }}
               />
             </Campo>
             <Button
@@ -211,9 +216,10 @@ export function EditarRutaSemanal({
             <CarteraRuta
               cartera={cartera}
               enRuta={enRuta}
-              onAgregar={(c) =>
-                setLista((actual) => [...actual, { clienteId: c.id, nombre: c.nombre, valido: true }])
-              }
+              onAgregar={(c) => {
+                setAviso(null);
+                setLista((actual) => [...actual, { clienteId: c.id, nombre: c.nombre, valido: true }]);
+              }}
             />
             <section aria-label="Clientes de la ruta" className="flex flex-col gap-2">
               <h2 className="text-base font-semibold">Clientes de la ruta: {lista.length}</h2>
@@ -232,7 +238,10 @@ export function EditarRutaSemanal({
                         variant="outline"
                         aria-label={`Quitar ${c.nombre}`}
                         disabled={ocupado}
-                        onClick={() => setLista((actual) => actual.filter((x) => x.clienteId !== c.clienteId))}
+                        onClick={() => {
+                          setAviso(null);
+                          setLista((actual) => actual.filter((x) => x.clienteId !== c.clienteId));
+                        }}
                       >
                         Quitar
                       </Button>
