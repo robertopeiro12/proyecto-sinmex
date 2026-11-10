@@ -48,6 +48,9 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
   const [rutas, setRutas] = useState<RutaSemanalResumen[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dia, setDia] = useState(() => diaDeHoy(hoyEnTijuana()));
+  // Las pestañas no son controladas: su valor inicial se fija una sola vez. Pasarles `dia`
+  // (que cambia con `onCambio`) hace que Base UI avise en la consola.
+  const [diaInicial] = useState(dia);
   const [editando, setEditando] = useState<string | null>(null);
   const [creando, setCreando] = useState(false);
   const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
@@ -105,7 +108,7 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
       ) : (
         <Pestanas
           etiqueta="Día de la semana"
-          valorInicial={String(dia)}
+          valorInicial={String(diaInicial)}
           onCambio={(valor) => setDia(Number(valor))}
           pestanas={DIAS.map((nombre, i) => ({
             valor: String(i + 1),

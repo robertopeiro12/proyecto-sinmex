@@ -80,6 +80,21 @@ describe("PantallaRutaSemanal", () => {
     expect(screen.queryByText("Buscar ruta")).toBeNull();
   });
 
+  // Va ANTES de cualquier otra prueba que cambie de pestaña: Base UI avisa una sola vez por
+  // módulo, así que después ya no se vería.
+  it("cambiar de pestaña no le cambia el valor inicial a las pestañas (aviso de Base UI)", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const usuario = userEvent.setup();
+    render(<PantallaRutaSemanal sucursal="TJ" />);
+    await screen.findByText("Playas");
+    await usuario.click(screen.getByRole("tab", { name: "Lunes" }));
+    await screen.findByText("Zona Centro");
+    const mensajes = [...error.mock.calls, ...aviso.mock.calls].map((c) => c.map(String).join(" "));
+    expect(mensajes.filter((m) => m.includes("default value"))).toEqual([]);
+    expect(screen.getByRole("tab", { name: "Lunes" })).toHaveAttribute("aria-selected", "true");
+  });
+
   it("cambiar de pestaña muestra las rutas de ese día; vacío dice 'Sin rutas'", async () => {
     const usuario = userEvent.setup();
     render(<PantallaRutaSemanal sucursal="TJ" />);
