@@ -206,3 +206,51 @@ export function filtrarCartera(
   const q = normalizarTexto(busqueda.trim());
   return cartera.filter((c) => !enRuta.has(c.id) && (q === "" || normalizarTexto(c.nombre).includes(q)));
 }
+
+// Copia normativa de `NotaDeRuta` y `NotasDeRuta` de
+// apps/backend/src/modules/rutas/reglas-notas-ruta.ts (spec §5.4).
+
+/** Una nota por cobrar en la ventana de notas de una ruta del día. */
+export interface NotaDeRuta {
+  ventaNotaId: string;
+  folio: string;
+  clienteId: string;
+  cliente: string;
+  /** `AAAA-MM-DD`, la fecha de la venta. */
+  fecha: string;
+  saldoCentavos: number;
+  diasAtraso: number;
+  /** Quien la trae ese día, o `null`. */
+  asignadaA: { vendedorId: string; nombre: string } | null;
+}
+
+export interface NotasDeRuta {
+  /** Con saldo, de los clientes de su ruta. */
+  pendientes: NotaDeRuta[];
+  /** Las de este vendedor ese día, aunque ya no tengan saldo. */
+  asignadas: NotaDeRuta[];
+}
+
+export function obtenerNotas(vendedorId: string, fecha: string): Promise<NotasDeRuta> {
+  return apiFetch<NotasDeRuta>(`/rutas/diaria/notas?${porVendedorYFecha(vendedorId, fecha)}`);
+}
+
+/** Asigna (o le pasa) la nota al vendedor ese día. Regresa las dos listas ya actualizadas. */
+export function asignarNota(ventaNotaId: string, vendedorId: string, fecha: string): Promise<NotasDeRuta> {
+  return apiFetch<NotasDeRuta>(`/rutas/diaria/notas/${ventaNotaId}`, {
+    method: "PUT",
+    body: JSON.stringify({ vendedorId, fecha }),
+  });
+}
+
+export function quitarNota(ventaNotaId: string, vendedorId: string, fecha: string): Promise<NotasDeRuta> {
+  return apiFetch<NotasDeRuta>(`/rutas/diaria/notas/${ventaNotaId}?${porVendedorYFecha(vendedorId, fecha)}`, {
+    method: "DELETE",
+  });
+}
+
+/** Buscar por folio, sin mayúsculas ni acentos. Vacío = la misma lista. */
+export function filtrarPorFolio(notas: NotaDeRuta[], texto: string): NotaDeRuta[] {
+  const q = normalizarTexto(texto.trim());
+  return q === "" ? notas : notas.filter((n) => normalizarTexto(n.folio).includes(q));
+}

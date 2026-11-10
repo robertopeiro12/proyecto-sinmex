@@ -10,15 +10,16 @@ import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantall
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { CajaTabla, FilaVacia, Tabla, Td, Th } from "@/components/ui/tabla";
 import { mensajeDe } from "@/lib/api";
-import { formatearDiaLargo } from "@/lib/formato";
+import { formatearDiaLargo, plural } from "@/lib/formato";
 import { obtenerDia, quitarRutaDiaria, type ListaDelDia, type RenglonDia } from "@/lib/rutas";
 import { hoyEnTijuana } from "@/lib/ventas";
 import { RutaDeVendedor } from "./ruta-de-vendedor";
+import { VentanaNotas } from "./ventana-notas";
 
 const TITULO = "Ruta Diaria";
 const DESCRIPCION = "La ruta, el vehículo y las notas por cobrar de cada vendedor en un día.";
 
-/** Qué columna de notas se picó (la ventana de notas es de la Tarea 11). */
+/** Qué columna de notas se picó. */
 export type NotasDelRenglon = "pendientes" | "asignadas";
 
 /**
@@ -45,6 +46,7 @@ function RutaDiariaDelDia({ sucursal }: { sucursal: string }) {
   const [error, setError] = useState<string | null>(null);
   const [abierto, setAbierto] = useState<RenglonDia | null>(null);
   const [quitando, setQuitando] = useState<string | null>(null);
+  const [notas, setNotas] = useState<{ renglon: RenglonDia; cuales: NotasDelRenglon } | null>(null);
   const { confirmar, ventana } = useConfirmar();
 
   // Una respuesta de otra fecha no pisa la pantalla actual.
@@ -139,8 +141,23 @@ function RutaDiariaDelDia({ sucursal }: { sucursal: string }) {
           quitando={quitando}
           onAbrir={setAbierto}
           onQuitar={(r) => void quitarRuta(r)}
+          onAbrirNotas={(renglon, cuales) => setNotas({ renglon, cuales })}
         />
       )}
+      {notas ? (
+        <VentanaNotas
+          key={`${notas.renglon.vendedorId}-${notas.cuales}`}
+          vendedorId={notas.renglon.vendedorId}
+          vendedorNombre={notas.renglon.vendedor}
+          fecha={fecha}
+          editable={dia?.editable ?? false}
+          cuales={notas.cuales}
+          alCerrar={() => {
+            setNotas(null);
+            void cargar();
+          }}
+        />
+      ) : null}
       {ventana}
     </Pantalla>
   );
@@ -148,8 +165,7 @@ function RutaDiariaDelDia({ sucursal }: { sucursal: string }) {
 
 /**
  * La tabla del día. Cabe en la caja de 1366 px (≈1012 px): columnas fijas y el nombre del
- * vendedor se lleva lo que sobra. `onAbrirNotas` es el punto de entrada de la ventana de
- * notas (Tarea 11): sin él, las columnas de notas muestran solo el número.
+ * vendedor se lleva lo que sobra. `onAbrirNotas` abre la ventana de notas: sin él, las columnas de notas muestran solo el número.
  */
 export function TablaDelDia({
   renglones,
@@ -214,7 +230,11 @@ export function TablaDelDia({
                   {r.vendedor}
                 </Td>
                 <Td className="truncate" title={r.rutaNombre ?? undefined}>
-                  {r.rutaNombre ?? <span className="text-muted-foreground">Sin ruta</span>}
+                  {r.rutaNombre ?? (
+                    <span className="text-muted-foreground">
+                      {r.clientes > 0 ? `Sin ruta · ${plural(r.clientes, "cliente", "clientes")}` : "Sin ruta"}
+                    </span>
+                  )}
                 </Td>
                 <Td alinear="derecha">{r.clientes}</Td>
                 <Td alinear="derecha">{celdaNotas(r, "pendientes")}</Td>

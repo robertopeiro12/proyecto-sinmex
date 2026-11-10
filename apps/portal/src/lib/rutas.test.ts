@@ -5,16 +5,21 @@ import {
   aEditable,
   agregarFila,
   aplicarRutaSemanal,
+  asignarNota,
   filtrarCartera,
+  filtrarPorFolio,
   fijarRecado,
   guardarRutaDiaria,
   hayCambios,
   moverFila,
   obtenerDia,
+  obtenerNotas,
   obtenerOpciones,
   obtenerRutaDiaria,
   quitarFila,
+  quitarNota,
   quitarRutaDiaria,
+  type NotaDeRuta,
   type FilaEditable,
   type OrigenRuta,
   type RutaEditable,
@@ -173,5 +178,45 @@ describe("lib/rutas: edición local", () => {
     const cartera = [cliente("1", "Abarrotes Doña Lupe"), cliente("2", "Tienda La Esquina"), cliente("3", "Abarrotes Güero")];
     expect(filtrarCartera(cartera, new Set(["3"]), "").map((c) => c.id)).toEqual(["1", "2"]);
     expect(filtrarCartera(cartera, new Set(), "dona").map((c) => c.id)).toEqual(["1"]);
+  });
+
+  it("obtenerNotas pide las notas del vendedor y día", async () => {
+    await obtenerNotas("v1", "2026-11-10");
+    expect(apiFetch).toHaveBeenLastCalledWith("/rutas/diaria/notas?vendedorId=v1&fecha=2026-11-10");
+  });
+
+  it("asignarNota hace PUT con vendedor y fecha en el cuerpo", async () => {
+    await asignarNota("n1", "v1", "2026-11-10");
+    expect(apiFetch).toHaveBeenLastCalledWith("/rutas/diaria/notas/n1", {
+      method: "PUT",
+      body: JSON.stringify({ vendedorId: "v1", fecha: "2026-11-10" }),
+    });
+  });
+
+  it("quitarNota hace DELETE con vendedor y fecha en la consulta y regresa las listas", async () => {
+    apiFetch.mockResolvedValue({ pendientes: [], asignadas: [] });
+    await expect(quitarNota("n1", "v1", "2026-11-10")).resolves.toEqual({ pendientes: [], asignadas: [] });
+    expect(apiFetch).toHaveBeenLastCalledWith("/rutas/diaria/notas/n1?vendedorId=v1&fecha=2026-11-10", {
+      method: "DELETE",
+    });
+  });
+});
+
+describe("filtrarPorFolio", () => {
+  const nota = (folio: string): NotaDeRuta => ({
+    ventaNotaId: folio,
+    folio,
+    clienteId: "c",
+    cliente: "Cliente",
+    fecha: "2026-11-01",
+    saldoCentavos: 100,
+    diasAtraso: 3,
+    asignadaA: null,
+  });
+  it("busca sin mayúsculas ni acentos y vacío deja todo", () => {
+    const notas = [nota("TJ261001AP01"), nota("TJ261002OF01")];
+    expect(filtrarPorFolio(notas, "  ")).toBe(notas);
+    expect(filtrarPorFolio(notas, "tj261002").map((n) => n.folio)).toEqual(["TJ261002OF01"]);
+    expect(filtrarPorFolio(notas, "zzz")).toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
 import { Campo, Lista } from "@/components/ui/campo";
@@ -60,8 +60,6 @@ export function RutaDeVendedor({
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { confirmar, ventana } = useConfirmar();
-  // Cada escoger ruta lleva su número: si se escoge otra antes de que llegue la primera, la vieja no pisa.
-  const escogida = useRef(0);
 
   const editable = ruta?.editable ?? false;
   const sucio = hayCambios(original, actual);
@@ -144,7 +142,6 @@ export function RutaDeVendedor({
     ) {
       return;
     }
-    const turno = ++escogida.current;
     setError(null);
     if (nueva === null) {
       setActual((a) => ({ ...a, rutaSemanalId: null, filas: aplicarRutaSemanal(a.filas, []) }));
@@ -153,12 +150,11 @@ export function RutaDeVendedor({
     setOcupado(true);
     try {
       const semanal = await obtenerRutaSemanal(nueva);
-      if (turno !== escogida.current) return;
       setActual((a) => ({ ...a, rutaSemanalId: nueva, filas: aplicarRutaSemanal(a.filas, semanal.lista) }));
     } catch (err) {
-      if (turno === escogida.current) setError(mensajeDe(err, "No se pudieron leer los clientes de esa ruta."));
+      setError(mensajeDe(err, "No se pudieron leer los clientes de esa ruta."));
     } finally {
-      if (turno === escogida.current) setOcupado(false);
+      setOcupado(false);
     }
   }
 

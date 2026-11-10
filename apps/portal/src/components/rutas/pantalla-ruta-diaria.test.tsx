@@ -9,8 +9,18 @@ import { PantallaRutaDiaria } from "./pantalla-ruta-diaria";
 vi.mock("@/components/auth/auth-provider");
 vi.mock("@/lib/rutas", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/rutas")>();
-  return { ...real, obtenerDia: vi.fn(), quitarRutaDiaria: vi.fn() };
+  return { ...real, obtenerDia: vi.fn(), quitarRutaDiaria: vi.fn(), obtenerNotas: vi.fn() };
 });
+vi.mock("./ventana-notas", () => ({
+  VentanaNotas: ({ vendedorNombre, cuales, editable, alCerrar }: { vendedorNombre: string; cuales: string; editable: boolean; alCerrar: () => void }) => (
+    <div>
+      <p>
+        Notas {cuales} de {vendedorNombre} {editable ? "editable" : "solo lectura"}
+      </p>
+      <button onClick={alCerrar}>Cerrar notas</button>
+    </div>
+  ),
+}));
 vi.mock("./ruta-de-vendedor", () => ({
   RutaDeVendedor: ({
     vendedorId,
@@ -153,5 +163,42 @@ describe("PantallaRutaDiaria (lista del día)", () => {
     await usuario.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Quitar ruta" }));
     expect(rutasLib.quitarRutaDiaria).toHaveBeenCalledWith("v2", HOY);
     await vi.waitFor(() => expect(rutasLib.obtenerDia).toHaveBeenCalledTimes(2));
+  });
+
+  it("las columnas de notas abren la ventana y al cerrar relee los conteos", async () => {
+    const usuario = userEvent.setup();
+    render(<PantallaRutaDiaria sucursal="TJ" />);
+    const filas = await screen.findAllByRole("row");
+    await usuario.click(within(filas[2]).getByRole("button", { name: "4" }));
+    expect(screen.getByText("Notas pendientes de Juan Pérez editable")).toBeInTheDocument();
+    await usuario.click(screen.getByRole("button", { name: "Cerrar notas" }));
+    await vi.waitFor(() => expect(rutasLib.obtenerDia).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/Notas pendientes de/)).toBeNull();
+    await usuario.click(within(screen.getAllByRole("row")[2]).getByRole("button", { name: "2" }));
+    expect(screen.getByText("Notas asignadas de Juan Pérez editable")).toBeInTheDocument();
+  });
+
+  it("un día pasado abre la ventana de notas en solo lectura", async () => {
+    const usuario = userEvent.setup();
+    vi.mocked(rutasLib.obtenerDia).mockResolvedValue(dia([CON_RUTA], false, "2026-11-09"));
+    render(<PantallaRutaDiaria sucursal="TJ" />);
+    await usuario.click(await screen.findByRole("button", { name: "4" }));
+    expect(screen.getByText("Notas pendientes de Juan Pérez solo lectura")).toBeInTheDocument();
+  });
+
+  it("sin ruta semanal pero con clientes dice 'Sin ruta · N clientes'", async () => {
+    vi.mocked(rutasLib.obtenerDia).mockResolvedValue(
+      dia([
+        renglon({ vendedorId: "a", vendedor: "Ana", clientes: 3, tieneRuta: true }),
+        renglon({ vendedorId: "b", vendedor: "Beto", clientes: 1, tieneRuta: true }),
+        renglon({ vendedorId: "c", vendedor: "Cris" }),
+      ]),
+    );
+    render(<PantallaRutaDiaria sucursal="TJ" />);
+    await screen.findByText("Ana");
+    const [, ana, beto, cris] = screen.getAllByRole("row");
+    expect(within(ana).getByText("Sin ruta · 3 clientes")).toBeInTheDocument();
+    expect(within(beto).getByText("Sin ruta · 1 cliente")).toBeInTheDocument();
+    expect(within(cris).getByText("Sin ruta")).toBeInTheDocument();
   });
 });
