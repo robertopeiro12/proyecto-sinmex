@@ -407,7 +407,8 @@ tablet vieja la ignora; la tablet nueva la trata como opcional.
     semanal que lleva el vendedor ese día y su vehículo (ambos pueden ser `null`).
   - **`notas_asignadas`** (nivel superior): `{ id, venta_nota_id, fecha, activo }`, las notas por cobrar que la
     oficina le asignó para ese día. Sin `desde`, no baja la de una venta borrada; con `desde`, una asignación
-    quitada viaja con `activo: 0` (aunque su venta se haya borrado) para que la tablet la retire.
+    quitada viaja con `activo: 0` (aunque su venta se haya borrado) para que la tablet la retire. Eliminar la venta en
+    el portal (T-17) da de baja sus asignaciones vivas en la misma transacción, así que también viajan con `activo: 0`.
   - `rutas_dia` y `notas_asignadas` tienen la misma ventana que `rutas` (`fecha >= current_date - 1`, sin tope),
     el mismo incremental por `updated_at`, bajas como `activo: 0` y solo traen lo del **vendedor del token**.
   - **Pendiente de Mario:** la copia de los tipos en `apps/tablet/src/sincronizacion/contrato.ts` (`recado`,

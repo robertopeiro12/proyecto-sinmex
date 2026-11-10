@@ -340,9 +340,14 @@ usuario con sesion pasa.
     baja sus notas asignadas a ese vendedor ese día; **Quitar ruta** baja **todas** las del vendedor ese día. El servidor
     **no** rechaza cobrar una nota no asignada (cobranza offline, como D9 de T-21).
   - Endpoints (permiso `ruta_semanal.gestionar` o `ruta_diaria.gestionar`, alcance de sucursal, **otra = 404**):
-    `/rutas/semanales`, `PUT /rutas/semanales/:id/clientes`, `GET /rutas/diaria/dia`, `GET|PUT|DELETE /rutas/diaria`,
-    `GET /rutas/diaria/notas`, `PUT|DELETE /rutas/diaria/notas/:ventaNotaId`. **Ya no hay "Copiar de ayer"** (`/anterior`
-    se quitó). Una semanal que ya trae otro vendedor = 409; de otro día de la semana = 400. El vehículo repetido solo avisa.
+    Ruta Semanal: `GET|POST /rutas/semanales`, `GET|PATCH|DELETE /rutas/semanales/:id`, `PUT /rutas/semanales/:id/clientes`.
+    Ruta Diaria: `GET /rutas/diaria/dia`, `GET /rutas/diaria/opciones` (rutas semanales del día con **`clientes`** —su
+    lista en orden con `valido`, la misma regla de la Ruta Semanal— y vehículos), `GET|PUT|DELETE /rutas/diaria`,
+    `GET /rutas/diaria/notas`, `PUT|DELETE /rutas/diaria/notas/:ventaNotaId`. **La pantalla de Ruta Diaria solo usa
+    endpoints de `ruta_diaria.gestionar`**: los clientes de la ruta que escoge salen de `/opciones`, no de
+    `GET /rutas/semanales/:id`. **Ya no hay "Copiar de ayer"** (`/anterior` se quitó). Una semanal que ya trae otro
+    vendedor = 409; de otro día de la semana o de otra sucursal = 400 "no es del …"; dada de baja o inexistente = 400
+    "Esa ruta ya no existe.". El vehículo repetido solo avisa.
   - **Alta de la tablet** (`ruta-alta`): `cliente_id` viaja en **`datos`**, no en el sobre (así un prospecto o un cliente
     borrado sale `cliente-inexistente` y no `cliente-fuera-de-alcance`); el alta usa `on conflict … do nothing` y, si no
     insertó, rechaza `ruta-duplicada`, que **la tablet trata como aplicada**. Un único vivo por vendedor, fecha y cliente
@@ -352,8 +357,9 @@ usuario con sesion pasa.
     Postgres, UTC), sin tope, baja con `activo: 0`; **`origen: 'semanal'` baja como `oficina`** (el SQLite de la tablet
     tiene un check de dos valores y uno nuevo tumbaría todos los pulls); `RutaPull.recado`; colecciones **`rutas_dia`**
     (`fecha`, `nombre_ruta`, `vehiculo_id`) y **`notas_asignadas`** (`venta_nota_id`, `fecha`). El orden que arrastra
-    el vendedor **no sube** (vive en `ruta_orden_local`). Una venta borrada con asignación viva no baja como `activo: 0`
-    en el pull incremental (pendiente).
+    el vendedor **no sube** (vive en `ruta_orden_local`). **Eliminar una venta (T-17) da de baja sus `nota_asignada`
+    vivas** en la misma transacción (`ventas-edicion.repository.ts`, `eliminarVenta`, tras el `for update of vn` y sin
+    bloquear `vendedor`), así que la baja viaja en el pull incremental como `activo: 0`.
   - **Dashboard y Flujo diario**: "Ruta asignada" muestra `nombre_ruta` ("Sin ruta · N clientes"); vehículo de la
     jornada, con "(asignado: X)" si difiere.
   - **Nube**: `20261110120000_ruta_semanal_y_dia.sql` se sube a `sinmex dev` después del merge, con el protocolo de push

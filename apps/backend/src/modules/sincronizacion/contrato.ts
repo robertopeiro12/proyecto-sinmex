@@ -856,7 +856,8 @@ export interface RutaDiaPull extends FilaSincronizable {
  * Una nota por cobrar que la oficina le asigno al vendedor para un dia (tabla
  * `nota_asignada`). Misma ventana e incremental que {@link RutaPull}. Sin
  * `desde` no baja la de una venta borrada; con `desde`, una asignacion dada de
- * baja viaja con `activo: 0`. Aditiva.
+ * baja viaja con `activo: 0`. Eliminar la venta (T-17) da de baja sus
+ * asignaciones vivas, asi que tambien viajan con `activo: 0`. Aditiva.
  */
 export interface NotaAsignadaPull extends FilaSincronizable {
   venta_nota_id: string;
