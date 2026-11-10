@@ -1,317 +1,157 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
-import { ErrorApi } from "@/lib/api";
-import * as clientesLib from "@/lib/clientes";
-import type { ClienteResumen } from "@/lib/clientes";
 import * as rutasLib from "@/lib/rutas";
-import type { RutaDiaria } from "@/lib/rutas";
-import * as vendedoresLib from "@/lib/vendedores";
-import type { Vendedor } from "@/lib/vendedores";
+import type { ListaDelDia, RenglonDia } from "@/lib/rutas";
 import { PantallaRutaDiaria } from "./pantalla-ruta-diaria";
 
-vi.mock("@/lib/clientes");
-vi.mock("@/lib/vendedores");
+vi.mock("@/components/auth/auth-provider");
 vi.mock("@/lib/rutas", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/rutas")>();
-  return {
-    ...real,
-    obtenerRutaDiaria: vi.fn(),
-    guardarRutaDiaria: vi.fn(),
-    obtenerRutaAnterior: vi.fn(),
-  };
+  return { ...real, obtenerDia: vi.fn(), quitarRutaDiaria: vi.fn() };
 });
-vi.mock("@/components/auth/auth-provider");
+vi.mock("./ruta-de-vendedor", () => ({
+  RutaDeVendedor: ({
+    vendedorId,
+    fecha,
+    onVolver,
+  }: {
+    vendedorId: string;
+    fecha: string;
+    onVolver: (guardada: boolean) => void;
+  }) => (
+    <div>
+      <p>
+        Ruta de {vendedorId} el {fecha}
+      </p>
+      <button onClick={() => onVolver(true)}>Simular guardar</button>
+    </div>
+  ),
+}));
 
-const VENDEDOR: Vendedor = {
-  id: "v1",
-  nombre: "Abraham Pérez",
-  login: "aperez",
-  sucursalId: "s-tj",
+const HOY = "2026-11-10";
+
+const renglon = (extra: Partial<RenglonDia>): RenglonDia => ({
+  vendedorId: "v1",
+  vendedor: "Ricardo López",
   sucursalCodigo: "TJ",
-  folioSegmento: "AP",
-  activo: true,
-};
-const cliente = (id: string, nombre: string): ClienteResumen => ({
-  id,
-  nombre,
-  telefono: "664",
-  tipo: "cliente",
-  tipoNegocio: null,
-  sucursalCodigo: "TJ",
+  rutaNombre: null,
+  clientes: 0,
+  notasPendientes: 0,
+  notasAsignadas: 0,
+  vehiculo: null,
+  tieneRuta: false,
+  ...extra,
 });
-const ruta = (filas: RutaDiaria["filas"]): RutaDiaria => ({
-  vendedor: { id: "v1", nombre: "Abraham Pérez", sucursalCodigo: "TJ" },
-  fecha: "2026-10-12",
-  filas,
+
+const dia = (renglones: RenglonDia[], editable = true, fecha = HOY): ListaDelDia => ({ fecha, editable, renglones });
+
+const CON_RUTA = renglon({
+  vendedorId: "v2",
+  vendedor: "Juan Pérez",
+  rutaNombre: "RUTA 1 (OTAY)",
+  clientes: 12,
+  notasPendientes: 4,
+  notasAsignadas: 2,
+  vehiculo: "Nissan blanca",
+  tieneRuta: true,
 });
-const OTRO: Vendedor = { ...VENDEDOR, id: "v3", nombre: "Beto Ruiz", login: "bruiz", folioSegmento: "BR" };
-const FILA_A = { id: "r1", clienteId: "a", clienteNombre: "Abarrotes A", orden: 1, origen: "oficina" as const };
 
 function mockAuth(puede: (clave: string) => boolean) {
   vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: false, cerrarSesion: vi.fn(), puede });
 }
 
-async function elegirVendedor(usuario: ReturnType<typeof userEvent.setup>) {
-  await screen.findByRole("option", { name: /Abraham Pérez/ });
-  await usuario.selectOptions(screen.getByLabelText("Vendedor"), "v1");
-  await screen.findByText("Abarrotes A");
-}
-
-describe("PantallaRutaDiaria", () => {
+describe("PantallaRutaDiaria (lista del día)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(vendedoresLib.listarVendedores).mockResolvedValue([
-      VENDEDOR,
-      { ...VENDEDOR, id: "v2", nombre: "Inactivo", activo: false },
-      OTRO,
-    ]);
-    vi.mocked(clientesLib.listarClientes).mockResolvedValue([
-      cliente("a", "Abarrotes A"),
-      cliente("b", "Tienda B"),
-    ]);
-    vi.mocked(rutasLib.obtenerRutaDiaria).mockResolvedValue(ruta([FILA_A]));
+    // Martes 10 de noviembre de 2026, 23:30 en Tijuana (ya es miércoles en UTC).
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-11T07:30:00Z"));
+    mockAuth(() => true);
+    vi.mocked(rutasLib.obtenerDia).mockResolvedValue(dia([renglon({}), CON_RUTA]));
+    vi.mocked(rutasLib.quitarRutaDiaria).mockResolvedValue(undefined);
   });
-
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
-  it("mientras carga la sesión dice Cargando…, no \"No tienes permiso\"", () => {
-    vi.mocked(useAuth).mockReturnValue({ usuario: null, cargando: true, cerrarSesion: vi.fn(), puede: () => false });
-    render(<PantallaRutaDiaria sucursal={null} />);
-    expect(screen.getByText("Cargando…")).toBeInTheDocument();
-    expect(screen.queryByText(/No tienes permiso/)).not.toBeInTheDocument();
-  });
-
-  it("sin ruta_diaria.gestionar lo dice y no pide nada", () => {
+  it("sin permiso lo dice y no pide nada", () => {
     mockAuth(() => false);
-    render(<PantallaRutaDiaria sucursal={null} />);
-    expect(screen.getByText("No tienes permiso para gestionar la ruta diaria")).toBeInTheDocument();
-    expect(vendedoresLib.listarVendedores).not.toHaveBeenCalled();
+    render(<PantallaRutaDiaria sucursal="TJ" />);
+    expect(screen.getByText("No tienes permiso para ver esta sección.")).toBeInTheDocument();
+    expect(rutasLib.obtenerDia).not.toHaveBeenCalled();
   });
 
-  it("solo ofrece vendedores activos; al elegir uno carga su ruta y la cartera de su sucursal", async () => {
-    mockAuth(() => true);
-    const usuario = userEvent.setup();
+  it("sin sucursal elegida pide elegirla", () => {
     render(<PantallaRutaDiaria sucursal="todas" />);
-
-    await elegirVendedor(usuario);
-
-    expect(screen.queryByRole("option", { name: /Inactivo/ })).toBeNull();
-    expect(vendedoresLib.listarVendedores).toHaveBeenCalledWith("todas");
-    expect(clientesLib.listarClientes).toHaveBeenCalledWith("TJ", "cliente");
-    expect(rutasLib.obtenerRutaDiaria).toHaveBeenCalledWith("v1", expect.any(String));
+    expect(screen.getByText(/Elige una sucursal/)).toBeInTheDocument();
+    expect(rutasLib.obtenerDia).not.toHaveBeenCalled();
   });
 
-  it("agregar no guarda; Guardar ruta manda la lista completa y limpia el aviso", async () => {
-    mockAuth(() => true);
-    vi.mocked(rutasLib.guardarRutaDiaria).mockResolvedValue(
-      ruta([FILA_A, { id: "r2", clienteId: "b", clienteNombre: "Tienda B", orden: 2, origen: "oficina" }]),
-    );
+  it("pide el día de hoy de Tijuana y pinta las columnas del sistema viejo", async () => {
+    render(<PantallaRutaDiaria sucursal="tj" />);
+    await screen.findByText("Juan Pérez");
+    expect(rutasLib.obtenerDia).toHaveBeenCalledWith(HOY, "TJ");
+    expect(screen.getAllByRole("columnheader").map((th) => th.textContent)).toEqual([
+      "Vendedor",
+      "Ruta asignada",
+      "Clientes asignados",
+      "Notas pendientes por cobrar",
+      "Notas asignadas por cobrar",
+      "Vehículo",
+      "Acciones",
+    ]);
+
+    const [, sinRuta, conRuta] = screen.getAllByRole("row");
+    expect(within(sinRuta).getByText("Sin ruta")).toBeInTheDocument();
+    expect(within(sinRuta).getByText("Sin vehículo")).toBeInTheDocument();
+    expect(within(sinRuta).getByRole("button", { name: "Asignar ruta" })).toBeInTheDocument();
+    expect(within(sinRuta).queryByRole("button", { name: "Quitar ruta" })).toBeNull();
+
+    expect(conRuta).toHaveTextContent("RUTA 1 (OTAY)");
+    expect(conRuta).toHaveTextContent("Nissan blanca");
+    expect(within(conRuta).getAllByRole("cell").map((td) => td.textContent).slice(2, 5)).toEqual(["12", "4", "2"]);
+    expect(within(conRuta).getByRole("button", { name: "Editar" })).toBeInTheDocument();
+    expect(within(conRuta).getByRole("button", { name: "Quitar ruta" })).toBeInTheDocument();
+    expect(within(conRuta).queryByRole("button", { name: "Asignar ruta" })).toBeNull();
+  });
+
+  it("un día pasado no muestra acciones de cambio", async () => {
+    vi.mocked(rutasLib.obtenerDia).mockResolvedValue(dia([renglon({}), CON_RUTA], false, "2026-11-09"));
+    render(<PantallaRutaDiaria sucursal="TJ" />);
+    await screen.findByText("Juan Pérez");
+    expect(screen.queryByRole("button", { name: "Asignar ruta" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Quitar ruta" })).toBeNull();
+    expect(screen.getByText(/Ese día ya pasó/)).toBeInTheDocument();
+  });
+
+  it("Asignar ruta abre la ruta del vendedor y al volver relee la lista sin recargar", async () => {
     const usuario = userEvent.setup();
-    render(<PantallaRutaDiaria sucursal={null} />);
-    await elegirVendedor(usuario);
+    render(<PantallaRutaDiaria sucursal="TJ" />);
+    const [, sinRuta] = await screen.findAllByRole("row");
 
-    await usuario.click(screen.getByRole("button", { name: "Agregar Tienda B" }));
-    expect(screen.getByText("Cambios sin guardar")).toBeInTheDocument();
-    expect(rutasLib.guardarRutaDiaria).not.toHaveBeenCalled();
+    await usuario.click(within(sinRuta).getByRole("button", { name: "Asignar ruta" }));
+    expect(screen.getByText(`Ruta de v1 el ${HOY}`)).toBeInTheDocument();
 
-    await usuario.click(screen.getByRole("button", { name: "Guardar ruta" }));
-
-    expect(rutasLib.guardarRutaDiaria).toHaveBeenCalledWith({
-      vendedorId: "v1",
-      fecha: expect.any(String) as string,
-      clientes: ["a", "b"],
-    });
-    expect(await screen.findByText("Ruta guardada.")).toBeInTheDocument();
-    expect(screen.queryByText("Cambios sin guardar")).toBeNull();
+    await usuario.click(screen.getByRole("button", { name: "Simular guardar" }));
+    expect(await screen.findByText("Juan Pérez")).toBeInTheDocument();
+    expect(rutasLib.obtenerDia).toHaveBeenCalledTimes(2);
   });
 
-  it("Copiar de ayer carga la ruta anterior sin guardar", async () => {
-    mockAuth(() => true);
-    vi.mocked(rutasLib.obtenerRutaAnterior).mockResolvedValue({ fecha: "2026-10-11", clientes: ["b"] });
+  it("Quitar ruta pregunta, quita y relee la lista", async () => {
     const usuario = userEvent.setup();
-    render(<PantallaRutaDiaria sucursal={null} />);
-    await elegirVendedor(usuario);
+    render(<PantallaRutaDiaria sucursal="TJ" />);
+    const filas = await screen.findAllByRole("row");
 
-    await usuario.click(screen.getByRole("button", { name: "Copiar de ayer" }));
+    await usuario.click(within(filas[2]).getByRole("button", { name: "Quitar ruta" }));
+    expect(await screen.findByText("¿Quitar la ruta de Juan Pérez?")).toBeInTheDocument();
+    expect(rutasLib.quitarRutaDiaria).not.toHaveBeenCalled();
 
-    const lista = screen.getByRole("region", { name: "Ruta del día" });
-    expect(await within(lista).findByText("Tienda B")).toBeInTheDocument();
-    expect(within(lista).queryByText("Abarrotes A")).toBeNull();
-    expect(screen.getByText("Se cargó la ruta del 2026-10-11. Revísala y guarda.")).toBeInTheDocument();
-    expect(rutasLib.guardarRutaDiaria).not.toHaveBeenCalled();
-  });
-
-  it("el encabezado dice para qué sirve la pantalla", () => {
-    mockAuth(() => true);
-    render(<PantallaRutaDiaria sucursal={null} />);
-    expect(screen.getByRole("heading", { level: 1, name: "Ruta Diaria" })).toBeInTheDocument();
-    expect(
-      screen.getByText("Los clientes que visita cada vendedor en un día, en el orden en que los atiende."),
-    ).toBeInTheDocument();
-  });
-
-  it("\"Cambios sin guardar\" es una advertencia y \"Ruta guardada.\" un éxito", async () => {
-    mockAuth(() => true);
-    vi.mocked(rutasLib.guardarRutaDiaria).mockResolvedValue(ruta([FILA_A]));
-    const usuario = userEvent.setup();
-    render(<PantallaRutaDiaria sucursal={null} />);
-    await elegirVendedor(usuario);
-    await usuario.click(screen.getByRole("button", { name: "Agregar Tienda B" }));
-    expect(screen.getByText("Cambios sin guardar").closest("[data-tono]")).toHaveAttribute("data-tono", "advertencia");
-    await usuario.click(screen.getByRole("button", { name: "Guardar ruta" }));
-    expect((await screen.findByText("Ruta guardada.")).closest("[data-tono]")).toHaveAttribute("data-tono", "exito");
-  });
-
-  async function conCambios() {
-    mockAuth(() => true);
-    const usuario = userEvent.setup();
-    const vista = render(<PantallaRutaDiaria sucursal={null} />);
-    await elegirVendedor(usuario);
-    await usuario.click(screen.getByRole("button", { name: "Agregar Tienda B" }));
-    return { usuario, ...vista };
-  }
-
-  async function preguntaAbierta() {
-    const ventana = await screen.findByRole("alertdialog", { name: "¿Descartar los cambios de la ruta?" });
-    expect(within(ventana).getByText("Hay cambios sin guardar en la ruta.")).toBeInTheDocument();
-    return ventana;
-  }
-
-  it("con cambios sin guardar, cambiar de vendedor pregunta; confirmar aplica el nuevo", async () => {
-    const { usuario } = await conCambios();
-
-    fireEvent.change(screen.getByLabelText("Vendedor"), { target: { value: "v3" } });
-    const ventana = await preguntaAbierta();
-    expect(screen.getByLabelText("Vendedor")).toHaveValue("v1");
-    await usuario.click(within(ventana).getByRole("button", { name: "Descartar cambios" }));
-
-    await waitFor(() => expect(screen.getByLabelText("Vendedor")).toHaveValue("v3"));
-    await waitFor(() => expect(rutasLib.obtenerRutaDiaria).toHaveBeenCalledWith("v3", expect.any(String)));
-    await waitFor(() => expect(screen.queryByText("Cambios sin guardar")).toBeNull());
-  });
-
-  it("cancelar al cambiar de vendedor deja todo igual", async () => {
-    const { usuario } = await conCambios();
-
-    fireEvent.change(screen.getByLabelText("Vendedor"), { target: { value: "v3" } });
-    const ventana = await preguntaAbierta();
-    await usuario.click(within(ventana).getByRole("button", { name: "Cancelar" }));
-
-    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-    expect(screen.getByLabelText("Vendedor")).toHaveValue("v1");
-    expect(rutasLib.obtenerRutaDiaria).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Cambios sin guardar")).toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: "Ruta del día" })).getByText("Tienda B")).toBeInTheDocument();
-  });
-
-  it("con cambios sin guardar, cambiar la fecha pregunta; cancelar se queda y confirmar la aplica", async () => {
-    const { usuario } = await conCambios();
-
-    fireEvent.change(screen.getByLabelText("Fecha"), { target: { value: "2030-01-01" } });
-    await usuario.click(within(await preguntaAbierta()).getByRole("button", { name: "Cancelar" }));
-    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-    expect(screen.getByLabelText("Fecha")).not.toHaveValue("2030-01-01");
-    expect(rutasLib.obtenerRutaDiaria).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Cambios sin guardar")).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("Fecha"), { target: { value: "2030-01-01" } });
-    await usuario.click(within(await preguntaAbierta()).getByRole("button", { name: "Descartar cambios" }));
-    await waitFor(() => expect(rutasLib.obtenerRutaDiaria).toHaveBeenCalledWith("v1", "2030-01-01"));
-    expect(screen.getByLabelText("Fecha")).toHaveValue("2030-01-01");
-  });
-
-  it("dos cambios seguidos con la pregunta abierta: solo se aplica el último", async () => {
-    const { usuario } = await conCambios();
-
-    fireEvent.change(screen.getByLabelText("Vendedor"), { target: { value: "v3" } });
-    await preguntaAbierta();
-    fireEvent.change(screen.getByLabelText("Fecha"), { target: { value: "2030-01-01" } });
-    await usuario.click(within(await preguntaAbierta()).getByRole("button", { name: "Descartar cambios" }));
-
-    await waitFor(() => expect(rutasLib.obtenerRutaDiaria).toHaveBeenCalledWith("v1", "2030-01-01"));
-    expect(screen.getByLabelText("Fecha")).toHaveValue("2030-01-01");
-    expect(screen.getByLabelText("Vendedor")).toHaveValue("v1");
-    expect(rutasLib.obtenerRutaDiaria).not.toHaveBeenCalledWith("v3", expect.any(String));
-  });
-
-  it("si cambia la sucursal y el vendedor desaparece con cambios sin guardar, pregunta; cancelar los conserva", async () => {
-    const { usuario, rerender } = await conCambios();
-
-    vi.mocked(vendedoresLib.listarVendedores).mockResolvedValue([]);
-    rerender(<PantallaRutaDiaria sucursal="OTRA" />);
-
-    await usuario.click(within(await preguntaAbierta()).getByRole("button", { name: "Cancelar" }));
-    expect(screen.getByText("Cambios sin guardar")).toBeInTheDocument();
-    expect(within(screen.getByRole("region", { name: "Ruta del día" })).getByText("Tienda B")).toBeInTheDocument();
-    expect(screen.getByLabelText("Vendedor")).toHaveValue("v1");
-  });
-
-  it("si cambia la sucursal y el vendedor desaparece, confirmar descarta los cambios", async () => {
-    const { usuario, rerender } = await conCambios();
-
-    vi.mocked(vendedoresLib.listarVendedores).mockResolvedValue([]);
-    rerender(<PantallaRutaDiaria sucursal="OTRA" />);
-
-    await usuario.click(within(await preguntaAbierta()).getByRole("button", { name: "Descartar cambios" }));
-    await waitFor(() => expect(screen.queryByText("Cambios sin guardar")).toBeNull());
-    expect(screen.getByText("Elige un vendedor para ver su ruta.")).toBeInTheDocument();
-  });
-
-  it("mientras guarda no se puede cambiar de vendedor ni de fecha", async () => {
-    mockAuth(() => true);
-    vi.mocked(rutasLib.guardarRutaDiaria).mockReturnValue(new Promise(() => {}));
-    const usuario = userEvent.setup();
-    render(<PantallaRutaDiaria sucursal={null} />);
-    await elegirVendedor(usuario);
-    await usuario.click(screen.getByRole("button", { name: "Agregar Tienda B" }));
-    await usuario.click(screen.getByRole("button", { name: "Guardar ruta" }));
-
-    expect(screen.getByLabelText("Vendedor")).toBeDisabled();
-    expect(screen.getByLabelText("Fecha")).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Fecha"), { target: { value: "2030-01-01" } });
-    expect(rutasLib.obtenerRutaDiaria).toHaveBeenCalledTimes(1);
-  });
-
-  it("un guardado que resuelve cuando el vendedor ya se soltó no pisa la pantalla", async () => {
-    mockAuth(() => true);
-    let resolver!: (r: RutaDiaria) => void;
-    vi.mocked(rutasLib.guardarRutaDiaria).mockReturnValue(new Promise((r) => (resolver = r)));
-    const usuario = userEvent.setup();
-    const { rerender } = render(<PantallaRutaDiaria sucursal={null} />);
-    await elegirVendedor(usuario);
-    await usuario.click(screen.getByRole("button", { name: "Agregar Tienda B" }));
-    await usuario.click(screen.getByRole("button", { name: "Guardar ruta" }));
-
-    vi.mocked(vendedoresLib.listarVendedores).mockResolvedValue([]);
-    rerender(<PantallaRutaDiaria sucursal="OTRA" />);
-    await usuario.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Descartar cambios" }));
-    await screen.findByText("Elige un vendedor para ver su ruta.");
-    await act(async () => {
-      resolver(ruta([FILA_A]));
-    });
-
-    expect(screen.queryByText("Ruta guardada.")).toBeNull();
-    expect(screen.getByText("Elige un vendedor para ver su ruta.")).toBeInTheDocument();
-  });
-
-  it("si guardar falla, muestra el mensaje del servidor y conserva las ediciones para reintentar", async () => {
-    mockAuth(() => true);
-    vi.mocked(rutasLib.guardarRutaDiaria).mockRejectedValue(new ErrorApi("HTTP 400", 400, "El cliente ya no existe"));
-    const usuario = userEvent.setup();
-    render(<PantallaRutaDiaria sucursal={null} />);
-    await elegirVendedor(usuario);
-    await usuario.click(screen.getByRole("button", { name: "Agregar Tienda B" }));
-
-    await usuario.click(screen.getByRole("button", { name: "Guardar ruta" }));
-
-    expect(await screen.findByRole("alert")).toHaveTextContent("El cliente ya no existe");
-    expect(screen.getByText("Cambios sin guardar")).toBeInTheDocument();
-    const lista = screen.getByRole("region", { name: "Ruta del día" });
-    expect(within(lista).getByText("Tienda B")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Guardar ruta" })).toBeEnabled();
+    await usuario.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Quitar ruta" }));
+    expect(rutasLib.quitarRutaDiaria).toHaveBeenCalledWith("v2", HOY);
+    await vi.waitFor(() => expect(rutasLib.obtenerDia).toHaveBeenCalledTimes(2));
   });
 });
