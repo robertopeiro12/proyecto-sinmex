@@ -32,6 +32,10 @@ export interface FilaVendedorDia {
   jornadaCerrada: boolean;
   /** Nombre del vehiculo de la jornada. */
   vehiculo: string | null;
+  /** Nombre de la ruta asignada ese dia (`ruta_dia` viva); `null` = sin ruta con nombre. */
+  rutaNombre: string | null;
+  /** Vehiculo asignado en la ruta del dia (`ruta_dia`), no el de la jornada. */
+  vehiculoAsignado: string | null;
 }
 
 export interface ResumenVendedorDia extends FilaVendedorDia {
@@ -307,10 +311,22 @@ export function agruparPorSucursal<T extends { sucursalCodigo: string }>(
   return grupos;
 }
 
-export function etiquetaRutaAsignada(clientesEnRuta: number): string {
-  return clientesEnRuta > 0
-    ? `Ruta del día · ${plural(clientesEnRuta, "cliente", "clientes")}`
-    : "Sin ruta";
+export function etiquetaRutaAsignada(
+  rutaNombre: string | null,
+  clientesEnRuta: number,
+): string {
+  if (clientesEnRuta === 0) return rutaNombre ?? "Sin ruta";
+  return `${rutaNombre ?? "Sin ruta"} · ${plural(clientesEnRuta, "cliente", "clientes")}`;
+}
+
+/** El vehiculo que uso (jornada) y, si es otro, el que tenia asignado. */
+export function etiquetaVehiculo(
+  usado: string | null,
+  asignado: string | null,
+): string {
+  if (usado && asignado && usado !== asignado)
+    return `${usado} (asignado: ${asignado})`;
+  return usado ?? asignado ?? "—";
 }
 
 export function etiquetaLiquidada(p: PagoDetalle): {

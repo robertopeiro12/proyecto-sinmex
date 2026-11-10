@@ -104,6 +104,8 @@ describe('armarDetalleVendedor', () => {
       gastoCentavos: 1000,
       jornadaCerrada: true,
       vehiculo: null,
+      rutaNombre: null,
+      vehiculoAsignado: null,
     });
     expect(armarDetalleVendedor(base, filas).corte).toEqual({
       contadoCentavos: 5000,

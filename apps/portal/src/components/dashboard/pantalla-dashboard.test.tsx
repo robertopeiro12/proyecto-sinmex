@@ -27,12 +27,12 @@ function fila(p: Partial<ResumenVendedorDia>): ResumenVendedorDia {
     fecha: "2026-11-09", vendedorId: "v", vendedor: "V", sucursalCodigo: "TJ",
     clientesEnRuta: 16, atendidosEnRuta: 6, piezas: 402, montoCentavos: 400000,
     contadoCentavos: 134000, anterioresCentavos: 0, aFavorCentavos: 0, gastoCentavos: 0,
-    jornadaCerrada: false, vehiculo: null, cobranzaCentavos: 134000, tesoreriaCentavos: 134000,
+    jornadaCerrada: false, vehiculo: null, rutaNombre: null, vehiculoAsignado: null, cobranzaCentavos: 134000, tesoreriaCentavos: 134000,
     estatus: "en_ruta", ...p,
   };
 }
 
-const RICARDO = fila({ vendedorId: "ricardo", vendedor: "Ricardo", vehiculo: "BK-4537A" });
+const RICARDO = fila({ vendedorId: "ricardo", vendedor: "Ricardo", vehiculo: "BK-4537A", rutaNombre: "RUTA 5 (BLV 2000)" });
 const RBLAS = fila({
   vendedorId: "rblas", vendedor: "RBlas", clientesEnRuta: 15, atendidosEnRuta: 15, piezas: 675,
   cobranzaCentavos: 279650, gastoCentavos: 1000, tesoreriaCentavos: 278650, jornadaCerrada: true, estatus: "terminado",
@@ -251,7 +251,7 @@ describe("PantallaDashboard", () => {
 
     // Vehículo, ruta asignada, ruta x / y y "—" en Notas ant. asignadas.
     expect(within(ricardo).getByText("BK-4537A")).toBeInTheDocument();
-    expect(within(ricardo).getByText("Ruta del día · 16 clientes")).toBeInTheDocument();
+    expect(within(ricardo).getByText("RUTA 5 (BLV 2000) · 16 clientes")).toBeInTheDocument();
     expect(within(ricardo).getByText("6 / 16")).toBeInTheDocument();
     expect(within(ricardo).getByText("Pronto")).toBeInTheDocument();
     expect(celdas[9]).toHaveTextContent("—");

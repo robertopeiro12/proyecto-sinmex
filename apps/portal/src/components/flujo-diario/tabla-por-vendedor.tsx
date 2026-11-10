@@ -51,8 +51,8 @@ export function TablaPorVendedor({
         <Td>
           <BotonRenglon onClick={() => abrir(clave)}>{f.vendedor}</BotonRenglon>
         </Td>
-        <Td className={f.clientesEnRuta === 0 ? "text-muted-foreground" : undefined}>
-          {etiquetaRutaAsignada(f.clientesEnRuta)}
+        <Td className={f.rutaNombre ? undefined : "text-muted-foreground"}>
+          {etiquetaRutaAsignada(f.rutaNombre, f.clientesEnRuta)}
         </Td>
         <Td alinear="derecha">
           <BotonNumero cero={f.piezas === 0} etiqueta={`Venta general de ${f.vendedor}`} onClick={() => verEn("venta")}>

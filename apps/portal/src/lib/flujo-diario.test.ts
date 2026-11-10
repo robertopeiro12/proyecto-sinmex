@@ -4,6 +4,7 @@ import {
   agruparPorSucursal,
   etiquetaLiquidada,
   etiquetaRutaAsignada,
+  etiquetaVehiculo,
   obtenerDashboard,
   obtenerDetalleDashboard,
   obtenerDetalleDia,
@@ -30,10 +31,33 @@ const pago = (saldo: number): PagoDetalle => ({
 });
 
 describe("etiquetaRutaAsignada", () => {
-  it("pluraliza y cubre sin ruta", () => {
-    expect(etiquetaRutaAsignada(16)).toBe("Ruta del día · 16 clientes");
-    expect(etiquetaRutaAsignada(1)).toBe("Ruta del día · 1 cliente");
-    expect(etiquetaRutaAsignada(0)).toBe("Sin ruta");
+  it("lleva el nombre de la ruta y pluraliza", () => {
+    expect(etiquetaRutaAsignada("RUTA 5 (BLV 2000)", 16)).toBe("RUTA 5 (BLV 2000) · 16 clientes");
+    expect(etiquetaRutaAsignada("RUTA 5 (BLV 2000)", 1)).toBe("RUTA 5 (BLV 2000) · 1 cliente");
+  });
+
+  it("sin nombre pero con clientes dice Sin ruta con la cuenta", () => {
+    expect(etiquetaRutaAsignada(null, 3)).toBe("Sin ruta · 3 clientes");
+  });
+
+  it("sin clientes dice solo Sin ruta", () => {
+    expect(etiquetaRutaAsignada(null, 0)).toBe("Sin ruta");
+  });
+});
+
+describe("etiquetaVehiculo", () => {
+  it("avisa cuando el usado difiere del asignado", () => {
+    expect(etiquetaVehiculo("Nissan 02", "Nissan 01")).toBe("Nissan 02 (asignado: Nissan 01)");
+  });
+
+  it("si coinciden o falta uno, muestra el que haya", () => {
+    expect(etiquetaVehiculo("Nissan 01", "Nissan 01")).toBe("Nissan 01");
+    expect(etiquetaVehiculo("Nissan 02", null)).toBe("Nissan 02");
+    expect(etiquetaVehiculo(null, "Nissan 01")).toBe("Nissan 01");
+  });
+
+  it("sin ninguno, raya", () => {
+    expect(etiquetaVehiculo(null, null)).toBe("—");
   });
 });
 

@@ -15,6 +15,7 @@ import { VentanaDetalle } from "@/components/flujo-diario/ventana-detalle";
 import {
   agruparPorSucursal,
   etiquetaRutaAsignada,
+  etiquetaVehiculo,
   obtenerDetalleDashboard,
   type Dashboard,
   type DetalleVendedorDia,
@@ -73,10 +74,12 @@ export function TablaDashboard({
         <Td>
           <BotonRenglon onClick={() => abrir(clave)}>{f.vendedor}</BotonRenglon>
         </Td>
-        <Td className={f.clientesEnRuta === 0 ? "text-muted-foreground" : undefined}>
-          {etiquetaRutaAsignada(f.clientesEnRuta)}
+        <Td className={f.rutaNombre ? undefined : "text-muted-foreground"}>
+          {etiquetaRutaAsignada(f.rutaNombre, f.clientesEnRuta)}
         </Td>
-        <Td className={f.vehiculo ? undefined : "text-muted-foreground"}>{f.vehiculo ?? "—"}</Td>
+        <Td className={f.vehiculo || f.vehiculoAsignado ? undefined : "text-muted-foreground"}>
+          {etiquetaVehiculo(f.vehiculo, f.vehiculoAsignado)}
+        </Td>
         <Td alinear="centro">
           <Pronto />
         </Td>

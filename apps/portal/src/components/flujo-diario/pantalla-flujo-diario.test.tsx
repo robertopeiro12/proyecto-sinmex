@@ -38,7 +38,7 @@ function fila(p: Partial<ResumenVendedorDia>): ResumenVendedorDia {
     fecha: "2026-11-09", vendedorId: "v", vendedor: "V", sucursalCodigo: "TJ",
     clientesEnRuta: 10, atendidosEnRuta: 4, piezas: 100, montoCentavos: 120000,
     contadoCentavos: 30000, anterioresCentavos: 20000, aFavorCentavos: 0, gastoCentavos: 1000,
-    jornadaCerrada: true, vehiculo: null, cobranzaCentavos: 50000, tesoreriaCentavos: 49000,
+    jornadaCerrada: true, vehiculo: null, rutaNombre: null, vehiculoAsignado: null, cobranzaCentavos: 50000, tesoreriaCentavos: 49000,
     estatus: "terminado", ...p,
   };
 }

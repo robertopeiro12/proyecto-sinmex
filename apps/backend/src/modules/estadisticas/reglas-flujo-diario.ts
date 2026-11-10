@@ -28,6 +28,10 @@ export interface FilaVendedorDia {
   jornadaCerrada: boolean;
   /** Nombre del vehiculo de la jornada. */
   vehiculo: string | null;
+  /** Nombre de la ruta asignada ese dia (`ruta_dia` viva); `null` = sin ruta con nombre. */
+  rutaNombre: string | null;
+  /** Vehiculo asignado en la ruta del dia (`ruta_dia`), no el de la jornada. */
+  vehiculoAsignado: string | null;
 }
 
 export interface ResumenVendedorDia extends FilaVendedorDia {

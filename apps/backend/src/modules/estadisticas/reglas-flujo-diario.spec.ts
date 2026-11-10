@@ -22,6 +22,8 @@ const fila = (extra: Partial<FilaVendedorDia>): FilaVendedorDia => ({
   gastoCentavos: 0,
   jornadaCerrada: true,
   vehiculo: null,
+  rutaNombre: null,
+  vehiculoAsignado: null,
   ...extra,
 });
 

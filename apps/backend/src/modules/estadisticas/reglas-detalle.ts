@@ -398,6 +398,8 @@ export function armarDetalleVendedor(
       gastoCentavos: suma(filas.gastos),
       jornadaCerrada: true,
       vehiculo: null,
+      rutaNombre: null,
+      vehiculoAsignado: null,
     });
     corte = {
       contadoCentavos: r.contadoCentavos,

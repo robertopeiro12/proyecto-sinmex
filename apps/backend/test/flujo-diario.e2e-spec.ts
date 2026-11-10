@@ -49,6 +49,8 @@ describe('Flujo diario (e2e)', () => {
   let motivoId: string;
   let campoId: string;
   let vehiculoId: string;
+  let vehiculoAsignadoId: string;
+  let rutaSemanalId: string;
   let ana: string;
   let beto: string;
   let carla: string;
@@ -350,6 +352,25 @@ describe('Flujo diario (e2e)', () => {
         .executeTakeFirstOrThrow()
     ).id;
 
+    vehiculoAsignadoId = (
+      await db
+        .insertInto('vehiculo')
+        .values({ nombre: `Asignada fd ${SUFIJO}`, sucursal_id: idFd })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+    rutaSemanalId = (
+      await db
+        .insertInto('ruta_semanal')
+        .values({
+          sucursal_id: idFd,
+          dia_semana: 3,
+          nombre: `RUTA fd ${SUFIJO}`,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+
     ana = await sembrarVendedor('Ana');
     beto = await sembrarVendedor('Beto');
     carla = await sembrarVendedor('Carla');
@@ -554,6 +575,17 @@ describe('Flujo diario (e2e)', () => {
         cerrada_en: '2018-05-09T22:00:00Z',
       })
       .execute();
+    // Dani, 05-09: ruta asignada con nombre y otro vehiculo que el de la jornada.
+    await db
+      .insertInto('ruta_dia')
+      .values({
+        vendedor_id: dani,
+        fecha: '2018-05-09',
+        ruta_semanal_id: rutaSemanalId,
+        nombre_ruta: `RUTA fd ${SUFIJO}`,
+        vehiculo_id: vehiculoAsignadoId,
+      })
+      .execute();
 
     // Eva, 05-14 (detalle): contado a c1 con 2 lineas y una promocion, un venta
     // eliminada, cobro de 130 a c4 (100 a la nota de Carla, que queda en 50, y 30 a
@@ -734,7 +766,18 @@ describe('Flujo diario (e2e)', () => {
         .execute();
       await db.deleteFrom('cliente').where('id', 'in', clienteIds).execute();
     }
-    await db.deleteFrom('vehiculo').where('id', '=', vehiculoId).execute();
+    await db
+      .deleteFrom('ruta_dia')
+      .where('vendedor_id', 'in', vendedorIds)
+      .execute();
+    await db
+      .deleteFrom('ruta_semanal')
+      .where('id', '=', rutaSemanalId)
+      .execute();
+    await db
+      .deleteFrom('vehiculo')
+      .where('id', 'in', [vehiculoId, vehiculoAsignadoId])
+      .execute();
     await db.deleteFrom('campo_egreso').where('id', '=', campoId).execute();
     await db.deleteFrom('motivo_visita').where('id', '=', motivoId).execute();
     await db
@@ -828,6 +871,8 @@ describe('Flujo diario (e2e)', () => {
         tesoreriaCentavos: 13000,
         estatus: 'en_ruta',
         vehiculo: null,
+        rutaNombre: null,
+        vehiculoAsignado: null,
       });
     });
 
@@ -882,6 +927,8 @@ describe('Flujo diario (e2e)', () => {
         tesoreriaCentavos: -4500,
         estatus: 'terminado',
         vehiculo: `Camioneta fd ${SUFIJO}`,
+        rutaNombre: `RUTA fd ${SUFIJO}`,
+        vehiculoAsignado: `Asignada fd ${SUFIJO}`,
       });
     });
 
