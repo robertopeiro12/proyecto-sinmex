@@ -5,7 +5,7 @@ import type { DB } from '../../database/schema';
 import { buscarSucursalUsuario as buscarSucursalUsuarioCompartido } from '../sucursales/buscar-sucursal-usuario';
 import type { FilaViva, PlanReemplazo } from './reemplazo-ruta';
 
-export type OrigenRuta = 'oficina' | 'vendedor';
+export type OrigenRuta = 'oficina' | 'vendedor' | 'semanal';
 
 /** Una fila de `ruta` diaria lista para escribir. */
 export interface NuevaFilaRuta {
@@ -204,7 +204,7 @@ export class RutasDiariasRepository {
   ): Promise<FilaViva[]> {
     const filas = await trx
       .selectFrom('ruta')
-      .select(['id', 'cliente_id', 'orden', 'origen'])
+      .select(['id', 'cliente_id', 'orden', 'origen', 'recado'])
       .where('vendedor_id', '=', vendedorId)
       .where(sql<boolean>`fecha = ${fecha}::date`)
       .where('tipo', '=', 'diaria')
@@ -216,6 +216,7 @@ export class RutasDiariasRepository {
       clienteId: f.cliente_id,
       orden: f.orden,
       origen: f.origen as OrigenRuta,
+      recado: f.recado,
     }));
   }
 
@@ -270,17 +271,17 @@ export class RutasDiariasRepository {
     plan: PlanReemplazo,
     trx: Transaction<DB>,
   ): Promise<void> {
-    if (plan.borrar.length > 0) {
+    for (const fila of plan.borrar) {
       await trx
         .updateTable('ruta')
-        .set({ deleted_at: new Date() })
-        .where('id', 'in', plan.borrar)
+        .set({ deleted_at: new Date(), quitado_por: fila.quitadoPor })
+        .where('id', '=', fila.id)
         .execute();
     }
     for (const fila of plan.actualizar) {
       await trx
         .updateTable('ruta')
-        .set({ orden: fila.orden, origen: fila.origen })
+        .set({ orden: fila.orden, recado: fila.recado })
         .where('id', '=', fila.id)
         .execute();
     }
@@ -293,7 +294,8 @@ export class RutasDiariasRepository {
             cliente_id: fila.clienteId,
             fecha,
             orden: fila.orden,
-            origen: 'oficina',
+            origen: fila.origen,
+            recado: fila.recado,
             tipo: 'diaria',
           })),
         )

@@ -207,7 +207,11 @@ export class RutasDiariasService {
       await this.repo.aplicarReemplazo(
         vendedor.id,
         dto.fecha,
-        planearReemplazo(vivas, clientes),
+        planearReemplazo(
+          vivas,
+          clientes.map((clienteId) => ({ clienteId, recado: null })),
+          { clientesDeLaSemanal: new Set(), rutaCambio: false },
+        ),
         trx,
       );
     });

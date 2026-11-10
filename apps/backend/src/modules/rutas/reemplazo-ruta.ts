@@ -6,58 +6,95 @@ export interface FilaViva {
   clienteId: string;
   orden: number;
   origen: OrigenRuta;
+  recado: string | null;
+}
+
+/** Un cliente de la lista que manda el portal, con su recado (ya recortado; vacio = null). */
+export interface PedidoCliente {
+  clienteId: string;
+  recado: string | null;
 }
 
 /** Lo que el `PUT` tiene que escribir. */
 export interface PlanReemplazo {
-  actualizar: { id: string; orden: number; origen: OrigenRuta }[];
-  insertar: { clienteId: string; orden: number }[];
-  /** Ids que se dan de baja (`deleted_at`). Solo filas de la oficina. */
-  borrar: string[];
+  actualizar: { id: string; orden: number; recado: string | null }[];
+  insertar: {
+    clienteId: string;
+    orden: number;
+    origen: 'oficina' | 'semanal';
+    recado: string | null;
+  }[];
+  /** Filas que se dan de baja (`deleted_at`), con quien las quito. Nunca las del vendedor. */
+  borrar: {
+    id: string;
+    clienteId: string;
+    quitadoPor: 'oficina' | 'cambio_ruta';
+  }[];
 }
 
 /**
- * El reemplazo de la ruta del portal (D14), sin base: la regla entera en una
- * funcion que se puede probar sola.
+ * El reemplazo de la ruta del portal, sin base: la regla entera en una funcion
+ * que se puede probar sola.
  *
- * - Cada cliente de la lista, en la posicion `i`, queda con `orden = i + 1` y
- *   `origen = 'oficina'`: si ya habia una fila viva (de cualquier origen) se
- *   actualiza esa; si no, se inserta. Asi la oficina **adopta** lo que el
- *   vendedor ya habia subido, sin crear otra fila.
- * - Las filas de la oficina que no vienen, se borran.
- * - Las del vendedor que no vienen **se conservan** y se renumeran al final en
- *   su orden relativo: el portal no puede quitar lo que agrego el vendedor (D2).
+ * - Cada cliente de la lista, en la posicion `i`, queda con `orden = i + 1`: si
+ *   ya habia una fila viva se actualiza esa (**conserva su origen**, cambia la
+ *   regla D14 de T-37) y se le pone su recado; si no, se inserta, con origen
+ *   `semanal` si el cliente viene de la ruta semanal del vendedor, si no
+ *   `oficina`.
+ * - Las del vendedor que no vienen **se conservan** al final en su orden
+ *   relativo: el portal no puede quitar lo que agrego el vendedor.
+ * - Las demas que no vienen se borran, con `quitadoPor`: `cambio_ruta` si
+ *   `rutaCambio` y la fila es `semanal`, si no `oficina`.
  *
- * Una fila que ya tiene el orden y el origen que le tocan no se toca: moveria
- * su `updated_at` y bajaria otra vez en el pull de la tablet sin haber cambiado.
+ * Una fila que ya tiene su orden y su recado no se toca: moveria su
+ * `updated_at` y bajaria otra vez en el pull de la tablet sin haber cambiado.
  */
 export function planearReemplazo(
   vivas: readonly FilaViva[],
-  clientes: readonly string[],
+  pedidos: readonly PedidoCliente[],
+  contexto: { clientesDeLaSemanal: ReadonlySet<string>; rutaCambio: boolean },
 ): PlanReemplazo {
   const porCliente = new Map(vivas.map((f) => [f.clienteId, f]));
-  const pedidos = new Set(clientes);
+  const pedidosIds = new Set(pedidos.map((p) => p.clienteId));
   const plan: PlanReemplazo = { actualizar: [], insertar: [], borrar: [] };
 
-  const fijar = (fila: FilaViva, orden: number, origen: OrigenRuta) => {
-    if (fila.orden !== orden || fila.origen !== origen) {
-      plan.actualizar.push({ id: fila.id, orden, origen });
+  const fijar = (fila: FilaViva, orden: number, recado: string | null) => {
+    if (fila.orden !== orden || fila.recado !== recado) {
+      plan.actualizar.push({ id: fila.id, orden, recado });
     }
   };
 
-  clientes.forEach((clienteId, i) => {
+  pedidos.forEach(({ clienteId, recado }, i) => {
     const fila = porCliente.get(clienteId);
-    if (fila) fijar(fila, i + 1, 'oficina');
-    else plan.insertar.push({ clienteId, orden: i + 1 });
+    if (fila) fijar(fila, i + 1, recado);
+    else {
+      plan.insertar.push({
+        clienteId,
+        orden: i + 1,
+        origen: contexto.clientesDeLaSemanal.has(clienteId)
+          ? 'semanal'
+          : 'oficina',
+        recado,
+      });
+    }
   });
 
   const fuera = vivas
-    .filter((f) => !pedidos.has(f.clienteId))
+    .filter((f) => !pedidosIds.has(f.clienteId))
     .sort((a, b) => a.orden - b.orden);
-  let siguiente = clientes.length;
+  let siguiente = pedidos.length;
   for (const f of fuera) {
-    if (f.origen === 'oficina') plan.borrar.push(f.id);
-    else fijar(f, ++siguiente, 'vendedor');
+    if (f.origen === 'vendedor') fijar(f, ++siguiente, f.recado);
+    else {
+      plan.borrar.push({
+        id: f.id,
+        clienteId: f.clienteId,
+        quitadoPor:
+          contexto.rutaCambio && f.origen === 'semanal'
+            ? 'cambio_ruta'
+            : 'oficina',
+      });
+    }
   }
 
   return plan;

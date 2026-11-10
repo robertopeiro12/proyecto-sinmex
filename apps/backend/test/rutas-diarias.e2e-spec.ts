@@ -364,7 +364,7 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
       ]);
     });
 
-    it('adopta la fila que subio el vendedor: la misma fila, con el orden y el origen de la oficina', async () => {
+    it('la fila que subio el vendedor y la oficina incluye sigue siendo la misma fila y conserva su origen', async () => {
       const fecha = diaNuevo();
       const a = await sembrarCliente(tjId);
       const id = await sembrarRuta({
@@ -386,7 +386,7 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
           id,
           cliente_id: a.id,
           orden: 1,
-          origen: 'oficina',
+          origen: 'vendedor',
           deleted_at: null,
         },
       ]);
