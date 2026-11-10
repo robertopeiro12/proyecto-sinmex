@@ -141,4 +141,39 @@ describe('planearReemplazo', () => {
       ).actualizar,
     ).toEqual([{ id: 'r1', orden: 1, recado: 'Solo contado' }]);
   });
+
+  it('con cambio de ruta, un cliente de la semanal nueva que la oficina quito a mano marca oficina', () => {
+    expect(
+      planearReemplazo(
+        [fila('r1', 'A', 1, 'semanal'), fila('r2', 'B', 2, 'semanal')],
+        pide('B'),
+        { clientesDeLaSemanal: new Set(['A', 'B']), rutaCambio: true },
+      ).borrar,
+    ).toEqual([{ id: 'r1', clienteId: 'A', quitadoPor: 'oficina' }]);
+  });
+
+  it('inserta el recado no nulo de un cliente nuevo', () => {
+    expect(
+      planearReemplazo(
+        [],
+        [{ clienteId: 'A', recado: 'Llevar cambio' }],
+        sinSemanal,
+      ).insertar,
+    ).toEqual([
+      { clienteId: 'A', orden: 1, origen: 'oficina', recado: 'Llevar cambio' },
+    ]);
+  });
+
+  it('con cambio de ruta, una fila del vendedor que no viene se conserva', () => {
+    expect(
+      planearReemplazo([fila('r1', 'A', 1, 'vendedor')], pide('B'), {
+        clientesDeLaSemanal: new Set(['B']),
+        rutaCambio: true,
+      }),
+    ).toEqual({
+      actualizar: [{ id: 'r1', orden: 2, recado: null }],
+      insertar: [{ clienteId: 'B', orden: 1, origen: 'semanal', recado: null }],
+      borrar: [],
+    });
+  });
 });

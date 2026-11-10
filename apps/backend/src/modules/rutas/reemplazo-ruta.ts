@@ -43,8 +43,11 @@ export interface PlanReemplazo {
  *   `oficina`.
  * - Las del vendedor que no vienen **se conservan** al final en su orden
  *   relativo: el portal no puede quitar lo que agrego el vendedor.
- * - Las demas que no vienen se borran, con `quitadoPor`: `cambio_ruta` si
- *   `rutaCambio` y la fila es `semanal`, si no `oficina`.
+ * - Las demas que no vienen se borran, con `quitadoPor`: `cambio_ruta` solo si
+ *   `rutaCambio`, la fila es `semanal` y su cliente NO esta en la semanal nueva
+ *   (`clientesDeLaSemanal`): la semanal vieja lo traia y la nueva no. Si la nueva
+ *   tambien lo trae y no viene en la lista, la oficina lo quito a mano en esta
+ *   edicion: `oficina`. Con los datos del PUT se distinguen asi, sin campo nuevo.
  *
  * Una fila que ya tiene su orden y su recado no se toca: moveria su
  * `updated_at` y bajaria otra vez en el pull de la tablet sin haber cambiado.
@@ -90,7 +93,9 @@ export function planearReemplazo(
         id: f.id,
         clienteId: f.clienteId,
         quitadoPor:
-          contexto.rutaCambio && f.origen === 'semanal'
+          contexto.rutaCambio &&
+          f.origen === 'semanal' &&
+          !contexto.clientesDeLaSemanal.has(f.clienteId)
             ? 'cambio_ruta'
             : 'oficina',
       });
