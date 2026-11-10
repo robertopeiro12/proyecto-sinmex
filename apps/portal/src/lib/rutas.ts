@@ -60,9 +60,12 @@ export interface ListaDelDia {
   renglones: RenglonDia[];
 }
 
-/** `GET /rutas/diaria/opciones`: las rutas semanales del día de la semana y los vehículos de la sucursal. */
+/**
+ * `GET /rutas/diaria/opciones`: las rutas semanales del día de la semana (con su lista de clientes en
+ * orden, para copiarla al escogerla sin pedir `ruta_semanal.gestionar`) y los vehículos de la sucursal.
+ */
 export interface OpcionesDia {
-  rutas: { id: string; nombre: string; ocupadaPor: string | null }[];
+  rutas: { id: string; nombre: string; ocupadaPor: string | null; clientes: ClienteDeRutaSemanal[] }[];
   vehiculos: { id: string; nombre: string; ocupadoPor: string | null }[];
 }
 

@@ -52,9 +52,23 @@ const rutaDiaria = (extra: Partial<RutaDiaria> = {}): RutaDiaria => ({
 
 const OPCIONES: OpcionesDia = {
   rutas: [
-    { id: "rs1", nombre: "RUTA 1 (OTAY)", ocupadaPor: null },
-    { id: "rs2", nombre: "RUTA 2 (CENTRO)", ocupadaPor: "Juan" },
-    { id: "rs3", nombre: "RUTA 3 (PLAYAS)", ocupadaPor: null },
+    {
+      id: "rs1",
+      nombre: "RUTA 1 (OTAY)",
+      ocupadaPor: null,
+      clientes: [
+        { clienteId: "a", nombre: "Abarrotes A", valido: true },
+        { clienteId: "baja", nombre: "Dado de baja", valido: false },
+        { clienteId: "b", nombre: "Tienda B", valido: true },
+      ],
+    },
+    { id: "rs2", nombre: "RUTA 2 (CENTRO)", ocupadaPor: "Juan", clientes: [] },
+    {
+      id: "rs3",
+      nombre: "RUTA 3 (PLAYAS)",
+      ocupadaPor: null,
+      clientes: [{ clienteId: "c", nombre: "Carnicería C", valido: true }],
+    },
   ],
   vehiculos: [
     { id: "ve1", nombre: "Nissan blanca", ocupadoPor: null },
@@ -74,21 +88,6 @@ describe("RutaDeVendedor", () => {
     vi.mocked(clientesLib.listarClientes).mockResolvedValue([cliente("a", "Abarrotes A"), cliente("b", "Tienda B")]);
     vi.mocked(rutasLib.obtenerRutaDiaria).mockResolvedValue(rutaDiaria());
     vi.mocked(rutasLib.obtenerOpciones).mockResolvedValue(OPCIONES);
-    vi.mocked(semanalesLib.obtenerRutaSemanal).mockImplementation(async (id) => ({
-      id,
-      diaSemana: 2,
-      nombre: id,
-      clientes: 2,
-      sucursalCodigo: "TJ",
-      lista:
-        id === "rs1"
-          ? [
-              { clienteId: "a", nombre: "Abarrotes A", valido: true },
-              { clienteId: "baja", nombre: "Dado de baja", valido: false },
-              { clienteId: "b", nombre: "Tienda B", valido: true },
-            ]
-          : [{ clienteId: "c", nombre: "Carnicería C", valido: true }],
-    }));
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -112,7 +111,7 @@ describe("RutaDeVendedor", () => {
     expect(screen.getByRole("option", { name: "Sin vehículo" })).toBeInTheDocument();
   });
 
-  it("escoger una ruta copia sus clientes válidos en su orden", async () => {
+  it("escoger una ruta copia sus clientes válidos en su orden, de las opciones (sin pedir la Ruta Semanal)", async () => {
     const { usuario } = pintar();
     await screen.findByRole("option", { name: "RUTA 1 (OTAY)" });
 
@@ -126,6 +125,8 @@ describe("RutaDeVendedor", () => {
     ]);
     expect(within(lista).queryByText("Dado de baja")).toBeNull();
     expect(screen.getByText("Cambios sin guardar")).toBeInTheDocument();
+    // `GET /rutas/semanales/:id` exige ruta_semanal.gestionar, que quien arma la ruta del día puede no tener.
+    expect(semanalesLib.obtenerRutaSemanal).not.toHaveBeenCalled();
   });
 
   it("cambiar de ruta con clientes de la semanal pregunta; si no, no cambia nada", async () => {
@@ -144,7 +145,6 @@ describe("RutaDeVendedor", () => {
     expect(pregunta).toHaveTextContent("¿Reemplazar los clientes de la ruta?");
     await usuario.click(within(pregunta).getByRole("button", { name: "Cancelar" }));
     expect(screen.getByLabelText("Ruta del día")).toHaveValue("rs1");
-    expect(semanalesLib.obtenerRutaSemanal).not.toHaveBeenCalled();
 
     await usuario.selectOptions(screen.getByLabelText("Ruta del día"), "rs3");
     await usuario.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Reemplazar" }));

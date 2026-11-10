@@ -25,7 +25,6 @@ import {
   type RutaDiaria,
   type RutaEditable,
 } from "@/lib/rutas";
-import { obtenerRutaSemanal } from "@/lib/rutas-semanales";
 import { CarteraRuta } from "./cartera-ruta";
 import { ListaRutaDiaria } from "./lista-ruta-diaria";
 
@@ -101,10 +100,11 @@ export function RutaDeVendedor({
   }, [sucio]);
 
   // La ruta guardada pudo salir de las opciones (dada de baja): se sigue ofreciendo para no perderla.
+  // Sin clientes: ya no tiene lista que copiar.
   const rutas = useMemo(() => {
     const guardada = ruta?.rutaSemanal;
     return guardada && !opciones.rutas.some((r) => r.id === guardada.id)
-      ? [{ ...guardada, ocupadaPor: null }, ...opciones.rutas]
+      ? [{ ...guardada, ocupadaPor: null, clientes: [] }, ...opciones.rutas]
       : opciones.rutas;
   }, [ruta, opciones.rutas]);
   const vehiculos = useMemo(() => {
@@ -143,19 +143,10 @@ export function RutaDeVendedor({
       return;
     }
     setError(null);
-    if (nueva === null) {
-      setActual((a) => ({ ...a, rutaSemanalId: null, filas: aplicarRutaSemanal(a.filas, []) }));
-      return;
-    }
-    setOcupado(true);
-    try {
-      const semanal = await obtenerRutaSemanal(nueva);
-      setActual((a) => ({ ...a, rutaSemanalId: nueva, filas: aplicarRutaSemanal(a.filas, semanal.lista) }));
-    } catch (err) {
-      setError(mensajeDe(err, "No se pudieron leer los clientes de esa ruta."));
-    } finally {
-      setOcupado(false);
-    }
+    // Los clientes vienen en las opciones del día: `GET /rutas/semanales/:id` exige
+    // `ruta_semanal.gestionar`, que quien arma la ruta del día puede no tener.
+    const clientes = nueva === null ? [] : (rutas.find((r) => r.id === nueva)?.clientes ?? []);
+    setActual((a) => ({ ...a, rutaSemanalId: nueva, filas: aplicarRutaSemanal(a.filas, clientes) }));
   }
 
   async function quitar(indice: number) {
