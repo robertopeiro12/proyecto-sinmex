@@ -21,9 +21,9 @@ import type {
  * Ruta Semanal desde el portal: alta, nombre unico por dia, alcance,
  * propagacion a las rutas del dia ya armadas y baja.
  *
- * Fechas de 2099 (desde el lunes 2099-01-05), exclusivas de este archivo. Las
- * rutas del dia asignadas se insertan directo en la base: el `PUT` de la ruta
- * diaria que las asigna es de la Tarea 5.
+ * Fechas de 2099 (desde el lunes 2099-01-05), exclusivas de este archivo. Casi
+ * todas las rutas del dia asignadas se insertan directo en la base; la prueba
+ * de "lo quitado a mano" las arma con el `PUT` de la ruta diaria.
  *
  * El reloj de "hoy" es el real, salvo en la prueba de medianoche, que lo fija
  * con `RELOJ_RUTAS`.
@@ -545,10 +545,38 @@ describe('Ruta Semanal desde el portal (e2e)', () => {
     ).toEqual([b, a]);
   });
 
-  it.todo(
-    'propaga sin deshacer lo quitado a mano: semanal martes [A, B], asignada el 2099-01-06 con el PUT de la diaria ' +
-      '(Tarea 5) y B quitado a mano; PUT de la semanal [A, B, C] → la ruta del dia queda [A, C], C con origen semanal',
-  );
+  it('propaga sin deshacer lo quitado a mano: asignada con el PUT de la diaria, B quitado a mano; [A, B, C] deja [A, C]', async () => {
+    const ruta = await crearRuta(2);
+    const [a, b, c] = [
+      await sembrarCliente(tjId),
+      await sembrarCliente(tjId),
+      await sembrarCliente(tjId),
+    ];
+    await guardarClientes(cookieGeneral, ruta.id, [a, b]).expect(200);
+    const vendedor = await sembrarVendedor(tjId);
+    const fecha = '2099-01-06';
+
+    const ponerRuta = (clientes: string[]) =>
+      servidor()
+        .put('/rutas/diaria')
+        .set('Cookie', cookieGeneral)
+        .send({
+          vendedorId: vendedor.id,
+          fecha,
+          rutaSemanalId: ruta.id,
+          clientes: clientes.map((clienteId) => ({ clienteId })),
+        })
+        .expect(200);
+    await ponerRuta([a, b]);
+    // La oficina quita B a mano.
+    await ponerRuta([a]);
+
+    await guardarClientes(cookieGeneral, ruta.id, [a, b, c]).expect(200);
+    expect(await vivasDe(vendedor.id, fecha)).toEqual([
+      { cliente_id: a, orden: 1, origen: 'semanal' },
+      { cliente_id: c, orden: 2, origen: 'semanal' },
+    ]);
+  });
 
   it('propaga a las rutas del dia de hoy en adelante sin tocar lo puesto a mano', async () => {
     const ruta = await crearRuta(2);

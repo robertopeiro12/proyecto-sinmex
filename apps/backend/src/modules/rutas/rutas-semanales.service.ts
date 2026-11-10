@@ -222,13 +222,25 @@ export class RutasSemanalesService {
           aMano,
           validos,
         );
-        await this.repo.aplicarPropagacion(
+        // La misma escritura que el PUT de la ruta del dia.
+        await this.diarias.aplicarReemplazo(
           dia.vendedorId,
           dia.fecha,
-          plan,
+          {
+            actualizar: [],
+            insertar: plan.insertar.map((f) => ({
+              ...f,
+              origen: 'semanal',
+              recado: null,
+            })),
+            borrar: plan.borrar.map((f) => ({
+              ...f,
+              quitadoPor: 'cambio_ruta',
+            })),
+          },
           trx,
         );
-        await this.repo.quitarNotasAsignadas(
+        await this.diarias.quitarNotasAsignadas(
           dia.vendedorId,
           dia.fecha,
           plan.borrar.map((f) => f.clienteId),

@@ -4,6 +4,7 @@ import { JornadasService } from './jornadas.service';
 import { MotivosVisitaController } from './motivos-visita.controller';
 import { MotivosVisitaRepository } from './motivos-visita.repository';
 import { MotivosVisitaService } from './motivos-visita.service';
+import { NotasRutaRepository } from './notas-ruta.repository';
 import { RutasDiariasController } from './rutas-diarias.controller';
 import { RutasDiariasRepository } from './rutas-diarias.repository';
 import { RutasDiariasService } from './rutas-diarias.service';
@@ -44,6 +45,7 @@ import { VisitasService } from './visitas.service';
     RutasDiariasRepository,
     RutasSemanalesService,
     RutasSemanalesRepository,
+    NotasRutaRepository,
     // "Hoy" de Tijuana sale de este reloj; las pruebas lo fijan.
     { provide: RELOJ_RUTAS, useValue: () => new Date() },
     MotivosVisitaService,

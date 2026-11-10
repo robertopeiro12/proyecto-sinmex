@@ -29,9 +29,10 @@ export interface RutaDiaAsignada {
 }
 
 /**
- * SQL de la Ruta Semanal. Las escrituras de la ruta del dia (`ruta`) que hace
- * la propagacion usan `RutasDiariasRepository`; aqui solo vive lo de la
- * semanal, sus clientes, sus `ruta_dia` y las `nota_asignada` que salen.
+ * SQL de la Ruta Semanal: la ruta, su lista de clientes y las lecturas de sus
+ * `ruta_dia` que hace la propagacion. Toda escritura de la ruta de un dia
+ * (`ruta`, `ruta_dia`, las `nota_asignada` que salen) es de
+ * `RutasDiariasRepository`, salvo el `nombre_ruta` de `renombrarRutasDelDia`.
  */
 @Injectable()
 export class RutasSemanalesRepository {
@@ -291,67 +292,5 @@ export class RutasSemanalesRepository {
       .where('quitado_por', '=', 'oficina')
       .execute();
     return new Set(filas.map((f) => f.cliente_id));
-  }
-
-  /** Escribe la propagacion en la ruta de un vendedor y dia; su fila ya esta bloqueada. */
-  async aplicarPropagacion(
-    vendedorId: string,
-    fecha: string,
-    plan: {
-      insertar: readonly { clienteId: string; orden: number }[];
-      borrar: readonly { id: string }[];
-    },
-    trx: Transaction<DB>,
-  ): Promise<void> {
-    if (plan.borrar.length > 0) {
-      await trx
-        .updateTable('ruta')
-        .set({ deleted_at: new Date(), quitado_por: 'cambio_ruta' })
-        .where(
-          'id',
-          'in',
-          plan.borrar.map((f) => f.id),
-        )
-        .execute();
-    }
-    if (plan.insertar.length > 0) {
-      await trx
-        .insertInto('ruta')
-        .values(
-          plan.insertar.map((f) => ({
-            vendedor_id: vendedorId,
-            cliente_id: f.clienteId,
-            fecha,
-            orden: f.orden,
-            origen: 'semanal',
-            tipo: 'diaria',
-          })),
-        )
-        .execute();
-    }
-  }
-
-  /** Baja de las notas asignadas a ese vendedor ese dia de los clientes que salieron de su ruta. */
-  async quitarNotasAsignadas(
-    vendedorId: string,
-    fecha: string,
-    clienteIds: readonly string[],
-    usuarioId: string,
-    trx: Transaction<DB>,
-  ): Promise<void> {
-    if (clienteIds.length === 0) return;
-    await trx
-      .updateTable('nota_asignada')
-      .set({ deleted_at: new Date(), quitada_por_usuario_id: usuarioId })
-      .where('vendedor_id', '=', vendedorId)
-      .where(sql<boolean>`fecha = ${fecha}::date`)
-      .where('deleted_at', 'is', null)
-      .where('venta_nota_id', 'in', (eb) =>
-        eb
-          .selectFrom('venta_nota')
-          .select('id')
-          .where('cliente_id', 'in', [...clienteIds]),
-      )
-      .execute();
   }
 }
