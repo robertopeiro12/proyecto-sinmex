@@ -112,10 +112,10 @@ export function VentanaNotas({
               <colgroup>
                 <col />
                 <col className="w-[150px]" />
-                <col className="w-[100px]" />
-                <col className="w-[110px]" />
-                <col className="w-[110px]" />
-                <col className="w-[260px]" />
+                <col className="w-[96px]" />
+                <col className="w-[140px]" />
+                <col className="w-[90px]" />
+                <col className="w-[240px]" />
               </colgroup>
               <thead>
                 <tr>
@@ -123,7 +123,7 @@ export function VentanaNotas({
                   <Th>Folio</Th>
                   <Th>Fecha</Th>
                   <Th alinear="derecha">Saldo</Th>
-                  <Th alinear="derecha">Días de atraso</Th>
+                  <Th alinear="derecha" className="whitespace-normal leading-tight">Días de atraso</Th>
                   <Th>Acción</Th>
                 </tr>
               </thead>

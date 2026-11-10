@@ -19,6 +19,9 @@ import { VentanaNotas } from "./ventana-notas";
 const TITULO = "Ruta Diaria";
 const DESCRIPCION = "La ruta, el vehículo y las notas por cobrar de cada vendedor en un día.";
 
+/** Encabezado que puede partirse en dos renglones en vez de cortarse. */
+const ENCABEZADO_EN_DOS = "whitespace-normal leading-tight";
+
 /** Qué columna de notas se picó. */
 export type NotasDelRenglon = "pendientes" | "asignadas";
 
@@ -188,6 +191,7 @@ export function TablaDelDia({
       <button
         type="button"
         className="cursor-pointer font-medium tabular-nums underline-offset-2 hover:underline focus-visible:underline"
+        aria-label={`${cuales === "pendientes" ? "Notas pendientes por cobrar" : "Notas asignadas por cobrar"} de ${r.vendedor}: ${n}`}
         onClick={() => onAbrirNotas(r, cuales)}
       >
         {n}
@@ -202,20 +206,20 @@ export function TablaDelDia({
       <Tabla className="table-fixed">
         <colgroup>
           <col />
-          <col className="w-[180px]" />
-          <col className="w-[92px]" />
-          <col className="w-[104px]" />
-          <col className="w-[104px]" />
           <col className="w-[150px]" />
+          <col className="w-[92px]" />
+          <col className="w-[118px]" />
+          <col className="w-[118px]" />
+          <col className="w-[130px]" />
           <col className="w-[184px]" />
         </colgroup>
         <thead>
           <tr>
             <Th>Vendedor</Th>
             <Th>Ruta asignada</Th>
-            <Th alinear="derecha">Clientes asignados</Th>
-            <Th alinear="derecha">Notas pendientes por cobrar</Th>
-            <Th alinear="derecha">Notas asignadas por cobrar</Th>
+            <Th alinear="derecha" className={ENCABEZADO_EN_DOS}>Clientes asignados</Th>
+            <Th alinear="derecha" className={ENCABEZADO_EN_DOS}>Notas pendientes por cobrar</Th>
+            <Th alinear="derecha" className={ENCABEZADO_EN_DOS}>Notas asignadas por cobrar</Th>
             <Th>Vehículo</Th>
             <Th>Acciones</Th>
           </tr>

@@ -169,12 +169,12 @@ describe("PantallaRutaDiaria (lista del día)", () => {
     const usuario = userEvent.setup();
     render(<PantallaRutaDiaria sucursal="TJ" />);
     const filas = await screen.findAllByRole("row");
-    await usuario.click(within(filas[2]).getByRole("button", { name: "4" }));
+    await usuario.click(within(filas[2]).getByRole("button", { name: "Notas pendientes por cobrar de Juan Pérez: 4" }));
     expect(screen.getByText("Notas pendientes de Juan Pérez editable")).toBeInTheDocument();
     await usuario.click(screen.getByRole("button", { name: "Cerrar notas" }));
     await vi.waitFor(() => expect(rutasLib.obtenerDia).toHaveBeenCalledTimes(2));
     expect(screen.queryByText(/Notas pendientes de/)).toBeNull();
-    await usuario.click(within(screen.getAllByRole("row")[2]).getByRole("button", { name: "2" }));
+    await usuario.click(within(screen.getAllByRole("row")[2]).getByRole("button", { name: "Notas asignadas por cobrar de Juan Pérez: 2" }));
     expect(screen.getByText("Notas asignadas de Juan Pérez editable")).toBeInTheDocument();
   });
 
@@ -182,7 +182,7 @@ describe("PantallaRutaDiaria (lista del día)", () => {
     const usuario = userEvent.setup();
     vi.mocked(rutasLib.obtenerDia).mockResolvedValue(dia([CON_RUTA], false, "2026-11-09"));
     render(<PantallaRutaDiaria sucursal="TJ" />);
-    await usuario.click(await screen.findByRole("button", { name: "4" }));
+    await usuario.click(await screen.findByRole("button", { name: "Notas pendientes por cobrar de Juan Pérez: 4" }));
     expect(screen.getByText("Notas pendientes de Juan Pérez solo lectura")).toBeInTheDocument();
   });
 

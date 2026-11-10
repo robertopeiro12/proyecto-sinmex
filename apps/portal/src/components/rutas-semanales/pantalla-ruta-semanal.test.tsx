@@ -9,7 +9,7 @@ import { PantallaRutaSemanal } from "./pantalla-ruta-semanal";
 vi.mock("@/components/auth/auth-provider");
 vi.mock("@/lib/rutas-semanales", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/rutas-semanales")>();
-  return { ...real, listarRutasSemanales: vi.fn(), crearRutaSemanal: vi.fn() };
+  return { ...real, listarRutasSemanales: vi.fn(), crearRutaSemanal: vi.fn(), eliminarRutaSemanal: vi.fn() };
 });
 vi.mock("./editar-ruta-semanal", () => ({
   EditarRutaSemanal: ({ id, onVolver }: { id: string; onVolver: () => void }) => (
@@ -116,6 +116,45 @@ describe("PantallaRutaSemanal", () => {
     await usuario.type(within(ventana).getByLabelText("Nombre"), "Playas");
     await usuario.click(within(ventana).getByRole("button", { name: "Crear ruta" }));
     expect(await within(ventana).findByText(/Ya hay una ruta con ese nombre/)).toBeInTheDocument();
+  });
+
+  it("la tabla trae la columna Acciones con Editar y Eliminar", async () => {
+    const usuario = userEvent.setup();
+    render(<PantallaRutaSemanal sucursal="TJ" />);
+    const tabla = await screen.findByRole("table");
+    expect(within(tabla).getByRole("columnheader", { name: "Acciones" })).toBeInTheDocument();
+    await usuario.click(within(tabla).getByRole("button", { name: "Editar" }));
+    expect(screen.getByText("Editando r3")).toBeInTheDocument();
+  });
+
+  it("Eliminar pregunta, elimina y recarga la lista", async () => {
+    vi.mocked(semanalesLib.eliminarRutaSemanal).mockResolvedValue(undefined);
+    const usuario = userEvent.setup();
+    render(<PantallaRutaSemanal sucursal="TJ" />);
+    await usuario.click(await screen.findByRole("button", { name: "Eliminar" }));
+    expect(await screen.findByText("¿Eliminar la ruta Playas?")).toBeInTheDocument();
+    expect(semanalesLib.eliminarRutaSemanal).not.toHaveBeenCalled();
+    await usuario.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Eliminar" }));
+    expect(semanalesLib.eliminarRutaSemanal).toHaveBeenCalledWith("r3");
+    await vi.waitFor(() => expect(semanalesLib.listarRutasSemanales).toHaveBeenCalledTimes(2));
+  });
+
+  it("Eliminar cancelado no elimina", async () => {
+    const usuario = userEvent.setup();
+    render(<PantallaRutaSemanal sucursal="TJ" />);
+    await usuario.click(await screen.findByRole("button", { name: "Eliminar" }));
+    await usuario.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Cancelar" }));
+    expect(semanalesLib.eliminarRutaSemanal).not.toHaveBeenCalled();
+  });
+
+  it("el 409 de eliminar (ruta en uso) se ve en un aviso", async () => {
+    const { ErrorApi } = await import("@/lib/api");
+    vi.mocked(semanalesLib.eliminarRutaSemanal).mockRejectedValue(new ErrorApi("conflicto", 409, "La ruta está en uso."));
+    const usuario = userEvent.setup();
+    render(<PantallaRutaSemanal sucursal="TJ" />);
+    await usuario.click(await screen.findByRole("button", { name: "Eliminar" }));
+    await usuario.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Eliminar" }));
+    expect(await screen.findByText("La ruta está en uso.")).toBeInTheDocument();
   });
 
   it("picar una ruta abre su edición y al volver recarga la lista", async () => {

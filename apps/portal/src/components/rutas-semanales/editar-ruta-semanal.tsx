@@ -12,13 +12,14 @@ import { Etiqueta } from "@/components/ui/etiqueta";
 import { mensajeDe } from "@/lib/api";
 import { listarClientes, type ClienteResumen } from "@/lib/clientes";
 import {
-  eliminarRutaSemanal,
   guardarClientesRutaSemanal,
   obtenerRutaSemanal,
   renombrarRutaSemanal,
   type ClienteDeRutaSemanal,
   type RutaSemanalDetalle,
 } from "@/lib/rutas-semanales";
+
+import { confirmarYEliminarRuta } from "./eliminar-ruta";
 
 const DIAS = ["", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
 
@@ -137,25 +138,16 @@ export function EditarRutaSemanal({
   }
 
   async function eliminar() {
-    if (
-      !ruta ||
-      !(await confirmar({
-        titulo: `¿Eliminar la ruta ${ruta.nombre}?`,
-        descripcion: "No se puede deshacer.",
-        confirmar: "Eliminar",
-      }))
-    ) {
-      return;
-    }
-    setOcupado(true);
+    if (!ruta) return;
+    // Se marca ocupado solo si el usuario confirma: la confirmación sale en el helper.
+    const resultado = await confirmarYEliminarRuta(confirmar, { id, nombre: ruta.nombre });
+    if (resultado.estado === "cancelada") return;
     setError(null);
     setAviso(null);
-    try {
-      await eliminarRutaSemanal(id);
+    if (resultado.estado === "eliminada") {
       onVolver();
-    } catch (err) {
-      setError(mensajeDe(err, "No se pudo eliminar la ruta."));
-      setOcupado(false);
+    } else {
+      setError(resultado.mensaje);
     }
   }
 

@@ -5,6 +5,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
 import { Campo, Entrada } from "@/components/ui/campo";
+import { useConfirmar } from "@/components/ui/confirmar";
 import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { Pestanas } from "@/components/ui/pestanas";
@@ -19,6 +20,7 @@ import {
   type RutaSemanalResumen,
 } from "@/lib/rutas-semanales";
 import { hoyEnTijuana } from "@/lib/ventas";
+import { confirmarYEliminarRuta } from "./eliminar-ruta";
 import { EditarRutaSemanal } from "./editar-ruta-semanal";
 
 const TITULO = "Ruta Semanal";
@@ -48,6 +50,8 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
   const [dia, setDia] = useState(() => diaDeHoy(hoyEnTijuana()));
   const [editando, setEditando] = useState<string | null>(null);
   const [creando, setCreando] = useState(false);
+  const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
+  const { confirmar, ventana } = useConfirmar();
 
   const cargar = useCallback(() => {
     setError(null);
@@ -59,6 +63,13 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
   useEffect(() => {
     void cargar();
   }, [cargar]);
+
+  async function eliminar(ruta: RutaSemanalResumen) {
+    setErrorEliminar(null);
+    const resultado = await confirmarYEliminarRuta(confirmar, ruta);
+    if (resultado.estado === "eliminada") await cargar();
+    else if (resultado.estado === "error") setErrorEliminar(resultado.mensaje);
+  }
 
   if (editando) {
     return (
@@ -86,6 +97,7 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
         }
       />
       {error ? <Aviso tono="error">{error}</Aviso> : null}
+      {errorEliminar ? <Aviso tono="error">{errorEliminar}</Aviso> : null}
       {rutas === null ? (
         error ? null : (
           <EstadoPantalla tipo="cargando" />
@@ -98,7 +110,7 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
           pestanas={DIAS.map((nombre, i) => ({
             valor: String(i + 1),
             etiqueta: nombre,
-            contenido: <RutasDelDia rutas={rutasDelDia(rutas, i + 1)} onAbrir={setEditando} />,
+            contenido: <RutasDelDia rutas={rutasDelDia(rutas, i + 1)} onAbrir={setEditando} onEliminar={(r) => void eliminar(r)} />,
           }))}
         />
       )}
@@ -112,27 +124,38 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
           setEditando(id);
         }}
       />
+      {ventana}
     </Pantalla>
   );
 }
 
-function RutasDelDia({ rutas, onAbrir }: { rutas: RutaSemanalResumen[]; onAbrir: (id: string) => void }) {
+function RutasDelDia({
+  rutas,
+  onAbrir,
+  onEliminar,
+}: {
+  rutas: RutaSemanalResumen[];
+  onAbrir: (id: string) => void;
+  onEliminar: (ruta: RutaSemanalResumen) => void;
+}) {
   return (
     <CajaTabla>
       <Tabla className="table-fixed">
         <colgroup>
           <col />
           <col className="w-32" />
+          <col className="w-[200px]" />
         </colgroup>
         <thead>
           <tr>
             <Th>Ruta</Th>
             <Th alinear="derecha">Clientes</Th>
+            <Th>Acciones</Th>
           </tr>
         </thead>
         <tbody>
           {rutas.length === 0 ? (
-            <FilaVacia columnas={2}>Sin rutas este día.</FilaVacia>
+            <FilaVacia columnas={3}>Sin rutas este día.</FilaVacia>
           ) : (
             rutas.map((r) => (
               <tr key={r.id}>
@@ -146,6 +169,16 @@ function RutasDelDia({ rutas, onAbrir }: { rutas: RutaSemanalResumen[]; onAbrir:
                   </button>
                 </Td>
                 <Td alinear="derecha">{r.clientes}</Td>
+                <Td>
+                  <div className="flex gap-1.5">
+                    <Button type="button" size="sm" variant="outline" onClick={() => onAbrir(r.id)}>
+                      Editar
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => onEliminar(r)}>
+                      Eliminar
+                    </Button>
+                  </div>
+                </Td>
               </tr>
             ))
           )}
