@@ -2,7 +2,7 @@ import type { OpcionesConfirmar } from "@/components/ui/confirmar";
 import { mensajeDe } from "@/lib/api";
 import { eliminarRutaSemanal } from "@/lib/rutas-semanales";
 
-export type ResultadoEliminar = { estado: "cancelada" | "eliminada" } | { estado: "error"; mensaje: string };
+export type ResultadoEliminar = { estado: "cancelada" } | { estado: "eliminada" } | { estado: "error"; mensaje: string };
 
 /**
  * Confirma y elimina una ruta semanal (spec §4). Lo comparten la lista y la edición, para
