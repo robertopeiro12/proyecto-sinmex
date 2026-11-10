@@ -51,3 +51,31 @@ export function planearPropagacion(
 
   return { insertar, borrar };
 }
+
+const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const MESES = [
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
+];
+
+/** Nombre del dia para los mensajes: 1 = "lunes" ... 6 = "sábado". */
+export function nombreDia(diaSemana: number): string {
+  return DIAS[diaSemana - 1];
+}
+
+/** "martes 10 de noviembre" de una fecha AAAA-MM-DD (sin año, como el resto del portal). */
+export function fechaLarga(fecha: string): string {
+  const [, m, d] = fecha.split('-').map(Number);
+  const dia = diaSemanaDe(fecha);
+  return `${dia === null ? 'domingo' : nombreDia(dia)} ${d} de ${MESES[m - 1]}`;
+}

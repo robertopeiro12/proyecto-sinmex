@@ -2,6 +2,8 @@ import type { FilaViva } from './reemplazo-ruta';
 import {
   diaSemanaDe,
   esFechaEditable,
+  fechaLarga,
+  nombreDia,
   planearPropagacion,
 } from './reglas-ruta-semanal';
 
@@ -88,5 +90,19 @@ describe('planearPropagacion', () => {
   it('salta clientes no validos', () => {
     const plan = planearPropagacion([], ['X'], set(), set(), set());
     expect(plan.insertar).toEqual([]);
+  });
+});
+
+describe('nombreDia y fechaLarga', () => {
+  it('nombra el dia de la semana de 1 a 6', () => {
+    expect(nombreDia(1)).toBe('lunes');
+    expect(nombreDia(3)).toBe('miércoles');
+    expect(nombreDia(6)).toBe('sábado');
+  });
+
+  it('escribe la fecha larga sin año', () => {
+    expect(fechaLarga('2026-11-10')).toBe('martes 10 de noviembre');
+    expect(fechaLarga('2099-01-05')).toBe('lunes 5 de enero');
+    expect(fechaLarga('2026-11-15')).toBe('domingo 15 de noviembre');
   });
 });
