@@ -29,6 +29,7 @@ import {
 } from './rutas-diarias.repository';
 import {
   RutasSemanalesRepository,
+  type ClienteDeRutaSemanalBruto,
   type FilaRutaSemanal,
 } from './rutas-semanales.repository';
 
@@ -61,9 +62,14 @@ export const MOTIVO_FECHA_PASADA = 'Ese día ya pasó; solo se puede consultar.'
 export const MOTIVO_VEHICULO_AJENO = 'Ese vehículo no es de la sucursal.';
 export const MOTIVO_RUTA_CAMBIO =
   'La ruta de ese día cambió mientras guardabas. Vuelve a abrirla e intenta otra vez.';
+export const MOTIVO_RUTA_YA_NO_EXISTE = 'Esa ruta ya no existe.';
 const MOTIVO_ELIGE_SUCURSAL = 'Elige una sucursal.';
 
-/** 400 de una ruta semanal que no es del dia de la semana de la fecha (o de otra sucursal, o no existe). */
+/**
+ * 400 de una ruta semanal que no es del dia de la semana de la fecha, o de
+ * otra sucursal: a esa no se le dice "ya no existe" ni nada que confirme que
+ * existe en otra parte.
+ */
 export function motivoRutaDeOtroDia(fecha: string): string {
   const dia = diaSemanaDe(fecha);
   return `Esa ruta no es del ${dia === null ? 'domingo' : nombreDia(dia)}.`;
@@ -123,8 +129,18 @@ export interface ListaDelDia {
 
 /** `GET /rutas/diaria/opciones`: lo que llena las listas de la pantalla del vendedor. */
 export interface OpcionesDia {
-  /** Las rutas semanales del dia de la semana de la fecha; `ocupadaPor` = otro vendedor que la trae. */
-  rutas: { id: string; nombre: string; ocupadaPor: string | null }[];
+  /**
+   * Las rutas semanales del dia de la semana de la fecha; `ocupadaPor` = otro
+   * vendedor que la trae. `clientes`: su lista en orden, con la regla de
+   * `valido` de la Ruta Semanal; la pantalla la copia al escoger la ruta sin
+   * pedir `ruta_semanal.gestionar`.
+   */
+  rutas: {
+    id: string;
+    nombre: string;
+    ocupadaPor: string | null;
+    clientes: ClienteDeRutaSemanalBruto[];
+  }[];
   vehiculos: { id: string; nombre: string; ocupadoPor: string | null }[];
 }
 
@@ -309,17 +325,22 @@ export class RutasDiariasService {
     exigirFechaReal(fecha);
     const vendedor = await this.vendedorEnAlcance(usuarioId, vendedorId);
     const dia = diaSemanaDe(fecha);
+    // El domingo no tiene rutas semanales.
+    const rutas =
+      dia === null
+        ? []
+        : await this.repo.rutasParaElDia(
+            vendedor.sucursalId,
+            dia,
+            fecha,
+            vendedor.id,
+          );
+    const listas = await this.semanales.listasDeRutas(
+      rutas.map((r) => r.id),
+      vendedor.sucursalId,
+    );
     return {
-      // El domingo no tiene rutas semanales.
-      rutas:
-        dia === null
-          ? []
-          : await this.repo.rutasParaElDia(
-              vendedor.sucursalId,
-              dia,
-              fecha,
-              vendedor.id,
-            ),
+      rutas: rutas.map((r) => ({ ...r, clientes: listas.get(r.id) ?? [] })),
       vehiculos: await this.repo.vehiculosParaElDia(
         vendedor.sucursalId,
         fecha,
@@ -368,8 +389,12 @@ export class RutasDiariasService {
       let listaDeLaSemanal = new Set<string>();
       if (rutaSemanalId !== null) {
         semanal = semanalesBloqueadas.get(rutaSemanalId);
+        // `buscar` no devuelve una dada de baja: la de otra sucursal se
+        // responde como de otro dia, sin confirmar que existe.
+        if (!semanal) {
+          throw new BadRequestException(MOTIVO_RUTA_YA_NO_EXISTE);
+        }
         if (
-          !semanal ||
           semanal.sucursalId !== vendedor.sucursalId ||
           semanal.diaSemana !== diaSemanaDe(dto.fecha)
         ) {

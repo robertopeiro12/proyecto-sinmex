@@ -36,6 +36,7 @@ const PASSWORD = 'contrasena-de-prueba';
 const LOGIN_GENERAL = `e2e-ruta-gen-${SUFIJO}`;
 const LOGIN_TIJUANA = `e2e-ruta-tj-${SUFIJO}`;
 const LOGIN_SIN_PERMISO = `e2e-ruta-sin-${SUFIJO}`;
+const LOGIN_SOLO_DIARIA = `e2e-ruta-solo-${SUFIJO}`;
 
 describe('Ruta Diaria desde el portal (e2e)', () => {
   let app: INestApplication<App>;
@@ -48,6 +49,8 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
   let cookieGeneral: string;
   let cookieTijuana: string;
   let cookieSinPermiso: string;
+  /** Perfil vacio + la excepcion `ruta_diaria.gestionar`: sin `ruta_semanal.gestionar`. */
+  let cookieSoloDiaria: string;
   let vendedorTj: string;
   let vendedorMx: string;
 
@@ -80,7 +83,7 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
     login: string,
     perfil: string,
     sucursalId: string | null,
-  ) => {
+  ): Promise<string> => {
     const hash = await app.get(PasswordService).hashear(PASSWORD);
     const { id: perfilId } = await db
       .selectFrom('perfil')
@@ -99,6 +102,7 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
       .returning('id')
       .executeTakeFirstOrThrow();
     usuarioIds.push(id);
+    return id;
   };
 
   const sembrarVendedor = async (
@@ -348,9 +352,28 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
     await crearUsuario(LOGIN_GENERAL, 'Administrador General', null);
     await crearUsuario(LOGIN_TIJUANA, 'Administrador General', tjId);
     await crearUsuario(LOGIN_SIN_PERMISO, 'Auxiliar Administrativo', null);
+    const soloDiaria = await crearUsuario(
+      LOGIN_SOLO_DIARIA,
+      'Auxiliar Administrativo',
+      tjId,
+    );
+    const { id: permisoDiaria } = await db
+      .selectFrom('permiso')
+      .select('id')
+      .where('clave', '=', 'ruta_diaria.gestionar')
+      .executeTakeFirstOrThrow();
+    await db
+      .insertInto('usuario_permiso')
+      .values({
+        usuario_id: soloDiaria,
+        permiso_id: permisoDiaria,
+        habilitado: true,
+      })
+      .execute();
     cookieGeneral = await iniciarSesion(LOGIN_GENERAL);
     cookieTijuana = await iniciarSesion(LOGIN_TIJUANA);
     cookieSinPermiso = await iniciarSesion(LOGIN_SIN_PERMISO);
+    cookieSoloDiaria = await iniciarSesion(LOGIN_SOLO_DIARIA);
 
     vendedorTj = await sembrarVendedor(tjId);
     vendedorMx = await sembrarVendedor(mxId);
@@ -387,6 +410,10 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
       await db.deleteFrom('cliente').where('id', 'in', clienteIds).execute();
     }
     await db.deleteFrom('vendedor').where('id', 'in', vendedorIds).execute();
+    await db
+      .deleteFrom('usuario_permiso')
+      .where('usuario_id', 'in', usuarioIds)
+      .execute();
     await db
       .deleteFrom('sesion_refresh')
       .where('usuario_id', 'in', usuarioIds)
@@ -786,6 +813,7 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
         id: semanal.id,
         nombre: semanal.nombre,
         ocupadaPor: `Juan ${SUFIJO}`,
+        clientes: [{ clienteId: a.id, nombre: a.nombre, valido: true }],
       });
       const deJuan = (await opciones(cookieGeneral, juan, fecha).expect(200))
         .body as OpcionesDia;
@@ -793,6 +821,7 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
         id: semanal.id,
         nombre: semanal.nombre,
         ocupadaPor: null,
+        clientes: [{ clienteId: a.id, nombre: a.nombre, valido: true }],
       });
 
       // Juan la puede volver a guardar (es suya).
@@ -823,6 +852,45 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
             .body as OpcionesDia
         ).rutas.map((r) => r.id),
       ).not.toContain(semanal.id);
+    });
+
+    it('una ruta dada de baja o que no existe = 400 "Esa ruta ya no existe."; una de otra sucursal, como de otro dia', async () => {
+      const fecha = diaNuevo();
+      const dia = diaSemanaDe(fecha)!;
+      const deBaja = await crearSemanal(fecha, []);
+      await request(app.getHttpServer())
+        .delete(`/rutas/semanales/${deBaja.id}`)
+        .set('Cookie', cookieGeneral)
+        .expect(204);
+      const pedir = (rutaSemanalId: string) =>
+        guardar(cookieGeneral, {
+          vendedorId: vendedorTj,
+          fecha,
+          rutaSemanalId,
+          clientes: [],
+        }).expect(400);
+
+      expect(mensaje(await pedir(deBaja.id))).toBe('Esa ruta ya no existe.');
+      expect(mensaje(await pedir('00000000-0000-4000-8000-0000000000aa'))).toBe(
+        'Esa ruta ya no existe.',
+      );
+
+      const deMx = (
+        await request(app.getHttpServer())
+          .post('/rutas/semanales')
+          .set('Cookie', cookieGeneral)
+          .send({
+            sucursal: 'MX',
+            diaSemana: dia,
+            nombre: `Ruta MX ${rutaIds.length + 1} ${SUFIJO}`,
+          })
+          .expect(201)
+      ).body as RutaSemanalDetalle;
+      rutaIds.push(deMx.id);
+      expect(mensaje(await pedir(deMx.id))).toBe(
+        `Esa ruta no es del ${nombreDia(dia)}.`,
+      );
+      expect(await filasDe(vendedorTj, fecha)).toHaveLength(0);
     });
 
     it('fecha pasada = 400 en PUT y DELETE; el GET responde editable:false', async () => {
@@ -1255,6 +1323,79 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
         fecha: '2099-02-30',
         sucursal: 'TJ',
       }).expect(400);
+    });
+  });
+
+  describe('con SOLO ruta_diaria.gestionar (sin ruta_semanal.gestionar)', () => {
+    it('lee el dia y las opciones con los clientes de cada ruta, guarda la ruta con su semanal y asigna una nota', async () => {
+      const fecha = diaNuevo();
+      const a = await sembrarCliente(tjId);
+      const deBaja = await sembrarCliente(tjId);
+      const b = await sembrarCliente(tjId);
+      const semanal = await crearSemanal(fecha, [a.id, deBaja.id, b.id]);
+      await db
+        .updateTable('cliente')
+        .set({ deleted_at: new Date() })
+        .where('id', '=', deBaja.id)
+        .execute();
+      const vendedor = await sembrarVendedor(tjId);
+
+      // La Ruta Semanal no es suya: por eso las opciones traen los clientes.
+      await request(app.getHttpServer())
+        .get(`/rutas/semanales/${semanal.id}`)
+        .set('Cookie', cookieSoloDiaria)
+        .expect(403);
+
+      const dia = (
+        await listaDelDia(cookieSoloDiaria, { fecha, sucursal: 'TJ' }).expect(
+          200,
+        )
+      ).body as ListaDelDia;
+      expect(dia.renglones.map((r) => r.vendedorId)).toContain(vendedor);
+
+      const ops = (
+        await opciones(cookieSoloDiaria, vendedor, fecha).expect(200)
+      ).body as OpcionesDia;
+      expect(ops.rutas.find((r) => r.id === semanal.id)).toEqual({
+        id: semanal.id,
+        nombre: semanal.nombre,
+        ocupadaPor: null,
+        clientes: [
+          { clienteId: a.id, nombre: a.nombre, valido: true },
+          { clienteId: deBaja.id, nombre: deBaja.nombre, valido: false },
+          { clienteId: b.id, nombre: b.nombre, valido: true },
+        ],
+      });
+
+      const ruta = (
+        await guardar(cookieSoloDiaria, {
+          vendedorId: vendedor,
+          fecha,
+          rutaSemanalId: semanal.id,
+          clientes: [a.id, b.id],
+        }).expect(200)
+      ).body as RutaDiaria;
+      expect(ruta.rutaSemanal).toEqual({
+        id: semanal.id,
+        nombre: semanal.nombre,
+      });
+      expect(ruta.filas.map((f) => [f.clienteId, f.origen])).toEqual([
+        [a.id, 'semanal'],
+        [b.id, 'semanal'],
+      ]);
+
+      const nota = await sembrarNota(a.id);
+      await request(app.getHttpServer())
+        .put(`/rutas/diaria/notas/${nota}`)
+        .set('Cookie', cookieSoloDiaria)
+        .send({ vendedorId: vendedor, fecha })
+        .expect(200);
+      const asignada = await db
+        .selectFrom('nota_asignada')
+        .select(['vendedor_id', 'deleted_at'])
+        .where('venta_nota_id', '=', nota)
+        .executeTakeFirstOrThrow();
+      expect(asignada).toEqual({ vendedor_id: vendedor, deleted_at: null });
     });
   });
 });

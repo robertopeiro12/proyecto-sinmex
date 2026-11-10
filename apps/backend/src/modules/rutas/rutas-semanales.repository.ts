@@ -184,6 +184,41 @@ export class RutasSemanalesRepository {
     return filas;
   }
 
+  /**
+   * Las listas de varias rutas de una sucursal en una sola consulta, por ruta
+   * y en su orden, con la misma regla de `valido` que {@link lista}. Una ruta
+   * sin clientes vivos no viene en el mapa.
+   */
+  async listasDeRutas(
+    rutaIds: readonly string[],
+    sucursalId: string,
+  ): Promise<Map<string, ClienteDeRutaSemanalBruto[]>> {
+    const listas = new Map<string, ClienteDeRutaSemanalBruto[]>();
+    if (rutaIds.length === 0) return listas;
+    const filas = await this.db
+      .selectFrom('ruta_semanal_cliente as rsc')
+      .innerJoin('cliente as c', 'c.id', 'rsc.cliente_id')
+      .select([
+        'rsc.ruta_semanal_id as rutaSemanalId',
+        'rsc.cliente_id as clienteId',
+        'c.nombre as nombre',
+        sql<boolean>`(c.deleted_at is null and c.tipo = 'cliente' and c.sucursal_id = ${sucursalId})`.as(
+          'valido',
+        ),
+      ])
+      .where('rsc.ruta_semanal_id', 'in', [...rutaIds])
+      .where('rsc.deleted_at', 'is', null)
+      .orderBy('rsc.ruta_semanal_id')
+      .orderBy('rsc.orden')
+      .execute();
+    for (const { rutaSemanalId, ...cliente } of filas) {
+      const lista = listas.get(rutaSemanalId) ?? [];
+      lista.push(cliente);
+      listas.set(rutaSemanalId, lista);
+    }
+    return listas;
+  }
+
   /** Las filas vivas de la lista: id de la fila y cliente. */
   async filasDeLista(
     rutaSemanalId: string,
