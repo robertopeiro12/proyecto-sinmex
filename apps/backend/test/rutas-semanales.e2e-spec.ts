@@ -758,6 +758,35 @@ describe('Ruta Semanal desde el portal (e2e)', () => {
       .expect(409);
   });
 
+  it('a las 23:30 de Tijuana la propagacion llega a la ruta del dia de "hoy" (ayer en UTC) y no a la de ayer', async () => {
+    // 2099-01-07 07:30 UTC = martes 2099-01-06 23:30 en Tijuana.
+    ahoraFijo = new Date('2099-01-07T07:30:00Z');
+    const ruta = await crearRuta(2);
+    const a = await sembrarCliente(tjId);
+    const vendedorHoy = await sembrarVendedor(tjId);
+    const vendedorAyer = await sembrarVendedor(tjId);
+    // Hoy en Tijuana (martes 6) y el martes anterior (ya pasado).
+    await sembrarRutaDia({
+      vendedor: vendedorHoy.id,
+      fecha: '2099-01-06',
+      rutaSemanalId: ruta.id,
+      nombreRuta: ruta.nombre,
+    });
+    await sembrarRutaDia({
+      vendedor: vendedorAyer.id,
+      fecha: '2098-12-30',
+      rutaSemanalId: ruta.id,
+      nombreRuta: ruta.nombre,
+    });
+
+    await guardarClientes(cookieGeneral, ruta.id, [a]).expect(200);
+
+    expect(await vivasDe(vendedorHoy.id, '2099-01-06')).toEqual([
+      { cliente_id: a, orden: 1, origen: 'semanal' },
+    ]);
+    expect(await vivasDe(vendedorAyer.id, '2098-12-30')).toEqual([]);
+  });
+
   it('cliente dado de baja, prospecto o de otra sucursal sale con valido:false', async () => {
     const ruta = await crearRuta(6);
     const vivo = await sembrarCliente(tjId);

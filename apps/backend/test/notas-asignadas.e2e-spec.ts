@@ -377,6 +377,38 @@ describe('Notas asignadas (e2e)', () => {
     expect(filas[1].deleted_at).toBeNull();
   });
 
+  it('pasarla a B cuando su cliente no esta en la ruta de B: 400 y A la conserva', async () => {
+    const fecha = diaNuevo();
+    const c = await sembrarCliente(tjId);
+    await sembrarRuta({ vendedor: vendedorA, cliente: c.id, fecha, orden: 1 });
+    const nota = await sembrarNota(c.id, tjId);
+    await asignar(cookieGeneral, nota, vendedorA, fecha).expect(200);
+
+    const res = await asignar(cookieGeneral, nota, vendedorB, fecha).expect(
+      400,
+    );
+    expect(mensaje(res)).toBe(`Primero agrega a ${c.nombre} a la ruta.`);
+    const filas = await vivas(nota, fecha);
+    expect(filas).toHaveLength(1);
+    expect(filas[0].vendedor_id).toBe(vendedorA);
+    expect(filas[0].deleted_at).toBeNull();
+  });
+
+  it('quitarla desde A cuando ya la trae B no toca la de B', async () => {
+    const fecha = diaNuevo();
+    const c = await sembrarCliente(tjId);
+    await sembrarRuta({ vendedor: vendedorA, cliente: c.id, fecha, orden: 1 });
+    await sembrarRuta({ vendedor: vendedorB, cliente: c.id, fecha, orden: 1 });
+    const nota = await sembrarNota(c.id, tjId);
+    await asignar(cookieGeneral, nota, vendedorB, fecha).expect(200);
+
+    await quitar(cookieGeneral, nota, vendedorA, fecha).expect(200);
+    const filas = await vivas(nota, fecha);
+    expect(filas).toHaveLength(1);
+    expect(filas[0].vendedor_id).toBe(vendedorB);
+    expect(filas[0].deleted_at).toBeNull();
+  });
+
   it('quitarla: deja de estar asignada y vuelve a pendientes libre', async () => {
     const fecha = diaNuevo();
     const c = await sembrarCliente(tjId);
@@ -461,22 +493,27 @@ describe('Notas asignadas (e2e)', () => {
     const hoyReal = new Date();
     const hoy = hoyReal.toISOString().slice(0, 10);
     ahora = new Date(`${hoy}T20:00:00Z`);
-    const c = await sembrarCliente(tjId);
-    await sembrarRuta({
-      vendedor: vendedorA,
-      cliente: c.id,
-      fecha: hoy,
-      orden: 1,
-    });
-    const nota = await sembrarNota(c.id, tjId);
-    await db
-      .updateTable('venta_nota')
-      .set({ fecha: hoy })
-      .where('id', '=', nota)
-      .execute();
-    const res = await asignar(cookieGeneral, nota, vendedorA, hoy).expect(200);
-    expect((res.body as NotasDeRuta).asignadas).toHaveLength(1);
-    ahora = new Date();
+    try {
+      const c = await sembrarCliente(tjId);
+      await sembrarRuta({
+        vendedor: vendedorA,
+        cliente: c.id,
+        fecha: hoy,
+        orden: 1,
+      });
+      const nota = await sembrarNota(c.id, tjId);
+      await db
+        .updateTable('venta_nota')
+        .set({ fecha: hoy })
+        .where('id', '=', nota)
+        .execute();
+      const res = await asignar(cookieGeneral, nota, vendedorA, hoy).expect(
+        200,
+      );
+      expect((res.body as NotasDeRuta).asignadas).toHaveLength(1);
+    } finally {
+      ahora = new Date();
+    }
   });
 
   it('un dia pasado es de solo lectura: 400', async () => {

@@ -362,8 +362,10 @@ usuario con sesion pasa.
     bloquear `vendedor`), así que la baja viaja en el pull incremental como `activo: 0`.
   - **Dashboard y Flujo diario**: "Ruta asignada" muestra `nombre_ruta` ("Sin ruta · N clientes"); vehículo de la
     jornada, con "(asignado: X)" si difiere.
-  - **Nube**: `20261110120000_ruta_semanal_y_dia.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
-    (pre-flight: tablas nuevas, columnas nulas y el check de origen ampliado; **nada que contar**). **Backend antes que
+  - **Nube**: `20261110120000_ruta_semanal_y_dia.sql` y `20261110130000_ruta_semanal_ajustes.sql` (índice parcial de
+    `ruta_semanal_cliente (cliente_id)` y el check `ck_nota_asignada_quitada`) se suben a `sinmex dev` después del merge, con
+    el protocolo de push (pre-flight de la primera: tablas nuevas, columnas nulas y el check de origen ampliado; de la
+    segunda: `select count(*) from nota_asignada where quitada_por_usuario_id is not null and deleted_at is null` debe dar 0). **Backend antes que
     la app.** Lo que le toca a Mario va en la nota del PR (spec §9).
 
 - **Promociones (T-74).** Regla de regalo por compra, configurada en el portal (*Operación → Promociones*, permiso
