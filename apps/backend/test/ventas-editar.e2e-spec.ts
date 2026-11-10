@@ -229,6 +229,10 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
       .where('id', 'in', ventas)
       .execute();
     await db
+      .deleteFrom('nota_asignada')
+      .where('venta_nota_id', 'in', ventas)
+      .execute();
+    await db
       .deleteFrom('cobranza_abono')
       .where('venta_nota_id', 'in', ventas)
       .execute();
@@ -566,6 +570,10 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
     await db
       .deleteFrom('factura')
       .where('cliente_id', 'in', clientes)
+      .execute();
+    await db
+      .deleteFrom('nota_asignada')
+      .where('venta_nota_id', 'in', ventas)
       .execute();
     await db
       .deleteFrom('cobranza_abono')
@@ -1586,6 +1594,41 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
       expect(porCobrar(await notasDeLaTablet(), v.id)).toBe(true);
       await eliminar(v.id).expect(200);
       expect(porCobrar(await notasDeLaTablet(), v.id)).toBe(false);
+    });
+
+    it('da de baja sus notas asignadas: el pull incremental del vendedor las trae con activo 0', async () => {
+      const v = await registrar({ fecha: FECHA_BORRADO });
+      // Una fecha futura: el pull solo baja asignaciones de `current_date - 1` en adelante.
+      const { id: asignada } = await db
+        .insertInto('nota_asignada')
+        .values({
+          venta_nota_id: v.id,
+          vendedor_id: vendedorApp,
+          fecha: '2099-03-03',
+          asignada_por_usuario_id: usuarioGeneralId,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      const corte = (await notasDeLaTablet()).servidor_en;
+
+      await eliminar(v.id).expect(200);
+
+      const fila = await db
+        .selectFrom('nota_asignada')
+        .select(['deleted_at', 'quitada_por_usuario_id'])
+        .where('id', '=', asignada)
+        .executeTakeFirstOrThrow();
+      expect(fila.deleted_at).not.toBeNull();
+      expect(fila.quitada_por_usuario_id).toBe(usuarioGeneralId);
+      const incremental = await notasDeLaTablet(corte);
+      expect(
+        incremental.notas_asignadas.find((n) => n.id === asignada),
+      ).toEqual({
+        id: asignada,
+        venta_nota_id: v.id,
+        fecha: '2099-03-03',
+        activo: 0,
+      });
     });
   });
 
