@@ -302,20 +302,63 @@ usuario con sesion pasa.
     backfill). El reporte de Kilometraje del portal es T-50 (ver el bloque Reportes y Excel, más abajo).
   - En la tablet, con la jornada de hoy cerrada **no se registra** venta, cobranza ni prospecto
     (`exigirJornadaAbierta`); no hay reabrir.
-- **Ruta diaria (T-37).** La oficina arma la ruta del día en el portal (`PUT /rutas/diaria`, permiso
-  `ruta_diaria.gestionar`) y el vendedor la complementa desde la tablet con la operación **`ruta-alta`** (no `ruta`,
-  que sigue guardada sin proyectar; la visita de T-39 usa su propia operación `visita`). Todo en `rutas/rutas-diarias.*`.
-  - `ruta.origen` (`oficina`/`vendedor`) y un único vivo por vendedor, fecha y cliente en la diaria
-    (`uq_ruta_diaria_vendedor_fecha_cliente`, parcial; la semanal de T-36 no entra). El alta usa `on conflict … do
-    nothing` y, si no insertó, rechaza `ruta-duplicada`, que **la tablet trata como aplicada**.
-  - `cliente_id` de `ruta-alta` viaja en **`datos`**, no en el sobre (así un prospecto o un cliente borrado sale como
-    `cliente-inexistente` y no como `cliente-fuera-de-alcance`); el buzón lo conserva (`guardarOperacion`).
-  - El `PUT` del portal **reemplaza** la ruta en una transacción: adopta lo que subió el vendedor, da de baja lo de
-    la oficina que no viene y **conserva** (renumerado al final) lo del vendedor. Alta y `PUT` se serializan
-    bloqueando la fila del vendedor (`for no key update`). Respuestas en camelCase; vendedor fuera de alcance = 404.
-  - El pull baja `rutas` del vendedor del token desde `current_date - 1` en adelante del reloj de Postgres (UTC),
-    sin tope: una ruta futura debe bajar en el pull siguiente a su creación;
-    la baja viaja con `activo: 0`. El orden que arrastra el vendedor **no sube** (vive en `ruta_orden_local`).
+- **Ruta semanal y Ruta diaria (T-37 + 2026-11-10).** La oficina tiene rutas fijas por día (*Operación → Ruta Semanal*), le
+  asigna una a cada vendedor cada mañana (*Ruta Diaria*), la ajusta, le pone vehículo y le asigna notas por cobrar; el
+  vendedor la complementa desde la tablet con la operación **`ruta-alta`** (no `ruta`, que sigue guardada sin proyectar; la
+  visita de T-39 usa su propia operación `visita`). Todo en `modules/rutas/` (`rutas-semanales.*`, `rutas-diarias.*`,
+  `notas-asignadas.*`). Spec: `docs/superpowers/specs/2026-11-10-ruta-semanal-y-diaria-design.md` (parte 1; el corte y
+  las tres listas de notas del Flujo diario son parte 2).
+  - **Tablas.** `ruta_semanal` (`dia_semana` 1 = lunes … 6 = sábado, **sin domingo**; nombre único vivo por sucursal y día)
+    y `ruta_semanal_cliente` (orden = en que se agregaron). **`ruta_dia`** es el encabezado del día: ruta semanal +
+    vehículo + `nombre_ruta` (copia del nombre al asignar, para que la historia no cambie si la renombran); **un vivo por
+    vendedor y fecha** y **la misma semanal no va a dos vendedores el mismo día** (ambos únicos parciales). Las rutas
+    de T-37 sin encabezado cuentan como "Sin ruta"; el encabezado se crea al guardar (un `PUT` vacío no lo crea).
+  - **Origen.** `ruta.origen` admite `semanal` (check `ck_ruta_origen` ampliado). **Lo decide el servidor, no el
+    portal** (el `PUT` solo manda ids, orden y recado): una fila existente **conserva** su origen (ya no se "adopta" como
+    `oficina` lo del vendedor, como decía T-37); una nueva es `semanal` si el cliente está en la semanal asignada y
+    `oficina` si no. `recado` ≤ 200, recortado, vacío = `null`. La vieja `tipo = 'semanal'` de T-36 nunca se usó y se deja.
+    Lo agregado por el vendedor no se quita desde el portal, solo se reordena.
+  - **`quitado_por`** al dar de baja una fila: `oficina` (la quitó a mano: **bloquea** que un cambio de la semanal la
+    vuelva a poner ese día) o `cambio_ruta` (salió por cambio o por Quitar ruta: **no** bloquea).
+  - **Propagación**: guardar la semanal (`PUT /rutas/semanales/:id/clientes`) la aplica en **su misma transacción** a las
+    `ruta_dia` de **hoy en adelante** (reglas puras en `reglas-ruta-semanal.ts`, `planearPropagacion`): agrega al final,
+    quita solo lo `origen = semanal`, no toca lo demás y **nunca** un día pasado. Un cliente no válido (baja, prospecto,
+    otra sucursal) se salta sin hacer fallar el guardado. Renombrar cambia `nombre_ruta` de hoy en adelante.
+    Eliminar una semanal asignada hoy o después = 409 con el motivo.
+  - **Candados, siempre en este orden: `ruta_semanal` (en orden de id; la anterior y la nueva de la `ruta_dia`) →
+    `vendedor` (`for no key update`) → `venta_nota`.** Alta de la tablet, `PUT` diario y guardado de la semanal se
+    serializan así; invertirlo abre un abrazo mortal o propaga desde la ruta equivocada.
+  - **Día pasado = solo lectura** (400) para guardar, quitar y notas; **"hoy" es el de Tijuana** y sale del reloj
+    inyectable **`RELOJ_RUTAS`** (`rutas/reloj.ts`), no de `new Date()`: las pruebas lo fijan a las 23:30 de Tijuana
+    (en UTC ya es mañana). `esFechaEditable` en `reglas-ruta-semanal.ts`.
+  - **`nota_asignada`**: una nota por **un solo vendedor y día** (`unique` vivo `(venta_nota_id, fecha)`); **pasar = baja
+    de la de A + alta de la de B** en una transacción. Se asigna a media jornada, incluso notas del mismo día. "Nota con
+    saldo" = venta **viva a crédito** en `pendiente`/`abonado` con saldo > 0 y fuera de cuenta perdida; **una sola
+    consulta** en `rutas/notas-ruta.repository.ts` que usan el conteo de la lista y la ventana de notas (no la dupliques).
+    Una nota que se termina de pagar deja de salir en "pendientes" pero **sigue contando como asignada**. Solo se asignan
+    notas de clientes de la ruta del día. Sale un cliente de la ruta (quitado, cambio de ruta o propagación) = se dan de
+    baja sus notas asignadas a ese vendedor ese día; **Quitar ruta** baja **todas** las del vendedor ese día. El servidor
+    **no** rechaza cobrar una nota no asignada (cobranza offline, como D9 de T-21).
+  - Endpoints (permiso `ruta_semanal.gestionar` o `ruta_diaria.gestionar`, alcance de sucursal, **otra = 404**):
+    `/rutas/semanales`, `PUT /rutas/semanales/:id/clientes`, `GET /rutas/diaria/dia`, `GET|PUT|DELETE /rutas/diaria`,
+    `GET /rutas/diaria/notas`, `PUT|DELETE /rutas/diaria/notas/:ventaNotaId`. **Ya no hay "Copiar de ayer"** (`/anterior`
+    se quitó). Una semanal que ya trae otro vendedor = 409; de otro día de la semana = 400. El vehículo repetido solo avisa.
+  - **Alta de la tablet** (`ruta-alta`): `cliente_id` viaja en **`datos`**, no en el sobre (así un prospecto o un cliente
+    borrado sale `cliente-inexistente` y no `cliente-fuera-de-alcance`); el alta usa `on conflict … do nothing` y, si no
+    insertó, rechaza `ruta-duplicada`, que **la tablet trata como aplicada**. Un único vivo por vendedor, fecha y cliente
+    (`uq_ruta_diaria_vendedor_fecha_cliente`, parcial).
+  - **Pull** (aditivo, `CONTRATO_ACTUAL` sigue en 1; copia a mano en la nota del PR, **no** se tocó
+    `apps/tablet/.../contrato.ts`): `rutas` del vendedor del token desde `current_date - 1` en adelante (reloj de
+    Postgres, UTC), sin tope, baja con `activo: 0`; **`origen: 'semanal'` baja como `oficina`** (el SQLite de la tablet
+    tiene un check de dos valores y uno nuevo tumbaría todos los pulls); `RutaPull.recado`; colecciones **`rutas_dia`**
+    (`fecha`, `nombre_ruta`, `vehiculo_id`) y **`notas_asignadas`** (`venta_nota_id`, `fecha`). El orden que arrastra
+    el vendedor **no sube** (vive en `ruta_orden_local`). Una venta borrada con asignación viva no baja como `activo: 0`
+    en el pull incremental (pendiente).
+  - **Dashboard y Flujo diario**: "Ruta asignada" muestra `nombre_ruta` ("Sin ruta · N clientes"); vehículo de la
+    jornada, con "(asignado: X)" si difiere.
+  - **Nube**: `20261110120000_ruta_semanal_y_dia.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
+    (pre-flight: tablas nuevas, columnas nulas y el check de origen ampliado; **nada que contar**). **Backend antes que
+    la app.** Lo que le toca a Mario va en la nota del PR (spec §9).
 
 - **Promociones (T-74).** Regla de regalo por compra, configurada en el portal (*Operación → Promociones*, permiso
   `promocion.gestionar`; backend en `cartera-clientes/promociones.*`, `/promociones`) y **aplicada solo por la
