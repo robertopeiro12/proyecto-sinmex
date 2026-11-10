@@ -139,15 +139,19 @@ export function EditarRutaSemanal({
 
   async function eliminar() {
     if (!ruta) return;
-    // Se marca ocupado solo si el usuario confirma: la confirmación sale en el helper.
-    const resultado = await confirmarYEliminarRuta(confirmar, { id, nombre: ruta.nombre });
-    if (resultado.estado === "cancelada") return;
+    setOcupado(true);
     setError(null);
     setAviso(null);
+    const resultado = await confirmarYEliminarRuta(confirmar, { id, nombre: ruta.nombre });
+    if (resultado.estado === "cancelada") {
+      setOcupado(false);
+      return;
+    }
     if (resultado.estado === "eliminada") {
       onVolver();
     } else {
       setError(resultado.mensaje);
+      setOcupado(false);
     }
   }
 

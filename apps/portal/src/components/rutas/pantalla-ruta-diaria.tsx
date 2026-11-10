@@ -167,8 +167,8 @@ function RutaDiariaDelDia({ sucursal }: { sucursal: string }) {
 }
 
 /**
- * La tabla del día. Cabe en la caja de 1366 px (≈1012 px): columnas fijas y el nombre del
- * vendedor se lleva lo que sobra. `onAbrirNotas` abre la ventana de notas: sin él, las columnas de notas muestran solo el número.
+ * La tabla del día. Cabe en la caja de 1366 px (≈1012 px): columnas fijas y la ruta se lleva
+ * lo que sobra y se parte en líneas. `onAbrirNotas` abre la ventana de notas: sin él, las columnas de notas muestran solo el número.
  */
 export function TablaDelDia({
   renglones,
@@ -205,8 +205,8 @@ export function TablaDelDia({
     <CajaTabla>
       <Tabla className="table-fixed">
         <colgroup>
-          <col />
           <col className="w-[150px]" />
+          <col />
           <col className="w-[92px]" />
           <col className="w-[118px]" />
           <col className="w-[118px]" />
@@ -233,7 +233,7 @@ export function TablaDelDia({
                 <Td className="truncate font-medium" title={r.vendedor}>
                   {r.vendedor}
                 </Td>
-                <Td className="truncate" title={r.rutaNombre ?? undefined}>
+                <Td className="whitespace-normal break-words" title={r.rutaNombre ?? undefined}>
                   {r.rutaNombre ?? (
                     <span className="text-muted-foreground">
                       {r.clientes > 0 ? `Sin ruta · ${plural(r.clientes, "cliente", "clientes")}` : "Sin ruta"}
