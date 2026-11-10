@@ -132,7 +132,7 @@ export interface OpcionesDia {
  * `AAAA-MM-DD` que existe en el calendario. El DTO ya comprobo el formato;
  * esto evita que un 30 de febrero llegue a Postgres y salga como 500.
  */
-function exigirFechaReal(fecha: string): void {
+export function exigirFechaReal(fecha: string): void {
   const [anio, mes, dia] = fecha.split('-').map(Number);
   const f = new Date(Date.UTC(anio, mes - 1, dia));
   if (
@@ -571,7 +571,7 @@ export class RutasDiariasService {
    * usuario de otra sucursal no se le confirma que el vendedor exista. Por eso
    * no se usa `exigirAlcanceSobre`, que responde 403.
    */
-  private async vendedorEnAlcance(
+  async vendedorEnAlcance(
     usuarioId: string,
     vendedorId: string,
   ): Promise<VendedorDeRuta> {

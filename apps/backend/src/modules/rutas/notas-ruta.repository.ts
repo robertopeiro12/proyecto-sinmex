@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { sql, type Transaction } from 'kysely';
+import { sql, type RawBuilder, type Transaction } from 'kysely';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import type { DB } from '../../database/schema';
 import { aCentavos } from '../sincronizacion/dinero';
@@ -39,6 +39,40 @@ export class NotasRutaRepository {
   ): Promise<NotaConSaldo[]> {
     if (clienteIds.length === 0) return [];
     const ids = sql.join(clienteIds.map((id) => sql`${id}::uuid`));
+    return this.leer(
+      sql`vn.contado_credito = 'credito'
+         and vn.status in ('pendiente', 'abonado')
+         and vn.cliente_id in (${ids})
+         and vn.monto_total - coalesce(a.abonado, 0) > 0`,
+      hoy,
+      trx,
+    );
+  }
+
+  /**
+   * Esas notas (ventas vivas) con su saldo de hoy, **tengan o no saldo**: la
+   * ventana de notas muestra tambien las asignadas que ya se pagaron. El saldo
+   * nunca baja de 0 y una nota que no esta `pendiente`/`abonado` no debe nada. Por fecha y folio.
+   */
+  async notasPorId(
+    ventaNotaIds: readonly string[],
+    hoy: string,
+    trx?: Transaction<DB>,
+  ): Promise<NotaConSaldo[]> {
+    if (ventaNotaIds.length === 0) return [];
+    const ids = sql.join(ventaNotaIds.map((id) => sql`${id}::uuid`));
+    return this.leer(sql`vn.id in (${ids})`, hoy, trx);
+  }
+
+  /**
+   * La unica consulta de notas de ruta: el saldo (abonos vivos) y los dias de
+   * atraso se calculan aqui para los dos caminos.
+   */
+  private async leer(
+    filtro: RawBuilder<unknown>,
+    hoy: string,
+    trx?: Transaction<DB>,
+  ): Promise<NotaConSaldo[]> {
     const filas = await sql<{
       id: string;
       folio: string;
@@ -50,7 +84,10 @@ export class NotasRutaRepository {
     }>`
       select vn.id, vn.folio, vn.cliente_id, c.nombre as cliente,
              to_char(vn.fecha, 'YYYY-MM-DD') as fecha,
-             (vn.monto_total - coalesce(a.abonado, 0))::text as saldo,
+             case when vn.status in ('pendiente', 'abonado')
+                  then greatest(vn.monto_total - coalesce(a.abonado, 0), 0)
+                  else 0
+             end::text as saldo,
              case when c.plazo_credito_dias is null then 0
                   else greatest(${hoy}::date - (vn.fecha + c.plazo_credito_dias), 0)
              end as dias_atraso
@@ -63,10 +100,7 @@ export class NotasRutaRepository {
              and ca.deleted_at is null
         ) a on true
        where vn.deleted_at is null
-         and vn.contado_credito = 'credito'
-         and vn.status in ('pendiente', 'abonado')
-         and vn.cliente_id in (${ids})
-         and vn.monto_total - coalesce(a.abonado, 0) > 0
+         and ${filtro}
        order by vn.fecha, vn.folio
     `.execute(trx ?? this.db);
 
