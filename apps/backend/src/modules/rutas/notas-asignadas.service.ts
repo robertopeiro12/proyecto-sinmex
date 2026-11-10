@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { hoyEnTijuana } from '../sincronizacion/operaciones';
+import { exigirFechaReal } from './fechas';
 import { NotasAsignadasRepository } from './notas-asignadas.repository';
 import { NotasRutaRepository } from './notas-ruta.repository';
 import {
@@ -18,7 +19,6 @@ import { RELOJ_RUTAS, type RelojRutas } from './reloj';
 import {
   MOTIVO_FECHA_PASADA,
   RutasDiariasService,
-  exigirFechaReal,
 } from './rutas-diarias.service';
 
 export const MOTIVO_NOTA_INEXISTENTE = 'No existe esa nota.';
@@ -52,7 +52,7 @@ export class NotasAsignadasService {
   ): Promise<NotasDeRuta> {
     exigirFechaReal(fecha);
     const vendedor = await this.rutas.vendedorEnAlcance(usuarioId, vendedorId);
-    return this.armar(vendedor.id, fecha);
+    return this.armar(vendedor.id, fecha, this.hoy());
   }
 
   /** `PUT`: asigna la nota, o la pasa si la traia otro ese dia. */
@@ -63,7 +63,7 @@ export class NotasAsignadasService {
     fecha: string,
   ): Promise<NotasDeRuta> {
     exigirFechaReal(fecha);
-    this.exigirEditable(fecha);
+    const hoy = this.exigirEditable(fecha);
     const vendedor = await this.rutas.vendedorEnAlcance(usuarioId, vendedorId);
     ventaNotaId = ventaNotaId.toLowerCase();
 
@@ -94,7 +94,7 @@ export class NotasAsignadasService {
       }
       const conSaldo = await this.notas.notasConSaldo(
         [nota.clienteId],
-        this.hoy(),
+        hoy,
         trx,
       );
       if (!conSaldo.some((n) => n.ventaNotaId === nota.id)) {
@@ -108,7 +108,7 @@ export class NotasAsignadasService {
       );
     });
 
-    return this.armar(vendedor.id, fecha);
+    return this.armar(vendedor.id, fecha, hoy);
   }
 
   /** `DELETE`: quita la nota de este vendedor ese dia. Si no la traia, no hace nada. */
@@ -119,7 +119,7 @@ export class NotasAsignadasService {
     fecha: string,
   ): Promise<NotasDeRuta> {
     exigirFechaReal(fecha);
-    this.exigirEditable(fecha);
+    const hoy = this.exigirEditable(fecha);
     const vendedor = await this.rutas.vendedorEnAlcance(usuarioId, vendedorId);
     ventaNotaId = ventaNotaId.toLowerCase();
 
@@ -136,22 +136,28 @@ export class NotasAsignadasService {
       }
     });
 
-    return this.armar(vendedor.id, fecha);
+    return this.armar(vendedor.id, fecha, hoy);
   }
 
   private hoy(): string {
     return hoyEnTijuana(this.reloj());
   }
 
-  private exigirEditable(fecha: string): void {
-    if (!esFechaEditable(fecha, this.hoy())) {
+  /** Exige fecha de hoy o posterior y devuelve el `hoy` leido, para no leer el reloj dos veces. */
+  private exigirEditable(fecha: string): string {
+    const hoy = this.hoy();
+    if (!esFechaEditable(fecha, hoy)) {
       throw new BadRequestException(MOTIVO_FECHA_PASADA);
     }
+    return hoy;
   }
 
-  private async armar(vendedorId: string, fecha: string): Promise<NotasDeRuta> {
+  private async armar(
+    vendedorId: string,
+    fecha: string,
+    hoy: string,
+  ): Promise<NotasDeRuta> {
     const clientes = await this.repo.clientesDeLaRuta(vendedorId, fecha);
-    const hoy = this.hoy();
     const conSaldo = await this.notas.notasConSaldo(clientes, hoy);
     const idsAsignadas = await this.repo.idsAsignadasA(vendedorId, fecha);
     const yaLeidas = new Set(conSaldo.map((n) => n.ventaNotaId));

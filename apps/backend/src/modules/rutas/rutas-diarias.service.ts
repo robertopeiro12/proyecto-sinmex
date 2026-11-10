@@ -14,6 +14,7 @@ import {
   resolverAlcance,
 } from '../sucursales/alcance-sucursal';
 import type { RutaAltaNormalizada } from './datos-ruta-alta';
+import { exigirFechaReal } from './fechas';
 import type { GuardarRutaDiariaDto } from './dto/ruta-diaria.dto';
 import { NotasRutaRepository } from './notas-ruta.repository';
 import { planearReemplazo } from './reemplazo-ruta';
@@ -55,7 +56,6 @@ export interface EntidadRuta {
   id: string;
 }
 
-export const MOTIVO_FECHA_INEXISTENTE = 'Esa fecha no existe.';
 export const MOTIVO_VENDEDOR_INEXISTENTE = 'No existe ese vendedor.';
 export const MOTIVO_CLIENTE_REPETIDO = 'Un cliente viene dos veces en la ruta.';
 export const MOTIVO_FECHA_PASADA = 'Ese día ya pasó; solo se puede consultar.';
@@ -142,22 +142,6 @@ export interface OpcionesDia {
     clientes: ClienteDeRutaSemanalBruto[];
   }[];
   vehiculos: { id: string; nombre: string; ocupadoPor: string | null }[];
-}
-
-/**
- * `AAAA-MM-DD` que existe en el calendario. El DTO ya comprobo el formato;
- * esto evita que un 30 de febrero llegue a Postgres y salga como 500.
- */
-export function exigirFechaReal(fecha: string): void {
-  const [anio, mes, dia] = fecha.split('-').map(Number);
-  const f = new Date(Date.UTC(anio, mes - 1, dia));
-  if (
-    f.getUTCFullYear() !== anio ||
-    f.getUTCMonth() !== mes - 1 ||
-    f.getUTCDate() !== dia
-  ) {
-    throw new BadRequestException(MOTIVO_FECHA_INEXISTENTE);
-  }
 }
 
 /** Recado recortado; vacio = `null`. El DTO ya recorto y limito a 200. */

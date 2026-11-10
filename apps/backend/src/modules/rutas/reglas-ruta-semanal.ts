@@ -52,7 +52,15 @@ export function planearPropagacion(
   return { insertar, borrar };
 }
 
-const DIAS = ['lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+const DIAS = [
+  'lunes',
+  'martes',
+  'miércoles',
+  'jueves',
+  'viernes',
+  'sábado',
+  'domingo',
+];
 const MESES = [
   'enero',
   'febrero',
@@ -68,14 +76,15 @@ const MESES = [
   'diciembre',
 ];
 
-/** Nombre del dia para los mensajes: 1 = "lunes" ... 6 = "sábado". */
+/** Nombre del dia para los mensajes: 1 = "lunes" ... 6 = "sábado" (7 = "domingo", que no es dia de ruta). */
 export function nombreDia(diaSemana: number): string {
   return DIAS[diaSemana - 1];
 }
 
 /** "martes 10 de noviembre" de una fecha AAAA-MM-DD (sin año, como el resto del portal). */
 export function fechaLarga(fecha: string): string {
-  const [, m, d] = fecha.split('-').map(Number);
-  const dia = diaSemanaDe(fecha);
-  return `${dia === null ? 'domingo' : nombreDia(dia)} ${d} de ${MESES[m - 1]}`;
+  const [a, m, d] = fecha.split('-').map(Number);
+  // 0 = domingo en getUTCDay; DIAS arranca en lunes.
+  const dia = (new Date(Date.UTC(a, m - 1, d)).getUTCDay() + 6) % 7;
+  return `${DIAS[dia]} ${d} de ${MESES[m - 1]}`;
 }

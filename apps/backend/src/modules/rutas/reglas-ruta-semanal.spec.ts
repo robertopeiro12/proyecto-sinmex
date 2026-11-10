@@ -22,9 +22,7 @@ describe('esFechaEditable', () => {
     expect(esFechaEditable('2026-11-09', '2026-11-10')).toBe(false);
   });
 
-  it('usa el "hoy" que se le da (Tijuana), no el reloj', () => {
-    // A las 23:30 de Tijuana ya es el dia siguiente en UTC: "hoy" sigue siendo el de Tijuana.
-    expect(esFechaEditable('2026-11-10', '2026-11-10')).toBe(true);
+  it('compara contra el "hoy" que se le da', () => {
     expect(esFechaEditable('2026-11-10', '2026-11-11')).toBe(false);
   });
 });
@@ -85,6 +83,11 @@ describe('planearPropagacion', () => {
       set('A', 'B'),
     );
     expect(plan.borrar).toEqual([{ id: 'f-A', clienteId: 'A' }]);
+  });
+
+  it('un cliente quitado que ya no tiene fila viva no borra nada', () => {
+    const plan = planearPropagacion([], [], set('A'), set(), set('A'));
+    expect(plan.borrar).toEqual([]);
   });
 
   it('salta clientes no validos', () => {
