@@ -153,6 +153,7 @@ describe('RutasDiariasService.reemplazarDiaria (Ruta Diaria ampliada)', () => {
       clientesParaRuta: jest.fn().mockResolvedValue(new Set()),
       nombresDeClientes: jest.fn().mockResolvedValue(new Map()),
       guardarRutaDia: jest.fn().mockResolvedValue(undefined),
+      darDeBajaRutaDia: jest.fn().mockResolvedValue(undefined),
       aplicarReemplazo: jest.fn().mockResolvedValue(undefined),
       quitarNotasAsignadas: jest.fn().mockResolvedValue(undefined),
       filasDelDia: jest.fn().mockResolvedValue([]),

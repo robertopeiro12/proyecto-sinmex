@@ -212,6 +212,7 @@ export class RutasDiariasRepository {
             .whereRef('na.vendedor_id', '=', 'ruta.vendedor_id')
             .whereRef('na.fecha', '=', 'ruta.fecha')
             .where('na.deleted_at', 'is', null)
+            .where('vn.deleted_at', 'is', null)
             .as('notasAsignadas'),
       ])
       .where('ruta.vendedor_id', '=', vendedorId)
@@ -452,6 +453,19 @@ export class RutasDiariasRepository {
       .execute();
   }
 
+  /** Baja de un encabezado (una ruta que se guardo sin semanal, sin vehiculo y sin clientes). */
+  async darDeBajaRutaDia(
+    id: string,
+    usuarioId: string,
+    trx: Transaction<DB>,
+  ): Promise<void> {
+    await trx
+      .updateTable('ruta_dia')
+      .set({ deleted_at: new Date(), actualizado_por_usuario_id: usuarioId })
+      .where('id', '=', id)
+      .execute();
+  }
+
   /**
    * "Quitar ruta": baja del encabezado, de las filas que puso la oficina o la
    * semanal (`quitado_por = 'cambio_ruta'`: si se vuelve a asignar, entran
@@ -658,13 +672,16 @@ export class RutasDiariasRepository {
     for (const f of filas)
       resumen.get(f.vendedor_id)!.clientes.push(f.cliente_id);
 
+    // Una nota de una venta eliminada (T-17) ya no cuenta como asignada.
     const notas = await this.db
-      .selectFrom('nota_asignada')
-      .select(['vendedor_id', sql<number>`count(*)::int`.as('n')])
-      .where('vendedor_id', 'in', ids)
-      .where(sql<boolean>`fecha = ${fecha}::date`)
-      .where('deleted_at', 'is', null)
-      .groupBy('vendedor_id')
+      .selectFrom('nota_asignada as na')
+      .innerJoin('venta_nota as vn', 'vn.id', 'na.venta_nota_id')
+      .select(['na.vendedor_id', sql<number>`count(*)::int`.as('n')])
+      .where('na.vendedor_id', 'in', ids)
+      .where(sql<boolean>`na.fecha = ${fecha}::date`)
+      .where('na.deleted_at', 'is', null)
+      .where('vn.deleted_at', 'is', null)
+      .groupBy('na.vendedor_id')
       .execute();
     for (const n of notas) {
       resumen.get(n.vendedor_id)!.notasAsignadas = Number(n.n);

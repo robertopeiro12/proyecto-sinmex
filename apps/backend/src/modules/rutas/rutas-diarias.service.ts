@@ -391,8 +391,11 @@ export class RutasDiariasService {
         );
       }
 
+      // Solo se valida un vehiculo NUEVO: reenviar el que ya tenia asignado,
+      // aunque se haya desactivado despues, no bloquea el guardado.
       if (
         vehiculoId !== null &&
+        vehiculoId !== (guardada?.vehiculoId ?? null) &&
         !(await this.repo.vehiculoParaRuta(
           vehiculoId,
           vendedor.sucursalId,
@@ -425,27 +428,36 @@ export class RutasDiariasService {
         );
       }
       const saltados = new Set(invalidos);
+      const quedan = pedidos.filter((p) => !saltados.has(p.clienteId));
 
-      await this.repo.guardarRutaDia(
-        {
-          vendedorId: vendedor.id,
-          fecha: dto.fecha,
-          rutaSemanalId,
-          nombreRuta: semanal?.nombre ?? null,
-          vehiculoId,
-          usuarioId,
-        },
-        guardada,
-        trx,
-      );
-      const plan = planearReemplazo(
-        vivas,
-        pedidos.filter((p) => !saltados.has(p.clienteId)),
-        {
-          clientesDeLaSemanal,
-          rutaCambio: (guardada?.rutaSemanalId ?? null) !== rutaSemanalId,
-        },
-      );
+      if (
+        rutaSemanalId === null &&
+        vehiculoId === null &&
+        quedan.length === 0
+      ) {
+        // Nada que guardar en el encabezado: no se deja uno vacio (la lista
+        // del dia diria "tiene ruta"), y el que habia se da de baja.
+        if (guardada) {
+          await this.repo.darDeBajaRutaDia(guardada.id, usuarioId, trx);
+        }
+      } else {
+        await this.repo.guardarRutaDia(
+          {
+            vendedorId: vendedor.id,
+            fecha: dto.fecha,
+            rutaSemanalId,
+            nombreRuta: semanal?.nombre ?? null,
+            vehiculoId,
+            usuarioId,
+          },
+          guardada,
+          trx,
+        );
+      }
+      const plan = planearReemplazo(vivas, quedan, {
+        clientesDeLaSemanal,
+        rutaCambio: (guardada?.rutaSemanalId ?? null) !== rutaSemanalId,
+      });
       await this.repo.aplicarReemplazo(vendedor.id, dto.fecha, plan, trx);
       await this.repo.quitarNotasAsignadas(
         vendedor.id,

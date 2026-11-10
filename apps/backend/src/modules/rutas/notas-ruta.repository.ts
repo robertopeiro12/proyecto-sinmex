@@ -26,7 +26,7 @@ export class NotasRutaRepository {
   constructor(@Inject(DB_CONNECTION) private readonly db: Database) {}
 
   /**
-   * Las notas con saldo de esos clientes: venta viva, `pendiente`/`abonado`,
+   * Las notas con saldo de esos clientes: venta viva a CREDITO, `pendiente`/`abonado`,
    * con saldo > 0 descontando solo los abonos vivos (los de un pago borrado
    * por T-34 no cuentan), incluidas las del mismo dia. `diasAtraso` contra
    * `hoy` con el mismo calculo que Cuentas por Cobrar
@@ -63,6 +63,7 @@ export class NotasRutaRepository {
              and ca.deleted_at is null
         ) a on true
        where vn.deleted_at is null
+         and vn.contado_credito = 'credito'
          and vn.status in ('pendiente', 'abonado')
          and vn.cliente_id in (${ids})
          and vn.monto_total - coalesce(a.abonado, 0) > 0

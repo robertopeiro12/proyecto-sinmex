@@ -138,6 +138,7 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
   const sembrarNota = async (
     clienteId: string,
     status: 'pendiente' | 'pagada' = 'pendiente',
+    extra: { contado?: boolean; borrada?: boolean } = {},
   ): Promise<string> =>
     (
       await db
@@ -152,10 +153,11 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
           vendedor_id: null,
           monto_total: '100.00',
           num_nota: null,
-          contado_credito: 'credito',
+          contado_credito: extra.contado ? 'contado' : 'credito',
           semana: 1,
           mes: 1,
           status,
+          deleted_at: extra.borrada ? new Date() : null,
           sucursal_id: tjId,
           origen: 'portal',
           capturo_usuario_id: usuarioIds[0],
@@ -1002,6 +1004,111 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
     });
   });
 
+  describe('PUT: ronda de arreglos 1', () => {
+    it('una asignada de una venta eliminada no cuenta en las filas', async () => {
+      const fecha = diaNuevo();
+      const a = await sembrarCliente(tjId);
+      const vendedor = await sembrarVendedor(tjId);
+      await guardar(cookieGeneral, {
+        vendedorId: vendedor,
+        fecha,
+        clientes: [a.id],
+      }).expect(200);
+      await asignarNota(await sembrarNota(a.id), vendedor, fecha);
+      await asignarNota(
+        await sembrarNota(a.id, 'pendiente', { borrada: true }),
+        vendedor,
+        fecha,
+      );
+
+      const ruta = (await obtener(cookieGeneral, vendedor, fecha).expect(200))
+        .body as RutaDiaria;
+      expect(ruta.filas.map((f) => f.notasAsignadas)).toEqual([1]);
+    });
+
+    it('un PUT sin semanal, sin vehiculo y sin clientes no deja encabezado; si habia uno, lo da de baja', async () => {
+      const fecha = diaNuevo();
+      const vehiculo = await sembrarVehiculo(tjId);
+      const vendedor = await sembrarVendedor(tjId);
+      const encabezados = () =>
+        db
+          .selectFrom('ruta_dia')
+          .select(['id', 'deleted_at'])
+          .where('vendedor_id', '=', vendedor)
+          .where(sql<boolean>`fecha = ${fecha}::date`)
+          .execute();
+      const renglon = async () =>
+        (
+          (
+            await listaDelDia(cookieGeneral, { fecha, sucursal: 'TJ' }).expect(
+              200,
+            )
+          ).body as ListaDelDia
+        ).renglones.find((r) => r.vendedorId === vendedor);
+
+      await guardar(cookieGeneral, {
+        vendedorId: vendedor,
+        fecha,
+        clientes: [],
+      }).expect(200);
+      expect(await encabezados()).toHaveLength(0);
+      expect((await renglon())?.tieneRuta).toBe(false);
+
+      await guardar(cookieGeneral, {
+        vendedorId: vendedor,
+        fecha,
+        vehiculoId: vehiculo.id,
+        clientes: [],
+      }).expect(200);
+      expect((await renglon())?.tieneRuta).toBe(true);
+
+      await guardar(cookieGeneral, {
+        vendedorId: vendedor,
+        fecha,
+        clientes: [],
+      }).expect(200);
+      const despues = await encabezados();
+      expect(despues).toHaveLength(1);
+      expect(despues[0].deleted_at).not.toBeNull();
+      expect((await renglon())?.tieneRuta).toBe(false);
+    });
+
+    it('reenviar el vehiculo ya asignado aunque se haya desactivado no es 400; uno nuevo desactivado si', async () => {
+      const fecha = diaNuevo();
+      const a = await sembrarCliente(tjId);
+      const asignado = await sembrarVehiculo(tjId);
+      const otro = await sembrarVehiculo(tjId);
+      const vendedor = await sembrarVendedor(tjId);
+      await guardar(cookieGeneral, {
+        vendedorId: vendedor,
+        fecha,
+        vehiculoId: asignado.id,
+        clientes: [a.id],
+      }).expect(200);
+      await db
+        .updateTable('vehiculo')
+        .set({ activo: false })
+        .where('id', 'in', [asignado.id, otro.id])
+        .execute();
+
+      const res = await guardar(cookieGeneral, {
+        vendedorId: vendedor,
+        fecha,
+        vehiculoId: asignado.id,
+        clientes: [{ clienteId: a.id, recado: 'Solo cobrar' }],
+      }).expect(200);
+      expect((res.body as RutaDiaria).vehiculo).toEqual(asignado);
+
+      const malo = await guardar(cookieGeneral, {
+        vendedorId: vendedor,
+        fecha,
+        vehiculoId: otro.id,
+        clientes: [a.id],
+      }).expect(400);
+      expect(mensaje(malo)).toBe('Ese vehículo no es de la sucursal.');
+    });
+  });
+
   describe('DELETE: quitar ruta', () => {
     it('DELETE conserva lo del vendedor', async () => {
       const fecha = diaNuevo();
@@ -1093,7 +1200,15 @@ describe('Ruta Diaria desde el portal (e2e)', () => {
       const notaA1 = await sembrarNota(a.id);
       await sembrarNota(a.id);
       await sembrarNota(b.id, 'pagada');
+      // Una de CONTADO pendiente no es nota por cobrar (spec §5.4).
+      await sembrarNota(b.id, 'pendiente', { contado: true });
       await asignarNota(notaA1, conRuta, fecha);
+      // Una asignada de una venta que despues se elimino ya no cuenta.
+      await asignarNota(
+        await sembrarNota(a.id, 'pendiente', { borrada: true }),
+        conRuta,
+        fecha,
+      );
 
       const res = await listaDelDia(cookieTijuana, { fecha }).expect(200);
       const cuerpo = res.body as ListaDelDia;
