@@ -111,6 +111,23 @@ describe("RutaDeVendedor", () => {
     expect(screen.getByRole("option", { name: "Sin vehículo" })).toBeInTheDocument();
   });
 
+  it("la ruta guardada dada de baja se conserva, y al cambiar a otra ya no se puede volver a escoger", async () => {
+    vi.mocked(rutasLib.obtenerRutaDiaria).mockResolvedValue(
+      rutaDiaria({
+        rutaSemanal: { id: "rsx", nombre: "RUTA VIEJA" },
+        filas: [fila("a", "Abarrotes A", { origen: "semanal" })],
+      }),
+    );
+    const { usuario } = pintar();
+    const lista = await screen.findByLabelText("Ruta del día");
+    expect(lista).toHaveValue("rsx");
+    expect(screen.getByRole("option", { name: "RUTA VIEJA" })).toBeEnabled();
+
+    await usuario.selectOptions(lista, "rs3");
+    await usuario.click(await screen.findByRole("button", { name: "Reemplazar" }));
+    expect(screen.getByRole("option", { name: "RUTA VIEJA (dada de baja)" })).toBeDisabled();
+  });
+
   it("escoger una ruta copia sus clientes válidos en su orden, de las opciones (sin pedir la Ruta Semanal)", async () => {
     const { usuario } = pintar();
     await screen.findByRole("option", { name: "RUTA 1 (OTAY)" });

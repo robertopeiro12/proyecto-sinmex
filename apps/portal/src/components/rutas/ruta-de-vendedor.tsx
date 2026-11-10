@@ -100,12 +100,14 @@ export function RutaDeVendedor({
   }, [sucio]);
 
   // La ruta guardada pudo salir de las opciones (dada de baja): se sigue ofreciendo para no perderla.
-  // Sin clientes: ya no tiene lista que copiar.
+  // Sin clientes (ya no tiene lista que copiar) y marcada `dadaDeBaja`: se puede conservar
+  // mientras sea la escogida, pero no volver a escoger.
   const rutas = useMemo(() => {
     const guardada = ruta?.rutaSemanal;
+    const lista = opciones.rutas.map((r) => ({ ...r, dadaDeBaja: false }));
     return guardada && !opciones.rutas.some((r) => r.id === guardada.id)
-      ? [{ ...guardada, ocupadaPor: null, clientes: [] }, ...opciones.rutas]
-      : opciones.rutas;
+      ? [{ ...guardada, ocupadaPor: null, clientes: [], dadaDeBaja: true }, ...lista]
+      : lista;
   }, [ruta, opciones.rutas]);
   const vehiculos = useMemo(() => {
     const guardado = ruta?.vehiculo;
@@ -130,6 +132,8 @@ export function RutaDeVendedor({
   async function cambiarRuta(valor: string) {
     const nueva = valor === "" ? null : valor;
     if (nueva === actual.rutaSemanalId) return;
+    const elegida = rutas.find((r) => r.id === nueva);
+    if (elegida?.dadaDeBaja) return; // una ruta dada de baja no se vuelve a escoger
     if (
       actual.filas.some((f) => f.origen === "semanal") &&
       !(await confirmar({
@@ -145,7 +149,7 @@ export function RutaDeVendedor({
     setError(null);
     // Los clientes vienen en las opciones del día: `GET /rutas/semanales/:id` exige
     // `ruta_semanal.gestionar`, que quien arma la ruta del día puede no tener.
-    const clientes = nueva === null ? [] : (rutas.find((r) => r.id === nueva)?.clientes ?? []);
+    const clientes = elegida?.clientes ?? [];
     setActual((a) => ({ ...a, rutaSemanalId: nueva, filas: aplicarRutaSemanal(a.filas, clientes) }));
   }
 
@@ -231,8 +235,16 @@ export function RutaDeVendedor({
               >
                 <option value="">Sin ruta</option>
                 {rutas.map((r) => (
-                  <option key={r.id} value={r.id} disabled={r.ocupadaPor !== null}>
-                    {r.ocupadaPor ? `${r.nombre} (la trae ${r.ocupadaPor})` : r.nombre}
+                  <option
+                    key={r.id}
+                    value={r.id}
+                    disabled={r.ocupadaPor !== null || (r.dadaDeBaja && r.id !== actual.rutaSemanalId)}
+                  >
+                    {r.ocupadaPor
+                      ? `${r.nombre} (la trae ${r.ocupadaPor})`
+                      : r.dadaDeBaja && r.id !== actual.rutaSemanalId
+                        ? `${r.nombre} (dada de baja)`
+                        : r.nombre}
                   </option>
                 ))}
               </Lista>

@@ -130,12 +130,21 @@ describe("VentanaNotas", () => {
     await screen.findByText("Abarrotes Lupe");
     expect(screen.queryByRole("button", { name: /Asignar|Quitar|Pasársela/ })).toBeNull();
     expect(screen.getByText("La trae Juan")).toBeInTheDocument();
+    // La que trae este vendedor dice "Asignada".
+    expect(within(screen.getAllByRole("row")[2]).getByText("Asignada")).toBeInTheDocument();
   });
 
-  it("sin notas lo dice, y un error al cargar sale en un aviso", async () => {
+  it("sin notas lo dice", async () => {
     vi.mocked(rutasLib.obtenerNotas).mockResolvedValue({ pendientes: [], asignadas: [] });
     abrir();
     expect(await screen.findByText("No hay notas por cobrar.")).toBeInTheDocument();
+  });
+
+  it("un error al cargar sale en un aviso", async () => {
+    vi.mocked(rutasLib.obtenerNotas).mockRejectedValue(new ErrorApi("x", 500, "No se pudieron cargar las notas."));
+    abrir();
+    expect(await screen.findByText("No se pudieron cargar las notas.")).toBeInTheDocument();
+    expect(screen.queryByText("Cargando…")).toBeNull();
   });
 
   it("Cerrar avisa para que la lista del día relea sus conteos", async () => {

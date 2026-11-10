@@ -78,7 +78,10 @@ export function VentanaNotas({
   }
 
   function celdaAccion(n: NotaDeRuta) {
-    if (!editable) return n.asignadaA && n.asignadaA.vendedorId !== vendedorId ? `La trae ${n.asignadaA.nombre}` : null;
+    if (!editable) {
+      if (!n.asignadaA) return null;
+      return n.asignadaA.vendedorId === vendedorId ? "Asignada" : `La trae ${n.asignadaA.nombre}`;
+    }
     const boton = (texto: string, quitar: boolean) => (
       <Button type="button" size="sm" variant="outline" disabled={trabajando} onClick={() => void accion(n, quitar)}>
         {texto}

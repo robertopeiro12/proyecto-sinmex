@@ -63,4 +63,17 @@ describe("ListaRutaDiaria", () => {
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.getByText("Vender solo de contado")).toBeInTheDocument();
   });
+
+  it("la ventana del recado se monta una vez y trae el texto de cada fila al abrirse", async () => {
+    pintar();
+    const usuario = userEvent.setup();
+
+    await usuario.click(screen.getByRole("button", { name: "Recado para Mini M" }));
+    fireEvent.change(await screen.findByLabelText("Recado"), { target: { value: "borrador" } });
+    await usuario.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    await usuario.click(screen.getByRole("button", { name: "Recado para Abarrotes A" }));
+    expect(await screen.findByLabelText("Recado")).toHaveValue("Vender solo de contado");
+    expect(screen.getByText("Recado para Abarrotes A")).toBeInTheDocument();
+  });
 });

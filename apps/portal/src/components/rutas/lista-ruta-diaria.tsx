@@ -94,7 +94,6 @@ export function ListaRutaDiaria({
         </ol>
       )}
       <VentanaRecado
-        key={recadoDe ?? "cerrada"}
         fila={filaRecado}
         alCerrar={() => setRecadoDe(null)}
         alGuardar={(texto) => {
@@ -115,11 +114,22 @@ function VentanaRecado({
   alCerrar: () => void;
   alGuardar: (texto: string) => void;
 }) {
+  // La ventana se monta una vez (así conserva su animación de cierre): el texto se
+  // reinicia cuando se abre para otra fila, y el título se queda mientras se cierra.
   const [texto, setTexto] = useState(fila?.recado ?? "");
+  const [abiertaPara, setAbiertaPara] = useState<FilaEditable | null>(fila);
+  const [mostrada, setMostrada] = useState<FilaEditable | null>(fila);
+  if (fila !== abiertaPara) {
+    setAbiertaPara(fila);
+    if (fila !== null) {
+      setMostrada(fila);
+      setTexto(fila.recado ?? "");
+    }
+  }
   const largo = texto.trim().length > MAX_RECADO;
 
   return (
-    <Ventana abierta={fila !== null} alCerrar={alCerrar} titulo={`Recado para ${fila?.clienteNombre ?? ""}`}>
+    <Ventana abierta={fila !== null} alCerrar={alCerrar} titulo={`Recado para ${mostrada?.clienteNombre ?? ""}`}>
       <form
         className="flex flex-col gap-3"
         onSubmit={(e) => {
