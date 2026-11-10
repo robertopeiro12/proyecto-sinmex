@@ -1,0 +1,92 @@
+import type { FilaViva } from './reemplazo-ruta';
+import {
+  diaSemanaDe,
+  esFechaEditable,
+  planearPropagacion,
+} from './reglas-ruta-semanal';
+
+const fila = (
+  id: string,
+  orden: number,
+  origen: FilaViva['origen'] = 'oficina',
+): FilaViva => ({ id: `f-${id}`, clienteId: id, orden, origen, recado: null });
+
+const set = (...xs: string[]) => new Set(xs);
+
+describe('esFechaEditable', () => {
+  it('hoy se puede editar y ayer no', () => {
+    expect(esFechaEditable('2026-11-10', '2026-11-10')).toBe(true);
+    expect(esFechaEditable('2026-11-11', '2026-11-10')).toBe(true);
+    expect(esFechaEditable('2026-11-09', '2026-11-10')).toBe(false);
+  });
+
+  it('usa el "hoy" que se le da (Tijuana), no el reloj', () => {
+    // A las 23:30 de Tijuana ya es el dia siguiente en UTC: "hoy" sigue siendo el de Tijuana.
+    expect(esFechaEditable('2026-11-10', '2026-11-10')).toBe(true);
+    expect(esFechaEditable('2026-11-10', '2026-11-11')).toBe(false);
+  });
+});
+
+describe('diaSemanaDe', () => {
+  it('1 = lunes ... 6 = sabado, domingo = null', () => {
+    expect(diaSemanaDe('2026-11-09')).toBe(1);
+    expect(diaSemanaDe('2026-11-10')).toBe(2);
+    expect(diaSemanaDe('2026-11-14')).toBe(6);
+    expect(diaSemanaDe('2026-11-15')).toBeNull();
+  });
+});
+
+describe('planearPropagacion', () => {
+  it('agrega al final y respeta lo quitado a mano', () => {
+    const plan = planearPropagacion(
+      [fila('A', 1), fila('B', 2)],
+      ['C', 'D'],
+      set(),
+      set('D'),
+      set('A', 'B', 'C', 'D'),
+    );
+    expect(plan.insertar).toEqual([{ clienteId: 'C', orden: 3 }]);
+    expect(plan.borrar).toEqual([]);
+  });
+
+  it('numera los agregados en el orden de la semanal', () => {
+    const plan = planearPropagacion(
+      [fila('A', 4)],
+      ['C', 'D'],
+      set(),
+      set(),
+      set('C', 'D'),
+    );
+    expect(plan.insertar).toEqual([
+      { clienteId: 'C', orden: 5 },
+      { clienteId: 'D', orden: 6 },
+    ]);
+  });
+
+  it('no duplica lo que el vendedor ya agregó', () => {
+    const plan = planearPropagacion(
+      [fila('C', 1, 'vendedor')],
+      ['C'],
+      set(),
+      set(),
+      set('C'),
+    );
+    expect(plan.insertar).toEqual([]);
+  });
+
+  it('quita solo lo que vino de la semanal', () => {
+    const plan = planearPropagacion(
+      [fila('A', 1, 'semanal'), fila('B', 2, 'oficina')],
+      [],
+      set('A', 'B'),
+      set(),
+      set('A', 'B'),
+    );
+    expect(plan.borrar).toEqual([{ id: 'f-A', clienteId: 'A' }]);
+  });
+
+  it('salta clientes no validos', () => {
+    const plan = planearPropagacion([], ['X'], set(), set(), set());
+    expect(plan.insertar).toEqual([]);
+  });
+});
