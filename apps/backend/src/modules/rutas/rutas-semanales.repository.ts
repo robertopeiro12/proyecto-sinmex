@@ -29,10 +29,11 @@ export interface RutaDiaAsignada {
 }
 
 /**
- * SQL de la Ruta Semanal: la ruta, su lista de clientes y las lecturas de sus
- * `ruta_dia` que hace la propagacion. Toda escritura de la ruta de un dia
- * (`ruta`, `ruta_dia`, las `nota_asignada` que salen) es de
- * `RutasDiariasRepository`, salvo el `nombre_ruta` de `renombrarRutasDelDia`.
+ * SQL de la Ruta Semanal: la ruta, su lista de clientes (la baja de la ruta se
+ * lleva su lista) y las lecturas de sus `ruta_dia` que hace la propagacion.
+ * Toda escritura de la ruta de un dia (`ruta`, `ruta_dia`, las `nota_asignada`
+ * que salen) es de `RutasDiariasRepository`, salvo el `nombre_ruta` de
+ * `renombrarRutasDelDia`.
  */
 @Injectable()
 export class RutasSemanalesRepository {
@@ -152,10 +153,17 @@ export class RutasSemanalesRepository {
   }
 
   async darDeBaja(id: string, trx: Transaction<DB>): Promise<void> {
+    const ahora = new Date();
     await trx
       .updateTable('ruta_semanal')
-      .set({ deleted_at: new Date() })
+      .set({ deleted_at: ahora })
       .where('id', '=', id)
+      .execute();
+    await trx
+      .updateTable('ruta_semanal_cliente')
+      .set({ deleted_at: ahora })
+      .where('ruta_semanal_id', '=', id)
+      .where('deleted_at', 'is', null)
       .execute();
   }
 
