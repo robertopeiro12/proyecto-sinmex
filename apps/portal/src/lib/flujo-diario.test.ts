@@ -43,6 +43,10 @@ describe("etiquetaRutaAsignada", () => {
   it("sin clientes dice solo Sin ruta", () => {
     expect(etiquetaRutaAsignada(null, 0)).toBe("Sin ruta");
   });
+
+  it("con nombre y 0 clientes dice solo el nombre, sin la cuenta", () => {
+    expect(etiquetaRutaAsignada("RUTA 5 (BLV 2000)", 0)).toBe("RUTA 5 (BLV 2000)");
+  });
 });
 
 describe("etiquetaVehiculo", () => {
