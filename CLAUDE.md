@@ -705,6 +705,27 @@ usuario con sesion pasa.
       venta viva a crédito de ese vendedor de hoy o antes = 400 y no se guarda nada. **No mueve `updated_at`**: el
       trigger `set_updated_at_venta_nota()` lo conserva cuando solo cambian las columnas `papel_*`. El detalle trae
       `notasCredito[].entregada` y `notasNoEntregadas` (días anteriores, `false` y con pendiente).
+    - **Revisión de notas en la tarde (Ruta Diaria parte 2).** Spec:
+      `docs/superpowers/specs/2026-11-11-ruta-diaria-parte-2-revision-notas-design.md`. La pestaña "Notas de ventas" del
+      detalle (Dashboard y Flujo diario, la misma `PestanaNotas` en `detalle-vendedor-pestanas.tsx`) trae **tres listas**:
+      "Notas Asignadas Cobradas" (`asignadasCobradas`, pendiente 0, solo se ven), "Notas Asignadas NO cobradas por
+      Entregar" (`asignadasPorEntregar`, con saldo, abonadas incluidas) y "Notas Nuevas x Cobrar Entregadas"
+      (`notasCredito`), más "Notas de Ventas NO Entregadas". Las casillas salen **palomeadas si `entregada` es null**
+      (se puede guardar "todo llegó" sin tocar nada).
+      - **Solo se piden notas con saldo y status `pendiente`/`abonado`** (`cuenta_perdida` no, ni entra al conteo). Una
+        nueva que también es asignada ese día sale una vez, como asignada. Las **ya revisadas se conservan** aunque se
+        paguen después (ventana y columna cuadran).
+      - `PUT /dashboard/notas-entregadas` ahora lleva `fecha` (AAAA-MM-DD, formato inválido = 400), `notas` y
+        `asignadas: {ventaNotaId, entregada}[]`; permite **hoy o ayer de Tijuana** (otra = 400) y **no requiere jornada
+        cerrada**. Sin `fecha` conserva la regla vieja (`<= hoy`). Todo o nada; lote vacío = 400.
+      - **Migración** `20261111120000_nota_asignada_papel.sql`: `nota_asignada.papel_entregado`/`papel_revisado_en`/
+        `papel_revisado_por_usuario_id` + check de que van juntos. A diferencia de `venta_nota`, el update **sí mueve
+        `updated_at`** de la asignación (trigger genérico): inofensivo, la tablet ignora el papel.
+      - `FilaVendedorDia.notasNoEntregadas` (Dashboard y Flujo diario; `null` = sin revisar, en rojo si > 0;
+        `contarNotasNoEntregadas` en `reglas-flujo-diario.ts`). Tipos duplicados en `lib/flujo-diario.ts` del portal.
+        `useCerrarConPendientes` (`use-detalle-abierto.ts`) pregunta antes de cerrar con casillas cambiadas a mano.
+      - **Nube**: la migración se sube a `sinmex dev` después del merge, con el protocolo de push (pre-flight: columnas
+        nulas y un check que todas las filas cumplen en null; nada que contar).
     - **Pestaña "Ruta"** (la ventana "Visitas" del viejo, que se abre al picar *Ruta*, también el "x / y" del
       Dashboard): los clientes de su **ruta diaria en su orden** con lo que pasó en cada uno, o `visitado: false` →
       "Cliente no visitado"; después los atendidos fuera de ruta, por hora (`armarDetalleVendedor`).
