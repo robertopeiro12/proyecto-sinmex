@@ -37,7 +37,8 @@ export function EditarRutaSemanal({
 }: {
   id: string;
   sucursal: string;
-  onVolver: () => void;
+  /** `guardada` viene cuando se sale porque se guardó: la lista regresa al día de la ruta. */
+  onVolver: (guardada?: { nombre: string; diaSemana: number }) => void;
 }) {
   const [ruta, setRuta] = useState<RutaSemanalDetalle | null>(null);
   const [cartera, setCartera] = useState<ClienteResumen[]>([]);
@@ -47,7 +48,6 @@ export function EditarRutaSemanal({
   const [cargando, setCargando] = useState(true);
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [aviso, setAviso] = useState<string | null>(null);
   const { confirmar, ventana } = useConfirmar();
 
   const listaSucia = !mismaLista(original, lista);
@@ -107,13 +107,15 @@ export function EditarRutaSemanal({
    * choca con otra ruta del día (409) no se toca la lista. Después la lista (si cambió).
    */
   async function guardar() {
+    if (!ruta) return;
+    let nombreFinal = ruta.nombre;
     setOcupado(true);
     setError(null);
-    setAviso(null);
     try {
       if (nombreSucio) {
         try {
           const renombrada = await renombrarRutaSemanal(id, nombre.trim());
+          nombreFinal = renombrada.nombre;
           setRuta((actual) => (actual ? { ...actual, nombre: renombrada.nombre } : renombrada));
           setNombre(renombrada.nombre);
         } catch (err) {
@@ -136,7 +138,7 @@ export function EditarRutaSemanal({
           return;
         }
       }
-      setAviso("Ruta guardada.");
+      onVolver({ nombre: nombreFinal, diaSemana: ruta.diaSemana });
     } finally {
       setOcupado(false);
     }
@@ -146,7 +148,6 @@ export function EditarRutaSemanal({
     if (!ruta) return;
     setOcupado(true);
     setError(null);
-    setAviso(null);
     const resultado = await confirmarYEliminarRuta(confirmar, { id, nombre: ruta.nombre });
     if (resultado.estado === "cancelada") {
       setOcupado(false);
@@ -191,7 +192,6 @@ export function EditarRutaSemanal({
       />
 
       {sucio ? <Aviso tono="advertencia">Cambios sin guardar</Aviso> : null}
-      {aviso ? <Aviso tono="exito">{aviso}</Aviso> : null}
       {error ? <Aviso tono="error">{error}</Aviso> : null}
 
       {ruta ? (
@@ -204,7 +204,6 @@ export function EditarRutaSemanal({
                 value={nombre}
                 disabled={ocupado}
                 onChange={(e) => {
-                  setAviso(null);
                   setNombre(e.target.value);
                 }}
               />
@@ -216,7 +215,6 @@ export function EditarRutaSemanal({
               cartera={cartera}
               enRuta={enRuta}
               onAgregar={(c) => {
-                setAviso(null);
                 setLista((actual) => [...actual, { clienteId: c.id, nombre: c.nombre, valido: true }]);
               }}
             />
@@ -238,7 +236,6 @@ export function EditarRutaSemanal({
                         aria-label={`Quitar ${c.nombre}`}
                         disabled={ocupado}
                         onClick={() => {
-                          setAviso(null);
                           setLista((actual) => actual.filter((x) => x.clienteId !== c.clienteId));
                         }}
                       >

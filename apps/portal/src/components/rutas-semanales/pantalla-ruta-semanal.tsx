@@ -58,12 +58,12 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
   const [creando, setCreando] = useState(false);
   const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
   const [eliminando, setEliminando] = useState(false);
-  const [creada, setCreada] = useState<string | null>(null);
+  const [confirmacion, setConfirmacion] = useState<string | null>(null);
   const { confirmar, ventana } = useConfirmar();
 
   function abrir(id: string) {
     setDiaInicial(dia);
-    setCreada(null);
+    setConfirmacion(null);
     setEditando(id);
   }
 
@@ -96,7 +96,13 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
         key={editando}
         id={editando}
         sucursal={sucursal}
-        onVolver={() => {
+        onVolver={(guardada) => {
+          // Al guardar regresa a las pestañas, en el día de la ruta, con la confirmación.
+          if (guardada) {
+            setDiaInicial(guardada.diaSemana);
+            setDia(guardada.diaSemana);
+            setConfirmacion(`Se guardó la ruta «${guardada.nombre}» del ${nombreDiaSemana(guardada.diaSemana)}.`);
+          }
           setEditando(null);
           void cargar();
         }}
@@ -117,7 +123,7 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
       />
       {error ? <Aviso tono="error">{error}</Aviso> : null}
       {errorEliminar ? <Aviso tono="error">{errorEliminar}</Aviso> : null}
-      {creada ? <Aviso tono="exito">{creada}</Aviso> : null}
+      {confirmacion ? <Aviso tono="exito">{confirmacion}</Aviso> : null}
       {rutas === null ? (
         error ? null : (
           <EstadoPantalla tipo="cargando" />
@@ -140,10 +146,9 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
         diaSemana={dia}
         alCerrar={() => setCreando(false)}
         alCrear={(nueva) => {
-          // Se queda en la lista, en la pestaña del día en que se creó, con la confirmación.
+          // Recién creada entra directo a su edición para agregarle clientes.
           setCreando(false);
-          setCreada(`Se creó la ruta «${nueva.nombre}» del ${nombreDiaSemana(nueva.diaSemana)}. Agrégale sus clientes con Editar.`);
-          void cargar();
+          abrir(nueva.id);
         }}
       />
       {ventana}

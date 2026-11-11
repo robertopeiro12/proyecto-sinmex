@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ErrorApi } from "@/lib/api";
 import * as clientesLib from "@/lib/clientes";
@@ -82,7 +82,7 @@ describe("EditarRutaSemanal", () => {
         { clienteId: "b", nombre: "Tienda B", valido: true },
       ]),
     );
-    const { usuario } = await abrir();
+    const { usuario, volver } = await abrir();
     await usuario.click(screen.getByRole("button", { name: "Agregar Dulcería D" }));
     await usuario.click(screen.getByRole("button", { name: "Agregar Tienda B" }));
     expect(screen.getByText("Clientes de la ruta: 3")).toBeInTheDocument();
@@ -90,7 +90,8 @@ describe("EditarRutaSemanal", () => {
     await usuario.click(screen.getByRole("button", { name: "Guardar" }));
 
     expect(semanalesLib.guardarClientesRutaSemanal).toHaveBeenCalledWith("r1", ["a", "d", "b"]);
-    expect(await screen.findByText("Ruta guardada.")).toBeInTheDocument();
+    // Al guardar regresa a las pestañas, con el nombre y el día de la ruta.
+    await waitFor(() => expect(volver).toHaveBeenCalledWith({ nombre: "Centro", diaSemana: 2 }));
   });
 
   it("quitar saca al cliente de la lista y lo devuelve a la izquierda", async () => {
@@ -146,7 +147,7 @@ describe("EditarRutaSemanal", () => {
 
   it("renombrar manda el nombre nuevo", async () => {
     vi.mocked(semanalesLib.renombrarRutaSemanal).mockResolvedValue({ ...detalle([]), nombre: "Zona Norte" });
-    const { usuario } = await abrir();
+    const { usuario, volver } = await abrir();
     const campo = screen.getByLabelText("Nombre de la ruta");
     await usuario.clear(campo);
     await usuario.type(campo, "Zona Norte");
@@ -155,14 +156,14 @@ describe("EditarRutaSemanal", () => {
     expect(semanalesLib.renombrarRutaSemanal).toHaveBeenCalledWith("r1", "Zona Norte");
     // Solo cambió el nombre: la lista no se manda.
     expect(semanalesLib.guardarClientesRutaSemanal).not.toHaveBeenCalled();
-    expect(await within(document.body).findByText("Ruta guardada.")).toBeInTheDocument();
+    await waitFor(() => expect(volver).toHaveBeenCalledWith({ nombre: "Zona Norte", diaSemana: 2 }));
   });
 
   it("un nombre repetido (409) no guarda la lista y deja el error", async () => {
     vi.mocked(semanalesLib.renombrarRutaSemanal).mockRejectedValue(
       new ErrorApi("conflicto", 409, "Ya hay una ruta con ese nombre el martes."),
     );
-    const { usuario } = await abrir();
+    const { usuario, volver } = await abrir();
     const campo = screen.getByLabelText("Nombre de la ruta");
     await usuario.clear(campo);
     await usuario.type(campo, "Playas");
@@ -170,26 +171,9 @@ describe("EditarRutaSemanal", () => {
     await usuario.click(screen.getByRole("button", { name: "Guardar" }));
     expect(await screen.findByText("Ya hay una ruta con ese nombre el martes.")).toBeInTheDocument();
     expect(semanalesLib.guardarClientesRutaSemanal).not.toHaveBeenCalled();
+    expect(volver).not.toHaveBeenCalled();
   });
 
-  it("el aviso de guardado se limpia al agregar, quitar o tocar el nombre", async () => {
-    vi.mocked(semanalesLib.guardarClientesRutaSemanal).mockResolvedValue(
-      detalle([{ clienteId: "a", nombre: "Abarrotes A", valido: true }, { clienteId: "b", nombre: "Tienda B", valido: true }]),
-    );
-    const { usuario } = await abrir();
-    await usuario.click(screen.getByRole("button", { name: "Agregar Tienda B" }));
-    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
-    expect(await screen.findByText("Ruta guardada.")).toBeInTheDocument();
-
-    await usuario.click(screen.getByRole("button", { name: "Quitar Tienda B" }));
-    expect(screen.queryByText("Ruta guardada.")).toBeNull();
-
-    await usuario.click(screen.getByRole("button", { name: "Agregar Dulcería D" }));
-    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
-    expect(await screen.findByText("Ruta guardada.")).toBeInTheDocument();
-    await usuario.type(screen.getByLabelText("Nombre de la ruta"), "x");
-    expect(screen.queryByText("Ruta guardada.")).toBeNull();
-  });
 
   it("un nombre escrito y sin guardar cuenta como cambio pendiente al salir", async () => {
     const { usuario, volver } = await abrir();

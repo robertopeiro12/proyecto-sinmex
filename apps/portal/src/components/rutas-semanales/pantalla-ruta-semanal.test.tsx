@@ -12,10 +12,17 @@ vi.mock("@/lib/rutas-semanales", async (importOriginal) => {
   return { ...real, listarRutasSemanales: vi.fn(), crearRutaSemanal: vi.fn(), eliminarRutaSemanal: vi.fn() };
 });
 vi.mock("./editar-ruta-semanal", () => ({
-  EditarRutaSemanal: ({ id, onVolver }: { id: string; onVolver: () => void }) => (
+  EditarRutaSemanal: ({
+    id,
+    onVolver,
+  }: {
+    id: string;
+    onVolver: (guardada?: { nombre: string; diaSemana: number }) => void;
+  }) => (
     <div>
       <p>Editando {id}</p>
-      <button onClick={onVolver}>← Volver a Ruta Semanal</button>
+      <button onClick={() => onVolver()}>← Volver a Ruta Semanal</button>
+      <button onClick={() => onVolver({ nombre: "Playas", diaSemana: 1 })}>Guardar (simulado)</button>
     </div>
   ),
 }));
@@ -105,7 +112,7 @@ describe("PantallaRutaSemanal", () => {
     expect(await screen.findByText("Sin rutas este día.")).toBeInTheDocument();
   });
 
-  it("Crear ruta abre una ventana con solo Nombre y, al crear, se queda en el día con la confirmación", async () => {
+  it("Crear ruta abre una ventana con solo Nombre y, al crear, entra a su edición", async () => {
     vi.mocked(semanalesLib.crearRutaSemanal).mockResolvedValue({ ...ruta("nueva", 3, "Otay"), lista: [] });
     const usuario = userEvent.setup();
     render(<PantallaRutaSemanal sucursal="TJ" />);
@@ -114,18 +121,20 @@ describe("PantallaRutaSemanal", () => {
     const ventana = await screen.findByRole("dialog");
     expect(within(ventana).getAllByRole("textbox")).toHaveLength(1);
     await usuario.type(within(ventana).getByLabelText("Nombre"), "Otay");
-    vi.mocked(semanalesLib.listarRutasSemanales).mockResolvedValue([
-      ruta("r1", 1, "Zona Centro"),
-      ruta("r3", 3, "Playas", 5),
-      ruta("nueva", 3, "Otay", 0),
-    ]);
     await usuario.click(within(ventana).getByRole("button", { name: "Crear ruta" }));
 
     expect(semanalesLib.crearRutaSemanal).toHaveBeenCalledWith({ sucursal: "TJ", diaSemana: 3, nombre: "Otay" });
-    expect(await screen.findByText("Se creó la ruta «Otay» del miércoles. Agrégale sus clientes con Editar.")).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Otay" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Miércoles", selected: true })).toBeInTheDocument();
-    expect(screen.queryByText("Editando nueva")).toBeNull();
+    expect(await screen.findByText("Editando nueva")).toBeInTheDocument();
+  });
+
+  it("al guardar en la edición regresa a las pestañas, en el día de la ruta, con la confirmación", async () => {
+    const usuario = userEvent.setup();
+    render(<PantallaRutaSemanal sucursal="TJ" />);
+    await screen.findByText("Playas");
+    await usuario.click(screen.getByRole("button", { name: "Playas" }));
+    await usuario.click(await screen.findByRole("button", { name: "Guardar (simulado)" }));
+    expect(await screen.findByText("Se guardó la ruta «Playas» del lunes.")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Lunes", selected: true })).toBeInTheDocument();
   });
 
   it("al volver de editar una ruta de otro día, regresa a la pestaña de ese día", async () => {
