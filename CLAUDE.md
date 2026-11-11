@@ -721,7 +721,7 @@ usuario con sesion pasa.
       - **Migración** `20261111120000_nota_asignada_papel.sql`: `nota_asignada.papel_entregado`/`papel_revisado_en`/
         `papel_revisado_por_usuario_id` + check de que van juntos. A diferencia de `venta_nota`, el update **sí mueve
         `updated_at`** de la asignación (trigger genérico): inofensivo, la tablet ignora el papel.
-      - `FilaVendedorDia.notasNoEntregadas` (Dashboard y Flujo diario; `null` = sin revisar, en rojo si > 0;
+      - `FilaVendedorDia.notasNoEntregadas` (Dashboard y Flujo diario; `null` = sin revisar o sin nada que revisar (columna vacía, el tío prefiere vacío a un "0"), en rojo si > 0;
         `contarNotasNoEntregadas` en `reglas-flujo-diario.ts`). Tipos duplicados en `lib/flujo-diario.ts` del portal.
         `useCerrarConPendientes` (`use-detalle-abierto.ts`) pregunta antes de cerrar con casillas cambiadas a mano.
       - **Nube**: la migración se sube a `sinmex dev` después del merge, con el protocolo de push (pre-flight: columnas

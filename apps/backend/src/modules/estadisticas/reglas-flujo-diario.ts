@@ -34,8 +34,8 @@ export interface FilaVendedorDia {
   vehiculoAsignado: string | null;
   /**
    * Revision de notas de la tarde: cuantas notas de ese dia (asignadas y sus
-   * ventas a credito) se guardaron como NO entregadas. `null` = tiene notas por
-   * revisar y ninguna se ha revisado. Ver `contarNotasNoEntregadas`.
+   * ventas a credito) se guardaron como NO entregadas. `null` = no hay nada que
+   * revisar o nada se ha revisado (la columna sale vacia). Ver `contarNotasNoEntregadas`.
    */
   notasNoEntregadas: number | null;
 }
@@ -44,15 +44,16 @@ export interface FilaVendedorDia {
  * La columna "Notas de ventas". `porRevisar` = las notas de ese dia que se
  * piden (asignadas y ventas a credito con saldo, mas las ya revisadas aunque
  * hoy esten pagadas); `revisadas` = de esas, con la casilla guardada;
- * `noEntregadas` = guardadas en "no". Si hay notas por revisar y ninguna se ha
- * revisado, el dia no se ha revisado: `null`. Si no, cuantas no llegaron.
+ * `noEntregadas` = guardadas en "no". Si no hay nada que revisar, o hay notas y
+ * ninguna se ha revisado: `null` (la columna sale vacia; el tio prefiere vacio a un
+ * "0" que se confunda con "revisado y todo llego", 2026-11-11). Si no, cuantas no llegaron.
  */
 export function contarNotasNoEntregadas(c: {
   porRevisar: number;
   revisadas: number;
   noEntregadas: number;
 }): number | null {
-  if (c.porRevisar > 0 && c.revisadas === 0) return null;
+  if (c.porRevisar === 0 || c.revisadas === 0) return null;
   return c.noEntregadas;
 }
 

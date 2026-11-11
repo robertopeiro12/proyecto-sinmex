@@ -967,7 +967,7 @@ describe('Dashboard (e2e)', () => {
       expect(d.asignadasCobradas).toEqual([]);
       expect(d.asignadasPorEntregar).toEqual([]);
       expect(d.notasCredito).toEqual([]);
-      expect(await noEntregadasFlujo(menos(3))).toBe(0);
+      expect(await noEntregadasFlujo(menos(3))).toBeNull();
     });
 
     it('sin revisar, la columna del Flujo diario y del Dashboard es null', async () => {

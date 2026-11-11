@@ -39,8 +39,8 @@ export interface FilaVendedorDia {
   vehiculoAsignado: string | null;
   /**
    * Revision de notas de la tarde: cuantas notas de ese dia (asignadas y sus
-   * ventas a credito) se guardaron como NO entregadas. `null` = tiene notas por
-   * revisar y ninguna se ha revisado. Ver `contarNotasNoEntregadas`.
+   * ventas a credito) se guardaron como NO entregadas. `null` = no hay nada que
+   * revisar o nada se ha revisado (la columna sale vacia). Ver `contarNotasNoEntregadas`.
    */
   notasNoEntregadas: number | null;
 }

@@ -249,10 +249,10 @@ describe('contarNotasNoEntregadas', () => {
     ).toBeNull();
   });
 
-  it('sin notas por revisar: 0', () => {
+  it('sin notas por revisar: null (la columna sale vacia, no un 0)', () => {
     expect(
       contarNotasNoEntregadas({ porRevisar: 0, revisadas: 0, noEntregadas: 0 }),
-    ).toBe(0);
+    ).toBeNull();
   });
 
   it('revisado y todo llego: 0', () => {
