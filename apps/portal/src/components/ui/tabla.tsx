@@ -1,4 +1,5 @@
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, CSSProperties, ReactNode } from "react";
+import { colorDeSucursal } from "@/lib/sucursal-color";
 import { cn } from "@/lib/utils";
 import { Monto } from "./monto";
 
@@ -92,10 +93,30 @@ export function FilaVacia({ columnas, children }: { columnas: number; children: 
 }
 
 /** El encabezado de un grupo (un vehículo, un día): ocupa todo el ancho. */
-export function FilaGrupo({ columnas, children }: { columnas: number; children: ReactNode }) {
+/**
+ * Encabezado de un grupo de renglones. Con `sucursal` se pinta del color de esa sucursal
+ * (el mismo del menú), para distinguir los bloques de Tijuana y Mexicali con "Todas".
+ */
+export function FilaGrupo({
+  columnas,
+  sucursal,
+  children,
+}: {
+  columnas: number;
+  sucursal?: string;
+  children: ReactNode;
+}) {
   return (
     <tr>
-      <th colSpan={columnas} scope="rowgroup" className="border-b bg-menu px-3 py-2 text-left font-semibold">
+      <th
+        colSpan={columnas}
+        scope="rowgroup"
+        style={sucursal ? ({ "--suc": colorDeSucursal(sucursal) } as CSSProperties) : undefined}
+        className={cn(
+          "border-b px-3 py-2 text-left font-semibold",
+          sucursal ? "bg-sucursal text-white" : "bg-menu",
+        )}
+      >
         {children}
       </th>
     </tr>

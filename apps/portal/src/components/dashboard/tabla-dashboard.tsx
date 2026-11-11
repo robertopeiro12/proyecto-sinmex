@@ -217,7 +217,7 @@ export function TablaDashboard({
                 const nombre = nombreSucursal(g.sucursalCodigo);
                 return (
                   <Fragment key={g.sucursalCodigo}>
-                    <FilaGrupo columnas={COLUMNAS}>{nombre}</FilaGrupo>
+                    <FilaGrupo columnas={COLUMNAS} sucursal={g.sucursalCodigo}>{nombre}</FilaGrupo>
                     {g.filas.map(renglon)}
                     {bloque && <RenglonTotal texto={`Subtotal ${nombre}`} totales={bloque.totales} />}
                   </Fragment>

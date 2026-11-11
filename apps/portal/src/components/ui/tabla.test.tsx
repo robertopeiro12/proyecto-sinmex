@@ -30,6 +30,21 @@ function Ejemplo({ densidad }: { densidad?: "normal" | "compacta" }) {
 }
 
 describe("Tabla", () => {
+  it("FilaGrupo con sucursal se pinta del color de esa sucursal; sin ella queda gris", () => {
+    render(
+      <table>
+        <tbody>
+          <FilaGrupo columnas={2} sucursal="MX">Mexicali</FilaGrupo>
+          <FilaGrupo columnas={2}>Nissan-01</FilaGrupo>
+        </tbody>
+      </table>,
+    );
+    const mx = screen.getByRole("rowheader", { name: "Mexicali" });
+    expect(mx.style.getPropertyValue("--suc")).toBe("var(--suc-mx)");
+    expect(mx).toHaveClass("bg-sucursal", "text-white");
+    expect(screen.getByRole("rowheader", { name: "Nissan-01" })).toHaveClass("bg-menu");
+  });
+
   it("Review Focus 5: la caja se desplaza sola y no empuja la página; con alto máximo fija el encabezado", () => {
     render(<Ejemplo />);
     const caja = screen.getByTestId("caja");

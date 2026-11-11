@@ -751,7 +751,7 @@ usuario con sesion pasa.
     de antes (`lib/ventas.ts`, `lib/reportes.ts`, `lib/reporte-ventas.ts`, `lib/tesoreria.ts`) solo re-exportan.
   - **El color de la sucursal vive en `lib/sucursal-color.ts`** (TJ azul pacífico, MX morado jamaica, todas = tinta) y
     en las variables `--suc-…` de `globals.css`. Una sucursal nueva usa la tinta hasta que se agregue en los dos
-    lugares. Es la única parte llamativa del portal: no se usa para otra cosa.
+    lugares. Es la única parte llamativa del portal: no se usa para otra cosa, salvo el renglón de grupo de cada sucursal (`FilaGrupo sucursal=…`) en Dashboard y Flujo diario con "Todas" (Roberto, 2026-11-11).
   - El marco es `components/layout/marco-portal.tsx`: sucursal arriba en su color, secciones plegables, usuario y
     "Cerrar sesión" abajo, ☰ lo esconde (se recuerda con `lib/almacen-local.ts`), y el `<title>` de la pestaña
     ("Ventas | JAWA Tijuana"). Una pantalla nueva se agrega en `nav-config.ts`; mientras su `page.tsx` sea un
