@@ -105,7 +105,7 @@ describe("PantallaRutaSemanal", () => {
     expect(await screen.findByText("Sin rutas este día.")).toBeInTheDocument();
   });
 
-  it("Crear ruta abre una ventana con solo Nombre y, al crear, abre la edición", async () => {
+  it("Crear ruta abre una ventana con solo Nombre y, al crear, se queda en el día con la confirmación", async () => {
     vi.mocked(semanalesLib.crearRutaSemanal).mockResolvedValue({ ...ruta("nueva", 3, "Otay"), lista: [] });
     const usuario = userEvent.setup();
     render(<PantallaRutaSemanal sucursal="TJ" />);
@@ -114,10 +114,28 @@ describe("PantallaRutaSemanal", () => {
     const ventana = await screen.findByRole("dialog");
     expect(within(ventana).getAllByRole("textbox")).toHaveLength(1);
     await usuario.type(within(ventana).getByLabelText("Nombre"), "Otay");
+    vi.mocked(semanalesLib.listarRutasSemanales).mockResolvedValue([
+      ruta("r1", 1, "Zona Centro"),
+      ruta("r3", 3, "Playas", 5),
+      ruta("nueva", 3, "Otay", 0),
+    ]);
     await usuario.click(within(ventana).getByRole("button", { name: "Crear ruta" }));
 
     expect(semanalesLib.crearRutaSemanal).toHaveBeenCalledWith({ sucursal: "TJ", diaSemana: 3, nombre: "Otay" });
-    expect(await screen.findByText("Editando nueva")).toBeInTheDocument();
+    expect(await screen.findByText("Se creó la ruta «Otay» del miércoles. Agrégale sus clientes con Editar.")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Otay" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Miércoles", selected: true })).toBeInTheDocument();
+    expect(screen.queryByText("Editando nueva")).toBeNull();
+  });
+
+  it("al volver de editar una ruta de otro día, regresa a la pestaña de ese día", async () => {
+    const usuario = userEvent.setup();
+    render(<PantallaRutaSemanal sucursal="TJ" />);
+    await screen.findByText("Playas");
+    await usuario.click(screen.getByRole("tab", { name: "Lunes" }));
+    await usuario.click(await screen.findByRole("button", { name: "Zona Centro" }));
+    await usuario.click(await screen.findByRole("button", { name: "← Volver a Ruta Semanal" }));
+    expect(await screen.findByRole("tab", { name: "Lunes", selected: true })).toBeInTheDocument();
   });
 
   it("un error al crear (nombre repetido) se ve en la ventana", async () => {

@@ -150,9 +150,26 @@ describe("EditarRutaSemanal", () => {
     const campo = screen.getByLabelText("Nombre de la ruta");
     await usuario.clear(campo);
     await usuario.type(campo, "Zona Norte");
-    await usuario.click(screen.getByRole("button", { name: "Guardar nombre" }));
+    expect(screen.queryByRole("button", { name: "Guardar nombre" })).toBeNull();
+    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
     expect(semanalesLib.renombrarRutaSemanal).toHaveBeenCalledWith("r1", "Zona Norte");
-    expect(await within(document.body).findByText("Nombre guardado.")).toBeInTheDocument();
+    // Solo cambió el nombre: la lista no se manda.
+    expect(semanalesLib.guardarClientesRutaSemanal).not.toHaveBeenCalled();
+    expect(await within(document.body).findByText("Ruta guardada.")).toBeInTheDocument();
+  });
+
+  it("un nombre repetido (409) no guarda la lista y deja el error", async () => {
+    vi.mocked(semanalesLib.renombrarRutaSemanal).mockRejectedValue(
+      new ErrorApi("conflicto", 409, "Ya hay una ruta con ese nombre el martes."),
+    );
+    const { usuario } = await abrir();
+    const campo = screen.getByLabelText("Nombre de la ruta");
+    await usuario.clear(campo);
+    await usuario.type(campo, "Playas");
+    await usuario.click(screen.getByRole("button", { name: "Agregar Dulcería D" }));
+    await usuario.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(await screen.findByText("Ya hay una ruta con ese nombre el martes.")).toBeInTheDocument();
+    expect(semanalesLib.guardarClientesRutaSemanal).not.toHaveBeenCalled();
   });
 
   it("el aviso de guardado se limpia al agregar, quitar o tocar el nombre", async () => {

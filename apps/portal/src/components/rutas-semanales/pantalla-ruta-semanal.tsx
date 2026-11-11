@@ -50,14 +50,22 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
   const [rutas, setRutas] = useState<RutaSemanalResumen[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dia, setDia] = useState(() => diaDeHoy(hoyEnTijuana()));
-  // Las pestañas no son controladas: su valor inicial se fija una sola vez. Pasarles `dia`
-  // (que cambia con `onCambio`) hace que Base UI avise en la consola.
-  const [diaInicial] = useState(dia);
+  // Las pestañas no son controladas: su valor inicial se fija al montarlas y no cambia con
+  // `onCambio` (Base UI avisa en la consola si cambia). Se actualiza solo al abrir la edición,
+  // porque entonces las pestañas se desmontan y al volver se montan en el día que se dejó.
+  const [diaInicial, setDiaInicial] = useState(dia);
   const [editando, setEditando] = useState<string | null>(null);
   const [creando, setCreando] = useState(false);
   const [errorEliminar, setErrorEliminar] = useState<string | null>(null);
   const [eliminando, setEliminando] = useState(false);
+  const [creada, setCreada] = useState<string | null>(null);
   const { confirmar, ventana } = useConfirmar();
+
+  function abrir(id: string) {
+    setDiaInicial(dia);
+    setCreada(null);
+    setEditando(id);
+  }
 
   const cargar = useCallback(() => {
     setError(null);
@@ -109,6 +117,7 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
       />
       {error ? <Aviso tono="error">{error}</Aviso> : null}
       {errorEliminar ? <Aviso tono="error">{errorEliminar}</Aviso> : null}
+      {creada ? <Aviso tono="exito">{creada}</Aviso> : null}
       {rutas === null ? (
         error ? null : (
           <EstadoPantalla tipo="cargando" />
@@ -121,7 +130,7 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
           pestanas={DIAS_SEMANA.map((nombre, i) => ({
             valor: String(i + 1),
             etiqueta: capitalizar(nombre),
-            contenido: <RutasDelDia rutas={rutasDelDia(rutas, i + 1)} eliminando={eliminando} onAbrir={setEditando} onEliminar={(r) => void eliminar(r)} />,
+            contenido: <RutasDelDia rutas={rutasDelDia(rutas, i + 1)} eliminando={eliminando} onAbrir={abrir} onEliminar={(r) => void eliminar(r)} />,
           }))}
         />
       )}
@@ -130,9 +139,11 @@ function RutasSemanales({ sucursal }: { sucursal: string }) {
         sucursal={sucursal}
         diaSemana={dia}
         alCerrar={() => setCreando(false)}
-        alCrear={(id) => {
+        alCrear={(nueva) => {
+          // Se queda en la lista, en la pestaña del día en que se creó, con la confirmación.
           setCreando(false);
-          setEditando(id);
+          setCreada(`Se creó la ruta «${nueva.nombre}» del ${nombreDiaSemana(nueva.diaSemana)}. Agrégale sus clientes con Editar.`);
+          void cargar();
         }}
       />
       {ventana}
@@ -212,7 +223,7 @@ function VentanaCrear({
   sucursal: string;
   diaSemana: number;
   alCerrar: () => void;
-  alCrear: (id: string) => void;
+  alCrear: (nueva: RutaSemanalResumen) => void;
 }) {
   const [nombre, setNombre] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -231,7 +242,7 @@ function VentanaCrear({
     try {
       const nueva = await crearRutaSemanal({ sucursal, diaSemana, nombre: nombre.trim() });
       setNombre("");
-      alCrear(nueva.id);
+      alCrear(nueva);
     } catch (err) {
       setError(mensajeDe(err, "No se pudo crear la ruta."));
     } finally {

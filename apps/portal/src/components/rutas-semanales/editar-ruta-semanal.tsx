@@ -102,38 +102,41 @@ export function EditarRutaSemanal({
     }
   }
 
+  /**
+   * Un solo "Guardar" para el nombre y la lista. Primero el nombre (si cambió): si
+   * choca con otra ruta del día (409) no se toca la lista. Después la lista (si cambió).
+   */
   async function guardar() {
     setOcupado(true);
     setError(null);
     setAviso(null);
     try {
-      const detalle = await guardarClientesRutaSemanal(
-        id,
-        lista.map((c) => c.clienteId),
-      );
-      setRuta(detalle);
-      setOriginal(detalle.lista);
-      setLista(detalle.lista);
+      if (nombreSucio) {
+        try {
+          const renombrada = await renombrarRutaSemanal(id, nombre.trim());
+          setRuta((actual) => (actual ? { ...actual, nombre: renombrada.nombre } : renombrada));
+          setNombre(renombrada.nombre);
+        } catch (err) {
+          setError(mensajeDe(err, "No se pudo cambiar el nombre."));
+          return;
+        }
+      }
+      if (listaSucia) {
+        try {
+          const detalle = await guardarClientesRutaSemanal(
+            id,
+            lista.map((c) => c.clienteId),
+          );
+          setRuta(detalle);
+          setOriginal(detalle.lista);
+          setLista(detalle.lista);
+        } catch (err) {
+          // Es una transacción: si falló, la lista del servidor no cambió y las ediciones se quedan.
+          setError(mensajeDe(err, "No se pudo guardar la ruta. No se cambió nada; vuelve a intentar."));
+          return;
+        }
+      }
       setAviso("Ruta guardada.");
-    } catch (err) {
-      // Es una transacción: si falló, la ruta del servidor no cambió y las ediciones se quedan.
-      setError(mensajeDe(err, "No se pudo guardar la ruta. No se cambió nada; vuelve a intentar."));
-    } finally {
-      setOcupado(false);
-    }
-  }
-
-  async function guardarNombre() {
-    setOcupado(true);
-    setError(null);
-    setAviso(null);
-    try {
-      const detalle = await renombrarRutaSemanal(id, nombre.trim());
-      setRuta((actual) => (actual ? { ...actual, nombre: detalle.nombre } : detalle));
-      setNombre(detalle.nombre);
-      setAviso("Nombre guardado.");
-    } catch (err) {
-      setError(mensajeDe(err, "No se pudo cambiar el nombre."));
     } finally {
       setOcupado(false);
     }
@@ -175,7 +178,11 @@ export function EditarRutaSemanal({
               <Button type="button" variant="outline" disabled={ocupado} onClick={() => void eliminar()}>
                 Eliminar ruta
               </Button>
-              <Button type="button" disabled={!listaSucia || ocupado} onClick={() => void guardar()}>
+              <Button
+                type="button"
+                disabled={!sucio || ocupado || nombre.trim() === ""}
+                onClick={() => void guardar()}
+              >
                 Guardar
               </Button>
             </>
@@ -189,7 +196,7 @@ export function EditarRutaSemanal({
 
       {ruta ? (
         <>
-          <div className="flex flex-wrap items-end gap-2">
+          <div className="max-w-sm">
             <Campo id="ruta-semanal-nombre" etiqueta="Nombre de la ruta">
               <Entrada
                 autoComplete="off"
@@ -202,14 +209,6 @@ export function EditarRutaSemanal({
                 }}
               />
             </Campo>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={ocupado || nombre.trim() === "" || nombre.trim() === ruta.nombre}
-              onClick={() => void guardarNombre()}
-            >
-              Guardar nombre
-            </Button>
           </div>
 
           <div className="grid gap-6 md:grid-cols-2">
