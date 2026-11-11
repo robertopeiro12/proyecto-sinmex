@@ -138,8 +138,10 @@ export class DetalleRepository {
       pendiente: string;
       hora: string;
       entregada: boolean | null;
+      status: VentaFila['status'];
     }>`
-      select vn.id, vn.folio, vn.papel_entregado as entregada, cl.nombre as cliente, cl.id as cliente_id,
+      select vn.id, vn.folio, vn.papel_entregado as entregada, vn.status,
+             cl.nombre as cliente, cl.id as cliente_id,
              v.id as vendedor_id,
              v.nombre as vendedor, vn.contado_credito,
              vn.monto_total::text as total,
@@ -172,6 +174,7 @@ export class DetalleRepository {
       pendienteCentavos: aCentavos(x.pendiente),
       hora: x.hora,
       entregada: x.entregada,
+      status: x.status,
     }));
   }
 
@@ -222,7 +225,8 @@ export class DetalleRepository {
   /**
    * Las notas asignadas vivas del vendedor ese dia (de ventas vivas), con el
    * saldo de HOY de la venta (monto - abonos vivos, nunca menor que 0) y la
-   * marca de papel de la asignacion.
+   * marca de papel de la asignacion. Sin las que tienen saldo y no se cobran
+   * (status fuera de `pendiente`/`abonado`, p. ej. cuenta perdida): no se piden.
    */
   private async asignadas(
     vendedorId: string,
@@ -238,16 +242,19 @@ export class DetalleRepository {
     }>`
       select vn.id, vn.folio, cl.nombre as cliente,
              vn.monto_total::text as total,
-             greatest(vn.monto_total - coalesce((
-               select sum(a.monto) from cobranza_abono a
-                where a.venta_nota_id = vn.id and a.deleted_at is null
-             ), 0), 0)::text as pendiente,
+             greatest(vn.monto_total - ab.abonado, 0)::text as pendiente,
              na.papel_entregado as entregada
         from nota_asignada na
         join venta_nota vn on vn.id = na.venta_nota_id
         join cliente cl on cl.id = vn.cliente_id
+        cross join lateral (
+          select coalesce(sum(a.monto), 0) as abonado from cobranza_abono a
+           where a.venta_nota_id = vn.id and a.deleted_at is null
+        ) ab
        where na.deleted_at is null and vn.deleted_at is null
          and na.vendedor_id = ${vendedorId}::uuid and na.fecha = ${fecha}::date
+         and (vn.status in ('pendiente', 'abonado')
+              or vn.monto_total - ab.abonado <= 0)
     `.execute(this.db);
     return r.rows.map((x) => ({
       ventaNotaId: x.id,
@@ -308,8 +315,16 @@ export class DetalleRepository {
            for update of na
         `.execute(trx);
         for (const x of r.rows) porVenta.set(x.venta_nota_id, x.id);
-        if (ventaIds.some((id) => !porVenta.has(id)))
-          return { invalido: 'asignada' as const };
+        const mala = ventaIds.find((id) => !porVenta.has(id));
+        if (mala !== undefined) {
+          // Para el mensaje: el folio de esa venta, si existe.
+          const f = await sql<{ folio: string }>`
+            select folio from venta_nota where id = ${mala}::uuid
+          `.execute(trx);
+          return {
+            invalido: f.rows[0] ? { folio: f.rows[0].folio } : 'asignada',
+          };
+        }
       }
 
       // Solo las que de verdad cambian: quien y cuando quedan del primero que

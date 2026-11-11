@@ -41,7 +41,8 @@ export class DashboardService {
     ahora?: Date,
   ): Promise<void> {
     const hoy = hoyEnTijuana(ahora);
-    const pedida = q.fecha?.trim() || null;
+    // El DTO ya exige `AAAA-MM-DD` si viene (vacia no es "hoy").
+    const pedida = q.fecha ?? null;
     if (pedida !== null && !fechaValidaDashboard(pedida, hoy))
       throw new BadRequestException('Ese día ya no se puede revisar.');
     const fecha = pedida ?? hoy;

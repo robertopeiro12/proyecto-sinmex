@@ -699,6 +699,9 @@ describe('Dashboard (e2e)', () => {
     let nuevaAntier: Nota;
     let asigAntier: Nota;
     let asigDeDora: Nota;
+    let nuevaPerdida: Nota;
+    let asigPerdida: Nota;
+    let asigPerdidaHoy: Nota;
 
     /** Venta a credito viva de `vendedorId` en `fecha`, con un abono opcional. */
     const credito = async (
@@ -757,6 +760,43 @@ describe('Dashboard (e2e)', () => {
       }
       return { id, folio };
     };
+
+    /** Un pago posterior que deja la nota en 0. */
+    const liquidar = async (nota: Nota, monto: string, cobrador: string) => {
+      const fecha = hoyEnTijuana();
+      const cobroId = await cobroParaNota(db, nota.id, {
+        vendedorId: cobrador,
+        monto,
+        fecha,
+      });
+      await db
+        .insertInto('cobranza_abono')
+        .values({
+          venta_nota_id: nota.id,
+          cobro_id: cobroId,
+          vendedor_id: cobrador,
+          fecha_pago: fecha,
+          fecha_operacion: fecha,
+          monto,
+          tipo: 'abono',
+          saldo_pendiente: '0.00',
+          metodo_pago: 'efectivo',
+          origen: 'cobro',
+        })
+        .execute();
+      await db
+        .updateTable('venta_nota')
+        .set({ status: 'pagada' })
+        .where('id', '=', nota.id)
+        .execute();
+    };
+
+    const perdida = (nota: Nota) =>
+      db
+        .updateTable('venta_nota')
+        .set({ status: 'cuenta_perdida' })
+        .where('id', '=', nota.id)
+        .execute();
 
     const asignar = (nota: Nota, vendedorId: string, fecha: string) =>
       db
@@ -866,6 +906,15 @@ describe('Dashboard (e2e)', () => {
       // Una asignada hoy a otra vendedora.
       asigDeDora = await credito(menos(12), ceci, '15.00');
       await asignar(asigDeDora, dora, hoy);
+      // Cuenta perdida con saldo: no se pide (ni hoy ni hace 3 dias).
+      asigPerdidaHoy = await credito(menos(12), dora, '55.00');
+      await perdida(asigPerdidaHoy);
+      await asignar(asigPerdidaHoy, ceci, hoy);
+      nuevaPerdida = await credito(menos(3), ceci, '65.00');
+      await perdida(nuevaPerdida);
+      asigPerdida = await credito(menos(12), dora, '75.00');
+      await perdida(asigPerdida);
+      await asignar(asigPerdida, ceci, menos(3));
     });
 
     it('el detalle trae las tres listas: cobradas, por entregar (con abonadas) y nuevas con saldo', async () => {
@@ -900,6 +949,25 @@ describe('Dashboard (e2e)', () => {
       expect(d.notasCredito.map((n) => n.folio)).not.toContain(
         nuevaPagadaPorOtro.folio,
       );
+      // La asignada en cuenta perdida no sale en ninguna lista.
+      const todas = [...d.asignadasCobradas, ...d.asignadasPorEntregar];
+      expect(todas.map((n) => n.ventaNotaId)).not.toContain(asigPerdidaHoy.id);
+    });
+
+    it('cuenta perdida con saldo (asignada o nueva) no se pide y no vuelve null la columna', async () => {
+      // Hace 3 dias: el Dashboard ya no lo da, el Flujo diario si.
+      const d = (
+        await request(app.getHttpServer())
+          .get(
+            `/reportes/flujo-diario/vendedor?${new URLSearchParams({ fecha: menos(3), vendedor: ceci }).toString()}`,
+          )
+          .set('Cookie', cookieGeneral)
+          .expect(200)
+      ).body as DetalleVendedorDia;
+      expect(d.asignadasCobradas).toEqual([]);
+      expect(d.asignadasPorEntregar).toEqual([]);
+      expect(d.notasCredito).toEqual([]);
+      expect(await noEntregadasFlujo(menos(3))).toBe(0);
     });
 
     it('sin revisar, la columna del Flujo diario y del Dashboard es null', async () => {
@@ -973,6 +1041,28 @@ describe('Dashboard (e2e)', () => {
       ).toBe(false);
     });
 
+    it('la asignada que no vale dice su folio en el 400', async () => {
+      const r = await guardar(cookieGeneral, {
+        vendedor: ceci,
+        fecha: hoyEnTijuana(),
+        notas: [],
+        asignadas: [{ ventaNotaId: asigDeDora.id, entregada: true }],
+      }).expect(400);
+      expect(JSON.stringify(r.body)).toContain(
+        `La nota ${asigDeDora.folio} no se puede revisar.`,
+      );
+    });
+
+    it('una fecha vacia o con otro formato es 400 (no se toma como hoy)', async () => {
+      for (const fecha of ['', '2026/11/11', '11-11-2026'])
+        await guardar(cookieGeneral, {
+          vendedor: ceci,
+          fecha,
+          notas: [{ folio: nuevaHoy.folio, entregada: true }],
+        }).expect(400);
+      expect(await papelVenta(nuevaHoy)).toBe(false);
+    });
+
     it('con fecha, una nota nueva de otro dia es 400 (sin fecha se acepta, como antes)', async () => {
       const r = await guardar(cookieGeneral, {
         vendedor: ceci,
@@ -1043,6 +1133,31 @@ describe('Dashboard (e2e)', () => {
         notas: [],
         asignadas: [{ ventaNotaId: asigSinPago.id, entregada: true }],
       }).expect(404);
+    });
+
+    it('lo revisado como no entregado y pagado despues sigue en su lista y sigue contando', async () => {
+      // De la revision de hoy: nuevaHoy y asigSinPago quedaron en "no".
+      await liquidar(nuevaHoy, '50.00', dora);
+      await liquidar(asigSinPago, '70.00', ceci);
+      const d = await detalle(hoyEnTijuana());
+      expect(d.notasCredito).toEqual([
+        expect.objectContaining({
+          ventaNotaId: nuevaHoy.id,
+          pendienteCentavos: 0,
+          entregada: false,
+        }),
+      ]);
+      expect(d.asignadasCobradas).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            ventaNotaId: asigSinPago.id,
+            pendienteCentavos: 0,
+            entregada: false,
+          }),
+        ]),
+      );
+      expect(ids(d.asignadasPorEntregar)).not.toContain(asigSinPago.id);
+      expect(await noEntregadasFlujo(hoyEnTijuana())).toBe(2);
     });
   });
 });

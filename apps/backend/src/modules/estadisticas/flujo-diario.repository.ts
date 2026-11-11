@@ -177,17 +177,22 @@ export class FlujoDiarioRepository {
           on rd.vendedor_id = d.vendedor_id and rd.fecha = d.fecha
          and rd.deleted_at is null
         left join vehiculo va on va.id = rd.vehiculo_id
-        -- Revision de papel de la tarde (Ruta Diaria parte 2): sus asignadas de
-        -- ese dia y sus ventas a credito de ese dia (una que tambien es
-        -- asignada cuenta una vez, como asignada). Se piden las que deben algo
-        -- (monto - abonos vivos > 0) y las ya revisadas aunque hoy esten pagadas.
+        -- Revision de papel de la tarde (Ruta Diaria parte 2), lo mismo que la
+        -- ventana (reglas-detalle.ts): sus asignadas de ese dia y sus ventas a
+        -- credito de ese dia (una que tambien es asignada cuenta una vez, como
+        -- asignada). Se piden las que se cobran (pendiente/abonado con
+        -- saldo) y las ya revisadas aunque hoy esten pagadas. Una asignada con
+        -- saldo que no se cobra (cuenta perdida) no cuenta ni revisada.
         left join lateral (
           select count(*) filter (
-                   where n.entregada is not null or n.saldo > 0)::int as por_revisar,
+                   where n.entregada is not null
+                      or (n.saldo > 0 and n.status in ('pendiente', 'abonado'))
+                 )::int as por_revisar,
                  count(*) filter (where n.entregada is not null)::int as revisadas,
                  count(*) filter (where n.entregada = false)::int as no_entregadas
             from (
-              select na.papel_entregado as entregada,
+              select true as es_asignada, na.papel_entregado as entregada,
+                     vn.status,
                      vn.monto_total - coalesce((
                        select sum(a.monto) from cobranza_abono a
                         where a.venta_nota_id = vn.id and a.deleted_at is null
@@ -197,7 +202,7 @@ export class FlujoDiarioRepository {
                where na.deleted_at is null and vn.deleted_at is null
                  and na.vendedor_id = d.vendedor_id and na.fecha = d.fecha
               union all
-              select vn.papel_entregado,
+              select false, vn.papel_entregado, vn.status,
                      vn.monto_total - coalesce((
                        select sum(a.monto) from cobranza_abono a
                         where a.venta_nota_id = vn.id and a.deleted_at is null
@@ -210,6 +215,9 @@ export class FlujoDiarioRepository {
                     where na.deleted_at is null and na.venta_nota_id = vn.id
                       and na.vendedor_id = d.vendedor_id and na.fecha = d.fecha)
             ) n
+           -- La asignada con saldo que no se cobra no sale en la ventana.
+           where not (n.es_asignada and n.saldo > 0
+                      and n.status not in ('pendiente', 'abonado'))
         ) pn on true
        where ${sql.join(condiciones, sql` and `)}
     `.execute(this.db);

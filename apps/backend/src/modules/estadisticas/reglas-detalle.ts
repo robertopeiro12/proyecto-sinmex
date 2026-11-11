@@ -61,15 +61,17 @@ export interface DetalleVendedorDia {
   gastos: { descripcion: string; montoCentavos: number }[];
   /**
    * "Notas Nuevas x Cobrar Entregadas": sus ventas a credito de ese dia que
-   * todavia deben algo. Una que tambien le asignaron ese dia sale solo como
-   * asignada. Orden: cliente, folio.
+   * todavia se cobran (`pendiente`/`abonado` con saldo) o que ya se revisaron
+   * (aunque hoy esten pagadas). Una que tambien le asignaron ese dia sale solo
+   * como asignada. Orden: cliente, folio.
    */
   notasCredito: NotaRevision[];
   /** "Notas Asignadas Cobradas": asignadas ese dia que hoy deben 0. Orden: cliente, folio. */
   asignadasCobradas: NotaRevision[];
   /**
    * "Notas Asignadas NO cobradas por Entregar": asignadas ese dia con saldo
-   * (las abonadas tambien). Orden: cliente, folio.
+   * (las abonadas tambien). Una con saldo fuera de `pendiente`/`abonado`
+   * (cuenta perdida) no sale en ninguna de las dos. Orden: cliente, folio.
    */
   asignadasPorEntregar: NotaRevision[];
   /**
@@ -128,7 +130,10 @@ export interface DetalleDia {
 
 /* ---- Filas planas que entrega el repositorio ---- */
 
-/** Una `nota_asignada` viva del vendedor ese dia, con el saldo de hoy de su venta. */
+/**
+ * Una `nota_asignada` viva del vendedor ese dia, con el saldo de hoy de su
+ * venta. El repositorio ya quito las que tienen saldo y no se cobran.
+ */
 export type AsignadaFila = NotaRevision;
 
 export interface VentaFila {
@@ -145,7 +150,16 @@ export interface VentaFila {
   hora: string;
   /** `venta_nota.papel_entregado`. */
   entregada: boolean | null;
+  /** `venta_nota.status`. */
+  status: 'pagada' | 'pendiente' | 'abonado' | 'cuenta_perdida' | 'promocion';
 }
+
+/**
+ * Solo se pide el papel de una nota que todavia se cobra: `pendiente` o
+ * `abonado` con saldo. Una en cuenta perdida con saldo no se pide.
+ */
+const seCobra = (status: VentaFila['status'], pendienteCentavos: number) =>
+  pendienteCentavos > 0 && (status === 'pendiente' || status === 'abonado');
 
 export interface LineaFila {
   ventaId: string;
@@ -408,9 +422,10 @@ export function armarDetalleVendedor(
     ...atendidos.filter((a) => !enRuta.has(a.clienteId)).map(sinId),
   ];
 
-  // Revision de la tarde: solo se piden notas que todavia deben algo; una nota
+  // Revision de la tarde: solo se piden notas que todavia se cobran, mas las ya
+  // revisadas (la ventana cuadra con la columna del Flujo diario); una nota
   // nueva que tambien le asignaron ese dia sale una vez, como asignada.
-  const asignadas = (filas.asignadas ?? []).map((a) => ({ ...a }));
+  const asignadas = filas.asignadas ?? [];
   const asignadaIds = new Set(asignadas.map((a) => a.ventaNotaId));
 
   let corte: Corte | null = null;
@@ -460,8 +475,8 @@ export function armarDetalleVendedor(
         .filter(
           (v) =>
             v.contadoCredito === 'credito' &&
-            v.pendienteCentavos > 0 &&
-            !asignadaIds.has(v.ventaId),
+            !asignadaIds.has(v.ventaId) &&
+            (v.entregada !== null || seCobra(v.status, v.pendienteCentavos)),
         )
         .map((v) => ({
           ventaNotaId: v.ventaId,

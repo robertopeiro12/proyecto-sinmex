@@ -45,6 +45,7 @@ const venta = (extra: Partial<VentaFila>): VentaFila => ({
   pendienteCentavos: 0,
   hora: '2026-11-07T18:00:00.000Z',
   entregada: null,
+  status: 'pendiente',
   ...extra,
 });
 
@@ -305,6 +306,59 @@ describe('revision de notas en la tarde (Ruta Diaria parte 2)', () => {
         pendienteCentavos: 300,
         entregada: null,
       },
+    ]);
+  });
+
+  it('notasCredito: una con saldo fuera de pendiente/abonado (cuenta perdida) no se pide', () => {
+    const d = armarDetalleVendedor(base, {
+      ...vacio,
+      ventas: [
+        venta({
+          ventaId: 'x1',
+          folio: 'TJ1',
+          contadoCredito: 'credito',
+          pendienteCentavos: 700,
+          status: 'cuenta_perdida',
+        }),
+        venta({
+          ventaId: 'x2',
+          folio: 'TJ2',
+          contadoCredito: 'credito',
+          pendienteCentavos: 700,
+          status: 'abonado',
+        }),
+      ],
+    });
+    expect(d.notasCredito.map((n) => n.ventaNotaId)).toEqual(['x2']);
+  });
+
+  it('notasCredito conserva las ya revisadas aunque hoy esten pagadas (cuadra con la columna)', () => {
+    const d = armarDetalleVendedor(base, {
+      ...vacio,
+      ventas: [
+        venta({
+          ventaId: 'x1',
+          folio: 'TJ1',
+          contadoCredito: 'credito',
+          pendienteCentavos: 0,
+          status: 'pagada',
+          entregada: false,
+        }),
+        venta({
+          ventaId: 'x2',
+          folio: 'TJ2',
+          contadoCredito: 'credito',
+          pendienteCentavos: 0,
+          status: 'pagada',
+        }),
+      ],
+    });
+    expect(d.notasCredito).toEqual([
+      expect.objectContaining({
+        ventaNotaId: 'x1',
+        pendienteCentavos: 0,
+        entregada: false,
+      }),
     ]);
   });
 
