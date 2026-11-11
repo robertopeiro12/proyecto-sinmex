@@ -131,6 +131,8 @@ export class SincronizacionService {
       camposEgreso,
       notasPendientes,
       rutas,
+      rutasDia,
+      notasAsignadas,
       promociones,
       cargas,
     ] = await Promise.all([
@@ -149,6 +151,9 @@ export class SincronizacionService {
       this.repo.notasPendientes(vendedor.sucursal_id, desde),
       // T-37: la ruta diaria. Por VENDEDOR, no por sucursal.
       this.repo.rutas(vendedor.id, desde),
+      // Ruta semanal y diaria: vehiculo/nombre del dia y notas asignadas, tambien por VENDEDOR.
+      this.repo.rutasDia(vendedor.id, desde),
+      this.repo.notasAsignadas(vendedor.id, desde),
       // T-74: por SUCURSAL, como los clientes.
       this.repo.promociones(vendedor.sucursal_id, desde),
       // T-27: las cargas del vendedor. Por VENDEDOR, como la ruta.
@@ -197,6 +202,8 @@ export class SincronizacionService {
       },
       notas_pendientes: notasPendientes,
       rutas,
+      rutas_dia: rutasDia,
+      notas_asignadas: notasAsignadas,
       promociones,
       cargas,
     };

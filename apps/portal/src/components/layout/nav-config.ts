@@ -27,7 +27,7 @@ export const navSections: NavSection[] = [
       { label: "Procesos", href: "/operacion/procesos", pronto: true },
       { label: "Notificaciones", href: "/operacion/notificaciones", pronto: true },
       { label: "Ruta Diaria", href: "/operacion/ruta-diaria" },
-      { label: "Ruta Semanal", href: "/operacion/ruta-semanal", pronto: true },
+      { label: "Ruta Semanal", href: "/operacion/ruta-semanal" },
       // Nuevas.
       { label: "Registrar venta", href: "/operacion/registrar-venta" },
       { label: "Ventas", href: "/operacion/ventas" },

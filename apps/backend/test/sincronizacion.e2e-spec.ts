@@ -233,7 +233,8 @@ describe('Sincronizacion pull/push (e2e)', () => {
     dias?: number;
     fecha?: string;
     orden?: number;
-    origen?: 'oficina' | 'vendedor';
+    origen?: 'oficina' | 'vendedor' | 'semanal';
+    recado?: string;
     tipo?: 'diaria' | 'semanal';
     borrada?: boolean;
     actualizadaHace?: string;
@@ -249,6 +250,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
             sql<string>`current_date + ${valores.dias ?? 0}::int`,
           orden: valores.orden ?? 1,
           origen: valores.origen ?? 'oficina',
+          recado: valores.recado ?? null,
           tipo: valores.tipo ?? 'diaria',
           deleted_at: valores.borrada ? new Date() : null,
           // El trigger solo corre en UPDATE: en el INSERT se puede fechar hacia
@@ -850,6 +852,16 @@ describe('Sincronizacion pull/push (e2e)', () => {
     // T-37: la ruta diaria apunta a vendedor y cliente.
     await db
       .deleteFrom('ruta')
+      .where('vendedor_id', 'in', [vendedorId, vendedorAjenoId])
+      .execute();
+    // Ruta semanal y diaria: la ruta del dia y las notas asignadas apuntan a
+    // vendedor, vehiculo y nota.
+    await db
+      .deleteFrom('ruta_dia')
+      .where('vendedor_id', 'in', [vendedorId, vendedorAjenoId])
+      .execute();
+    await db
+      .deleteFrom('nota_asignada')
       .where('vendedor_id', 'in', [vendedorId, vendedorAjenoId])
       .execute();
     // T-38: las jornadas proyectadas apuntan a vendedor y vehiculo.
@@ -3703,6 +3715,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
         fecha: await fechaServidor(0),
         orden: 2,
         origen: 'vendedor',
+        recado: null,
         activo: 1,
       });
     });
@@ -3763,6 +3776,224 @@ describe('Sincronizacion pull/push (e2e)', () => {
         cliente_id: c,
         fecha: await fechaServidor(9),
         activo: 1,
+      });
+    });
+  });
+
+  describe('ruta semanal y diaria: pull (recado, rutas_dia, notas_asignadas)', () => {
+    const haceUnMinuto = async () =>
+      (
+        await sql<{
+          t: Date;
+        }>`select now() - interval '1 minute' as t`.execute(db)
+      ).rows[0].t.toISOString();
+
+    const sembrarRutaDia = async (valores: {
+      vendedor?: string;
+      dias: number;
+      nombre?: string | null;
+      vehiculo?: string | null;
+      borrada?: boolean;
+      actualizadaHace?: string;
+    }) =>
+      (
+        await db
+          .insertInto('ruta_dia')
+          .values({
+            vendedor_id: valores.vendedor ?? vendedorId,
+            fecha: sql<string>`current_date + ${valores.dias}::int`,
+            nombre_ruta: null,
+            vehiculo_id: valores.vehiculo ?? null,
+            deleted_at: valores.borrada ? new Date() : null,
+            ...(valores.actualizadaHace
+              ? {
+                  updated_at: sql<Date>`now() - ${valores.actualizadaHace}::interval`,
+                }
+              : {}),
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+
+    const sembrarNotaAsignada = async (valores: {
+      nota: string;
+      vendedor?: string;
+      dias: number;
+      borrada?: boolean;
+      actualizadaHace?: string;
+    }) =>
+      (
+        await db
+          .insertInto('nota_asignada')
+          .values({
+            venta_nota_id: valores.nota,
+            vendedor_id: valores.vendedor ?? vendedorId,
+            fecha: sql<string>`current_date + ${valores.dias}::int`,
+            asignada_por_usuario_id: usuarioPortalId,
+            deleted_at: valores.borrada ? new Date() : null,
+            ...(valores.actualizadaHace
+              ? {
+                  updated_at: sql<Date>`now() - ${valores.actualizadaHace}::interval`,
+                }
+              : {}),
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+
+    const notaViva = async () =>
+      (
+        await clienteConNotas([
+          { monto: '100.00', fecha: FECHA_COBROS, status: 'pendiente' },
+        ])
+      ).notas[0];
+
+    it('la ruta trae el recado, y una fila semanal baja como origen oficina', async () => {
+      const c = await clienteDeRuta();
+      const conRecado = await sembrarRuta({
+        cliente: c,
+        dias: 0,
+        recado: 'Cobrar el cheque',
+      });
+      const otro = await clienteDeRuta();
+      const deSemanal = await sembrarRuta({
+        cliente: otro,
+        dias: 0,
+        origen: 'semanal',
+      });
+
+      const cuerpo = (await pull().expect(200)).body as RespuestaPull;
+
+      expect(cuerpo.rutas.find((r) => r.id === conRecado)).toMatchObject({
+        recado: 'Cobrar el cheque',
+        origen: 'oficina',
+      });
+      expect(cuerpo.rutas.find((r) => r.id === deSemanal)).toMatchObject({
+        recado: null,
+        origen: 'oficina',
+      });
+    });
+
+    it('rutas_dia: sin desde baja las vivas del vendedor desde ayer, sin tope; no las de otro ni las borradas ni las anteriores', async () => {
+      const antes = await sembrarRutaDia({ dias: -2 });
+      const ayer = await sembrarRutaDia({ dias: -1 });
+      const lejana = await sembrarRutaDia({
+        dias: 9,
+        vehiculo: vehiculoId,
+      });
+      const borrada = await sembrarRutaDia({ dias: 3, borrada: true });
+      const ajena = await sembrarRutaDia({
+        dias: 0,
+        vendedor: vendedorAjenoId,
+      });
+
+      const cuerpo = (await pull().expect(200)).body as RespuestaPull;
+      const ids = new Set(cuerpo.rutas_dia.map((r) => r.id));
+
+      expect(ids.has(ayer)).toBe(true);
+      for (const id of [antes, borrada, ajena]) {
+        expect(ids.has(id)).toBe(false);
+      }
+      expect(cuerpo.rutas_dia.find((r) => r.id === lejana)).toEqual({
+        id: lejana,
+        fecha: await fechaServidor(9),
+        nombre_ruta: null,
+        vehiculo_id: vehiculoId,
+        activo: 1,
+      });
+    });
+
+    it('rutas_dia: con desde baja lo que cambio y una baja viaja con activo 0', async () => {
+      const quieta = await sembrarRutaDia({
+        dias: 1,
+        actualizadaHace: '1 hour',
+      });
+      const quitada = await sembrarRutaDia({
+        dias: 2,
+        actualizadaHace: '1 hour',
+      });
+      const desde = await haceUnMinuto();
+      await db
+        .updateTable('ruta_dia')
+        .set({ deleted_at: new Date() })
+        .where('id', '=', quitada)
+        .execute();
+
+      const cuerpo = (await pull({ desde }).expect(200)).body as RespuestaPull;
+
+      expect(cuerpo.rutas_dia.some((r) => r.id === quieta)).toBe(false);
+      expect(cuerpo.rutas_dia.find((r) => r.id === quitada)).toMatchObject({
+        activo: 0,
+      });
+    });
+
+    it('notas_asignadas: sin desde baja las vivas del vendedor; no las de otro, las borradas ni las de ventas borradas', async () => {
+      const nota = await notaViva();
+      const otraNota = await notaViva();
+      const notaBorrada = await notaViva();
+      await db
+        .updateTable('venta_nota')
+        .set({ deleted_at: new Date() })
+        .where('id', '=', notaBorrada)
+        .execute();
+      const asignada = await sembrarNotaAsignada({ nota, dias: 0 });
+      const quitada = await sembrarNotaAsignada({
+        nota: otraNota,
+        dias: 0,
+        borrada: true,
+      });
+      const deVentaBorrada = await sembrarNotaAsignada({
+        nota: notaBorrada,
+        dias: 0,
+      });
+      const ajena = await sembrarNotaAsignada({
+        nota: otraNota,
+        dias: 1,
+        vendedor: vendedorAjenoId,
+      });
+
+      const cuerpo = (await pull().expect(200)).body as RespuestaPull;
+      const ids = new Set(cuerpo.notas_asignadas.map((r) => r.id));
+
+      expect(cuerpo.notas_asignadas.find((r) => r.id === asignada)).toEqual({
+        id: asignada,
+        venta_nota_id: nota,
+        fecha: await fechaServidor(0),
+        activo: 1,
+      });
+      for (const id of [quitada, deVentaBorrada, ajena]) {
+        expect(ids.has(id)).toBe(false);
+      }
+    });
+
+    it('notas_asignadas: con desde, una nota asignada quitada viaja con activo 0', async () => {
+      const nota = await notaViva();
+      const otraNota = await notaViva();
+      const quieta = await sembrarNotaAsignada({
+        nota,
+        dias: 0,
+        actualizadaHace: '1 hour',
+      });
+      const quitada = await sembrarNotaAsignada({
+        nota: otraNota,
+        dias: 0,
+        actualizadaHace: '1 hour',
+      });
+      const desde = await haceUnMinuto();
+      await db
+        .updateTable('nota_asignada')
+        .set({ deleted_at: new Date() })
+        .where('id', '=', quitada)
+        .execute();
+
+      const cuerpo = (await pull({ desde }).expect(200)).body as RespuestaPull;
+
+      expect(cuerpo.notas_asignadas.some((r) => r.id === quieta)).toBe(false);
+      expect(cuerpo.notas_asignadas.find((r) => r.id === quitada)).toEqual({
+        id: quitada,
+        venta_nota_id: otraNota,
+        fecha: await fechaServidor(0),
+        activo: 0,
       });
     });
   });

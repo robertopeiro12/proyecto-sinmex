@@ -5,6 +5,7 @@ import { CajaTabla, Fila, FilaGrupo, FilaTotal, FilaVacia, Tabla, Td, TdMonto, T
 import {
   agruparPorSucursal,
   etiquetaRutaAsignada,
+  etiquetaVehiculo,
   obtenerDetalleVendedor,
   type FlujoDiario,
   type ResumenVendedorDia,
@@ -16,7 +17,7 @@ import { BotonNumero, BotonRenglon, BotonVer, formatearPiezas, Pronto } from "./
 import { useDetalleAbierto } from "./use-detalle-abierto";
 import { VentanaDetalle } from "./ventana-detalle";
 
-const COLUMNAS = 12;
+const COLUMNAS = 13;
 const claveDe = (f: ResumenVendedorDia) => `${f.fecha}|${f.vendedorId}`;
 
 /**
@@ -51,8 +52,11 @@ export function TablaPorVendedor({
         <Td>
           <BotonRenglon onClick={() => abrir(clave)}>{f.vendedor}</BotonRenglon>
         </Td>
-        <Td className={f.clientesEnRuta === 0 ? "text-muted-foreground" : undefined}>
-          {etiquetaRutaAsignada(f.clientesEnRuta)}
+        <Td className={f.rutaNombre ? undefined : "text-muted-foreground"}>
+          {etiquetaRutaAsignada(f.rutaNombre, f.clientesEnRuta)}
+        </Td>
+        <Td className={f.vehiculo || f.vehiculoAsignado ? undefined : "text-muted-foreground"}>
+          {etiquetaVehiculo(f.vehiculo, f.vehiculoAsignado)}
         </Td>
         <Td alinear="derecha">
           <BotonNumero cero={f.piezas === 0} etiqueta={`Venta general de ${f.vendedor}`} onClick={() => verEn("venta")}>
@@ -111,11 +115,12 @@ export function TablaPorVendedor({
           />
         )}
       </VentanaDetalle>
-      <Tabla aria-label="Por vendedor" className="min-w-[82rem] table-fixed">
+      <Tabla aria-label="Por vendedor" className="min-w-[91rem] table-fixed">
         <colgroup>
           <col className="w-24" />
           <col />
           <col className="w-40" />
+          <col className="w-36" />
           <col className="w-24" />
           <col className="w-28" />
           <col className="w-30" />
@@ -131,6 +136,7 @@ export function TablaPorVendedor({
             <Th>Fecha</Th>
             <Th>Vendedor</Th>
             <Th>Ruta asignada</Th>
+            <Th>Vehículo</Th>
             <Th alinear="derecha" className="whitespace-normal">Venta general</Th>
             <Th alinear="derecha">Monto</Th>
             <Th alinear="derecha">Cobranza</Th>
@@ -155,7 +161,7 @@ export function TablaPorVendedor({
                 const nombre = nombreSucursal(g.sucursalCodigo);
                 return (
                   <Fragment key={g.sucursalCodigo}>
-                    <FilaGrupo columnas={COLUMNAS}>{nombre}</FilaGrupo>
+                    <FilaGrupo columnas={COLUMNAS} sucursal={g.sucursalCodigo}>{nombre}</FilaGrupo>
                     {g.filas.map(renglon)}
                     {bloque && <RenglonTotal texto={`Subtotal ${nombre}`} totales={bloque.porVendedor} />}
                   </Fragment>
@@ -172,7 +178,7 @@ export function TablaPorVendedor({
 function RenglonTotal({ texto, totales }: { texto: string; totales: Totales }) {
   return (
     <FilaTotal>
-      <Td colSpan={3}>{texto}</Td>
+      <Td colSpan={4}>{texto}</Td>
       <Td alinear="derecha">{formatearPiezas(totales.piezas)}</Td>
       <TdMonto centavos={totales.montoCentavos} />
       <TdMonto centavos={totales.cobranzaCentavos} />

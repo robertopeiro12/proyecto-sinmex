@@ -11,6 +11,8 @@ import type {
   ProductoPull,
   PromocionPull,
   RutaPull,
+  RutaDiaPull,
+  NotaAsignadaPull,
   SucursalPull,
   TipoNegocioPull,
   MotivoVisitaPull,
@@ -528,6 +530,7 @@ export class SincronizacionRepository {
         sql<string>`to_char(fecha, 'YYYY-MM-DD')`.as('fecha'),
         'orden',
         'origen',
+        'recado',
         'deleted_at',
       ])
       .where('vendedor_id', '=', vendedorId)
@@ -544,9 +547,92 @@ export class SincronizacionRepository {
       cliente_id: f.cliente_id,
       fecha: f.fecha,
       orden: f.orden,
-      origen: f.origen as 'oficina' | 'vendedor',
+      // `semanal` baja como `oficina`: la tablet sin actualizar no la conoce.
+      origen: f.origen === 'vendedor' ? 'vendedor' : 'oficina',
+      recado: f.recado,
       activo: bandera(true, f.deleted_at),
     }));
+  }
+
+  /**
+   * La ruta del dia (nombre y vehiculo) del vendedor del token. Misma ventana,
+   * incremental y bajas que {@link rutas}: `fecha >= current_date - 1`, sin
+   * tope, y con `desde` una baja viaja con `activo: 0`.
+   */
+  async rutasDia(
+    vendedorId: string,
+    desde: Date | null,
+  ): Promise<RutaDiaPull[]> {
+    let q = this.db
+      .selectFrom('ruta_dia')
+      .select([
+        'id',
+        sql<string>`to_char(fecha, 'YYYY-MM-DD')`.as('fecha'),
+        'nombre_ruta',
+        'vehiculo_id',
+        'deleted_at',
+      ])
+      .where('vendedor_id', '=', vendedorId)
+      .where(sql<boolean>`fecha >= current_date - 1`);
+    if (desde) {
+      q = q.where('updated_at', '>', desde);
+    } else {
+      q = q.where('deleted_at', 'is', null);
+    }
+
+    return (await q.orderBy('fecha').execute()).map((f) => ({
+      id: f.id,
+      fecha: f.fecha,
+      nombre_ruta: f.nombre_ruta,
+      vehiculo_id: f.vehiculo_id,
+      activo: bandera(true, f.deleted_at),
+    }));
+  }
+
+  /**
+   * Las notas por cobrar que la oficina asigno al vendedor del token. Misma
+   * ventana e incremental que {@link rutas}. Sin `desde` solo bajan las vivas
+   * y de ventas vivas; con `desde` baja todo lo que cambio (una asignacion
+   * quitada viaja con `activo: 0`, aunque su venta se haya borrado, para que
+   * la tablet pueda retirarla).
+   */
+  async notasAsignadas(
+    vendedorId: string,
+    desde: Date | null,
+  ): Promise<NotaAsignadaPull[]> {
+    let q = this.db
+      .selectFrom('nota_asignada as na')
+      .select([
+        'na.id',
+        'na.venta_nota_id',
+        sql<string>`to_char(na.fecha, 'YYYY-MM-DD')`.as('fecha'),
+        'na.deleted_at',
+      ])
+      .where('na.vendedor_id', '=', vendedorId)
+      .where(sql<boolean>`na.fecha >= current_date - 1`);
+    if (desde) {
+      q = q.where('na.updated_at', '>', desde);
+    } else {
+      q = q
+        .where('na.deleted_at', 'is', null)
+        .where(
+          'na.venta_nota_id',
+          'in',
+          this.db
+            .selectFrom('venta_nota')
+            .select('id')
+            .where('deleted_at', 'is', null),
+        );
+    }
+
+    return (await q.orderBy('na.fecha').orderBy('na.id').execute()).map(
+      (f) => ({
+        id: f.id,
+        venta_nota_id: f.venta_nota_id,
+        fecha: f.fecha,
+        activo: bandera(true, f.deleted_at),
+      }),
+    );
   }
 
   /**

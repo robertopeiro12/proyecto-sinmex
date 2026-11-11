@@ -64,6 +64,8 @@ export class FlujoDiarioRepository {
       gasto: string;
       jornada_cerrada: boolean;
       vehiculo: string | null;
+      ruta_nombre: string | null;
+      vehiculo_asignado: string | null;
     }>`
       with dias as (
         select ru.vendedor_id, ru.fecha from ruta ru
@@ -149,7 +151,9 @@ export class FlujoDiarioRepository {
                  and g.vendedor_id = d.vendedor_id and g.fecha = d.fecha
              ) as gasto,
              (j.id is not null) as jornada_cerrada,
-             j.vehiculo as vehiculo
+             j.vehiculo as vehiculo,
+             rd.nombre_ruta as ruta_nombre,
+             va.nombre as vehiculo_asignado
         from dias d
         join vendedor v on v.id = d.vendedor_id
         join sucursal s on s.id = v.sucursal_id
@@ -162,6 +166,10 @@ export class FlujoDiarioRepository {
            order by jo.cerrada_en desc, jo.id
            limit 1
         ) j on true
+        left join ruta_dia rd
+          on rd.vendedor_id = d.vendedor_id and rd.fecha = d.fecha
+         and rd.deleted_at is null
+        left join vehiculo va on va.id = rd.vehiculo_id
        where ${sql.join(condiciones, sql` and `)}
     `.execute(this.db);
 
@@ -180,6 +188,8 @@ export class FlujoDiarioRepository {
       gastoCentavos: aCentavos(x.gasto),
       jornadaCerrada: x.jornada_cerrada,
       vehiculo: x.vehiculo,
+      rutaNombre: x.ruta_nombre,
+      vehiculoAsignado: x.vehiculo_asignado,
     }));
   }
 

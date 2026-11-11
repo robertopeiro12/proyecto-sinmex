@@ -32,8 +32,8 @@ describe("SeccionesMenu", () => {
 
   it("lo que todavía no existe dice Pronto; lo que existe no", () => {
     render(<SeccionesMenu pathname="/operacion/ventas" sucursal={null} />);
-    const rutaSemanal = screen.getByRole("link", { name: "Ruta Semanal Pronto" });
-    expect(within(rutaSemanal).getByText("Pronto")).toBeInTheDocument();
+    const procesos = screen.getByRole("link", { name: "Procesos Pronto" });
+    expect(within(procesos).getByText("Pronto")).toBeInTheDocument();
     expect(within(screen.getByRole("link", { name: "Ventas" })).queryByText("Pronto")).not.toBeInTheDocument();
   });
 

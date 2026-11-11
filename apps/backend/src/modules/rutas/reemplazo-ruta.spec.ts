@@ -1,19 +1,32 @@
-import { planearReemplazo, type FilaViva } from './reemplazo-ruta';
+import {
+  planearReemplazo,
+  type FilaViva,
+  type PedidoCliente,
+} from './reemplazo-ruta';
 
 const fila = (
   id: string,
   clienteId: string,
   orden: number,
-  origen: 'oficina' | 'vendedor' = 'oficina',
-): FilaViva => ({ id, clienteId, orden, origen });
+  origen: FilaViva['origen'] = 'oficina',
+  recado: string | null = null,
+): FilaViva => ({ id, clienteId, orden, origen, recado });
 
-describe('planearReemplazo (T-37, D14)', () => {
+const pide = (...ids: string[]): PedidoCliente[] =>
+  ids.map((clienteId) => ({ clienteId, recado: null }));
+
+const sinSemanal = {
+  clientesDeLaSemanal: new Set<string>(),
+  rutaCambio: false,
+};
+
+describe('planearReemplazo', () => {
   it('sin filas vivas inserta toda la lista en orden', () => {
-    expect(planearReemplazo([], ['a', 'b'])).toEqual({
+    expect(planearReemplazo([], pide('a', 'b'), sinSemanal)).toEqual({
       actualizar: [],
       insertar: [
-        { clienteId: 'a', orden: 1 },
-        { clienteId: 'b', orden: 2 },
+        { clienteId: 'a', orden: 1, origen: 'oficina', recado: null },
+        { clienteId: 'b', orden: 2, origen: 'oficina', recado: null },
       ],
       borrar: [],
     });
@@ -21,22 +34,42 @@ describe('planearReemplazo (T-37, D14)', () => {
 
   it('una fila de la oficina que no viene se borra', () => {
     expect(
-      planearReemplazo([fila('r1', 'a', 1), fila('r2', 'b', 2)], ['b']),
+      planearReemplazo(
+        [fila('r1', 'a', 1), fila('r2', 'b', 2)],
+        pide('b'),
+        sinSemanal,
+      ),
     ).toEqual({
-      actualizar: [{ id: 'r2', orden: 1, origen: 'oficina' }],
+      actualizar: [{ id: 'r2', orden: 1, recado: null }],
       insertar: [],
-      borrar: ['r1'],
+      borrar: [{ id: 'r1', clienteId: 'a', quitadoPor: 'oficina' }],
     });
   });
 
-  it('la fila del vendedor que viene en la lista se adopta: orden de la oficina y origen oficina', () => {
+  it('conserva el origen al reordenar', () => {
+    const plan = planearReemplazo(
+      [fila('r1', 'A', 1, 'vendedor'), fila('r2', 'B', 2, 'semanal')],
+      pide('B', 'A'),
+      sinSemanal,
+    );
+    expect(plan.actualizar).toEqual([
+      { id: 'r2', orden: 1, recado: null },
+      { id: 'r1', orden: 2, recado: null },
+    ]);
+    expect(plan.insertar).toEqual([]);
+    expect(plan.borrar).toEqual([]);
+  });
+
+  it('una nueva de la semanal nace semanal', () => {
     expect(
-      planearReemplazo([fila('r1', 'a', 1, 'vendedor')], ['b', 'a']),
-    ).toEqual({
-      actualizar: [{ id: 'r1', orden: 2, origen: 'oficina' }],
-      insertar: [{ clienteId: 'b', orden: 1 }],
-      borrar: [],
-    });
+      planearReemplazo([], pide('C', 'D'), {
+        clientesDeLaSemanal: new Set(['C']),
+        rutaCambio: false,
+      }).insertar,
+    ).toEqual([
+      { clienteId: 'C', orden: 1, origen: 'semanal', recado: null },
+      { clienteId: 'D', orden: 2, origen: 'oficina', recado: null },
+    ]);
   });
 
   it('las del vendedor que no vienen se conservan al final, en su orden relativo', () => {
@@ -45,22 +78,23 @@ describe('planearReemplazo (T-37, D14)', () => {
       fila('r2', 'b', 2, 'vendedor'),
       fila('r3', 'd', 5, 'vendedor'),
     ];
-    expect(planearReemplazo(vivas, ['c', 'a'])).toEqual({
+    expect(planearReemplazo(vivas, pide('c', 'a'), sinSemanal)).toEqual({
       actualizar: [
-        { id: 'r1', orden: 2, origen: 'oficina' },
-        { id: 'r2', orden: 3, origen: 'vendedor' },
-        { id: 'r3', orden: 4, origen: 'vendedor' },
+        { id: 'r1', orden: 2, recado: null },
+        { id: 'r2', orden: 3, recado: null },
+        { id: 'r3', orden: 4, recado: null },
       ],
-      insertar: [{ clienteId: 'c', orden: 1 }],
+      insertar: [{ clienteId: 'c', orden: 1, origen: 'oficina', recado: null }],
       borrar: [],
     });
   });
 
-  it('una fila que ya tiene el orden y el origen que le tocan no se toca', () => {
+  it('una fila que ya tiene su orden y su recado no se toca', () => {
     expect(
       planearReemplazo(
         [fila('r1', 'a', 1), fila('r2', 'b', 2, 'vendedor')],
-        ['a'],
+        pide('a'),
+        sinSemanal,
       ),
     ).toEqual({ actualizar: [], insertar: [], borrar: [] });
   });
@@ -70,11 +104,76 @@ describe('planearReemplazo (T-37, D14)', () => {
       planearReemplazo(
         [fila('r1', 'a', 1), fila('r2', 'b', 2, 'vendedor')],
         [],
+        sinSemanal,
       ),
     ).toEqual({
-      actualizar: [{ id: 'r2', orden: 1, origen: 'vendedor' }],
+      actualizar: [{ id: 'r2', orden: 1, recado: null }],
       insertar: [],
-      borrar: ['r1'],
+      borrar: [{ id: 'r1', clienteId: 'a', quitadoPor: 'oficina' }],
+    });
+  });
+
+  it('quitar a mano marca oficina', () => {
+    expect(
+      planearReemplazo([fila('r1', 'A', 1, 'semanal')], [], sinSemanal).borrar,
+    ).toEqual([{ id: 'r1', clienteId: 'A', quitadoPor: 'oficina' }]);
+  });
+
+  it('cambiar de ruta marca cambio_ruta solo lo que vino de la semanal', () => {
+    expect(
+      planearReemplazo(
+        [fila('r1', 'A', 1, 'semanal'), fila('r2', 'B', 2, 'oficina')],
+        [],
+        { clientesDeLaSemanal: new Set(), rutaCambio: true },
+      ).borrar,
+    ).toEqual([
+      { id: 'r1', clienteId: 'A', quitadoPor: 'cambio_ruta' },
+      { id: 'r2', clienteId: 'B', quitadoPor: 'oficina' },
+    ]);
+  });
+
+  it('el recado cambia sin mover el orden', () => {
+    expect(
+      planearReemplazo(
+        [fila('r1', 'A', 1)],
+        [{ clienteId: 'A', recado: 'Solo contado' }],
+        sinSemanal,
+      ).actualizar,
+    ).toEqual([{ id: 'r1', orden: 1, recado: 'Solo contado' }]);
+  });
+
+  it('con cambio de ruta, un cliente de la semanal nueva que la oficina quito a mano marca oficina', () => {
+    expect(
+      planearReemplazo(
+        [fila('r1', 'A', 1, 'semanal'), fila('r2', 'B', 2, 'semanal')],
+        pide('B'),
+        { clientesDeLaSemanal: new Set(['A', 'B']), rutaCambio: true },
+      ).borrar,
+    ).toEqual([{ id: 'r1', clienteId: 'A', quitadoPor: 'oficina' }]);
+  });
+
+  it('inserta el recado no nulo de un cliente nuevo', () => {
+    expect(
+      planearReemplazo(
+        [],
+        [{ clienteId: 'A', recado: 'Llevar cambio' }],
+        sinSemanal,
+      ).insertar,
+    ).toEqual([
+      { clienteId: 'A', orden: 1, origen: 'oficina', recado: 'Llevar cambio' },
+    ]);
+  });
+
+  it('con cambio de ruta, una fila del vendedor que no viene se conserva', () => {
+    expect(
+      planearReemplazo([fila('r1', 'A', 1, 'vendedor')], pide('B'), {
+        clientesDeLaSemanal: new Set(['B']),
+        rutaCambio: true,
+      }),
+    ).toEqual({
+      actualizar: [{ id: 'r1', orden: 2, recado: null }],
+      insertar: [{ clienteId: 'B', orden: 1, origen: 'semanal', recado: null }],
+      borrar: [],
     });
   });
 });

@@ -38,7 +38,7 @@ function fila(p: Partial<ResumenVendedorDia>): ResumenVendedorDia {
     fecha: "2026-11-09", vendedorId: "v", vendedor: "V", sucursalCodigo: "TJ",
     clientesEnRuta: 10, atendidosEnRuta: 4, piezas: 100, montoCentavos: 120000,
     contadoCentavos: 30000, anterioresCentavos: 20000, aFavorCentavos: 0, gastoCentavos: 1000,
-    jornadaCerrada: true, vehiculo: null, cobranzaCentavos: 50000, tesoreriaCentavos: 49000,
+    jornadaCerrada: true, vehiculo: null, rutaNombre: null, vehiculoAsignado: null, cobranzaCentavos: 50000, tesoreriaCentavos: 49000,
     estatus: "terminado", ...p,
   };
 }
@@ -143,6 +143,24 @@ describe("PantallaFlujoDiario", () => {
     expect(within(tabla).getByRole("rowheader", { name: "Mexicali" })).toBeInTheDocument();
     const total = within(tabla).getByText(/^Total$/).closest("tr")!;
     expect(within(total).getByText("150")).toBeInTheDocument();
+  });
+
+  it("Por vendedor trae la columna Vehículo: el usado, y el asignado si es distinto", async () => {
+    mockAuth([PERMISO]);
+    obtenerFlujo.mockResolvedValue({
+      ...DOS_SUCURSALES,
+      porVendedor: [
+        { ...RICARDO, vehiculo: "Nissan 02", vehiculoAsignado: "Nissan 01" },
+        { ...LUIS, vehiculo: null, vehiculoAsignado: null },
+      ],
+    });
+    render(<PantallaFlujoDiario sucursal={null} />);
+    const tabla = await screen.findByRole("table", { name: "Por vendedor" });
+    expect(within(tabla).getByRole("columnheader", { name: "Vehículo" })).toBeInTheDocument();
+    const ricardo = (await within(tabla).findByRole("button", { name: "Ricardo" })).closest("tr")!;
+    expect(within(ricardo).getByText("Nissan 02 (asignado: Nissan 01)")).toBeInTheDocument();
+    const luis = within(tabla).getByRole("button", { name: "Luis" }).closest("tr")!;
+    expect(within(luis).getByText("—")).toBeInTheDocument();
   });
 
   it("picar Ricardo pide su detalle con la fecha y sucursal del renglón y abre una ventana en Venta general", async () => {

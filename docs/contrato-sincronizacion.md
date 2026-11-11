@@ -211,7 +211,10 @@ nadie relacionaría con nada.
                                        "metodo_pago": "efectivo" }],
                           "activo": 1 }],
   "rutas": [{ "id": "…", "cliente_id": "…", "fecha": "2026-10-12", "orden": 1,
-              "origen": "oficina", "activo": 1 }],
+              "origen": "oficina", "recado": null, "activo": 1 }],
+  "rutas_dia": [{ "id": "…", "fecha": "2026-10-12", "nombre_ruta": "Ruta Norte",
+                  "vehiculo_id": "…", "activo": 1 }],
+  "notas_asignadas": [{ "id": "…", "venta_nota_id": "…", "fecha": "2026-10-12", "activo": 1 }],
   "promociones": [ /* filas: ver la seccion promociones, abajo */ ],
   "cargas": [ /* filas: ver la seccion cargas, abajo */ ]
 }
@@ -395,6 +398,21 @@ tablet vieja la ignora; la tablet nueva la trata como opcional.
 - `origen` dice quién puso al cliente: `oficina` (portal) o `vendedor` (un `ruta-alta` proyectado).
 - El orden que el vendedor arrastra en la tablet **no sube** (D4): vive en la tabla local `ruta_orden_local` y
   ningún pull lo pisa.
+- **Ruta semanal y diaria** (spec `docs/superpowers/specs/2026-11-10-ruta-semanal-y-diaria-design.md`, §9). Cambios
+  **aditivos**, `CONTRATO_ACTUAL` sigue en 1:
+  - Cada fila de `rutas` trae **`recado`** (`string | null`, ≤ 200): el recado de la oficina para el vendedor.
+  - **`origen` solo baja `oficina` o `vendedor`**: una fila de origen `semanal` (cliente que viene de una ruta
+    semanal) baja como `oficina`, para que una tablet sin actualizar no encuentre un valor que no conoce.
+  - **`rutas_dia`** (nivel superior): `{ id, fecha, nombre_ruta, vehiculo_id, activo }`, el nombre de la ruta
+    semanal que lleva el vendedor ese día y su vehículo (ambos pueden ser `null`).
+  - **`notas_asignadas`** (nivel superior): `{ id, venta_nota_id, fecha, activo }`, las notas por cobrar que la
+    oficina le asignó para ese día. Sin `desde`, no baja la de una venta borrada; con `desde`, una asignación
+    quitada viaja con `activo: 0` (aunque su venta se haya borrado) para que la tablet la retire. Eliminar la venta en
+    el portal (T-17) da de baja sus asignaciones vivas en la misma transacción, así que también viajan con `activo: 0`.
+  - `rutas_dia` y `notas_asignadas` tienen la misma ventana que `rutas` (`fecha >= current_date - 1`, sin tope),
+    el mismo incremental por `updated_at`, bajas como `activo: 0` y solo traen lo del **vendedor del token**.
+  - **Pendiente de Mario:** la copia de los tipos en `apps/tablet/src/sincronizacion/contrato.ts` (`recado`,
+    `RutaDiaPull`, `NotaAsignadaPull`, `rutas_dia`, `notas_asignadas`) la actualiza él; este PR no toca `apps/tablet`.
 
 ### `promociones`: las reglas de regalo (T-74)
 
