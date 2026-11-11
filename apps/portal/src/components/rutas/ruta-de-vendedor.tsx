@@ -210,7 +210,7 @@ export function RutaDeVendedor({
       </div>
       <EncabezadoPantalla
         titulo={titulo}
-        descripcion="La ruta, el vehículo y los clientes que visita ese día, en orden y con su recado."
+        descripcion="La ruta, el vehículo y los clientes que visita ese día, en orden y con su mensaje."
         acciones={
           ruta && editable ? (
             <Button type="button" disabled={!sucio || ocupado} onClick={() => void guardar()}>

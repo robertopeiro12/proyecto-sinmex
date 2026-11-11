@@ -71,10 +71,10 @@ export function ListaRutaDiaria({
                     type="button"
                     variant="outline"
                     size="sm"
-                    aria-label={`Recado para ${f.clienteNombre}`}
+                    aria-label={`Mensaje para ${f.clienteNombre}`}
                     onClick={() => setRecadoDe(i)}
                   >
-                    Recado
+                    Mensaje
                   </Button>
                   {f.origen !== "vendedor" ? (
                     <Button
@@ -129,7 +129,7 @@ function VentanaRecado({
   const largo = texto.trim().length > MAX_RECADO;
 
   return (
-    <Ventana abierta={fila !== null} alCerrar={alCerrar} titulo={`Recado para ${mostrada?.clienteNombre ?? ""}`}>
+    <Ventana abierta={fila !== null} alCerrar={alCerrar} titulo={`Mensaje para ${mostrada?.clienteNombre ?? ""}`}>
       <form
         className="flex flex-col gap-3"
         onSubmit={(e) => {
@@ -139,9 +139,9 @@ function VentanaRecado({
       >
         <Campo
           id="recado-cliente"
-          etiqueta="Recado"
+          etiqueta="Mensaje"
           ayuda="Lo ve el vendedor en la app. Déjalo vacío para quitarlo."
-          error={largo ? `El recado no puede pasar de ${MAX_RECADO} caracteres.` : null}
+          error={largo ? `El mensaje no puede pasar de ${MAX_RECADO} caracteres.` : null}
         >
           <Entrada
             autoComplete="off"
@@ -155,7 +155,7 @@ function VentanaRecado({
             Cancelar
           </Button>
           <Button type="submit" disabled={largo}>
-            Guardar recado
+            Guardar mensaje
           </Button>
         </div>
       </form>

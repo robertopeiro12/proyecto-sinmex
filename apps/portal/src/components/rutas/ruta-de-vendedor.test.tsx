@@ -197,9 +197,9 @@ describe("RutaDeVendedor", () => {
   it("el recado se escribe y se ve bajo el nombre", async () => {
     vi.mocked(rutasLib.obtenerRutaDiaria).mockResolvedValue(rutaDiaria({ filas: [fila("a", "Abarrotes A")] }));
     const { usuario } = pintar();
-    await usuario.click(await screen.findByRole("button", { name: "Recado para Abarrotes A" }));
-    fireEvent.change(await screen.findByLabelText("Recado"), { target: { value: "  SOLAMENTE COBRAR " } });
-    await usuario.click(screen.getByRole("button", { name: "Guardar recado" }));
+    await usuario.click(await screen.findByRole("button", { name: "Mensaje para Abarrotes A" }));
+    fireEvent.change(await screen.findByLabelText("Mensaje"), { target: { value: "  SOLAMENTE COBRAR " } });
+    await usuario.click(screen.getByRole("button", { name: "Guardar mensaje" }));
 
     const lista = screen.getByRole("region", { name: "Clientes de la ruta" });
     expect(within(lista).getByText("SOLAMENTE COBRAR")).toBeInTheDocument();

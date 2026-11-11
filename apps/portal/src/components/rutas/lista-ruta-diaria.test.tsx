@@ -47,14 +47,14 @@ describe("ListaRutaDiaria", () => {
     const { onRecado } = pintar();
     const usuario = userEvent.setup();
 
-    await usuario.click(screen.getByRole("button", { name: "Recado para Mini M" }));
-    const campo = await screen.findByLabelText("Recado");
+    await usuario.click(screen.getByRole("button", { name: "Mensaje para Mini M" }));
+    const campo = await screen.findByLabelText("Mensaje");
     fireEvent.change(campo, { target: { value: "a".repeat(201) } });
-    expect(screen.getByText("El recado no puede pasar de 200 caracteres.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Guardar recado" })).toBeDisabled();
+    expect(screen.getByText("El mensaje no puede pasar de 200 caracteres.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Guardar mensaje" })).toBeDisabled();
 
     fireEvent.change(campo, { target: { value: "SOLAMENTE COBRAR" } });
-    await usuario.click(screen.getByRole("button", { name: "Guardar recado" }));
+    await usuario.click(screen.getByRole("button", { name: "Guardar mensaje" }));
     expect(onRecado).toHaveBeenCalledWith(1, "SOLAMENTE COBRAR");
   });
 
@@ -68,12 +68,12 @@ describe("ListaRutaDiaria", () => {
     pintar();
     const usuario = userEvent.setup();
 
-    await usuario.click(screen.getByRole("button", { name: "Recado para Mini M" }));
-    fireEvent.change(await screen.findByLabelText("Recado"), { target: { value: "borrador" } });
+    await usuario.click(screen.getByRole("button", { name: "Mensaje para Mini M" }));
+    fireEvent.change(await screen.findByLabelText("Mensaje"), { target: { value: "borrador" } });
     await usuario.click(screen.getByRole("button", { name: "Cancelar" }));
 
-    await usuario.click(screen.getByRole("button", { name: "Recado para Abarrotes A" }));
-    expect(await screen.findByLabelText("Recado")).toHaveValue("Vender solo de contado");
-    expect(screen.getByText("Recado para Abarrotes A")).toBeInTheDocument();
+    await usuario.click(screen.getByRole("button", { name: "Mensaje para Abarrotes A" }));
+    expect(await screen.findByLabelText("Mensaje")).toHaveValue("Vender solo de contado");
+    expect(screen.getByText("Mensaje para Abarrotes A")).toBeInTheDocument();
   });
 });
