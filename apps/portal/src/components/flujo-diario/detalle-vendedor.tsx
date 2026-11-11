@@ -13,7 +13,7 @@ import {
   PestanaCorte,
   PestanaGastos,
   PestanaMermas,
-  PestanaNotasCredito,
+  PestanaNotas,
   PestanaVisitas,
 } from "./detalle-vendedor-pestanas";
 
@@ -46,7 +46,7 @@ const E = ETIQUETA_PESTANA_VENDEDOR;
  * el Flujo diario (`modo="flujo"`, sin Corte) y el Dashboard (`modo="dashboard"`).
  * `pestanaInicial`: picar un número del renglón abre su pestaña (Cobranza, Gastos…).
  * `onCambioPestana`: avisa la pestaña que eligió el usuario, para que el título de la ventana la siga.
- * `onNotasGuardadas`: en el Dashboard, tras guardar la casilla Entregada de las notas.
+ * `onNotasGuardadas`: tras guardar la revisión de notas de papel (en los dos modos).
  */
 export function DetalleVendedor({
   detalle,
@@ -60,16 +60,19 @@ export function DetalleVendedor({
   modo: "flujo" | "dashboard";
   pestanaInicial?: PestanaDetalleVendedor;
   onCambioPestana?: (pestana: PestanaDetalleVendedor) => void;
-  /** Dashboard: se guardó la casilla Entregada; quien abrió el detalle lo vuelve a pedir. */
-  onNotasGuardadas?: () => void;
-  /** Dashboard: hay casillas Entregada cambiadas sin guardar (para preguntar antes de cerrar). */
+  /**
+   * Se guardó la revisión de notas: quien abrió el detalle lo vuelve a pedir y pinta en el renglón
+   * `noEntregadas` (cuántas quedaron en no).
+   */
+  onNotasGuardadas?: (noEntregadas: number) => void;
+  /** Hay casillas Entregada cambiadas sin guardar (para preguntar antes de cerrar). */
   onCambiosPendientes?: (hay: boolean) => void;
 }) {
   const pestanas = [
     { valor: "venta", etiqueta: E.venta, contenido: <PestanaVentaGeneral detalle={detalle} /> },
     { valor: "cobranza", etiqueta: E.cobranza, contenido: <PestanaCobranza detalle={detalle} /> },
     { valor: "gastos", etiqueta: E.gastos, contenido: <PestanaGastos gastos={detalle.gastos} /> },
-    { valor: "notas", etiqueta: E.notas, contenido: <PestanaNotasCredito detalle={detalle} modo={modo} onGuardadas={onNotasGuardadas} onCambiosPendientes={onCambiosPendientes} /> },
+    { valor: "notas", etiqueta: E.notas, contenido: <PestanaNotas detalle={detalle} onGuardadas={onNotasGuardadas} onCambiosPendientes={onCambiosPendientes} /> },
     { valor: "visitas", etiqueta: E.visitas, contenido: <PestanaVisitas visitas={detalle.visitas} /> },
     {
       valor: "mermas",

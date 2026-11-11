@@ -11,7 +11,13 @@ import { PantallaFlujoDiario } from "./pantalla-flujo-diario";
 vi.mock("@/components/auth/auth-provider");
 vi.mock("@/lib/flujo-diario", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/flujo-diario")>();
-  return { ...real, obtenerFlujoDiario: vi.fn(), obtenerDetalleVendedor: vi.fn(), obtenerDetalleDia: vi.fn() };
+  return {
+    ...real,
+    obtenerFlujoDiario: vi.fn(),
+    obtenerDetalleVendedor: vi.fn(),
+    obtenerDetalleDia: vi.fn(),
+    guardarNotasEntregadas: vi.fn(),
+  };
 });
 vi.mock("@/lib/vendedores", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/vendedores")>();
@@ -22,9 +28,15 @@ vi.mock("@/lib/sucursales", async (importOriginal) => {
   return { ...real, listarSucursales: vi.fn() };
 });
 
+
+/** El número de la columna "Notas de ventas" ("2" + " no entregadas" solo para lector de pantalla). */
+const noEntregadas = (texto: string) => (_: string, el: Element | null) =>
+  el?.tagName === "SPAN" && el.textContent === texto;
+
 const obtenerFlujo = vi.mocked(fd.obtenerFlujoDiario);
 const obtenerDetalle = vi.mocked(fd.obtenerDetalleVendedor);
 const obtenerDetalleDia = vi.mocked(fd.obtenerDetalleDia);
+const guardarNotasEntregadas = vi.mocked(fd.guardarNotasEntregadas);
 const listarVendedores = vi.mocked(vendedoresLib.listarVendedores);
 const listarSucursales = vi.mocked(sucursalesLib.listarSucursales);
 
@@ -39,7 +51,7 @@ function fila(p: Partial<ResumenVendedorDia>): ResumenVendedorDia {
     clientesEnRuta: 10, atendidosEnRuta: 4, piezas: 100, montoCentavos: 120000,
     contadoCentavos: 30000, anterioresCentavos: 20000, aFavorCentavos: 0, gastoCentavos: 1000,
     jornadaCerrada: true, vehiculo: null, rutaNombre: null, vehiculoAsignado: null, cobranzaCentavos: 50000, tesoreriaCentavos: 49000,
-    estatus: "terminado", ...p,
+    notasNoEntregadas: null, estatus: "terminado", ...p,
   };
 }
 
@@ -80,7 +92,8 @@ const DETALLE: DetalleVendedorDia = {
   porProducto: [{ presentacion: "500 ml", producto: "Horchata 500 ml", piezas: 100 }],
   notas: [],
   cobranza: { contado: [], anteriores: [], aFavor: [] },
-  gastos: [], notasCredito: [], notasNoEntregadas: [], visitas: [], promociones: [], corte: null,
+  gastos: [], notasCredito: [], asignadasCobradas: [], asignadasPorEntregar: [], notasNoEntregadas: [],
+  visitas: [], promociones: [], corte: null,
 };
 
 function mockAuth(permisos: string[]) {
@@ -180,6 +193,51 @@ describe("PantallaFlujoDiario", () => {
     // La ✕ la cierra.
     await u.click(within(ventana).getByRole("button", { name: "Cerrar" }));
     await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("Notas de ventas: el número de NO entregadas junto al Ver, rojo si hay; nada si no se ha revisado", async () => {
+    mockAuth([PERMISO]);
+    obtenerFlujo.mockResolvedValue({
+      ...DOS_SUCURSALES,
+      porVendedor: [{ ...RICARDO, notasNoEntregadas: 3 }, { ...LUIS, notasNoEntregadas: null }],
+    });
+    render(<PantallaFlujoDiario sucursal={null} />);
+    const tabla = await screen.findByRole("table", { name: "Por vendedor" });
+    const ricardo = (await within(tabla).findByRole("button", { name: "Ricardo" })).closest("tr")!;
+    expect(within(ricardo).getByText(noEntregadas("3 no entregadas"))).toHaveClass("text-destructive");
+    expect(within(ricardo).getByRole("button", { name: "Notas de ventas de Ricardo" })).toBeInTheDocument();
+    const luis = within(tabla).getByRole("button", { name: "Luis" }).closest("tr")!;
+    expect(within(luis).queryByText(/no entregadas/)).not.toBeInTheDocument();
+  });
+
+  it("revisar las notas de hoy desde el Flujo diario: guarda con la fecha del renglón y el número se actualiza", async () => {
+    // Hoy en Tijuana es el 9 (ver beforeEach): el renglón del 9 se puede revisar.
+    mockAuth([PERMISO, "nota_papel.revisar"]);
+    obtenerDetalle.mockResolvedValue({
+      ...DETALLE,
+      notasCredito: [
+        { ventaNotaId: "v1", folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null },
+      ],
+    });
+    guardarNotasEntregadas.mockResolvedValue(undefined);
+    const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PantallaFlujoDiario sucursal="TJ" />);
+    await u.click(await screen.findByRole("button", { name: "Notas de ventas de Ricardo" }));
+    const ventana = await screen.findByRole("dialog", { name: "Notas de ventas · Ricardo · 09/11/2026" });
+    await u.click(await within(ventana).findByRole("checkbox", { name: "Entregada TJ261109RB10" }));
+    await u.click(within(ventana).getByRole("button", { name: "Guardar revisión" }));
+    expect(guardarNotasEntregadas).toHaveBeenCalledWith({
+      vendedor: "ricardo",
+      fecha: "2026-11-09",
+      notas: [{ folio: "TJ261109RB10", entregada: false }],
+      asignadas: [],
+    });
+    // Vuelve a pedir el detalle sin cerrar la ventana, y el renglón ya dice 1.
+    await vi.waitFor(() => expect(obtenerDetalle).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("dialog", { name: "Notas de ventas · Ricardo · 09/11/2026" })).toBeInTheDocument();
+    // La ventana sigue abierta: lo de atrás queda fuera del árbol accesible, de ahí `hidden`.
+    const ricardo = screen.getByRole("button", { name: "Ricardo", hidden: true }).closest("tr")!;
+    expect(within(ricardo).getByText(noEntregadas("1 no entregadas"))).toHaveClass("text-destructive");
   });
 
   it("la cobranza de arriba dice de quién es, sin avisos sueltos bajo la tabla", async () => {

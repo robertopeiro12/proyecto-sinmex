@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { CajaTabla, Fila, FilaGrupo, FilaTotal, FilaVacia, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
 import {
   agruparPorSucursal,
@@ -13,8 +13,8 @@ import {
 } from "@/lib/flujo-diario";
 import { formatearFecha, formatearPesos } from "@/lib/formato";
 import { DetalleVendedor, ETIQUETA_PESTANA_VENDEDOR, type PestanaDetalleVendedor } from "./detalle-vendedor";
-import { BotonNumero, BotonRenglon, BotonVer, formatearPiezas, Pronto } from "./piezas";
-import { useDetalleAbierto } from "./use-detalle-abierto";
+import { BotonNumero, BotonRenglon, BotonVer, CeldaNotasVentas, formatearPiezas, Pronto } from "./piezas";
+import { useCerrarConPendientes, useDetalleAbierto } from "./use-detalle-abierto";
 import { VentanaDetalle } from "./ventana-detalle";
 
 const COLUMNAS = 13;
@@ -31,7 +31,7 @@ export function TablaPorVendedor({
   flujo: FlujoDiario;
   nombreSucursal: (codigo: string) => string;
 }) {
-  const { abierto, visto, estado, abrir, abrirEn, cambiarPestana, cerrar } = useDetalleAbierto<
+  const { abierto, visto, estado, abrir, abrirEn, cambiarPestana, recargar, cerrar } = useDetalleAbierto<
     Awaited<ReturnType<typeof obtenerDetalleVendedor>>,
     PestanaDetalleVendedor
   >((clave) => {
@@ -39,6 +39,17 @@ export function TablaPorVendedor({
     // La sucursal del renglón: así funciona también con "Todas".
     return obtenerDetalleVendedor({ fecha: fila.fecha, vendedor: fila.vendedorId, sucursal: fila.sucursalCodigo });
   }, "venta");
+
+  const { avisarPendientes, alCerrar, pregunta: preguntaCerrar } = useCerrarConPendientes(cerrar);
+  // Lo que dijo la revisión de notas recién guardada (hoy o ayer), por renglón: se ve sin volver a
+  // consultar el Flujo diario (eso cerraría la ventana). La próxima consulta trae el del servidor.
+  const [noEntregadasGuardadas, setNoEntregadasGuardadas] = useState<ReadonlyMap<string, number>>(() => new Map());
+
+  function notasGuardadas(noEntregadas: number) {
+    const clave = abierto?.clave;
+    if (clave) setNoEntregadasGuardadas((antes) => new Map(antes).set(clave, noEntregadas));
+    recargar();
+  }
 
   const grupos = agruparPorSucursal(flujo.porVendedor);
   const varias = flujo.bloques.length > 1;
@@ -76,7 +87,11 @@ export function TablaPorVendedor({
         </Td>
         <TdMonto centavos={f.tesoreriaCentavos} className="font-bold" />
         <Td alinear="centro">
-          <BotonVer etiqueta={`Notas de ventas de ${f.vendedor}`} onClick={() => verEn("notas")} />
+          <CeldaNotasVentas
+            noEntregadas={noEntregadasGuardadas.get(clave) ?? f.notasNoEntregadas}
+            etiqueta={`Notas de ventas de ${f.vendedor}`}
+            onClick={() => verEn("notas")}
+          />
         </Td>
         <Td alinear="centro">
           <BotonVer etiqueta={`Ruta de ${f.vendedor}`} onClick={() => verEn("visitas")} />
@@ -95,9 +110,10 @@ export function TablaPorVendedor({
 
   return (
     <CajaTabla>
+      {preguntaCerrar}
       <VentanaDetalle
         abierta={!!abierto}
-        alCerrar={cerrar}
+        alCerrar={() => void alCerrar()}
         titulo={
           visto && filaAbierta
             ? `${ETIQUETA_PESTANA_VENDEDOR[visto.pestana]} · ${filaAbierta.vendedor} · ${formatearFecha(filaAbierta.fecha)}`
@@ -112,6 +128,8 @@ export function TablaPorVendedor({
             modo="flujo"
             pestanaInicial={visto?.pestana}
             onCambioPestana={cambiarPestana}
+            onNotasGuardadas={notasGuardadas}
+            onCambiosPendientes={avisarPendientes}
           />
         )}
       </VentanaDetalle>

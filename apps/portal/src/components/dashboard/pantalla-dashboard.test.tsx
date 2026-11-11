@@ -17,6 +17,11 @@ vi.mock("@/lib/sucursales", async (importOriginal) => {
   return { ...real, listarSucursales: vi.fn() };
 });
 
+
+/** El número de la columna "Notas de ventas" ("2" + " no entregadas" solo para lector de pantalla). */
+const noEntregadas = (texto: string) => (_: string, el: Element | null) =>
+  el?.tagName === "SPAN" && el.textContent === texto;
+
 const obtenerDashboard = vi.mocked(fd.obtenerDashboard);
 const obtenerDetalle = vi.mocked(fd.obtenerDetalleDashboard);
 const guardarNotasEntregadas = vi.mocked(fd.guardarNotasEntregadas);
@@ -28,7 +33,7 @@ function fila(p: Partial<ResumenVendedorDia>): ResumenVendedorDia {
     clientesEnRuta: 16, atendidosEnRuta: 6, piezas: 402, montoCentavos: 400000,
     contadoCentavos: 134000, anterioresCentavos: 0, aFavorCentavos: 0, gastoCentavos: 0,
     jornadaCerrada: false, vehiculo: null, rutaNombre: null, vehiculoAsignado: null, cobranzaCentavos: 134000, tesoreriaCentavos: 134000,
-    estatus: "en_ruta", ...p,
+    notasNoEntregadas: null, estatus: "en_ruta", ...p,
   };
 }
 
@@ -66,7 +71,7 @@ const DETALLE: DetalleVendedorDia = {
   fecha: "2026-11-09", vendedorId: "rblas", vendedor: "RBlas",
   porProducto: [], notas: [],
   cobranza: { contado: [], anteriores: [], aFavor: [] },
-  gastos: [], notasCredito: [], notasNoEntregadas: [], visitas: [], promociones: [],
+  gastos: [], notasCredito: [], asignadasCobradas: [], asignadasPorEntregar: [], notasNoEntregadas: [], visitas: [], promociones: [],
   corte: { contadoCentavos: 279650, anterioresCentavos: 0, aFavorCentavos: 0, gastoCentavos: 1000, tesoreriaCentavos: 278650 },
 };
 
@@ -187,7 +192,7 @@ describe("PantallaDashboard", () => {
     mockAuth([PERMISO, "nota_papel.revisar"]);
     const conNota: DetalleVendedorDia = {
       ...DETALLE,
-      notasCredito: [{ folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null }],
+      notasCredito: [{ ventaNotaId: "v-rb10", folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null }],
     };
     obtenerDetalle.mockResolvedValue(conNota);
     const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -196,10 +201,10 @@ describe("PantallaDashboard", () => {
     await u.click(await screen.findByRole("tab", { name: "Notas de ventas" }));
     await u.click(screen.getByRole("checkbox", { name: "Entregada TJ261109RB10" }));
     await u.click(screen.getByRole("button", { name: "Cerrar" }));
-    // Pregunta; "Cancelar" deja la ventana abierta con la casilla como estaba.
+    // Pregunta; "Cancelar" deja la ventana abierta con la casilla como estaba (sin palomita).
     const pregunta = await screen.findByRole("alertdialog", { name: "¿Cerrar sin guardar la revisión?" });
     await u.click(within(pregunta).getByRole("button", { name: "Cancelar" }));
-    expect(screen.getByRole("checkbox", { name: "Entregada TJ261109RB10" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Entregada TJ261109RB10" })).not.toBeChecked();
     // "Cerrar sin guardar" sí la cierra.
     await u.click(screen.getByRole("button", { name: "Cerrar" }));
     await u.click(await screen.findByRole("button", { name: "Cerrar sin guardar" }));
@@ -216,7 +221,7 @@ describe("PantallaDashboard", () => {
     mockAuth([PERMISO, "nota_papel.revisar"]);
     const conNota: DetalleVendedorDia = {
       ...DETALLE,
-      notasCredito: [{ folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null }],
+      notasCredito: [{ ventaNotaId: "v-rb10", folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null }],
     };
     obtenerDetalle.mockResolvedValue(conNota);
     guardarNotasEntregadas.mockResolvedValue(undefined);
@@ -228,11 +233,33 @@ describe("PantallaDashboard", () => {
     await u.click(screen.getByRole("button", { name: "Guardar revisión" }));
     expect(guardarNotasEntregadas).toHaveBeenCalledWith({
       vendedor: "rblas",
-      notas: [{ folio: "TJ261109RB10", entregada: true }],
+      fecha: "2026-11-09",
+      notas: [{ folio: "TJ261109RB10", entregada: false }],
+      asignadas: [],
     });
     await vi.waitFor(() => expect(obtenerDetalle).toHaveBeenCalledTimes(2));
     const ventana = screen.getByRole("dialog", { name: "Notas de ventas · RBlas · 09/11/2026" });
     expect(within(ventana).getByRole("tab", { name: "Notas de ventas" })).toHaveAttribute("aria-selected", "true");
+    // El renglón ya dice cuántas no llegaron, sin esperar la siguiente actualización (la ventana
+    // sigue abierta: lo de atrás queda fuera del árbol accesible, de ahí `hidden`).
+    const renglon = screen.getByRole("button", { name: "RBlas", hidden: true }).closest("tr")!;
+    expect(within(renglon).getByText(noEntregadas("1 no entregadas"))).toHaveClass("text-destructive");
+  });
+
+  it("Notas de ventas: el número de NO entregadas junto al Ver, rojo si hay; nada si no se ha revisado", async () => {
+    mockAuth([PERMISO]);
+    obtenerDashboard.mockResolvedValue({
+      ...TIJUANA,
+      vendedores: [{ ...RICARDO, notasNoEntregadas: 2 }, { ...RBLAS, notasNoEntregadas: 0 }, { ...LUIS, sucursalCodigo: "TJ", notasNoEntregadas: null }],
+    });
+    render(<PantallaDashboard sucursal="TJ" />);
+    const ricardo = (await screen.findByRole("button", { name: "Ricardo" })).closest("tr")!;
+    expect(within(ricardo).getByText(noEntregadas("2 no entregadas"))).toHaveClass("text-destructive");
+    expect(within(ricardo).getByRole("button", { name: "Notas de ventas de Ricardo" })).toBeInTheDocument();
+    const rblas = screen.getByRole("button", { name: "RBlas" }).closest("tr")!;
+    expect(within(rblas).getByText(noEntregadas("0 no entregadas"))).not.toHaveClass("text-destructive");
+    const luis = screen.getByRole("button", { name: "Luis" }).closest("tr")!;
+    expect(within(luis).queryByText(/no entregadas/)).not.toBeInTheDocument();
   });
 
   it("Estatus En ruta / Terminó; Corte «Ver» solo del que terminó y abre la pestaña Corte", async () => {

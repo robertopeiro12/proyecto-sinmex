@@ -1,4 +1,5 @@
 import { apiFetch, apiFetchSinCuerpo } from "./api";
+import { diaAnterior } from "./fechas";
 import { formatearPesos, plural } from "./formato";
 
 /*
@@ -36,6 +37,12 @@ export interface FilaVendedorDia {
   rutaNombre: string | null;
   /** Vehiculo asignado en la ruta del dia (`ruta_dia`), no el de la jornada. */
   vehiculoAsignado: string | null;
+  /**
+   * Revision de notas de la tarde: cuantas notas de ese dia (asignadas y sus
+   * ventas a credito) se guardaron como NO entregadas. `null` = tiene notas por
+   * revisar y ninguna se ha revisado. Ver `contarNotasNoEntregadas`.
+   */
+  notasNoEntregadas: number | null;
 }
 
 export interface ResumenVendedorDia extends FilaVendedorDia {
@@ -157,14 +164,21 @@ export interface DetalleVendedorDia {
     aFavor: { cliente: string; montoCentavos: number }[];
   };
   gastos: { descripcion: string; montoCentavos: number }[];
-  notasCredito: {
-    folio: string;
-    cliente: string;
-    totalCentavos: number;
-    pendienteCentavos: number;
-    /** La nota de papel: true entregada, false no, null sin revisar. */
-    entregada: boolean | null;
-  }[];
+  /**
+   * "Notas Nuevas x Cobrar Entregadas": sus ventas a credito de ese dia que
+   * todavia se cobran (`pendiente`/`abonado` con saldo) o que ya se revisaron
+   * (aunque hoy esten pagadas). Una que tambien le asignaron ese dia sale solo
+   * como asignada. Orden: cliente, folio.
+   */
+  notasCredito: NotaRevision[];
+  /** "Notas Asignadas Cobradas": asignadas ese dia que hoy deben 0. Orden: cliente, folio. */
+  asignadasCobradas: NotaRevision[];
+  /**
+   * "Notas Asignadas NO cobradas por Entregar": asignadas ese dia con saldo
+   * (las abonadas tambien). Una con saldo fuera de `pendiente`/`abonado`
+   * (cuenta perdida) no sale en ninguna de las dos. Orden: cliente, folio.
+   */
+  asignadasPorEntregar: NotaRevision[];
   /**
    * Notas a credito de dias ANTERIORES del vendedor marcadas como no
    * entregadas y con algo pendiente. Orden: fecha, folio.
@@ -174,6 +188,21 @@ export interface DetalleVendedorDia {
   promociones: { cliente: string; producto: string; cantidad: number }[];
   /** `null` sin jornada cerrada. */
   corte: Corte | null;
+}
+
+/** Una nota en la revision de la tarde (nueva a credito o asignada). */
+export interface NotaRevision {
+  ventaNotaId: string;
+  folio: string;
+  cliente: string;
+  totalCentavos: number;
+  /** Saldo de hoy: monto - abonos vivos, nunca menor que 0. */
+  pendienteCentavos: number;
+  /**
+   * La nota de papel: true entregada, false no, null sin revisar. En una
+   * asignada es `nota_asignada.papel_entregado`; en una nueva, el de la venta.
+   */
+  entregada: boolean | null;
 }
 
 export interface NotaNoEntregada {
@@ -284,17 +313,29 @@ export function obtenerDetalleDashboard(f: {
 }
 
 /**
- * La casilla "Entregada" de las notas a crédito (permiso `nota_papel.revisar`). Manda todas las
- * del vendedor; una que no se puede revisar tumba el lote (400) y no se guarda nada. Responde 204.
+ * La revisión de notas de papel de la tarde (permiso `nota_papel.revisar`). Manda las dos listas
+ * con casilla completas: las ventas a crédito del día por folio (`notas`) y las asignadas por venta
+ * (`asignadas`). `fecha` (`AAAA-MM-DD`) es la del detalle: solo hoy o ayer de Tijuana (otra = 400).
+ * Una nota que no se puede revisar tumba el lote (400) y no se guarda nada. Responde 204.
  */
 export function guardarNotasEntregadas(datos: {
   vendedor: string;
+  fecha: string;
   notas: { folio: string; entregada: boolean }[];
+  asignadas: { ventaNotaId: string; entregada: boolean }[];
 }): Promise<void> {
   return apiFetchSinCuerpo("/dashboard/notas-entregadas", {
     method: "PUT",
     body: JSON.stringify(datos),
   });
+}
+
+/**
+ * ¿Se puede guardar la revisión de notas de ese día? Solo hoy o ayer de Tijuana (`hoy` =
+ * `hoyEnTijuana()`), la misma regla del servidor: se corrige al día siguiente.
+ */
+export function fechaRevisable(fecha: string, hoy: string): boolean {
+  return fecha === hoy || fecha === diaAnterior(hoy);
 }
 
 /** Agrupa respetando el orden de llegada (el servidor ya ordena por sucursal). */
