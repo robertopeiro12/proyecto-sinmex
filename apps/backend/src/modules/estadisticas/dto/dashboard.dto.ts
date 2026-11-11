@@ -1,13 +1,13 @@
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
-  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsNotEmpty,
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
   ValidateNested,
 } from 'class-validator';
@@ -49,15 +49,41 @@ export class NotaEntregadaDto {
   entregada!: boolean;
 }
 
-/** `PUT /dashboard/notas-entregadas`: la casilla "Entregada" de las notas. */
+export class AsignadaEntregadaDto {
+  @IsUUID(undefined, { message: 'La nota asignada no es válida.' })
+  ventaNotaId!: string;
+
+  @IsBoolean({ message: 'Entregada debe ser sí o no.' })
+  entregada!: boolean;
+}
+
+/**
+ * `PUT /dashboard/notas-entregadas`: la revision de papel de la tarde. Las
+ * ventas a credito del dia van por folio en `notas`; las asignadas, por venta
+ * en `asignadas`. `fecha` (`AAAA-MM-DD`; que sea hoy o ayer de Tijuana lo
+ * valida el servicio); sin ella, hoy y la forma vieja para `notas`. Al menos una nota entre las dos
+ * listas (tambien lo revisa el servicio).
+ */
 export class NotasEntregadasDto {
   @IsUUID(undefined, { message: 'El vendedor no es válido.' })
   vendedor!: string;
 
+  /** Vacia no es "hoy": si viene, tiene que ser `AAAA-MM-DD`. */
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'La fecha no es válida.' })
+  fecha?: string;
+
   @IsArray()
-  @ArrayMinSize(1, { message: 'Marca al menos una nota.' })
   @ArrayMaxSize(200, { message: 'No más de 200 notas a la vez.' })
   @ValidateNested({ each: true })
   @Type(() => NotaEntregadaDto)
   notas!: NotaEntregadaDto[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200, { message: 'No más de 200 notas asignadas a la vez.' })
+  @ValidateNested({ each: true })
+  @Type(() => AsignadaEntregadaDto)
+  asignadas?: AsignadaEntregadaDto[];
 }

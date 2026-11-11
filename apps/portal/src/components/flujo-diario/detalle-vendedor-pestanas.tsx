@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
@@ -10,13 +10,17 @@ import { Monto } from "@/components/ui/monto";
 import { CajaTabla, FilaTotal, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
 import { mensajeDe } from "@/lib/api";
 import {
+  fechaRevisable,
   guardarNotasEntregadas,
   type Corte,
   type DetalleVendedorDia,
+  type NotaNoEntregada,
+  type NotaRevision,
   type PagoDetalle,
   type VisitaDetalle,
 } from "@/lib/flujo-diario";
 import { formatearPesos, plural } from "@/lib/formato";
+import { hoyEnTijuana } from "@/lib/ventas";
 import {
   BotonFolio,
   EtiquetaVendio,
@@ -180,111 +184,80 @@ export function PestanaGastos({ gastos }: { gastos: DetalleVendedorDia["gastos"]
 }
 
 /**
- * Las notas a crédito del día, con las palabras del sistema viejo. En el Dashboard son las
- * "pendientes nuevas por entregar", con la casilla Entregada (¿el vendedor regresó la nota de
- * papel?), "Cancelar" (regresa a lo guardado) y "Guardar revisión", como el CANCELAR / GUARDAR del
- * viejo; los dos solo se activan con cambios. Debajo, las nuevas NO entregadas de días anteriores. En el
- * Flujo diario, solo consulta: entregadas y NO entregadas (sin revisar cuenta como no).
- * Las notas asignadas llegan con la pieza 6.
+ * "Notas de ventas": la revisión de papel de la tarde (spec Ruta Diaria parte 2, §2), igual en el
+ * Dashboard y en el Flujo diario. Tres listas con las palabras del tío: las asignadas que ya se
+ * cobraron (solo se ven, salvo las que ya se habían revisado: esas conservan su casilla), las asignadas que todavía deben y las ventas a crédito nuevas, estas dos con
+ * la casilla Entregada (¿regresó el papel?). Sin revisar = palomeada: Administración solo le quita la
+ * palomita a lo que no le dieron. "Guardar revisión" manda las dos listas completas con la fecha del
+ * detalle; "Cancelar" regresa a lo guardado (el CANCELAR / GUARDAR del viejo). Se puede guardar con
+ * `nota_papel.revisar` y si el día es hoy o ayer de Tijuana; si no, solo consulta. Debajo, "Notas de
+ * Ventas NO Entregadas": lo guardado en no y las de días anteriores que siguen sin llegar.
  */
-export function PestanaNotasCredito({
-  detalle,
-  modo,
-  onGuardadas,
-  onCambiosPendientes,
-}: {
-  detalle: DetalleVendedorDia;
-  modo: "flujo" | "dashboard";
-  onGuardadas?: () => void;
-  onCambiosPendientes?: (hay: boolean) => void;
-}) {
-  if (modo === "dashboard") return <NotasDashboard detalle={detalle} onGuardadas={onGuardadas} onCambiosPendientes={onCambiosPendientes} />;
-  const entregadas = detalle.notasCredito.filter((n) => n.entregada === true);
-  const noEntregadas = detalle.notasCredito.filter((n) => n.entregada !== true);
-  if (detalle.notasCredito.length === 0) return <SinDatos>No hay notas pendientes.</SinDatos>;
-  return (
-    <div className="flex mx-auto w-full max-w-5xl flex-col gap-5">
-      {entregadas.length > 0 && <TablaNotas titulo="Notas pendientes nuevas entregadas" notas={entregadas} />}
-      {noEntregadas.length > 0 && <TablaNotas titulo="Notas nuevas NO entregadas" notas={noEntregadas} />}
-    </div>
-  );
-}
-
-function TablaNotas({ titulo, notas }: { titulo: string; notas: DetalleVendedorDia["notasCredito"] }) {
-  return (
-    <div>
-      <TituloBloque extra={plural(notas.length, "nota", "notas")}>{titulo}</TituloBloque>
-      <CajaTabla>
-        <Tabla densidad="compacta" aria-label={titulo}>
-          <thead>
-            <tr>
-              {/* Las columnas del Reporte de Ventas viejo: Folio · Cliente · Pendiente $. */}
-              <Th>Folio</Th>
-              <Th>Cliente</Th>
-              <Th alinear="derecha">Pendiente $</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {notas.map((n) => (
-              <tr key={n.folio}>
-                <Td className="font-mono text-[12.5px] whitespace-nowrap">{n.folio}</Td>
-                <Td>{n.cliente}</Td>
-                <TdMonto centavos={n.pendienteCentavos} />
-              </tr>
-            ))}
-          </tbody>
-        </Tabla>
-      </CajaTabla>
-    </div>
-  );
-}
-
-const TITULO_POR_ENTREGAR = "Notas pendientes nuevas por entregar";
-const TITULO_NO_ENTREGADAS = "Notas nuevas NO entregadas";
-
-function NotasDashboard({
+export function PestanaNotas({
   detalle,
   onGuardadas,
   onCambiosPendientes,
 }: {
   detalle: DetalleVendedorDia;
-  onGuardadas?: () => void;
+  /** Se guardó la revisión; `noEntregadas` = cuántas quedaron en no (el número del renglón). */
+  onGuardadas?: (noEntregadas: number) => void;
+  /** Hay casillas cambiadas a mano sin guardar (para preguntar antes de cerrar). */
   onCambiosPendientes?: (hay: boolean) => void;
 }) {
   const { puede } = useAuth();
-  const puedeRevisar = puede("nota_papel.revisar");
-  // Lo que el usuario cambió y aún no guarda: sobrevive a la actualización automática del
+  const editable = puede("nota_papel.revisar") && fechaRevisable(detalle.fecha, hoyEnTijuana());
+  // Lo que el usuario cambió y aún no guarda, por venta: sobrevive a la actualización automática del
   // Dashboard (cada 60 s), que trae otra vez el detalle. Al guardar bien se olvida.
   const [marcas, setMarcas] = useState<ReadonlyMap<string, boolean>>(() => new Map());
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { notasCredito: notas, notasNoEntregadas } = detalle;
-  const marcada = (n: (typeof notas)[number]) => marcas.get(n.folio) ?? n.entregada === true;
-  const hayCambios = notas.some((n) => marcada(n) !== (n.entregada === true));
+  const { asignadasCobradas, asignadasPorEntregar, notasCredito, notasNoEntregadas } = detalle;
+  // Una asignada que se guardó y después se pagó se queda en "Cobradas" con su `entregada` (el
+  // servidor la sigue contando en el renglón): lleva casilla para corregirla. Las que nunca se
+  // revisaron ahí solo se ven.
+  const cobradasRevisadas = asignadasCobradas.filter((n) => n.entregada !== null);
+  const asignadasConCasilla = [...asignadasPorEntregar, ...cobradasRevisadas];
+  const conCasilla = [...asignadasConCasilla, ...notasCredito];
+  const palomeadaDeInicio = (n: NotaRevision) => n.entregada !== false;
+  const marcada = (n: NotaRevision) => marcas.get(n.ventaNotaId) ?? palomeadaDeInicio(n);
+  // Cambios hechos a mano: Cancelar y la pregunta al cerrar. Una sin revisar también se guarda
+  // (todo llegó), así que Guardar se activa con cualquier nota cuyo valor guardado no sea el de pantalla.
+  const tocadas = conCasilla.some((n) => marcada(n) !== palomeadaDeInicio(n));
+  const porGuardar = conCasilla.some((n) => marcada(n) !== n.entregada);
 
-  // Quien abrió la ventana pregunta antes de cerrarla si quedaron casillas sin guardar.
   useEffect(() => {
-    onCambiosPendientes?.(hayCambios);
-  }, [hayCambios, onCambiosPendientes]);
+    onCambiosPendientes?.(tocadas);
+  }, [tocadas, onCambiosPendientes]);
   useEffect(() => () => onCambiosPendientes?.(false), [onCambiosPendientes]);
 
-  if (notas.length === 0 && notasNoEntregadas.length === 0) return <SinDatos>No hay notas pendientes.</SinDatos>;
+  const noEntregadas: (NotaNoEntregada & { clave: string })[] = [
+    ...conCasilla
+      .filter((n) => n.entregada === false)
+      .map((n) => ({ ...n, fecha: detalle.fecha, clave: n.ventaNotaId })),
+    ...notasNoEntregadas.map((n) => ({ ...n, clave: `${n.fecha}|${n.folio}` })),
+  ];
 
-  function marcar(folio: string, valor: boolean) {
-    setMarcas((antes) => new Map(antes).set(folio, valor));
+  if (conCasilla.length + asignadasCobradas.length + notasNoEntregadas.length === 0)
+    return <SinDatos>No hay notas pendientes.</SinDatos>;
+
+  function marcar(ventaNotaId: string, valor: boolean) {
+    setMarcas((antes) => new Map(antes).set(ventaNotaId, valor));
   }
 
   async function guardar() {
     setGuardando(true);
     setError(null);
     try {
-      // Guardar es la revisión completa: la que queda sin marcar es "no entregada".
+      // Guardar es la revisión completa de las dos listas: la que queda sin palomita es "no entregada".
       await guardarNotasEntregadas({
         vendedor: detalle.vendedorId,
-        notas: notas.map((n) => ({ folio: n.folio, entregada: marcada(n) })),
+        fecha: detalle.fecha,
+        notas: notasCredito.map((n) => ({ folio: n.folio, entregada: marcada(n) })),
+        asignadas: asignadasConCasilla.map((n) => ({ ventaNotaId: n.ventaNotaId, entregada: marcada(n) })),
       });
+      const cuantas = conCasilla.filter((n) => !marcada(n)).length;
       setMarcas(new Map());
-      onGuardadas?.();
+      onGuardadas?.(cuantas);
     } catch (err) {
       setError(mensajeDe(err, "No se pudo guardar la revisión."));
     } finally {
@@ -292,71 +265,63 @@ function NotasDashboard({
     }
   }
 
+  const casilla = editable
+    ? (n: NotaRevision) => (
+        <Casilla
+          aria-label={`Entregada ${n.folio}`}
+          checked={marcada(n)}
+          disabled={guardando}
+          onChange={(e) => marcar(n.ventaNotaId, e.target.checked)}
+        />
+      )
+    : (n: NotaRevision) =>
+        n.entregada === null ? (
+          <span className="text-muted-foreground">Sin revisar</span>
+        ) : n.entregada ? (
+          "Sí"
+        ) : (
+          <span className="font-semibold text-destructive">No</span>
+        );
+
   return (
     <div className="flex mx-auto w-full max-w-5xl flex-col gap-5">
-      {notas.length > 0 && (
-        <div>
-          <TituloBloque extra={plural(notas.length, "nota", "notas")}>{TITULO_POR_ENTREGAR}</TituloBloque>
-          <CajaTabla>
-            <Tabla densidad="compacta" aria-label={TITULO_POR_ENTREGAR}>
-              <thead>
-                <tr>
-                  <Th>Cliente</Th>
-                  <Th>Folio</Th>
-                  <Th alinear="derecha">Monto</Th>
-                  <Th alinear="derecha">Pendiente</Th>
-                  <Th alinear="centro">Entregada</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {notas.map((n) => (
-                  <tr key={n.folio}>
-                    <Td>{n.cliente}</Td>
-                    <Td className="font-mono text-[12.5px] whitespace-nowrap">{n.folio}</Td>
-                    <TdMonto centavos={n.totalCentavos} />
-                    <TdMonto centavos={n.pendienteCentavos} />
-                    <Td alinear="centro">
-                      <Casilla
-                        aria-label={`Entregada ${n.folio}`}
-                        checked={marcada(n)}
-                        disabled={!puedeRevisar || guardando}
-                        onChange={(e) => marcar(n.folio, e.target.checked)}
-                      />
-                    </Td>
-                  </tr>
-                ))}
-              </tbody>
-            </Tabla>
-          </CajaTabla>
-          {error && (
-            <Aviso tono="error" className="mt-2.5">
-              {error}
-            </Aviso>
-          )}
-          {puedeRevisar && (
-            <div className="mt-2.5 flex justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setMarcas(new Map());
-                  setError(null);
-                }}
-                disabled={guardando || !hayCambios}
-              >
-                Cancelar
-              </Button>
-              <Button onClick={() => void guardar()} disabled={guardando || !hayCambios}>
-                {guardando ? "Guardando…" : "Guardar revisión"}
-              </Button>
-            </div>
-          )}
+      {asignadasCobradas.length > 0 && (
+        <TablaRevision
+          titulo={TITULO_ASIGNADAS_COBRADAS}
+          notas={asignadasCobradas}
+          entregada={(n) => (n.entregada === null ? <span className="text-muted-foreground">—</span> : casilla(n))}
+        />
+      )}
+      {asignadasPorEntregar.length > 0 && (
+        <TablaRevision titulo={TITULO_ASIGNADAS_POR_ENTREGAR} notas={asignadasPorEntregar} entregada={casilla} />
+      )}
+      {notasCredito.length > 0 && <TablaRevision titulo={TITULO_NUEVAS} notas={notasCredito} entregada={casilla} />}
+      {editable && conCasilla.length > 0 && (
+        <div className="flex flex-col gap-2.5">
+          {error && <Aviso tono="error">{error}</Aviso>}
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setMarcas(new Map());
+                setError(null);
+              }}
+              disabled={guardando || !tocadas}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={() => void guardar()} disabled={guardando || !porGuardar}>
+              {guardando ? "Guardando…" : "Guardar revisión"}
+            </Button>
+          </div>
         </div>
       )}
-      {notasNoEntregadas.length > 0 && (
+      {noEntregadas.length > 0 && (
         <div>
-          <TituloBloque extra={plural(notasNoEntregadas.length, "nota", "notas")}>{TITULO_NO_ENTREGADAS}</TituloBloque>
+          <TituloBloque extra={plural(noEntregadas.length, "nota", "notas")}>{TITULO_NO_ENTREGADAS}</TituloBloque>
           <CajaTabla>
-            <Tabla densidad="compacta" aria-label={TITULO_NO_ENTREGADAS}>
+            <Tabla densidad="compacta" aria-label={TITULO_NO_ENTREGADAS} className="table-fixed">
+              <ColumnasRevision />
               <thead>
                 <tr>
                   <Th>Cliente</Th>
@@ -367,8 +332,8 @@ function NotasDashboard({
                 </tr>
               </thead>
               <tbody>
-                {notasNoEntregadas.map((n) => (
-                  <tr key={n.folio}>
+                {noEntregadas.map((n) => (
+                  <tr key={n.clave}>
                     <Td>{n.cliente}</Td>
                     <Td className="font-mono text-[12.5px] whitespace-nowrap">{n.folio}</Td>
                     <Td>
@@ -383,6 +348,66 @@ function NotasDashboard({
           </CajaTabla>
         </div>
       )}
+    </div>
+  );
+}
+
+const TITULO_ASIGNADAS_COBRADAS = "Notas Asignadas Cobradas";
+const TITULO_ASIGNADAS_POR_ENTREGAR = "Notas Asignadas NO cobradas por Entregar";
+const TITULO_NUEVAS = "Notas Nuevas x Cobrar Entregadas";
+const TITULO_NO_ENTREGADAS = "Notas de Ventas NO Entregadas";
+
+/** Los mismos anchos en las cuatro tablas: una debajo de la otra se leen como una sola lista. */
+function ColumnasRevision() {
+  return (
+    <colgroup>
+      <col />
+      <col className="w-[10rem]" />
+      <col className="w-[8rem]" />
+      <col className="w-[8rem]" />
+      <col className="w-[8rem]" />
+    </colgroup>
+  );
+}
+
+/** Cliente · Folio · Monto · Pendiente · Entregada (`entregada` dice cómo pintar esa celda). */
+function TablaRevision({
+  titulo,
+  notas,
+  entregada,
+}: {
+  titulo: string;
+  notas: NotaRevision[];
+  entregada: (n: NotaRevision) => ReactNode;
+}) {
+  return (
+    <div>
+      <TituloBloque extra={plural(notas.length, "nota", "notas")}>{titulo}</TituloBloque>
+      <CajaTabla>
+        <Tabla densidad="compacta" aria-label={titulo} className="table-fixed">
+          <ColumnasRevision />
+          <thead>
+            <tr>
+              <Th>Cliente</Th>
+              <Th>Folio</Th>
+              <Th alinear="derecha">Monto</Th>
+              <Th alinear="derecha">Pendiente</Th>
+              <Th alinear="centro">Entregada</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {notas.map((n) => (
+              <tr key={n.ventaNotaId}>
+                <Td>{n.cliente}</Td>
+                <Td className="font-mono text-[12.5px] whitespace-nowrap">{n.folio}</Td>
+                <TdMonto centavos={n.totalCentavos} />
+                <TdMonto centavos={n.pendienteCentavos} />
+                <Td alinear="centro">{entregada(n)}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </Tabla>
+      </CajaTabla>
     </div>
   );
 }

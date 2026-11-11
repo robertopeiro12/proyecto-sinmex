@@ -205,6 +205,32 @@ export function BotonVer({ etiqueta, onClick }: { etiqueta: string; onClick: () 
   );
 }
 
+/**
+ * La celda "Notas de ventas" del renglón: cuántas notas de papel NO regresaron ese día (en rojo si
+ * hay; nada si el día no se ha revisado) junto al "Ver" que abre la revisión.
+ */
+export function CeldaNotasVentas({
+  noEntregadas,
+  etiqueta,
+  onClick,
+}: {
+  noEntregadas: number | null;
+  etiqueta: string;
+  onClick: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-center gap-2">
+      {noEntregadas !== null && (
+        <span className={noEntregadas > 0 ? "font-semibold text-destructive" : "text-muted-foreground"}>
+          {noEntregadas}
+          <span className="sr-only"> no entregadas</span>
+        </span>
+      )}
+      <BotonVer etiqueta={etiqueta} onClick={onClick} />
+    </div>
+  );
+}
+
 /** El nombre (o la fecha) del renglón: abre su detalle en una ventana, en la pestaña por defecto. */
 export function BotonRenglon({ children, onClick }: { children: ReactNode; onClick: () => void }) {
   return (

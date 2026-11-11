@@ -11,6 +11,7 @@ import {
   obtenerDetalleVendedor,
   obtenerFlujoDiario,
   guardarNotasEntregadas,
+  fechaRevisable,
   type PagoDetalle,
 } from "./flujo-diario";
 
@@ -158,15 +159,31 @@ describe("fetchers", () => {
       "/dashboard/vendedor?vendedor=v1&sucursal=MX&fecha=2026-11-09",
     );
   });
-  it("guardarNotasEntregadas: PUT sin cuerpo de respuesta (204)", async () => {
+  it("guardarNotasEntregadas: PUT con la fecha y las dos listas, sin cuerpo de respuesta (204)", async () => {
     apiFetchSinCuerpo.mockResolvedValue(undefined);
-    await guardarNotasEntregadas({
+    const datos = {
       vendedor: "v1",
+      fecha: "2026-11-10",
       notas: [{ folio: "TJ1", entregada: true }],
-    });
+      asignadas: [{ ventaNotaId: "a1", entregada: false }],
+    };
+    await guardarNotasEntregadas(datos);
     expect(apiFetchSinCuerpo).toHaveBeenCalledWith("/dashboard/notas-entregadas", {
       method: "PUT",
-      body: JSON.stringify({ vendedor: "v1", notas: [{ folio: "TJ1", entregada: true }] }),
+      body: JSON.stringify(datos),
     });
+  });
+});
+
+describe("fechaRevisable", () => {
+  it("hoy y ayer de Tijuana se pueden revisar; antes o después, no", () => {
+    expect(fechaRevisable("2026-11-11", "2026-11-11")).toBe(true);
+    expect(fechaRevisable("2026-11-10", "2026-11-11")).toBe(true);
+    expect(fechaRevisable("2026-11-09", "2026-11-11")).toBe(false);
+    expect(fechaRevisable("2026-11-12", "2026-11-11")).toBe(false);
+  });
+
+  it("ayer cruza el mes", () => {
+    expect(fechaRevisable("2026-10-31", "2026-11-01")).toBe(true);
   });
 });

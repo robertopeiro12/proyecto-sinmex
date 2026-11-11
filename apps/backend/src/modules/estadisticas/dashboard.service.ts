@@ -23,31 +23,65 @@ export class DashboardService {
   ) {}
 
   /**
-   * Casilla "Entregada": marca si el vendedor regreso la nota de papel. Solo
-   * notas vivas a credito de ese vendedor, de hoy (Tijuana) o antes; una que no
-   * cumple tumba todo el lote (400) y no se guarda nada.
+   * Revision de papel de la tarde (casilla "Entregada"): las ventas a credito
+   * del vendedor ese dia (`notas`, por folio) y sus notas asignadas ese dia
+   * (`asignadas`). `fecha` solo puede ser hoy o ayer de Tijuana (se corrige al
+   * dia siguiente). Sin `fecha` es hoy y las `notas` aceptan cualquier venta a
+   * credito suya hasta hoy (la forma de antes de la parte 2, para el portal
+   * viejo). Una nota que no cumple tumba todo el lote (400) y no se guarda nada.
    */
   async marcarNotasEntregadas(
     usuarioId: string,
-    q: { vendedor: string; notas: { folio: string; entregada: boolean }[] },
+    q: {
+      vendedor: string;
+      fecha?: string;
+      notas: { folio: string; entregada: boolean }[];
+      asignadas?: { ventaNotaId: string; entregada: boolean }[];
+    },
     ahora?: Date,
   ): Promise<void> {
+    const hoy = hoyEnTijuana(ahora);
+    // El DTO ya exige `AAAA-MM-DD` si viene (vacia no es "hoy").
+    const pedida = q.fecha ?? null;
+    if (pedida !== null && !fechaValidaDashboard(pedida, hoy))
+      throw new BadRequestException('Ese día ya no se puede revisar.');
+    const fecha = pedida ?? hoy;
+    // Si una nota viene dos veces, gana la ultima marca.
+    const porFolio = new Map(q.notas.map((n) => [n.folio.trim(), n.entregada]));
+    const porVenta = new Map(
+      (q.asignadas ?? []).map((a) => [
+        a.ventaNotaId.toLowerCase(),
+        a.entregada,
+      ]),
+    );
+    if (porFolio.size + porVenta.size === 0)
+      throw new BadRequestException('Marca al menos una nota.');
+
     const id = this.flujo.idVendedor(q.vendedor);
     const alcance = await this.flujo.alcanceDe(usuarioId, undefined);
     const vendedor = await this.flujo.vendedorEnAlcance(
       id,
       alcance.tipo === 'una' ? alcance.codigo : null,
     );
-    // Si un folio viene dos veces, gana la ultima marca.
-    const porFolio = new Map(q.notas.map((n) => [n.folio.trim(), n.entregada]));
     const { invalido } = await this.detalleRepo.marcarPapel(
       vendedor.id,
-      hoyEnTijuana(ahora),
       usuarioId,
+      { fecha, hasta: pedida === null },
+      fecha,
       [...porFolio].map(([folio, entregada]) => ({ folio, entregada })),
+      [...porVenta].map(([ventaNotaId, entregada]) => ({
+        ventaNotaId,
+        entregada,
+      })),
     );
+    if (invalido === 'asignada')
+      throw new BadRequestException(
+        'Una de las notas asignadas no se puede revisar.',
+      );
     if (invalido !== null)
-      throw new BadRequestException(`La nota ${invalido} no se puede revisar.`);
+      throw new BadRequestException(
+        `La nota ${invalido.folio} no se puede revisar.`,
+      );
   }
 
   async dashboard(

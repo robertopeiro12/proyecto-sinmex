@@ -4,6 +4,7 @@ import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import { aCentavos } from '../sincronizacion/dinero';
 import type {
   AFavorFila,
+  AsignadaFila,
   GastoFila,
   LineaFila,
   MetodoPago,
@@ -28,6 +29,8 @@ export interface FilasDetalle {
   visitasSinVenta: VisitaSinVentaFila[];
   /** Solo para un vendedor: su ruta diaria de ese dia. */
   ruta: RutaFila[];
+  /** Solo para un vendedor: sus notas asignadas de ese dia. */
+  asignadas: AsignadaFila[];
   promociones: PromoFila[];
 }
 
@@ -92,6 +95,7 @@ export class DetalleRepository {
       visitas,
       promos,
       ruta,
+      asignadas,
     ] = await Promise.all([
       this.ventas(cond, fecha),
       this.lineas(cond, fecha),
@@ -104,6 +108,9 @@ export class DetalleRepository {
       'vendedorId' in a
         ? this.ruta(a.vendedorId, fecha)
         : Promise.resolve<RutaFila[]>([]),
+      'vendedorId' in a
+        ? this.asignadas(a.vendedorId, fecha)
+        : Promise.resolve<AsignadaFila[]>([]),
     ]);
     return {
       ventas,
@@ -114,6 +121,7 @@ export class DetalleRepository {
       visitasSinVenta: visitas,
       promociones: promos,
       ruta,
+      asignadas,
     };
   }
 
@@ -130,8 +138,10 @@ export class DetalleRepository {
       pendiente: string;
       hora: string;
       entregada: boolean | null;
+      status: VentaFila['status'];
     }>`
-      select vn.id, vn.folio, vn.papel_entregado as entregada, cl.nombre as cliente, cl.id as cliente_id,
+      select vn.id, vn.folio, vn.papel_entregado as entregada, vn.status,
+             cl.nombre as cliente, cl.id as cliente_id,
              v.id as vendedor_id,
              v.nombre as vendedor, vn.contado_credito,
              vn.monto_total::text as total,
@@ -164,6 +174,7 @@ export class DetalleRepository {
       pendienteCentavos: aCentavos(x.pendiente),
       hora: x.hora,
       entregada: x.entregada,
+      status: x.status,
     }));
   }
 
@@ -212,44 +223,138 @@ export class DetalleRepository {
   }
 
   /**
-   * Marca la nota de papel de varias ventas del vendedor, en una transaccion:
-   * si algun folio no es una venta viva a credito de ese vendedor con fecha
-   * <= `hasta`, no se guarda nada y se devuelve ese folio. Solo escribe las
-   * que cambian de valor (conservan quien y cuando las marco). No mueve
-   * `updated_at` (lo cuida el trigger de `venta_nota`).
+   * Las notas asignadas vivas del vendedor ese dia (de ventas vivas), con el
+   * saldo de HOY de la venta (monto - abonos vivos, nunca menor que 0) y la
+   * marca de papel de la asignacion. Sin las que tienen saldo y no se cobran
+   * (status fuera de `pendiente`/`abonado`, p. ej. cuenta perdida): no se piden.
+   */
+  private async asignadas(
+    vendedorId: string,
+    fecha: string,
+  ): Promise<AsignadaFila[]> {
+    const r = await sql<{
+      id: string;
+      folio: string;
+      cliente: string;
+      total: string;
+      pendiente: string;
+      entregada: boolean | null;
+    }>`
+      select vn.id, vn.folio, cl.nombre as cliente,
+             vn.monto_total::text as total,
+             greatest(vn.monto_total - ab.abonado, 0)::text as pendiente,
+             na.papel_entregado as entregada
+        from nota_asignada na
+        join venta_nota vn on vn.id = na.venta_nota_id
+        join cliente cl on cl.id = vn.cliente_id
+        cross join lateral (
+          select coalesce(sum(a.monto), 0) as abonado from cobranza_abono a
+           where a.venta_nota_id = vn.id and a.deleted_at is null
+        ) ab
+       where na.deleted_at is null and vn.deleted_at is null
+         and na.vendedor_id = ${vendedorId}::uuid and na.fecha = ${fecha}::date
+         and (vn.status in ('pendiente', 'abonado')
+              or vn.monto_total - ab.abonado <= 0)
+    `.execute(this.db);
+    return r.rows.map((x) => ({
+      ventaNotaId: x.id,
+      folio: x.folio,
+      cliente: x.cliente,
+      totalCentavos: aCentavos(x.total),
+      pendienteCentavos: aCentavos(x.pendiente),
+      entregada: x.entregada,
+    }));
+  }
+
+  /**
+   * Guarda la revision de papel de un vendedor en una transaccion: sus ventas a
+   * credito (`notas`, por folio) y sus notas asignadas (`asignadas`, por
+   * venta). Una venta vale si esta viva, es a credito, es del vendedor y su
+   * fecha es `ventas.fecha` (o, con `ventas.hasta`, cualquiera hasta ese dia:
+   * la forma vieja, sin fecha). Una asignada vale si esta viva, de una venta
+   * viva, es del vendedor y de `fechaAsignadas`. Si alguna no vale no se guarda
+   * nada y se devuelve cual. Solo escribe las que cambian de valor (conservan
+   * quien y cuando las marco). En `venta_nota` no mueve `updated_at` (lo cuida
+   * su trigger); en `nota_asignada` si (ver la migracion).
    */
   async marcarPapel(
     vendedorId: string,
-    hasta: string,
     usuarioId: string,
+    ventas: { fecha: string; hasta: boolean },
+    fechaAsignadas: string,
     notas: { folio: string; entregada: boolean }[],
-  ): Promise<{ invalido: string | null }> {
+    asignadas: { ventaNotaId: string; entregada: boolean }[],
+  ): Promise<{ invalido: { folio: string } | 'asignada' | null }> {
     return this.db.transaction().execute(async (trx) => {
       const folios = notas.map((n) => n.folio);
-      const r = await sql<{ id: string; folio: string }>`
-        select vn.id, vn.folio from venta_nota vn
-         where vn.folio = any(${folios}::text[])
-           and vn.deleted_at is null and vn.vendedor_id = ${vendedorId}::uuid
-           and vn.contado_credito = 'credito' and vn.fecha <= ${hasta}::date
-         for update
-      `.execute(trx);
-      const porFolio = new Map(r.rows.map((x) => [x.folio, x.id]));
-      const invalido = folios.find((f) => !porFolio.has(f));
-      if (invalido !== undefined) return { invalido };
+      const porFolio = new Map<string, string>();
+      if (folios.length > 0) {
+        const r = await sql<{ id: string; folio: string }>`
+          select vn.id, vn.folio from venta_nota vn
+           where vn.folio = any(${folios}::text[])
+             and vn.deleted_at is null and vn.vendedor_id = ${vendedorId}::uuid
+             and vn.contado_credito = 'credito'
+             and ${ventas.hasta ? sql`vn.fecha <= ${ventas.fecha}::date` : sql`vn.fecha = ${ventas.fecha}::date`}
+           for update
+        `.execute(trx);
+        for (const x of r.rows) porFolio.set(x.folio, x.id);
+        const malo = folios.find((f) => !porFolio.has(f));
+        if (malo !== undefined) return { invalido: { folio: malo } };
+      }
+
+      const ventaIds = asignadas.map((a) => a.ventaNotaId);
+      const porVenta = new Map<string, string>();
+      if (ventaIds.length > 0) {
+        const r = await sql<{ id: string; venta_nota_id: string }>`
+          select na.id, na.venta_nota_id from nota_asignada na
+            join venta_nota vn on vn.id = na.venta_nota_id
+           where na.venta_nota_id = any(${ventaIds}::uuid[])
+             and na.deleted_at is null and vn.deleted_at is null
+             and na.vendedor_id = ${vendedorId}::uuid
+             and na.fecha = ${fechaAsignadas}::date
+           for update of na
+        `.execute(trx);
+        for (const x of r.rows) porVenta.set(x.venta_nota_id, x.id);
+        const mala = ventaIds.find((id) => !porVenta.has(id));
+        if (mala !== undefined) {
+          // Para el mensaje: el folio de esa venta, si existe.
+          const f = await sql<{ folio: string }>`
+            select folio from venta_nota where id = ${mala}::uuid
+          `.execute(trx);
+          return {
+            invalido: f.rows[0] ? { folio: f.rows[0].folio } : 'asignada',
+          };
+        }
+      }
+
       // Solo las que de verdad cambian: quien y cuando quedan del primero que
       // la marco con ese valor (guardar dos veces lo mismo no reescribe nada).
-      await sql`
-        update venta_nota vn
-           set papel_entregado = m.entregada,
-               papel_revisado_en = now(),
-               papel_revisado_por_usuario_id = ${usuarioId}::uuid
-          from unnest(
-                 ${notas.map((n) => porFolio.get(n.folio))}::uuid[],
-                 ${notas.map((n) => n.entregada)}::boolean[]
-               ) as m(id, entregada)
-         where vn.id = m.id
-           and vn.papel_entregado is distinct from m.entregada
-      `.execute(trx);
+      if (notas.length > 0)
+        await sql`
+          update venta_nota vn
+             set papel_entregado = m.entregada,
+                 papel_revisado_en = now(),
+                 papel_revisado_por_usuario_id = ${usuarioId}::uuid
+            from unnest(
+                   ${notas.map((n) => porFolio.get(n.folio))}::uuid[],
+                   ${notas.map((n) => n.entregada)}::boolean[]
+                 ) as m(id, entregada)
+           where vn.id = m.id
+             and vn.papel_entregado is distinct from m.entregada
+        `.execute(trx);
+      if (asignadas.length > 0)
+        await sql`
+          update nota_asignada na
+             set papel_entregado = m.entregada,
+                 papel_revisado_en = now(),
+                 papel_revisado_por_usuario_id = ${usuarioId}::uuid
+            from unnest(
+                   ${asignadas.map((a) => porVenta.get(a.ventaNotaId))}::uuid[],
+                   ${asignadas.map((a) => a.entregada)}::boolean[]
+                 ) as m(id, entregada)
+           where na.id = m.id
+             and na.papel_entregado is distinct from m.entregada
+        `.execute(trx);
       return { invalido: null };
     });
   }

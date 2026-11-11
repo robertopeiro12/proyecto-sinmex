@@ -1,7 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useRef } from "react";
-import { useConfirmar } from "@/components/ui/confirmar";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Etiqueta } from "@/components/ui/etiqueta";
 import { CajaTabla, Fila, FilaGrupo, FilaTotal, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
 import {
@@ -9,8 +8,16 @@ import {
   ETIQUETA_PESTANA_VENDEDOR,
   type PestanaDetalleVendedor,
 } from "@/components/flujo-diario/detalle-vendedor";
-import { Barra, BotonNumero, BotonRenglon, BotonVer, formatearPiezas, Pronto } from "@/components/flujo-diario/piezas";
-import { useDetalleAbierto } from "@/components/flujo-diario/use-detalle-abierto";
+import {
+  Barra,
+  BotonNumero,
+  BotonRenglon,
+  BotonVer,
+  CeldaNotasVentas,
+  formatearPiezas,
+  Pronto,
+} from "@/components/flujo-diario/piezas";
+import { useCerrarConPendientes, useDetalleAbierto } from "@/components/flujo-diario/use-detalle-abierto";
 import { VentanaDetalle } from "@/components/flujo-diario/ventana-detalle";
 import {
   agruparPorSucursal,
@@ -52,11 +59,16 @@ export function TablaDashboard({
     return obtenerDetalleDashboard({ vendedor: fila.vendedorId, sucursal: fila.sucursalCodigo, fecha: dashboard.fecha });
   }, "venta");
 
+  // Lo que dijo la revisión de notas recién guardada, por vendedor: el renglón lo muestra sin esperar
+  // la siguiente actualización, que ya trae el número del servidor y lo reemplaza.
+  const [noEntregadasGuardadas, setNoEntregadasGuardadas] = useState<ReadonlyMap<string, number>>(() => new Map());
+
   // Tras cada actualización: el detalle abierto se vuelve a pedir; si su vendedor ya no salió, se cierra.
   const vista = useRef(actualizacion);
   useEffect(() => {
     if (vista.current === actualizacion) return;
     vista.current = actualizacion;
+    setNoEntregadasGuardadas(new Map());
     if (!abierto) return;
     if (dashboard.vendedores.some((f) => f.vendedorId === abierto.clave)) recargar();
     else cerrar();
@@ -102,7 +114,11 @@ export function TablaDashboard({
           </BotonNumero>
         </Td>
         <Td alinear="centro">
-          <BotonVer etiqueta={`Notas de ventas de ${f.vendedor}`} onClick={() => verEn("notas")} />
+          <CeldaNotasVentas
+            noEntregadas={noEntregadasGuardadas.get(clave) ?? f.notasNoEntregadas}
+            etiqueta={`Notas de ventas de ${f.vendedor}`}
+            onClick={() => verEn("notas")}
+          />
         </Td>
         {/* Las notas asignadas llegan con la pieza 6 (spec §6). */}
         <Td alinear="centro" className="text-muted-foreground">
@@ -128,25 +144,12 @@ export function TablaDashboard({
 
   const filaAbierta = visto && dashboard.vendedores.find((f) => f.vendedorId === visto.clave);
 
-  // Casillas Entregada cambiadas sin guardar: cerrar la ventana pregunta antes de perderlas.
-  const pendientes = useRef(false);
-  const avisarPendientes = useCallback((hay: boolean) => {
-    pendientes.current = hay;
-  }, []);
-  const { confirmar, ventana: preguntaCerrar } = useConfirmar();
-  async function alCerrar() {
-    if (
-      pendientes.current &&
-      !(await confirmar({
-        titulo: "¿Cerrar sin guardar la revisión?",
-        descripcion: "Las casillas de Entregada que cambiaste no se guardan.",
-        confirmar: "Cerrar sin guardar",
-        tono: "normal",
-      }))
-    )
-      return;
-    pendientes.current = false;
-    cerrar();
+  const { avisarPendientes, alCerrar, pregunta: preguntaCerrar } = useCerrarConPendientes(cerrar);
+
+  function notasGuardadas(noEntregadas: number) {
+    const clave = abierto?.clave;
+    if (clave) setNoEntregadasGuardadas((antes) => new Map(antes).set(clave, noEntregadas));
+    recargar();
   }
 
   return (
@@ -169,7 +172,7 @@ export function TablaDashboard({
             modo="dashboard"
             pestanaInicial={visto?.pestana}
             onCambioPestana={cambiarPestana}
-            onNotasGuardadas={recargar}
+            onNotasGuardadas={notasGuardadas}
             onCambiosPendientes={avisarPendientes}
           />
         )}

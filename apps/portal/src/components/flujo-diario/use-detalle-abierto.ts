@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { useConfirmar } from "@/components/ui/confirmar";
 import { mensajeDe } from "@/lib/api";
 
 export type EstadoDetalle<D> =
@@ -84,4 +85,32 @@ export function useDetalleAbierto<D, P extends string>(pedir: (clave: string) =>
   const visto = abierto ?? ultimo.current;
 
   return { abierto, visto, estado, abrir, abrirEn, cambiarPestana, recargar, cerrar };
+}
+
+/**
+ * Casillas Entregada cambiadas sin guardar: cerrar la ventana pregunta antes de perderlas.
+ * `avisarPendientes` va al `onCambiosPendientes` del detalle; `alCerrar` a la ventana; `pregunta`
+ * se pinta en la pantalla.
+ */
+export function useCerrarConPendientes(cerrar: () => void) {
+  const pendientes = useRef(false);
+  const avisarPendientes = useCallback((hay: boolean) => {
+    pendientes.current = hay;
+  }, []);
+  const { confirmar, ventana: pregunta } = useConfirmar();
+  async function alCerrar() {
+    if (
+      pendientes.current &&
+      !(await confirmar({
+        titulo: "¿Cerrar sin guardar la revisión?",
+        descripcion: "Las casillas de Entregada que cambiaste no se guardan.",
+        confirmar: "Cerrar sin guardar",
+        tono: "normal",
+      }))
+    )
+      return;
+    pendientes.current = false;
+    cerrar();
+  }
+  return { avisarPendientes, alCerrar, pregunta };
 }

@@ -3,9 +3,10 @@ import { sql } from 'kysely';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import { aCentavos } from '../sincronizacion/dinero';
 import { buscarSucursalUsuario } from '../sucursales/buscar-sucursal-usuario';
-import type {
-  CobranzaOficinaDia,
-  FilaVendedorDia,
+import {
+  contarNotasNoEntregadas,
+  type CobranzaOficinaDia,
+  type FilaVendedorDia,
 } from './reglas-flujo-diario';
 
 export interface FiltroFlujoDiario {
@@ -66,6 +67,9 @@ export class FlujoDiarioRepository {
       vehiculo: string | null;
       ruta_nombre: string | null;
       vehiculo_asignado: string | null;
+      notas_por_revisar: number;
+      notas_revisadas: number;
+      notas_no_entregadas: number;
     }>`
       with dias as (
         select ru.vendedor_id, ru.fecha from ruta ru
@@ -153,7 +157,10 @@ export class FlujoDiarioRepository {
              (j.id is not null) as jornada_cerrada,
              j.vehiculo as vehiculo,
              rd.nombre_ruta as ruta_nombre,
-             va.nombre as vehiculo_asignado
+             va.nombre as vehiculo_asignado,
+             pn.por_revisar as notas_por_revisar,
+             pn.revisadas as notas_revisadas,
+             pn.no_entregadas as notas_no_entregadas
         from dias d
         join vendedor v on v.id = d.vendedor_id
         join sucursal s on s.id = v.sucursal_id
@@ -170,6 +177,48 @@ export class FlujoDiarioRepository {
           on rd.vendedor_id = d.vendedor_id and rd.fecha = d.fecha
          and rd.deleted_at is null
         left join vehiculo va on va.id = rd.vehiculo_id
+        -- Revision de papel de la tarde (Ruta Diaria parte 2), lo mismo que la
+        -- ventana (reglas-detalle.ts): sus asignadas de ese dia y sus ventas a
+        -- credito de ese dia (una que tambien es asignada cuenta una vez, como
+        -- asignada). Se piden las que se cobran (pendiente/abonado con
+        -- saldo) y las ya revisadas aunque hoy esten pagadas. Una asignada con
+        -- saldo que no se cobra (cuenta perdida) no cuenta ni revisada.
+        left join lateral (
+          select count(*) filter (
+                   where n.entregada is not null
+                      or (n.saldo > 0 and n.status in ('pendiente', 'abonado'))
+                 )::int as por_revisar,
+                 count(*) filter (where n.entregada is not null)::int as revisadas,
+                 count(*) filter (where n.entregada = false)::int as no_entregadas
+            from (
+              select true as es_asignada, na.papel_entregado as entregada,
+                     vn.status,
+                     vn.monto_total - coalesce((
+                       select sum(a.monto) from cobranza_abono a
+                        where a.venta_nota_id = vn.id and a.deleted_at is null
+                     ), 0) as saldo
+                from nota_asignada na
+                join venta_nota vn on vn.id = na.venta_nota_id
+               where na.deleted_at is null and vn.deleted_at is null
+                 and na.vendedor_id = d.vendedor_id and na.fecha = d.fecha
+              union all
+              select false, vn.papel_entregado, vn.status,
+                     vn.monto_total - coalesce((
+                       select sum(a.monto) from cobranza_abono a
+                        where a.venta_nota_id = vn.id and a.deleted_at is null
+                     ), 0)
+                from venta_nota vn
+               where vn.deleted_at is null and vn.contado_credito = 'credito'
+                 and vn.vendedor_id = d.vendedor_id and vn.fecha = d.fecha
+                 and not exists (
+                   select 1 from nota_asignada na
+                    where na.deleted_at is null and na.venta_nota_id = vn.id
+                      and na.vendedor_id = d.vendedor_id and na.fecha = d.fecha)
+            ) n
+           -- La asignada con saldo que no se cobra no sale en la ventana.
+           where not (n.es_asignada and n.saldo > 0
+                      and n.status not in ('pendiente', 'abonado'))
+        ) pn on true
        where ${sql.join(condiciones, sql` and `)}
     `.execute(this.db);
 
@@ -190,6 +239,11 @@ export class FlujoDiarioRepository {
       vehiculo: x.vehiculo,
       rutaNombre: x.ruta_nombre,
       vehiculoAsignado: x.vehiculo_asignado,
+      notasNoEntregadas: contarNotasNoEntregadas({
+        porRevisar: Number(x.notas_por_revisar),
+        revisadas: Number(x.notas_revisadas),
+        noEntregadas: Number(x.notas_no_entregadas),
+      }),
     }));
   }
 
