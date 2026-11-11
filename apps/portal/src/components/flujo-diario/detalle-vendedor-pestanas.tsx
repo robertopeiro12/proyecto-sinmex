@@ -186,7 +186,7 @@ export function PestanaGastos({ gastos }: { gastos: DetalleVendedorDia["gastos"]
 /**
  * "Notas de ventas": la revisión de papel de la tarde (spec Ruta Diaria parte 2, §2), igual en el
  * Dashboard y en el Flujo diario. Tres listas con las palabras del tío: las asignadas que ya se
- * cobraron (solo se ven), las asignadas que todavía deben y las ventas a crédito nuevas, estas dos con
+ * cobraron (solo se ven, salvo las que ya se habían revisado: esas conservan su casilla), las asignadas que todavía deben y las ventas a crédito nuevas, estas dos con
  * la casilla Entregada (¿regresó el papel?). Sin revisar = palomeada: Administración solo le quita la
  * palomita a lo que no le dieron. "Guardar revisión" manda las dos listas completas con la fecha del
  * detalle; "Cancelar" regresa a lo guardado (el CANCELAR / GUARDAR del viejo). Se puede guardar con
@@ -212,7 +212,12 @@ export function PestanaNotas({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { asignadasCobradas, asignadasPorEntregar, notasCredito, notasNoEntregadas } = detalle;
-  const conCasilla = [...asignadasPorEntregar, ...notasCredito];
+  // Una asignada que se guardó y después se pagó se queda en "Cobradas" con su `entregada` (el
+  // servidor la sigue contando en el renglón): lleva casilla para corregirla. Las que nunca se
+  // revisaron ahí solo se ven.
+  const cobradasRevisadas = asignadasCobradas.filter((n) => n.entregada !== null);
+  const asignadasConCasilla = [...asignadasPorEntregar, ...cobradasRevisadas];
+  const conCasilla = [...asignadasConCasilla, ...notasCredito];
   const palomeadaDeInicio = (n: NotaRevision) => n.entregada !== false;
   const marcada = (n: NotaRevision) => marcas.get(n.ventaNotaId) ?? palomeadaDeInicio(n);
   // Cambios hechos a mano: Cancelar y la pregunta al cerrar. Una sin revisar también se guarda
@@ -232,7 +237,7 @@ export function PestanaNotas({
     ...notasNoEntregadas.map((n) => ({ ...n, clave: `${n.fecha}|${n.folio}` })),
   ];
 
-  if (conCasilla.length + asignadasCobradas.length + noEntregadas.length === 0)
+  if (conCasilla.length + asignadasCobradas.length + notasNoEntregadas.length === 0)
     return <SinDatos>No hay notas pendientes.</SinDatos>;
 
   function marcar(ventaNotaId: string, valor: boolean) {
@@ -248,7 +253,7 @@ export function PestanaNotas({
         vendedor: detalle.vendedorId,
         fecha: detalle.fecha,
         notas: notasCredito.map((n) => ({ folio: n.folio, entregada: marcada(n) })),
-        asignadas: asignadasPorEntregar.map((n) => ({ ventaNotaId: n.ventaNotaId, entregada: marcada(n) })),
+        asignadas: asignadasConCasilla.map((n) => ({ ventaNotaId: n.ventaNotaId, entregada: marcada(n) })),
       });
       const cuantas = conCasilla.filter((n) => !marcada(n)).length;
       setMarcas(new Map());
@@ -280,7 +285,13 @@ export function PestanaNotas({
 
   return (
     <div className="flex mx-auto w-full max-w-5xl flex-col gap-5">
-      {asignadasCobradas.length > 0 && <TablaRevision titulo={TITULO_ASIGNADAS_COBRADAS} notas={asignadasCobradas} />}
+      {asignadasCobradas.length > 0 && (
+        <TablaRevision
+          titulo={TITULO_ASIGNADAS_COBRADAS}
+          notas={asignadasCobradas}
+          entregada={(n) => (n.entregada === null ? <span className="text-muted-foreground">—</span> : casilla(n))}
+        />
+      )}
       {asignadasPorEntregar.length > 0 && (
         <TablaRevision titulo={TITULO_ASIGNADAS_POR_ENTREGAR} notas={asignadasPorEntregar} entregada={casilla} />
       )}
@@ -359,7 +370,7 @@ function ColumnasRevision() {
   );
 }
 
-/** Cliente · Folio · Monto · Pendiente, y la columna Entregada si se pasa cómo pintarla. */
+/** Cliente · Folio · Monto · Pendiente · Entregada (`entregada` dice cómo pintar esa celda). */
 function TablaRevision({
   titulo,
   notas,
@@ -367,7 +378,7 @@ function TablaRevision({
 }: {
   titulo: string;
   notas: NotaRevision[];
-  entregada?: (n: NotaRevision) => ReactNode;
+  entregada: (n: NotaRevision) => ReactNode;
 }) {
   return (
     <div>
@@ -381,7 +392,7 @@ function TablaRevision({
               <Th>Folio</Th>
               <Th alinear="derecha">Monto</Th>
               <Th alinear="derecha">Pendiente</Th>
-              {entregada ? <Th alinear="centro">Entregada</Th> : <Th />}
+              <Th alinear="centro">Entregada</Th>
             </tr>
           </thead>
           <tbody>
@@ -391,7 +402,7 @@ function TablaRevision({
                 <Td className="font-mono text-[12.5px] whitespace-nowrap">{n.folio}</Td>
                 <TdMonto centavos={n.totalCentavos} />
                 <TdMonto centavos={n.pendienteCentavos} />
-                <Td alinear="centro">{entregada?.(n)}</Td>
+                <Td alinear="centro">{entregada(n)}</Td>
               </tr>
             ))}
           </tbody>

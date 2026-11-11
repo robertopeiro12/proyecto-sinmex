@@ -356,6 +356,83 @@ describe("DetalleVendedor", () => {
       expect(within(tabla).queryByText("TJ261102AP03")).not.toBeInTheDocument();
     });
 
+    it("una asignada guardada en no y pagada después: sale en NO Entregadas, cuenta y se puede volver a palomear", async () => {
+      const u = userEvent.setup();
+      const guardadas = vi.fn();
+      guardarNotasEntregadas.mockResolvedValue(undefined);
+      const detalle: DetalleVendedorDia = {
+        ...REVISION,
+        asignadasCobradas: [
+          nueva("TJ261101AP01", null, { cliente: "Pagó Ya", pendienteCentavos: 0 }),
+          nueva("TJ261101AP04", false, { cliente: "Pagó Sin Papel", pendienteCentavos: 0 }),
+        ],
+        asignadasPorEntregar: [nueva("TJ261102AP03", true)],
+        notasCredito: [nueva("TJ261111RB11", true)],
+      };
+      render(<DetalleVendedor detalle={detalle} modo="dashboard" onNotasGuardadas={guardadas} />);
+      await abrir(u);
+      const cobradas = screen.getByRole("table", { name: "Notas Asignadas Cobradas" });
+      // La que nunca se revisó solo se ve; la revisada lleva su casilla, sin palomita.
+      expect(within(cobradas).queryByRole("checkbox", { name: "Entregada TJ261101AP01" })).not.toBeInTheDocument();
+      const ap04 = within(cobradas).getByRole("checkbox", { name: "Entregada TJ261101AP04" });
+      expect(ap04).not.toBeChecked();
+      const no = screen.getByRole("table", { name: "Notas de Ventas NO Entregadas" });
+      expect(within(no).getByText("Pagó Sin Papel")).toBeInTheDocument();
+      // Todo está guardado: nada por guardar todavía.
+      expect(screen.getByRole("button", { name: "Guardar revisión" })).toBeDisabled();
+      // Al fin sí llegó: se vuelve a palomear y se guarda.
+      await u.click(ap04);
+      await u.click(screen.getByRole("button", { name: "Guardar revisión" }));
+      expect(guardarNotasEntregadas).toHaveBeenCalledWith({
+        vendedor: "ricardo",
+        fecha: HOY,
+        notas: [{ folio: "TJ261111RB11", entregada: true }],
+        asignadas: [
+          { ventaNotaId: "v-TJ261102AP03", entregada: true },
+          { ventaNotaId: "v-TJ261101AP04", entregada: true },
+        ],
+      });
+      await waitFor(() => expect(guardadas).toHaveBeenCalledWith(0));
+    });
+
+    it("el número que se avisa al guardar cuenta la asignada cobrada que sigue en no", async () => {
+      const u = userEvent.setup();
+      const guardadas = vi.fn();
+      guardarNotasEntregadas.mockResolvedValue(undefined);
+      const detalle: DetalleVendedorDia = {
+        ...REVISION,
+        asignadasCobradas: [nueva("TJ261101AP04", false, { pendienteCentavos: 0 })],
+        asignadasPorEntregar: [],
+        notasCredito: [nueva("TJ261111RB10", null)],
+      };
+      render(<DetalleVendedor detalle={detalle} modo="dashboard" onNotasGuardadas={guardadas} />);
+      await abrir(u);
+      await u.click(screen.getByRole("button", { name: "Guardar revisión" }));
+      expect(guardarNotasEntregadas).toHaveBeenCalledWith(
+        expect.objectContaining({ asignadas: [{ ventaNotaId: "v-TJ261101AP04", entregada: false }] }),
+      );
+      await waitFor(() => expect(guardadas).toHaveBeenCalledWith(1));
+    });
+
+    it("solo consulta: la asignada cobrada dice Sí / No, o — si nunca se revisó", async () => {
+      const u = userEvent.setup();
+      mockAuth([]);
+      const detalle: DetalleVendedorDia = {
+        ...REVISION,
+        asignadasCobradas: [
+          nueva("TJ261101AP01", null, { pendienteCentavos: 0 }),
+          nueva("TJ261101AP04", false, { pendienteCentavos: 0 }),
+          nueva("TJ261101AP05", true, { pendienteCentavos: 0 }),
+        ],
+      };
+      render(<DetalleVendedor detalle={detalle} modo="dashboard" />);
+      await abrir(u);
+      const cobradas = screen.getByRole("table", { name: "Notas Asignadas Cobradas" });
+      expect(within(cobradas).getByText("TJ261101AP01").closest("tr")).toHaveTextContent(/—$/);
+      expect(within(cobradas).getByText("TJ261101AP04").closest("tr")).toHaveTextContent(/No$/);
+      expect(within(cobradas).getByText("TJ261101AP05").closest("tr")).toHaveTextContent(/Sí$/);
+    });
+
     it("sin notas NO entregadas, esa lista no sale", async () => {
       const u = userEvent.setup();
       const detalle: DetalleVendedorDia = { ...REVISION, notasCredito: [nueva("TJ261111RB10", true)] };
