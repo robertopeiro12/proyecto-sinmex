@@ -207,6 +207,9 @@ export interface NotaAsignada {
   deleted_at: Timestamp | null;
   fecha: Timestamp;
   id: Generated<string>;
+  papel_entregado: boolean | null;
+  papel_revisado_en: Timestamp | null;
+  papel_revisado_por_usuario_id: string | null;
   quitada_por_usuario_id: string | null;
   updated_at: Generated<Timestamp>;
   vendedor_id: string;

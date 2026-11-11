@@ -1,6 +1,7 @@
 import {
   armarDashboard,
   armarFlujoDiario,
+  contarNotasNoEntregadas,
   fechaValidaDashboard,
   resumir,
   sumar,
@@ -24,6 +25,7 @@ const fila = (extra: Partial<FilaVendedorDia>): FilaVendedorDia => ({
   vehiculo: null,
   rutaNombre: null,
   vehiculoAsignado: null,
+  notasNoEntregadas: null,
   ...extra,
 });
 
@@ -237,5 +239,31 @@ describe('fechaValidaDashboard', () => {
   it('ayer cruza mes y año', () => {
     expect(fechaValidaDashboard('2026-02-28', '2026-03-01')).toBe(true);
     expect(fechaValidaDashboard('2025-12-31', '2026-01-01')).toBe(true);
+  });
+});
+
+describe('contarNotasNoEntregadas', () => {
+  it('con notas por revisar y ninguna revisada: null (el dia no se ha revisado)', () => {
+    expect(
+      contarNotasNoEntregadas({ porRevisar: 3, revisadas: 0, noEntregadas: 0 }),
+    ).toBeNull();
+  });
+
+  it('sin notas por revisar: 0', () => {
+    expect(
+      contarNotasNoEntregadas({ porRevisar: 0, revisadas: 0, noEntregadas: 0 }),
+    ).toBe(0);
+  });
+
+  it('revisado y todo llego: 0', () => {
+    expect(
+      contarNotasNoEntregadas({ porRevisar: 2, revisadas: 2, noEntregadas: 0 }),
+    ).toBe(0);
+  });
+
+  it('revisado con notas sin palomita: cuantas', () => {
+    expect(
+      contarNotasNoEntregadas({ porRevisar: 4, revisadas: 3, noEntregadas: 2 }),
+    ).toBe(2);
   });
 });

@@ -2,6 +2,7 @@ import {
   armarDetalleDia,
   cmpVolumen,
   armarDetalleVendedor,
+  type AsignadaFila,
   type PagoFila,
   type VentaFila,
 } from './reglas-detalle';
@@ -106,6 +107,7 @@ describe('armarDetalleVendedor', () => {
       vehiculo: null,
       rutaNombre: null,
       vehiculoAsignado: null,
+      notasNoEntregadas: null,
     });
     expect(armarDetalleVendedor(base, filas).corte).toEqual({
       contadoCentavos: 5000,
@@ -174,14 +176,25 @@ describe('armarDetalleVendedor', () => {
     const d = armarDetalleVendedor(base, {
       ...vacio,
       ventas: [
-        venta({ folio: 'TJ1', contadoCredito: 'credito', entregada: true }),
+        venta({
+          folio: 'TJ1',
+          contadoCredito: 'credito',
+          pendienteCentavos: 100,
+          entregada: true,
+        }),
         venta({
           ventaId: 'x2',
           folio: 'TJ2',
           contadoCredito: 'credito',
+          pendienteCentavos: 100,
           entregada: false,
         }),
-        venta({ ventaId: 'x3', folio: 'TJ3', contadoCredito: 'credito' }),
+        venta({
+          ventaId: 'x3',
+          folio: 'TJ3',
+          contadoCredito: 'credito',
+          pendienteCentavos: 100,
+        }),
       ],
     });
     expect(d.notasCredito.map((n) => [n.folio, n.entregada])).toEqual([
@@ -213,6 +226,161 @@ describe('armarDetalleVendedor', () => {
       'TJ1',
       'TJ9',
     ]);
+  });
+});
+
+describe('revision de notas en la tarde (Ruta Diaria parte 2)', () => {
+  const asignada = (extra: Partial<AsignadaFila>): AsignadaFila => ({
+    ventaNotaId: 'a1',
+    folio: 'TJA1',
+    cliente: 'C',
+    totalCentavos: 1000,
+    pendienteCentavos: 1000,
+    entregada: null,
+    ...extra,
+  });
+
+  it('sin asignadas: las dos listas vacias', () => {
+    const d = armarDetalleVendedor(base, vacio);
+    expect(d.asignadasCobradas).toEqual([]);
+    expect(d.asignadasPorEntregar).toEqual([]);
+  });
+
+  it('las asignadas pagadas van a Cobradas; con saldo (abonadas tambien) a Por entregar', () => {
+    const d = armarDetalleVendedor(base, {
+      ...vacio,
+      asignadas: [
+        asignada({ ventaNotaId: 'a1', folio: 'TJA1', pendienteCentavos: 0 }),
+        asignada({
+          ventaNotaId: 'a2',
+          folio: 'TJA2',
+          pendienteCentavos: 400,
+          entregada: false,
+        }),
+        asignada({ ventaNotaId: 'a3', folio: 'TJA3' }),
+      ],
+    });
+    expect(d.asignadasCobradas).toEqual([
+      {
+        ventaNotaId: 'a1',
+        folio: 'TJA1',
+        cliente: 'C',
+        totalCentavos: 1000,
+        pendienteCentavos: 0,
+        entregada: null,
+      },
+    ]);
+    expect(
+      d.asignadasPorEntregar.map((n) => [n.ventaNotaId, n.entregada]),
+    ).toEqual([
+      ['a2', false],
+      ['a3', null],
+    ]);
+  });
+
+  it('notasCredito: solo con saldo > 0 y con su ventaNotaId', () => {
+    const d = armarDetalleVendedor(base, {
+      ...vacio,
+      ventas: [
+        venta({
+          ventaId: 'x1',
+          folio: 'TJ1',
+          contadoCredito: 'credito',
+          pendienteCentavos: 0,
+        }),
+        venta({
+          ventaId: 'x2',
+          folio: 'TJ2',
+          contadoCredito: 'credito',
+          pendienteCentavos: 300,
+        }),
+      ],
+    });
+    expect(d.notasCredito).toEqual([
+      {
+        ventaNotaId: 'x2',
+        folio: 'TJ2',
+        cliente: 'C',
+        totalCentavos: 1000,
+        pendienteCentavos: 300,
+        entregada: null,
+      },
+    ]);
+  });
+
+  it('una venta nueva que tambien es asignada sale una vez, como asignada', () => {
+    const d = armarDetalleVendedor(base, {
+      ...vacio,
+      ventas: [
+        venta({
+          ventaId: 'x1',
+          folio: 'TJ1',
+          contadoCredito: 'credito',
+          pendienteCentavos: 500,
+        }),
+      ],
+      asignadas: [
+        asignada({ ventaNotaId: 'x1', folio: 'TJ1', pendienteCentavos: 500 }),
+      ],
+    });
+    expect(d.notasCredito).toEqual([]);
+    expect(d.asignadasPorEntregar.map((n) => n.ventaNotaId)).toEqual(['x1']);
+  });
+
+  it('las tres listas por cliente y folio', () => {
+    const d = armarDetalleVendedor(base, {
+      ...vacio,
+      ventas: [
+        venta({
+          ventaId: 'x1',
+          folio: 'TJ2',
+          cliente: 'Beto',
+          contadoCredito: 'credito',
+          pendienteCentavos: 1,
+          hora: '2026-11-07T15:00:00.000Z',
+        }),
+        venta({
+          ventaId: 'x2',
+          folio: 'TJ9',
+          cliente: 'Ana',
+          contadoCredito: 'credito',
+          pendienteCentavos: 1,
+          hora: '2026-11-07T19:00:00.000Z',
+        }),
+        venta({
+          ventaId: 'x3',
+          folio: 'TJ1',
+          cliente: 'Beto',
+          contadoCredito: 'credito',
+          pendienteCentavos: 1,
+          hora: '2026-11-07T20:00:00.000Z',
+        }),
+      ],
+      asignadas: [
+        asignada({ ventaNotaId: 'a1', folio: 'TJ5', cliente: 'Zoe' }),
+        asignada({ ventaNotaId: 'a2', folio: 'TJ7', cliente: 'Ana' }),
+        asignada({ ventaNotaId: 'a3', folio: 'TJ3', cliente: 'Ana' }),
+        asignada({
+          ventaNotaId: 'a4',
+          folio: 'TJ8',
+          cliente: 'Zoe',
+          pendienteCentavos: 0,
+        }),
+        asignada({
+          ventaNotaId: 'a5',
+          folio: 'TJ4',
+          cliente: 'Ana',
+          pendienteCentavos: 0,
+        }),
+      ],
+    });
+    expect(d.notasCredito.map((n) => n.folio)).toEqual(['TJ9', 'TJ1', 'TJ2']);
+    expect(d.asignadasPorEntregar.map((n) => n.folio)).toEqual([
+      'TJ3',
+      'TJ7',
+      'TJ5',
+    ]);
+    expect(d.asignadasCobradas.map((n) => n.folio)).toEqual(['TJ4', 'TJ8']);
   });
 });
 

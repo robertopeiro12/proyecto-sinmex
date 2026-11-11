@@ -1109,15 +1109,22 @@ describe('Flujo diario (e2e)', () => {
       expect(suma(c.cobranza.contado)).toBe(rc?.contadoCentavos);
     });
 
-    it('venta a credito aparece en notasCredito con su pendiente; la venta eliminada en ninguna lista', async () => {
+    it('venta a credito ya pagada sale en notas pero no en notasCredito (no se pide su papel); la venta eliminada en ninguna lista', async () => {
       const c = (
         await detalleVendedor(cookieGeneral, {
           fecha: '2018-05-01',
           vendedor: carla,
         }).expect(200)
       ).body as DetalleVendedorDia;
-      expect(c.notasCredito).toHaveLength(1);
-      expect(c.notasCredito[0]).toMatchObject({ totalCentavos: 15000 });
+      // El cobro del 05-08 la dejo en 0: la revision de la tarde ya no la pide.
+      expect(c.notas).toEqual([
+        expect.objectContaining({
+          contadoCredito: 'credito',
+          totalCentavos: 15000,
+          pendienteCentavos: 0,
+        }),
+      ]);
+      expect(c.notasCredito).toEqual([]);
       const e = (
         await detalleVendedor(cookieGeneral, {
           fecha: '2018-05-08',

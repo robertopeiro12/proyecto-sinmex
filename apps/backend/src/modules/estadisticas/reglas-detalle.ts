@@ -59,14 +59,19 @@ export interface DetalleVendedorDia {
     aFavor: { cliente: string; montoCentavos: number }[];
   };
   gastos: { descripcion: string; montoCentavos: number }[];
-  notasCredito: {
-    folio: string;
-    cliente: string;
-    totalCentavos: number;
-    pendienteCentavos: number;
-    /** La nota de papel: true entregada, false no, null sin revisar. */
-    entregada: boolean | null;
-  }[];
+  /**
+   * "Notas Nuevas x Cobrar Entregadas": sus ventas a credito de ese dia que
+   * todavia deben algo. Una que tambien le asignaron ese dia sale solo como
+   * asignada. Orden: cliente, folio.
+   */
+  notasCredito: NotaRevision[];
+  /** "Notas Asignadas Cobradas": asignadas ese dia que hoy deben 0. Orden: cliente, folio. */
+  asignadasCobradas: NotaRevision[];
+  /**
+   * "Notas Asignadas NO cobradas por Entregar": asignadas ese dia con saldo
+   * (las abonadas tambien). Orden: cliente, folio.
+   */
+  asignadasPorEntregar: NotaRevision[];
   /**
    * Notas a credito de dias ANTERIORES del vendedor marcadas como no
    * entregadas y con algo pendiente. Orden: fecha, folio.
@@ -76,6 +81,21 @@ export interface DetalleVendedorDia {
   promociones: { cliente: string; producto: string; cantidad: number }[];
   /** `null` sin jornada cerrada. */
   corte: Corte | null;
+}
+
+/** Una nota en la revision de la tarde (nueva a credito o asignada). */
+export interface NotaRevision {
+  ventaNotaId: string;
+  folio: string;
+  cliente: string;
+  totalCentavos: number;
+  /** Saldo de hoy: monto - abonos vivos, nunca menor que 0. */
+  pendienteCentavos: number;
+  /**
+   * La nota de papel: true entregada, false no, null sin revisar. En una
+   * asignada es `nota_asignada.papel_entregado`; en una nueva, el de la venta.
+   */
+  entregada: boolean | null;
 }
 
 export interface NotaNoEntregada {
@@ -107,6 +127,9 @@ export interface DetalleDia {
 }
 
 /* ---- Filas planas que entrega el repositorio ---- */
+
+/** Una `nota_asignada` viva del vendedor ese dia, con el saldo de hoy de su venta. */
+export type AsignadaFila = NotaRevision;
 
 export interface VentaFila {
   ventaId: string;
@@ -258,6 +281,9 @@ const mezclarVisitas = <V extends { vendio: boolean; hora: string | null }>(
           : cmp(a.hora, b.hora),
   );
 
+const porClienteFolio = (ns: NotaRevision[]): NotaRevision[] =>
+  [...ns].sort((a, b) => cmp(a.cliente, b.cliente) || cmp(a.folio, b.folio));
+
 export function armarDetalleVendedor(
   base: {
     fecha: string;
@@ -277,6 +303,8 @@ export function armarDetalleVendedor(
     noEntregadas?: NotaNoEntregada[];
     /** Su ruta diaria de ese dia; sin ella, solo los clientes que atendió. */
     ruta?: RutaFila[];
+    /** Sus notas asignadas de ese dia; sin ellas, ninguna. */
+    asignadas?: AsignadaFila[];
   },
 ): DetalleVendedorDia {
   const ventas = [...filas.ventas].sort(
@@ -380,6 +408,11 @@ export function armarDetalleVendedor(
     ...atendidos.filter((a) => !enRuta.has(a.clienteId)).map(sinId),
   ];
 
+  // Revision de la tarde: solo se piden notas que todavia deben algo; una nota
+  // nueva que tambien le asignaron ese dia sale una vez, como asignada.
+  const asignadas = (filas.asignadas ?? []).map((a) => ({ ...a }));
+  const asignadaIds = new Set(asignadas.map((a) => a.ventaNotaId));
+
   let corte: Corte | null = null;
   if (base.jornadaCerrada) {
     // La misma cuenta del renglon de Tarea 2: nunca se repite la aritmetica.
@@ -400,6 +433,7 @@ export function armarDetalleVendedor(
       vehiculo: null,
       rutaNombre: null,
       vehiculoAsignado: null,
+      notasNoEntregadas: null,
     });
     corte = {
       contadoCentavos: r.contadoCentavos,
@@ -421,15 +455,29 @@ export function armarDetalleVendedor(
       descripcion: g.descripcion,
       montoCentavos: g.montoCentavos,
     })),
-    notasCredito: ventas
-      .filter((v) => v.contadoCredito === 'credito')
-      .map((v) => ({
-        folio: v.folio,
-        cliente: v.cliente,
-        totalCentavos: v.totalCentavos,
-        pendienteCentavos: v.pendienteCentavos,
-        entregada: v.entregada,
-      })),
+    notasCredito: porClienteFolio(
+      ventas
+        .filter(
+          (v) =>
+            v.contadoCredito === 'credito' &&
+            v.pendienteCentavos > 0 &&
+            !asignadaIds.has(v.ventaId),
+        )
+        .map((v) => ({
+          ventaNotaId: v.ventaId,
+          folio: v.folio,
+          cliente: v.cliente,
+          totalCentavos: v.totalCentavos,
+          pendienteCentavos: v.pendienteCentavos,
+          entregada: v.entregada,
+        })),
+    ),
+    asignadasCobradas: porClienteFolio(
+      asignadas.filter((a) => a.pendienteCentavos <= 0),
+    ),
+    asignadasPorEntregar: porClienteFolio(
+      asignadas.filter((a) => a.pendienteCentavos > 0),
+    ),
     notasNoEntregadas: [...(filas.noEntregadas ?? [])].sort(
       (a, b) => cmp(a.fecha, b.fecha) || cmp(a.folio, b.folio),
     ),
