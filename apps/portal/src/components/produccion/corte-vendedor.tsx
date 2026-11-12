@@ -5,10 +5,20 @@ import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
 import { Campo, Entrada, Lista } from "@/components/ui/campo";
 import { useConfirmar } from "@/components/ui/confirmar";
-import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
+import {
+  EncabezadoPantalla,
+  Pantalla,
+} from "@/components/ui/encabezado-pantalla";
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { Etiqueta } from "@/components/ui/etiqueta";
-import { CajaTabla, Fila, FilaTotal, Tabla, Td, Th } from "@/components/ui/tabla";
+import {
+  CajaTabla,
+  Fila,
+  FilaTotal,
+  Tabla,
+  Td,
+  Th,
+} from "@/components/ui/tabla";
 import { mensajeDe } from "@/lib/api";
 import {
   borradorDeCorte,
@@ -23,8 +33,9 @@ import {
   type BorradorCorte,
   type CorteVendedor as Corte,
   type LineaCorte,
+  textoHecho,
 } from "@/lib/cortes";
-import { formatearDiaLargo, formatearFechaHora } from "@/lib/formato";
+import { formatearDiaLargo } from "@/lib/formato";
 import { listarProductos, type Producto } from "@/lib/productos";
 
 const COLUMNAS = 8;
@@ -87,19 +98,27 @@ export function CorteVendedor({
   const opciones = presentacionesParaAgregar(productos, lineas);
   // La pastilla dice lo guardado (como la lista), no lo que se va escribiendo.
   const estado = etiquetaEstadoCorte(
-    corte ? estadoDeCorte(corte) : { estado: "sin_corte", piezasFaltantes: null },
+    corte
+      ? estadoDeCorte(corte)
+      : { estado: "sin_corte", piezasFaltantes: null },
   );
 
   function editar(id: string, campo: "buenas" | "merma", valor: string) {
     setAviso(null);
-    setBorrador((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { buenas: "", merma: "" }), [campo]: valor } }));
+    setBorrador((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] ?? { buenas: "", merma: "" }), [campo]: valor },
+    }));
     setTocadas((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   }
 
   function agregar() {
     const elegida = opciones.find((o) => o.id === porAgregar);
     if (!elegida) return;
-    setAgregadas((prev) => [...prev, lineaAgregada(elegida.id, elegida.nombre)]);
+    setAgregadas((prev) => [
+      ...prev,
+      lineaAgregada(elegida.id, elegida.nombre),
+    ]);
     setPorAgregar("");
   }
 
@@ -129,14 +148,20 @@ export function CorteVendedor({
     setError(null);
     setAviso(null);
     try {
-      const r = await guardarCorteVendedor({ fecha, vendedor: vendedor.id, lineas: conteosDe(vista) });
+      const r = await guardarCorteVendedor({
+        fecha,
+        vendedor: vendedor.id,
+        lineas: conteosDe(vista),
+      });
       setCorte(r);
       setAgregadas([]);
       setTocadas(new Set());
       setBorrador(borradorDeCorte(r.lineas));
       setAviso("Corte guardado.");
     } catch (err) {
-      setError(mensajeDe(err, "No se pudo guardar el corte. Vuelve a intentar."));
+      setError(
+        mensajeDe(err, "No se pudo guardar el corte. Vuelve a intentar."),
+      );
     } finally {
       setGuardando(false);
     }
@@ -148,7 +173,12 @@ export function CorteVendedor({
         titulo={`Corte · ${vendedor.nombre}`}
         descripcion={`${formatearDiaLargo(fecha)}. Cuenta lo que regresó y anota las buenas y la merma de cada presentación.`}
         acciones={
-          <Button type="button" variant="outline" disabled={guardando} onClick={() => void salir()}>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={guardando}
+            onClick={() => void salir()}
+          >
             ← Volver a Corte
           </Button>
         }
@@ -161,11 +191,14 @@ export function CorteVendedor({
         <>
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <Etiqueta tono={estado.tono}>{estado.texto}</Etiqueta>
-            {corte.hecho && `Hecho por ${corte.hecho.por}, ${formatearFechaHora(corte.hecho.en)}.`}
+            {corte.hecho && textoHecho(corte.hecho)}
           </p>
 
           <CajaTabla>
-            <Tabla aria-label="Corte del vendedor" className="table-fixed min-w-[900px]">
+            <Tabla
+              aria-label="Corte del vendedor"
+              className="table-fixed min-w-[900px]"
+            >
               <colgroup>
                 <col />
                 <col className="w-24" />
@@ -193,8 +226,12 @@ export function CorteVendedor({
               <tbody>
                 {vista.filas.length === 0 && (
                   <tr>
-                    <td colSpan={COLUMNAS} className="px-3 py-6 text-center text-muted-foreground">
-                      No hubo carga ni venta ese día. Si regresó algo, agrega la presentación.
+                    <td
+                      colSpan={COLUMNAS}
+                      className="px-3 py-6 text-center text-muted-foreground"
+                    >
+                      No hubo carga ni venta ese día. Si regresó algo, agrega la
+                      presentación.
                     </td>
                   </tr>
                 )}
@@ -205,7 +242,9 @@ export function CorteVendedor({
                       <Td>
                         <span className="block truncate">{l.nombre}</span>
                         {l.deberiaRegresar < 0 && (
-                          <span className="block text-xs font-medium text-warning">Vendió más de lo cargado</span>
+                          <span className="block text-xs font-medium text-warning">
+                            Vendió más de lo cargado
+                          </span>
                         )}
                       </Td>
                       <Td alinear="derecha">{l.cargadas}</Td>
@@ -220,7 +259,9 @@ export function CorteVendedor({
                           valor={borrador[l.presentacionId]?.buenas ?? ""}
                           invalido={f.buenas === null}
                           deshabilitado={guardando}
-                          onCambio={(v) => editar(l.presentacionId, "buenas", v)}
+                          onCambio={(v) =>
+                            editar(l.presentacionId, "buenas", v)
+                          }
                         />
                       </Td>
                       <Td alinear="derecha">
@@ -263,8 +304,16 @@ export function CorteVendedor({
 
           {opciones.length > 0 && (
             <div className="flex flex-wrap items-end gap-3">
-              <Campo id="corte-agregar" etiqueta="Agregar presentación" className="w-72">
-                <Lista value={porAgregar} disabled={guardando} onChange={(e) => setPorAgregar(e.target.value)}>
+              <Campo
+                id="corte-agregar"
+                etiqueta="Agregar presentación"
+                className="w-72"
+              >
+                <Lista
+                  value={porAgregar}
+                  disabled={guardando}
+                  onChange={(e) => setPorAgregar(e.target.value)}
+                >
                   <option value="">Elige una presentación</option>
                   {opciones.map((o) => (
                     <option key={o.id} value={o.id}>
@@ -273,17 +322,30 @@ export function CorteVendedor({
                   ))}
                 </Lista>
               </Campo>
-              <Button type="button" variant="outline" disabled={!porAgregar || guardando} onClick={agregar}>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!porAgregar || guardando}
+                onClick={agregar}
+              >
                 Agregar
               </Button>
             </div>
           )}
 
           <div className="flex flex-wrap items-center gap-3">
-            <Button disabled={guardando || vista.hayInvalidas} onClick={() => void guardar()}>
+            <Button
+              disabled={guardando || vista.hayInvalidas}
+              onClick={() => void guardar()}
+            >
               {guardando ? "Guardando…" : "Guardar corte"}
             </Button>
-            <Button type="button" variant="outline" disabled={guardando} onClick={() => void salir()}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={guardando}
+              onClick={() => void salir()}
+            >
               Cancelar
             </Button>
             {aviso && <Aviso tono="exito">{aviso}</Aviso>}
@@ -319,7 +381,9 @@ function CampoConteo({
         onChange={(e) => onCambio(e.target.value)}
         className="w-full text-right tabular-nums"
       />
-      {invalido && <p className="mt-1 text-xs text-destructive">Solo piezas enteras</p>}
+      {invalido && (
+        <p className="mt-1 text-xs text-destructive">Solo piezas enteras</p>
+      )}
     </>
   );
 }
@@ -327,6 +391,7 @@ function CampoConteo({
 /** > 0 en rojo; < 0 es sobrante, sin rojo; 0 nada; `null` (sin corte) nada. */
 function Faltante({ valor }: { valor: number | null }) {
   if (valor === null || valor === 0) return null;
-  if (valor > 0) return <span className="font-semibold text-destructive">{valor}</span>;
+  if (valor > 0)
+    return <span className="font-semibold text-destructive">{valor}</span>;
   return <span className="text-muted-foreground">{`Sobran ${-valor}`}</span>;
 }

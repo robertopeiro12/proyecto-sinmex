@@ -1,4 +1,5 @@
 import { apiFetch } from "./api";
+import { formatearDiaLargo } from "./formato";
 import { leerPiezas } from "./produccion";
 import type { Producto } from "./productos";
 
@@ -78,12 +79,18 @@ export interface ConteoCorte {
 }
 
 /** `sucursal`: código (`TJ`) o `null` = todas las que alcance el usuario. */
-export function leerCortesDelDia(fecha: string, sucursal: string | null): Promise<CortesDelDia> {
+export function leerCortesDelDia(
+  fecha: string,
+  sucursal: string | null,
+): Promise<CortesDelDia> {
   const params = new URLSearchParams({ fecha, sucursal: sucursal ?? "todas" });
   return apiFetch<CortesDelDia>(`/cortes?${params.toString()}`);
 }
 
-export function leerCorteVendedor(fecha: string, vendedor: string): Promise<CorteVendedor> {
+export function leerCorteVendedor(
+  fecha: string,
+  vendedor: string,
+): Promise<CorteVendedor> {
   const params = new URLSearchParams({ fecha, vendedor });
   return apiFetch<CorteVendedor>(`/cortes/vendedor?${params.toString()}`);
 }
@@ -97,7 +104,10 @@ export function guardarCorteVendedor(datos: {
   vendedor: string;
   lineas: ConteoCorte[];
 }): Promise<CorteVendedor> {
-  return apiFetch<CorteVendedor>("/cortes/vendedor", { method: "PUT", body: JSON.stringify(datos) });
+  return apiFetch<CorteVendedor>("/cortes/vendedor", {
+    method: "PUT",
+    body: JSON.stringify(datos),
+  });
 }
 
 // ── Reglas de la pantalla (puras) ──────────────────────────────────────────────
@@ -106,32 +116,46 @@ export function guardarCorteVendedor(datos: {
 export function etiquetaEstadoCorte(
   fila: Pick<FilaCorte, "estado" | "piezasFaltantes">,
 ): { texto: string; tono: "neutro" | "exito" | "error" } {
-  if (fila.estado === "sin_corte") return { texto: "Sin corte", tono: "neutro" };
-  if (fila.estado === "con_faltante") return { texto: `Faltan ${fila.piezasFaltantes ?? 0}`, tono: "error" };
+  if (fila.estado === "sin_corte")
+    return { texto: "Sin corte", tono: "neutro" };
+  if (fila.estado === "con_faltante")
+    return { texto: `Faltan ${fila.piezasFaltantes ?? 0}`, tono: "error" };
   return { texto: "Corte hecho", tono: "exito" };
 }
 
 /** El estado de un corte ya leído, con la misma regla que la lista del servidor. */
-export function estadoDeCorte(corte: Pick<CorteVendedor, "hecho" | "totales">): Pick<FilaCorte, "estado" | "piezasFaltantes"> {
+export function estadoDeCorte(
+  corte: Pick<CorteVendedor, "hecho" | "totales">,
+): Pick<FilaCorte, "estado" | "piezasFaltantes"> {
   if (!corte.hecho) return { estado: "sin_corte", piezasFaltantes: null };
   const faltan = corte.totales.faltante ?? 0;
-  return { estado: faltan > 0 ? "con_faltante" : "hecho", piezasFaltantes: faltan };
+  return {
+    estado: faltan > 0 ? "con_faltante" : "hecho",
+    piezasFaltantes: faltan,
+  };
 }
 
 /** Lo guardado como texto del campo: vacío si no hay (nunca el teórico prellenado). */
-export const textoConteo = (piezas: number) => (piezas > 0 ? String(piezas) : "");
+export const textoConteo = (piezas: number) =>
+  piezas > 0 ? String(piezas) : "";
 
 /** Lo escrito en los campos, por presentación. */
 export type BorradorCorte = Record<string, { buenas: string; merma: string }>;
 
 export function borradorDeCorte(lineas: readonly LineaCorte[]): BorradorCorte {
   return Object.fromEntries(
-    lineas.map((l) => [l.presentacionId, { buenas: textoConteo(l.buenas), merma: textoConteo(l.merma) }]),
+    lineas.map((l) => [
+      l.presentacionId,
+      { buenas: textoConteo(l.buenas), merma: textoConteo(l.merma) },
+    ]),
   );
 }
 
 /** Una línea vacía para una presentación agregada a mano (sin movimiento ese día). */
-export function lineaAgregada(presentacionId: string, nombre: string): LineaCorte {
+export function lineaAgregada(
+  presentacionId: string,
+  nombre: string,
+): LineaCorte {
   return {
     presentacionId,
     nombre,
@@ -182,14 +206,21 @@ export function vistaCorte(
     buenas: leerPiezas(borrador[l.presentacionId]?.buenas ?? ""),
     merma: leerPiezas(borrador[l.presentacionId]?.merma ?? ""),
   }));
-  const hayInvalidas = leidas.some((f) => f.buenas === null || f.merma === null);
-  const cambios = leidas.some((f) => f.buenas !== f.linea.buenas || f.merma !== f.linea.merma);
+  const hayInvalidas = leidas.some(
+    (f) => f.buenas === null || f.merma === null,
+  );
+  const cambios = leidas.some(
+    (f) => f.buenas !== f.linea.buenas || f.merma !== f.linea.merma,
+  );
   const filas = leidas.map((f) => ({
     ...f,
     faltante:
-      (hecho || tocadas.has(f.linea.presentacionId)) && f.buenas !== null ? f.linea.deberiaRegresar - f.buenas : null,
+      (hecho || tocadas.has(f.linea.presentacionId)) && f.buenas !== null
+        ? f.linea.deberiaRegresar - f.buenas
+        : null,
   }));
-  const suma = (valor: (f: FilaVistaCorte) => number) => filas.reduce((t, f) => t + valor(f), 0);
+  const suma = (valor: (f: FilaVistaCorte) => number) =>
+    filas.reduce((t, f) => t + valor(f), 0);
   return {
     filas,
     totales: {
@@ -209,7 +240,11 @@ export function vistaCorte(
 
 /** Lo que se manda al guardar: todas las líneas de la tabla, vacío = 0. */
 export function conteosDe(vista: VistaCorte): ConteoCorte[] {
-  return vista.filas.map((f) => ({ presentacionId: f.linea.presentacionId, buenas: f.buenas ?? 0, merma: f.merma ?? 0 }));
+  return vista.filas.map((f) => ({
+    presentacionId: f.linea.presentacionId,
+    buenas: f.buenas ?? 0,
+    merma: f.merma ?? 0,
+  }));
 }
 
 /** Presentaciones vivas (de productos activos) que todavía no están en la tabla, por nombre. */
@@ -220,7 +255,22 @@ export function presentacionesParaAgregar(
   const ya = new Set(enTabla.map((l) => l.presentacionId));
   return productos
     .filter((p) => p.activo)
-    .flatMap((p) => p.presentaciones.map((pr) => ({ id: pr.id, nombre: `${p.nombre} ${pr.volumen}` })))
+    .flatMap((p) =>
+      p.presentaciones.map((pr) => ({
+        id: pr.id,
+        nombre: `${p.nombre} ${pr.volumen}`,
+      })),
+    )
     .filter((pr) => !ya.has(pr.id))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+}
+
+/**
+ * "Hecho por Luis el jueves 12 de noviembre a las 12:58." `en` llega del servidor como
+ * `AAAA-MM-DD hh:mm` en hora de Tijuana; si no trae esa forma se muestra tal cual.
+ */
+export function textoHecho(hecho: { en: string; por: string }): string {
+  const m = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})$/.exec(hecho.en);
+  const cuando = m ? `el ${formatearDiaLargo(m[1])} a las ${m[2]}` : hecho.en;
+  return `Hecho por ${hecho.por} ${cuando}.`;
 }
