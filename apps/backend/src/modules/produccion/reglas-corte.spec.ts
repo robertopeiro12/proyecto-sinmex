@@ -2,6 +2,7 @@ import {
   armarCorte,
   deberiaRegresar,
   estadoCorte,
+  existenciasPorPresentacion,
   faltante,
   MENSAJE_CONTEO_INVALIDO,
   planCorte,
@@ -218,5 +219,21 @@ describe('planCorte', () => {
       [{ presentacionId: A, buenas: 5, merma: 1 }],
     );
     expect(plan).toEqual({ crear: [], actualizar: [], borrar: [] });
+  });
+});
+
+describe('existenciasPorPresentacion', () => {
+  it('es deberia regresar por presentacion, sin recortar el negativo', () => {
+    const base = { nombre: 'x', buenas: 7, merma: 1 };
+    const mapa = existenciasPorPresentacion([
+      { ...base, presentacionId: A, cargadas: 20, vendidas: 5, regaladas: 2 },
+      { ...base, presentacionId: B, cargadas: 0, vendidas: 3, regaladas: 0 },
+    ]);
+    expect(mapa).toEqual(
+      new Map([
+        [A, 13],
+        [B, -3],
+      ]),
+    );
   });
 });

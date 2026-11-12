@@ -64,6 +64,23 @@ export function deberiaRegresar(m: {
   return m.cargadas - m.vendidas - m.regaladas;
 }
 
+/**
+ * Lo que el vendedor todavia trae en la camioneta, por presentacion: la MISMA
+ * cuenta que "deberia regresar" (`deberiaRegresar`), en vivo. La usa la venta
+ * del portal para no venderle a un vendedor mas de lo que trae cargado (con
+ * `sucursal.control_inventario` prendida, como la app de T-27).
+ *
+ * Cuando exista la merma y el consumo de la tablet (PR #150 / T-33), se restan
+ * en `deberiaRegresar` y esta existencia los descuenta sola.
+ */
+export function existenciasPorPresentacion(
+  movimientos: readonly MovimientoPresentacion[],
+): Map<string, number> {
+  return new Map(
+    movimientos.map((m) => [m.presentacionId, deberiaRegresar(m)]),
+  );
+}
+
 /** Faltante = deberia − buenas, solo con el corte hecho (D9). */
 export function faltante(
   deberia: number,

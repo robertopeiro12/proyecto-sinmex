@@ -40,6 +40,99 @@ export interface DiaVendedor {
   fecha: string;
 }
 
+/** Un vendedor, o una sucursal por codigo (`null` = todas). */
+export type FiltroMovimientos =
+  { vendedorId: string } | { sucursalCodigo: string | null };
+
+/**
+ * Las lineas de las cargas **aceptadas** y vivas de ese dia (pendientes,
+ * rechazadas y dadas de baja no cuentan). `carga_detalle` no tiene baja
+ * logica: editar una carga reemplaza sus lineas. La misma suma que usaba
+ * Retorno como referencia.
+ */
+function cargasAceptadasDelDia(fecha: string, db: Kysely<DB>) {
+  return db
+    .selectFrom('carga as c')
+    .innerJoin('carga_detalle as cd', 'cd.carga_id', 'c.id')
+    .select([
+      'c.vendedor_id as vendedor_id',
+      'cd.presentacion_id as presentacion_id',
+      'cd.piezas as piezas',
+    ])
+    .where(sql<boolean>`c.fecha = ${fecha}::date`)
+    .where('c.estado', '=', 'aceptada')
+    .where('c.deleted_at', 'is', null);
+}
+
+/**
+ * Por vendedor y presentacion, lo cargado (cargas aceptadas), lo vendido y
+ * regalado (lineas vivas de ventas vivas con esa `fecha`, de cualquier status;
+ * las de mostrador no tienen vendedor y no cuentan) y lo contado (filas vivas
+ * de `retorno`). Solo salen las presentaciones con algun movimiento, aunque
+ * esten desactivadas o dadas de baja. Vendidas se leen en vivo: editar o
+ * eliminar una venta (T-17) cambia el teorico.
+ *
+ * `filtro`: un vendedor, o una sucursal por codigo (`null` = todas). Siempre
+ * vendedores vivos; la sucursal es la del vendedor.
+ *
+ * Fuera de la clase a proposito: la venta del portal (`ventas-cobranza/`) la
+ * llama con su `trx` para calcular la existencia del vendedor con
+ * `existenciasPorPresentacion` (reglas-corte.ts). Una sola cuenta para el corte
+ * y para el candado de la venta.
+ */
+export async function movimientosDelDia(
+  db: Kysely<DB>,
+  fecha: string,
+  filtro: FiltroMovimientos,
+): Promise<MovimientoVendedor[]> {
+  const condicion =
+    'vendedorId' in filtro
+      ? sql`v.id = ${filtro.vendedorId}`
+      : filtro.sucursalCodigo === null
+        ? sql`true`
+        : sql`s.codigo = ${filtro.sucursalCodigo}`;
+  const r = await sql<MovimientoVendedor>`
+    with mov as (
+      select cg.vendedor_id, cg.presentacion_id,
+             cg.piezas as cargadas, 0 as vendidas, 0 as regaladas, 0 as buenas, 0 as merma
+        from (${cargasAceptadasDelDia(fecha, db)}) cg
+      union all
+      select vn.vendedor_id, d.presentacion_id,
+             0, d.cantidad, d.cantidad_promocion, 0, 0
+        from venta_nota vn
+        join venta_nota_detalle d on d.venta_nota_id = vn.id
+       where vn.fecha = ${fecha}::date
+         and vn.vendedor_id is not null
+         and vn.deleted_at is null
+         and d.deleted_at is null
+      union all
+      select rt.vendedor_id, rt.presentacion_id,
+             0, 0, 0, rt.piezas, rt.piezas_merma
+        from retorno rt
+       where rt.fecha = ${fecha}::date
+         and rt.deleted_at is null
+    )
+    select m.vendedor_id as "vendedorId",
+           m.presentacion_id as "presentacionId",
+           p.nombre || ' ' || pr.volumen as nombre,
+           sum(m.cargadas)::int as cargadas,
+           sum(m.vendidas)::int as vendidas,
+           sum(m.regaladas)::int as regaladas,
+           sum(m.buenas)::int as buenas,
+           sum(m.merma)::int as merma
+      from mov m
+      join vendedor v on v.id = m.vendedor_id
+      join sucursal s on s.id = v.sucursal_id
+      join presentacion pr on pr.id = m.presentacion_id
+      join producto p on p.id = pr.producto_id
+     where v.deleted_at is null
+       and ${condicion}
+     group by m.vendedor_id, m.presentacion_id, p.nombre, pr.volumen
+     order by p.nombre, pr.volumen, m.presentacion_id
+  `.execute(db);
+  return r.rows;
+}
+
 /**
  * SQL del corte de mercancia. Los metodos que escriben reciben la `trx` del
  * servicio; ninguno abre la suya. Cargas y ventas solo se leen.
@@ -247,88 +340,13 @@ export class CortesRepository {
       .executeTakeFirst();
   }
 
-  /**
-   * Las lineas de las cargas **aceptadas** y vivas de ese dia (pendientes,
-   * rechazadas y dadas de baja no cuentan). `carga_detalle` no tiene baja
-   * logica: editar una carga reemplaza sus lineas. La misma suma que usaba
-   * Retorno como referencia.
-   */
-  private cargasAceptadasDelDia(fecha: string, db: Kysely<DB>) {
-    return db
-      .selectFrom('carga as c')
-      .innerJoin('carga_detalle as cd', 'cd.carga_id', 'c.id')
-      .select([
-        'c.vendedor_id as vendedor_id',
-        'cd.presentacion_id as presentacion_id',
-        'cd.piezas as piezas',
-      ])
-      .where(sql<boolean>`c.fecha = ${fecha}::date`)
-      .where('c.estado', '=', 'aceptada')
-      .where('c.deleted_at', 'is', null);
-  }
-
-  /**
-   * Por vendedor y presentacion, lo cargado (cargas aceptadas), lo vendido y
-   * regalado (lineas vivas de ventas vivas con esa `fecha`, de cualquier status;
-   * las de mostrador no tienen vendedor y no cuentan) y lo contado (filas vivas
-   * de `retorno`). Solo salen las presentaciones con algun movimiento, aunque
-   * esten desactivadas o dadas de baja. Vendidas se leen en vivo: editar o
-   * eliminar una venta (T-17) cambia el teorico.
-   *
-   * `filtro`: un vendedor, o una sucursal por codigo (`null` = todas). Siempre
-   * vendedores vivos; la sucursal es la del vendedor.
-   */
-  async movimientos(
+  /** Ver `movimientosDelDia`: la consulta vive fuera de la clase para que la venta del portal la reutilice. */
+  movimientos(
     fecha: string,
-    filtro: { vendedorId: string } | { sucursalCodigo: string | null },
+    filtro: FiltroMovimientos,
     db: Kysely<DB> = this.db,
   ): Promise<MovimientoVendedor[]> {
-    const condicion =
-      'vendedorId' in filtro
-        ? sql`v.id = ${filtro.vendedorId}`
-        : filtro.sucursalCodigo === null
-          ? sql`true`
-          : sql`s.codigo = ${filtro.sucursalCodigo}`;
-    const r = await sql<MovimientoVendedor>`
-      with mov as (
-        select cg.vendedor_id, cg.presentacion_id,
-               cg.piezas as cargadas, 0 as vendidas, 0 as regaladas, 0 as buenas, 0 as merma
-          from (${this.cargasAceptadasDelDia(fecha, db)}) cg
-        union all
-        select vn.vendedor_id, d.presentacion_id,
-               0, d.cantidad, d.cantidad_promocion, 0, 0
-          from venta_nota vn
-          join venta_nota_detalle d on d.venta_nota_id = vn.id
-         where vn.fecha = ${fecha}::date
-           and vn.vendedor_id is not null
-           and vn.deleted_at is null
-           and d.deleted_at is null
-        union all
-        select rt.vendedor_id, rt.presentacion_id,
-               0, 0, 0, rt.piezas, rt.piezas_merma
-          from retorno rt
-         where rt.fecha = ${fecha}::date
-           and rt.deleted_at is null
-      )
-      select m.vendedor_id as "vendedorId",
-             m.presentacion_id as "presentacionId",
-             p.nombre || ' ' || pr.volumen as nombre,
-             sum(m.cargadas)::int as cargadas,
-             sum(m.vendidas)::int as vendidas,
-             sum(m.regaladas)::int as regaladas,
-             sum(m.buenas)::int as buenas,
-             sum(m.merma)::int as merma
-        from mov m
-        join vendedor v on v.id = m.vendedor_id
-        join sucursal s on s.id = v.sucursal_id
-        join presentacion pr on pr.id = m.presentacion_id
-        join producto p on p.id = pr.producto_id
-       where v.deleted_at is null
-         and ${condicion}
-       group by m.vendedor_id, m.presentacion_id, p.nombre, pr.volumen
-       order by p.nombre, pr.volumen, m.presentacion_id
-    `.execute(db);
-    return r.rows;
+    return movimientosDelDia(db, fecha, filtro);
   }
 
   /**

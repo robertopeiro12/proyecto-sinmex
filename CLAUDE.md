@@ -229,6 +229,17 @@ usuario con sesion pasa.
 - **Una venta de mostrador no tiene vendedor** (`venta_nota.vendedor_id` null, "Oficina" en la
   pantalla). La base solo lo permite con `origen = 'portal'`, y entonces exige `capturo_usuario_id`
   (`ck_venta_nota_origen_actores`). Toda venta de la tablet sigue llevando vendedor.
+- **Con `sucursal.control_inventario` prendida, el portal no le vende a un vendedor más de lo que trae cargado** (cliente,
+  2026-11-12; la misma casilla y la misma regla que la app de T-27). Aplica a `POST /ventas` y a `PATCH /ventas/:id` solo
+  si la venta tiene vendedor (Oficina nunca se revisa): existencia = cargas **aceptadas** − vendidas − regaladas de ese
+  vendedor en la **fecha de la venta**, la misma cuenta que "debería regresar" del corte (`movimientosDelDia` de
+  `produccion/cortes.repository.ts` + `existenciasPorPresentacion` de `reglas-corte.ts`; ahí se restarán merma y consumo
+  cuando existan). Si no alcanza → **409** "No le alcanza el producto a …: Horchata 1 L, faltan 3; …" antes del folio (no
+  lo quema). Al editar se suman de vuelta las líneas de la propia venta si sigue con el mismo vendedor, y una presentación
+  que no sube nunca se rechaza. Una carga **pendiente** no bloquea en el portal (la app sí). Reglas puras en
+  `ventas-cobranza/inventario-venta.ts`, candado en `inventario-venta.service.ts`. **Orden de candados: `vendedor`
+  (`for no key update`) → `venta_nota`**, el de la ruta del día: la edición bloquea al vendedor **antes** del
+  `for update of vn` (al revés se abrazaría con la asignación de notas). Una venta de la tablet no toma ese candado.
 - **Toda corrección de una venta va por el portal (T-17, parte 2)**, venga de la tablet o del
   portal: `PATCH`/`DELETE /ventas/:id` y `POST /ventas/:id/cuenta-perdida`
   (`ventas-cobranza/ventas-edicion.service.ts`), con el permiso `venta.editar_eliminar`.
@@ -688,6 +699,9 @@ usuario con sesion pasa.
   - **Fuera de alcance.** El **dinero** que entrega el vendedor (R-5) sigue **pendiente de decidir**: el viejo no lo captura
     en ningún lado salvo la pestaña "Dinero" del Dashboard. Merma recibida de clientes, cambios y consumo dependen de T-33 y
     no entran aquí; T-24 (inventario) leerá este corte.
+  - **Con la casilla de inventario prendida, el portal tampoco vende más de lo cargado** (ver el bloque de la venta del
+    portal, T-17): el aviso "Vendió más de lo cargado" queda como red de seguridad (ventas de la tablet sin red, o de
+    cuando la casilla estaba apagada).
   - **Nube**: `20261112120000_corte_mercancia.sql` se sube a `sinmex dev` después del merge, con el protocolo de push.
     Pre-flight: `select count(*) from retorno where piezas <= 0` debe dar 0 (el check nuevo admite 0 solo con merma > 0, y
     las filas viejas son > 0), y `select count(*) from (select distinct fecha, vendedor_id from retorno where deleted_at is

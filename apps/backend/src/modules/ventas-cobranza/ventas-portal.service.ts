@@ -10,6 +10,7 @@ import { exigirAlcanceSobre } from './alcance-venta';
 import type { RegistrarVentaDto } from './dto/registrar-venta.dto';
 import { FoliosOficinaAgotados } from './folio-oficina';
 import { FoliosOficinaRepository } from './folios-oficina.repository';
+import { InventarioVentaService } from './inventario-venta.service';
 import { armarVentaPortal, revisarFechaVenta } from './venta-portal';
 import { VentaRechazada } from './venta-rechazada';
 import {
@@ -50,6 +51,7 @@ export class VentasPortalService {
     private readonly precios: PreciosRepository,
     private readonly ventas: VentasService,
     private readonly folios: FoliosOficinaRepository,
+    private readonly inventario: InventarioVentaService,
   ) {}
 
   async catalogo(
@@ -149,6 +151,24 @@ export class VentasPortalService {
           if (armada.tipo === 'rechazo')
             throw new VentaRechazada(armada.rechazo);
           throw new BadRequestException(armada.motivo);
+        }
+
+        // Con la casilla de inventario prendida, no se le vende al vendedor
+        // mas de lo que trae cargado. Su fila es el PRIMER candado de esta
+        // transaccion (hasta aqui solo se leyo): orden vendedor -> venta_nota,
+        // ver `InventarioVentaService`. Antes del folio: un 409 no lo quema.
+        if (dto.vendedorId !== null) {
+          const vendedor = await this.inventario.bloquearVendedor(
+            dto.vendedorId,
+            trx,
+          );
+          await this.inventario.exigirExistencia(
+            vendedor,
+            dto.fecha,
+            armada.venta.lineas,
+            [],
+            trx,
+          );
         }
 
         // Despues de todas las validaciones y dentro de la transaccion: un
