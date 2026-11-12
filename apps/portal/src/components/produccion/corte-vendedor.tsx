@@ -49,6 +49,8 @@ export function CorteVendedor({
   // Las presentaciones agregadas a mano que el servidor todavía no devuelve.
   const [agregadas, setAgregadas] = useState<LineaCorte[]>([]);
   const [borrador, setBorrador] = useState<BorradorCorte>({});
+  // Renglones que el almacenista tocó en esta captura: sin corte hecho, solo ellos muestran faltante (D9).
+  const [tocadas, setTocadas] = useState<ReadonlySet<string>>(() => new Set());
   const [productos, setProductos] = useState<Producto[]>([]);
   const [porAgregar, setPorAgregar] = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -81,7 +83,7 @@ export function CorteVendedor({
   }, [fecha, vendedor.id]);
 
   const lineas = [...(corte?.lineas ?? []), ...agregadas];
-  const vista = vistaCorte(lineas, borrador, corte?.hecho != null);
+  const vista = vistaCorte(lineas, borrador, corte?.hecho != null, tocadas);
   const opciones = presentacionesParaAgregar(productos, lineas);
   // La pastilla dice lo guardado (como la lista), no lo que se va escribiendo.
   const estado = etiquetaEstadoCorte(
@@ -91,6 +93,7 @@ export function CorteVendedor({
   function editar(id: string, campo: "buenas" | "merma", valor: string) {
     setAviso(null);
     setBorrador((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { buenas: "", merma: "" }), [campo]: valor } }));
+    setTocadas((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
   }
 
   function agregar() {
@@ -129,6 +132,7 @@ export function CorteVendedor({
       const r = await guardarCorteVendedor({ fecha, vendedor: vendedor.id, lineas: conteosDe(vista) });
       setCorte(r);
       setAgregadas([]);
+      setTocadas(new Set());
       setBorrador(borradorDeCorte(r.lineas));
       setAviso("Corte guardado.");
     } catch (err) {
@@ -144,7 +148,7 @@ export function CorteVendedor({
         titulo={`Corte · ${vendedor.nombre}`}
         descripcion={`${formatearDiaLargo(fecha)}. Cuenta lo que regresó y anota las buenas y la merma de cada presentación.`}
         acciones={
-          <Button type="button" variant="outline" onClick={() => void salir()}>
+          <Button type="button" variant="outline" disabled={guardando} onClick={() => void salir()}>
             ← Volver a Corte
           </Button>
         }

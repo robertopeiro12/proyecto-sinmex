@@ -81,12 +81,12 @@ describe("vistaCorte", () => {
     expect(v.sinPiezas).toBe(true);
   });
 
-  it("al capturar calcula faltante y sobrante; el total suma solo lo que falta", () => {
+  it("con el corte hecho recalcula faltante y sobrante al editar; el total suma solo lo que falta", () => {
     const lineas = [linea("p1"), linea("p2"), linea("p3")]; // deberían 5 cada una
     const v = vistaCorte(
       lineas,
       { p1: { buenas: "2", merma: "1" }, p2: { buenas: "8", merma: "" }, p3: { buenas: "5", merma: "" } },
-      false,
+      true,
     );
     expect(v.filas.map((f) => f.faltante)).toEqual([3, -3, 0]);
     expect(v.totales.faltante).toBe(3);
@@ -95,6 +95,24 @@ describe("vistaCorte", () => {
     expect(v.totales.deberiaRegresar).toBe(15);
     expect(v.cambios).toBe(true);
     expect(v.sinPiezas).toBe(false);
+  });
+
+  it("sin corte, solo el renglón tocado muestra su faltante; lo no contado no es faltante (D9)", () => {
+    const lineas = [linea("p1"), linea("p2"), linea("p3")]; // deberían 5 cada una
+    const v = vistaCorte(lineas, { p1: { buenas: "2", merma: "" } }, false, new Set(["p1"]));
+    expect(v.filas.map((f) => f.faltante)).toEqual([3, null, null]);
+    expect(v.cambios).toBe(true);
+  });
+
+  it("sin corte, el total de faltante queda vacío aunque haya cambios", () => {
+    const v = vistaCorte([linea("p1"), linea("p2")], { p1: { buenas: "1", merma: "" } }, false, new Set(["p1"]));
+    expect(v.totales.faltante).toBeNull();
+  });
+
+  it("un renglón tocado y borrado de nuevo sigue mostrando su vista previa", () => {
+    const v = vistaCorte([linea("p1")], { p1: { buenas: "", merma: "" } }, false, new Set(["p1"]));
+    expect(v.filas[0].faltante).toBe(5);
+    expect(v.totales.faltante).toBeNull();
   });
 
   it("con el corte hecho muestra el faltante aunque no haya cambios", () => {

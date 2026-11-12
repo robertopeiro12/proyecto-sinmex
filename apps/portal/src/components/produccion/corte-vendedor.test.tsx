@@ -120,8 +120,6 @@ describe("CorteVendedor", () => {
     montar();
     await screen.findByRole("table", { name: "Corte del vendedor" });
     await userEvent.type(buenas("Jamaica 1 L"), "5");
-    // Capturando ya se ve el faltante que quedará.
-    expect(renglon("Horchata 1 L").getByText("Sobran 3")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Guardar corte" }));
     expect(lib.guardarCorteVendedor).toHaveBeenCalledWith({
       fecha: FECHA,
@@ -133,6 +131,28 @@ describe("CorteVendedor", () => {
     });
     expect(await screen.findByText("Corte guardado.")).toBeInTheDocument();
     expect(screen.getByText("Corte hecho")).toBeInTheDocument();
+  });
+
+  it("sin corte, solo el renglón tocado muestra su faltante y el total queda vacío (D9)", async () => {
+    montar();
+    await screen.findByRole("table", { name: "Corte del vendedor" });
+    await userEvent.type(buenas("Jamaica 1 L"), "3");
+    expect(renglon("Jamaica 1 L").getByText("2")).toHaveClass("text-destructive");
+    // Horchata (debería −3) no se tocó: no sale como sobrante.
+    expect(renglon("Horchata 1 L").queryByText(/Sobran/)).toBeNull();
+    expect(renglon("Total").queryByText(/Faltan/)).toBeNull();
+  });
+
+  it("mientras guarda, Volver y Cancelar no se pueden usar", async () => {
+    vi.mocked(lib.guardarCorteVendedor).mockReturnValue(new Promise(() => {}));
+    const onVolver = montar();
+    await screen.findByRole("table", { name: "Corte del vendedor" });
+    await userEvent.type(buenas("Jamaica 1 L"), "4");
+    await userEvent.click(screen.getByRole("button", { name: "Guardar corte" }));
+    expect(await screen.findByRole("button", { name: "Guardando…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "← Volver a Corte" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancelar" })).toBeDisabled();
+    expect(onVolver).not.toHaveBeenCalled();
   });
 
   it("sin piezas pregunta si el vendedor no regresó ninguna; Cancelar no guarda", async () => {

@@ -150,7 +150,7 @@ export interface FilaVistaCorte {
   /** Lo leído de los campos; `null` = no es un entero válido. Vacío = 0. */
   buenas: number | null;
   merma: number | null;
-  /** Debería − buenas; `null` mientras no se muestra (corte sin hacer y sin captura) o con buenas inválidas. */
+  /** Debería − buenas; `null` mientras no se muestra (corte sin hacer y renglón sin tocar) o con buenas inválidas. */
   faltante: number | null;
 }
 
@@ -165,12 +165,18 @@ export interface VistaCorte {
 }
 
 /**
- * La tabla del corte con lo que va escribiendo el almacenista. El faltante se muestra si
- * el corte ya está hecho o si se está capturando (hay cambios): es lo que quedará al
- * guardar. Antes de eso, lo no capturado no es un faltante (D9). Los totales de faltante
- * suman solo los positivos, como el servidor.
+ * La tabla del corte con lo que va escribiendo el almacenista. Con el corte hecho, el
+ * faltante de cada renglón y el "Faltan N" del total se recalculan con lo escrito. Sin
+ * corte, lo no contado no es un faltante (D9): solo los renglones que se tocaron en esta
+ * captura (`tocadas`) muestran el suyo, como vista previa, y el total queda vacío hasta
+ * guardar. Los totales de faltante suman solo los positivos, como el servidor.
  */
-export function vistaCorte(lineas: readonly LineaCorte[], borrador: BorradorCorte, hecho: boolean): VistaCorte {
+export function vistaCorte(
+  lineas: readonly LineaCorte[],
+  borrador: BorradorCorte,
+  hecho: boolean,
+  tocadas: ReadonlySet<string> = new Set(),
+): VistaCorte {
   const leidas = lineas.map((l) => ({
     linea: l,
     buenas: leerPiezas(borrador[l.presentacionId]?.buenas ?? ""),
@@ -178,10 +184,10 @@ export function vistaCorte(lineas: readonly LineaCorte[], borrador: BorradorCort
   }));
   const hayInvalidas = leidas.some((f) => f.buenas === null || f.merma === null);
   const cambios = leidas.some((f) => f.buenas !== f.linea.buenas || f.merma !== f.linea.merma);
-  const mostrarFaltante = hecho || cambios;
   const filas = leidas.map((f) => ({
     ...f,
-    faltante: mostrarFaltante && f.buenas !== null ? f.linea.deberiaRegresar - f.buenas : null,
+    faltante:
+      (hecho || tocadas.has(f.linea.presentacionId)) && f.buenas !== null ? f.linea.deberiaRegresar - f.buenas : null,
   }));
   const suma = (valor: (f: FilaVistaCorte) => number) => filas.reduce((t, f) => t + valor(f), 0);
   return {
@@ -193,7 +199,7 @@ export function vistaCorte(lineas: readonly LineaCorte[], borrador: BorradorCort
       deberiaRegresar: suma((f) => f.linea.deberiaRegresar),
       buenas: suma((f) => f.buenas ?? 0),
       merma: suma((f) => f.merma ?? 0),
-      faltante: mostrarFaltante ? suma((f) => Math.max(f.faltante ?? 0, 0)) : null,
+      faltante: hecho ? suma((f) => Math.max(f.faltante ?? 0, 0)) : null,
     },
     hayInvalidas,
     cambios,

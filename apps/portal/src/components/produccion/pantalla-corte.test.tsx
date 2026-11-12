@@ -123,6 +123,18 @@ describe("PantallaCorte (lista del día)", () => {
     expect(vi.mocked(lib.leerCortesDelDia).mock.calls.some(([f]) => f === "2999-01-01")).toBe(false);
   });
 
+  it("mientras carga otro día, los botones de los renglones viejos no se pueden usar", async () => {
+    mockAuth([PERMISO]);
+    render(<PantallaCorte sucursal={null} />);
+    await screen.findByRole("table", { name: "Vendedores del día" });
+    vi.mocked(lib.leerCortesDelDia).mockReturnValue(new Promise(() => {}));
+    await userEvent.click(screen.getByRole("button", { name: "Ayer" }));
+    const fila = within(screen.getByRole("row", { name: /Ana Pérez/ }));
+    expect(fila.getByRole("button", { name: "Hacer corte" })).toBeDisabled();
+    await userEvent.click(fila.getByRole("button", { name: "Hacer corte" }));
+    expect(lib.leerCorteVendedor).not.toHaveBeenCalled();
+  });
+
   it("con Todas, un bloque por sucursal con su nombre", async () => {
     mockAuth([PERMISO], null);
     vi.mocked(lib.leerCortesDelDia).mockResolvedValue(

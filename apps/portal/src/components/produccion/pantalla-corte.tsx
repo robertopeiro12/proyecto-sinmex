@@ -121,7 +121,13 @@ function Cortes({ sucursal }: { sucursal: string | null }) {
           <Etiqueta tono={estado.tono}>{estado.texto}</Etiqueta>
         </Td>
         <Td alinear="derecha">
-          <Button size="sm" variant={f.estado === "sin_corte" ? "default" : "outline"} onClick={() => setAbierto(f.vendedor)}>
+          {/* Mientras llega la lista de otro día, los renglones son del día anterior: no se abren. */}
+          <Button
+            size="sm"
+            variant={f.estado === "sin_corte" ? "default" : "outline"}
+            disabled={cargandoDia}
+            onClick={() => setAbierto(f.vendedor)}
+          >
             {f.estado === "sin_corte" ? "Hacer corte" : "Ver corte"}
           </Button>
         </Td>
