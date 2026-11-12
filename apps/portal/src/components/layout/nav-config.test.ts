@@ -25,6 +25,12 @@ describe("navSections", () => {
     expect(navSections[2].items.slice(0, 3).map((i) => i.label)).toEqual(["Peticiones", "Recarga", "Corte"]);
   });
 
+  it("Corte ya es pantalla y Retorno salió del menú (es parte del Corte)", () => {
+    const produccion = navSections[2].items;
+    expect(produccion.find((i) => i.label === "Corte")).toEqual({ label: "Corte", href: "/produccion/corte" });
+    expect(produccion.some((i) => i.href === "/produccion/retorno")).toBe(false);
+  });
+
   it("toda pantalla que todavía es Placeholder lleva pronto, y ninguna otra", () => {
     for (const seccion of navSections) {
       for (const item of seccion.items) {

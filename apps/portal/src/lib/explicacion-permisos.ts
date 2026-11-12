@@ -54,7 +54,7 @@ export const EXPLICACION_PERMISO: Record<string, string> = {
   "carga.gestionar": "Puede registrar qué mercancía sale cargada en cada vehículo.",
   "inventario.ver": "Puede consultar cuánto inventario hay disponible.",
   "retorno.gestionar":
-    "Puede registrar la mercancía que regresa sin vender al final del día.",
+    "Puede hacer el corte de mercancía: contar lo que regresa cada vendedor (buenas y merma) y ver el faltante.",
   "analisis_cliente.ver":
     "Puede consultar el análisis e historial de compra de un cliente.",
   "reportes.ver": "Puede consultar los reportes generales del negocio.",
