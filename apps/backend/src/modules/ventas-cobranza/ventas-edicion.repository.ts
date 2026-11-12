@@ -277,6 +277,16 @@ export class VentasEdicionRepository {
       .where('deleted_at', 'is', null)
       .execute();
     await this.borrarCobroContado(id, trx);
+    // Sus asignaciones a un vendedor (Ruta Diaria) salen con ella: el trigger
+    // mueve `updated_at` y la baja viaja en el pull incremental como
+    // `activo: 0`. Sin tocar `vendedor`: la venta ya esta bloqueada y el orden
+    // de candados de la ruta es ruta_semanal -> vendedor -> venta_nota.
+    await trx
+      .updateTable('nota_asignada')
+      .set({ deleted_at: sql`now()`, quitada_por_usuario_id: usuarioId })
+      .where('venta_nota_id', '=', id)
+      .where('deleted_at', 'is', null)
+      .execute();
     await trx
       .updateTable('venta_nota')
       .set({ deleted_at: sql`now()`, eliminado_por_usuario_id: usuarioId })

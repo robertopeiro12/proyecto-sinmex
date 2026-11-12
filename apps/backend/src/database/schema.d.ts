@@ -223,6 +223,21 @@ export interface MovimientoInventarioLinea {
   sentido: string;
 }
 
+export interface NotaAsignada {
+  asignada_por_usuario_id: string;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  fecha: Timestamp;
+  id: Generated<string>;
+  papel_entregado: boolean | null;
+  papel_revisado_en: Timestamp | null;
+  papel_revisado_por_usuario_id: string | null;
+  quitada_por_usuario_id: string | null;
+  updated_at: Generated<Timestamp>;
+  vendedor_id: string;
+  venta_nota_id: string;
+}
+
 export interface Perfil {
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -350,9 +365,44 @@ export interface Ruta {
   id: Generated<string>;
   orden: number;
   origen: Generated<string>;
+  quitado_por: string | null;
+  recado: string | null;
   tipo: string;
   updated_at: Generated<Timestamp>;
   vendedor_id: string;
+}
+
+export interface RutaDia {
+  actualizado_por_usuario_id: string | null;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  fecha: Timestamp;
+  id: Generated<string>;
+  nombre_ruta: string | null;
+  ruta_semanal_id: string | null;
+  updated_at: Generated<Timestamp>;
+  vehiculo_id: string | null;
+  vendedor_id: string;
+}
+
+export interface RutaSemanal {
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  dia_semana: number;
+  id: Generated<string>;
+  nombre: string;
+  sucursal_id: string;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface RutaSemanalCliente {
+  cliente_id: string;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  id: Generated<string>;
+  orden: number;
+  ruta_semanal_id: string;
+  updated_at: Generated<Timestamp>;
 }
 
 export interface SaldoFavorMovimiento {
@@ -547,6 +597,9 @@ export interface VentaNota {
   monto_total: Generated<Numeric>;
   num_nota: string | null;
   origen: Generated<string>;
+  papel_entregado: boolean | null;
+  papel_revisado_en: Timestamp | null;
+  papel_revisado_por_usuario_id: string | null;
   pct_comision: Numeric | null;
   semana: number;
   status: string;
@@ -612,6 +665,7 @@ export interface DB {
   motivo_visita: MotivoVisita;
   movimiento_inventario: MovimientoInventario;
   movimiento_inventario_linea: MovimientoInventarioLinea;
+  nota_asignada: NotaAsignada;
   perfil: Perfil;
   perfil_permiso: PerfilPermiso;
   permiso: Permiso;
@@ -623,6 +677,9 @@ export interface DB {
   promocion: Promocion;
   retorno: Retorno;
   ruta: Ruta;
+  ruta_dia: RutaDia;
+  ruta_semanal: RutaSemanal;
+  ruta_semanal_cliente: RutaSemanalCliente;
   saldo_favor_movimiento: SaldoFavorMovimiento;
   sesion_refresh: SesionRefresh;
   sesion_vendedor: SesionVendedor;

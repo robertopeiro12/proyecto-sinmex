@@ -32,9 +32,18 @@ describe("SeccionesMenu", () => {
 
   it("lo que todavía no existe dice Pronto; lo que existe no", () => {
     render(<SeccionesMenu pathname="/operacion/ventas" sucursal={null} />);
-    const rutaSemanal = screen.getByRole("link", { name: "Ruta Semanal Pronto" });
-    expect(within(rutaSemanal).getByText("Pronto")).toBeInTheDocument();
+    const procesos = screen.getByRole("link", { name: "Procesos Pronto" });
+    expect(within(procesos).getByText("Pronto")).toBeInTheDocument();
     expect(within(screen.getByRole("link", { name: "Ventas" })).queryByText("Pronto")).not.toBeInTheDocument();
+  });
+
+  it("Tesorería y Flujo de Efectivo no salen en el menú; Gastos sí", async () => {
+    const usuario = userEvent.setup();
+    render(<SeccionesMenu pathname="/operacion/ventas" sucursal={null} />);
+    await usuario.click(screen.getByRole("button", { name: "Finanzas" }));
+    expect(screen.getByRole("link", { name: "Gastos" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Tesorería" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Flujo de Efectivo" })).not.toBeInTheDocument();
   });
 
   it("recuerda lo que el usuario abre y cierra", async () => {
@@ -58,7 +67,7 @@ describe("SeccionesMenu", () => {
 
   it("Review Focus 2: con basura guardada arranca solo con la sección actual", async () => {
     localStorage.setItem(CLAVE_SECCIONES, "{no es json");
-    render(<SeccionesMenu pathname="/finanzas/tesoreria" sucursal={null} />);
+    render(<SeccionesMenu pathname="/finanzas/gastos" sucursal={null} />);
     expect(screen.getByRole("button", { name: "Finanzas" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("button", { name: "Operación" })).toHaveAttribute("aria-expanded", "false");
   });

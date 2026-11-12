@@ -3,70 +3,87 @@ export type NavItem = {
   href: string;
   /** La pantalla todavía es un "Próximamente" (`Placeholder`): el menú la marca "Pronto". */
   pronto?: true;
+  /**
+   * Fuera del menú, pero la pantalla y su código se quedan (se entra por la dirección).
+   * Tesorería y Flujo de Efectivo, por ADR-0015 del vault: el cliente no los quiere por ahora.
+   */
+  oculto?: true;
 };
 export type NavSection = { label: string; items: NavItem[] };
 
-// Orden del spec (UI Etapa 1, §3.3). Una pantalla nueva se agrega aquí; mientras su
-// page.tsx sea un Placeholder lleva `pronto: true` (nav-config.test.ts lo exige).
+// Orden del menú del sistema viejo del cliente (Roberto, 2026-11-09): primero, en su orden, lo
+// que ya existe allá (Operación, Catálogos, Producción, Información) y después lo nuevo, en cada
+// sección y entre secciones (Finanzas no existe en el viejo). Una pantalla nueva se agrega aquí;
+// mientras su page.tsx sea un Placeholder lleva `pronto: true` (nav-config.test.ts lo exige).
 export const navSections: NavSection[] = [
   {
     label: "Operación",
     items: [
-      { label: "Dashboard", href: "/operacion", pronto: true },
+      // Como el viejo: Dashboard · Reporte de Ventas · Peticiones · Procesos · Notificaciones ·
+      // Ruta Diaria · Rutas Semanales.
+      { label: "Dashboard", href: "/operacion" },
+      { label: "Flujo diario", href: "/operacion/reporte-de-ventas" },
+      { label: "Peticiones", href: "/operacion/peticiones" },
+      { label: "Procesos", href: "/operacion/procesos", pronto: true },
+      { label: "Notificaciones", href: "/operacion/notificaciones", pronto: true },
+      { label: "Ruta Diaria", href: "/operacion/ruta-diaria" },
+      { label: "Ruta Semanal", href: "/operacion/ruta-semanal" },
+      // Nuevas.
       { label: "Registrar venta", href: "/operacion/registrar-venta" },
       { label: "Ventas", href: "/operacion/ventas" },
       { label: "Facturas", href: "/operacion/facturas" },
       { label: "Cobranza", href: "/operacion/cobranza" },
       { label: "Cuentas por Cobrar", href: "/operacion/cuentas-por-cobrar" },
-      { label: "Reporte de Ventas", href: "/operacion/reporte-de-ventas" },
       { label: "Promociones", href: "/operacion/promociones" },
-      { label: "Procesos", href: "/operacion/procesos", pronto: true },
-      { label: "Peticiones", href: "/operacion/peticiones" },
-      { label: "Notificaciones", href: "/operacion/notificaciones", pronto: true },
-      { label: "Ruta Diaria", href: "/operacion/ruta-diaria" },
-      { label: "Ruta Semanal", href: "/operacion/ruta-semanal", pronto: true },
-    ],
-  },
-  {
-    label: "Finanzas",
-    items: [
-      { label: "Tesorería", href: "/finanzas/tesoreria" },
-      { label: "Gastos", href: "/finanzas/gastos" },
-      { label: "Flujo de Efectivo", href: "/finanzas/flujo-efectivo" },
-    ],
-  },
-  {
-    label: "Producción",
-    items: [
-      { label: "Peticiones", href: "/produccion/peticiones", pronto: true },
-      { label: "Producción del día", href: "/produccion/produccion-del-dia" },
-      { label: "Recarga", href: "/produccion/recarga" },
-      { label: "Retorno", href: "/produccion/retorno" },
-      { label: "Corte", href: "/produccion/corte", pronto: true },
-      { label: "Almacenes", href: "/produccion/almacenes", pronto: true },
-    ],
-  },
-  {
-    label: "Información",
-    items: [
-      { label: "Reportes", href: "/informacion/reportes" },
-      { label: "Análisis Cliente", href: "/informacion/analisis-cliente", pronto: true },
-      { label: "Nómina", href: "/informacion/nomina", pronto: true },
     ],
   },
   {
     label: "Catálogo",
     items: [
-      { label: "Sucursales", href: "/catalogo/sucursales" },
+      // Como el viejo: Clientes · Vendedores · Vehículos.
       { label: "Clientes", href: "/catalogo/clientes" },
       { label: "Vendedores", href: "/catalogo/vendedores" },
       { label: "Vehículos", href: "/catalogo/vehiculos" },
+      // Nuevas.
+      { label: "Sucursales", href: "/catalogo/sucursales" },
       { label: "Motivos de visita", href: "/catalogo/motivos-de-visita" },
       { label: "Campos de egreso", href: "/catalogo/campos-de-egreso" },
       { label: "Productos", href: "/catalogo/productos" },
       { label: "Listas de Precios", href: "/catalogo/precios" },
       { label: "Usuarios", href: "/catalogo/usuarios" },
       { label: "Perfiles y Permisos", href: "/catalogo/perfiles-y-permisos" },
+    ],
+  },
+  {
+    label: "Producción",
+    items: [
+      // Como el viejo: Peticiones · Información (aún sin pantalla) · Recarga · Corte.
+      { label: "Peticiones", href: "/produccion/peticiones", pronto: true },
+      { label: "Recarga", href: "/produccion/recarga" },
+      { label: "Corte", href: "/produccion/corte", pronto: true },
+      // Nuevas.
+      { label: "Producción del día", href: "/produccion/produccion-del-dia" },
+      { label: "Retorno", href: "/produccion/retorno" },
+      { label: "Almacenes", href: "/produccion/almacenes", pronto: true },
+    ],
+  },
+  {
+    label: "Información",
+    items: [
+      // Como el viejo: (SIG, eliminado) · Reportes · Análisis Cliente.
+      { label: "Reportes", href: "/informacion/reportes" },
+      { label: "Análisis Cliente", href: "/informacion/analisis-cliente", pronto: true },
+      // Nuevas.
+      { label: "Nómina", href: "/informacion/nomina", pronto: true },
+    ],
+  },
+  {
+    // No existe en el viejo.
+    label: "Finanzas",
+    items: [
+      { label: "Tesorería", href: "/finanzas/tesoreria", oculto: true },
+      { label: "Gastos", href: "/finanzas/gastos" },
+      { label: "Flujo de Efectivo", href: "/finanzas/flujo-efectivo", oculto: true },
     ],
   },
 ];

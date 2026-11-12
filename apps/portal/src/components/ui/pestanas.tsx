@@ -8,6 +8,8 @@ export interface Pestana {
   valor: string;
   etiqueta: string;
   contenido: ReactNode;
+  /** Se ve pero no se puede elegir (una pestaña "pronto"). */
+  deshabilitada?: boolean;
 }
 
 /**
@@ -42,7 +44,8 @@ export function Pestanas({
           <Tabs.Tab
             key={p.valor}
             value={p.valor}
-            className="-mb-px rounded-t-[7px] border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-sucursal data-[active]:border-sucursal data-[active]:text-foreground"
+            disabled={p.deshabilitada}
+            className="data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 -mb-px rounded-t-[7px] border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-sucursal data-[active]:border-sucursal data-[active]:text-foreground"
           >
             {p.etiqueta}
           </Tabs.Tab>

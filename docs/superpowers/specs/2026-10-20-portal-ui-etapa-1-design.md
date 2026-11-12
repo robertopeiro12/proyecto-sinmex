@@ -92,6 +92,12 @@ cambiar de sucursal, abrir la lista, la ventana de confirmar y el menú escondid
 
 ### 3.3 Secciones que se abren y cierran
 
+> [!note] Orden cambiado el 2026-11-09
+> El orden de secciones y opciones ahora es el del menú del sistema viejo del cliente (Operación, Catálogo,
+> Producción, Información) y lo nuevo después; Finanzas al final. Ver `components/layout/nav-config.ts` y el
+> diseño de Dashboard y Flujo diario (§9).
+
+
 - Cada sección (Operación, Finanzas, Producción, Información, Catálogo) es un `Collapsible` con flecha ▾/▸.
 - La sección de la pantalla actual **siempre se abre sola** al entrar.
 - Lo que el usuario abre o cierra se recuerda en esa computadora (`localStorage`, con `try/catch`; sin él, todo funciona y

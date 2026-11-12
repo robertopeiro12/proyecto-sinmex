@@ -20,6 +20,20 @@ describe("Pestanas", () => {
     expect(screen.queryByText("Panel de búsqueda")).not.toBeInTheDocument();
   });
 
+  it("una pestaña deshabilitada se ve pero no se elige", async () => {
+    const usuario = userEvent.setup();
+    render(
+      <Pestanas
+        pestanas={[...PESTANAS, { valor: "pronto", etiqueta: "Pronto", contenido: <p>Nada</p>, deshabilitada: true }]}
+      />,
+    );
+    const pronto = screen.getByRole("tab", { name: "Pronto" });
+    expect(pronto).toHaveAttribute("aria-disabled", "true");
+    await usuario.click(pronto);
+    expect(screen.getByRole("tab", { name: "Asignar" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByText("Nada")).not.toBeInTheDocument();
+  });
+
   it("valorInicial elige otra", () => {
     render(<Pestanas pestanas={PESTANAS} valorInicial="buscar" />);
     expect(screen.getByRole("tab", { name: "Buscar y corregir" })).toHaveAttribute("aria-selected", "true");

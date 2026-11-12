@@ -302,20 +302,71 @@ usuario con sesion pasa.
     backfill). El reporte de Kilometraje del portal es T-50 (ver el bloque Reportes y Excel, más abajo).
   - En la tablet, con la jornada de hoy cerrada **no se registra** venta, cobranza ni prospecto
     (`exigirJornadaAbierta`); no hay reabrir.
-- **Ruta diaria (T-37).** La oficina arma la ruta del día en el portal (`PUT /rutas/diaria`, permiso
-  `ruta_diaria.gestionar`) y el vendedor la complementa desde la tablet con la operación **`ruta-alta`** (no `ruta`,
-  que sigue guardada sin proyectar; la visita de T-39 usa su propia operación `visita`). Todo en `rutas/rutas-diarias.*`.
-  - `ruta.origen` (`oficina`/`vendedor`) y un único vivo por vendedor, fecha y cliente en la diaria
-    (`uq_ruta_diaria_vendedor_fecha_cliente`, parcial; la semanal de T-36 no entra). El alta usa `on conflict … do
-    nothing` y, si no insertó, rechaza `ruta-duplicada`, que **la tablet trata como aplicada**.
-  - `cliente_id` de `ruta-alta` viaja en **`datos`**, no en el sobre (así un prospecto o un cliente borrado sale como
-    `cliente-inexistente` y no como `cliente-fuera-de-alcance`); el buzón lo conserva (`guardarOperacion`).
-  - El `PUT` del portal **reemplaza** la ruta en una transacción: adopta lo que subió el vendedor, da de baja lo de
-    la oficina que no viene y **conserva** (renumerado al final) lo del vendedor. Alta y `PUT` se serializan
-    bloqueando la fila del vendedor (`for no key update`). Respuestas en camelCase; vendedor fuera de alcance = 404.
-  - El pull baja `rutas` del vendedor del token desde `current_date - 1` en adelante del reloj de Postgres (UTC),
-    sin tope: una ruta futura debe bajar en el pull siguiente a su creación;
-    la baja viaja con `activo: 0`. El orden que arrastra el vendedor **no sube** (vive en `ruta_orden_local`).
+- **Ruta semanal y Ruta diaria (T-37 + 2026-11-10).** La oficina tiene rutas fijas por día (*Operación → Ruta Semanal*), le
+  asigna una a cada vendedor cada mañana (*Ruta Diaria*), la ajusta, le pone vehículo y le asigna notas por cobrar; el
+  vendedor la complementa desde la tablet con la operación **`ruta-alta`** (no `ruta`, que sigue guardada sin proyectar; la
+  visita de T-39 usa su propia operación `visita`). Todo en `modules/rutas/` (`rutas-semanales.*`, `rutas-diarias.*`,
+  `notas-asignadas.*`). Spec: `docs/superpowers/specs/2026-11-10-ruta-semanal-y-diaria-design.md` (parte 1; el corte y
+  las tres listas de notas del Flujo diario son parte 2).
+  - **Tablas.** `ruta_semanal` (`dia_semana` 1 = lunes … 6 = sábado, **sin domingo**; nombre único vivo por sucursal y día)
+    y `ruta_semanal_cliente` (orden = en que se agregaron). **`ruta_dia`** es el encabezado del día: ruta semanal +
+    vehículo + `nombre_ruta` (copia del nombre al asignar, para que la historia no cambie si la renombran); **un vivo por
+    vendedor y fecha** y **la misma semanal no va a dos vendedores el mismo día** (ambos únicos parciales). Las rutas
+    de T-37 sin encabezado cuentan como "Sin ruta"; el encabezado se crea al guardar (un `PUT` vacío no lo crea).
+  - **Origen.** `ruta.origen` admite `semanal` (check `ck_ruta_origen` ampliado). **Lo decide el servidor, no el
+    portal** (el `PUT` solo manda ids, orden y recado): una fila existente **conserva** su origen (ya no se "adopta" como
+    `oficina` lo del vendedor, como decía T-37); una nueva es `semanal` si el cliente está en la semanal asignada y
+    `oficina` si no. `recado` ≤ 200, recortado, vacío = `null`. La vieja `tipo = 'semanal'` de T-36 nunca se usó y se deja.
+    Lo agregado por el vendedor no se quita desde el portal, solo se reordena.
+  - **`quitado_por`** al dar de baja una fila: `oficina` (la quitó a mano: **bloquea** que un cambio de la semanal la
+    vuelva a poner ese día) o `cambio_ruta` (salió por cambio o por Quitar ruta: **no** bloquea).
+  - **Propagación**: guardar la semanal (`PUT /rutas/semanales/:id/clientes`) la aplica en **su misma transacción** a las
+    `ruta_dia` de **hoy en adelante** (reglas puras en `reglas-ruta-semanal.ts`, `planearPropagacion`): agrega al final,
+    quita solo lo `origen = semanal`, no toca lo demás y **nunca** un día pasado. Un cliente no válido (baja, prospecto,
+    otra sucursal) se salta sin hacer fallar el guardado. Renombrar cambia `nombre_ruta` de hoy en adelante.
+    Eliminar una semanal asignada hoy o después = 409 con el motivo.
+  - **Candados, siempre en este orden: `ruta_semanal` (en orden de id; la anterior y la nueva de la `ruta_dia`) →
+    `vendedor` (`for no key update`) → `venta_nota`.** Alta de la tablet, `PUT` diario y guardado de la semanal se
+    serializan así; invertirlo abre un abrazo mortal o propaga desde la ruta equivocada.
+  - **Día pasado = solo lectura** (400) para guardar, quitar y notas; **"hoy" es el de Tijuana** y sale del reloj
+    inyectable **`RELOJ_RUTAS`** (`rutas/reloj.ts`), no de `new Date()`: las pruebas lo fijan a las 23:30 de Tijuana
+    (en UTC ya es mañana). `esFechaEditable` en `reglas-ruta-semanal.ts`.
+  - **`nota_asignada`**: una nota por **un solo vendedor y día** (`unique` vivo `(venta_nota_id, fecha)`); **pasar = baja
+    de la de A + alta de la de B** en una transacción. Se asigna a media jornada, incluso notas del mismo día. "Nota con
+    saldo" = venta **viva a crédito** en `pendiente`/`abonado` con saldo > 0 y fuera de cuenta perdida; **una sola
+    consulta** en `rutas/notas-ruta.repository.ts` que usan el conteo de la lista y la ventana de notas (no la dupliques).
+    Una nota que se termina de pagar deja de salir en "pendientes" pero **sigue contando como asignada**. Solo se asignan
+    notas de clientes de la ruta del día. Sale un cliente de la ruta (quitado, cambio de ruta o propagación) = se dan de
+    baja sus notas asignadas a ese vendedor ese día; **Quitar ruta** baja **todas** las del vendedor ese día. El servidor
+    **no** rechaza cobrar una nota no asignada (cobranza offline, como D9 de T-21).
+  - Endpoints (permiso `ruta_semanal.gestionar` o `ruta_diaria.gestionar`, alcance de sucursal, **otra = 404**):
+    Ruta Semanal: `GET|POST /rutas/semanales`, `GET|PATCH|DELETE /rutas/semanales/:id`, `PUT /rutas/semanales/:id/clientes`.
+    Ruta Diaria: `GET /rutas/diaria/dia`, `GET /rutas/diaria/opciones` (rutas semanales del día con **`clientes`** —su
+    lista en orden con `valido`, la misma regla de la Ruta Semanal— y vehículos), `GET|PUT|DELETE /rutas/diaria`,
+    `GET /rutas/diaria/notas`, `PUT|DELETE /rutas/diaria/notas/:ventaNotaId`. **La pantalla de Ruta Diaria solo usa
+    endpoints de `ruta_diaria.gestionar`**: los clientes de la ruta que escoge salen de `/opciones`, no de
+    `GET /rutas/semanales/:id`. **Ya no hay "Copiar de ayer"** (`/anterior` se quitó). Una semanal que ya trae otro
+    vendedor = 409; de otro día de la semana o de otra sucursal = 400 "no es del …"; dada de baja o inexistente = 400
+    "Esa ruta ya no existe.". El vehículo repetido solo avisa.
+  - **Alta de la tablet** (`ruta-alta`): `cliente_id` viaja en **`datos`**, no en el sobre (así un prospecto o un cliente
+    borrado sale `cliente-inexistente` y no `cliente-fuera-de-alcance`); el alta usa `on conflict … do nothing` y, si no
+    insertó, rechaza `ruta-duplicada`, que **la tablet trata como aplicada**. Un único vivo por vendedor, fecha y cliente
+    (`uq_ruta_diaria_vendedor_fecha_cliente`, parcial).
+  - **Pull** (aditivo, `CONTRATO_ACTUAL` sigue en 1; copia a mano en la nota del PR, **no** se tocó
+    `apps/tablet/.../contrato.ts`): `rutas` del vendedor del token desde `current_date - 1` en adelante (reloj de
+    Postgres, UTC), sin tope, baja con `activo: 0`; **`origen: 'semanal'` baja como `oficina`** (el SQLite de la tablet
+    tiene un check de dos valores y uno nuevo tumbaría todos los pulls); `RutaPull.recado`; colecciones **`rutas_dia`**
+    (`fecha`, `nombre_ruta`, `vehiculo_id`) y **`notas_asignadas`** (`venta_nota_id`, `fecha`). El orden que arrastra
+    el vendedor **no sube** (vive en `ruta_orden_local`). **Eliminar una venta (T-17) da de baja sus `nota_asignada`
+    vivas** en la misma transacción (`ventas-edicion.repository.ts`, `eliminarVenta`, tras el `for update of vn` y sin
+    bloquear `vendedor`), así que la baja viaja en el pull incremental como `activo: 0`.
+  - **Dashboard y Flujo diario**: "Ruta asignada" muestra `nombre_ruta` ("Sin ruta · N clientes"); vehículo de la
+    jornada, con "(asignado: X)" si difiere.
+  - **Nube**: `20261110120000_ruta_semanal_y_dia.sql` y `20261110130000_ruta_semanal_ajustes.sql` (índice parcial de
+    `ruta_semanal_cliente (cliente_id)` y el check `ck_nota_asignada_quitada`) se suben a `sinmex dev` después del merge, con
+    el protocolo de push (pre-flight de la primera: tablas nuevas, columnas nulas y el check de origen ampliado; de la
+    segunda: `select count(*) from nota_asignada where quitada_por_usuario_id is not null and deleted_at is null` debe dar 0). **Backend antes que
+    la app.** Lo que le toca a Mario va en la nota del PR (spec §9).
 
 - **Promociones (T-74).** Regla de regalo por compra, configurada en el portal (*Operación → Promociones*, permiso
   `promocion.gestionar`; backend en `cartera-clientes/promociones.*`, `/promociones`) y **aplicada solo por la
@@ -380,7 +431,9 @@ usuario con sesion pasa.
     por nombre + teléfono). e2e: `apps/backend/test/prospecto-venta.e2e-spec.ts`.
 
 - **Tesorería (T-28 / T-29).** *Finanzas → Tesorería* (`/finanzas/tesoreria`), backend en `modules/tesoreria/`
-  (`/tesoreria`). Permisos: `tesoreria.ver` (la vista) y `tesoreria.gestionar` (cuentas, saldos, movimientos y destinos de la cobranza). Spec:
+  (`/tesoreria`). **Fuera del menú desde 2026-11-07** (`oculto: true` en `nav-config.ts`; ADR-0015 del vault): el
+  cliente llama "Tesorería" a lo que cobra el vendedor − lo que gasta, por día, y no quiere las cuentas del negocio. El
+  código se queda y la pantalla sigue entrando por su dirección. Lo mismo con Flujo de Efectivo. Permisos: `tesoreria.ver` (la vista) y `tesoreria.gestionar` (cuentas, saldos, movimientos y destinos de la cobranza). Spec:
   `docs/superpowers/specs/2026-10-15-t28-tesoreria-cuentas-saldo-inicial-design.md`.
   - **Dos "tesorerías":** la del repartidor (`Cobranza − Gastos`) se cuenta **en persona** y no es de aquí; esto
     son las **cuentas del negocio** (Efectivo, Caja Chica, bancos) que pidió el cliente.
@@ -652,23 +705,88 @@ usuario con sesion pasa.
   - **Todo reporte del portal exporta con `apps/portal/src/lib/excel/`** (`exportarExcel(definición)`), que carga
     `exceljs` solo al exportar. `uuid` de `exceljs` va forzado a `^11.1.1` con `overrides` en el `package.json`
     raíz (aviso de seguridad heredado).
-  - **Reporte de Ventas (T-49):** `GET /reportes/ventas`, mismo `ReportesController`, pero con **su propio permiso**
-    `reporte_ventas.ver` (no `reportes.ver`). Pantalla en *Operación → Reporte de Ventas*.
+  - **Flujo diario y Dashboard (2026-11-09; reemplazan a la pantalla del Reporte de Ventas de T-49).** Spec:
+    `docs/superpowers/specs/2026-11-09-dashboard-flujo-diario-design.md`. Backend en `modules/estadisticas/`
+    (`flujo-diario.*`, `dashboard.*`, `detalle.repository.ts`; reglas puras en `reglas-flujo-diario.ts` y
+    `reglas-detalle.ts`). Solo lectura.
+    - **Endpoints.** *Operación → Flujo diario* (`/operacion/reporte-de-ventas`, pestañas *Por vendedor* y *Por día*):
+      `GET /reportes/flujo-diario`, `/reportes/flujo-diario/vendedor` y `/reportes/flujo-diario/dia`, permiso
+      `reporte_ventas.ver`. *Operación → Dashboard* (`/operacion`, el de **hoy**): `GET /dashboard` y
+      `/dashboard/vendedor`, permiso **`dashboard.ver`** (migración `20261109120000_permiso_dashboard.sql`).
+    - **"Hoy" y "ayer" de Tijuana los calcula el servidor** para el Dashboard (nunca el reloj del navegador ni UTC);
+      Flujo diario abre en ayer.
+    - **Cobranza = contado + cobro de notas de días anteriores + lo que quedó a favor**, de **todos** los métodos de pago
+      (efectivo, transferencia y cheque), y **nunca** `saldo_favor` (no es dinero nuevo). La misma lectura de `cobro` /
+      abonos de contado que usan Tesorería y Flujo de Efectivo. Tesorería del día = cobranza − gastos. La cobranza de
+      la **oficina** (cobros sin vendedor, por la sucursal del cliente) solo suma en la pestaña *Por día*; las ventas de
+      mostrador (sin vendedor) **no entran** al Flujo diario. *Por día* es de **toda la sucursal** (Roberto, 2026-11-09):
+      el selector de vendedor solo aparece en *Por vendedor*, y con un vendedor elegido el portal consulta dos veces (el
+      filtrado para *Por vendedor*, sin vendedor para *Por día*). El backend acepta `vendedor` opcional en
+      `/reportes/flujo-diario/dia` (ajeno = 404, sin oficina), pero el portal no lo manda. Las cifras de arriba siguen
+      a la pestaña y la Cobranza dice de quién es en una línea bajo la cifra ("Solo lo que cobraron los vendedores" /
+      "Vendedores $X · Oficina $Y"), en vez de avisos bajo la tabla.
+    - **Dashboard:** `/dashboard/vendedor` acepta `fecha` (solo hoy o ayer de Tijuana; otra = 400) y el portal manda la
+      del Dashboard pintado, para que a la medianoche el detalle no cambie de día. No lista a un vendedor inactivo o
+      dado de baja cuya única razón para salir es la ruta diaria (el Flujo diario sí, es historia).
+    - **Casilla "Entregada" (nota de papel):** `venta_nota.papel_entregado` (null = sin revisar) +
+      `papel_revisado_en`/`papel_revisado_por_usuario_id`. `PUT /dashboard/notas-entregadas` (permiso
+      `nota_papel.revisar`, 204) manda **todas** las notas a crédito del día (sin marcar = `false`); un folio que no es
+      venta viva a crédito de ese vendedor de hoy o antes = 400 y no se guarda nada. **No mueve `updated_at`**: el
+      trigger `set_updated_at_venta_nota()` lo conserva cuando solo cambian las columnas `papel_*`. El detalle trae
+      `notasCredito[].entregada` y `notasNoEntregadas` (días anteriores, `false` y con pendiente).
+    - **Revisión de notas en la tarde (Ruta Diaria parte 2).** Spec:
+      `docs/superpowers/specs/2026-11-11-ruta-diaria-parte-2-revision-notas-design.md`. La pestaña "Notas de ventas" del
+      detalle (Dashboard y Flujo diario, la misma `PestanaNotas` en `detalle-vendedor-pestanas.tsx`) trae **tres listas**:
+      "Notas Asignadas Cobradas" (`asignadasCobradas`, pendiente 0, solo se ven), "Notas Asignadas NO cobradas por
+      Entregar" (`asignadasPorEntregar`, con saldo, abonadas incluidas) y "Notas Nuevas x Cobrar Entregadas"
+      (`notasCredito`), más "Notas de Ventas NO Entregadas". Las casillas salen **palomeadas si `entregada` es null**
+      (se puede guardar "todo llegó" sin tocar nada).
+      - **Solo se piden notas con saldo y status `pendiente`/`abonado`** (`cuenta_perdida` no, ni entra al conteo). Una
+        nueva que también es asignada ese día sale una vez, como asignada. Las **ya revisadas se conservan** aunque se
+        paguen después (ventana y columna cuadran).
+      - `PUT /dashboard/notas-entregadas` ahora lleva `fecha` (AAAA-MM-DD, formato inválido = 400), `notas` y
+        `asignadas: {ventaNotaId, entregada}[]`; permite **hoy o ayer de Tijuana** (otra = 400) y **no requiere jornada
+        cerrada**. Sin `fecha` conserva la regla vieja (`<= hoy`). Todo o nada; lote vacío = 400.
+      - **Migración** `20261111120000_nota_asignada_papel.sql`: `nota_asignada.papel_entregado`/`papel_revisado_en`/
+        `papel_revisado_por_usuario_id` + check de que van juntos. A diferencia de `venta_nota`, el update **sí mueve
+        `updated_at`** de la asignación (trigger genérico): inofensivo, la tablet ignora el papel.
+      - `FilaVendedorDia.notasNoEntregadas` (Dashboard y Flujo diario; `null` = sin revisar o sin nada que revisar (columna vacía, el tío prefiere vacío a un "0"), en rojo si > 0;
+        `contarNotasNoEntregadas` en `reglas-flujo-diario.ts`). Tipos duplicados en `lib/flujo-diario.ts` del portal.
+        `useCerrarConPendientes` (`use-detalle-abierto.ts`) pregunta antes de cerrar con casillas cambiadas a mano.
+      - **Nube**: la migración se sube a `sinmex dev` después del merge, con el protocolo de push (pre-flight: columnas
+        nulas y un check que todas las filas cumplen en null; nada que contar).
+    - **Pestaña "Ruta"** (la ventana "Visitas" del viejo, que se abre al picar *Ruta*, también el "x / y" del
+      Dashboard): los clientes de su **ruta diaria en su orden** con lo que pasó en cada uno, o `visitado: false` →
+      "Cliente no visitado"; después los atendidos fuera de ruta, por hora (`armarDetalleVendedor`).
+    - **Liquidada** se lee de `abono.saldo_pendiente` (la nota quedó en cero con ese abono), no se recalcula.
+    - **Alcance:** un parámetro `sucursal` ajeno responde **403**; un `vendedor` ajeno responde **404** (no confirma que
+      exista). Con "Todas" hay un bloque por sucursal.
+    - **Los tipos están duplicados** en `apps/portal/src/lib/flujo-diario.ts` y `reglas-flujo-diario.ts` del backend
+      (el portal no importa del backend): si cambias uno, cambia el otro en el mismo commit.
+    - **Portal** (`components/flujo-diario/`, `components/dashboard/`, `ui/selector-segmentado.tsx`, `Pestanas` con
+      `deshabilitada`): el scroll horizontal de la tabla del Dashboard (13 columnas) se **aceptó** a propósito; no
+      lo "arregles" quitando columnas.
+    - **Nube**: `20261109120000_permiso_dashboard.sql`, `20261109130000_indices_flujo_diario.sql` (índices parciales de
+      `venta_nota (vendedor_id, fecha)` y `cobro (vendedor_id, fecha_pago)` para las sumas por vendedor y día) y
+      `20261109140000_nota_papel_entregado.sql` (columnas nulas, un check que todas las filas cumplen en null, el
+      trigger nuevo de `venta_nota` y un permiso) se suben a `sinmex dev` después del merge, con el protocolo de push
+      (pre-flight: nada que contar).
+  - **`GET /reportes/ventas` (T-49) se queda** con su permiso `reporte_ventas.ver` y `lib/reporte-ventas.ts`: son la
+    base del Excel de ventas de *Información → Reportes* (pieza 4). Su pantalla y `components/reporte-ventas/` se borraron.
     - Cuenta ventas vivas de **cualquier status**; la sucursal es **la de la venta** (`venta_nota.sucursal_id`), no la
       del cliente como en Cuentas por Cobrar (T-22). Piezas = líneas **vivas** de `venta_nota_detalle`.
-    - Agrupa por día (subtotales) y trae `porRepartidor` ("resultados por vendedor y por día", fuente de julio).
-      `repartidor=oficina` filtra ventas de mostrador.
+    - Agrupa por día (subtotales) y trae `porRepartidor`. `repartidor=oficina` filtra ventas de mostrador.
   - **El portal se usa en computadora, no en celular.** Una tabla ancha tiene que caber desde **1366 px** de ventana
     (≈1012 px de caja, por la barra lateral `w-64` y el `p-8`). Medir el texto en el navegador antes de fijar anchos
-    de columna: la primera versión de T-49 se desplazaba de lado incluso a 1440 px. Ver
-    `components/reporte-ventas/tabla-reporte-ventas.tsx` (`table-fixed`, `colgroup`, `min-w`, scroll en su caja).
+    de columna: la primera versión de T-49 se desplazaba de lado incluso a 1440 px. Patrón: `table-fixed`, `colgroup`,
+    `min-w`, scroll en su caja (ver `components/gastos/` o `components/flujo-diario/`).
 
 - **Portal UI (piezas comunes, Etapa 1).** Spec: `docs/superpowers/specs/2026-10-20-portal-ui-etapa-1-design.md`.
   - **Toda pantalla nueva, o una vieja que se toque, usa `apps/portal/src/components/ui/`**: `EncabezadoPantalla`
     (título + UNA línea que dice para qué sirve), `EstadoPantalla` (Cargando / sin permiso / elige sucursal, mismo texto
     en todas), `Tabla`/`Th`/`Td`/`TdMonto`/`CajaTabla`, `FiltroFechas` (botón **Mostrar**, atajos Hoy · Ayer · Esta
     semana · Este mes) + `BotonExcel`, `Aviso`, `Etiqueta`/`EtiquetaStatusVenta`, `Monto`, `Fecha`, `Campo` y sus
-    controles, `Pestanas` (con `onCambio` opcional para avisar la pestaña elegida), `Ventana` (`ui/ventana.tsx`, Dialog de base-ui: formularios cortos de crear/editar),
+    controles, `Pestanas` (con `onCambio` opcional para avisar la pestaña elegida), `SelectorSegmentado` (`ui/selector-segmentado.tsx`: 2–3 opciones excluyentes en tira, `radiogroup` con flechas; el "Por producto / Por cliente" del Dashboard), `Ventana` (`ui/ventana.tsx`, Dialog de base-ui: formularios cortos de crear/editar),
     `Ayuda` (ⓘ con globito, Tooltip de base-ui; las explicaciones de permisos viven en `lib/explicacion-permisos.ts`).
     Para confirmar, `useConfirmar()` (pinta `{ventana}` en la pantalla), **nunca `window.confirm`**.
   - **Movimiento:** `Pantalla` entra con un desvanecido al montarse y `app/(portal)/template.tsx` hace lo mismo al
@@ -683,7 +801,7 @@ usuario con sesion pasa.
     de antes (`lib/ventas.ts`, `lib/reportes.ts`, `lib/reporte-ventas.ts`, `lib/tesoreria.ts`) solo re-exportan.
   - **El color de la sucursal vive en `lib/sucursal-color.ts`** (TJ azul pacífico, MX morado jamaica, todas = tinta) y
     en las variables `--suc-…` de `globals.css`. Una sucursal nueva usa la tinta hasta que se agregue en los dos
-    lugares. Es la única parte llamativa del portal: no se usa para otra cosa.
+    lugares. Es la única parte llamativa del portal: no se usa para otra cosa, salvo el renglón de grupo de cada sucursal (`FilaGrupo sucursal=…`) en Dashboard y Flujo diario con "Todas" (Roberto, 2026-11-11).
   - El marco es `components/layout/marco-portal.tsx`: sucursal arriba en su color, secciones plegables, usuario y
     "Cerrar sesión" abajo, ☰ lo esconde (se recuerda con `lib/almacen-local.ts`), y el `<title>` de la pestaña
     ("Ventas | JAWA Tijuana"). Una pantalla nueva se agrega en `nav-config.ts`; mientras su `page.tsx` sea un

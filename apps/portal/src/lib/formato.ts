@@ -25,6 +25,24 @@ export function formatearFecha(iso: string): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
 }
 
+const DIAS = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MESES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+/**
+ * `AAAA-MM-DD` → "lunes 9 de noviembre". El día de la semana se calcula en UTC sobre la
+ * fecha pura, así la zona del navegador no lo corre. Lo que no tenga esa forma sale tal cual.
+ */
+export function formatearDiaLargo(iso: string): string {
+  const m = SOLO_FECHA.exec(iso);
+  if (!m) return iso;
+  const [anio, mes, dia] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const semana = new Date(Date.UTC(anio, mes - 1, dia)).getUTCDay();
+  return `${DIAS[semana]} ${dia} de ${MESES[mes - 1]}`;
+}
+
 /**
  * `AAAA-MM-DD hh:mm` → `dd/mm/aaaa hh:mm`. El servidor ya la manda en hora de Tijuana
  * (`to_char(... at time zone 'America/Tijuana', 'YYYY-MM-DD HH24:MI')`). Una hora UTC

@@ -1,13 +1,16 @@
-import { apiFetch } from "./api";
+import { apiFetch, apiFetchSinCuerpo } from "./api";
 import type { ClienteResumen } from "./clientes";
+import type { ClienteDeRutaSemanal } from "./rutas-semanales";
 import { normalizarTexto } from "./ventas";
 
 // Copia normativa de las formas de
-// apps/backend/src/modules/rutas/rutas-diarias.service.ts (`RutaDiaria`, `RutaAnterior`) y
-// rutas-diarias.repository.ts (`FilaRutaDiaria`). Mismo trato que lib/cobranzas.ts: un cambio
-// de forma en un lado exige el equivalente en el otro.
+// apps/backend/src/modules/rutas/rutas-diarias.service.ts (`RutaDiaria`, `RenglonDia`,
+// `ListaDelDia`, `OpcionesDia`) y rutas-diarias.repository.ts (`FilaRutaDiaria`,
+// `OrigenRuta`). Mismo trato que lib/cobranzas.ts: un cambio de forma en un lado exige el
+// equivalente en el otro.
 
-export type OrigenRuta = "oficina" | "vendedor";
+/** `semanal` = llegó de la Ruta Semanal; `oficina` = puesto a mano en el portal; `vendedor` = desde la tablet. */
+export type OrigenRuta = "oficina" | "vendedor" | "semanal";
 
 export interface FilaRutaDiaria {
   id: string;
@@ -15,48 +18,118 @@ export interface FilaRutaDiaria {
   clienteNombre: string;
   orden: number;
   origen: OrigenRuta;
+  /** Lo que la oficina le dice al vendedor de ese cliente, o `null`. */
+  recado: string | null;
+  /** Notas de ese cliente asignadas a este vendedor ese día (vivas). */
+  notasAsignadas: number;
 }
 
+/** `GET`/`PUT /rutas/diaria`: la ruta de un vendedor y día (spec §5.2). */
 export interface RutaDiaria {
   vendedor: { id: string; nombre: string; sucursalCodigo: string };
   fecha: string;
+  /** `false` = un día que ya pasó (de Tijuana): solo lectura. */
+  editable: boolean;
+  /** `null` = "Sin ruta". El nombre es el congelado al asignarla. */
+  rutaSemanal: { id: string; nombre: string } | null;
+  vehiculo: { id: string; nombre: string } | null;
   filas: FilaRutaDiaria[];
 }
 
-export interface RutaAnterior {
-  /** `null` si el vendedor no tiene ninguna ruta antes de esa fecha. */
-  fecha: string | null;
-  clientes: string[];
+/** Un renglón de la lista del día (spec §5.1): un vendedor activo. */
+export interface RenglonDia {
+  vendedorId: string;
+  vendedor: string;
+  sucursalCodigo: string;
+  /** `null` = "Sin ruta". */
+  rutaNombre: string | null;
+  clientes: number;
+  /** Notas con saldo de los clientes de su ruta. */
+  notasPendientes: number;
+  /** Notas asignadas a él ese día (vivas), tengan saldo o no. */
+  notasAsignadas: number;
+  vehiculo: string | null;
+  /** Hay encabezado o clientes vivos ese día. */
+  tieneRuta: boolean;
 }
 
-/** Una fila de la columna derecha mientras se edita (sin guardar). */
+/** `GET /rutas/diaria/dia`. */
+export interface ListaDelDia {
+  fecha: string;
+  editable: boolean;
+  renglones: RenglonDia[];
+}
+
+/**
+ * `GET /rutas/diaria/opciones`: las rutas semanales del día de la semana (con su lista de clientes en
+ * orden, para copiarla al escogerla sin pedir `ruta_semanal.gestionar`) y los vehículos de la sucursal.
+ */
+export interface OpcionesDia {
+  rutas: { id: string; nombre: string; ocupadaPor: string | null; clientes: ClienteDeRutaSemanal[] }[];
+  vehiculos: { id: string; nombre: string; ocupadoPor: string | null }[];
+}
+
+/** Tope del recado (el mismo `MAX_RECADO` del backend). */
+export const MAX_RECADO = 200;
+
+/** Una fila de la lista mientras se edita (sin guardar). */
 export interface FilaEditable {
   clienteId: string;
   clienteNombre: string;
   origen: OrigenRuta;
+  recado: string | null;
+  notasAsignadas: number;
+}
+
+/** Lo que se edita de la ruta de un vendedor: lo mismo que manda "Guardar". */
+export interface RutaEditable {
+  rutaSemanalId: string | null;
+  vehiculoId: string | null;
+  filas: FilaEditable[];
+}
+
+const porVendedorYFecha = (vendedorId: string, fecha: string) => new URLSearchParams({ vendedorId, fecha }).toString();
+
+export function obtenerDia(fecha: string, sucursal: string): Promise<ListaDelDia> {
+  return apiFetch<ListaDelDia>(`/rutas/diaria/dia?${new URLSearchParams({ fecha, sucursal }).toString()}`);
 }
 
 export function obtenerRutaDiaria(vendedorId: string, fecha: string): Promise<RutaDiaria> {
-  return apiFetch<RutaDiaria>(`/rutas/diaria?${new URLSearchParams({ vendedorId, fecha }).toString()}`);
+  return apiFetch<RutaDiaria>(`/rutas/diaria?${porVendedorYFecha(vendedorId, fecha)}`);
 }
 
-export function obtenerRutaAnterior(vendedorId: string, fecha: string): Promise<RutaAnterior> {
-  return apiFetch<RutaAnterior>(
-    `/rutas/diaria/anterior?${new URLSearchParams({ vendedorId, fecha }).toString()}`,
-  );
+export function obtenerOpciones(vendedorId: string, fecha: string): Promise<OpcionesDia> {
+  return apiFetch<OpcionesDia>(`/rutas/diaria/opciones?${porVendedorYFecha(vendedorId, fecha)}`);
 }
 
-/** Semántica de reemplazo (D14): la lista COMPLETA y ordenada. */
+/** Semántica de reemplazo: la ruta COMPLETA (ruta semanal, vehículo y clientes en orden con su recado). */
 export function guardarRutaDiaria(datos: {
   vendedorId: string;
   fecha: string;
-  clientes: string[];
+  rutaSemanalId: string | null;
+  vehiculoId: string | null;
+  clientes: { clienteId: string; recado: string | null }[];
 }): Promise<RutaDiaria> {
   return apiFetch<RutaDiaria>("/rutas/diaria", { method: "PUT", body: JSON.stringify(datos) });
 }
 
-export function aEditables(ruta: RutaDiaria): FilaEditable[] {
-  return ruta.filas.map(({ clienteId, clienteNombre, origen }) => ({ clienteId, clienteNombre, origen }));
+/** "Quitar ruta": baja la ruta del día del vendedor; lo que agregó el vendedor se queda. */
+export function quitarRutaDiaria(vendedorId: string, fecha: string): Promise<void> {
+  return apiFetchSinCuerpo(`/rutas/diaria?${porVendedorYFecha(vendedorId, fecha)}`, { method: "DELETE" });
+}
+
+export function aEditable(ruta: RutaDiaria): RutaEditable {
+  return {
+    rutaSemanalId: ruta.rutaSemanal?.id ?? null,
+    vehiculoId: ruta.vehiculo?.id ?? null,
+    filas: ruta.filas.map(({ clienteId, clienteNombre, origen, recado, notasAsignadas }) => ({
+      clienteId,
+      clienteNombre,
+      origen,
+      recado,
+      notasAsignadas,
+    })),
+  };
 }
 
 /** Mueve una fila. Fuera de rango devuelve la MISMA lista (React no repinta). */
@@ -68,48 +141,63 @@ export function moverFila(filas: FilaEditable[], desde: number, hasta: number): 
   return copia;
 }
 
-/** El portal no puede quitar lo que agregó el vendedor (D2, D14): solo reordenarlo. */
+/** El portal no puede quitar lo que agregó el vendedor (T-37): solo reordenarlo. */
 export function quitarFila(filas: FilaEditable[], indice: number): FilaEditable[] {
-  if (filas[indice]?.origen !== "oficina") return filas;
+  const fila = filas[indice];
+  if (!fila || fila.origen === "vendedor") return filas;
   return filas.filter((_, i) => i !== indice);
 }
 
 export function agregarFila(filas: FilaEditable[], cliente: { id: string; nombre: string }): FilaEditable[] {
   if (filas.some((f) => f.clienteId === cliente.id)) return filas;
-  return [...filas, { clienteId: cliente.id, clienteNombre: cliente.nombre, origen: "oficina" }];
+  return [
+    ...filas,
+    { clienteId: cliente.id, clienteNombre: cliente.nombre, origen: "oficina", recado: null, notasAsignadas: 0 },
+  ];
+}
+
+/** El recado recortado; vacío = `null`. Más de `MAX_RECADO` caracteres no se acepta (misma lista). */
+export function fijarRecado(filas: FilaEditable[], indice: number, texto: string): FilaEditable[] {
+  const recortado = texto.trim();
+  if (!filas[indice] || recortado.length > MAX_RECADO) return filas;
+  const recado = recortado === "" ? null : recortado;
+  return filas.map((f, i) => (i === indice ? { ...f, recado } : f));
 }
 
 /**
- * "Copiar de ayer" (D17): la ruta anterior en su orden, sin guardar. Una fila que
- * ya estaba conserva su origen; un cliente que ya no está en la cartera se omite;
- * las del vendedor que no venían se quedan al final (no se pueden quitar).
+ * Escoger (o cambiar) la ruta semanal: salen los clientes que llegaron de la semanal
+ * anterior y entran los de la nueva en su orden, antes de los puestos a mano (oficina o
+ * vendedor), que se quedan. Un cliente que ya no es válido no se copia; uno que ya está
+ * puesto a mano no se repite. Un cliente que sigue en la nueva conserva su recado.
  */
-export function cargarAnterior(
-  filas: FilaEditable[],
-  anterior: string[],
-  cartera: Pick<ClienteResumen, "id" | "nombre">[],
-): FilaEditable[] {
-  const actuales = new Map(filas.map((f) => [f.clienteId, f]));
-  const nombres = new Map(cartera.map((c) => [c.id, c.nombre]));
-  const copiadas: FilaEditable[] = [];
-  for (const id of anterior) {
-    const actual = actuales.get(id);
-    const nombre = nombres.get(id);
-    if (actual) copiadas.push(actual);
-    else if (nombre !== undefined) copiadas.push({ clienteId: id, clienteNombre: nombre, origen: "oficina" });
+export function aplicarRutaSemanal(filas: FilaEditable[], clientesDeLaSemanal: ClienteDeRutaSemanal[]): FilaEditable[] {
+  const aMano = filas.filter((f) => f.origen !== "semanal");
+  const yaPuestos = new Set(aMano.map((f) => f.clienteId));
+  const anteriores = new Map(filas.filter((f) => f.origen === "semanal").map((f) => [f.clienteId, f]));
+  const nuevas: FilaEditable[] = [];
+  for (const c of clientesDeLaSemanal) {
+    if (!c.valido || yaPuestos.has(c.clienteId) || nuevas.some((f) => f.clienteId === c.clienteId)) continue;
+    nuevas.push(
+      anteriores.get(c.clienteId) ?? {
+        clienteId: c.clienteId,
+        clienteNombre: c.nombre,
+        origen: "semanal",
+        recado: null,
+        notasAsignadas: 0,
+      },
+    );
   }
-  const enCopia = new Set(copiadas.map((f) => f.clienteId));
-  return [...copiadas, ...filas.filter((f) => f.origen === "vendedor" && !enCopia.has(f.clienteId))];
+  return [...nuevas, ...aMano];
 }
 
-/** ¿La columna derecha ya no es lo que está guardado? Cuenta el orden. */
-export function hayCambios(original: FilaEditable[], actual: FilaEditable[]): boolean {
-  return original.length !== actual.length || original.some((f, i) => f.clienteId !== actual[i].clienteId);
-}
-
-/** Encabezado "Ruta armada por el vendedor" (D3). */
-export function armadaPorElVendedor(filas: FilaEditable[]): boolean {
-  return filas.length > 0 && filas.every((f) => f.origen === "vendedor");
+/** ¿Lo editado ya no es lo guardado? Cuenta ruta, vehículo, orden y recados. */
+export function hayCambios(original: RutaEditable, actual: RutaEditable): boolean {
+  return (
+    original.rutaSemanalId !== actual.rutaSemanalId ||
+    original.vehiculoId !== actual.vehiculoId ||
+    original.filas.length !== actual.filas.length ||
+    original.filas.some((f, i) => f.clienteId !== actual.filas[i].clienteId || f.recado !== actual.filas[i].recado)
+  );
 }
 
 /** La cartera que se ofrece: lo que no está ya en la ruta, buscando sin acentos. */
@@ -120,4 +208,52 @@ export function filtrarCartera(
 ): ClienteResumen[] {
   const q = normalizarTexto(busqueda.trim());
   return cartera.filter((c) => !enRuta.has(c.id) && (q === "" || normalizarTexto(c.nombre).includes(q)));
+}
+
+// Copia normativa de `NotaDeRuta` y `NotasDeRuta` de
+// apps/backend/src/modules/rutas/reglas-notas-ruta.ts (spec §5.4).
+
+/** Una nota por cobrar en la ventana de notas de una ruta del día. */
+export interface NotaDeRuta {
+  ventaNotaId: string;
+  folio: string;
+  clienteId: string;
+  cliente: string;
+  /** `AAAA-MM-DD`, la fecha de la venta. */
+  fecha: string;
+  saldoCentavos: number;
+  diasAtraso: number;
+  /** Quien la trae ese día, o `null`. */
+  asignadaA: { vendedorId: string; nombre: string } | null;
+}
+
+export interface NotasDeRuta {
+  /** Con saldo, de los clientes de su ruta. */
+  pendientes: NotaDeRuta[];
+  /** Las de este vendedor ese día, aunque ya no tengan saldo. */
+  asignadas: NotaDeRuta[];
+}
+
+export function obtenerNotas(vendedorId: string, fecha: string): Promise<NotasDeRuta> {
+  return apiFetch<NotasDeRuta>(`/rutas/diaria/notas?${porVendedorYFecha(vendedorId, fecha)}`);
+}
+
+/** Asigna (o le pasa) la nota al vendedor ese día. Regresa las dos listas ya actualizadas. */
+export function asignarNota(ventaNotaId: string, vendedorId: string, fecha: string): Promise<NotasDeRuta> {
+  return apiFetch<NotasDeRuta>(`/rutas/diaria/notas/${ventaNotaId}`, {
+    method: "PUT",
+    body: JSON.stringify({ vendedorId, fecha }),
+  });
+}
+
+export function quitarNota(ventaNotaId: string, vendedorId: string, fecha: string): Promise<NotasDeRuta> {
+  return apiFetch<NotasDeRuta>(`/rutas/diaria/notas/${ventaNotaId}?${porVendedorYFecha(vendedorId, fecha)}`, {
+    method: "DELETE",
+  });
+}
+
+/** Buscar por folio, sin mayúsculas ni acentos. Vacío = la misma lista. */
+export function filtrarPorFolio(notas: NotaDeRuta[], texto: string): NotaDeRuta[] {
+  const q = normalizarTexto(texto.trim());
+  return q === "" ? notas : notas.filter((n) => normalizarTexto(n.folio).includes(q));
 }

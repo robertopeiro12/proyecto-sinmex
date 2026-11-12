@@ -881,7 +881,39 @@ export interface RutaPull extends FilaSincronizable {
   fecha: string;
   /** El orden de la oficina. La tablet lo usa solo si el vendedor no reordeno. */
   orden: number;
+  /**
+   * Quien puso al cliente. Una fila `semanal` (cliente que viene de una ruta
+   * semanal) baja como `oficina`: la tablet sin actualizar no conoce otro
+   * valor.
+   */
   origen: 'oficina' | 'vendedor';
+  /** Ruta semanal y diaria: el recado de la oficina para el vendedor (<= 200). */
+  recado: string | null;
+}
+
+/**
+ * La ruta del dia de un vendedor (tabla `ruta_dia`): nombre de la ruta
+ * semanal que lleva y vehiculo asignado. Misma ventana, incremental y bajas
+ * (`activo: 0`) que {@link RutaPull}; solo del vendedor del token. Aditiva.
+ */
+export interface RutaDiaPull extends FilaSincronizable {
+  /** `AAAA-MM-DD`. */
+  fecha: string;
+  nombre_ruta: string | null;
+  vehiculo_id: string | null;
+}
+
+/**
+ * Una nota por cobrar que la oficina le asigno al vendedor para un dia (tabla
+ * `nota_asignada`). Misma ventana e incremental que {@link RutaPull}. Sin
+ * `desde` no baja la de una venta borrada; con `desde`, una asignacion dada de
+ * baja viaja con `activo: 0`. Eliminar la venta (T-17) da de baja sus
+ * asignaciones vivas, asi que tambien viajan con `activo: 0`. Aditiva.
+ */
+export interface NotaAsignadaPull extends FilaSincronizable {
+  venta_nota_id: string;
+  /** `AAAA-MM-DD`. */
+  fecha: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1047,6 +1079,10 @@ export interface RespuestaPull {
   notas_pendientes: NotaPendientePull[];
   /** T-37. La ruta diaria del vendedor (ver {@link RutaPull}). Aditiva. */
   rutas: RutaPull[];
+  /** Ruta semanal y diaria: nombre de ruta y vehiculo del dia (ver {@link RutaDiaPull}). Aditiva. */
+  rutas_dia: RutaDiaPull[];
+  /** Ruta semanal y diaria: notas por cobrar asignadas (ver {@link NotaAsignadaPull}). Aditiva. */
+  notas_asignadas: NotaAsignadaPull[];
   /**
    * T-74. Las filas de `promocion` cuyo `sucursal_id` es la sucursal del
    * vendedor: las de `todos`, las de `prospecto` y las de `cliente` creadas en

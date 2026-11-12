@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatearFecha, formatearFechaHora, formatearPesos, iniciales, plural } from "./formato";
+import { formatearDiaLargo, formatearFecha, formatearFechaHora, formatearPesos, iniciales, plural } from "./formato";
 import * as reportes from "./reportes";
 import * as ventas from "./ventas";
 
@@ -60,5 +60,17 @@ describe("iniciales", () => {
     expect(iniciales("Roberto")).toBe("RO");
     expect(iniciales("ángel")).toBe("ÁN");
     expect(iniciales("   ")).toBe("?");
+  });
+});
+
+describe("formatearDiaLargo", () => {
+  it("día de la semana, día y mes en español, sin correr el día por la zona", () => {
+    expect(formatearDiaLargo("2026-11-09")).toBe("lunes 9 de noviembre");
+    expect(formatearDiaLargo("2026-11-15")).toBe("domingo 15 de noviembre");
+    expect(formatearDiaLargo("2027-01-01")).toBe("viernes 1 de enero");
+  });
+
+  it("lo que no es AAAA-MM-DD sale tal cual", () => {
+    expect(formatearDiaLargo("mañana")).toBe("mañana");
   });
 });
