@@ -28,7 +28,7 @@ function mockAuth(puede: (clave: string) => boolean) {
   });
 }
 
-const TIJUANA: Sucursal = { id: "1", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false };
+const TIJUANA: Sucursal = { id: "1", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false, consumoDiarioMax: 1 };
 
 describe("PantallaSucursales", () => {
   beforeEach(() => {
@@ -81,10 +81,10 @@ describe("PantallaSucursales", () => {
       codigo: "MX",
       nombre: "Mexicali",
       activa: true,
-      controlInventario: false,
+      controlInventario: false, consumoDiarioMax: 1,
     });
     listarSucursales.mockResolvedValueOnce([
-      { id: "2", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false },
+      { id: "2", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false, consumoDiarioMax: 1 },
     ]);
 
     render(<PantallaSucursales sucursal={null} />);
@@ -126,7 +126,7 @@ describe("PantallaSucursales", () => {
       expect(editarSucursal).toHaveBeenCalledWith("1", {
         nombre: "Tijuana Centro",
         activa: true,
-        controlInventario: false,
+        controlInventario: false, consumoDiarioMax: 1,
       }),
     );
     expect(await screen.findByText("Tijuana Centro")).toBeInTheDocument();
@@ -158,8 +158,8 @@ describe("PantallaSucursales", () => {
     const usuario = userEvent.setup();
     mockAuth(() => true);
     listarSucursales.mockResolvedValueOnce([TIJUANA]);
-    editarSucursal.mockResolvedValue({ ...TIJUANA, controlInventario: true });
-    listarSucursales.mockResolvedValueOnce([{ ...TIJUANA, controlInventario: true }]);
+    editarSucursal.mockResolvedValue({ ...TIJUANA, controlInventario: true, consumoDiarioMax: 1 });
+    listarSucursales.mockResolvedValueOnce([{ ...TIJUANA, controlInventario: true, consumoDiarioMax: 1 }]);
 
     render(<PantallaSucursales sucursal={null} />);
     expect(await screen.findByText("Apagado")).toBeInTheDocument();
@@ -176,9 +176,53 @@ describe("PantallaSucursales", () => {
       expect(editarSucursal).toHaveBeenCalledWith("1", {
         nombre: "Tijuana",
         activa: true,
-        controlInventario: true,
+        controlInventario: true, consumoDiarioMax: 1,
       }),
     );
     expect(await screen.findByText("Prendido")).toBeInTheDocument();
+  });
+
+  it("T-27 pieza 2: cambia el consumo propio máximo por día desde la edición", async () => {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    listarSucursales.mockResolvedValueOnce([TIJUANA]);
+    editarSucursal.mockResolvedValue({ ...TIJUANA, consumoDiarioMax: 3 });
+    listarSucursales.mockResolvedValueOnce([{ ...TIJUANA, consumoDiarioMax: 3 }]);
+
+    render(<PantallaSucursales sucursal={null} />);
+    await screen.findByText("TJ");
+
+    await usuario.click(screen.getByRole("button", { name: "Editar" }));
+    const ventana = screen.getByRole("dialog", { name: "Editar TJ" });
+    const campo = within(ventana).getByLabelText("Consumo propio máximo por día") as HTMLInputElement;
+    expect(campo.value).toBe("1");
+    expect(
+      within(ventana).getByText("Piezas que cada vendedor puede registrar como consumo propio en un día."),
+    ).toBeInTheDocument();
+
+    await usuario.clear(campo);
+    await usuario.type(campo, "3");
+    await usuario.click(within(ventana).getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() =>
+      expect(editarSucursal).toHaveBeenCalledWith("1", {
+        nombre: "Tijuana",
+        activa: true,
+        controlInventario: false,
+        consumoDiarioMax: 3,
+      }),
+    );
+  });
+
+  it("T-27 pieza 2: el alta no pide el consumo (nace con 1)", async () => {
+    const usuario = userEvent.setup();
+    mockAuth(() => true);
+    listarSucursales.mockResolvedValue([]);
+
+    render(<PantallaSucursales sucursal={null} />);
+    await screen.findByText("No hay sucursales que mostrar.");
+    await usuario.click(screen.getByRole("button", { name: "Nueva sucursal" }));
+    const ventana = screen.getByRole("dialog", { name: "Nueva sucursal" });
+    expect(within(ventana).queryByLabelText("Consumo propio máximo por día")).not.toBeInTheDocument();
   });
 });

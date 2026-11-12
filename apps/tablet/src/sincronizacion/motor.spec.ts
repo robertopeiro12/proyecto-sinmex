@@ -257,6 +257,19 @@ describe('aSnapshot (T-27)', () => {
     ]);
   });
 
+  it('pasa el consumo diario del vendedor tal cual y tolera un servidor que no lo manda (pieza 2)', () => {
+    const respuesta = respuestaPullDePrueba();
+    respuesta.catalogos.vendedores = respuesta.catalogos.vendedores.map((v, i) => ({
+      ...v,
+      consumo_diario_max: i === 0 ? 3 : 0,
+    }));
+    expect(aSnapshot(respuesta).vendedores?.map((v) => v.consumo_diario_max)).toEqual([3, 0]);
+    expect(aSnapshot(respuestaPullDePrueba()).vendedores?.map((v) => v.consumo_diario_max)).toEqual([
+      undefined,
+      undefined,
+    ]);
+  });
+
   it('pasa las cargas y tolera un servidor que todavia no las manda', () => {
     const carga = {
       id: 'carga-1',

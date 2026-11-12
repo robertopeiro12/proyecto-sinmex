@@ -1,5 +1,6 @@
 import { esViolacionUnicidad } from '../../database/errores-postgres';
 import type { GastoNormalizado } from '../compras-egresos/datos-gasto';
+import type { MovimientoNormalizado } from '../inventario/datos-movimiento';
 import type { ProspectoNormalizado } from '../cartera-clientes/datos-prospecto';
 import {
   normalizarDatosVenta,
@@ -14,6 +15,7 @@ import type { CodigoRechazo } from './contrato';
 import { prepararCobranza } from './despacho-cobranza';
 import { prepararGasto } from './despacho-gasto';
 import { prepararJornada } from './despacho-jornada';
+import { prepararMovimiento } from './despacho-movimiento';
 import { prepararProspecto } from './despacho-prospecto';
 import { prepararRutaAlta } from './despacho-ruta-alta';
 import { prepararVisita } from './despacho-visita';
@@ -29,10 +31,11 @@ import type { OperacionNormalizada, Rechazo } from './operaciones';
 /**
  * Lo que un modulo de dominio tiene que proyectar para una operacion.
  *
- * Un `tipo` sin modulo todavia (`merma`, `ruta`) no tiene proyeccion:
+ * Un `tipo` sin modulo (`merma` y `ruta`, reservados) no tiene proyeccion:
  * se guarda en el buzon y queda `aplicada`, como desde T-07.
  * Orden acordado entre tickets: `venta`, `prospecto` (T-40), `cobranza` (T-20),
- * `jornada` (T-38), `ruta-alta` (T-37), `visita` (T-39), `gasto` (T-30/T-31).
+ * `jornada` (T-38), `ruta-alta` (T-37), `visita` (T-39), `gasto` (T-30/T-31),
+ * `movimiento` (T-27 pieza 2).
  */
 export type Proyeccion =
   // T-17: el folio viaja con la proyeccion. Aqui ya se comprobo que no es null,
@@ -49,7 +52,14 @@ export type Proyeccion =
   // T-39. La fila es de `visita` con id = clave; el cliente es el del sobre.
   | { tipo: 'visita'; visita: VisitaNormalizada; clienteId: string }
   // T-30/T-31. La fila es de `gasto` con id = clave; sin cliente.
-  | { tipo: 'gasto'; gasto: GastoNormalizado };
+  | { tipo: 'gasto'; gasto: GastoNormalizado }
+  // T-27 pieza 2. La fila es de `movimiento_inventario` con id = clave; el
+  // cliente (solo en la merma del cliente) es el del sobre.
+  | {
+      tipo: 'movimiento';
+      movimiento: MovimientoNormalizado;
+      clienteId: string | null;
+    };
 
 export type ResultadoPreparacion =
   { ok: true; proyeccion: Proyeccion | null } | ({ ok: false } & Rechazo);
@@ -120,6 +130,21 @@ export function prepararProyeccion(
       const r = prepararGasto(op);
       if (!r.ok) return r;
       return { ok: true, proyeccion: { tipo: 'gasto', gasto: r.gasto } };
+    }
+    case 'movimiento': {
+      // T-27 pieza 2. La forma y el cliente segun el tipo los revisa
+      // `despacho-movimiento.ts`; la presentacion y el id ocupado,
+      // `MovimientosService` dentro de la transaccion.
+      const r = prepararMovimiento(op);
+      if (!r.ok) return r;
+      return {
+        ok: true,
+        proyeccion: {
+          tipo: 'movimiento',
+          movimiento: r.movimiento,
+          clienteId: r.clienteId,
+        },
+      };
     }
     case 'merma':
     case 'ruta':

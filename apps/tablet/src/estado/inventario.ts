@@ -12,7 +12,9 @@ import type { CargaPull, CuerpoRespuestaCarga } from '@/sincronizacion/contrato'
 export {
   bloqueoDeVenta,
   cargaPendiente,
+  consumoDelDia,
   existencias,
+  faltantesDeMovimiento,
   faltantesDeVenta,
   MOTIVO_CARGA_PENDIENTE,
   textoFaltante,
@@ -21,6 +23,7 @@ export type {
   CargaInventario,
   Existencia,
   Faltante,
+  LineaMovimientoInventario,
   LineaVentaInventario,
   PiezasDePresentacion,
 } from '@/datos/inventario-reglas';
@@ -213,4 +216,22 @@ export function crearRespondedorCarga(): RespondedorCarga {
       }
     },
   };
+}
+
+/**
+ * "Por regresar a la planta" (T-27 pieza 2): por presentacion, las piezas buenas
+ * (la existencia; una negativa —registrada con el control apagado— cuenta 0) y la
+ * merma (recibida del cliente + del trayecto). Sin nada que regresar, no sale.
+ */
+export function filasPorRegresar<
+  F extends { presentacionId: string; etiqueta: string; existencia: number; mermaPorRegresar: number },
+>(filas: readonly F[]): { presentacionId: string; etiqueta: string; buenas: number; merma: number }[] {
+  return filas
+    .map((f) => ({
+      presentacionId: f.presentacionId,
+      etiqueta: f.etiqueta,
+      buenas: Math.max(0, f.existencia),
+      merma: f.mermaPorRegresar,
+    }))
+    .filter((f) => f.buenas > 0 || f.merma > 0);
 }

@@ -84,8 +84,8 @@ import { trocearLotes } from './lotes';
  *
  * Cada modulo de negocio registra la suya sin tocar el motor: hoy jornada
  * (T-04), venta (T-16), prospecto (T-40), cobranza (T-20),
- * la visita (T-39), el gasto de la ruta (T-30/T-31) y el alta de ruta (T-37),
- * en `proveedor-sesion.tsx`. Falta la merma (T-33).
+ * la visita (T-39), el gasto de la ruta (T-30/T-31), el alta de ruta (T-37) y
+ * los movimientos de inventario (T-27 pieza 2), en `proveedor-sesion.tsx`.
  */
 export interface FuenteOperaciones {
   tipo: TipoOperacion;

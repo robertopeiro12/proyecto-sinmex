@@ -152,3 +152,10 @@ export type {
   LineaVentaInventario,
   PiezasDePresentacion,
 } from './inventario-reglas';
+export { crearRepositorioMovimientos, ErrorMovimiento } from './repositorios/movimientos';
+export type {
+  DatosRegistroMovimiento,
+  MovimientoConLineas,
+  PresentacionMovimiento,
+  RepositorioMovimientos,
+} from './repositorios/movimientos';

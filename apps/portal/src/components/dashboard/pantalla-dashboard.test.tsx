@@ -111,8 +111,8 @@ describe("PantallaDashboard", () => {
     obtenerDashboard.mockResolvedValue(TIJUANA);
     obtenerDetalle.mockResolvedValue(DETALLE);
     listarSucursales.mockResolvedValue([
-      { id: "1", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false },
-      { id: "2", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false },
+      { id: "1", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false, consumoDiarioMax: 1 },
+      { id: "2", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false, consumoDiarioMax: 1 },
     ]);
   });
 

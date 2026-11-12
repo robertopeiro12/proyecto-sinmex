@@ -15,10 +15,10 @@ vi.mock("@/lib/sucursales", async (importOriginal) => ({
 }));
 
 const SUCURSALES: Sucursal[] = [
-  { id: "s1", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false },
-  { id: "s2", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false },
-  { id: "s3", codigo: "EN", nombre: "Ensenada", activa: true, controlInventario: false },
-  { id: "s4", codigo: "BC", nombre: "Baja", activa: false, controlInventario: false },
+  { id: "s1", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false, consumoDiarioMax: 1 },
+  { id: "s2", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false, consumoDiarioMax: 1 },
+  { id: "s3", codigo: "EN", nombre: "Ensenada", activa: true, controlInventario: false, consumoDiarioMax: 1 },
+  { id: "s4", codigo: "BC", nombre: "Baja", activa: false, controlInventario: false, consumoDiarioMax: 1 },
 ];
 const GENERAL: UsuarioSesion = { id: "u1", login: "admin", nombre: "Admin Local", perfil: "Administrador General", sucursal: null, permisos: [] };
 const ATADO: UsuarioSesion = { ...GENERAL, id: "u2", sucursal: { id: "s1", codigo: "TJ", nombre: "Tijuana" } };
