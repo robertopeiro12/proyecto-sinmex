@@ -137,7 +137,7 @@ export class CortesService {
           estado: corte.estado,
           sinCarga: !corte.lineas.some((l) => l.cargadas > 0),
           piezasFaltantes: corte.totales.faltante,
-          hechoEn: v.hechoEn === null ? null : v.hechoEn.toISOString(),
+          hechoEn: v.hechoEn,
         };
       }),
     };
@@ -267,7 +267,7 @@ export class CortesService {
       })),
       totales: corte.totales,
       hecho: encabezado
-        ? { en: encabezado.hechoEn.toISOString(), por: encabezado.hechoPor }
+        ? { en: encabezado.hechoEn, por: encabezado.hechoPor }
         : null,
     };
   }

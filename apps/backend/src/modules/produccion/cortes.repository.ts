@@ -19,13 +19,13 @@ export interface VendedorCorte {
 
 /** El encabezado vivo del corte: cuando se hizo y quien. */
 export interface EncabezadoCorte {
-  hechoEn: Date;
+  hechoEn: string;
   hechoPor: string;
 }
 
 /** Un vendedor de la lista del dia, con su encabezado si ya se hizo el corte. */
 export interface VendedorDelDia extends VendedorCorte {
-  hechoEn: Date | null;
+  hechoEn: string | null;
 }
 
 /** Los movimientos de una presentacion de un vendedor. */
@@ -234,7 +234,13 @@ export class CortesRepository {
     return db
       .selectFrom('corte_mercancia as cm')
       .innerJoin('usuario as u', 'u.id', 'cm.hecho_por_usuario_id')
-      .select(['cm.hecho_en as hechoEn', 'u.nombre as hechoPor'])
+      .select([
+        // Hora de Tijuana ya formateada: el portal no adivina la zona (lib/formato.ts).
+        sql<string>`to_char(cm.hecho_en at time zone 'America/Tijuana', 'YYYY-MM-DD HH24:MI')`.as(
+          'hechoEn',
+        ),
+        'u.nombre as hechoPor',
+      ])
       .where('cm.vendedor_id', '=', dia.vendedorId)
       .where(sql<boolean>`cm.fecha = ${dia.fecha}::date`)
       .where('cm.deleted_at', 'is', null)
@@ -348,7 +354,9 @@ export class CortesRepository {
         'v.nombre as nombre',
         's.id as sucursalId',
         's.codigo as sucursalCodigo',
-        'cm.hecho_en as hechoEn',
+        sql<string>`to_char(cm.hecho_en at time zone 'America/Tijuana', 'YYYY-MM-DD HH24:MI')`.as(
+          'hechoEn',
+        ),
       ])
       .where('v.deleted_at', 'is', null)
       .$if(sucursalCodigo !== null, (qb) =>
