@@ -130,6 +130,19 @@ export interface Cobro {
   vendedor_id: string | null;
 }
 
+export interface CorteMercancia {
+  actualizado_por_usuario_id: string | null;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  fecha: Timestamp;
+  hecho_en: Generated<Timestamp>;
+  hecho_por_usuario_id: string;
+  id: Generated<string>;
+  sucursal_id: string;
+  updated_at: Generated<Timestamp>;
+  vendedor_id: string;
+}
+
 export interface Factura {
   actualizado_en: Timestamp | null;
   actualizado_por_usuario_id: string | null;
@@ -351,6 +364,7 @@ export interface Retorno {
   fecha: Timestamp;
   id: Generated<string>;
   piezas: number;
+  piezas_merma: Generated<number>;
   presentacion_id: string;
   sucursal_id: string;
   updated_at: Generated<Timestamp>;
@@ -657,6 +671,7 @@ export interface DB {
   cliente_precio: ClientePrecio;
   cobranza_abono: CobranzaAbono;
   cobro: Cobro;
+  corte_mercancia: CorteMercancia;
   factura: Factura;
   folio_oficina_contador: FolioOficinaContador;
   gasto: Gasto;
