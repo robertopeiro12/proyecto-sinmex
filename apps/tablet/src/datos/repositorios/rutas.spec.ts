@@ -630,6 +630,21 @@ describe('delDia con notas asignadas, recado y comentario (notas-asignadas-table
     expect(rutas.delDia()[0]).toMatchObject({ visitado: true, visita_sin_venta: true });
   });
 
+  it('con solo comentario, ultimo_comentario_en trae la hora del ultimo; sin comentario es null', () => {
+    const { rutas, catalogos, deps } = montar();
+    rutas.aplicarSnapshot([delServidor()]);
+    asignar(catalogos);
+    expect(rutas.delDia()[0]!.ultimo_comentario_en).toBeNull();
+    crearRepositorioNotasAsignadas(deps).registrarNoCobrada({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      ventaNotaId: 'nota-1',
+      comentario: 'No estaba el dueño',
+    });
+    expect(rutas.delDia()[0]!.ultimo_comentario_en).toBe(MOMENTO);
+    expect(rutas.delDia()[0]!.ultima_visita_en).toBeNull();
+  });
+
   it('con comentario y venta, atendido gana: no es visita_sin_venta', () => {
     const { rutas, catalogos, deps, ventas } = montar();
     rutas.aplicarSnapshot([delServidor()]);

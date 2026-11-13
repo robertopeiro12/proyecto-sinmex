@@ -45,8 +45,16 @@ export function sinRutaAsignada(grupos: {
   return grupos.enRuta.length === 0 && grupos.visitadosSinVenta.length === 0 && grupos.fueraDeRuta.length === 0;
 }
 
-/** La linea de la fila de "Visitados sin venta": "Cerrado · 10:42". */
-export function textoUltimaVisita(motivo: string | null, en: string | null): string {
+/**
+ * La linea de la fila de "Visitados sin venta": "Cerrado · 10:42". Sin visita
+ * pero con comentario de "Continuar sin cobrar": "No cobró · 10:42".
+ */
+export function textoUltimaVisita(
+  motivo: string | null,
+  en: string | null,
+  comentarioEn: string | null = null,
+): string {
+  if (motivo === null && en === null && comentarioEn !== null) return `No cobró · ${formatearHora(comentarioEn)}`;
   return `${motivo ?? 'Visita'} · ${formatearHora(en)}`;
 }
 

@@ -37,8 +37,9 @@ export interface FuentesConPendientes {
 
 /**
  * Cuenta lo que falta por subir, sumando las 9 fuentes del push de hoy (T-07,
- * T-16, T-40, T-20, T-39, T-30/T-31, T-37, T-27 pieza 2): jornada, venta,
- * prospecto, cobranza, visita, gasto, movimiento y alta de ruta.
+ * T-16, T-40, T-20, notas asignadas, T-39, T-30/T-31, T-37, T-27 pieza 2):
+ * jornada, venta, prospecto, cobranza, comentario de nota no cobrada, visita,
+ * gasto, movimiento y alta de ruta.
  *
  * Si una fuente se queda fuera de esta suma, el menu de la jornada y "cerrar
  * el dia" pueden decir "listo" con datos todavia sin subir (I-1, PR #90) — por

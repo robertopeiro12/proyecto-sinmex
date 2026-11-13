@@ -252,6 +252,12 @@ describe('textoUltimaVisita y motivoDeRechazo (T-39)', () => {
     expect(textoUltimaVisita(null, null)).toBe('Visita · --:--');
   });
 
+  it('sin visita pero con comentario de nota no cobrada: "No cobró · HH:MM"', () => {
+    const en = new Date(2026, 9, 17, 11, 5).toISOString();
+    expect(textoUltimaVisita(null, null, en)).toBe('No cobró · 11:05');
+    expect(textoUltimaVisita('Cerrado', en, new Date(2026, 9, 17, 12, 0).toISOString())).toBe('Cerrado · 11:05');
+  });
+
   it('el motivo sin el codigo tecnico', () => {
     expect(motivoDeRechazo('visita-id-ocupado: El id de esta visita ya está ocupado.')).toBe(
       'El id de esta visita ya está ocupado.',

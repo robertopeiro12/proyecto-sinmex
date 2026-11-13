@@ -254,7 +254,7 @@ Pre-flight: una columna con default y una tabla nueva; nada que contar.
   registrado_en}`. Registrar en `fuentesDelPush` (después de Cobranzas), `FuentesConPendientes` y
   `contarPendientesDeSubir`.
 - Rechazo `nota-no-encontrada` o `nota-no-cobrada-id-ocupado`: la fila queda en `error` con el motivo y se ve en la
-  ficha como las demás; no se reintenta sola.
+  ficha, y se vuelve a enviar en cada sincronización (como gasto y visita): sigue en `error` con el motivo.
 
 ### Cerrar el día
 - Sin cambios. No se exige atender todas las asignadas para cerrar (la oficina lo ve en la revisión de la tarde).

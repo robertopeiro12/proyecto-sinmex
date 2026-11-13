@@ -389,7 +389,7 @@ usuario con sesion pasa.
     abrir la ficha y al picar Vender (`operacion/[clienteId]/notas-asignadas.tsx`): Cobrar o Continuar sin cobrar
     (comentario obligatorio, una fila por nota e intento); vuelve a salir al reabrir hasta que un cobro de hoy la toque.
     Vender se bloquea según la condición, también dentro de `ventas.registrar()` antes del folio; el servidor no rechaza la
-    venta. Push `nota-no-cobrada` después de cobranzas; la ruta marca "Nota asignada · N", muestra el recado ("Mensaje de la
+    venta. Push `nota-no-cobrada` después de cobranzas; la ruta marca "Nota asignada" (1) / "Notas asignadas · N" (más), muestra el recado ("Mensaje de la
     oficina") y el comentario cuenta como visita. `ALTO_FILA` de la ruta subió a 112.
 
 - **Promociones (T-74).** Regla de regalo por compra, configurada en el portal (*Operación → Promociones*, permiso

@@ -200,10 +200,11 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
     /**
      * "Continuar sin cobrar" sobre varias notas a la vez (la pantalla de la
      * nota): una fila por nota con el mismo comentario, **todo o nada** en una
-     * transaccion. Mismos errores que `registrarNoCobrada`, antes de escribir.
+     * transaccion. Sin notas lanza `ErrorNotaNoCobrada`. Mismos errores que `registrarNoCobrada`, antes de escribir.
      */
     registrarNoCobradas(datos: DatosNotasNoCobradasLocal): NotaNoCobrada[] {
       const comentario = exigirComentario(datos.vendedorId, datos.comentario);
+      if (datos.ventaNotaIds.length === 0) throw new ErrorNotaNoCobrada('No hay notas por atender.');
       return enTransaccion(bd, () =>
         datos.ventaNotaIds.map((ventaNotaId) =>
           insertar({ vendedorId: datos.vendedorId, clienteId: datos.clienteId, ventaNotaId }, comentario),

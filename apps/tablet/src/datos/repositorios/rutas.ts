@@ -62,6 +62,8 @@ export interface FilaRutaDelDia {
   ultima_visita_motivo: string | null;
   /** Hora de la ultima visita de hoy, o `null`. */
   ultima_visita_en: MomentoISO | null;
+  /** Hora del ultimo comentario de "Continuar sin cobrar" de hoy, o `null`. */
+  ultimo_comentario_en: MomentoISO | null;
   /**
    * Subida de las visitas de hoy, con la regla de las ventas (error > pendiente >
    * listo). Mismo vocabulario que `EstadoSubida` de `src/estado/ruta-del-dia.ts`
@@ -229,6 +231,9 @@ export function crearRepositorioRutas(
                 (select w.visitada_en from visita w
                   where w.cliente_id = r.cliente_id and w.fecha = r.fecha
                   order by w.visitada_en desc, w.rowid desc limit 1) as ultima_visita_en,
+                (select q.registrado_en from nota_no_cobrada q
+                  where q.cliente_id = r.cliente_id and q.fecha = r.fecha
+                  order by q.registrado_en desc, q.rowid desc limit 1) as ultimo_comentario_en,
                 case
                   when exists (select 1 from visita w
                                 where w.cliente_id = r.cliente_id and w.fecha = r.fecha

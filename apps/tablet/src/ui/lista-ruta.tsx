@@ -594,7 +594,7 @@ export function FilaVisitadoSinVenta({
   const { t } = useTema();
   const estado = fila.visitas_estado;
   const textoEstado = estado ? textoEstadoVisitas(estado) : null;
-  const linea = textoUltimaVisita(fila.ultima_visita_motivo, fila.ultima_visita_en);
+  const linea = textoUltimaVisita(fila.ultima_visita_motivo, fila.ultima_visita_en, fila.ultimo_comentario_en);
   return (
     <Pressable
       onPress={() => onTocar(fila.cliente_id)}
@@ -627,6 +627,7 @@ export function FilaVisitadoSinVenta({
         >
           {linea}
         </Text>
+        {fila.notas_asignadas > 0 ? <MarcaAsignadas notas={fila.notas_asignadas} /> : null}
         {estado === 'error' && fila.visita_error ? (
           <Text
             numberOfLines={2}

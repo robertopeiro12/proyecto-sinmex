@@ -288,6 +288,13 @@ describe('repositorio de notas asignadas', () => {
     expect(notas.pendientesDeSincronizar()).toEqual([]);
   });
 
+  it('registrarNoCobradas sin notas lanza ErrorNotaNoCobrada y no escribe', () => {
+    const { notas } = montar();
+    const datos = { vendedorId: 'ven-1', clienteId: 'cli-1', ventaNotaIds: [], comentario: 'x' };
+    expect(() => notas.registrarNoCobradas(datos)).toThrow('No hay notas por atender.');
+    expect(notas.pendientesDeSincronizar()).toEqual([]);
+  });
+
   it('registrarNoCobradas valida el comentario y el dia antes de escribir', () => {
     const { notas, jornadas } = montar();
     const datos = { vendedorId: 'ven-1', clienteId: 'cli-1', ventaNotaIds: ['nota-1', 'nota-2'], comentario: ' ' };
