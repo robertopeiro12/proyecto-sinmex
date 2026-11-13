@@ -1,11 +1,13 @@
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Image, Linking, Modal, Pressable, Text, View } from 'react-native';
 
+import { ETIQUETA_CONDICION, motivoBloqueoVenta, porAtender } from '@/datos/notas-asignadas-reglas';
 import type { SyncEstado } from '@/datos/tipos';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
 import { firmaPorSubir } from '@/estado/firma';
 import { pastillaMovimiento, resumenMovimiento } from '@/estado/movimiento';
+import { venderDesdeFicha } from '@/estado/notas-asignadas';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import { estadoSubida, pastillaAlta, urlMapa, urlTelefono } from '@/estado/ruta-del-dia';
@@ -79,6 +81,10 @@ export default function FichaCliente() {
       promociones: datos.promociones.aplicablesPara(clienteId),
       // T-75 (D4): el estado del alta cambia cuando el push termina (`ultimaSincronizacion`).
       alta: pastillaAlta(datos.prospectos.porId(clienteId)),
+      // Notas asignadas de hoy (spec 2026-11-13): se releen al volver de cobrar o
+      // de "Continuar sin cobrar" (`registrarNoCobrada` no publica cambio).
+      asignadas: datos.notasAsignadas.deHoyDelCliente(clienteId),
+      recado: datos.rutas.recadoDeHoy(clienteId),
     };
   }, [datos, clienteId, vueltas, ultimaSincronizacion, versionCatalogos]);
 
@@ -139,6 +145,19 @@ export default function FichaCliente() {
   const mapa = urlMapa(cliente);
   const foto = fotoBajada ?? decision.uri;
   const params = { clienteId };
+
+  // Notas asignadas (spec 2026-11-13): todo sale de una sola lectura.
+  const asignadasConSaldo = hoy.asignadas.filter((n) => n.saldoCentavos > 0);
+  const asignadasPorAtender = porAtender(hoy.asignadas);
+  const vender = venderDesdeFicha(hoy.asignadas);
+  const motivoVenta = motivoBloqueoVenta(hoy.asignadas);
+  const destinoVender =
+    vender.destino.tipo === 'notas'
+      ? ({
+          pathname: '/(jornada)/operacion/[clienteId]/notas-asignadas',
+          params: { clienteId, siguiente: vender.destino.siguiente },
+        } as const)
+      : ({ pathname: '/(jornada)/operacion/[clienteId]/venta', params } as const);
 
   // Lo mas grave manda: un error sobre "falta subir", y "falta subir" sobre "todo subido".
   const estadoVentas: Estado = hoy.ventas.some((v) => v.sync_estado === 'error')
@@ -208,16 +227,73 @@ export default function FichaCliente() {
         {foto ? datoTocable('Foto del lugar', 'Ver foto', () => setVerFoto(true)) : null}
       </View>
 
+      {hoy.recado ? (
+        <Tarjeta estado="accion" etiqueta="Mensaje de la oficina">
+          <Text style={estilos.textoTarjeta}>{hoy.recado}</Text>
+        </Tarjeta>
+      ) : null}
+
+      {/* Spec 2026-11-13 §6: arriba, antes de los botones; la nota sale primero cada vez. */}
+      {asignadasConSaldo.length > 0 ? (
+        <Tarjeta
+          estado={asignadasPorAtender.length > 0 ? 'pendiente' : 'neutro'}
+          etiqueta="Notas asignadas por cobrar"
+        >
+          {asignadasConSaldo.map((n) => {
+            const condicion = ETIQUETA_CONDICION[n.condicion];
+            return (
+              <View key={n.asignacionId} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
+                <Text style={estilos.textoTarjeta}>
+                  <Cifra valor={n.folio} /> · {n.fecha} · debe <Cifra valor={pesos(n.saldoCentavos)} />
+                  {n.diasAtraso > 0 ? (
+                    <>
+                      {' '}
+                      · <Cifra valor={String(n.diasAtraso)} /> {n.diasAtraso === 1 ? 'día' : 'días'} de atraso
+                    </>
+                  ) : null}
+                </Text>
+                {condicion ? <Pastilla texto={condicion} estado="pendiente" /> : null}
+              </View>
+            );
+          })}
+          {/* Tras "Continuar sin cobrar" con la condicion sin cumplir, aqui queda el motivo. */}
+          {motivoVenta ? <Text style={estilos.error}>{motivoVenta}</Text> : null}
+          {asignadasPorAtender.length > 0 ? (
+            <View style={estilos.filaAcciones}>
+              <Boton
+                etiqueta="Cobrar"
+                deshabilitado={!menu.operacionesHabilitadas}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(jornada)/operacion/[clienteId]/cobranza',
+                    params: { clienteId, notaId: asignadasPorAtender[0]!.ventaNotaId },
+                  })
+                }
+              />
+              <Boton
+                etiqueta="Continuar sin cobrar"
+                tono="neutra"
+                deshabilitado={!menu.operacionesHabilitadas}
+                onPress={() =>
+                  router.push({ pathname: '/(jornada)/operacion/[clienteId]/notas-asignadas', params })
+                }
+              />
+            </View>
+          ) : null}
+        </Tarjeta>
+      ) : null}
+
       <View style={[estilos.rejilla, { marginTop: espacio.md }]}>
         <BotonMenu
           titulo="Vender"
           descripcion={
-            esProspecto
+            vender.bloqueo ??
+            (esProspecto
               ? 'Solo regalo de bienvenida: el prospecto no tiene lista de precios'
-              : 'Capturar cantidades; el total se calcula con el precio del cliente'
+              : 'Capturar cantidades; el total se calcula con el precio del cliente')
           }
-          destino={{ pathname: '/(jornada)/operacion/[clienteId]/venta', params }}
-          deshabilitado={!menu.operacionesHabilitadas}
+          destino={destinoVender}
+          deshabilitado={!menu.operacionesHabilitadas || vender.bloqueo !== null}
           destacada
         />
         {/* T-75 (D6): un prospecto no tiene notas ni inventario que ajustar; la conversion es del portal. */}

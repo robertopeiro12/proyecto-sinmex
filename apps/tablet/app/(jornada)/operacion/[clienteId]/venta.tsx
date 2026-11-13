@@ -1,5 +1,5 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 
 import {
@@ -110,6 +110,21 @@ export default function PantallaVenta() {
     void versionCatalogos;
     return vendedor ? datos.cargas.paraVenta(vendedor.id) : null;
   }, [datos, vendedor, versionCatalogos]);
+
+  // Spec 2026-11-13: la nota asignada sin cumplir su condicion no deja vender.
+  // Se relee al volver de "Ir a cobrar" (cobrar no publica cambio de catalogo).
+  // Solo enfoca/desenfoca: no re-renderiza a medio trazo de la firma.
+  const [vueltas, setVueltas] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      setVueltas((n) => n + 1);
+    }, []),
+  );
+  const motivoNota = useMemo(() => {
+    void vueltas;
+    void versionCatalogos;
+    return datos.notasAsignadas.bloqueoDeVenta(clienteId);
+  }, [datos, clienteId, vueltas, versionCatalogos]);
 
   const [paso, setPaso] = useState<Paso>('captura');
   const [capturas, setCapturas] = useState<Record<string, CapturaTexto>>({});
@@ -525,6 +540,27 @@ export default function PantallaVenta() {
           etiqueta="Ir a Inventario"
           glifo="→"
           onPress={() => router.push('/(jornada)/inventario')}
+          estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
+        />
+      </Pantalla>
+    );
+  }
+
+  // Spec 2026-11-13 (regla 10): igual que la carga, solo en la captura;
+  // `ventas.registrar` vuelve a exigirlo al grabar.
+  if (motivoNota) {
+    return (
+      <Pantalla titulo={`Venta · ${nombreCliente}`} subtitulo="Antes de vender cobra su nota asignada.">
+        <Tarjeta estado="pendiente" etiqueta="Nota por cobrar">
+          <Text style={estilos.textoTarjeta}>{motivoNota}.</Text>
+          <Text style={estilos.textoSuave}>Ve a cobrarla; después podrás vender.</Text>
+        </Tarjeta>
+        <Boton
+          etiqueta="Ir a cobrar"
+          glifo="→"
+          onPress={() =>
+            router.push({ pathname: '/(jornada)/operacion/[clienteId]/cobranza', params: { clienteId } })
+          }
           estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
         />
       </Pantalla>

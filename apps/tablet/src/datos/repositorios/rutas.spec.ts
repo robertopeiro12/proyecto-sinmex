@@ -544,6 +544,27 @@ describe('aplicarSnapshot con el recado de la oficina', () => {
     rutas.aplicarSnapshot([delServidor({ id: 'srv-1', cliente_id: 'cli-1' })]);
     expect(rutas.porId('srv-1')?.recado).toBeNull();
   });
+
+  it('recadoDeHoy da el recado de la fila viva de hoy del cliente', () => {
+    const { rutas } = montar();
+    rutas.aplicarSnapshot([
+      delServidor({ id: 'srv-1', cliente_id: 'cli-1', recado: 'Lleva cambio' }),
+      delServidor({ id: 'srv-3', cliente_id: 'cli-3', orden: 2 }),
+    ]);
+    expect(rutas.recadoDeHoy('cli-1')).toBe('Lleva cambio');
+    expect(rutas.recadoDeHoy('cli-3')).toBeNull();
+  });
+
+  it('recadoDeHoy es null fuera de la ruta de hoy, en otro dia o con la fila dada de baja', () => {
+    const { rutas } = montar();
+    rutas.aplicarSnapshot([
+      delServidor({ id: 'srv-1', cliente_id: 'cli-1', fecha: MANANA, recado: 'Manana' }),
+      delServidor({ id: 'srv-3', cliente_id: 'cli-3', activo: 0, recado: 'Ya no' }),
+    ]);
+    expect(rutas.recadoDeHoy('cli-1')).toBeNull();
+    expect(rutas.recadoDeHoy('cli-3')).toBeNull();
+    expect(rutas.recadoDeHoy('cli-4')).toBeNull();
+  });
 });
 
 describe('delDia con notas asignadas, recado y comentario (notas-asignadas-tablet)', () => {

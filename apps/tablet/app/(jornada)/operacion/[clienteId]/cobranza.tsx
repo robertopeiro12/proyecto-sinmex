@@ -17,6 +17,7 @@ import {
   type NotaPendiente,
   type SyncEstado,
 } from '@/datos';
+import { agruparNotasParaCobrar } from '@/estado/notas-asignadas';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import { Boton } from '@/ui/boton';
@@ -69,10 +70,13 @@ function NotaSeleccionable({
   nota,
   seleccionada,
   onPress,
+  condicion = null,
 }: {
   nota: NotaPendiente;
   seleccionada: boolean;
   onPress: () => void;
+  /** "Debe liquidar" / "Debe abonar" de una nota asignada (spec 2026-11-13). */
+  condicion?: string | null;
 }) {
   const { estilos } = useTema();
   const abonos = leerAbonos(nota.abonos_json);
@@ -113,6 +117,7 @@ function NotaSeleccionable({
           {NOMBRE_METODO[a.metodo_pago] ?? a.metodo_pago}
         </Text>
       ))}
+      {condicion ? <Pastilla texto={condicion} estado="pendiente" /> : null}
       {seleccionada ? <Text style={estilos.textoSuave}>Seleccionada</Text> : null}
     </Pressable>
   );
@@ -127,7 +132,8 @@ function NotaSeleccionable({
  * muestra.
  */
 export default function PantallaCobranza() {
-  const { clienteId } = useLocalSearchParams<{ clienteId: string }>();
+  // `notaId`: la nota asignada que llega preseleccionada desde la ficha o la pantalla de la nota.
+  const { clienteId, notaId: notaIdInicial } = useLocalSearchParams<{ clienteId: string; notaId?: string }>();
   const { datos, vendedor, versionCatalogos } = useJawa();
   const { ultimaSincronizacion } = useSesion();
   const { estilos } = useTema();
@@ -156,6 +162,13 @@ export default function PantallaCobranza() {
     }, []),
   );
 
+  // Spec 2026-11-13: las asignadas de hoy van primero, en su propio grupo.
+  const grupos = useMemo(() => {
+    void vueltas;
+    void versionCatalogos;
+    return agruparNotasParaCobrar(notas, datos.notasAsignadas.deHoyDelCliente(clienteId));
+  }, [datos, clienteId, notas, vueltas, versionCatalogos]);
+
   const cobrosDeHoy = useMemo(() => {
     void vueltas;
     void ultimaSincronizacion;
@@ -164,7 +177,7 @@ export default function PantallaCobranza() {
   }, [datos, clienteId, vueltas, ultimaSincronizacion, versionCatalogos]);
 
   const [paso, setPaso] = useState<Paso>('captura');
-  const [notaId, setNotaId] = useState<string | null>(null);
+  const [notaId, setNotaId] = useState<string | null>(notaIdInicial ?? null);
   const [montoTexto, setMontoTexto] = useState('');
   const [metodo, setMetodo] = useState<MetodoPago>('efectivo');
   const [fechaPago, setFechaPago] = useState(hoy);
@@ -400,8 +413,32 @@ export default function PantallaCobranza() {
         </Tarjeta>
       ) : null}
 
-      <Text style={estilos.seccion}>Notas pendientes</Text>
-      {notas.length === 0 ? (
+      {grupos.asignadas.length > 0 ? (
+        <>
+          <Text style={estilos.seccion}>Asignadas a ti</Text>
+          {grupos.asignadas.map(({ nota: n, etiqueta }) => (
+            <NotaSeleccionable
+              key={n.id}
+              nota={n}
+              condicion={etiqueta}
+              seleccionada={n.id === notaId}
+              onPress={() => elegirNota(n.id)}
+            />
+          ))}
+          {grupos.otras.length > 0 ? <Text style={estilos.seccion}>Otras notas del cliente</Text> : null}
+          {grupos.otras.map((n) => (
+            <NotaSeleccionable
+              key={n.id}
+              nota={n}
+              seleccionada={n.id === notaId}
+              onPress={() => elegirNota(n.id)}
+            />
+          ))}
+        </>
+      ) : (
+        <Text style={estilos.seccion}>Notas pendientes</Text>
+      )}
+      {grupos.asignadas.length > 0 ? null : notas.length === 0 ? (
         <Tarjeta etiqueta="Sin notas">
           <Text style={estilos.textoTarjeta}>Este cliente no tiene notas pendientes en la tablet.</Text>
           <Text style={estilos.textoSuave}>Las notas bajan del portal al sincronizar.</Text>

@@ -2,10 +2,12 @@ import type { NotaAsignadaDeHoy } from '@/datos/notas-asignadas-reglas';
 import { porAtender } from '@/datos/notas-asignadas-reglas';
 
 import {
+  agruparNotasParaCobrar,
   crearGuardiaComentario,
   despuesDeContinuar,
   destinoAlVender,
   validarComentario,
+  venderDesdeFicha,
 } from './notas-asignadas';
 
 const nota = (cambios: Partial<NotaAsignadaDeHoy> = {}): NotaAsignadaDeHoy => ({
@@ -80,5 +82,56 @@ describe('crearGuardiaComentario', () => {
     const guardia = crearGuardiaComentario();
     expect(guardia.intentar(() => 1)).toBe(1);
     expect(guardia.intentar(() => 2)).toBeNull();
+  });
+});
+
+describe('venderDesdeFicha', () => {
+  it('sin asignadas: a la venta, sin bloqueo', () => {
+    expect(venderDesdeFicha([])).toEqual({ destino: { tipo: 'venta' }, bloqueo: null });
+  });
+  it('con una por atender: primero las notas y Vender sigue habilitado (la pantalla de la nota decide)', () => {
+    expect(venderDesdeFicha([nota({ condicion: 'liquidar' })])).toEqual({
+      destino: { tipo: 'notas', siguiente: 'venta' },
+      bloqueo: null,
+    });
+  });
+  it('comentada sin cumplir la condicion: sigue por atender, no se deshabilita', () => {
+    expect(venderDesdeFicha([nota({ condicion: 'abonar', comentadaHoy: true })]).bloqueo).toBeNull();
+  });
+  it('sin por atender pero con la condicion sin cumplir: Vender deshabilitado con el motivo', () => {
+    // Abono parcial de hoy a una nota que debe liquidar: ya no se pide, pero bloquea.
+    const abonada = nota({ condicion: 'liquidar', tocadaHoy: true, saldoCentavos: 5000 });
+    expect(venderDesdeFicha([abonada])).toEqual({
+      destino: { tipo: 'venta' },
+      bloqueo: 'Tiene una nota asignada que debe liquidar antes de venderle',
+    });
+  });
+  it('cumplida: a la venta sin bloqueo', () => {
+    const abonada = nota({ condicion: 'abonar', tocadaHoy: true, saldoCentavos: 5000 });
+    expect(venderDesdeFicha([abonada])).toEqual({ destino: { tipo: 'venta' }, bloqueo: null });
+  });
+});
+
+describe('agruparNotasParaCobrar', () => {
+  const pendiente = (id: string) => ({ id, folio: `F-${id}` });
+
+  it('separa las asignadas (con su etiqueta) de las otras, en el orden de entrada', () => {
+    const grupos = agruparNotasParaCobrar(
+      [pendiente('n1'), pendiente('n2'), pendiente('n3')],
+      [nota({ ventaNotaId: 'n3', condicion: 'liquidar' }), nota({ ventaNotaId: 'n1', condicion: 'ninguna' })],
+    );
+    expect(grupos.asignadas).toEqual([
+      { nota: pendiente('n1'), etiqueta: null },
+      { nota: pendiente('n3'), etiqueta: 'Debe liquidar' },
+    ]);
+    expect(grupos.otras).toEqual([pendiente('n2')]);
+  });
+
+  it('sin asignadas, todas son otras', () => {
+    expect(agruparNotasParaCobrar([pendiente('n1')], [])).toEqual({ asignadas: [], otras: [pendiente('n1')] });
+  });
+
+  it('una asignada que ya no esta entre las pendientes no aparece', () => {
+    expect(agruparNotasParaCobrar([pendiente('n1')], [nota({ ventaNotaId: 'n9' })]).asignadas).toEqual([]);
   });
 });

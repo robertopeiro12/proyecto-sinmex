@@ -22,8 +22,13 @@ import { colores, espacio, fuente, grosor, radio, tipo } from './tokens';
  * Alto FIJO de cada fila (D10): el arrastre calcula a que renglon cae
  * dividiendo el desplazamiento entre el paso de una fila. Una fila mas alta
  * romperia la cuenta; por eso cada texto va en una sola linea.
+ *
+ * 112 y no 96 (notas asignadas, 2026-11-13): con el recado la fila llega a
+ * cuatro lineas (nombre, recado, domicilio y "Por subir"/error); a escala 1.1
+ * son ~21+14+18+14 px de letra (~1.3 de interlineado) mas 3 huecos `xs`, ~98 px.
+ * Todo el arrastre usa `ALTO_FILA + HUECO`, asi que la cuenta sigue cuadrando.
  */
-export const ALTO_FILA = 96;
+export const ALTO_FILA = 112;
 
 /** Hueco entre filas. El paso del arrastre es `ALTO_FILA + HUECO`. */
 const HUECO = espacio.sm;

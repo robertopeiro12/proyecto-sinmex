@@ -349,6 +349,20 @@ export function crearRepositorioRutas(
       return escritas;
     },
 
+    /**
+     * El recado de la oficina para el cliente en la ruta de hoy (la ficha), o
+     * `null`: sin fila viva hoy, o sin recado.
+     */
+    recadoDeHoy(clienteId: string): string | null {
+      const fila = bd.getFirstSync<{ recado: string | null }>(
+        `select recado from ruta
+          where fecha = $hoy and cliente_id = $cliente_id and activo = 1
+          limit 1`,
+        { $hoy: reloj.hoy(), $cliente_id: clienteId },
+      );
+      return fila?.recado ?? null;
+    },
+
     porId(id: string): Ruta | null {
       return bd.getFirstSync<Ruta>('select * from ruta where id = $id', { $id: id });
     },
