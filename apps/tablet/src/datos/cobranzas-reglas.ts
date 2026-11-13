@@ -137,6 +137,16 @@ export function leerAbonos(json: string): AbonoNota[] {
   }
 }
 
+/** Las notas que tocó un cobro, de `cobranza.reparto_json`. Un texto corrupto da `[]`. */
+export function leerReparto(json: string): { venta_nota_id: string; monto_centavos: number }[] {
+  try {
+    const valor: unknown = JSON.parse(json);
+    return Array.isArray(valor) ? (valor as { venta_nota_id: string; monto_centavos: number }[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export interface CapturaCobro {
   /** Fecha de la nota elegida, o `null` si aun no eligio. */
   notaFecha: FechaISO | null;

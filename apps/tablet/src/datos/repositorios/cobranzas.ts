@@ -124,10 +124,10 @@ export function crearRepositorioCobranzas(
         bd.runSync(
           `insert into cobranza (
              id, fecha, cliente_id, vendedor_id, sucursal_id, venta_nota_id,
-             monto_centavos, metodo_pago, fecha_pago, grabada_en, sync_estado
+             monto_centavos, metodo_pago, fecha_pago, grabada_en, sync_estado, reparto_json
            ) values (
              $id, $fecha, $cliente_id, $vendedor_id, $sucursal_id, $venta_nota_id,
-             $monto_centavos, $metodo_pago, $fecha_pago, $grabada_en, 'pendiente'
+             $monto_centavos, $metodo_pago, $fecha_pago, $grabada_en, 'pendiente', $reparto_json
            )`,
           {
             $id: id,
@@ -141,6 +141,13 @@ export function crearRepositorioCobranzas(
             $metodo_pago: datos.metodoPago,
             $fecha_pago: fechaPago,
             $grabada_en: ahora,
+            // Las notas que tocó este cobro: de aquí sale "tocó la nota" hoy.
+            $reparto_json: JSON.stringify(
+              reparto.aplicaciones.map((a) => ({
+                venta_nota_id: a.notaId,
+                monto_centavos: a.montoCentavos,
+              })),
+            ),
           },
         );
 

@@ -263,8 +263,9 @@ export interface Cobranza {
   sync_error: string | null;
   sincronizado_en: MomentoISO | null;
   /**
-   * JSON `[{ venta_nota_id, monto_centavos }]`: a que notas fue el cobro. Lo
-   * llena el pull y la tablet al cobrar; `'[]'` en los cobros viejos.
+   * JSON `[{ venta_nota_id, monto_centavos }]`: a que notas fue el cobro. Solo
+   * lo escribe la tablet al grabar el cobro (el pull nunca toca `cobranza`);
+   * `'[]'` en los cobros viejos.
    */
   reparto_json: string;
 }
