@@ -377,6 +377,20 @@ usuario con sesion pasa.
     rechaza la venta (lo hace la tablet, PR 2). La revisión de notas une el último comentario vivo por nota y fecha, de
     cualquier vendedor, y muestra el nombre del autor; la pestaña Ruta pinta "Nota sin cobrar · <folio>" sin contarla como
     visita sin venta. **Nube**: se sube con el protocolo (pre-flight: nada que contar), backend y portal juntos.
+    En Ruta Diaria el botón "Asignar notas" (columna Acciones de la lista y dentro de la pantalla de ruta del vendedor)
+    abre la ventana de notas.
+    **Tablet (PR 2).** Migración local 019 (`019-notas-asignadas.ts`): `ruta.recado`, `ruta_dia`, `nota_asignada` (sin FK a
+    `nota_pendiente`), `nota_no_cobrada` y `cobranza.reparto_json` (líneas `{venta_nota_id, monto_centavos,
+    saldo_despues_centavos}`); borra el cursor del pull, así que la primera sincronización tras instalar es completa, sin
+    `pm clear`. Reglas puras en `src/datos/notas-asignadas-reglas.ts`; repositorio `repositorios/notas-asignadas.ts`
+    (`deHoyDelCliente`, `bloqueoDeVenta`, `conteoDeHoyPorCliente`, `registrarNoCobradas` atómico); estado de pantallas en
+    `src/estado/notas-asignadas.ts`. "Cobro de hoy" = `cobranza.fecha` + `reparto_json` (tocadaHoy / liquidadaHoy), nunca
+    `fecha_pago` ni `abonos_json` (el pull los pisa y trae cobros de la oficina; el pull va antes del push). La nota sale al
+    abrir la ficha y al picar Vender (`operacion/[clienteId]/notas-asignadas.tsx`): Cobrar o Continuar sin cobrar
+    (comentario obligatorio, una fila por nota e intento); vuelve a salir al reabrir hasta que un cobro de hoy la toque.
+    Vender se bloquea según la condición, también dentro de `ventas.registrar()` antes del folio; el servidor no rechaza la
+    venta. Push `nota-no-cobrada` después de cobranzas; la ruta marca "Nota asignada · N", muestra el recado ("Mensaje de la
+    oficina") y el comentario cuenta como visita. `ALTO_FILA` de la ruta subió a 112.
 
 - **Promociones (T-74).** Regla de regalo por compra, configurada en el portal (*Operación → Promociones*, permiso
   `promocion.gestionar`; backend en `cartera-clientes/promociones.*`, `/promociones`) y **aplicada solo por la
