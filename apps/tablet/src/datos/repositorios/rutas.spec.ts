@@ -3,6 +3,7 @@ import { crearRepositorioCatalogos } from './catalogos';
 import { crearRepositorioCobranzas } from './cobranzas';
 import { crearRepositorioFolios } from './folios';
 import { crearRepositorioJornadas, ErrorJornada, MENSAJE_DIA_CERRADO } from './jornadas';
+import { crearRepositorioNotasAsignadas } from './notas-asignadas';
 import { crearRepositorioRutas, ErrorRuta, type FilaRutaPull } from './rutas';
 import { crearRepositorioVentas } from './ventas';
 import { crearRepositorioVisitas } from './visitas';
@@ -542,5 +543,83 @@ describe('aplicarSnapshot con el recado de la oficina', () => {
     const { rutas } = montar();
     rutas.aplicarSnapshot([delServidor({ id: 'srv-1', cliente_id: 'cli-1' })]);
     expect(rutas.porId('srv-1')?.recado).toBeNull();
+  });
+});
+
+describe('delDia con notas asignadas, recado y comentario (notas-asignadas-tablet)', () => {
+  const asignar = (catalogos: ReturnType<typeof montar>['catalogos'], ids = ['nota-1'], condicion: 'ninguna' | 'abonar' = 'abonar') =>
+    catalogos.guardarSnapshot({
+      notasAsignadas: ids.map((n, i) => ({
+        id: `asg-${i}`,
+        venta_nota_id: n,
+        fecha: HOY,
+        condicion_venta: condicion,
+        activo: 1 as const,
+      })),
+    });
+
+  it('notas_asignadas cuenta las asignadas de hoy con saldo y sin cobro de hoy', () => {
+    const { rutas, catalogos } = montar();
+    rutas.aplicarSnapshot([delServidor()]);
+    expect(rutas.delDia()[0]!.notas_asignadas).toBe(0);
+
+    asignar(catalogos, ['nota-1', 'nota-2']);
+    expect(rutas.delDia()[0]!.notas_asignadas).toBe(2);
+  });
+
+  it('la misma regla que porAtender: un cobro de hoy a la nota la saca de la cuenta', () => {
+    const { rutas, catalogos, cobranzas, deps } = montar();
+    rutas.aplicarSnapshot([delServidor()]);
+    asignar(catalogos, ['nota-1', 'nota-2']);
+    cobranzas.registrar({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      ventaNotaId: 'nota-1',
+      montoCentavos: 5000,
+      metodoPago: 'efectivo',
+      fechaPago: HOY,
+    });
+    expect(rutas.delDia()[0]!.notas_asignadas).toBe(1);
+    expect(rutas.delDia()[0]!.notas_asignadas).toBe(
+      crearRepositorioNotasAsignadas(deps).conteoDeHoyPorCliente().get('cli-1') ?? 0,
+    );
+  });
+
+  it('el recado de la ruta baja a la fila (y es null sin recado)', () => {
+    const { rutas } = montar();
+    rutas.aplicarSnapshot([
+      delServidor({ id: 'srv-1', cliente_id: 'cli-1', recado: 'Lleva cambio' }),
+      delServidor({ id: 'srv-3', cliente_id: 'cli-3', orden: 2 }),
+    ]);
+    const filas = rutas.delDia();
+    expect(filas.find((f) => f.cliente_id === 'cli-1')!.recado).toBe('Lleva cambio');
+    expect(filas.find((f) => f.cliente_id === 'cli-3')!.recado).toBeNull();
+  });
+
+  it('un cliente con solo un comentario de nota no cobrada sale visitado y visita_sin_venta', () => {
+    const { rutas, catalogos, deps } = montar();
+    rutas.aplicarSnapshot([delServidor()]);
+    asignar(catalogos);
+    crearRepositorioNotasAsignadas(deps).registrarNoCobrada({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      ventaNotaId: 'nota-1',
+      comentario: 'No estaba el dueño',
+    });
+    expect(rutas.delDia()[0]).toMatchObject({ visitado: true, visita_sin_venta: true });
+  });
+
+  it('con comentario y venta, atendido gana: no es visita_sin_venta', () => {
+    const { rutas, catalogos, deps, ventas } = montar();
+    rutas.aplicarSnapshot([delServidor()]);
+    asignar(catalogos, ['nota-1'], 'ninguna');
+    crearRepositorioNotasAsignadas(deps).registrarNoCobrada({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      ventaNotaId: 'nota-1',
+      comentario: 'Pide esperar',
+    });
+    venderA(ventas);
+    expect(rutas.delDia()[0]).toMatchObject({ visitado: true, visita_sin_venta: false });
   });
 });

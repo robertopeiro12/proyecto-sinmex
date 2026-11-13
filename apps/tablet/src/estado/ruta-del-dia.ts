@@ -94,6 +94,11 @@ export function textoBurbuja(notas: number): string {
   return notas === 1 ? '1 nota pendiente' : `${notas} notas pendientes`;
 }
 
+/** La marca de la fila de la ruta con notas asignadas por la oficina. */
+export function textoMarcaAsignadas(n: number): string {
+  return n === 1 ? 'Nota asignada' : `Notas asignadas · ${n}`;
+}
+
 /** Saca el elemento `desde` y lo mete en `hasta`. Fuera de rango, una copia igual. */
 export function moverElemento<T>(lista: readonly T[], desde: number, hasta: number): T[] {
   const copia = [...lista];

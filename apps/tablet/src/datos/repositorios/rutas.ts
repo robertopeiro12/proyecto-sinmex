@@ -11,6 +11,7 @@ import type { RepositorioCatalogos } from './catalogos';
 import type { DepsRepositorio } from './deps';
 import { enTransaccion } from './deps';
 import { exigirJornadaAbierta } from './jornadas';
+import { crearRepositorioNotasAsignadas } from './notas-asignadas';
 
 /** Error de regla de negocio de la ruta (no un fallo tecnico de SQLite). */
 export class ErrorRuta extends Error {
@@ -46,6 +47,13 @@ export interface FilaRutaDelDia {
   posicion: number | null;
   /** Notas con saldo del cliente: la burbuja. Baja al cobrar sin red. */
   notas_pendientes: number;
+  /**
+   * Asignadas de hoy por atender (con saldo y sin cobro de hoy): la MISMA cuenta que
+   * `notasAsignadas.conteoDeHoyPorCliente()` (`porAtender`); no se re-deriva en SQL.
+   */
+  notas_asignadas: number;
+  /** El recado de la oficina para este cliente en la ruta (`ruta.recado`), o `null`. */
+  recado: string | null;
   /** Hoy tiene venta, cobro o visita en esta tablet (D5; T-39). Se deriva, no se guarda. */
   visitado: boolean;
   /** T-39 (D8): hoy tiene visita y NO tiene venta ni cobro: va a "Visitados sin venta". */
@@ -179,6 +187,7 @@ export function crearRepositorioRutas(
   { bd, reloj, generarId }: DepsRepositorio,
   { catalogos }: { catalogos: RepositorioCatalogos },
 ) {
+  const notasAsignadas = crearRepositorioNotasAsignadas({ bd, reloj, generarId });
   const repo = {
     /**
      * La ruta de un dia, en el orden del vendedor: primero su posicion local y,
@@ -193,12 +202,13 @@ export function crearRepositorioRutas(
      * `saldo_centavos > 0`.
      */
     delDia(fecha: FechaISO = reloj.hoy()): FilaRutaDelDia[] {
-      type FilaCruda = Omit<FilaRutaDelDia, 'visitado' | 'visita_sin_venta'> & {
+      type FilaCruda = Omit<FilaRutaDelDia, 'visitado' | 'visita_sin_venta' | 'notas_asignadas'> & {
         atendido: number;
         con_visita: number;
+        con_comentario: number;
       };
       const filas = bd.getAllSync<FilaCruda>(
-        `select r.id, r.cliente_id, r.fecha, r.orden, r.origen, r.activo,
+        `select r.id, r.cliente_id, r.fecha, r.orden, r.origen, r.activo, r.recado,
                 r.sync_estado, r.sync_error,
                 c.nombre, c.domicilio,
                 o.posicion,
@@ -211,6 +221,8 @@ export function crearRepositorioRutas(
                              where k.cliente_id = r.cliente_id and k.fecha = r.fecha)) as atendido,
                 exists (select 1 from visita w
                          where w.cliente_id = r.cliente_id and w.fecha = r.fecha) as con_visita,
+                exists (select 1 from nota_no_cobrada q
+                         where q.cliente_id = r.cliente_id and q.fecha = r.fecha) as con_comentario,
                 (select w.motivo_nombre from visita w
                   where w.cliente_id = r.cliente_id and w.fecha = r.fecha
                   order by w.visitada_en desc, w.rowid desc limit 1) as ultima_visita_motivo,
@@ -239,11 +251,17 @@ export function crearRepositorioRutas(
         { $fecha: fecha },
       );
       // Atendido (venta o cobro) gana a visitado (D8): con venta, sigue en la ruta.
-      return filas.map(({ atendido, con_visita, ...f }) => ({
-        ...f,
-        visitado: atendido === 1 || con_visita === 1,
-        visita_sin_venta: con_visita === 1 && atendido !== 1,
-      }));
+      // Un comentario de "Continuar sin cobrar" cuenta como visita (decision 17).
+      const asignadas = notasAsignadas.conteoDeHoyPorCliente();
+      return filas.map(({ atendido, con_visita, con_comentario, ...f }) => {
+        const visita = con_visita === 1 || con_comentario === 1;
+        return {
+          ...f,
+          notas_asignadas: asignadas.get(f.cliente_id) ?? 0,
+          visitado: atendido === 1 || visita,
+          visita_sin_venta: visita && atendido !== 1,
+        };
+      });
     },
 
     /**

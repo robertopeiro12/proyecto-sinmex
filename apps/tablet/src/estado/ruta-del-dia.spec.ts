@@ -15,6 +15,7 @@ import {
   textoAgregado,
   textoAvisoSinRuta,
   textoBurbuja,
+  textoMarcaAsignadas,
   textoUltimaVisita,
   urlMapa,
   urlTelefono,
@@ -376,5 +377,16 @@ describe('anchoMenuLateral (menu lateral, 2026-10-18)', () => {
   });
   it('un ancho invalido no da negativo', () => {
     expect(anchoMenuLateral(-10)).toBe(0);
+  });
+});
+
+describe('textoMarcaAsignadas', () => {
+  it('una nota, en singular', () => {
+    expect(textoMarcaAsignadas(1)).toBe('Nota asignada');
+  });
+
+  it('varias, con la cuenta', () => {
+    expect(textoMarcaAsignadas(2)).toBe('Notas asignadas · 2');
+    expect(textoMarcaAsignadas(5)).toBe('Notas asignadas · 5');
   });
 });

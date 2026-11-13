@@ -9,6 +9,7 @@ import {
   moverElemento,
   primeraLineaDomicilio,
   textoBurbuja,
+  textoMarcaAsignadas,
   textoUltimaVisita,
 } from '@/estado/ruta-del-dia';
 import { textoEstadoVisitas } from '@/estado/visita';
@@ -313,6 +314,15 @@ function FilaRuta({
           {fila.visitado ? '✓ ' : ''}
           {fila.nombre}
         </Text>
+        {fila.recado ? (
+          <Text
+            numberOfLines={1}
+            accessibilityLabel={`Mensaje de la oficina: ${fila.recado}`}
+            style={{ fontFamily: fuente.cuerpoMedio, fontSize: t(tipo.menor), color: colores.primario }}
+          >
+            {fila.recado}
+          </Text>
+        ) : null}
         <Text
           numberOfLines={1}
           style={{ fontFamily: fuente.cuerpo, fontSize: t(tipo.cuerpo), color: colores.tintaSuave }}
@@ -344,6 +354,7 @@ function FilaRuta({
         ) : null}
       </View>
 
+      {fila.notas_asignadas > 0 ? <MarcaAsignadas notas={fila.notas_asignadas} /> : null}
       {fila.notas_pendientes > 0 ? <Burbuja notas={fila.notas_pendientes} /> : null}
 
       {conError ? (
@@ -422,6 +433,29 @@ export function FilaFueraDeRuta({
       </View>
       {fila.notas_pendientes > 0 ? <Burbuja notas={fila.notas_pendientes} /> : null}
     </Pressable>
+  );
+}
+
+/** La marca de notas que la oficina asigno hoy: tenue y con borde de accion, distinta de la burbuja. */
+function MarcaAsignadas({ notas }: { notas: number }) {
+  const { t } = useTema();
+  return (
+    <View
+      accessible
+      accessibilityLabel={textoMarcaAsignadas(notas)}
+      style={{
+        paddingHorizontal: espacio.sm,
+        paddingVertical: espacio.xs,
+        borderRadius: radio.pastilla,
+        borderWidth: grosor.hairline,
+        borderColor: colores.primario,
+        backgroundColor: colores.primarioTenue,
+      }}
+    >
+      <Text style={{ fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.menor), color: colores.primario }}>
+        {textoMarcaAsignadas(notas)}
+      </Text>
+    </View>
   );
 }
 
