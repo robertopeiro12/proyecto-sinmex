@@ -6,18 +6,27 @@ import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
 import { Campo, Entrada } from "@/components/ui/campo";
 import { useConfirmar } from "@/components/ui/confirmar";
-import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
+import {
+  EncabezadoPantalla,
+  Pantalla,
+} from "@/components/ui/encabezado-pantalla";
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { CajaTabla, FilaVacia, Tabla, Td, Th } from "@/components/ui/tabla";
 import { mensajeDe } from "@/lib/api";
 import { formatearDiaLargo, plural } from "@/lib/formato";
-import { obtenerDia, quitarRutaDiaria, type ListaDelDia, type RenglonDia } from "@/lib/rutas";
+import {
+  obtenerDia,
+  quitarRutaDiaria,
+  type ListaDelDia,
+  type RenglonDia,
+} from "@/lib/rutas";
 import { hoyEnTijuana } from "@/lib/ventas";
 import { RutaDeVendedor } from "./ruta-de-vendedor";
 import { VentanaNotas } from "./ventana-notas";
 
 const TITULO = "Ruta Diaria";
-const DESCRIPCION = "La ruta, el vehículo y las notas por cobrar de cada vendedor en un día.";
+const DESCRIPCION =
+  "La ruta, el vehículo y las notas por cobrar de cada vendedor en un día.";
 
 /** Encabezado que puede partirse en dos renglones en vez de cortarse. */
 const ENCABEZADO_EN_DOS = "whitespace-normal leading-tight";
@@ -27,17 +36,21 @@ export type NotasDelRenglon = "pendientes" | "asignadas";
 
 /**
  * Operación → Ruta Diaria (spec §5.1), como la del sistema viejo: un renglón por vendedor
- * activo de la sucursal, con su ruta, clientes, notas y vehículo del día. "Asignar ruta" /
+ * activo de la sucursal, con su ruta, clientes, notas y vehículo del día. "Asignar ruta o clientes" /
  * "Editar" abren la ruta del vendedor a pantalla completa. Un día pasado es solo lectura.
  */
 export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
   const { usuario, puede, cargando } = useAuth();
 
   if (cargando) return <EstadoPantalla titulo={TITULO} tipo="cargando" />;
-  if (!puede("ruta_diaria.gestionar")) return <EstadoPantalla titulo={TITULO} tipo="sin-permiso" />;
+  if (!puede("ruta_diaria.gestionar"))
+    return <EstadoPantalla titulo={TITULO} tipo="sin-permiso" />;
 
   const codigo =
-    usuario?.sucursal?.codigo ?? (sucursal && sucursal.toLowerCase() !== "todas" ? sucursal.toUpperCase() : null);
+    usuario?.sucursal?.codigo ??
+    (sucursal && sucursal.toLowerCase() !== "todas"
+      ? sucursal.toUpperCase()
+      : null);
   if (!codigo) return <EstadoPantalla titulo={TITULO} tipo="elige-sucursal" />;
 
   return <RutaDiariaDelDia key={codigo} sucursal={codigo} />;
@@ -49,7 +62,10 @@ function RutaDiariaDelDia({ sucursal }: { sucursal: string }) {
   const [error, setError] = useState<string | null>(null);
   const [abierto, setAbierto] = useState<RenglonDia | null>(null);
   const [quitando, setQuitando] = useState<string | null>(null);
-  const [notas, setNotas] = useState<{ renglon: RenglonDia; cuales: NotasDelRenglon } | null>(null);
+  const [notas, setNotas] = useState<{
+    renglon: RenglonDia;
+    cuales: NotasDelRenglon;
+  } | null>(null);
   const { confirmar, ventana } = useConfirmar();
 
   // Una respuesta de otra fecha no pisa la pantalla actual.
@@ -66,7 +82,8 @@ function RutaDiariaDelDia({ sucursal }: { sucursal: string }) {
         if (fechaVigente.current === paraFecha) setDia(lista);
       })
       .catch((err: unknown) => {
-        if (fechaVigente.current === paraFecha) setError(mensajeDe(err, "No se pudo cargar la ruta del día."));
+        if (fechaVigente.current === paraFecha)
+          setError(mensajeDe(err, "No se pudo cargar la ruta del día."));
       });
   }, [fecha, sucursal]);
 
@@ -127,10 +144,16 @@ function RutaDiariaDelDia({ sucursal }: { sucursal: string }) {
             }}
           />
         </Campo>
-        <p className="pb-2 text-sm text-muted-foreground">{formatearDiaLargo(fecha)}</p>
+        <p className="pb-2 text-sm text-muted-foreground">
+          {formatearDiaLargo(fecha)}
+        </p>
       </div>
 
-      {dia && !dia.editable ? <Aviso tono="informacion">Ese día ya pasó; solo se puede consultar.</Aviso> : null}
+      {dia && !dia.editable ? (
+        <Aviso tono="informacion">
+          Ese día ya pasó; solo se puede consultar.
+        </Aviso>
+      ) : null}
       {error ? <Aviso tono="error">{error}</Aviso> : null}
 
       {dia === null ? (
@@ -187,9 +210,16 @@ export function TablaDelDia({
   onAbrirNotas?: (renglon: RenglonDia, cuales: NotasDelRenglon) => void;
 }) {
   const celdaNotas = (r: RenglonDia) => {
-    if (editable && !r.tieneRuta) return <span className="text-muted-foreground">Asigna primero su ruta</span>;
+    if (editable && !r.tieneRuta)
+      return (
+        <span className="text-muted-foreground">
+          Asigna primero su ruta o clientes
+        </span>
+      );
     if (r.notasPendientes === 0 && r.notasAsignadas === 0) {
-      return <span className="text-muted-foreground">Sin notas por cobrar</span>;
+      return (
+        <span className="text-muted-foreground">Sin notas por cobrar</span>
+      );
     }
     const conteo = (
       <span>
@@ -205,13 +235,23 @@ export function TablaDelDia({
           <Button
             type="button"
             size="sm"
-            variant={r.notasAsignadas === 0 && r.notasPendientes > 0 ? "default" : "outline"}
+            variant={
+              r.notasAsignadas === 0 && r.notasPendientes > 0
+                ? "default"
+                : "outline"
+            }
             onClick={() => onAbrirNotas(r, "pendientes")}
           >
             Asignar
           </Button>
         ) : (
-          <Button type="button" size="sm" variant="link" className="px-1" onClick={() => onAbrirNotas(r, "pendientes")}>
+          <Button
+            type="button"
+            size="sm"
+            variant="link"
+            className="px-1"
+            onClick={() => onAbrirNotas(r, "pendientes")}
+          >
             Ver
           </Button>
         )}
@@ -235,7 +275,9 @@ export function TablaDelDia({
           <tr>
             <Th>Vendedor</Th>
             <Th>Ruta asignada</Th>
-            <Th alinear="derecha" className={ENCABEZADO_EN_DOS}>Clientes asignados</Th>
+            <Th alinear="derecha" className={ENCABEZADO_EN_DOS}>
+              Clientes asignados
+            </Th>
             <Th>Notas por cobrar</Th>
             <Th>Vehículo</Th>
             <Th>Acciones</Th>
@@ -243,36 +285,55 @@ export function TablaDelDia({
         </thead>
         <tbody>
           {renglones.length === 0 ? (
-            <FilaVacia columnas={6}>Sin vendedores activos en la sucursal.</FilaVacia>
+            <FilaVacia columnas={6}>
+              Sin vendedores activos en la sucursal.
+            </FilaVacia>
           ) : (
             renglones.map((r) => (
               <tr key={r.vendedorId}>
                 <Td className="truncate font-medium" title={r.vendedor}>
                   {r.vendedor}
                 </Td>
-                <Td className="whitespace-normal break-words" title={r.rutaNombre ?? undefined}>
+                <Td
+                  className="whitespace-normal break-words"
+                  title={r.rutaNombre ?? undefined}
+                >
                   {r.rutaNombre ?? (
                     <span className="text-muted-foreground">
-                      {r.clientes > 0 ? `Sin ruta · ${plural(r.clientes, "cliente", "clientes")}` : "Sin ruta"}
+                      {r.clientes > 0
+                        ? `Sin ruta · ${plural(r.clientes, "cliente", "clientes")}`
+                        : "Sin ruta"}
                     </span>
                   )}
                 </Td>
                 <Td alinear="derecha">{r.clientes}</Td>
                 <Td>{celdaNotas(r)}</Td>
                 <Td className="truncate" title={r.vehiculo ?? undefined}>
-                  {r.vehiculo ?? <span className="text-muted-foreground">Sin vehículo</span>}
+                  {r.vehiculo ?? (
+                    <span className="text-muted-foreground">Sin vehículo</span>
+                  )}
                 </Td>
                 <Td>
                   <div className="flex flex-wrap gap-1.5">
                     {!editable ? (
                       r.tieneRuta ? (
-                        <Button type="button" size="sm" variant="outline" onClick={() => onAbrir(r)}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onAbrir(r)}
+                        >
                           Ver
                         </Button>
                       ) : null
                     ) : r.tieneRuta ? (
                       <>
-                        <Button type="button" size="sm" variant="outline" onClick={() => onAbrir(r)}>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onAbrir(r)}
+                        >
                           Editar
                         </Button>
                         <Button
@@ -288,8 +349,12 @@ export function TablaDelDia({
                         </Button>
                       </>
                     ) : (
-                      <Button type="button" size="sm" onClick={() => onAbrir(r)}>
-                        Asignar ruta
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => onAbrir(r)}
+                      >
+                        Asignar ruta o clientes
                       </Button>
                     )}
                   </div>
