@@ -189,15 +189,29 @@ describe('Nota no cobrada (e2e)', () => {
     sucursalId = sucursales[0].id;
     sucursalAjenaId = sucursales[1].id;
 
+    const hash = await new PasswordService().hashear(PASSWORD);
+
+    // Usuario propio (quien asigna): la base limpia de CI no trae ninguno.
+    const perfil = await db
+      .selectFrom('perfil')
+      .select('id')
+      .where('deleted_at', 'is', null)
+      .orderBy('nombre')
+      .limit(1)
+      .executeTakeFirstOrThrow();
     usuarioId = (
       await db
-        .selectFrom('usuario')
-        .select('id')
-        .limit(1)
+        .insertInto('usuario')
+        .values({
+          login: `e2e-nnc-u-${SUFIJO}`,
+          nombre: 'Oficina nota no cobrada',
+          password_hash: hash,
+          perfil_id: perfil.id,
+          sucursal_id: sucursalId,
+        })
+        .returning('id')
         .executeTakeFirstOrThrow()
     ).id;
-
-    const hash = await new PasswordService().hashear(PASSWORD);
     const vendedor = async (login: string) =>
       (
         await db
@@ -249,6 +263,7 @@ describe('Nota no cobrada (e2e)', () => {
       .where('vendedor_id', 'in', vendedores)
       .execute();
     await db.deleteFrom('vendedor').where('id', 'in', vendedores).execute();
+    await db.deleteFrom('usuario').where('id', '=', usuarioId).execute();
     await app.close();
   });
 
