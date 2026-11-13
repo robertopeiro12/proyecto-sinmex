@@ -52,13 +52,19 @@ Fuentes:
    tablet, cuya nota local sigue viva con `saldo_centavos > 0`. Una asignada que la oficina ya cobró baja en el pull pero
    no se pide ni bloquea.
 10. **Cuándo se cumple la condición**, con datos locales de la tablet:
-    - `liquidar`: `nota_pendiente.saldo_centavos = 0` después de los cobros de hoy.
-    - `abonar`: la nota tiene al menos un abono con `fecha_pago` = hoy (en `abonos_json`, que la tablet actualiza al
-      grabar el cobro). Un abono de días anteriores no cuenta.
-    - El reparto de un cobro puede tocar la asignada aunque el vendedor haya elegido otra nota; eso también cuenta.
-11. **El comentario se pide una vez por nota y día.** Si ya cobró la nota hoy (algo o todo) o ya dejó comentario hoy, la
-    nota deja de "pedirse". El aviso vuelve a salir cada vez que abre la ficha mientras haya notas por atender; no es
-    modal: el vendedor puede cerrarlo y volver después, pero **Vender** sigue bloqueado si hay condición sin cumplir.
+    - Una nota con `nota_pendiente.saldo_centavos = 0` **nunca bloquea ni se pide**, la haya cobrado quien sea (regla 9):
+      no hay nada que cobrar.
+    - `liquidar`: la nota quedó en saldo 0.
+    - `abonar`: **un cobro del vendedor registrado hoy tocó esa nota**. "Hoy" es la fecha de operación del cobro (el día
+      de la jornada), **no** `fecha_pago`, que el vendedor puede retroceder. "Tocó" = la nota recibió dinero en el reparto
+      del cobro, la haya elegido él o no; para saberlo la tabla local `cobranza` guarda el reparto (`reparto_json`,
+      migración 019). Un abono que registró la oficina **no** cumple `abonar` (la condición es "si *te* paga"); solo
+      cumple si dejó la nota en cero. **No** se usa `abonos_json`: el pull lo pisa con lo del servidor y trae también
+      los cobros de la oficina.
+11. **El comentario se pide una vez por nota y día.** Si un cobro del vendedor de hoy tocó la nota (regla 10), la nota
+    quedó en cero, o ya dejó comentario hoy, la nota deja de "pedirse". El aviso vuelve a salir cada vez que abre la
+    ficha mientras haya notas por atender; no es modal: el vendedor puede cerrarlo y volver después, pero **Vender**
+    sigue bloqueado si hay condición sin cumplir.
 12. **Dónde vive el comentario en el servidor**: tabla nueva `nota_no_cobrada`, una fila por comentario, con `id = clave`
     como las demás proyecciones del push (visita, gasto, movimiento). No es una columna de `nota_asignada`: el push
     siempre inserta, nunca actualiza, y una columna ahí movería `updated_at` y haría bajar la asignación otra vez.
@@ -71,8 +77,19 @@ Fuentes:
     que mande el cuerpo; el portal manda la que tenía para que viaje con la nota.
 15. **La tablet guarda también `recado` y `rutas_dia`** en la misma migración local, aunque la pantalla de esta pieza
     solo use el recado. Razón: el pull ya los manda y cada versión que agrega colecciones obliga a un pull completo
-    forzado en todas las tablets; mejor una sola vez. Vehículo propuesto y kilometraje por vehículo quedan para otra
-    pieza, pero ya con los datos abajo.
+    en todas las tablets; mejor una sola vez. Vehículo propuesto y kilometraje por vehículo quedan para otra pieza,
+    pero ya con los datos abajo.
+16. **El pull completo lo dispara la propia migración 019**, no un paso a mano: la migración borra el cursor del pull
+    (`olvidarCursor()` ya existe en `repositorios/sync.ts`), así la primera sincronización tras instalar baja todo y
+    recoge `recado`, `rutas_dia` y `notas_asignadas` que una tablet vieja ya se saltó. Sin `pm clear`, que borraría
+    operaciones locales sin subir.
+17. **"No pude cobrar" cuenta como visita al cliente**: en la ruta de la tablet el cliente queda con palomita (como el
+    visitado sin venta) y en la pestaña Ruta de la oficina deja de salir "Cliente no visitado" (se lee `nota_no_cobrada`
+    además de ventas y visitas). Si no, un vendedor bloqueado por la condición y sin cobro quedaría como si nunca hubiera
+    ido.
+18. **El comentario se cruza por nota y fecha, no por vendedor**, y se muestra con el nombre de quien lo escribió. Si A
+    comentó y la oficina le pasó la nota a B, la revisión de B ve "A: el cliente no estaba"; la de A ya no muestra la nota
+    (su asignación está dada de baja).
 
 ## 3. Datos (nube, migración `20261113120000_nota_asignada_condicion.sql`)
 
@@ -134,9 +151,12 @@ cambiar la condición, y eso es lo que queremos: la tablet la vuelve a bajar.
 - `docs/contrato-sincronizacion.md`: tipo nuevo, `condicion_venta`, código nuevo, orden del push.
 
 ### Revisión de la tarde (`modules/estadisticas/`)
-- `NotaRevision` gana `comentarioVendedor: string | null` y `condicionVenta`. `detalle.repository.asignadas()` hace
-  `left join lateral` al último `nota_no_cobrada` vivo de esa nota, ese vendedor y esa fecha.
+- `NotaRevision` gana `comentarioVendedor: { texto, vendedor } | null` y `condicionVenta`.
+  `detalle.repository.asignadas()` hace `left join lateral` al último `nota_no_cobrada` vivo de esa **nota y fecha**
+  (cualquier vendedor, decisión 18), con el nombre del vendedor que lo escribió.
 - Solo se muestra; no cambia el conteo de no entregadas ni las tres listas.
+- **Pestaña Ruta** (`reglas-detalle.ts`, `detalle.repository.ts`): un cliente con `nota_no_cobrada` del vendedor ese día
+  cuenta como visitado (decisión 17), con el texto "No cobró: <comentario>" en vez de "Cliente no visitado".
 
 ## 5. Portal (PR 1)
 
@@ -172,6 +192,11 @@ cambiar la condición, y eso es lo que queremos: la tablet la vuelve a bajar.
     comentario text not null, registrado_en text not null, sync_estado text not null default 'pendiente' check in
     ('pendiente','enviando','sincronizado','error'), sync_error text, sincronizado_en text)` con
     `idx_nota_no_cobrada_sync (sync_estado) where sync_estado <> 'sincronizado'` e índice `(venta_nota_id, fecha)`.
+  - `alter table cobranza add column reparto_json text not null default '[]';` — las líneas del reparto del cobro
+    (`[{venta_nota_id, monto_centavos}]`) tal como las calculó la tablet al grabar; `cobranzas.registrar` las guarda
+    desde entonces. Es lo que lee la regla 10. Las cobranzas anteriores a la migración quedan con `[]` (son de días
+    pasados: no afectan "hoy").
+  - La migración termina llamando `olvidarCursor()` (decisión 16).
 - `aSnapshot` / `guardarSnapshot`: `ruta` con `recado`; `rutas_dia` y `notas_asignadas` por upsert sobre `id` con su
   `activo` (bandera, nunca ausencia), después de `nota_pendiente`.
 
@@ -191,6 +216,8 @@ cambiar la condición, y eso es lo que queremos: la tablet la vuelve a bajar.
 - Cada fila gana `notas_asignadas` (conteo de asignadas de hoy con saldo) y `recado`. La burbuja de notas pendientes se
   queda; junto a ella una **marca** distinta cuando `notas_asignadas > 0` (por ejemplo "Nota asignada · 2"). El recado se
   muestra en la fila, debajo del nombre, en una línea.
+- `visitado` también es verdadero si hay `nota_no_cobrada` de hoy del cliente (decisión 17); en `agruparRuta` ese
+  cliente va a "Visitados sin venta" salvo que además tenga venta (atendido gana, como con la visita).
 
 ### Ficha del cliente (`operacion/[clienteId]/index.tsx`)
 - Arriba, antes de los botones, una **tarjeta "Notas asignadas por cobrar"** si `porCliente` no está vacía: una fila por
@@ -226,8 +253,9 @@ cambiar la condición, y eso es lo que queremos: la tablet la vuelve a bajar.
 1. PR 1: migración a `sinmex dev` con el protocolo de CLAUDE.md; **backend y portal juntos** (el `PUT` de notas cambia
    de cuerpo de forma compatible, pero el portal nuevo manda la condición y la quiere ver de regreso).
 2. PR 2: backend antes que la app (un servidor viejo responde `tipo-desconocido` a `nota-no-cobrada`).
-3. **Al instalar la app**: forzar un pull completo una vez o `adb shell pm clear mx.jawa.tablet` en cada tablet, porque
-   una tablet vieja ya avanzó su cursor sin guardar `recado`, `rutas_dia` ni `notas_asignadas` (nota del PR #155).
+3. **Al instalar la app** no hay paso a mano: la migración local 019 borra el cursor del pull (decisión 16) y la primera
+   sincronización baja todo, incluidos `recado`, `rutas_dia` y `notas_asignadas` que una tablet vieja se saltó (nota del
+   PR #155). Las operaciones locales sin subir se conservan.
 
 ## 8. Fuera de alcance
 
