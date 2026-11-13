@@ -121,15 +121,13 @@ create index idx_nota_no_cobrada_vendedor_fecha on nota_no_cobrada (vendedor_id,
 create index idx_nota_no_cobrada_nota on nota_no_cobrada (venta_nota_id) where deleted_at is null;
 ```
 
-Pre-flight: una columna con default y una tabla nueva; nada que contar. `updated_at` de `nota_asignada` se mueve al
-cambiar la condición, y eso es lo que queremos: la tablet la vuelve a bajar.
-
+Pre-flight: una columna con default y una tabla nueva; nada que contar.
 ## 4. Backend (PR 1, con el portal)
 
 ### Asignar con condición (`modules/rutas/`)
 - `AsignarNotaDto` gana `condicionVenta?: 'ninguna' | 'liquidar' | 'abonar'` (default `ninguna`).
-- `NotasAsignadasService.asignar`: si la asignación viva ya es de este vendedor y la condición cambia, **actualiza**
-  la columna (hoy regresa sin hacer nada). Al asignar o pasar, inserta con la condición del cuerpo.
+- `NotasAsignadasService.asignar`: al asignar o pasar, inserta con la condición del cuerpo. Si la asignación viva ya es
+  de este vendedor, sigue sin hacer nada aunque la condición sea otra (decisión 14).
 - `NotaDeRuta` gana `condicionVenta` (null si no está asignada) para que el portal la muestre.
 
 ### Pull (`modules/sincronizacion/`)
