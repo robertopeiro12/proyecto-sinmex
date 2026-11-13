@@ -54,7 +54,9 @@ export type TipoOperacion =
   /** T-39. Una visita sin venta: el servidor la proyecta a `visita` con id = clave. */
   | 'visita'
   /** T-27 pieza 2. Merma del cliente, del trayecto o consumo: se proyecta a `movimiento_inventario`. */
-  | 'movimiento';
+  | 'movimiento'
+  /** Notas asignadas: el comentario "no cobre" sobre una nota asignada; el servidor lo guarda con id = clave. */
+  | 'nota-no-cobrada';
 
 export type EstadoOperacion = 'aplicada' | 'duplicada' | 'rechazada';
 
@@ -143,6 +145,8 @@ export const CODIGOS_RECHAZO = [
   'gasto-id-ocupado',
   /** T-27 pieza 2: el id del movimiento ya lo ocupa otro registro. Motivo neutro. */
   'movimiento-id-ocupado',
+  /** Notas asignadas: el id del comentario de nota no cobrada ya lo ocupa otro registro. Motivo neutro. */
+  'nota-no-cobrada-id-ocupado',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -340,6 +344,36 @@ export interface RutaPull extends FilaSincronizable {
   fecha: string;
   orden: number;
   origen: 'oficina' | 'vendedor';
+  /**
+   * Ruta semanal y diaria: el recado de la oficina para el vendedor (<= 200).
+   * Opcional en la copia de la tablet (el servidor la manda siempre): un
+   * servidor que aun no lo manda no debe reventar la sincronizacion.
+   */
+  recado?: string | null;
+}
+
+/**
+ * La ruta del dia de un vendedor (tabla `ruta_dia`): nombre de la ruta
+ * semanal que lleva y vehiculo asignado. Copia de la del backend.
+ */
+export interface RutaDiaPull extends FilaSincronizable {
+  /** `AAAA-MM-DD`. */
+  fecha: string;
+  nombre_ruta: string | null;
+  vehiculo_id: string | null;
+}
+
+/**
+ * Una nota por cobrar que la oficina le asigno al vendedor para un dia (tabla
+ * `nota_asignada`). Copia de la del backend. Una asignacion dada de baja (o de
+ * una venta eliminada) viaja con `activo: 0`.
+ */
+export interface NotaAsignadaPull extends FilaSincronizable {
+  venta_nota_id: string;
+  /** `AAAA-MM-DD`. */
+  fecha: string;
+  /** Lo que la oficina pide para venderle. La tablet decide el bloqueo; el servidor no rechaza la venta. */
+  condicion_venta: 'ninguna' | 'liquidar' | 'abonar';
 }
 
 /* ------------------------------------------------------------------ */
@@ -501,6 +535,14 @@ export interface RespuestaPull {
    * sincronizacion. Sin la coleccion, la tablet funciona sin ruta asignada (D3).
    */
   rutas?: RutaPull[];
+  /**
+   * Notas asignadas. **Opcional en la copia de la tablet, obligatoria en el
+   * servidor**, por la misma razon que `rutas`: sin la coleccion la tablet
+   * funciona sin nombre de ruta ni notas asignadas.
+   */
+  rutas_dia?: RutaDiaPull[];
+  /** Notas asignadas: notas por cobrar que la oficina asigno al vendedor. Opcional, igual que `rutas_dia`. */
+  notas_asignadas?: NotaAsignadaPull[];
   /**
    * T-74. Las filas de `promocion` cuyo `sucursal_id` es la sucursal del
    * vendedor: las de `todos`, las de `prospecto` y las de `cliente` creadas en
@@ -774,6 +816,20 @@ export type DatosMovimiento = {
     sentido: 'recibido' | 'entregado';
     piezas: number;
   }[];
+};
+
+/**
+ * `datos` de una operacion `tipo: "nota-no-cobrada"`: el comentario "no cobre"
+ * sobre una nota asignada. Copia de la del backend: `cliente_id` va en el sobre,
+ * la `clave` es el id de la fila (uuid).
+ */
+export type DatosNotaNoCobrada = {
+  /** uuid de la `venta_nota`. */
+  venta_nota_id: string;
+  /** 1..300 tras recortar. */
+  comentario: string;
+  /** Instante ISO-8601 con zona en que el vendedor lo guardo. */
+  registrado_en: string;
 };
 
 export interface ResultadoOperacion {
