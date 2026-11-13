@@ -530,3 +530,17 @@ describe('delDia con visitas (T-39, D8)', () => {
     expect(rutas.delDia()).toMatchObject([{ activo: 0, visitado: true }]);
   });
 });
+
+describe('aplicarSnapshot con el recado de la oficina', () => {
+  it('guarda el recado de la fila', () => {
+    const { rutas } = montar();
+    rutas.aplicarSnapshot([delServidor({ id: 'srv-1', cliente_id: 'cli-1', recado: 'Lleva cambio' })]);
+    expect(rutas.porId('srv-1')?.recado).toBe('Lleva cambio');
+  });
+
+  it('un servidor viejo sin recado lo deja en null', () => {
+    const { rutas } = montar();
+    rutas.aplicarSnapshot([delServidor({ id: 'srv-1', cliente_id: 'cli-1' })]);
+    expect(rutas.porId('srv-1')?.recado).toBeNull();
+  });
+});

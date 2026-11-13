@@ -25,7 +25,10 @@ export class ErrorRuta extends Error {
  * a proposito: la capa de datos no importa el contrato, y `aSnapshot` le pasa
  * las filas del pull tal cual.
  */
-export type FilaRutaPull = Pick<Ruta, 'id' | 'cliente_id' | 'fecha' | 'orden' | 'origen' | 'activo'>;
+export type FilaRutaPull = Pick<Ruta, 'id' | 'cliente_id' | 'fecha' | 'orden' | 'origen' | 'activo'> & {
+  /** Opcional: un servidor anterior no lo manda y se escribe `null`. */
+  recado?: string | null;
+};
 
 /** Una fila de la ruta del dia como la pinta la pantalla principal (D16). */
 export interface FilaRutaDelDia {
@@ -136,14 +139,15 @@ export function aplicarSnapshotRutas(
     }
 
     bd.runSync(
-      `insert into ruta (id, cliente_id, fecha, orden, origen, activo, sync_estado, sincronizado_en)
-       values ($id, $cliente_id, $fecha, $orden, $origen, $activo, 'sincronizada', $sincronizado_en)
+      `insert into ruta (id, cliente_id, fecha, orden, origen, activo, recado, sync_estado, sincronizado_en)
+       values ($id, $cliente_id, $fecha, $orden, $origen, $activo, $recado, 'sincronizada', $sincronizado_en)
        on conflict(id) do update set
          cliente_id = excluded.cliente_id,
          fecha = excluded.fecha,
          orden = excluded.orden,
          origen = excluded.origen,
          activo = excluded.activo,
+         recado = excluded.recado,
          sincronizado_en = excluded.sincronizado_en`,
       {
         $id: fila.id,
@@ -152,6 +156,7 @@ export function aplicarSnapshotRutas(
         $orden: fila.orden,
         $origen: fila.origen,
         $activo: fila.activo,
+        $recado: fila.recado ?? null,
         $sincronizado_en: sincronizadoEn,
       },
     );
