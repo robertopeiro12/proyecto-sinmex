@@ -238,6 +238,8 @@ describe('revision de notas en la tarde (Ruta Diaria parte 2)', () => {
     totalCentavos: 1000,
     pendienteCentavos: 1000,
     entregada: null,
+    condicionVenta: 'ninguna',
+    comentarioVendedor: null,
     ...extra,
   });
 
@@ -269,6 +271,8 @@ describe('revision de notas en la tarde (Ruta Diaria parte 2)', () => {
         totalCentavos: 1000,
         pendienteCentavos: 0,
         entregada: null,
+        condicionVenta: 'ninguna',
+        comentarioVendedor: null,
       },
     ]);
     expect(
@@ -305,6 +309,8 @@ describe('revision de notas en la tarde (Ruta Diaria parte 2)', () => {
         totalCentavos: 1000,
         pendienteCentavos: 300,
         entregada: null,
+        condicionVenta: null,
+        comentarioVendedor: null,
       },
     ]);
   });
@@ -573,5 +579,83 @@ describe('Ruta (visitas) como el sistema viejo', () => {
       motivo: 'Tenía producto',
       atendio: 'Mimi',
     });
+  });
+});
+
+describe('nota no cobrada (decision 17)', () => {
+  const ruta = [{ clienteId: 'c1', cliente: 'Uno', orden: 1 }];
+  const noCobrada = (extra = {}) => ({
+    clienteId: 'c1',
+    cliente: 'Uno',
+    folio: 'TJN1',
+    hora: '2026-11-07T17:00:00.000Z',
+    comentario: 'No estaba el dueño',
+    ...extra,
+  });
+
+  it("un cliente de la ruta con nota no cobrada sale visitado con 'Nota sin cobrar · <folio>' y el comentario", () => {
+    const d = armarDetalleVendedor(base, {
+      ...vacio,
+      ruta,
+      notasNoCobradas: [noCobrada()],
+    });
+    expect(d.visitas).toEqual([
+      {
+        cliente: 'Uno',
+        visitado: true,
+        vendio: false,
+        hora: '2026-11-07T17:00:00.000Z',
+        motivo: 'Nota sin cobrar · TJN1',
+        atendio: null,
+        comentario: 'No estaba el dueño',
+      },
+    ]);
+  });
+
+  it('si ademas le vendio, sale la venta y la nota no cobrada, en orden de hora', () => {
+    const d = armarDetalleVendedor(base, {
+      ...vacio,
+      ruta,
+      ventas: [
+        venta({
+          clienteId: 'c1',
+          cliente: 'Uno',
+          hora: '2026-11-07T18:00:00.000Z',
+        }),
+      ],
+      notasNoCobradas: [noCobrada()],
+    });
+    expect(d.visitas.map((v) => [v.vendio, v.motivo])).toEqual([
+      [false, 'Nota sin cobrar · TJN1'],
+      [true, null],
+    ]);
+  });
+
+  it('la nota no cobrada no suma a visitas sin venta', () => {
+    const sin = armarDetalleVendedor(base, { ...vacio, ruta });
+    const con = armarDetalleVendedor(base, {
+      ...vacio,
+      ruta,
+      notasNoCobradas: [noCobrada()],
+    });
+    // Sigue sin entrar a ninguna otra lista ni al corte.
+    expect(con.corte).toEqual(sin.corte);
+    expect(con.notas).toEqual(sin.notas);
+    expect(con.visitas.filter((v) => v.vendio)).toEqual([]);
+  });
+
+  it('asignadasPorEntregar conserva condicionVenta y comentarioVendedor de la fila', () => {
+    const fila: AsignadaFila = {
+      ventaNotaId: 'a1',
+      folio: 'TJA1',
+      cliente: 'C',
+      totalCentavos: 1000,
+      pendienteCentavos: 1000,
+      entregada: null,
+      condicionVenta: 'liquidar',
+      comentarioVendedor: { texto: 'Sin dinero', vendedor: 'Ana' },
+    };
+    const d = armarDetalleVendedor(base, { ...vacio, asignadas: [fila] });
+    expect(d.asignadasPorEntregar).toEqual([fila]);
   });
 });

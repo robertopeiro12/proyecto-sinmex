@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { sql, type RawBuilder } from 'kysely';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
+import type { CondicionVenta } from '../rutas/reglas-notas-ruta';
 import { aCentavos } from '../sincronizacion/dinero';
 import type {
   AFavorFila,
@@ -8,6 +9,7 @@ import type {
   GastoFila,
   LineaFila,
   MetodoPago,
+  NotaNoCobradaFila,
   NotaNoEntregada,
   PagoFila,
   PromoFila,
@@ -31,6 +33,8 @@ export interface FilasDetalle {
   ruta: RutaFila[];
   /** Solo para un vendedor: sus notas asignadas de ese dia. */
   asignadas: AsignadaFila[];
+  /** Solo para un vendedor: sus "no cobre" de ese dia. */
+  notasNoCobradas: NotaNoCobradaFila[];
   promociones: PromoFila[];
 }
 
@@ -96,6 +100,7 @@ export class DetalleRepository {
       promos,
       ruta,
       asignadas,
+      notasNoCobradas,
     ] = await Promise.all([
       this.ventas(cond, fecha),
       this.lineas(cond, fecha),
@@ -111,6 +116,9 @@ export class DetalleRepository {
       'vendedorId' in a
         ? this.asignadas(a.vendedorId, fecha)
         : Promise.resolve<AsignadaFila[]>([]),
+      'vendedorId' in a
+        ? this.notasNoCobradas(a.vendedorId, fecha)
+        : Promise.resolve<NotaNoCobradaFila[]>([]),
     ]);
     return {
       ventas,
@@ -122,6 +130,7 @@ export class DetalleRepository {
       promociones: promos,
       ruta,
       asignadas,
+      notasNoCobradas,
     };
   }
 
@@ -239,11 +248,16 @@ export class DetalleRepository {
       total: string;
       pendiente: string;
       entregada: boolean | null;
+      condicion_venta: CondicionVenta;
+      comentario: string | null;
+      comentario_vendedor: string | null;
     }>`
       select vn.id, vn.folio, cl.nombre as cliente,
              vn.monto_total::text as total,
              greatest(vn.monto_total - ab.abonado, 0)::text as pendiente,
-             na.papel_entregado as entregada
+             na.papel_entregado as entregada,
+             na.condicion_venta,
+             nc.comentario, nc.vendedor as comentario_vendedor
         from nota_asignada na
         join venta_nota vn on vn.id = na.venta_nota_id
         join cliente cl on cl.id = vn.cliente_id
@@ -251,6 +265,15 @@ export class DetalleRepository {
           select coalesce(sum(a.monto), 0) as abonado from cobranza_abono a
            where a.venta_nota_id = vn.id and a.deleted_at is null
         ) ab
+        left join lateral (
+          select c.comentario, cv.nombre as vendedor
+            from nota_no_cobrada c
+            join vendedor cv on cv.id = c.vendedor_id
+           where c.venta_nota_id = vn.id and c.fecha = ${fecha}::date
+             and c.deleted_at is null
+           order by c.registrado_en desc, c.id desc
+           limit 1
+        ) nc on true
        where na.deleted_at is null and vn.deleted_at is null
          and na.vendedor_id = ${vendedorId}::uuid and na.fecha = ${fecha}::date
          and (vn.status in ('pendiente', 'abonado')
@@ -263,6 +286,41 @@ export class DetalleRepository {
       totalCentavos: aCentavos(x.total),
       pendienteCentavos: aCentavos(x.pendiente),
       entregada: x.entregada,
+      condicionVenta: x.condicion_venta,
+      comentarioVendedor:
+        x.comentario !== null && x.comentario_vendedor !== null
+          ? { texto: x.comentario, vendedor: x.comentario_vendedor }
+          : null,
+    }));
+  }
+
+  /** Los "no cobre" vivos del vendedor ese dia, con su cliente y folio. */
+  private async notasNoCobradas(
+    vendedorId: string,
+    fecha: string,
+  ): Promise<NotaNoCobradaFila[]> {
+    const r = await sql<{
+      cliente_id: string;
+      cliente: string;
+      folio: string;
+      hora: string;
+      comentario: string;
+    }>`
+      select cl.id as cliente_id, cl.nombre as cliente, vn.folio,
+             ${iso('c.registrado_en')} as hora, c.comentario
+        from nota_no_cobrada c
+        join venta_nota vn on vn.id = c.venta_nota_id
+        join cliente cl on cl.id = vn.cliente_id
+       where c.deleted_at is null and vn.deleted_at is null
+         and c.vendedor_id = ${vendedorId}::uuid and c.fecha = ${fecha}::date
+       order by c.registrado_en, c.id
+    `.execute(this.db);
+    return r.rows.map((x) => ({
+      clienteId: x.cliente_id,
+      cliente: x.cliente,
+      folio: x.folio,
+      hora: x.hora,
+      comentario: x.comentario,
     }));
   }
 
