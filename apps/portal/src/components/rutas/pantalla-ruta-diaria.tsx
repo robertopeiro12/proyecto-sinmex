@@ -36,7 +36,7 @@ export type NotasDelRenglon = "pendientes" | "asignadas";
 
 /**
  * Operación → Ruta Diaria (spec §5.1), como la del sistema viejo: un renglón por vendedor
- * activo de la sucursal, con su ruta, clientes, notas y vehículo del día. "Asignar ruta o clientes" /
+ * activo de la sucursal, con su ruta, clientes, notas y vehículo del día. "Asignar ruta/clientes" /
  * "Editar" abren la ruta del vendedor a pantalla completa. Un día pasado es solo lectura.
  */
 export function PantallaRutaDiaria({ sucursal }: { sucursal: string | null }) {
@@ -213,7 +213,7 @@ export function TablaDelDia({
     if (editable && !r.tieneRuta)
       return (
         <span className="text-muted-foreground">
-          Asigna primero su ruta o clientes
+          Asigna primero su ruta/clientes
         </span>
       );
     if (r.notasPendientes === 0 && r.notasAsignadas === 0) {
@@ -352,9 +352,12 @@ export function TablaDelDia({
                       <Button
                         type="button"
                         size="sm"
+                        aria-label="Asignar ruta/clientes"
+                        className="h-auto flex-col gap-0 py-1 leading-tight"
                         onClick={() => onAbrir(r)}
                       >
-                        Asignar ruta o clientes
+                        <span>Asignar ruta/</span>
+                        <span>clientes</span>
                       </Button>
                     )}
                   </div>
