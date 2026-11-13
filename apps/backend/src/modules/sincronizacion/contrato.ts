@@ -914,6 +914,11 @@ export interface NotaAsignadaPull extends FilaSincronizable {
   venta_nota_id: string;
   /** `AAAA-MM-DD`. */
   fecha: string;
+  /**
+   * Spec 2026-11-13: lo que la oficina pide para venderle. Aditivo. La tablet
+   * decide el bloqueo; el servidor no rechaza la venta.
+   */
+  condicion_venta: 'ninguna' | 'liquidar' | 'abonar';
 }
 
 /* ------------------------------------------------------------------ */

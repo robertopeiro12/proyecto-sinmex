@@ -214,7 +214,7 @@ nadie relacionaría con nada.
               "origen": "oficina", "recado": null, "activo": 1 }],
   "rutas_dia": [{ "id": "…", "fecha": "2026-10-12", "nombre_ruta": "Ruta Norte",
                   "vehiculo_id": "…", "activo": 1 }],
-  "notas_asignadas": [{ "id": "…", "venta_nota_id": "…", "fecha": "2026-10-12", "activo": 1 }],
+  "notas_asignadas": [{ "id": "…", "venta_nota_id": "…", "fecha": "2026-10-12", "condicion_venta": "ninguna", "activo": 1 }],
   "promociones": [ /* filas: ver la seccion promociones, abajo */ ],
   "cargas": [ /* filas: ver la seccion cargas, abajo */ ]
 }
@@ -405,8 +405,9 @@ tablet vieja la ignora; la tablet nueva la trata como opcional.
     semanal) baja como `oficina`, para que una tablet sin actualizar no encuentre un valor que no conoce.
   - **`rutas_dia`** (nivel superior): `{ id, fecha, nombre_ruta, vehiculo_id, activo }`, el nombre de la ruta
     semanal que lleva el vendedor ese día y su vehículo (ambos pueden ser `null`).
-  - **`notas_asignadas`** (nivel superior): `{ id, venta_nota_id, fecha, activo }`, las notas por cobrar que la
-    oficina le asignó para ese día. Sin `desde`, no baja la de una venta borrada; con `desde`, una asignación
+  - **`notas_asignadas`** (nivel superior): `{ id, venta_nota_id, fecha, condicion_venta, activo }`, las notas por cobrar que la
+    oficina le asignó para ese día. `condicion_venta` (`ninguna` | `liquidar` | `abonar`, aditivo) es lo que la
+    oficina pide para venderle al cliente: la tablet decide el bloqueo; el servidor no rechaza la venta. Sin `desde`, no baja la de una venta borrada; con `desde`, una asignación
     quitada viaja con `activo: 0` (aunque su venta se haya borrado) para que la tablet la retire. Eliminar la venta en
     el portal (T-17) da de baja sus asignaciones vivas en la misma transacción, así que también viajan con `activo: 0`.
   - `rutas_dia` y `notas_asignadas` tienen la misma ventana que `rutas` (`fecha >= current_date - 1`, sin tope),
