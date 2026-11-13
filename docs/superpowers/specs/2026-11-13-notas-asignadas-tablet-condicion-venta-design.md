@@ -122,6 +122,7 @@ create index idx_nota_no_cobrada_nota on nota_no_cobrada (venta_nota_id) where d
 ```
 
 Pre-flight: una columna con default y una tabla nueva; nada que contar.
+
 ## 4. Backend (PR 1, con el portal)
 
 ### Asignar con condición (`modules/rutas/`)
