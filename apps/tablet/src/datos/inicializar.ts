@@ -13,6 +13,10 @@ import { crearRepositorioFolios, type RepositorioFolios } from './repositorios/f
 import { crearRepositorioJornadas, type RepositorioJornadas } from './repositorios/jornadas';
 import { crearRepositorioMovimientos, type RepositorioMovimientos } from './repositorios/movimientos';
 import {
+  crearRepositorioNotasAsignadas,
+  type RepositorioNotasAsignadas,
+} from './repositorios/notas-asignadas';
+import {
   crearRepositorioProspectos,
   type RepositorioProspectos,
 } from './repositorios/prospectos';
@@ -51,6 +55,8 @@ export interface CapaDatos {
   cargas: RepositorioCargas;
   /** Merma del cliente, merma del trayecto y consumo propio (T-27 pieza 2). */
   movimientos: RepositorioMovimientos;
+  /** Notas asignadas de hoy, bloqueo de venta y "Continuar sin cobrar" (spec 2026-11-13). */
+  notasAsignadas: RepositorioNotasAsignadas;
   /** Version de esquema con la que quedo la base tras migrar. */
   versionEsquema: number;
 }
@@ -100,6 +106,7 @@ export function inicializarCapaDatos(): CapaDatos {
     // El MISMO `catalogos`: `registrar` publica por el la version que observan
     // Inventario, la ficha y "Merma y consumo".
     movimientos: crearRepositorioMovimientos(deps, { catalogos }),
+    notasAsignadas: crearRepositorioNotasAsignadas(deps),
     versionEsquema: versionFinal,
   };
 }
