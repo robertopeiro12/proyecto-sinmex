@@ -64,7 +64,7 @@ const DETALLE: DetalleVendedorDia = {
   },
   gastos: [{ descripcion: "Hielo", montoCentavos: 1000 }],
   notasCredito: [
-    { ventaNotaId: "v-rb10", folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null },
+    { ventaNotaId: "v-rb10", folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null, condicionVenta: null, comentarioVendedor: null },
   ],
   asignadasCobradas: [],
   asignadasPorEntregar: [],
@@ -195,7 +195,7 @@ describe("DetalleVendedor", () => {
   describe("Notas de ventas (la revisión de la tarde)", () => {
     const HOY = hoyEnTijuana();
     const nueva = (folio: string, entregada: boolean | null, extra: Partial<fd.NotaRevision> = {}): fd.NotaRevision => ({
-      ventaNotaId: `v-${folio}`, folio, cliente: `Cliente ${folio}`, totalCentavos: 10000, pendienteCentavos: 4000, entregada, ...extra,
+      ventaNotaId: `v-${folio}`, folio, cliente: `Cliente ${folio}`, totalCentavos: 10000, pendienteCentavos: 4000, entregada, condicionVenta: null, comentarioVendedor: null, ...extra,
     });
     const REVISION: DetalleVendedorDia = {
       ...DETALLE,
@@ -207,6 +207,31 @@ describe("DetalleVendedor", () => {
     };
     const abrir = async (u: ReturnType<typeof userEvent.setup>) =>
       u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
+
+    it("en las asignadas por entregar se ve la condición y el comentario del vendedor; una nueva a crédito no", async () => {
+      const u = userEvent.setup();
+      render(
+        <DetalleVendedor
+          detalle={{
+            ...REVISION,
+            asignadasPorEntregar: [
+              nueva("TJ261102AP02", null, {
+                condicionVenta: "liquidar",
+                comentarioVendedor: { texto: "no estaba el encargado", vendedor: "Juan" },
+              }),
+            ],
+          }}
+          modo="dashboard"
+        />,
+      );
+      await abrir(u);
+      const por = screen.getByRole("table", { name: "Notas Asignadas NO cobradas por Entregar" });
+      expect(within(por).getByText("Juan: no estaba el encargado")).toBeInTheDocument();
+      expect(within(por).getByText("Solo si liquida")).toBeInTheDocument();
+      const nuevas = screen.getByRole("table", { name: "Notas Nuevas x Cobrar Entregadas" });
+      expect(within(nuevas).queryByText(/Solo si/)).toBeNull();
+      expect(within(nuevas).queryByText(/Juan:/)).toBeNull();
+    });
 
     it("las tres listas con sus nombres; las casillas vienen palomeadas si no se han revisado", async () => {
       const u = userEvent.setup();

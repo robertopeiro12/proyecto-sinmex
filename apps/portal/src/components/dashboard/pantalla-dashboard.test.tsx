@@ -192,7 +192,7 @@ describe("PantallaDashboard", () => {
     mockAuth([PERMISO, "nota_papel.revisar"]);
     const conNota: DetalleVendedorDia = {
       ...DETALLE,
-      notasCredito: [{ ventaNotaId: "v-rb10", folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null }],
+      notasCredito: [{ ventaNotaId: "v-rb10", folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null, condicionVenta: null, comentarioVendedor: null }],
     };
     obtenerDetalle.mockResolvedValue(conNota);
     const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -221,7 +221,7 @@ describe("PantallaDashboard", () => {
     mockAuth([PERMISO, "nota_papel.revisar"]);
     const conNota: DetalleVendedorDia = {
       ...DETALLE,
-      notasCredito: [{ ventaNotaId: "v-rb10", folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null }],
+      notasCredito: [{ ventaNotaId: "v-rb10", folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null, condicionVenta: null, comentarioVendedor: null }],
     };
     obtenerDetalle.mockResolvedValue(conNota);
     guardarNotasEntregadas.mockResolvedValue(undefined);
