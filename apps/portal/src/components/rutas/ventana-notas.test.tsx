@@ -108,6 +108,19 @@ describe("VentanaNotas", () => {
     expect(rutasLib.asignarNota).toHaveBeenCalledWith("n1", "v1", "2026-11-10", "liquidar");
   });
 
+  it("una nota asignada con 'liquidar' y luego quitada vuelve a 'ninguna'", async () => {
+    const usuario = userEvent.setup();
+    const asignada = { ...LIBRE, asignadaA: { vendedorId: "v1", nombre: "Ricardo", condicionVenta: "liquidar" as const } };
+    vi.mocked(rutasLib.asignarNota).mockResolvedValue(listas({ pendientes: [asignada, MIA, DE_JUAN] }));
+    vi.mocked(rutasLib.quitarNota).mockResolvedValue(listas());
+    abrir();
+    await screen.findAllByRole("row");
+    await usuario.selectOptions(screen.getByLabelText("Condición de la nota TJ261001AP01"), "Vender solo si liquida");
+    await usuario.click(within(screen.getAllByRole("row")[1]).getByRole("button", { name: "Asignar" }));
+    await usuario.click(await within(screen.getAllByRole("row")[1]).findByRole("button", { name: "Quitar" }));
+    expect(await screen.findByLabelText("Condición de la nota TJ261001AP01")).toHaveValue("ninguna");
+  });
+
   it("sin tocar la lista asigna con 'ninguna'", async () => {
     const usuario = userEvent.setup();
     vi.mocked(rutasLib.asignarNota).mockResolvedValue(listas());

@@ -114,7 +114,16 @@ export class FlujoDiarioRepository {
                    or exists (select 1 from visita vi
                                where vi.vendedor_id = d.vendedor_id
                                  and vi.fecha = d.fecha
-                                 and vi.cliente_id = r.cliente_id))
+                                 and vi.cliente_id = r.cliente_id)
+                   -- Un comentario "no cobre" tambien atiende al cliente (decision
+                   -- 17); no se filtra la nota borrada: el comentario se acepta
+                   -- aunque la venta se borre despues (decision 13).
+                   or exists (select 1 from nota_no_cobrada c
+                               join venta_nota vn2 on vn2.id = c.venta_nota_id
+                               where c.deleted_at is null
+                                 and c.vendedor_id = d.vendedor_id
+                                 and c.fecha = d.fecha
+                                 and vn2.cliente_id = r.cliente_id))
              ) as atendidos_en_ruta,
              (select coalesce(sum(dd.cantidad), 0)::int
                 from venta_nota vn

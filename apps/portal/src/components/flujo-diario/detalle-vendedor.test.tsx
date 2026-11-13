@@ -233,6 +233,27 @@ describe("DetalleVendedor", () => {
       expect(within(nuevas).queryByText(/Juan:/)).toBeNull();
     });
 
+    it("la condición 'abonar' se rotula 'Solo si abona' y 'ninguna' no lleva etiqueta", async () => {
+      const u = userEvent.setup();
+      render(
+        <DetalleVendedor
+          detalle={{
+            ...REVISION,
+            asignadasPorEntregar: [
+              nueva("TJ261102AP02", null, { condicionVenta: "abonar" }),
+              nueva("TJ261102AP03", null, { condicionVenta: "ninguna" }),
+            ],
+          }}
+          modo="dashboard"
+        />,
+      );
+      await abrir(u);
+      const por = screen.getByRole("table", { name: "Notas Asignadas NO cobradas por Entregar" });
+      expect(within(por).getByText("Solo si abona")).toBeInTheDocument();
+      expect(within(por).queryByText(/Solo si liquida/)).toBeNull();
+      expect(within(por).getAllByText(/Solo si/)).toHaveLength(1);
+    });
+
     it("las tres listas con sus nombres; las casillas vienen palomeadas si no se han revisado", async () => {
       const u = userEvent.setup();
       render(<DetalleVendedor detalle={REVISION} modo="dashboard" />);

@@ -77,6 +77,13 @@ export function VentanaNotas({
           ? await quitarNota(nota.ventaNotaId, vendedorId, fecha)
           : await asignarNota(nota.ventaNotaId, vendedorId, fecha, condicionDe(nota)),
       );
+      // La elección ya quedó en la asignación: si la nota vuelve a quedar libre
+      // debe empezar otra vez en "ninguna".
+      setElegidas((prev) => {
+        const resto = { ...prev };
+        delete resto[nota.ventaNotaId];
+        return resto;
+      });
     } catch (err) {
       setError(mensajeDe(err, quitar ? "No se pudo quitar la nota." : "No se pudo asignar la nota."));
     } finally {

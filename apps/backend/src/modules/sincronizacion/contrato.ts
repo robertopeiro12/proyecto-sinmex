@@ -198,6 +198,10 @@ export const CODIGOS_RECHAZO = [
    * acepta y el monto va a las otras notas y al saldo a favor (el dinero si se
    * cobro). Una cobranza sobre una venta que aun no se proyecto si cae aqui, y
    * la tablet la reenvia en cada sincronizacion.
+   *
+   * Tambien lo da `nota-no-cobrada`: la nota comentada no existe, no es del
+   * `cliente_id` del sobre o no es de la sucursal del vendedor. La tablet deja la
+   * fila en `error` y no la reintenta (a diferencia de la cobranza).
    */
   'nota-no-encontrada',
   /**

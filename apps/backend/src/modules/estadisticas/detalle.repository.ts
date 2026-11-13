@@ -311,7 +311,7 @@ export class DetalleRepository {
         from nota_no_cobrada c
         join venta_nota vn on vn.id = c.venta_nota_id
         join cliente cl on cl.id = vn.cliente_id
-       where c.deleted_at is null and vn.deleted_at is null
+       where c.deleted_at is null
          and c.vendedor_id = ${vendedorId}::uuid and c.fecha = ${fecha}::date
        order by c.registrado_en, c.id
     `.execute(this.db);

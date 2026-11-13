@@ -1627,6 +1627,7 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
         id: asignada,
         venta_nota_id: v.id,
         fecha: '2099-03-03',
+        condicion_venta: 'ninguna',
         activo: 0,
       });
     });
