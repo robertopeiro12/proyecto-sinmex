@@ -20,6 +20,12 @@ export interface NotaAsignadaDeHoy {
   condicion: CondicionVenta;
   /** Un cobro de hoy (`cobranza.fecha` = hoy) la toco en su `reparto_json`. */
   tocadaHoy: boolean;
+  /**
+   * Un cobro de hoy la dejo en saldo 0 (`saldo_despues_centavos` de su
+   * `reparto_json`). Cumple `liquidar` aunque un pull que corrio antes del push
+   * haya reescrito `nota_pendiente` con el saldo viejo. Implica `tocadaHoy`.
+   */
+  liquidadaHoy: boolean;
   /** Hoy se dejo al menos un "Continuar sin cobrar" sobre ella. */
   comentadaHoy: boolean;
 }
@@ -48,7 +54,8 @@ export function diasDeAtraso(fechaNota: string, plazoDias: number | null, hoy: s
 }
 
 /**
- * Si la nota ya no detiene la venta. `liquidar` pide saldo 0; `abonar`, un
+ * Si la nota ya no detiene la venta. `liquidar` pide saldo 0 (o que un cobro
+ * de hoy la haya dejado en 0); `abonar`, un
  * cobro de hoy que la toque (o saldo 0). El comentario nunca cumple.
  */
 export function cumpleCondicion(n: NotaAsignadaDeHoy): boolean {
@@ -56,7 +63,7 @@ export function cumpleCondicion(n: NotaAsignadaDeHoy): boolean {
     case 'ninguna':
       return true;
     case 'liquidar':
-      return n.saldoCentavos <= 0;
+      return n.saldoCentavos <= 0 || n.liquidadaHoy;
     case 'abonar':
       return n.tocadaHoy || n.saldoCentavos <= 0;
   }

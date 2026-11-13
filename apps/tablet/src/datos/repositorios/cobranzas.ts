@@ -141,11 +141,14 @@ export function crearRepositorioCobranzas(
             $metodo_pago: datos.metodoPago,
             $fecha_pago: fechaPago,
             $grabada_en: ahora,
-            // Las notas que tocó este cobro: de aquí sale "tocó la nota" hoy.
+            // Las notas que tocó este cobro: de aquí sale "tocó la nota" hoy; y
+            // el saldo en que la dejó, "la liquidó hoy" (un pull viejo puede
+            // reescribir nota_pendiente con el saldo de antes del cobro).
             $reparto_json: JSON.stringify(
               reparto.aplicaciones.map((a) => ({
                 venta_nota_id: a.notaId,
                 monto_centavos: a.montoCentavos,
+                saldo_despues_centavos: a.saldoDespuesCentavos,
               })),
             ),
           },

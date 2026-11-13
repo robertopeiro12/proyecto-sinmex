@@ -67,6 +67,7 @@ describe('repositorio de notas asignadas', () => {
         diasAtraso: 0,
         condicion: 'abonar',
         tocadaHoy: false,
+        liquidadaHoy: false,
         comentadaHoy: false,
       },
     ]);
@@ -152,6 +153,30 @@ describe('repositorio de notas asignadas', () => {
     expect(notas.bloqueoDeVenta('cli-1')).toBeNull();
   });
 
+  it('liquidar se cumple con un cobro en la tablet que deja la nota en 0', () => {
+    const { notas, cobranzas } = montar([asignacion({ id: 'asg-2', venta_nota_id: 'nota-2', condicion_venta: 'liquidar' })]);
+    expect(notas.bloqueoDeVenta('cli-1')).toBe(LIQUIDAR);
+    // Con una sola nota marcada, el reparto va primero a ella: nota-2 (10000) queda en 0.
+    cobranzas.registrar(cobro({ ventaNotaId: 'nota-2', montoCentavos: 10000 }));
+    expect(notas.bloqueoDeVenta('cli-1')).toBeNull();
+    expect(notas.conteoDeHoyPorCliente().get('cli-1') ?? 0).toBe(0);
+  });
+
+  it('Review Focus 4 (liquidar): un pull que reescribe el saldo viejo con activo 1 no vuelve a bloquear', () => {
+    const { notas, cobranzas, catalogos } = montar([
+      asignacion({ id: 'asg-2', venta_nota_id: 'nota-2', condicion_venta: 'liquidar' }),
+    ]);
+    cobranzas.registrar(cobro({ ventaNotaId: 'nota-2', montoCentavos: 10000 }));
+    const nota2 = snapshotDePrueba().notas?.[1];
+    if (!nota2) throw new Error('falta nota-2 en el snapshot');
+    // El pull corre antes del push: trae la nota como estaba (saldo 10000, viva).
+    catalogos.guardarSnapshot({ notas: [{ ...nota2, saldo_centavos: 10000, activo: 1 }] });
+    const [n] = notas.deHoyDelCliente('cli-1');
+    expect(n).toMatchObject({ saldoCentavos: 10000, tocadaHoy: true, liquidadaHoy: true });
+    expect(notas.bloqueoDeVenta('cli-1')).toBeNull();
+    expect(notas.conteoDeHoyPorCliente().get('cli-1') ?? 0).toBe(0);
+  });
+
   it('liquidar gana sobre abonar y un abono no la cumple', () => {
     const { notas, cobranzas } = montar([
       asignacion({ id: 'asg-1', venta_nota_id: 'nota-1', condicion_venta: 'abonar' }),
@@ -202,6 +227,22 @@ describe('repositorio de notas asignadas', () => {
     expect(con('    ')).toThrow(ErrorNotaNoCobrada);
     expect(con('x'.repeat(301))).toThrow(new ErrorNotaNoCobrada('El comentario admite hasta 300 caracteres.'));
     expect(con(` ${'x'.repeat(300)} `)().comentario).toHaveLength(300);
+  });
+
+  it('si la fila recien grabada no se puede releer es un Error tecnico, no ErrorNotaNoCobrada', () => {
+    const { notas, deps } = montar();
+    deps.bd.execSync(`
+      create trigger t4_borra_nota_no_cobrada after insert on nota_no_cobrada
+      begin delete from nota_no_cobrada where id = new.id; end;
+    `);
+    let error: unknown;
+    try {
+      notas.registrarNoCobrada({ vendedorId: 'ven-1', clienteId: 'cli-1', ventaNotaId: 'nota-1', comentario: 'x' });
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(ErrorNotaNoCobrada);
   });
 
   it('registrarNoCobrada con el dia cerrado lanza el error de jornada y no deja fila', () => {

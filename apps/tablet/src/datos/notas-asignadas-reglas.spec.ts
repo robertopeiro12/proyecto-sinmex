@@ -17,6 +17,7 @@ const nota = (cambios: Partial<NotaAsignadaDeHoy> = {}): NotaAsignadaDeHoy => ({
   diasAtraso: 0,
   condicion: 'ninguna',
   tocadaHoy: false,
+  liquidadaHoy: false,
   comentadaHoy: false,
   ...cambios,
 });
@@ -50,6 +51,12 @@ describe('cumpleCondicion', () => {
     expect(cumpleCondicion(nota({ condicion: 'liquidar' }))).toBe(false);
     expect(cumpleCondicion(nota({ condicion: 'liquidar', tocadaHoy: true }))).toBe(false);
     expect(cumpleCondicion(nota({ condicion: 'liquidar', saldoCentavos: 0 }))).toBe(true);
+  });
+
+  it('liquidar se cumple si un cobro de hoy la dejo en 0, aunque un pull viejo reescriba el saldo', () => {
+    expect(
+      cumpleCondicion(nota({ condicion: 'liquidar', saldoCentavos: 15000, tocadaHoy: true, liquidadaHoy: true })),
+    ).toBe(true);
   });
 
   it('abonar con un cobro de hoy o con saldo 0; el comentario no cumple', () => {

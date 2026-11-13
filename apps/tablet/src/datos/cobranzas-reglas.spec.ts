@@ -319,9 +319,14 @@ describe('problemasDeCobro (D4, D14)', () => {
 });
 
 describe('leerReparto (T-notas)', () => {
-  it('lee las líneas guardadas', () => {
+  it('lee las líneas guardadas, con el saldo en que dejó la nota', () => {
+    expect(leerReparto('[{"venta_nota_id":"n1","monto_centavos":500,"saldo_despues_centavos":0}]')).toEqual([
+      { venta_nota_id: 'n1', monto_centavos: 500, saldo_despues_centavos: 0 },
+    ]);
+  });
+  it('una línea vieja sin saldo_despues_centavos lo da como null (desconocido)', () => {
     expect(leerReparto('[{"venta_nota_id":"n1","monto_centavos":500}]')).toEqual([
-      { venta_nota_id: 'n1', monto_centavos: 500 },
+      { venta_nota_id: 'n1', monto_centavos: 500, saldo_despues_centavos: null },
     ]);
   });
   it('texto corrupto o que no es lista da []', () => {

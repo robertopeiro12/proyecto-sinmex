@@ -137,11 +137,24 @@ export function leerAbonos(json: string): AbonoNota[] {
   }
 }
 
+/** Una linea de `cobranza.reparto_json`. */
+export interface LineaReparto {
+  venta_nota_id: string;
+  monto_centavos: number;
+  /** En cuanto dejo la nota este cobro; `null` en las lineas viejas que no lo guardaban. */
+  saldo_despues_centavos: number | null;
+}
+
 /** Las notas que tocó un cobro, de `cobranza.reparto_json`. Un texto corrupto da `[]`. */
-export function leerReparto(json: string): { venta_nota_id: string; monto_centavos: number }[] {
+export function leerReparto(json: string): LineaReparto[] {
   try {
     const valor: unknown = JSON.parse(json);
-    return Array.isArray(valor) ? (valor as { venta_nota_id: string; monto_centavos: number }[]) : [];
+    if (!Array.isArray(valor)) return [];
+    return (valor as Partial<LineaReparto>[]).map((l) => ({
+      venta_nota_id: l.venta_nota_id as string,
+      monto_centavos: l.monto_centavos as number,
+      saldo_despues_centavos: typeof l.saldo_despues_centavos === 'number' ? l.saldo_despues_centavos : null,
+    }));
   } catch {
     return [];
   }

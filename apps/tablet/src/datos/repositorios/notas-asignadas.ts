@@ -53,7 +53,8 @@ interface FilaAsignada {
  *
  * "Tocada hoy" sale de `cobranza.fecha` = hoy + `reparto_json`, **nunca** de
  * `fecha_pago` ni de `nota_pendiente.abonos_json` (el pull lo pisa y trae
- * abonos de la oficina). Asi un pull que reescribe el saldo viejo antes de que
+ * abonos de la oficina). "Liquidada hoy" sale del mismo `reparto_json`
+ * (`saldo_despues_centavos` = 0). Asi un pull que reescribe el saldo viejo antes de que
  * suba el cobro no desbloquea ni bloquea de mas.
  */
 export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRepositorio) {
@@ -76,6 +77,7 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
     if (filas.length === 0) return [];
 
     const tocadas = new Set<string>();
+    const liquidadas = new Set<string>();
     const cobros = bd.getAllSync<{ reparto_json: string }>(
       `select reparto_json from cobranza where fecha = $hoy ${clienteId === null ? '' : 'and cliente_id = $cliente_id'}`,
       params,
@@ -83,6 +85,7 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
     for (const c of cobros) {
       for (const r of leerReparto(c.reparto_json)) {
         if (r.monto_centavos > 0) tocadas.add(r.venta_nota_id);
+        if (r.saldo_despues_centavos === 0) liquidadas.add(r.venta_nota_id);
       }
     }
 
@@ -106,6 +109,7 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
       diasAtraso: diasDeAtraso(f.fecha, f.plazo_credito_dias, hoy),
       condicion: f.condicion_venta,
       tocadaHoy: tocadas.has(f.venta_nota_id),
+      liquidadaHoy: liquidadas.has(f.venta_nota_id),
       comentadaHoy: comentadas.has(f.venta_nota_id),
     }));
   }
@@ -165,7 +169,8 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
       );
 
       const grabada = bd.getFirstSync<NotaNoCobrada>('select * from nota_no_cobrada where id = $id', { $id: id });
-      if (!grabada) throw new ErrorNotaNoCobrada('No se pudo leer el comentario recién grabado.');
+      // Fallo tecnico, no regla de negocio: no es ErrorNotaNoCobrada.
+      if (!grabada) throw new Error('No se pudo leer el comentario recién grabado.');
       return grabada;
     },
 
