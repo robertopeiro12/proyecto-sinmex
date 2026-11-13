@@ -186,10 +186,10 @@ describe("lib/rutas: edición local", () => {
   });
 
   it("asignarNota hace PUT con vendedor y fecha en el cuerpo", async () => {
-    await asignarNota("n1", "v1", "2026-11-10");
+    await asignarNota("n1", "v1", "2026-11-10", "liquidar");
     expect(apiFetch).toHaveBeenLastCalledWith("/rutas/diaria/notas/n1", {
       method: "PUT",
-      body: JSON.stringify({ vendedorId: "v1", fecha: "2026-11-10" }),
+      body: JSON.stringify({ vendedorId: "v1", fecha: "2026-11-10", condicionVenta: "liquidar" }),
     });
   });
 

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
-import { Campo, Entrada } from "@/components/ui/campo";
+import { Campo, Entrada, Lista } from "@/components/ui/campo";
 import { CajaTabla, FilaVacia, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
 import { Fecha } from "@/components/ui/fecha";
 import { Ventana } from "@/components/ui/ventana";
@@ -14,6 +14,8 @@ import {
   filtrarPorFolio,
   obtenerNotas,
   quitarNota,
+  TEXTO_CONDICION,
+  type CondicionVenta,
   type NotaDeRuta,
   type NotasDeRuta,
 } from "@/lib/rutas";
@@ -44,6 +46,8 @@ export function VentanaNotas({
   const [error, setError] = useState<string | null>(null);
   const [trabajando, setTrabajando] = useState(false);
   const [busqueda, setBusqueda] = useState("");
+  // Condición elegida por nota; sin tocar, la de la asignación actual o "ninguna".
+  const [elegidas, setElegidas] = useState<Record<string, CondicionVenta>>({});
 
   useEffect(() => {
     let vigente = true;
@@ -61,6 +65,9 @@ export function VentanaNotas({
 
   const visibles = useMemo(() => filtrarPorFolio(listas?.[cuales] ?? [], busqueda), [listas, cuales, busqueda]);
 
+  const condicionDe = (n: NotaDeRuta): CondicionVenta =>
+    elegidas[n.ventaNotaId] ?? n.asignadaA?.condicionVenta ?? "ninguna";
+
   async function accion(nota: NotaDeRuta, quitar: boolean) {
     setTrabajando(true);
     setError(null);
@@ -68,13 +75,32 @@ export function VentanaNotas({
       setListas(
         quitar
           ? await quitarNota(nota.ventaNotaId, vendedorId, fecha)
-          : await asignarNota(nota.ventaNotaId, vendedorId, fecha),
+          : await asignarNota(nota.ventaNotaId, vendedorId, fecha, condicionDe(nota)),
       );
     } catch (err) {
       setError(mensajeDe(err, quitar ? "No se pudo quitar la nota." : "No se pudo asignar la nota."));
     } finally {
       setTrabajando(false);
     }
+  }
+
+  function celdaCondicion(n: NotaDeRuta) {
+    const propia = n.asignadaA?.vendedorId === vendedorId;
+    if (!editable || propia) return n.asignadaA ? TEXTO_CONDICION[n.asignadaA.condicionVenta] : null;
+    return (
+      <Lista
+        aria-label={`Condición de la nota ${n.folio}`}
+        value={condicionDe(n)}
+        disabled={trabajando}
+        onChange={(e) => setElegidas((prev) => ({ ...prev, [n.ventaNotaId]: e.target.value as CondicionVenta }))}
+      >
+        {(Object.keys(TEXTO_CONDICION) as CondicionVenta[]).map((c) => (
+          <option key={c} value={c}>
+            {TEXTO_CONDICION[c]}
+          </option>
+        ))}
+      </Lista>
+    );
   }
 
   function celdaAccion(n: NotaDeRuta) {
@@ -118,6 +144,7 @@ export function VentanaNotas({
                 <col className="w-[96px]" />
                 <col className="w-[140px]" />
                 <col className="w-[90px]" />
+                <col className="w-[190px]" />
                 <col className="w-[240px]" />
               </colgroup>
               <thead>
@@ -127,12 +154,13 @@ export function VentanaNotas({
                   <Th>Fecha</Th>
                   <Th alinear="derecha">Saldo</Th>
                   <Th alinear="derecha" className="whitespace-normal leading-tight">Días de atraso</Th>
+                  <Th>Condición</Th>
                   <Th>Acción</Th>
                 </tr>
               </thead>
               <tbody>
                 {visibles.length === 0 ? (
-                  <FilaVacia columnas={6}>No hay notas por cobrar.</FilaVacia>
+                  <FilaVacia columnas={7}>No hay notas por cobrar.</FilaVacia>
                 ) : (
                   visibles.map((n) => (
                     <tr key={n.ventaNotaId}>
@@ -145,6 +173,7 @@ export function VentanaNotas({
                       </Td>
                       <TdMonto centavos={n.saldoCentavos} />
                       <Td alinear="derecha">{n.diasAtraso}</Td>
+                      <Td>{celdaCondicion(n)}</Td>
                       <Td>{celdaAccion(n)}</Td>
                     </tr>
                   ))
