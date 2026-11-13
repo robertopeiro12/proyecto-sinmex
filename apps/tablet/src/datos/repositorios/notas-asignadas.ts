@@ -9,7 +9,7 @@ import {
   type NotaAsignadaDeHoy,
 } from '../notas-asignadas-reglas';
 import type { CondicionVenta, FechaISO, NotaNoCobrada } from '../tipos';
-import type { DepsRepositorio } from './deps';
+import { enTransaccion, type DepsRepositorio } from './deps';
 import { exigirJornadaAbierta } from './jornadas';
 
 export { LARGO_MAX_COMENTARIO_NO_COBRADA };
@@ -26,6 +26,15 @@ export interface DatosNotaNoCobradaLocal {
   vendedorId: string;
   clienteId: string;
   ventaNotaId: string;
+  /** Tal cual lo escribio; se recorta al guardar. */
+  comentario: string;
+}
+
+/** Un solo "Continuar sin cobrar" sobre varias notas: el mismo comentario en cada una. */
+export interface DatosNotasNoCobradasLocal {
+  vendedorId: string;
+  clienteId: string;
+  ventaNotaIds: readonly string[];
   /** Tal cual lo escribio; se recorta al guardar. */
   comentario: string;
 }
@@ -115,6 +124,47 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
     }));
   }
 
+  /**
+   * @throws {ErrorJornada} si el dia de hoy ya esta cerrado: primero el candado.
+   * @throws {ErrorNotaNoCobrada} si el comentario recortado esta vacio o pasa de 300.
+   */
+  function exigirComentario(vendedorId: string, texto: string): string {
+    exigirJornadaAbierta({ bd, reloj }, vendedorId);
+    const comentario = texto.trim();
+    const error = errorDeComentario(comentario);
+    if (error !== null) throw new ErrorNotaNoCobrada(error);
+    return comentario;
+  }
+
+  /** Graba una fila ya validada. Cada vez es una fila nueva (no se edita ni se borra). */
+  function insertar(
+    datos: Omit<DatosNotaNoCobradaLocal, 'comentario'>,
+    comentario: string,
+  ): NotaNoCobrada {
+    const id = generarId();
+    bd.runSync(
+      `insert into nota_no_cobrada (
+         id, venta_nota_id, cliente_id, vendedor_id, fecha, comentario, registrado_en, sync_estado
+       ) values (
+         $id, $venta_nota_id, $cliente_id, $vendedor_id, $fecha, $comentario, $registrado_en, 'pendiente'
+       )`,
+      {
+        $id: id,
+        $venta_nota_id: datos.ventaNotaId,
+        $cliente_id: datos.clienteId,
+        $vendedor_id: datos.vendedorId,
+        $fecha: reloj.hoy(),
+        $comentario: comentario,
+        $registrado_en: reloj.ahora(),
+      },
+    );
+
+    const grabada = bd.getFirstSync<NotaNoCobrada>('select * from nota_no_cobrada where id = $id', { $id: id });
+    // Fallo tecnico, no regla de negocio: no es ErrorNotaNoCobrada.
+    if (!grabada) throw new Error('No se pudo leer el comentario recién grabado.');
+    return grabada;
+  }
+
   const repo = {
     /** Las asignadas de hoy del cliente, saldo 0 incluido. Orden: fecha y folio de la nota. */
     deHoyDelCliente(clienteId: string): NotaAsignadaDeHoy[] {
@@ -143,34 +193,22 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
      * @throws {ErrorNotaNoCobrada} si el comentario recortado esta vacio o pasa de 300.
      */
     registrarNoCobrada(datos: DatosNotaNoCobradaLocal): NotaNoCobrada {
-      exigirJornadaAbierta({ bd, reloj }, datos.vendedorId);
+      const comentario = exigirComentario(datos.vendedorId, datos.comentario);
+      return insertar(datos, comentario);
+    },
 
-      const comentario = datos.comentario.trim();
-      const error = errorDeComentario(comentario);
-      if (error !== null) throw new ErrorNotaNoCobrada(error);
-
-      const id = generarId();
-      bd.runSync(
-        `insert into nota_no_cobrada (
-           id, venta_nota_id, cliente_id, vendedor_id, fecha, comentario, registrado_en, sync_estado
-         ) values (
-           $id, $venta_nota_id, $cliente_id, $vendedor_id, $fecha, $comentario, $registrado_en, 'pendiente'
-         )`,
-        {
-          $id: id,
-          $venta_nota_id: datos.ventaNotaId,
-          $cliente_id: datos.clienteId,
-          $vendedor_id: datos.vendedorId,
-          $fecha: reloj.hoy(),
-          $comentario: comentario,
-          $registrado_en: reloj.ahora(),
-        },
+    /**
+     * "Continuar sin cobrar" sobre varias notas a la vez (la pantalla de la
+     * nota): una fila por nota con el mismo comentario, **todo o nada** en una
+     * transaccion. Mismos errores que `registrarNoCobrada`, antes de escribir.
+     */
+    registrarNoCobradas(datos: DatosNotasNoCobradasLocal): NotaNoCobrada[] {
+      const comentario = exigirComentario(datos.vendedorId, datos.comentario);
+      return enTransaccion(bd, () =>
+        datos.ventaNotaIds.map((ventaNotaId) =>
+          insertar({ vendedorId: datos.vendedorId, clienteId: datos.clienteId, ventaNotaId }, comentario),
+        ),
       );
-
-      const grabada = bd.getFirstSync<NotaNoCobrada>('select * from nota_no_cobrada where id = $id', { $id: id });
-      // Fallo tecnico, no regla de negocio: no es ErrorNotaNoCobrada.
-      if (!grabada) throw new Error('No se pudo leer el comentario recién grabado.');
-      return grabada;
     },
 
     /** Lo que falta por subir, incluidos los rechazados: se reintentan con la misma clave. */

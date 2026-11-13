@@ -2,12 +2,12 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Image, Linking, Modal, Pressable, Text, View } from 'react-native';
 
-import { ETIQUETA_CONDICION, motivoBloqueoVenta, porAtender } from '@/datos/notas-asignadas-reglas';
+import { motivoBloqueoVenta, porAtender } from '@/datos/notas-asignadas-reglas';
 import type { SyncEstado } from '@/datos/tipos';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
 import { firmaPorSubir } from '@/estado/firma';
 import { pastillaMovimiento, resumenMovimiento } from '@/estado/movimiento';
-import { venderDesdeFicha } from '@/estado/notas-asignadas';
+import { etiquetaCondicionPendiente, venderDesdeFicha } from '@/estado/notas-asignadas';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import { estadoSubida, pastillaAlta, urlMapa, urlTelefono } from '@/estado/ruta-del-dia';
@@ -240,7 +240,8 @@ export default function FichaCliente() {
           etiqueta="Notas asignadas por cobrar"
         >
           {asignadasConSaldo.map((n) => {
-            const condicion = ETIQUETA_CONDICION[n.condicion];
+            // Ya cumplida hoy: no se pinta "Debe ..." (fix T8).
+            const condicion = etiquetaCondicionPendiente(n);
             return (
               <View key={n.asignacionId} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
                 <Text style={estilos.textoTarjeta}>
@@ -275,7 +276,11 @@ export default function FichaCliente() {
                 tono="neutra"
                 deshabilitado={!menu.operacionesHabilitadas}
                 onPress={() =>
-                  router.push({ pathname: '/(jornada)/operacion/[clienteId]/notas-asignadas', params })
+                  // Con el comentario ya abierto: un toque basta.
+                  router.push({
+                    pathname: '/(jornada)/operacion/[clienteId]/notas-asignadas',
+                    params: { clienteId, comentar: '1' },
+                  })
                 }
               />
             </View>

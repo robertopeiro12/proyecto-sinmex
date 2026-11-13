@@ -255,6 +255,49 @@ describe('repositorio de notas asignadas', () => {
     expect(notas.pendientesDeSincronizar()).toEqual([]);
   });
 
+  it('registrarNoCobradas graba una fila por nota con el mismo comentario, en orden', () => {
+    const { notas } = montar();
+    const filas = notas.registrarNoCobradas({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      ventaNotaIds: ['nota-1', 'nota-2'],
+      comentario: '  No tenia efectivo ',
+    });
+    expect(filas.map((f) => [f.venta_nota_id, f.comentario])).toEqual([
+      ['nota-1', 'No tenia efectivo'],
+      ['nota-2', 'No tenia efectivo'],
+    ]);
+    expect(notas.pendientesDeSincronizar()).toHaveLength(2);
+  });
+
+  it('registrarNoCobradas es todo o nada: si falla la segunda no queda ninguna', () => {
+    const { notas, deps } = montar();
+    deps.bd.execSync(`
+      create trigger t8_falla_nota_2 before insert on nota_no_cobrada
+      when new.venta_nota_id = 'nota-2'
+      begin select raise(abort, 'falla a proposito'); end;
+    `);
+    expect(() =>
+      notas.registrarNoCobradas({
+        vendedorId: 'ven-1',
+        clienteId: 'cli-1',
+        ventaNotaIds: ['nota-1', 'nota-2'],
+        comentario: 'No estaba',
+      }),
+    ).toThrow();
+    expect(notas.pendientesDeSincronizar()).toEqual([]);
+  });
+
+  it('registrarNoCobradas valida el comentario y el dia antes de escribir', () => {
+    const { notas, jornadas } = montar();
+    const datos = { vendedorId: 'ven-1', clienteId: 'cli-1', ventaNotaIds: ['nota-1', 'nota-2'], comentario: ' ' };
+    expect(() => notas.registrarNoCobradas(datos)).toThrow(ErrorNotaNoCobrada);
+    const j = jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
+    jornadas.cerrar(j.id, 20);
+    expect(() => notas.registrarNoCobradas({ ...datos, comentario: 'x' })).toThrow(ErrorJornada);
+    expect(notas.pendientesDeSincronizar()).toEqual([]);
+  });
+
   it('la cola del push: pendientes y con error se reintentan; sincronizadas salen', () => {
     const { notas } = montar();
     const datos = { vendedorId: 'ven-1', clienteId: 'cli-1', ventaNotaId: 'nota-1', comentario: 'No estaba' };

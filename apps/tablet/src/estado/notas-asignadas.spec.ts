@@ -6,6 +6,8 @@ import {
   crearGuardiaComentario,
   despuesDeContinuar,
   destinoAlVender,
+  etiquetaCondicionPendiente,
+  notaParaCobrar,
   validarComentario,
   venderDesdeFicha,
 } from './notas-asignadas';
@@ -133,5 +135,60 @@ describe('agruparNotasParaCobrar', () => {
 
   it('una asignada que ya no esta entre las pendientes no aparece', () => {
     expect(agruparNotasParaCobrar([pendiente('n1')], [nota({ ventaNotaId: 'n9' })]).asignadas).toEqual([]);
+  });
+});
+
+describe('agruparNotasParaCobrar con saldo 0 (fix T8)', () => {
+  it('una asignada ya en saldo 0 (liquidada sin red) va a las otras, sin etiqueta', () => {
+    const grupos = agruparNotasParaCobrar(
+      [{ id: 'n1' }, { id: 'n2' }],
+      [
+        nota({ ventaNotaId: 'n1', condicion: 'liquidar', saldoCentavos: 0, tocadaHoy: true, liquidadaHoy: true }),
+        nota({ ventaNotaId: 'n2', condicion: 'abonar' }),
+      ],
+    );
+    expect(grupos.asignadas).toEqual([{ nota: { id: 'n2' }, etiqueta: 'Debe abonar' }]);
+    expect(grupos.otras).toEqual([{ id: 'n1' }]);
+  });
+
+  it('una asignada con la condicion ya cumplida hoy sigue en su grupo pero sin "Debe ..."', () => {
+    const grupos = agruparNotasParaCobrar(
+      [{ id: 'n1' }],
+      [nota({ ventaNotaId: 'n1', condicion: 'abonar', tocadaHoy: true, saldoCentavos: 5000 })],
+    );
+    expect(grupos.asignadas).toEqual([{ nota: { id: 'n1' }, etiqueta: null }]);
+  });
+});
+
+describe('etiquetaCondicionPendiente', () => {
+  it('dice la condicion mientras no se cumpla', () => {
+    expect(etiquetaCondicionPendiente(nota({ condicion: 'liquidar' }))).toBe('Debe liquidar');
+    expect(etiquetaCondicionPendiente(nota({ condicion: 'abonar' }))).toBe('Debe abonar');
+  });
+  it('nada con ninguna ni con la condicion cumplida hoy', () => {
+    expect(etiquetaCondicionPendiente(nota({ condicion: 'ninguna' }))).toBeNull();
+    expect(etiquetaCondicionPendiente(nota({ condicion: 'abonar', tocadaHoy: true }))).toBeNull();
+    expect(etiquetaCondicionPendiente(nota({ condicion: 'liquidar', liquidadaHoy: true, tocadaHoy: true }))).toBeNull();
+  });
+});
+
+describe('notaParaCobrar', () => {
+  it('la primera por atender', () => {
+    const notas = [
+      nota({ ventaNotaId: 'n1', tocadaHoy: true, condicion: 'abonar' }),
+      nota({ ventaNotaId: 'n2' }),
+    ];
+    expect(notaParaCobrar(notas)).toBe('n2');
+  });
+  it('sin por atender, la primera que aun no cumple (abono parcial a una que debe liquidar)', () => {
+    const notas = [
+      nota({ ventaNotaId: 'n1', tocadaHoy: true, condicion: 'abonar' }),
+      nota({ ventaNotaId: 'n2', tocadaHoy: true, condicion: 'liquidar', saldoCentavos: 5000 }),
+    ];
+    expect(notaParaCobrar(notas)).toBe('n2');
+  });
+  it('nada que cobrar: null', () => {
+    expect(notaParaCobrar([])).toBeNull();
+    expect(notaParaCobrar([nota({ tocadaHoy: true, condicion: 'abonar' })])).toBeNull();
   });
 });

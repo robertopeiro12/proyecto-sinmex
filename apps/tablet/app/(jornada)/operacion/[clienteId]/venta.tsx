@@ -19,6 +19,7 @@ import {
   type LineaCaptura,
   type Venta,
 } from '@/datos';
+import { motivoBloqueoVenta } from '@/datos/notas-asignadas-reglas';
 import {
   crearGrabadorVenta,
   ErrorFirma,
@@ -32,6 +33,7 @@ import {
   type EstadoFirma,
 } from '@/estado/firma';
 import { faltantesDeCaptura, textoTeQuedan } from '@/estado/inventario';
+import { notaParaCobrar } from '@/estado/notas-asignadas';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { guardarFirmaJpg } from '@/fotos/firma-expo';
 import { Boton } from '@/ui/boton';
@@ -120,11 +122,12 @@ export default function PantallaVenta() {
       setVueltas((n) => n + 1);
     }, []),
   );
-  const motivoNota = useMemo(() => {
+  const asignadas = useMemo(() => {
     void vueltas;
     void versionCatalogos;
-    return datos.notasAsignadas.bloqueoDeVenta(clienteId);
+    return datos.notasAsignadas.deHoyDelCliente(clienteId);
   }, [datos, clienteId, vueltas, versionCatalogos]);
+  const motivoNota = motivoBloqueoVenta(asignadas);
 
   const [paso, setPaso] = useState<Paso>('captura');
   const [capturas, setCapturas] = useState<Record<string, CapturaTexto>>({});
@@ -549,17 +552,21 @@ export default function PantallaVenta() {
   // Spec 2026-11-13 (regla 10): igual que la carga, solo en la captura;
   // `ventas.registrar` vuelve a exigirlo al grabar.
   if (motivoNota) {
+    const notaACobrar = notaParaCobrar(asignadas);
     return (
       <Pantalla titulo={`Venta · ${nombreCliente}`} subtitulo="Antes de vender cobra su nota asignada.">
         <Tarjeta estado="pendiente" etiqueta="Nota por cobrar">
-          <Text style={estilos.textoTarjeta}>{motivoNota}.</Text>
+          <Text style={estilos.textoTarjeta}>{motivoNota}</Text>
           <Text style={estilos.textoSuave}>Ve a cobrarla; después podrás vender.</Text>
         </Tarjeta>
         <Boton
           etiqueta="Ir a cobrar"
           glifo="→"
           onPress={() =>
-            router.push({ pathname: '/(jornada)/operacion/[clienteId]/cobranza', params: { clienteId } })
+            router.push({
+              pathname: '/(jornada)/operacion/[clienteId]/cobranza',
+              params: notaACobrar ? { clienteId, notaId: notaACobrar } : { clienteId },
+            })
           }
           estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
         />

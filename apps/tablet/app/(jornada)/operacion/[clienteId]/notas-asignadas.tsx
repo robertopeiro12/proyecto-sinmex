@@ -3,14 +3,15 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, Platform, Text, ToastAndroid, View } from 'react-native';
 
 import { ErrorJornada } from '@/datos';
-import {
-  ETIQUETA_CONDICION,
-  LARGO_MAX_COMENTARIO_NO_COBRADA,
-  porAtender,
-} from '@/datos/notas-asignadas-reglas';
+import { LARGO_MAX_COMENTARIO_NO_COBRADA, porAtender } from '@/datos/notas-asignadas-reglas';
 import { ErrorNotaNoCobrada } from '@/datos/repositorios/notas-asignadas';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
-import { crearGuardiaComentario, despuesDeContinuar, validarComentario } from '@/estado/notas-asignadas';
+import {
+  crearGuardiaComentario,
+  despuesDeContinuar,
+  etiquetaCondicionPendiente,
+  validarComentario,
+} from '@/estado/notas-asignadas';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
@@ -32,9 +33,15 @@ function avisar(texto: string) {
  * (`siguiente = 'venta'`). Toda decision esta en `estado/notas-asignadas.ts`.
  */
 export default function PantallaNotasAsignadas() {
-  const { clienteId, siguiente: siguienteParam } = useLocalSearchParams<{
+  const {
+    clienteId,
+    siguiente: siguienteParam,
+    comentar,
+  } = useLocalSearchParams<{
     clienteId: string;
     siguiente?: string;
+    /** `'1'`: llega desde "Continuar sin cobrar" de la ficha, con el comentario abierto. */
+    comentar?: string;
   }>();
   const siguiente = siguienteParam === 'venta' ? 'venta' : null;
   const { datos, vendedor, jornada, versionCatalogos } = useJawa();
@@ -56,7 +63,7 @@ export default function PantallaNotasAsignadas() {
   }, [datos, clienteId, vueltas, versionCatalogos]);
   const pendientes = porAtender(notas);
 
-  const [comentando, setComentando] = useState(false);
+  const [comentando, setComentando] = useState(comentar === '1');
   const [comentario, setComentario] = useState('');
   const [error, setError] = useState<string | null>(null);
   // Doble toque: cada `registrarNoCobrada` crea una fila nueva. Tras grabar se
@@ -103,18 +110,16 @@ export default function PantallaNotasAsignadas() {
       return;
     }
     try {
-      // Un solo comentario para todas las de esta vez: una fila por nota (regla 11).
-      const hecho = guardia.intentar(() => {
-        for (const n of pendientes) {
-          datos.notasAsignadas.registrarNoCobrada({
-            vendedorId,
-            clienteId,
-            ventaNotaId: n.ventaNotaId,
-            comentario,
-          });
-        }
-        return true;
-      });
+      // Un solo comentario para todas las de esta vez: una fila por nota
+      // (regla 11), todo o nada en una transaccion.
+      const hecho = guardia.intentar(() =>
+        datos.notasAsignadas.registrarNoCobradas({
+          vendedorId,
+          clienteId,
+          ventaNotaIds: pendientes.map((n) => n.ventaNotaId),
+          comentario,
+        }),
+      );
       if (hecho === null) return;
       setGuardado(true);
       avisar('Comentario guardado');
@@ -153,7 +158,7 @@ export default function PantallaNotasAsignadas() {
     >
       <Tarjeta estado="pendiente" etiqueta="Notas asignadas por cobrar">
         {pendientes.map((n) => {
-          const condicion = ETIQUETA_CONDICION[n.condicion];
+          const condicion = etiquetaCondicionPendiente(n);
           return (
             <View key={n.asignacionId} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
               <Text style={estilos.textoTarjeta}>

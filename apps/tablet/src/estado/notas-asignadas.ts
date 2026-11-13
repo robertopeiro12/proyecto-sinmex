@@ -1,4 +1,5 @@
 import {
+  cumpleCondicion,
   errorDeComentario,
   ETIQUETA_CONDICION,
   motivoBloqueoVenta,
@@ -72,12 +73,32 @@ export function agruparNotasParaCobrar<N extends { id: string }>(
   notas: N[],
   asignadas: NotaAsignadaDeHoy[],
 ): { asignadas: { nota: N; etiqueta: string | null }[]; otras: N[] } {
-  const condicion = new Map(asignadas.map((a) => [a.ventaNotaId, a.condicion]));
+  // Solo con saldo: una asignada que ya quedo en 0 (liquidada sin red, antes del
+  // pull) va con las otras, como cualquier nota pagada.
+  const porNota = new Map(asignadas.filter((a) => a.saldoCentavos > 0).map((a) => [a.ventaNotaId, a]));
   const grupos: { asignadas: { nota: N; etiqueta: string | null }[]; otras: N[] } = { asignadas: [], otras: [] };
   for (const nota of notas) {
-    const c = condicion.get(nota.id);
-    if (c === undefined) grupos.otras.push(nota);
-    else grupos.asignadas.push({ nota, etiqueta: ETIQUETA_CONDICION[c] });
+    const a = porNota.get(nota.id);
+    if (a === undefined) grupos.otras.push(nota);
+    else grupos.asignadas.push({ nota, etiqueta: etiquetaCondicionPendiente(a) });
   }
   return grupos;
+}
+
+/**
+ * "Debe liquidar" / "Debe abonar" mientras la condicion no se cumpla; `null`
+ * con `ninguna` o ya cumplida hoy (no se le pide al vendedor lo que ya hizo).
+ */
+export function etiquetaCondicionPendiente(n: NotaAsignadaDeHoy): string | null {
+  return cumpleCondicion(n) ? null : ETIQUETA_CONDICION[n.condicion];
+}
+
+/**
+ * La nota que "Ir a cobrar" deja preseleccionada: la primera por atender; si
+ * no hay, la primera que aun no cumple su condicion (p. ej. un abono parcial a
+ * una que debe liquidar). `null` = nada que cobrar.
+ */
+export function notaParaCobrar(notas: NotaAsignadaDeHoy[]): string | null {
+  const n = porAtender(notas)[0] ?? notas.find((x) => !cumpleCondicion(x));
+  return n?.ventaNotaId ?? null;
 }
