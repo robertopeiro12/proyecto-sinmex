@@ -304,6 +304,7 @@ describe('agregar', () => {
       fecha: HOY,
       orden: 5,
       origen: 'vendedor',
+      recado: null,
       activo: 1,
       sync_estado: 'pendiente',
       sync_error: null,

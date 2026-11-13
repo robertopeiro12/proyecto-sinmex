@@ -16,6 +16,7 @@ import { gastos } from './015-gastos';
 import { firmaVenta } from './016-firma-venta';
 import { cargas } from './017-cargas';
 import { movimientos } from './018-movimientos';
+import { notasAsignadas } from './019-notas-asignadas';
 import type { Migracion } from './motor';
 
 /**
@@ -46,6 +47,7 @@ export const migraciones: readonly Migracion[] = [
   firmaVenta,
   cargas,
   movimientos,
+  notasAsignadas,
 ];
 
 export { ejecutarMigraciones, versionEsquema } from './motor';

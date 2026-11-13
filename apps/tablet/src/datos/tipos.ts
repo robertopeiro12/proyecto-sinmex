@@ -262,6 +262,11 @@ export interface Cobranza {
   /** Motivo con el que el servidor lo rechazo, si `sync_estado = 'error'`. */
   sync_error: string | null;
   sincronizado_en: MomentoISO | null;
+  /**
+   * JSON `[{ venta_nota_id, monto_centavos }]`: a que notas fue el cobro. Lo
+   * llena el pull y la tablet al cobrar; `'[]'` en los cobros viejos.
+   */
+  reparto_json: string;
 }
 
 export type EstadoJornada = 'abierta' | 'cerrada';
@@ -370,6 +375,48 @@ export interface Ruta {
   clave: string | null;
   /** Cuando bajo. En un alta pendiente, cuando se capturo (va como `ocurrido_en`). */
   sincronizado_en: MomentoISO;
+  /** Recado de la oficina para el vendedor (<= 200); `null` si no hay. */
+  recado: string | null;
+}
+
+/** Lo que la oficina pide para venderle al cliente de una nota asignada. */
+export type CondicionVenta = 'ninguna' | 'liquidar' | 'abonar';
+
+/** Nombre de ruta y vehiculo del dia (espejo de `RutaDiaPull`). */
+export interface RutaDia {
+  id: string;
+  fecha: FechaISO;
+  nombre_ruta: string | null;
+  vehiculo_id: string | null;
+  activo: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
+/** Nota por cobrar que la oficina asigno al vendedor (espejo de `NotaAsignadaPull`). */
+export interface NotaAsignada {
+  id: string;
+  venta_nota_id: string;
+  fecha: FechaISO;
+  condicion_venta: CondicionVenta;
+  activo: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
+/** Comentario "continuar sin cobrar" sobre una nota asignada; sube con el push. */
+export interface NotaNoCobrada {
+  /** uuid generado al guardar. Es la clave de idempotencia del push. */
+  id: string;
+  venta_nota_id: string;
+  cliente_id: string;
+  vendedor_id: string;
+  /** Dia de trabajo (`reloj.hoy()`). */
+  fecha: FechaISO;
+  /** Recortado, 1 a 300 caracteres. */
+  comentario: string;
+  registrado_en: MomentoISO;
+  sync_estado: SyncEstado;
+  sync_error: string | null;
+  sincronizado_en: MomentoISO | null;
 }
 
 /* T-74: promociones por regla. Espejo de `PromocionPull`, con `se_repite` como entero de SQLite. */

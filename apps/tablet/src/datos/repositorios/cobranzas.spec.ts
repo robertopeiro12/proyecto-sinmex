@@ -75,6 +75,7 @@ describe('repositorio de cobranzas (T-20; sin folio desde T-21)', () => {
       sync_estado: 'pendiente',
       sync_error: null,
       sincronizado_en: null,
+      reparto_json: '[]',
     });
     expect(cuantas(deps, 'folio_emitido')).toBe(0);
   });
