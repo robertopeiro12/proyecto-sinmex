@@ -367,6 +367,16 @@ usuario con sesion pasa.
     el protocolo de push (pre-flight de la primera: tablas nuevas, columnas nulas y el check de origen ampliado; de la
     segunda: `select count(*) from nota_asignada where quitada_por_usuario_id is not null and deleted_at is null` debe dar 0). **Backend antes que
     la app.** Lo que le toca a Mario va en la nota del PR (spec §9).
+  - **Condición de venta y comentario de no cobro (2026-11-13).** `nota_asignada.condicion_venta` (`ninguna` por omisión,
+    `liquidar` o `abonar`, con check) y la tabla `nota_no_cobrada` (comentario 1..300) nacen en
+    `20261113120000_nota_asignada_condicion.sql`. La condición viaja **dentro de `asignadaA`** (`NotaDeRuta`); cambiarla es
+    Quitar + Asignar, porque el `PUT` del mismo vendedor no edita. La operación de push **`nota-no-cobrada`** (proyección en
+    `rutas/notas-no-cobradas.service.ts`, forma en `datos-nota-no-cobrada.ts`, sobre revisado en
+    `sincronizacion/despacho-nota-no-cobrada.ts`) no lleva folio, `cliente_id` va en el sobre, la clave es el id y se acepta
+    aunque la asignación ya no exista; rechazos `nota-no-encontrada` y `nota-no-cobrada-id-ocupado`. El servidor **no**
+    rechaza la venta (lo hace la tablet, PR 2). La revisión de notas une el último comentario vivo por nota y fecha, de
+    cualquier vendedor, y muestra el nombre del autor; la pestaña Ruta pinta "Nota sin cobrar · <folio>" sin contarla como
+    visita sin venta. **Nube**: se sube con el protocolo (pre-flight: nada que contar), backend y portal juntos.
 
 - **Promociones (T-74).** Regla de regalo por compra, configurada en el portal (*Operación → Promociones*, permiso
   `promocion.gestionar`; backend en `cartera-clientes/promociones.*`, `/promociones`) y **aplicada solo por la
