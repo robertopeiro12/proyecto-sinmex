@@ -225,6 +225,7 @@ export interface MovimientoInventarioLinea {
 
 export interface NotaAsignada {
   asignada_por_usuario_id: string;
+  condicion_venta: Generated<string>;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
   fecha: Timestamp;
@@ -233,6 +234,19 @@ export interface NotaAsignada {
   papel_revisado_en: Timestamp | null;
   papel_revisado_por_usuario_id: string | null;
   quitada_por_usuario_id: string | null;
+  updated_at: Generated<Timestamp>;
+  vendedor_id: string;
+  venta_nota_id: string;
+}
+
+export interface NotaNoCobrada {
+  comentario: string;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  fecha: Timestamp;
+  id: string;
+  registrado_en: Timestamp;
+  sucursal_id: string;
   updated_at: Generated<Timestamp>;
   vendedor_id: string;
   venta_nota_id: string;
@@ -666,6 +680,7 @@ export interface DB {
   movimiento_inventario: MovimientoInventario;
   movimiento_inventario_linea: MovimientoInventarioLinea;
   nota_asignada: NotaAsignada;
+  nota_no_cobrada: NotaNoCobrada;
   perfil: Perfil;
   perfil_permiso: PerfilPermiso;
   permiso: Permiso;
