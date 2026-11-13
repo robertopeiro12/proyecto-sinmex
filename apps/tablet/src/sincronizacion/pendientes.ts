@@ -1,5 +1,6 @@
 import type { RepositorioCobranzas } from '@/datos/repositorios/cobranzas';
 import type { RepositorioJornadas } from '@/datos/repositorios/jornadas';
+import type { RepositorioNotasAsignadas } from '@/datos/repositorios/notas-asignadas';
 import type { RepositorioMovimientos } from '@/datos/repositorios/movimientos';
 import type { RepositorioProspectos } from '@/datos/repositorios/prospectos';
 import type { RepositorioRutas } from '@/datos/repositorios/rutas';
@@ -22,6 +23,8 @@ export interface FuentesConPendientes {
   ventas: RepositorioVentas;
   prospectos: RepositorioProspectos;
   cobranzas: RepositorioCobranzas;
+  /** Los comentarios de "Continuar sin cobrar". */
+  notasAsignadas: RepositorioNotasAsignadas;
   /** T-39: las visitas sin venta. */
   visitas: RepositorioVisitas;
   /** T-30/T-31: los gastos de la ruta. */
@@ -33,7 +36,7 @@ export interface FuentesConPendientes {
 }
 
 /**
- * Cuenta lo que falta por subir, sumando las 8 fuentes del push de hoy (T-07,
+ * Cuenta lo que falta por subir, sumando las 9 fuentes del push de hoy (T-07,
  * T-16, T-40, T-20, T-39, T-30/T-31, T-37, T-27 pieza 2): jornada, venta,
  * prospecto, cobranza, visita, gasto, movimiento y alta de ruta.
  *
@@ -48,6 +51,7 @@ export function contarPendientesDeSubir(datos: FuentesConPendientes): number {
     datos.ventas.pendientesDeSincronizar().length +
     datos.prospectos.pendientesDeSincronizar().length +
     datos.cobranzas.pendientesDeSincronizar().length +
+    datos.notasAsignadas.pendientesDeSincronizar().length +
     datos.visitas.pendientesDeSincronizar().length +
     datos.gastos.pendientesDeSincronizar().length +
     datos.movimientos.pendientesDeSincronizar().length +
