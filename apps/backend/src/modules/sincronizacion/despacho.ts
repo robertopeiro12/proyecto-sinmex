@@ -7,6 +7,7 @@ import {
   type VentaNormalizada,
 } from '../ventas-cobranza/datos-venta';
 import type { JornadaNormalizada } from '../rutas/datos-jornada';
+import type { NotaNoCobradaNormalizada } from '../rutas/datos-nota-no-cobrada';
 import type { VisitaNormalizada } from '../rutas/datos-visita';
 import type { RutaAltaNormalizada } from '../rutas/datos-ruta-alta';
 import type { CobranzaNormalizada } from '../ventas-cobranza/datos-cobranza';
@@ -18,6 +19,7 @@ import { prepararJornada } from './despacho-jornada';
 import { prepararMovimiento } from './despacho-movimiento';
 import { prepararProspecto } from './despacho-prospecto';
 import { prepararRutaAlta } from './despacho-ruta-alta';
+import { prepararNotaNoCobrada } from './despacho-nota-no-cobrada';
 import { prepararVisita } from './despacho-visita';
 import type { OperacionNormalizada, Rechazo } from './operaciones';
 
@@ -34,7 +36,7 @@ import type { OperacionNormalizada, Rechazo } from './operaciones';
  * Un `tipo` sin modulo (`merma` y `ruta`, reservados) no tiene proyeccion:
  * se guarda en el buzon y queda `aplicada`, como desde T-07.
  * Orden acordado entre tickets: `venta`, `prospecto` (T-40), `cobranza` (T-20),
- * `jornada` (T-38), `ruta-alta` (T-37), `visita` (T-39), `gasto` (T-30/T-31),
+ * `nota-no-cobrada`, `jornada` (T-38), `ruta-alta` (T-37), `visita` (T-39), `gasto` (T-30/T-31),
  * `movimiento` (T-27 pieza 2).
  */
 export type Proyeccion =
@@ -51,6 +53,12 @@ export type Proyeccion =
   | { tipo: 'ruta-alta'; alta: RutaAltaNormalizada }
   // T-39. La fila es de `visita` con id = clave; el cliente es el del sobre.
   | { tipo: 'visita'; visita: VisitaNormalizada; clienteId: string }
+  // La fila es de `nota_no_cobrada` con id = clave; el cliente es el del sobre.
+  | {
+      tipo: 'nota-no-cobrada';
+      nota: NotaNoCobradaNormalizada;
+      clienteId: string;
+    }
   // T-30/T-31. La fila es de `gasto` con id = clave; sin cliente.
   | { tipo: 'gasto'; gasto: GastoNormalizado }
   // T-27 pieza 2. La fila es de `movimiento_inventario` con id = clave; el
@@ -155,6 +163,20 @@ export function prepararProyeccion(
       const r = prepararRutaAlta(op);
       if (!r.ok) return r;
       return { ok: true, proyeccion: { tipo: 'ruta-alta', alta: r.alta } };
+    }
+    case 'nota-no-cobrada': {
+      // La forma la revisa `despacho-nota-no-cobrada.ts`; la nota y el id
+      // ocupado, `NotasNoCobradasService` dentro de la transaccion.
+      const r = prepararNotaNoCobrada(op);
+      if (!r.ok) return r;
+      return {
+        ok: true,
+        proyeccion: {
+          tipo: 'nota-no-cobrada',
+          nota: r.nota,
+          clienteId: r.clienteId,
+        },
+      };
     }
     case 'visita': {
       // T-39. La forma la revisa `despacho-visita.ts`; el motivo y el id

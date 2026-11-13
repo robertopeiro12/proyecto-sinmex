@@ -413,7 +413,7 @@ tablet vieja la ignora; la tablet nueva la trata como opcional.
   - `rutas_dia` y `notas_asignadas` tienen la misma ventana que `rutas` (`fecha >= current_date - 1`, sin tope),
     el mismo incremental por `updated_at`, bajas como `activo: 0` y solo traen lo del **vendedor del token**.
   - **Pendiente de Mario:** la copia de los tipos en `apps/tablet/src/sincronizacion/contrato.ts` (`recado`,
-    `RutaDiaPull`, `NotaAsignadaPull`, `rutas_dia`, `notas_asignadas`) la actualiza él; este PR no toca `apps/tablet`.
+    `RutaDiaPull`, `NotaAsignadaPull` con `condicion_venta`, `rutas_dia`, `notas_asignadas`, y la operación `nota-no-cobrada` con `DatosNotaNoCobrada`) la actualiza él; este PR no toca `apps/tablet`.
 
 ### `promociones`: las reglas de regalo (T-74)
 
@@ -491,7 +491,7 @@ servidor anterior no lo manda y la tablet conserva lo que tenía (1 la primera v
   "operaciones": [
     {
       "clave": "9e0b…-4a1f",             // OBLIGATORIA. Ver idempotencia
-      "tipo": "jornada",                  // jornada|venta|cobranza|gasto|merma|ruta|prospecto|ruta-alta|visita|movimiento
+      "tipo": "jornada",                  // jornada|venta|cobranza|gasto|merma|ruta|prospecto|ruta-alta|visita|movimiento|nota-no-cobrada
       "fecha_operacion": "2026-08-07",   // día de trabajo (§4)
       "ocurrido_en": "2026-08-07T14:03:22.000-07:00",
       "cliente_id": "…",                  // opcional; se valida el alcance
@@ -537,7 +537,7 @@ no hacer.
 no sube la versión del contrato. Hoy tienen forma fija **`venta`** (T-16),
 **`prospecto`** (T-40), **`cobranza`** (T-20), **`jornada`** (T-38),
 **`ruta-alta`** (T-37), **`visita`** (T-39), **`gasto`** (T-30/T-31) y
-**`movimiento`** (T-27 pieza 2), los ocho abajo; `merma` y `ruta` siguen reservados
+**`movimiento`** (T-27 pieza 2) y **`nota-no-cobrada`**, los nueve abajo; `merma` y `ruta` siguen reservados
 sin forma, y el servidor los guarda tal cual.
 
 ### `datos` de una venta (T-16)
@@ -841,9 +841,41 @@ permiso o no haber señal, y eso no le impide registrar al prospecto.
 - **El servidor no revisa "exige foto" ni "exige nombre"**: lo exige la tablet al guardar.
 - Se guarda en `visita` con `id = clave` y `fecha = fecha_operacion`; el buzón apunta a esa fila
   (`entidad_tabla = 'visita'`). Puede haber varias visitas al día por cliente, y se puede visitar a un prospecto.
-- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → gastos → movimientos → rutas`. La visita a un prospecto
+- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → notas-no-cobradas → visitas → gastos → movimientos → rutas`. La visita a un prospecto
   capturado sin red necesita que su alta ya haya entrado en un lote anterior (el alcance se comprueba una vez por
   lote, como la venta de bienvenida de T-75).
+
+### `datos` de una nota no cobrada
+
+El vendedor, sin red, deja un comentario de por qué no cobró una nota que la oficina le asignó (`nota_asignada`).
+
+```jsonc
+{
+  "clave": "uuid de la fila local",     // ES el id del comentario en el servidor: debe ser uuid
+  "tipo": "nota-no-cobrada",
+  "fecha_operacion": "2026-11-13",      // el día al que cuenta el comentario
+  "ocurrido_en": "2026-11-13T18:40:00.000Z",
+  "cliente_id": "uuid",                 // en el SOBRE: pasa por el alcance del lote. Sin "folio"
+  "datos": {
+    "venta_nota_id": "uuid",            // la nota; tiene que ser del cliente del sobre
+    "comentario": "No estaba el encargado", // 1..300 tras recortar
+    "registrado_en": "2026-11-13T10:40:00-08:00" // instante ISO-8601 con zona
+  }
+}
+```
+
+- La forma se valida **antes** de la transacción (`prepararNotaNoCobrada`): clave no uuid, folio en el sobre, sin
+  `cliente_id`, `datos` que no es objeto, `venta_nota_id` no uuid, `comentario` vacío o de más de 300, o
+  `registrado_en` sin zona es `datos-invalidos` con un motivo que nombra el campo.
+- Dentro de la transacción (`NotasNoCobradasService.registrar`): una nota que no existe, que es de **otro cliente** que
+  el del sobre o de otra sucursal es `nota-no-encontrada`, con el mismo motivo neutro para los tres casos. Una nota
+  **borrada después** del comentario sí se acepta. Un id que ya ocupa otro comentario es `nota-no-cobrada-id-ocupado`,
+  con motivo neutro; la misma clave reenviada es `duplicada`.
+- **El servidor no revisa que la nota siga asignada** a ese vendedor: la oficina pudo pasarla a otro mientras la tablet
+  estaba sin red, y el comentario ya se escribió.
+- Se guarda en `nota_no_cobrada` con `id = clave` y `fecha = fecha_operacion`; el buzón apunta a esa fila
+  (`entidad_tabla = 'nota_no_cobrada'`). Puede haber varios comentarios sobre la misma nota.
+- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → notas-no-cobradas → visitas → gastos → movimientos → rutas`.
 
 ### `datos` de un gasto de la ruta (T-30/T-31)
 
@@ -873,7 +905,7 @@ permiso o no haber señal, y eso no le impide registrar al prospecto.
   `metodo = 'efectivo_cobranza_dia'`, `origen = 'app'`, `quien` = el nombre del vendedor y una copia del nombre y
   el tipo del campo. El buzón apunta a esa fila (`entidad_tabla = 'gasto'`).
 - Tesorería **lee** la tabla `gasto` (no copia nada) y resta el gasto de la cuenta de efectivo de la sucursal.
-- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → gastos → movimientos → rutas`.
+- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → notas-no-cobradas → visitas → gastos → movimientos → rutas`.
 - Las operaciones `gasto` que llegaron antes de T-30/T-31 (ninguna tablet las mandaba) se quedan en el buzón sin
   proyectar y sin relleno.
 
@@ -909,7 +941,7 @@ permiso o no haber señal, y eso no le impide registrar al prospecto.
 - **El servidor no revisa el límite de consumo ni la existencia**: las piezas ya salieron; lo exige la tablet.
 - Se guarda en `movimiento_inventario` con `id = clave`, `fecha = fecha_operacion` y la sucursal del token, y sus
   líneas en `movimiento_inventario_linea`. El buzón apunta a esa fila (`entidad_tabla = 'movimiento_inventario'`).
-- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → gastos → movimientos → rutas`. Una
+- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → notas-no-cobradas → visitas → gastos → movimientos → rutas`. Una
   merma a un prospecto cuya alta viaja en el mismo lote cae `cliente-fuera-de-alcance` (como la visita) y entra en el
   lote siguiente con la misma clave.
 
@@ -1009,6 +1041,7 @@ texto en español** si reintenta o si avisa al vendedor.
 | `ruta-duplicada` | Ya había una fila viva de ese vendedor, fecha y cliente con **otra** clave. **La tablet la trata como aplicada** (T-37) |
 | `motivo-visita-inexistente` | El `motivo_visita_id` de una visita no existe. Uno dado de baja **sí** se acepta. Se reintenta (T-39) |
 | `visita-id-ocupado` | El id (la clave) de la visita ya lo ocupa otro registro. Motivo neutro; avisar a la oficina (T-39) |
+| `nota-no-cobrada-id-ocupado` | El id (la clave) del comentario de nota no cobrada ya lo ocupa otro registro. Motivo neutro; avisar a la oficina |
 | `campo-egreso-inexistente` | El `campo_egreso_id` de un gasto no existe. Uno dado de baja **sí** se acepta y "se usa en la app" no se revisa. Se reintenta (T-30/T-31) |
 | `gasto-id-ocupado` | El id (la clave) del gasto ya lo ocupa otro registro. Motivo neutro; avisar a la oficina (T-30/T-31) |
 | `movimiento-id-ocupado` | El id (la clave) del movimiento de inventario ya lo ocupa otro registro. Motivo neutro; avisar a la oficina (T-27 pieza 2) |
@@ -1055,7 +1088,7 @@ El rechazo se recalcula en cada intento: es determinista y no necesita memoria.
 ### Una transacción por operación (T-16, ADR-0009)
 
 Cuando un `tipo` tiene un módulo de dominio que lo proyecta (hoy `venta`,
-`cobranza`, `prospecto`, `jornada`, `ruta-alta`, `visita`, `gasto` y `movimiento`), cada operación del lote se aplica **en su
+`cobranza`, `prospecto`, `jornada`, `ruta-alta`, `visita`, `gasto`, `movimiento` y `nota-no-cobrada`), cada operación del lote se aplica **en su
 propia transacción**:
 
 1. `INSERT` en `sync_operacion` con `on conflict (vendedor_id, clave_idempotencia) do nothing`.
@@ -1079,6 +1112,10 @@ propia transacción**:
    - `VisitasService.registrarVisita` (T-39) → comprueba que el motivo exista (**aunque esté dado de baja**) e
      inserta en `visita` con `id = clave` y `on conflict (id) do nothing`; si no insertó, `visita-id-ocupado`.
      La entidad es la fila de `visita`.
+   - `NotasNoCobradasService.registrar` → lee la nota (**aunque esté borrada**) y comprueba que sea del cliente y la
+     sucursal del sobre (si no, `nota-no-encontrada`); inserta en `nota_no_cobrada` con `id = clave` y
+     `on conflict (id) do nothing`; si no insertó, `nota-no-cobrada-id-ocupado`. **No consulta `nota_asignada`.**
+     La entidad es la fila de `nota_no_cobrada`.
    - `GastosService.registrarGasto` (T-30/T-31) → comprueba que el campo exista (**aunque esté dado de baja**),
      copia su nombre y su tipo e inserta en `gasto` con `id = clave` y `on conflict (id) do nothing`; si no
      insertó, `gasto-id-ocupado`. La entidad es la fila de `gasto`.
@@ -1086,7 +1123,7 @@ propia transacción**:
      estén dadas de baja**), inserta en `movimiento_inventario` con `id = clave` y `on conflict (id) do nothing` (si no
      insertó, `movimiento-id-ocupado`) y luego sus líneas. La entidad es la fila de `movimiento_inventario`.
 3. `commit` → `aplicada`. Si el dominio rechaza (`presentacion-inactiva`,
-   `precio-no-asignado`, `nota-no-encontrada`, `vehiculo-inexistente`, `jornada-duplicada`, `cliente-inexistente`, `ruta-duplicada`, `motivo-visita-inexistente`, `visita-id-ocupado`, `campo-egreso-inexistente`, `gasto-id-ocupado`, `movimiento-id-ocupado`),
+   `precio-no-asignado`, `nota-no-encontrada`, `vehiculo-inexistente`, `jornada-duplicada`, `cliente-inexistente`, `ruta-duplicada`, `motivo-visita-inexistente`, `visita-id-ocupado`, `campo-egreso-inexistente`, `gasto-id-ocupado`, `movimiento-id-ocupado`, `nota-no-cobrada-id-ocupado`),
    `rollback`: no queda **ni** la fila de negocio **ni** la del buzón.
 
 Los tipos reservados sin módulo (`merma`, `ruta`) se guardan en el buzón y

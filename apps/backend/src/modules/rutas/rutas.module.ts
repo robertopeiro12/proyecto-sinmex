@@ -4,6 +4,8 @@ import { JornadasService } from './jornadas.service';
 import { MotivosVisitaController } from './motivos-visita.controller';
 import { MotivosVisitaRepository } from './motivos-visita.repository';
 import { MotivosVisitaService } from './motivos-visita.service';
+import { NotasNoCobradasRepository } from './notas-no-cobradas.repository';
+import { NotasNoCobradasService } from './notas-no-cobradas.service';
 import { NotasAsignadasController } from './notas-asignadas.controller';
 import { NotasAsignadasRepository } from './notas-asignadas.repository';
 import { NotasAsignadasService } from './notas-asignadas.service';
@@ -31,6 +33,7 @@ import { VisitasService } from './visitas.service';
 // `ruta-alta`.
 //
 // T-39: el catalogo de motivos de visita vive aqui porque la visita es de Rutas (ADR-0009).
+// `NotasNoCobradasService` se exporta para que sincronizacion/ proyecte el "no cobre".
 // T-39: `VisitasService` se exporta para que sincronizacion/ proyecte la visita.
 @Module({
   controllers: [
@@ -58,7 +61,14 @@ import { VisitasService } from './visitas.service';
     MotivosVisitaRepository,
     VisitasService,
     VisitasRepository,
+    NotasNoCobradasService,
+    NotasNoCobradasRepository,
   ],
-  exports: [JornadasService, RutasDiariasService, VisitasService],
+  exports: [
+    JornadasService,
+    RutasDiariasService,
+    VisitasService,
+    NotasNoCobradasService,
+  ],
 })
 export class RutasModule {}
