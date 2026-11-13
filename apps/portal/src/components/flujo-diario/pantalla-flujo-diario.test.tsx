@@ -216,7 +216,7 @@ describe("PantallaFlujoDiario", () => {
     obtenerDetalle.mockResolvedValue({
       ...DETALLE,
       notasCredito: [
-        { ventaNotaId: "v1", folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null },
+        { ventaNotaId: "v1", folio: "TJ261109RB10", cliente: "Don Gallo", totalCentavos: 92000, pendienteCentavos: 92000, entregada: null, condicionVenta: null, comentarioVendedor: null },
       ],
     });
     guardarNotasEntregadas.mockResolvedValue(undefined);

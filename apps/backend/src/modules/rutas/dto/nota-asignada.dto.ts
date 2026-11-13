@@ -1,4 +1,5 @@
-import { IsUUID, Matches } from 'class-validator';
+import { IsIn, IsOptional, IsUUID, Matches } from 'class-validator';
+import { CONDICIONES_VENTA, type CondicionVenta } from '../reglas-notas-ruta';
 
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -12,7 +13,12 @@ export class ConsultaNotasDto {
 }
 
 /** `PUT /rutas/diaria/notas/:ventaNotaId`: a quien se le asigna y para que dia. */
-export class AsignarNotaDto extends ConsultaNotasDto {}
+export class AsignarNotaDto extends ConsultaNotasDto {
+  /** Lo que se le pide al vendedor; sin ella, `ninguna`. */
+  @IsOptional()
+  @IsIn(CONDICIONES_VENTA, { message: 'La condición de venta no es válida.' })
+  condicionVenta?: CondicionVenta;
+}
 
 /** El `:ventaNotaId` de la ruta. */
 export class NotaParamDto {

@@ -44,6 +44,7 @@ export class NotasAsignadasController {
       p.ventaNotaId,
       dto.vendedorId,
       dto.fecha,
+      dto.condicionVenta,
     );
   }
 

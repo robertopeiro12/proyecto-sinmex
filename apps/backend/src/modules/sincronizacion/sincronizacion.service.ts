@@ -23,6 +23,8 @@ import { CargasService } from '../produccion/cargas.service';
 import { JornadaRechazada } from '../rutas/jornada-rechazada';
 import { JornadasService } from '../rutas/jornadas.service';
 import { RutaRechazada } from '../rutas/ruta-rechazada';
+import { NotaNoCobradaRechazada } from '../rutas/nota-no-cobrada-rechazada';
+import { NotasNoCobradasService } from '../rutas/notas-no-cobradas.service';
 import { VisitaRechazada } from '../rutas/visita-rechazada';
 import { VisitasService } from '../rutas/visitas.service';
 import { RutasDiariasService } from '../rutas/rutas-diarias.service';
@@ -52,6 +54,7 @@ import {
 } from './despacho-prospecto';
 import { CODIGO_POR_RAZON_RUTA } from './despacho-ruta-alta';
 import { CODIGO_POR_RAZON_GASTO } from './despacho-gasto';
+import { CODIGO_POR_RAZON_NOTA_NO_COBRADA } from './despacho-nota-no-cobrada';
 import { CODIGO_POR_RAZON_VISITA } from './despacho-visita';
 import type { PullDto, PushDto } from './dto/sincronizacion.dto';
 import { INTENTOS_ANTE_CONFLICTO, reintentarAnteConflicto } from './reintento';
@@ -100,6 +103,8 @@ export class SincronizacionService {
     private readonly rutasDiarias: RutasDiariasService,
     // T-39: Rutas tambien es la duena de la visita sin venta.
     private readonly visitas: VisitasService,
+    // Rutas tambien es la duena del comentario "no cobre" de una nota asignada.
+    private readonly notasNoCobradas: NotasNoCobradasService,
     // T-72: geocodificar el domicilio de un prospecto sin GPS, DESPUES del commit.
     private readonly ubicacion: UbicacionClientesService,
     // T-30/T-31: Compras y Egresos es la duena del gasto de la ruta.
@@ -482,6 +487,16 @@ export class SincronizacionService {
           motivo: error.message,
         };
       }
+      // El rollback ya dejo sin fila tanto el buzon como el comentario.
+      if (error instanceof NotaNoCobradaRechazada) {
+        return {
+          clave: op.clave,
+          tipo: op.tipo,
+          estado: 'rechazada',
+          codigo: CODIGO_POR_RAZON_NOTA_NO_COBRADA[error.razon],
+          motivo: error.message,
+        };
+      }
       // T-39: el rollback ya dejo sin fila tanto el buzon como la visita.
       if (error instanceof VisitaRechazada) {
         return {
@@ -610,6 +625,22 @@ export class SincronizacionService {
             // Del token, nunca del cuerpo: el cliente se coteja contra ella.
             sucursalId: vendedor.sucursal_id,
             vendedorId: vendedor.id,
+            // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
+            fechaOperacion: op.fechaOperacion,
+          },
+          trx,
+        );
+      case 'nota-no-cobrada':
+        // La entidad del buzon es la fila de `nota_no_cobrada`.
+        return this.notasNoCobradas.registrar(
+          proyeccion.nota,
+          {
+            // La clave ES el id del comentario (uuid validado en prepararNotaNoCobrada).
+            id: op.clave,
+            // Del token, nunca del cuerpo.
+            sucursalId: vendedor.sucursal_id,
+            vendedorId: vendedor.id,
+            clienteId: proyeccion.clienteId,
             // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
             fechaOperacion: op.fechaOperacion,
           },

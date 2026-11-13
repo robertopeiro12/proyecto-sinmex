@@ -20,6 +20,8 @@ import {
   type VisitaDetalle,
 } from "@/lib/flujo-diario";
 import { formatearPesos, plural } from "@/lib/formato";
+import { Etiqueta } from "@/components/ui/etiqueta";
+import type { CondicionVenta } from "@/lib/rutas";
 import { hoyEnTijuana } from "@/lib/ventas";
 import {
   BotonFolio,
@@ -357,6 +359,12 @@ const TITULO_ASIGNADAS_POR_ENTREGAR = "Notas Asignadas NO cobradas por Entregar"
 const TITULO_NUEVAS = "Notas Nuevas x Cobrar Entregadas";
 const TITULO_NO_ENTREGADAS = "Notas de Ventas NO Entregadas";
 
+/** Etiqueta corta de la condición de venta (los textos largos del selector viven en `lib/rutas`). */
+const ETIQUETA_CONDICION: Record<Exclude<CondicionVenta, "ninguna">, string> = {
+  liquidar: "Solo si liquida",
+  abonar: "Solo si abona",
+};
+
 /** Los mismos anchos en las cuatro tablas: una debajo de la otra se leen como una sola lista. */
 function ColumnasRevision() {
   return (
@@ -398,8 +406,25 @@ function TablaRevision({
           <tbody>
             {notas.map((n) => (
               <tr key={n.ventaNotaId}>
-                <Td>{n.cliente}</Td>
-                <Td className="font-mono text-[12.5px] whitespace-nowrap">{n.folio}</Td>
+                <Td>
+                  {n.cliente}
+                  {n.comentarioVendedor && (
+                    <div
+                      className="line-clamp-2 text-xs text-muted-foreground"
+                      title={`${n.comentarioVendedor.vendedor}: ${n.comentarioVendedor.texto}`}
+                    >
+                      {n.comentarioVendedor.vendedor}: {n.comentarioVendedor.texto}
+                    </div>
+                  )}
+                </Td>
+                <Td className="font-mono text-[12.5px] whitespace-nowrap">
+                  {n.folio}
+                  {n.condicionVenta && n.condicionVenta !== "ninguna" && (
+                    <div className="mt-0.5 font-sans">
+                      <Etiqueta tono="advertencia">{ETIQUETA_CONDICION[n.condicionVenta]}</Etiqueta>
+                    </div>
+                  )}
+                </Td>
                 <TdMonto centavos={n.totalCentavos} />
                 <TdMonto centavos={n.pendienteCentavos} />
                 <Td alinear="centro">{entregada(n)}</Td>

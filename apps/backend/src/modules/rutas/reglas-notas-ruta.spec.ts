@@ -1,7 +1,15 @@
 import { armarNotasDeRuta, type NotaDeRuta } from './reglas-notas-ruta';
 
-const A = { vendedorId: 'va', nombre: 'Ana' };
-const B = { vendedorId: 'vb', nombre: 'Beto' };
+const A = {
+  vendedorId: 'va',
+  nombre: 'Ana',
+  condicionVenta: 'ninguna' as const,
+};
+const B = {
+  vendedorId: 'vb',
+  nombre: 'Beto',
+  condicionVenta: 'ninguna' as const,
+};
 
 function nota(
   folio: string,

@@ -3821,11 +3821,13 @@ describe('Sincronizacion pull/push (e2e)', () => {
       dias: number;
       borrada?: boolean;
       actualizadaHace?: string;
+      condicion?: 'ninguna' | 'liquidar' | 'abonar';
     }) =>
       (
         await db
           .insertInto('nota_asignada')
           .values({
+            condicion_venta: valores.condicion ?? 'ninguna',
             venta_nota_id: valores.nota,
             vendedor_id: valores.vendedor ?? vendedorId,
             fecha: sql<string>`current_date + ${valores.dias}::int`,
@@ -3959,6 +3961,7 @@ describe('Sincronizacion pull/push (e2e)', () => {
         id: asignada,
         venta_nota_id: nota,
         fecha: await fechaServidor(0),
+        condicion_venta: 'ninguna',
         activo: 1,
       });
       for (const id of [quitada, deVentaBorrada, ajena]) {
@@ -3993,7 +3996,54 @@ describe('Sincronizacion pull/push (e2e)', () => {
         id: quitada,
         venta_nota_id: otraNota,
         fecha: await fechaServidor(0),
+        condicion_venta: 'ninguna',
         activo: 0,
+      });
+    });
+
+    it('notas_asignadas: el pull completo trae condicion_venta de cada asignación', async () => {
+      const nota = await notaViva();
+      const asignada = await sembrarNotaAsignada({
+        nota,
+        dias: 0,
+        condicion: 'liquidar',
+      });
+
+      const cuerpo = (await pull().expect(200)).body as RespuestaPull;
+
+      expect(
+        cuerpo.notas_asignadas.find((r) => r.id === asignada)?.condicion_venta,
+      ).toBe('liquidar');
+    });
+
+    it('notas_asignadas: tras quitar y volver a asignar con otra condición, el incremental trae la vieja inactiva y la nueva activa', async () => {
+      const nota = await notaViva();
+      const vieja = await sembrarNotaAsignada({
+        nota,
+        dias: 0,
+        condicion: 'liquidar',
+        actualizadaHace: '1 hour',
+      });
+      const desde = await haceUnMinuto();
+      await db
+        .updateTable('nota_asignada')
+        .set({ deleted_at: new Date() })
+        .where('id', '=', vieja)
+        .execute();
+      const nueva = await sembrarNotaAsignada({
+        nota,
+        dias: 0,
+        condicion: 'abonar',
+      });
+
+      const cuerpo = (await pull({ desde }).expect(200)).body as RespuestaPull;
+
+      expect(cuerpo.notas_asignadas.find((r) => r.id === vieja)).toMatchObject({
+        activo: 0,
+      });
+      expect(cuerpo.notas_asignadas.find((r) => r.id === nueva)).toMatchObject({
+        activo: 1,
+        condicion_venta: 'abonar',
       });
     });
   });

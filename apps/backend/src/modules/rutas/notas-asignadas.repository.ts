@@ -2,6 +2,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { sql, type Transaction } from 'kysely';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import type { DB } from '../../database/schema';
+import type { CondicionVenta } from './reglas-notas-ruta';
 
 /** La nota que se va a asignar, ya bloqueada. */
 export interface NotaBloqueada {
@@ -15,6 +16,7 @@ export interface NotaBloqueada {
 export interface Asignacion {
   vendedorId: string;
   nombre: string;
+  condicionVenta: CondicionVenta;
 }
 
 /**
@@ -127,6 +129,7 @@ export class NotasAsignadasRepository {
       vendedorId: string;
       fecha: string;
       usuarioId: string;
+      condicionVenta: CondicionVenta;
     },
     trx: Transaction<DB>,
   ): Promise<void> {
@@ -137,6 +140,7 @@ export class NotasAsignadasRepository {
         vendedor_id: datos.vendedorId,
         fecha: datos.fecha,
         asignada_por_usuario_id: datos.usuarioId,
+        condicion_venta: datos.condicionVenta,
       })
       .execute();
   }
@@ -164,7 +168,12 @@ export class NotasAsignadasRepository {
     const filas = await this.db
       .selectFrom('nota_asignada as na')
       .innerJoin('vendedor as v', 'v.id', 'na.vendedor_id')
-      .select(['na.venta_nota_id', 'v.id as vendedor_id', 'v.nombre'])
+      .select([
+        'na.venta_nota_id',
+        'v.id as vendedor_id',
+        'v.nombre',
+        'na.condicion_venta',
+      ])
       .where('na.venta_nota_id', 'in', [...ventaNotaIds])
       .where(sql<boolean>`na.fecha = ${fecha}::date`)
       .where('na.deleted_at', 'is', null)
@@ -172,7 +181,11 @@ export class NotasAsignadasRepository {
     return new Map(
       filas.map((f) => [
         f.venta_nota_id,
-        { vendedorId: f.vendedor_id, nombre: f.nombre },
+        {
+          vendedorId: f.vendedor_id,
+          nombre: f.nombre,
+          condicionVenta: f.condicion_venta as CondicionVenta,
+        },
       ]),
     );
   }

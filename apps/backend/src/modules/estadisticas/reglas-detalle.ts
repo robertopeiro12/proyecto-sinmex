@@ -3,6 +3,7 @@
  * sin base de datos. El repositorio entrega filas planas; aqui se agrupa,
  * se ordena y se calcula el corte con `resumir` (la misma cuenta del renglon).
  */
+import type { CondicionVenta } from '../rutas/reglas-notas-ruta';
 import { resumir } from './reglas-flujo-diario';
 
 export type MetodoPago = 'efectivo' | 'transferencia' | 'cheque';
@@ -98,6 +99,13 @@ export interface NotaRevision {
    * asignada es `nota_asignada.papel_entregado`; en una nueva, el de la venta.
    */
   entregada: boolean | null;
+  /** Solo una asignada la trae; null en las nuevas a credito. */
+  condicionVenta: CondicionVenta | null;
+  /**
+   * Ultimo "no cobre" de la nota ese dia, de CUALQUIER vendedor (si A la paso a
+   * B, B ve el de A con el nombre de A). null en las nuevas a credito.
+   */
+  comentarioVendedor: { texto: string; vendedor: string } | null;
 }
 
 export interface NotaNoEntregada {
@@ -211,6 +219,16 @@ export interface RutaFila {
   orden: number;
 }
 
+/** Un "no cobre" del vendedor ese dia (`nota_no_cobrada`), con su cliente y folio. */
+export interface NotaNoCobradaFila {
+  clienteId: string;
+  cliente: string;
+  folio: string;
+  /** ISO. */
+  hora: string;
+  comentario: string;
+}
+
 export interface PromoFila {
   cliente: string;
   producto: string;
@@ -319,6 +337,8 @@ export function armarDetalleVendedor(
     ruta?: RutaFila[];
     /** Sus notas asignadas de ese dia; sin ellas, ninguna. */
     asignadas?: AsignadaFila[];
+    /** Sus "no cobre" de ese dia; no cuentan como visita sin venta. */
+    notasNoCobradas?: NotaNoCobradaFila[];
   },
 ): DetalleVendedorDia {
   const ventas = [...filas.ventas].sort(
@@ -390,6 +410,18 @@ export function armarDetalleVendedor(
       motivo: v.motivo,
       atendio: v.atendio,
       comentario: v.comentario,
+    })),
+    // Decision 17: una nota no cobrada cuenta como visita en la pestaña Ruta,
+    // pero NO entra a `visitasSinVenta` ni a ningun conteo.
+    ...(filas.notasNoCobradas ?? []).map((n) => ({
+      clienteId: n.clienteId,
+      cliente: n.cliente,
+      visitado: true,
+      vendio: false,
+      hora: n.hora,
+      motivo: `Nota sin cobrar · ${n.folio}`,
+      atendio: null,
+      comentario: n.comentario,
     })),
   ]);
   const ruta = [...(filas.ruta ?? [])].sort((a, b) => a.orden - b.orden);
@@ -485,6 +517,8 @@ export function armarDetalleVendedor(
           totalCentavos: v.totalCentavos,
           pendienteCentavos: v.pendienteCentavos,
           entregada: v.entregada,
+          condicionVenta: null,
+          comentarioVendedor: null,
         })),
     ),
     asignadasCobradas: porClienteFolio(

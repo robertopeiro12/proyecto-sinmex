@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
@@ -218,6 +219,10 @@ describe('Dashboard (e2e)', () => {
       .execute();
     await db
       .deleteFrom('nota_asignada')
+      .where('vendedor_id', 'in', vendedorIds)
+      .execute();
+    await db
+      .deleteFrom('nota_no_cobrada')
       .where('vendedor_id', 'in', vendedorIds)
       .execute();
     await db
@@ -927,6 +932,8 @@ describe('Dashboard (e2e)', () => {
           totalCentavos: 10000,
           pendienteCentavos: 0,
           entregada: null,
+          condicionVenta: 'ninguna',
+          comentarioVendedor: null,
         },
       ]);
       expect(ids(d.asignadasPorEntregar)).toEqual(
@@ -944,6 +951,8 @@ describe('Dashboard (e2e)', () => {
           totalCentavos: 5000,
           pendienteCentavos: 5000,
           entregada: null,
+          condicionVenta: null,
+          comentarioVendedor: null,
         },
       ]);
       expect(d.notasCredito.map((n) => n.folio)).not.toContain(
@@ -1158,6 +1167,172 @@ describe('Dashboard (e2e)', () => {
       );
       expect(ids(d.asignadasPorEntregar)).not.toContain(asigSinPago.id);
       expect(await noEntregadasFlujo(hoyEnTijuana())).toBe(2);
+    });
+  });
+
+  describe('condicion y comentario de no cobro (Notas asignadas)', () => {
+    let eva: string;
+    let fer: string;
+    let clienteNnc: string;
+
+    const fecha = () => hoyEnTijuana();
+
+    const creditoNnc = async (monto: string) => {
+      const folio =
+        `ZNN${Math.random().toString(36).slice(2, 8)}${SUFIJO}`.slice(0, 30);
+      const { id } = await db
+        .insertInto('venta_nota')
+        .values({
+          folio,
+          fecha: '2026-01-05',
+          cliente_id: clienteNnc,
+          vendedor_id: eva,
+          monto_total: monto,
+          contado_credito: 'credito',
+          semana: 1,
+          mes: 1,
+          status: 'pendiente',
+          sucursal_id: idDb,
+          origen: 'portal',
+          capturo_usuario_id: generalId,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      return { id, folio };
+    };
+
+    const asignarNnc = (
+      n: { id: string },
+      v: string,
+      condicion: 'ninguna' | 'liquidar' | 'abonar' = 'ninguna',
+    ) =>
+      db
+        .insertInto('nota_asignada')
+        .values({
+          venta_nota_id: n.id,
+          vendedor_id: v,
+          fecha: fecha(),
+          asignada_por_usuario_id: generalId,
+          condicion_venta: condicion,
+        })
+        .execute();
+
+    const comentar = (
+      n: { id: string },
+      v: string,
+      comentario: string,
+      registradoEn: string,
+    ) =>
+      db
+        .insertInto('nota_no_cobrada')
+        .values({
+          id: randomUUID(),
+          venta_nota_id: n.id,
+          vendedor_id: v,
+          sucursal_id: idDb,
+          fecha: fecha(),
+          comentario,
+          registrado_en: registradoEn,
+        })
+        .execute();
+
+    const detalleDe = async (v: string) =>
+      (await pedir(cookieGeneral, '/vendedor', { vendedor: v }).expect(200))
+        .body as DetalleVendedorDia;
+
+    beforeAll(async () => {
+      eva = await vendedor('Eva', idDb);
+      fer = await vendedor('Fer', idDb);
+      clienteNnc = (
+        await db
+          .insertInto('cliente')
+          .values({
+            nombre: `Cliente nnc ${SUFIJO}`,
+            domicilio: 'Calle 2',
+            telefono: '6640000001',
+            tipo: 'cliente',
+            lista_precio_id: (
+              await db
+                .selectFrom('lista_precio')
+                .select('id')
+                .where('nombre', '=', 'Lista 1')
+                .executeTakeFirstOrThrow()
+            ).id,
+            sucursal_id: idDb,
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+      clienteIds.push(clienteNnc);
+    });
+
+    it('la revision muestra la condicion y el ultimo comentario de la asignada', async () => {
+      const n = await creditoNnc('80.00');
+      await asignarNnc(n, eva, 'abonar');
+      await comentar(n, eva, 'Primero', '2026-11-13T17:00:00Z');
+      await comentar(n, eva, 'El mas reciente', '2026-11-13T19:00:00Z');
+      await comentar(n, eva, 'Intermedio', '2026-11-13T18:00:00Z');
+      const d = await detalleDe(eva);
+      expect(
+        d.asignadasPorEntregar.find((x) => x.ventaNotaId === n.id),
+      ).toMatchObject({
+        condicionVenta: 'abonar',
+        comentarioVendedor: {
+          texto: 'El mas reciente',
+          vendedor: `Eva ${SUFIJO}`,
+        },
+      });
+    });
+
+    it('el comentario de A se ve en la revision de B despues de pasarle la nota, con el nombre de A', async () => {
+      const n = await creditoNnc('90.00');
+      await asignarNnc(n, eva, 'liquidar');
+      await comentar(n, eva, 'No estaba', '2026-11-13T17:00:00Z');
+      // Pasar = baja de la de A + alta de la de B.
+      await db
+        .updateTable('nota_asignada')
+        .set({ deleted_at: new Date().toISOString() })
+        .where('venta_nota_id', '=', n.id)
+        .where('vendedor_id', '=', eva)
+        .execute();
+      await asignarNnc(n, fer, 'ninguna');
+      const d = await detalleDe(fer);
+      expect(
+        d.asignadasPorEntregar.find((x) => x.ventaNotaId === n.id),
+      ).toMatchObject({
+        condicionVenta: 'ninguna',
+        comentarioVendedor: { texto: 'No estaba', vendedor: `Eva ${SUFIJO}` },
+      });
+    });
+
+    it("la pestaña Ruta muestra 'Nota sin cobrar · <folio>' para el cliente comentado", async () => {
+      const n = await creditoNnc('60.00');
+      await asignarNnc(n, eva);
+      await comentar(n, eva, 'Cerrado', '2026-11-13T20:00:00Z');
+      await db
+        .insertInto('ruta')
+        .values({
+          vendedor_id: eva,
+          cliente_id: clienteNnc,
+          fecha: fecha(),
+          tipo: 'diaria',
+          orden: 1,
+        })
+        .execute();
+      const d = await detalleDe(eva);
+      const v = d.visitas.find(
+        (x) => x.motivo === `Nota sin cobrar · ${n.folio}`,
+      );
+      expect(v).toMatchObject({
+        cliente: `Cliente nnc ${SUFIJO}`,
+        visitado: true,
+        vendio: false,
+        comentario: 'Cerrado',
+        atendio: null,
+      });
+      expect(d.visitas.some((x) => x.motivo === null && !x.visitado)).toBe(
+        false,
+      );
     });
   });
 });

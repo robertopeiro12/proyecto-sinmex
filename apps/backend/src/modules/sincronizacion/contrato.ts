@@ -80,6 +80,10 @@ export const MAX_BYTES_POR_LOTE = 1_000_000;
  *        {@link DatosVisita}); se proyecta a la tabla `visita` con `id = clave`.
  *        **No** reutiliza `ruta`, que sigue reservado y se guarda sin proyectar.
  *        Tipo nuevo = cambio aditivo: no sube la version.
+ * Hecho: `nota-no-cobrada`, el comentario "no cobre" que el vendedor deja sobre
+ *        una nota asignada (ver {@link DatosNotaNoCobrada}); se proyecta a la
+ *        tabla `nota_no_cobrada` con `id = clave`. Tipo nuevo = cambio aditivo:
+ *        no sube la version.
  * Hecho: T-37 — `ruta-alta`, un cliente que el vendedor agrego a su ruta del
  *        dia (ver {@link DatosRutaAlta}); se proyecta a la tabla `ruta` con
  *        `origen = 'vendedor'`. **No** reutiliza `ruta`, que queda reservado a
@@ -103,6 +107,7 @@ export const TIPOS_OPERACION = [
   'ruta-alta',
   'visita',
   'movimiento',
+  'nota-no-cobrada',
 ] as const;
 
 export type TipoOperacion = (typeof TIPOS_OPERACION)[number];
@@ -193,6 +198,10 @@ export const CODIGOS_RECHAZO = [
    * acepta y el monto va a las otras notas y al saldo a favor (el dinero si se
    * cobro). Una cobranza sobre una venta que aun no se proyecto si cae aqui, y
    * la tablet la reenvia en cada sincronizacion.
+   *
+   * Tambien lo da `nota-no-cobrada`: la nota comentada no existe, no es del
+   * `cliente_id` del sobre o no es de la sucursal del vendedor. La tablet deja la
+   * fila en `error` y no la reintenta (a diferencia de la cobranza).
    */
   'nota-no-encontrada',
   /**
@@ -255,6 +264,12 @@ export const CODIGOS_RECHAZO = [
    * neutro a proposito: no confirma que hay detras del id.
    */
   'visita-id-ocupado',
+  /**
+   * El id (la clave) de un comentario de nota no cobrada ya esta ocupado por
+   * otro registro. El mismo vendedor con la misma clave es `duplicada`, no
+   * esto. El motivo es neutro a proposito: no confirma que hay detras del id.
+   */
+  'nota-no-cobrada-id-ocupado',
   /**
    * El `campo_egreso_id` de un gasto no existe en el catalogo. T-30/T-31. Un
    * campo **dado de baja si se acepta**, y tampoco se mira "se usa en la app":
@@ -490,6 +505,26 @@ export type DatosJornada = {
 export type DatosRutaAlta = {
   /** uuid de un `cliente` (no prospecto) de la sucursal del vendedor. */
   cliente_id: string;
+};
+
+/**
+ * `datos` de una operacion `tipo: "nota-no-cobrada"`: el comentario "no cobre"
+ * sobre una nota asignada.
+ *
+ * `cliente_id` va en el **sobre** (se comprueba con el alcance normal del
+ * lote) y no lleva folio. La `clave` **es el id** de la fila: debe ser uuid. La
+ * nota tiene que ser del cliente del sobre y de la sucursal del vendedor; el
+ * servidor **no** revisa que siga asignada al vendedor.
+ *
+ * Es `type` y no `interface` por la misma razon que {@link DatosVenta}.
+ */
+export type DatosNotaNoCobrada = {
+  /** uuid de la `venta_nota` (viva o ya borrada). */
+  venta_nota_id: string;
+  /** 1..300 tras recortar. */
+  comentario: string;
+  /** Instante ISO-8601 con zona en que el vendedor lo guardo. */
+  registrado_en: string;
 };
 
 /**
@@ -914,6 +949,11 @@ export interface NotaAsignadaPull extends FilaSincronizable {
   venta_nota_id: string;
   /** `AAAA-MM-DD`. */
   fecha: string;
+  /**
+   * Spec 2026-11-13: lo que la oficina pide para venderle. Aditivo. La tablet
+   * decide el bloqueo; el servidor no rechaza la venta.
+   */
+  condicion_venta: 'ninguna' | 'liquidar' | 'abonar';
 }
 
 /* ------------------------------------------------------------------ */

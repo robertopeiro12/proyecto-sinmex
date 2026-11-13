@@ -56,6 +56,7 @@ describe('Flujo diario (e2e)', () => {
   let carla: string;
   let dani: string;
   let eva: string;
+  let fede: string;
   let vendedorOtra: string;
   let idOtra: string;
   let folios = 0;
@@ -376,6 +377,7 @@ describe('Flujo diario (e2e)', () => {
     carla = await sembrarVendedor('Carla');
     dani = await sembrarVendedor('Dani');
     eva = await sembrarVendedor('Eva');
+    fede = await sembrarVendedor('Fede');
     const c1 = await sembrarCliente('Cliente 1');
     const c2 = await sembrarCliente('Cliente 2');
     const c3 = await sembrarCliente('Cliente 3');
@@ -416,6 +418,32 @@ describe('Flujo diario (e2e)', () => {
 
     // Beto, 05-07: solo ruta.
     await sembrarRuta(beto, '2018-05-07', [c3]);
+
+    // Fede, 05-09: ruta de 2 (c5, c6). Sin ventas ni visitas: solo el comentario
+    // "no cobre" sobre una nota de c5 que se borro despues (decisiones 13 y 17).
+    const c5 = await sembrarCliente('Cliente 5');
+    const c6 = await sembrarCliente('Cliente 6');
+    await sembrarRuta(fede, '2018-05-09', [c5, c6]);
+    const notaFede = await sembrarVenta({
+      clienteId: c5,
+      fecha: '2018-05-01',
+      vendedor: fede,
+      monto: '80.00',
+      contado: false,
+      borrada: true,
+    });
+    await db
+      .insertInto('nota_no_cobrada')
+      .values({
+        id: randomUUID(),
+        venta_nota_id: notaFede,
+        vendedor_id: fede,
+        sucursal_id: idFd,
+        fecha: '2018-05-09',
+        comentario: 'No estaba el encargado',
+        registrado_en: new Date(),
+      })
+      .execute();
 
     // Carla: nota a credito del 05-01 de c4 (150); el 05-08 cobra 200 (150 + 50 a favor).
     const notaCarla = await sembrarVenta({
@@ -742,6 +770,10 @@ describe('Flujo diario (e2e)', () => {
     await porVendedor('visita');
     await porVendedor('jornada');
     await porVendedor('ruta');
+    await db
+      .deleteFrom('nota_no_cobrada')
+      .where('vendedor_id', 'in', vendedorIds)
+      .execute();
     if (clienteIds.length > 0) {
       const notas = db
         .selectFrom('venta_nota')
@@ -885,6 +917,16 @@ describe('Flujo diario (e2e)', () => {
         montoCentavos: 0,
         cobranzaCentavos: 0,
         estatus: 'en_ruta',
+      });
+    });
+
+    it('Fede: un cliente con solo el comentario "no cobre" cuenta como atendido en la ruta (aunque la nota se borrara)', async () => {
+      const r = await deFd();
+      expect(renglon(r, fede, '2018-05-09')).toMatchObject({
+        clientesEnRuta: 2,
+        atendidosEnRuta: 1,
+        piezas: 0,
+        montoCentavos: 0,
       });
     });
 
@@ -1077,6 +1119,19 @@ describe('Flujo diario (e2e)', () => {
         [`Cliente 3 ${SUFIJO}`, false, false],
       ]);
       expect(d.visitas[2].hora).toBeNull();
+    });
+
+    it('Ruta: el cliente con comentario "no cobre" sobre una nota borrada sale visitado', async () => {
+      const d = (
+        await detalleVendedor(cookieGeneral, {
+          fecha: '2018-05-09',
+          vendedor: fede,
+        }).expect(200)
+      ).body as DetalleVendedorDia;
+      expect(d.visitas.map((v) => [v.cliente, v.visitado, v.vendio])).toEqual([
+        [`Cliente 5 ${SUFIJO}`, true, false],
+        [`Cliente 6 ${SUFIJO}`, false, false],
+      ]);
     });
 
     it('el corte y las listas suman lo mismo que el renglon del reporte', async () => {

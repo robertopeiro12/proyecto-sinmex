@@ -27,6 +27,7 @@ import {
 } from "@/lib/rutas";
 import { CarteraRuta } from "./cartera-ruta";
 import { ListaRutaDiaria } from "./lista-ruta-diaria";
+import { VentanaNotas } from "./ventana-notas";
 
 const VACIA: RutaEditable = { rutaSemanalId: null, vehiculoId: null, filas: [] };
 
@@ -58,6 +59,7 @@ export function RutaDeVendedor({
   const [cargando, setCargando] = useState(true);
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [verNotas, setVerNotas] = useState(false);
   const { confirmar, ventana } = useConfirmar();
 
   const editable = ruta?.editable ?? false;
@@ -213,15 +215,25 @@ export function RutaDeVendedor({
         descripcion="La ruta, el vehículo y los clientes que visita ese día, en orden y con su mensaje."
         acciones={
           ruta && editable ? (
-            <Button type="button" disabled={!sucio || ocupado} onClick={() => void guardar()}>
-              {ocupado ? "Guardando…" : "Guardar"}
-            </Button>
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" disabled={ocupado} onClick={() => setVerNotas(true)}>
+                Asignar notas
+              </Button>
+              <Button type="button" disabled={!sucio || ocupado} onClick={() => void guardar()}>
+                {ocupado ? "Guardando…" : "Guardar"}
+              </Button>
+            </div>
           ) : undefined
         }
       />
 
       {ruta && !editable ? <Aviso tono="informacion">Ese día ya pasó; solo se puede consultar.</Aviso> : null}
       {sucio ? <Aviso tono="advertencia">Cambios sin guardar</Aviso> : null}
+      {sucio && editable ? (
+        <p className="text-sm text-muted-foreground">
+          Para asignar notas, el cliente debe estar ya guardado en la ruta del día.
+        </p>
+      ) : null}
       {error ? <Aviso tono="error">{error}</Aviso> : null}
 
       {ruta ? (
@@ -285,6 +297,16 @@ export function RutaDeVendedor({
             />
           </div>
         </>
+      ) : null}
+      {verNotas ? (
+        <VentanaNotas
+          vendedorId={vendedorId}
+          vendedorNombre={ruta?.vendedor.nombre ?? vendedorNombre}
+          fecha={fecha}
+          editable={editable}
+          cuales="pendientes"
+          alCerrar={() => setVerNotas(false)}
+        />
       ) : null}
       {ventana}
     </Pantalla>

@@ -11,6 +11,7 @@ import { NotasAsignadasRepository } from './notas-asignadas.repository';
 import { NotasRutaRepository } from './notas-ruta.repository';
 import {
   armarNotasDeRuta,
+  type CondicionVenta,
   type NotaDeRuta,
   type NotasDeRuta,
 } from './reglas-notas-ruta';
@@ -61,6 +62,7 @@ export class NotasAsignadasService {
     ventaNotaId: string,
     vendedorId: string,
     fecha: string,
+    condicionVenta: CondicionVenta = 'ninguna',
   ): Promise<NotasDeRuta> {
     exigirFechaReal(fecha);
     const hoy = this.exigirEditable(fecha);
@@ -103,7 +105,13 @@ export class NotasAsignadasService {
 
       if (actual) await this.repo.darDeBaja(actual.id, usuarioId, trx);
       await this.repo.asignar(
-        { ventaNotaId: nota.id, vendedorId: vendedor.id, fecha, usuarioId },
+        {
+          ventaNotaId: nota.id,
+          vendedorId: vendedor.id,
+          fecha,
+          usuarioId,
+          condicionVenta,
+        },
         trx,
       );
     });

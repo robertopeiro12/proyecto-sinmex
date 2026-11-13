@@ -610,6 +610,7 @@ export class SincronizacionRepository {
         'na.id',
         'na.venta_nota_id',
         sql<string>`to_char(na.fecha, 'YYYY-MM-DD')`.as('fecha'),
+        'na.condicion_venta',
         'na.deleted_at',
       ])
       .where('na.vendedor_id', '=', vendedorId)
@@ -634,6 +635,8 @@ export class SincronizacionRepository {
         id: f.id,
         venta_nota_id: f.venta_nota_id,
         fecha: f.fecha,
+        condicion_venta:
+          f.condicion_venta as NotaAsignadaPull['condicion_venta'],
         activo: bandera(true, f.deleted_at),
       }),
     );

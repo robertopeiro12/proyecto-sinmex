@@ -22,7 +22,7 @@ const DESCRIPCION = "La ruta, el vehículo y las notas por cobrar de cada vended
 /** Encabezado que puede partirse en dos renglones en vez de cortarse. */
 const ENCABEZADO_EN_DOS = "whitespace-normal leading-tight";
 
-/** Qué columna de notas se picó. */
+/** Con qué filtro abre la ventana de notas. */
 export type NotasDelRenglon = "pendientes" | "asignadas";
 
 /**
@@ -168,7 +168,8 @@ function RutaDiariaDelDia({ sucursal }: { sucursal: string }) {
 
 /**
  * La tabla del día. Cabe en la caja de 1366 px (≈1012 px): columnas fijas y la ruta se lleva
- * lo que sobra y se parte en líneas. `onAbrirNotas` abre la ventana de notas: sin él, las columnas de notas muestran solo el número.
+ * lo que sobra y se parte en líneas. `onAbrirNotas` abre la ventana de notas: sin él, la
+ * columna de notas muestra solo los números.
  */
 export function TablaDelDia({
   renglones,
@@ -185,48 +186,64 @@ export function TablaDelDia({
   onQuitar: (renglon: RenglonDia) => void;
   onAbrirNotas?: (renglon: RenglonDia, cuales: NotasDelRenglon) => void;
 }) {
-  const celdaNotas = (r: RenglonDia, cuales: NotasDelRenglon) => {
-    const n = cuales === "pendientes" ? r.notasPendientes : r.notasAsignadas;
-    return onAbrirNotas ? (
-      <button
-        type="button"
-        className="cursor-pointer font-medium tabular-nums underline-offset-2 hover:underline focus-visible:underline"
-        aria-label={`${cuales === "pendientes" ? "Notas pendientes por cobrar" : "Notas asignadas por cobrar"} de ${r.vendedor}: ${n}`}
-        onClick={() => onAbrirNotas(r, cuales)}
-      >
-        {n}
-      </button>
-    ) : (
-      n
+  const celdaNotas = (r: RenglonDia) => {
+    if (editable && !r.tieneRuta) return <span className="text-muted-foreground">Asigna primero su ruta</span>;
+    if (r.notasPendientes === 0 && r.notasAsignadas === 0) {
+      return <span className="text-muted-foreground">Sin notas por cobrar</span>;
+    }
+    const conteo = (
+      <span>
+        <span className="font-medium tabular-nums">{r.notasAsignadas}</span> de{" "}
+        <span className="tabular-nums">{r.notasPendientes}</span> asignadas
+      </span>
+    );
+    if (!onAbrirNotas) return conteo;
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        {conteo}
+        {editable ? (
+          <Button
+            type="button"
+            size="sm"
+            variant={r.notasAsignadas === 0 && r.notasPendientes > 0 ? "default" : "outline"}
+            onClick={() => onAbrirNotas(r, "pendientes")}
+          >
+            Asignar
+          </Button>
+        ) : (
+          <Button type="button" size="sm" variant="link" className="px-1" onClick={() => onAbrirNotas(r, "pendientes")}>
+            Ver
+          </Button>
+        )}
+      </div>
     );
   };
 
   return (
     <CajaTabla>
       <Tabla className="table-fixed">
+        {/* 150 + ruta (≈274) + 92 + 216 + 130 + 150 = 1012 px. */}
         <colgroup>
           <col className="w-[150px]" />
           <col />
           <col className="w-[92px]" />
-          <col className="w-[118px]" />
-          <col className="w-[118px]" />
+          <col className="w-[216px]" />
           <col className="w-[130px]" />
-          <col className="w-[184px]" />
+          <col className="w-[150px]" />
         </colgroup>
         <thead>
           <tr>
             <Th>Vendedor</Th>
             <Th>Ruta asignada</Th>
             <Th alinear="derecha" className={ENCABEZADO_EN_DOS}>Clientes asignados</Th>
-            <Th alinear="derecha" className={ENCABEZADO_EN_DOS}>Notas pendientes por cobrar</Th>
-            <Th alinear="derecha" className={ENCABEZADO_EN_DOS}>Notas asignadas por cobrar</Th>
+            <Th>Notas por cobrar</Th>
             <Th>Vehículo</Th>
             <Th>Acciones</Th>
           </tr>
         </thead>
         <tbody>
           {renglones.length === 0 ? (
-            <FilaVacia columnas={7}>Sin vendedores activos en la sucursal.</FilaVacia>
+            <FilaVacia columnas={6}>Sin vendedores activos en la sucursal.</FilaVacia>
           ) : (
             renglones.map((r) => (
               <tr key={r.vendedorId}>
@@ -241,13 +258,12 @@ export function TablaDelDia({
                   )}
                 </Td>
                 <Td alinear="derecha">{r.clientes}</Td>
-                <Td alinear="derecha">{celdaNotas(r, "pendientes")}</Td>
-                <Td alinear="derecha">{celdaNotas(r, "asignadas")}</Td>
+                <Td>{celdaNotas(r)}</Td>
                 <Td className="truncate" title={r.vehiculo ?? undefined}>
                   {r.vehiculo ?? <span className="text-muted-foreground">Sin vehículo</span>}
                 </Td>
                 <Td>
-                  <div className="flex gap-1.5">
+                  <div className="flex flex-wrap gap-1.5">
                     {!editable ? (
                       r.tieneRuta ? (
                         <Button type="button" size="sm" variant="outline" onClick={() => onAbrir(r)}>
@@ -262,11 +278,13 @@ export function TablaDelDia({
                         <Button
                           type="button"
                           size="sm"
-                          variant="outline"
+                          variant="ghost"
+                          className="text-muted-foreground"
+                          aria-label={`Quitar ruta de ${r.vendedor}`}
                           disabled={quitando !== null}
                           onClick={() => onQuitar(r)}
                         >
-                          Quitar ruta
+                          Quitar
                         </Button>
                       </>
                     ) : (

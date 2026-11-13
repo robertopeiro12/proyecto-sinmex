@@ -1,3 +1,7 @@
+/** Lo que se le pide al vendedor con una nota asignada. */
+export const CONDICIONES_VENTA = ['ninguna', 'liquidar', 'abonar'] as const;
+export type CondicionVenta = (typeof CONDICIONES_VENTA)[number];
+
 /** Una nota por cobrar en la ventana de notas de una ruta del dia (spec §5.4). */
 export interface NotaDeRuta {
   ventaNotaId: string;
@@ -9,7 +13,11 @@ export interface NotaDeRuta {
   saldoCentavos: number;
   diasAtraso: number;
   /** Quien la trae ese dia, o `null`. */
-  asignadaA: { vendedorId: string; nombre: string } | null;
+  asignadaA: {
+    vendedorId: string;
+    nombre: string;
+    condicionVenta: CondicionVenta;
+  } | null;
 }
 
 export interface NotasDeRuta {

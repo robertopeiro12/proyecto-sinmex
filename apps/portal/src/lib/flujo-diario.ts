@@ -1,6 +1,7 @@
 import { apiFetch, apiFetchSinCuerpo } from "./api";
 import { diaAnterior } from "./fechas";
 import { formatearPesos, plural } from "./formato";
+import type { CondicionVenta } from "./rutas";
 
 /*
  * Flujo diario y Dashboard. Los tipos de respuesta son COPIA de los del backend
@@ -203,6 +204,10 @@ export interface NotaRevision {
    * asignada es `nota_asignada.papel_entregado`; en una nueva, el de la venta.
    */
   entregada: boolean | null;
+  /** Condición de venta de la asignada; `null` en una nota nueva a crédito. */
+  condicionVenta: CondicionVenta | null;
+  /** Lo que dejó el vendedor al no cobrar; `null` si no dijo nada o en una nota nueva. */
+  comentarioVendedor: { texto: string; vendedor: string } | null;
 }
 
 export interface NotaNoEntregada {

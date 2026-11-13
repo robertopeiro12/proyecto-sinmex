@@ -206,11 +206,16 @@ describe('Notas asignadas (e2e)', () => {
     ventaNotaId: string,
     vendedorId: string,
     fecha: string,
+    condicionVenta?: string,
   ) =>
     request(app.getHttpServer())
       .put(`/rutas/diaria/notas/${ventaNotaId}`)
       .set('Cookie', cookie)
-      .send({ vendedorId, fecha });
+      .send(
+        condicionVenta === undefined
+          ? { vendedorId, fecha }
+          : { vendedorId, fecha, condicionVenta },
+      );
 
   const quitar = (
     cookie: string,
@@ -231,6 +236,15 @@ describe('Notas asignadas (e2e)', () => {
     db
       .selectFrom('nota_asignada')
       .select(['vendedor_id', 'deleted_at', 'quitada_por_usuario_id'])
+      .where('venta_nota_id', '=', ventaNotaId)
+      .where(sql<boolean>`fecha = ${fecha}::date`)
+      .orderBy('created_at')
+      .execute();
+
+  const condiciones = (ventaNotaId: string, fecha: string) =>
+    db
+      .selectFrom('nota_asignada')
+      .select(['vendedor_id', 'condicion_venta', 'deleted_at', 'updated_at'])
       .where('venta_nota_id', '=', ventaNotaId)
       .where(sql<boolean>`fecha = ${fecha}::date`)
       .orderBy('created_at')
@@ -334,6 +348,93 @@ describe('Notas asignadas (e2e)', () => {
       vendedorId: vendedorA,
     });
     expect(cuerpo.pendientes[0].asignadaA?.vendedorId).toBe(vendedorA);
+  });
+
+  it("asignar sin condicionVenta guarda 'ninguna' y la respuesta trae asignadaA.condicionVenta = 'ninguna'", async () => {
+    const fecha = diaNuevo();
+    const c = await sembrarCliente(tjId);
+    await sembrarRuta({ vendedor: vendedorA, cliente: c.id, fecha, orden: 1 });
+    const nota = await sembrarNota(c.id, tjId);
+    const res = await asignar(cookieGeneral, nota, vendedorA, fecha).expect(
+      200,
+    );
+    expect(
+      (res.body as NotasDeRuta).asignadas[0].asignadaA?.condicionVenta,
+    ).toBe('ninguna');
+    expect((await condiciones(nota, fecha))[0].condicion_venta).toBe('ninguna');
+  });
+
+  it("asignar con condicionVenta 'liquidar' la guarda", async () => {
+    const fecha = diaNuevo();
+    const c = await sembrarCliente(tjId);
+    await sembrarRuta({ vendedor: vendedorA, cliente: c.id, fecha, orden: 1 });
+    const nota = await sembrarNota(c.id, tjId);
+    const res = await asignar(
+      cookieGeneral,
+      nota,
+      vendedorA,
+      fecha,
+      'liquidar',
+    ).expect(200);
+    expect(
+      (res.body as NotasDeRuta).asignadas[0].asignadaA?.condicionVenta,
+    ).toBe('liquidar');
+    expect((await condiciones(nota, fecha))[0].condicion_venta).toBe(
+      'liquidar',
+    );
+  });
+
+  it("condicionVenta 'otra' es 400 con 'La condición de venta no es válida.'", async () => {
+    const fecha = diaNuevo();
+    const c = await sembrarCliente(tjId);
+    await sembrarRuta({ vendedor: vendedorA, cliente: c.id, fecha, orden: 1 });
+    const nota = await sembrarNota(c.id, tjId);
+    const res = await asignar(
+      cookieGeneral,
+      nota,
+      vendedorA,
+      fecha,
+      'otra',
+    ).expect(400);
+    expect(mensaje(res)).toContain('La condición de venta no es válida.');
+    expect(await condiciones(nota, fecha)).toEqual([]);
+  });
+
+  it('el mismo vendedor con otra condición no cambia nada', async () => {
+    const fecha = diaNuevo();
+    const c = await sembrarCliente(tjId);
+    await sembrarRuta({ vendedor: vendedorA, cliente: c.id, fecha, orden: 1 });
+    const nota = await sembrarNota(c.id, tjId);
+    await asignar(cookieGeneral, nota, vendedorA, fecha, 'abonar').expect(200);
+    const [antes] = await condiciones(nota, fecha);
+    await asignar(cookieGeneral, nota, vendedorA, fecha, 'liquidar').expect(
+      200,
+    );
+    const filas = await condiciones(nota, fecha);
+    expect(filas).toHaveLength(1);
+    expect(filas[0].condicion_venta).toBe('abonar');
+    expect(filas[0].deleted_at).toBeNull();
+    expect(filas[0].updated_at).toEqual(antes.updated_at);
+  });
+
+  it("pasar a otro vendedor con 'abonar': la de A conserva 'liquidar'", async () => {
+    const fecha = diaNuevo();
+    const c = await sembrarCliente(tjId);
+    await sembrarRuta({ vendedor: vendedorA, cliente: c.id, fecha, orden: 1 });
+    await sembrarRuta({ vendedor: vendedorB, cliente: c.id, fecha, orden: 1 });
+    const nota = await sembrarNota(c.id, tjId);
+    await asignar(cookieGeneral, nota, vendedorA, fecha, 'liquidar').expect(
+      200,
+    );
+    await asignar(cookieGeneral, nota, vendedorB, fecha, 'abonar').expect(200);
+    const filas = await condiciones(nota, fecha);
+    expect(filas).toHaveLength(2);
+    expect(filas[0].vendedor_id).toBe(vendedorA);
+    expect(filas[0].deleted_at).not.toBeNull();
+    expect(filas[0].condicion_venta).toBe('liquidar');
+    expect(filas[1].vendedor_id).toBe(vendedorB);
+    expect(filas[1].deleted_at).toBeNull();
+    expect(filas[1].condicion_venta).toBe('abonar');
   });
 
   it('misma nota y mismo vendedor: 200 sin escribir', async () => {
