@@ -106,7 +106,7 @@ describe("RutaDeVendedor", () => {
     const { usuario } = pintar();
     await usuario.click(await screen.findByRole("button", { name: "Asignar notas" }));
     expect(rutasLib.obtenerNotas).toHaveBeenCalledWith("v1", FECHA);
-    expect(await screen.findByText("Notas para Ricardo · martes 10 de noviembre")).toBeInTheDocument();
+    expect(await screen.findByText("Notas por cobrar de Ricardo · martes 10 de noviembre")).toBeInTheDocument();
   });
 
   it("un día pasado no ofrece Asignar notas", async () => {

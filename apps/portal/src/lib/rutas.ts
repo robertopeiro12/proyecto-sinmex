@@ -221,6 +221,13 @@ export const TEXTO_CONDICION: Record<CondicionVenta, string> = {
   abonar: "Vender solo si abona",
 };
 
+/** La misma condición, corta: para el selector y la etiqueta de la ventana de notas. */
+export const TEXTO_CONDICION_CORTO: Record<CondicionVenta, string> = {
+  ninguna: "Puede vender",
+  liquidar: "Solo si liquida",
+  abonar: "Solo si abona",
+};
+
 /** Una nota por cobrar en la ventana de notas de una ruta del día. */
 export interface NotaDeRuta {
   ventaNotaId: string;
@@ -269,4 +276,38 @@ export function quitarNota(ventaNotaId: string, vendedorId: string, fecha: strin
 export function filtrarPorFolio(notas: NotaDeRuta[], texto: string): NotaDeRuta[] {
   const q = normalizarTexto(texto.trim());
   return q === "" ? notas : notas.filter((n) => normalizarTexto(n.folio).includes(q));
+}
+
+/** Las dos listas en una, sin repetir nota: primero las pendientes (en orden de ruta), luego las asignadas que falten. */
+export function unirNotas(listas: NotasDeRuta): NotaDeRuta[] {
+  const vistas = new Set<string>();
+  const todas: NotaDeRuta[] = [];
+  for (const n of [...listas.pendientes, ...listas.asignadas]) {
+    if (vistas.has(n.ventaNotaId)) continue;
+    vistas.add(n.ventaNotaId);
+    todas.push(n);
+  }
+  return todas;
+}
+
+export interface GrupoDeCliente {
+  clienteId: string;
+  cliente: string;
+  notas: NotaDeRuta[];
+  saldoCentavos: number;
+}
+
+/** Agrupa por cliente en el orden en que aparece cada uno (el de la ruta). */
+export function agruparPorCliente(notas: NotaDeRuta[]): GrupoDeCliente[] {
+  const grupos = new Map<string, GrupoDeCliente>();
+  for (const n of notas) {
+    let g = grupos.get(n.clienteId);
+    if (!g) {
+      g = { clienteId: n.clienteId, cliente: n.cliente, notas: [], saldoCentavos: 0 };
+      grupos.set(n.clienteId, g);
+    }
+    g.notas.push(n);
+    g.saldoCentavos += n.saldoCentavos;
+  }
+  return [...grupos.values()];
 }
