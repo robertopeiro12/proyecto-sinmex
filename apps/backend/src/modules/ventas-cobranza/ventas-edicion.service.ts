@@ -21,6 +21,7 @@ import {
   pctComisionTrasEdicion,
   planDetalle,
 } from './edicion-venta';
+import { InventarioVentaService } from './inventario-venta.service';
 import { montoTotalCentavos, statusInicial } from './reglas-venta';
 import { VentaRechazada } from './venta-rechazada';
 import {
@@ -52,6 +53,7 @@ export class VentasEdicionService {
     private readonly ventas: VentasRepository,
     private readonly cobranzas: CobranzasRepository,
     private readonly consulta: VentasConsultaService,
+    private readonly inventario: InventarioVentaService,
   ) {}
 
   /** §4.2. Manda el ESTADO COMPLETO de lo editable. */
@@ -62,6 +64,14 @@ export class VentasEdicionService {
   ): Promise<VentaDetalle> {
     try {
       await this.portal.enTransaccion(async (trx) => {
+        const vendedorNuevo = dto.vendedorId?.toLowerCase() ?? null;
+        // El vendedor ANTES que la venta: orden vendedor -> venta_nota, el de
+        // la ruta del dia (ver `InventarioVentaService`). Solo el que queda en
+        // la venta: el anterior, si cambia, recupera piezas y no se revisa.
+        const vendedorInventario =
+          vendedorNuevo === null
+            ? undefined
+            : await this.inventario.bloquearVendedor(vendedorNuevo, trx);
         const venta = await this.bloquearConAlcance(usuarioId, id, trx);
 
         const bloqueo = bloqueoDeEdicion(
@@ -72,7 +82,6 @@ export class VentasEdicionService {
         );
         if (bloqueo) throw new ConflictException(bloqueo);
 
-        const vendedorNuevo = dto.vendedorId?.toLowerCase() ?? null;
         if (vendedorNuevo === null && venta.origen === 'app') {
           throw new BadRequestException(
             'Una venta de tablet debe tener vendedor.',
@@ -121,6 +130,16 @@ export class VentasEdicionService {
         }
 
         const nueva = armada.venta;
+        // Sin contar la propia venta: si sigue con el mismo vendedor, sus
+        // lineas guardadas se suman de vuelta a la existencia.
+        await this.inventario.exigirExistencia(
+          vendedorInventario,
+          venta.fecha,
+          nueva.lineas,
+          vendedorNuevo === venta.vendedorId ? guardadas : [],
+          trx,
+        );
+
         const monto = montoTotalCentavos(nueva.lineas);
         const pctActual =
           vendedorNuevo !== null && vendedorNuevo !== venta.vendedorId

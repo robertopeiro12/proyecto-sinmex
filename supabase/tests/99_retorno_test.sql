@@ -1,5 +1,5 @@
 begin;
-select plan(20);
+select plan(31);
 
 -- Retorno del vendedor: lo que la BASE garantiza del registro de piezas buenas
 -- retornadas por dia, vendedor y presentacion aunque alguien escriba por debajo
@@ -13,6 +13,7 @@ select has_column('retorno', 'piezas', 'lleva las piezas buenas retornadas');
 select has_column('retorno', 'capturo_usuario_id', 'dice quien lo capturo');
 select has_column('retorno', 'actualizado_por_usuario_id', 'dice quien lo corrigio');
 select has_column('retorno', 'deleted_at', 'se da de baja con baja logica');
+select has_column('retorno', 'piezas_merma', 'lleva la merma contada (corte de mercancia)');
 
 select has_index('retorno', 'uq_retorno_dia_vendedor_presentacion',
   'una fila viva por dia, vendedor y presentacion');
@@ -49,7 +50,17 @@ select lives_ok(
 select throws_ok(
   $$insert into retorno (fecha, vendedor_id, sucursal_id, presentacion_id, piezas, capturo_usuario_id)
     select date '2026-10-23', vendedor, sucursal, medio, 0, usuario from _ret$$,
-  '23514', null, 'las piezas son mayores que cero');
+  '23514', null, 'buenas y merma en cero no es una fila');
+
+select lives_ok(
+  $$insert into retorno (fecha, vendedor_id, sucursal_id, presentacion_id, piezas, piezas_merma, capturo_usuario_id)
+    select date '2026-10-22', vendedor, sucursal, medio, 0, 3, usuario from _ret$$,
+  'una fila solo con merma entra');
+
+select throws_ok(
+  $$insert into retorno (fecha, vendedor_id, sucursal_id, presentacion_id, piezas, piezas_merma, capturo_usuario_id)
+    select date '2026-10-21', vendedor, sucursal, medio, 5, -1, usuario from _ret$$,
+  '23514', null, 'la merma no es negativa');
 
 select throws_ok(
   $$insert into retorno (fecha, vendedor_id, sucursal_id, presentacion_id, piezas, capturo_usuario_id)
@@ -95,6 +106,38 @@ select ok(
   (select updated_at > timestamptz '2020-01-01' from retorno
     where presentacion_id = (select medio from _ret) and fecha = date '2026-10-24'),
   'editar el retorno le toca updated_at');
+
+-- Encabezado del corte: uno vivo por vendedor y dia.
+select has_table('corte_mercancia', 'existe el encabezado del corte');
+select has_index('corte_mercancia', 'uq_corte_mercancia_fecha_vendedor',
+  'un corte vivo por vendedor y dia');
+select has_index('corte_mercancia', 'idx_corte_mercancia_sucursal_fecha',
+  'la lista del dia lee por sucursal y fecha');
+select has_trigger('corte_mercancia', 'trg_corte_mercancia_updated',
+  'el corte mueve updated_at al editarse');
+
+select lives_ok(
+  $$insert into corte_mercancia (fecha, vendedor_id, sucursal_id, hecho_por_usuario_id)
+    select date '2026-10-23', vendedor, sucursal, usuario from _ret$$,
+  'un corte entra');
+
+select throws_ok(
+  $$insert into corte_mercancia (fecha, vendedor_id, sucursal_id, hecho_por_usuario_id)
+    select date '2026-10-23', vendedor, sucursal, usuario from _ret$$,
+  '23505', null, 'dos cortes vivos no comparten vendedor y dia');
+
+update corte_mercancia set deleted_at = now()
+  where vendedor_id = (select vendedor from _ret) and fecha = date '2026-10-23';
+
+select lives_ok(
+  $$insert into corte_mercancia (fecha, vendedor_id, sucursal_id, hecho_por_usuario_id)
+    select date '2026-10-23', vendedor, sucursal, usuario from _ret$$,
+  'con el anterior dado de baja, otro corte ese dia entra (indice parcial)');
+
+select throws_ok(
+  $$insert into corte_mercancia (fecha, vendedor_id, sucursal_id, hecho_por_usuario_id)
+    select date '2026-10-25', vendedor, sucursal, gen_random_uuid() from _ret$$,
+  '23503', null, 'quien hizo el corte tiene que existir');
 
 select * from finish();
 rollback;

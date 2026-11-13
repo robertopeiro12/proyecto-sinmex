@@ -229,6 +229,17 @@ usuario con sesion pasa.
 - **Una venta de mostrador no tiene vendedor** (`venta_nota.vendedor_id` null, "Oficina" en la
   pantalla). La base solo lo permite con `origen = 'portal'`, y entonces exige `capturo_usuario_id`
   (`ck_venta_nota_origen_actores`). Toda venta de la tablet sigue llevando vendedor.
+- **Con `sucursal.control_inventario` prendida, el portal no le vende a un vendedor más de lo que trae cargado** (cliente,
+  2026-11-12; la misma casilla y la misma regla que la app de T-27). Aplica a `POST /ventas` y a `PATCH /ventas/:id` solo
+  si la venta tiene vendedor (Oficina nunca se revisa): existencia = cargas **aceptadas** − vendidas − regaladas de ese
+  vendedor en la **fecha de la venta**, la misma cuenta que "debería regresar" del corte (`movimientosDelDia` de
+  `produccion/cortes.repository.ts` + `existenciasPorPresentacion` de `reglas-corte.ts`; ahí se restarán merma y consumo
+  cuando existan). Si no alcanza → **409** "No le alcanza el producto a …: Horchata 1 L, faltan 3; …" antes del folio (no
+  lo quema). Al editar se suman de vuelta las líneas de la propia venta si sigue con el mismo vendedor, y una presentación
+  que no sube nunca se rechaza. Una carga **pendiente** no bloquea en el portal (la app sí). Reglas puras en
+  `ventas-cobranza/inventario-venta.ts`, candado en `inventario-venta.service.ts`. **Orden de candados: `vendedor`
+  (`for no key update`) → `venta_nota`**, el de la ruta del día: la edición bloquea al vendedor **antes** del
+  `for update of vn` (al revés se abrazaría con la asignación de notas). Una venta de la tablet no toma ese candado.
 - **Toda corrección de una venta va por el portal (T-17, parte 2)**, venga de la tablet o del
   portal: `PATCH`/`DELETE /ventas/:id` y `POST /ventas/:id/cuenta-perdida`
   (`ventas-cobranza/ventas-edicion.service.ts`), con el permiso `venta.editar_eliminar`.
@@ -709,16 +720,45 @@ usuario con sesion pasa.
     vendedor en las cargas); el 409 del índice único queda como red de seguridad.
   - **Nube**: `20261023120000_produccion.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
     (pre-flight: tabla nueva; nada que contar).
-- **Retorno del vendedor.** El almacenista captura en el portal las piezas **buenas** que regresó cada vendedor (*Producción →
-  Retorno*). T-24 resta cargas − retornos; el corte de T-27 (pieza 3) leerá este retorno validado. La merma retornada no va
-  aquí (T-35 / T-27). Spec: `docs/superpowers/specs/2026-10-22-retorno-del-vendedor-design.md`.
-  - Tabla `retorno`: una fila **viva** por fecha, vendedor y presentación, piezas > 0; `sucursal_id` sale del vendedor.
-    Backend en `modules/produccion/` (`GET`/`PUT /retornos`), permiso `retorno.gestionar` y alcance de sucursal.
-  - `PUT` reemplaza el día del vendedor: **0 da de baja** la fila. Fecha futura = 400 (hoy de Tijuana). Dos guardados se
-    serializan bloqueando la fila del vendedor. **No se valida retorno <= cargado**; `cargadas` (cargas **aceptadas** de ese
-    día) es solo referencia.
-  - **Nube**: `20261024120000_retorno.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
-    (pre-flight: tabla nueva; nada que contar).
+- **Corte de mercancía (pieza 3).** *Producción → Corte* (`/produccion/corte`) absorbe al Retorno: por vendedor y día, el
+  almacenista cuenta lo que regresó (**buenas** y **merma**) y el portal le muestra cuánto **faltó**. La vieja
+  `/produccion/retorno` redirige a Corte (conserva `?sucursal`) y los endpoints `/retornos` **se quitaron** (404). Spec:
+  `docs/superpowers/specs/2026-11-12-corte-de-mercancia-design.md` (D1–D13); respuestas del cliente en el vault
+  (`Respuestas del cliente 2026-11-12 Corte de mercancía`).
+  - **Tablas.** `retorno` gana `piezas_merma` (default 0) y el check `ck_retorno_piezas` (`piezas >= 0`, `piezas_merma >= 0`
+    y la suma > 0; reemplaza a `retorno_piezas_check`). **`corte_mercancia`** es el encabezado: un vivo por vendedor y fecha
+    (`uq_corte_mercancia_fecha_vendedor`, parcial), con quién lo hizo y cuándo (`hecho_por_usuario_id`, `hecho_en`) y
+    `actualizado_por_usuario_id` para las correcciones. La migración **rellena** un encabezado por cada (fecha, vendedor)
+    con `retorno` vivo, así que un día capturado antes sale como "Corte hecho" con sus buenas.
+  - **Endpoints** (`modules/produccion/cortes.*`, `reglas-corte.ts`; permiso **`retorno.gestionar`**, el mismo de antes, no se
+    tocaron perfiles): `GET /cortes?fecha&sucursal` (lista del día; `sucursal` = código o `todas`, atado a otra = 403),
+    `GET`/`PUT /cortes/vendedor` (vendedor ajeno o dado de baja = 404). Fecha futura = 400 con `hoyEnTijuana`, también en los
+    GET. El `PUT` reemplaza el día del vendedor y **siempre** marca el corte hecho, aunque no haya piezas (un vendedor que
+    vendió todo); 0/0 en un renglón lo da de baja.
+  - **La regla.** `debería regresar = cargadas aceptadas − vendidas − regaladas`, **en vivo** (nunca se congela), sin
+    recortar: negativo = "Vendió más de lo cargado". Cargadas = solo cargas **aceptadas** (una recarga pendiente o rechazada
+    no cuenta); vendidas = `cantidad` y regaladas = `cantidad_promocion` de líneas **vivas** de ventas **vivas** del vendedor
+    con esa `fecha`, de **cualquier status** (una venta eliminada, T-17, no cuenta). `faltante = debería − buenas` por
+    renglón y **solo existe si el corte está hecho** (o el renglón se tocó en la captura; sin corte, `null`, nunca 0). El total
+    "Faltan N" = suma de los faltantes **> 0** (lo que sobra en una presentación no compensa lo que falta en otra); es el
+    mismo número que `piezasFaltantes` de la lista. La **merma retornada no resta** del faltante, solo se registra.
+  - **D13 (lo no obvio).** Se serializa bloqueando la fila de `vendedor` (`for no key update`), como cargas y retorno; el `23505`
+    queda como 409 de red de seguridad. Una presentación **desactivada o dada de baja** con movimiento ese día sigue saliendo
+    y aceptándose; sin movimiento ni fila viva = 400. `hecho.en`/`hecho.por` son del **primer** guardado (o del relleno), las
+    correcciones solo llenan `actualizado_por_usuario_id`. **`hecho.en` / `hechoEn` viajan como texto en hora de Tijuana**
+    (`AAAA-MM-DD hh:mm`, formateado en SQL): el portal lo pinta tal cual, no lo reinterpreta con el reloj del navegador.
+    Los tipos están duplicados en `apps/portal/src/lib/cortes.ts` y `cortes.service.ts`/`reglas-corte.ts`: si cambias uno,
+    cambia el otro en el mismo commit. No se tocó la tablet ni el contrato de sincronización.
+  - **Fuera de alcance.** El **dinero** que entrega el vendedor (R-5) sigue **pendiente de decidir**: el viejo no lo captura
+    en ningún lado salvo la pestaña "Dinero" del Dashboard. Merma recibida de clientes, cambios y consumo dependen de T-33 y
+    no entran aquí; T-24 (inventario) leerá este corte.
+  - **Con la casilla de inventario prendida, el portal tampoco vende más de lo cargado** (ver el bloque de la venta del
+    portal, T-17): el aviso "Vendió más de lo cargado" queda como red de seguridad (ventas de la tablet sin red, o de
+    cuando la casilla estaba apagada).
+  - **Nube**: `20261112120000_corte_mercancia.sql` se sube a `sinmex dev` después del merge, con el protocolo de push.
+    Pre-flight: `select count(*) from retorno where piezas <= 0` debe dar 0 (el check nuevo admite 0 solo con merma > 0, y
+    las filas viejas son > 0), y `select count(*) from (select distinct fecha, vendedor_id from retorno where deleted_at is
+    null) t` cuenta los encabezados que el relleno va a crear (va al comentario del PR). Backend antes que el portal.
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
   - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).
