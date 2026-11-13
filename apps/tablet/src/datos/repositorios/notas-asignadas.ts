@@ -2,6 +2,8 @@ import type { ParametrosSQL } from '../base-datos';
 import { leerReparto } from '../cobranzas-reglas';
 import {
   diasDeAtraso,
+  errorDeComentario,
+  LARGO_MAX_COMENTARIO_NO_COBRADA,
   motivoBloqueoVenta,
   porAtender,
   type NotaAsignadaDeHoy,
@@ -10,8 +12,7 @@ import type { CondicionVenta, FechaISO, NotaNoCobrada } from '../tipos';
 import type { DepsRepositorio } from './deps';
 import { exigirJornadaAbierta } from './jornadas';
 
-/** Largo maximo del comentario de "Continuar sin cobrar" (recortado). */
-export const LARGO_MAX_COMENTARIO_NO_COBRADA = 300;
+export { LARGO_MAX_COMENTARIO_NO_COBRADA };
 
 /** Error de regla de negocio de "Continuar sin cobrar" (no un fallo tecnico de SQLite). */
 export class ErrorNotaNoCobrada extends Error {
@@ -145,10 +146,8 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
       exigirJornadaAbierta({ bd, reloj }, datos.vendedorId);
 
       const comentario = datos.comentario.trim();
-      if (comentario === '') throw new ErrorNotaNoCobrada('Escribe por qué no te pagó.');
-      if (comentario.length > LARGO_MAX_COMENTARIO_NO_COBRADA) {
-        throw new ErrorNotaNoCobrada('El comentario admite hasta 300 caracteres.');
-      }
+      const error = errorDeComentario(comentario);
+      if (error !== null) throw new ErrorNotaNoCobrada(error);
 
       const id = generarId();
       bd.runSync(

@@ -5,6 +5,7 @@ import { aplicarSnapshotCargas } from './cargas';
 import { crearRepositorioCatalogos } from './catalogos';
 import type { DepsRepositorio } from './deps';
 import { crearRepositorioFolios, ErrorFolio } from './folios';
+import { crearRepositorioCobranzas } from './cobranzas';
 import { crearRepositorioVentas, ErrorVenta, type DatosRegistroVenta } from './ventas';
 
 /**
@@ -556,5 +557,47 @@ describe('inventario del vendedor (T-27, D3, D4, D10)', () => {
       expect(ventas.registrar(venta()).folio).toBe('TJ260807AP01');
       expect(cuantas(deps, 'venta')).toBe(1);
     });
+  });
+});
+
+describe('condicion de la nota asignada dentro de la venta', () => {
+  const HOY = '2026-08-07';
+  const LIQUIDAR = 'Tiene una nota asignada que debe liquidar antes de venderle';
+
+  function conAsignada(condicion: 'liquidar' | 'abonar') {
+    const m = montar();
+    m.catalogos.guardarSnapshot({
+      ...snapshotDePrueba(),
+      notasAsignadas: [{ id: 'asg-1', venta_nota_id: 'nota-1', fecha: HOY, condicion_venta: condicion, activo: 1 }],
+    });
+    return { ...m, cobranzas: crearRepositorioCobranzas(m.deps, { catalogos: m.catalogos }) };
+  }
+
+  it('lanza con la condicion liquidar sin cobrar, sin grabar ni quemar folio', () => {
+    const { deps, ventas } = conAsignada('liquidar');
+    expect(() => ventas.registrar(venta())).toThrow(ErrorVenta);
+    expect(() => ventas.registrar(venta())).toThrow(`${LIQUIDAR}. Cóbrala antes de vender.`);
+    expect(cuantas(deps, 'venta')).toBe(0);
+    expect(cuantas(deps, 'folio_emitido')).toBe(0);
+  });
+
+  it('tras un cobro que la liquida, graba', () => {
+    const { deps, ventas, cobranzas } = conAsignada('liquidar');
+    cobranzas.registrar({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      ventaNotaId: 'nota-1',
+      montoCentavos: 15000,
+      metodoPago: 'efectivo',
+      fechaPago: HOY,
+    });
+    ventas.registrar(venta());
+    expect(cuantas(deps, 'venta')).toBe(1);
+  });
+
+  it('sin asignadas, nada cambia', () => {
+    const { deps, ventas } = montar();
+    ventas.registrar(venta());
+    expect(cuantas(deps, 'venta')).toBe(1);
   });
 });

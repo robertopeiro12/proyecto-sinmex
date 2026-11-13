@@ -33,6 +33,19 @@ export interface NotaAsignadaDeHoy {
 export const MOTIVO_BLOQUEO_LIQUIDAR = 'Tiene una nota asignada que debe liquidar antes de venderle';
 export const MOTIVO_BLOQUEO_ABONAR = 'Tiene una nota asignada que debe abonar antes de venderle';
 
+/** Largo maximo del comentario de "Continuar sin cobrar" (recortado). */
+export const LARGO_MAX_COMENTARIO_NO_COBRADA = 300;
+export const MENSAJE_COMENTARIO_VACIO = 'Escribe por qué no te pagó.';
+export const MENSAJE_COMENTARIO_LARGO = 'El comentario admite hasta 300 caracteres.';
+
+/** Por que el comentario no sirve (recortado: 1 a 300 caracteres), o `null`. */
+export function errorDeComentario(texto: string): string | null {
+  const comentario = texto.trim();
+  if (comentario === '') return MENSAJE_COMENTARIO_VACIO;
+  if (comentario.length > LARGO_MAX_COMENTARIO_NO_COBRADA) return MENSAJE_COMENTARIO_LARGO;
+  return null;
+}
+
 /** Como se nombra la condicion en pantalla; `ninguna` no dice nada. */
 export const ETIQUETA_CONDICION: Record<CondicionVenta, string | null> = {
   ninguna: null,
