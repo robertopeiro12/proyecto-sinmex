@@ -4,6 +4,7 @@ import type { ClienteResumen } from "./clientes";
 import {
   aEditable,
   agregarFila,
+  agruparPorCliente,
   aplicarRutaSemanal,
   asignarNota,
   filtrarCartera,
@@ -18,6 +19,7 @@ import {
   obtenerRutaDiaria,
   quitarFila,
   quitarNota,
+  unirNotas,
   quitarRutaDiaria,
   type NotaDeRuta,
   type FilaEditable,
@@ -218,5 +220,30 @@ describe("filtrarPorFolio", () => {
     expect(filtrarPorFolio(notas, "  ")).toBe(notas);
     expect(filtrarPorFolio(notas, "tj261002").map((n) => n.folio)).toEqual(["TJ261002OF01"]);
     expect(filtrarPorFolio(notas, "zzz")).toEqual([]);
+  });
+});
+
+describe("unirNotas y agruparPorCliente", () => {
+  const nota = (id: string, clienteId: string, saldo: number): NotaDeRuta => ({
+    ventaNotaId: id,
+    folio: `F${id}`,
+    clienteId,
+    cliente: `Cliente ${clienteId}`,
+    fecha: "2026-11-01",
+    saldoCentavos: saldo,
+    diasAtraso: 0,
+    asignadaA: null,
+  });
+  it("une sin repetir y agrupa por cliente en el orden de llegada, con su total", () => {
+    const a1 = nota("1", "a", 100);
+    const b1 = nota("2", "b", 300);
+    const a2 = nota("3", "a", 50);
+    const todas = unirNotas({ pendientes: [a1, b1], asignadas: [b1, a2] });
+    expect(todas.map((n) => n.ventaNotaId)).toEqual(["1", "2", "3"]);
+    const grupos = agruparPorCliente(todas);
+    expect(grupos.map((g) => [g.cliente, g.notas.length, g.saldoCentavos])).toEqual([
+      ["Cliente a", 2, 150],
+      ["Cliente b", 1, 300],
+    ]);
   });
 });
