@@ -61,10 +61,13 @@ Fuentes:
       migración 019). Un abono que registró la oficina **no** cumple `abonar` (la condición es "si *te* paga"); solo
       cumple si dejó la nota en cero. **No** se usa `abonos_json`: el pull lo pisa con lo del servidor y trae también
       los cobros de la oficina.
-11. **El comentario se pide una vez por nota y día.** Si un cobro del vendedor de hoy tocó la nota (regla 10), la nota
-    quedó en cero, o ya dejó comentario hoy, la nota deja de "pedirse". El aviso vuelve a salir cada vez que abre la
-    ficha mientras haya notas por atender; no es modal: el vendedor puede cerrarlo y volver después, pero **Vender**
-    sigue bloqueado si hay condición sin cumplir.
+11. **La nota sale primero, cada vez** (Mario, 2026-11-13). Al empezar a operar con el cliente (abrir su ficha y al
+    picar **Vender**), si tiene notas asignadas sin cobrar hoy, la app las pone enfrente **antes** de seguir, con dos
+    opciones: **Cobrar** o **Continuar sin cobrar**. Continuar sin cobrar pide **comentario obligatorio** (por qué no
+    pagó). Lo que sigue depende de la condición: sin condición vende; con condición sin cumplir, Vender queda bloqueado.
+    **El vendedor puede regresar**: si vuelve a abrir la ficha más tarde, la nota sale otra vez con las mismas dos
+    opciones, y puede cobrarla. Cada "Continuar sin cobrar" deja su propio comentario (una fila por intento); la oficina
+    ve el último. La nota deja de salir solo cuando un cobro del vendedor de hoy la tocó (regla 10) o quedó en cero.
 12. **Dónde vive el comentario en el servidor**: tabla nueva `nota_no_cobrada`, una fila por comentario, con `id = clave`
     como las demás proyecciones del push (visita, gasto, movimiento). No es una columna de `nota_asignada`: el push
     siempre inserta, nunca actualiza, y una columna ahí movería `updated_at` y haría bajar la asignación otra vez.
@@ -72,9 +75,10 @@ Fuentes:
     quitó, o eliminó la venta): se guarda igual, referido a la nota, el vendedor del token y la fecha. Mismo criterio que
     la cobranza de una nota que ya no tiene saldo (D9 de T-21). Lo único que se rechaza es una nota que no existe o no
     es de la sucursal del vendedor (`nota-no-encontrada`).
-14. **La condición se puede cambiar** después de asignar: un `PUT` para el mismo vendedor con otra `condicionVenta` la
-    actualiza (hoy ese `PUT` es un no-op). **Pasar** la nota a otro vendedor crea la asignación nueva con la condición
-    que mande el cuerpo; el portal manda la que tenía para que viaje con la nota.
+14. **Cambiar la condición = volver a asignar** (Mario, 2026-11-13): la oficina quita la nota y la vuelve a asignar con
+    otra condición. El `PUT` para el mismo vendedor sigue siendo un no-op aunque traiga otra condición (no se edita en
+    sitio). **Pasar** la nota a otro vendedor es una asignación nueva: lleva la condición que la oficina escoja al
+    pasarla (el selector arranca con la que tenía).
 15. **La tablet guarda también `recado` y `rutas_dia`** en la misma migración local, aunque la pantalla de esta pieza
     solo use el recado. Razón: el pull ya los manda y cada versión que agrega colecciones obliga a un pull completo
     en todas las tablets; mejor una sola vez. Vehículo propuesto y kilometraje por vehículo quedan para otra pieza,
@@ -164,9 +168,10 @@ cambiar la condición, y eso es lo que queremos: la tablet la vuelve a bajar.
 - Columna nueva **"Condición"** entre "Días de atraso" y "Acción" (colgroup pasa a 7; `FilaVacia columnas={7}`).
   - Nota **sin asignar**, editable: un selector con "Puede vender", "Vender solo si liquida", "Vender solo si abona"
     (default "Puede vender") y el botón **Asignar**. Un clic en Asignar manda la condición elegida.
-  - Nota **asignada a este vendedor**, editable: el selector muestra la condición actual y cambiarla manda el `PUT`
-    de inmediato (cada clic se guarda al momento, como el resto de la ventana).
-  - Nota **de otro vendedor**: texto de la condición; **Pasársela** la manda tal cual.
+  - Nota **asignada a este vendedor**: texto de la condición y **Quitar**. Para cambiarla se quita y se vuelve a
+    asignar (decisión 14).
+  - Nota **de otro vendedor**, editable: "La trae X · <condición>", el selector (arranca con la condición que tenía) y
+    **Pasársela**, que manda la elegida.
   - Solo lectura (día pasado): texto.
 - `lib/rutas.ts`: `asignarNota(ventaNotaId, vendedorId, fecha, condicionVenta)`; `NotaDeRuta.condicionVenta`.
 
@@ -223,9 +228,12 @@ cambiar la condición, y eso es lo que queremos: la tablet la vuelve a bajar.
 - Arriba, antes de los botones, una **tarjeta "Notas asignadas por cobrar"** si `porCliente` no está vacía: una fila por
   nota con folio, fecha, saldo, días de atraso y condición ("Debe liquidar" / "Debe abonar" / nada). Si el cliente trae
   recado, el recado va primero, en su propia tarjeta "Mensaje de la oficina".
-- Si hay notas **por atender**, la tarjeta trae dos botones: **Cobrar** (va a la pantalla de cobro con la primera
-  asignada preseleccionada) y **No pude cobrar** (abre el comentario). El comentario es un campo de texto obligatorio
-  con "Guardar"; al guardar, la nota deja de pedirse y el vendedor sigue en la ficha.
+- Si hay notas **por atender** (regla 11), la tarjeta trae dos botones: **Cobrar** (va a la pantalla de cobro con la
+  primera asignada preseleccionada) y **Continuar sin cobrar** (abre el comentario). El comentario es un campo de texto
+  obligatorio con "Guardar"; al guardar, el vendedor sigue en la ficha. Si vuelve a abrir la ficha más tarde, la nota
+  sale otra vez.
+- **Vender con notas por atender** abre primero esa misma pantalla de la nota (Cobrar / Continuar sin cobrar). Después
+  de continuar sin cobrar, entra a la venta si no hay condición; si la hay, se queda en la ficha con el motivo.
 - **Vender** se deshabilita con el motivo de `bloqueoDeVenta` debajo del botón mientras la condición no se cumpla. El
   bloqueo también se exige dentro de `ventas.registrar()` (como la carga pendiente) por si llegan por otro camino.
 - Lo demás de la ficha no cambia: Visita, Merma y la lista de notas pendientes siguen igual.
@@ -246,7 +254,6 @@ cambiar la condición, y eso es lo que queremos: la tablet la vuelve a bajar.
 
 ### Cerrar el día
 - Sin cambios. No se exige atender todas las asignadas para cerrar (la oficina lo ve en la revisión de la tarde).
-  *Decisión del agente*; ver pregunta abierta 1.
 
 ## 7. Despliegue
 
@@ -264,14 +271,11 @@ cambiar la condición, y eso es lo que queremos: la tablet la vuelve a bajar.
 - Control impreso del inventario de notas (T-79) y la sincronización automática (T-44).
 - Impedir que el vendedor cobre notas no asignadas (R-3.6 del tío): decisión 4.
 
-## 9. Preguntas abiertas (para Mario)
+## 9. Respuestas de Mario (2026-11-13)
 
-1. **Si el vendedor no abre la ficha** de un cliente con nota asignada, hoy nada lo obliga a dejar comentario: la oficina
-   lo ve en la tarde como "no cobrada" sin comentario. ¿Está bien así, o Cerrar el día debe negarse mientras haya una
-   asignada de hoy sin cobro ni comentario?
-2. **Cambiar la condición y pasar la nota** (decisión 14): ¿la oficina puede cambiar la condición de una nota ya asignada
-   durante el día, y al pasarla a otro vendedor viaja la misma condición?
-3. **Alcance de la migración local 019** (decisión 15): guardar `recado` y `rutas_dia` desde ahora y mostrar el recado en
-   la ruta y la ficha, aunque el vehículo quede para después. ¿De acuerdo?
-4. **Quién hace el PR 1** (servidor y portal): ¿esta sesión, o se lo pasamos a Roberto? Cambia la rama y quién sube la
-   migración a la nube.
+1. La nota sale primero al empezar a operar con el cliente, con **Cobrar** o **Continuar sin cobrar** (comentario
+   obligatorio); después manda la condición. Cerrar el día no se bloquea (regla 11).
+2. Cambiar la condición = quitar y volver a asignar (decisión 14).
+3. El vendedor puede regresar y volver a intentar cobrar: la nota sale de nuevo al reabrir la ficha (regla 11).
+4. El PR 1 (servidor y portal) lo hace esta misma sesión. El resto de la spec, de acuerdo, incluido guardar `recado` y
+   `rutas_dia` en la migración 019.
