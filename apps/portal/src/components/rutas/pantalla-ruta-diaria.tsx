@@ -247,7 +247,7 @@ export function TablaDelDia({
                   {r.vehiculo ?? <span className="text-muted-foreground">Sin vehículo</span>}
                 </Td>
                 <Td>
-                  <div className="flex gap-1.5">
+                  <div className="flex flex-wrap gap-1.5">
                     {!editable ? (
                       r.tieneRuta ? (
                         <Button type="button" size="sm" variant="outline" onClick={() => onAbrir(r)}>
@@ -259,6 +259,11 @@ export function TablaDelDia({
                         <Button type="button" size="sm" variant="outline" onClick={() => onAbrir(r)}>
                           Editar
                         </Button>
+                        {onAbrirNotas ? (
+                          <Button type="button" size="sm" variant="outline" onClick={() => onAbrirNotas(r, "pendientes")}>
+                            Asignar notas
+                          </Button>
+                        ) : null}
                         <Button
                           type="button"
                           size="sm"

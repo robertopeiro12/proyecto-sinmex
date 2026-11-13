@@ -178,6 +178,22 @@ describe("PantallaRutaDiaria (lista del día)", () => {
     expect(screen.getByText("Notas asignadas de Juan Pérez editable")).toBeInTheDocument();
   });
 
+  it("Asignar notas (junto a Editar) abre la ventana de pendientes en modo editable; solo con ruta", async () => {
+    const usuario = userEvent.setup();
+    render(<PantallaRutaDiaria sucursal="TJ" />);
+    await screen.findByText("Juan Pérez");
+    expect(screen.getAllByRole("button", { name: "Asignar notas" })).toHaveLength(1);
+    await usuario.click(screen.getByRole("button", { name: "Asignar notas" }));
+    expect(screen.getByText("Notas pendientes de Juan Pérez editable")).toBeInTheDocument();
+  });
+
+  it("un día pasado no muestra Asignar notas", async () => {
+    vi.mocked(rutasLib.obtenerDia).mockResolvedValue(dia([renglon({}), CON_RUTA], false, "2026-11-09"));
+    render(<PantallaRutaDiaria sucursal="TJ" />);
+    await screen.findByText("Juan Pérez");
+    expect(screen.queryByRole("button", { name: "Asignar notas" })).toBeNull();
+  });
+
   it("un día pasado abre la ventana de notas en solo lectura", async () => {
     const usuario = userEvent.setup();
     vi.mocked(rutasLib.obtenerDia).mockResolvedValue(dia([CON_RUTA], false, "2026-11-09"));

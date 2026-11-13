@@ -11,7 +11,7 @@ import { RutaDeVendedor } from "./ruta-de-vendedor";
 vi.mock("@/lib/clientes");
 vi.mock("@/lib/rutas", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/rutas")>();
-  return { ...real, obtenerRutaDiaria: vi.fn(), obtenerOpciones: vi.fn(), guardarRutaDiaria: vi.fn() };
+  return { ...real, obtenerRutaDiaria: vi.fn(), obtenerOpciones: vi.fn(), guardarRutaDiaria: vi.fn(), obtenerNotas: vi.fn() };
 });
 vi.mock("@/lib/rutas-semanales", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/rutas-semanales")>();
@@ -99,6 +99,21 @@ describe("RutaDeVendedor", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Ruta de Ricardo · martes 10 de noviembre" })).toBeInTheDocument();
     expect(rutasLib.obtenerOpciones).toHaveBeenCalledWith("v1", FECHA);
     expect(clientesLib.listarClientes).toHaveBeenCalledWith("TJ", "cliente");
+  });
+
+  it("Asignar notas abre la ventana de notas pendientes del vendedor; en un día pasado no está", async () => {
+    vi.mocked(rutasLib.obtenerNotas).mockResolvedValue({ pendientes: [], asignadas: [] });
+    const { usuario } = pintar();
+    await usuario.click(await screen.findByRole("button", { name: "Asignar notas" }));
+    expect(rutasLib.obtenerNotas).toHaveBeenCalledWith("v1", FECHA);
+    expect(await screen.findByText("Notas para Ricardo · martes 10 de noviembre")).toBeInTheDocument();
+  });
+
+  it("un día pasado no ofrece Asignar notas", async () => {
+    vi.mocked(rutasLib.obtenerRutaDiaria).mockResolvedValue(rutaDiaria({ editable: false }));
+    pintar();
+    await screen.findByRole("button", { name: "← Volver a Ruta Diaria" });
+    expect(screen.queryByRole("button", { name: "Asignar notas" })).toBeNull();
   });
 
   it("la ruta que trae otro sale deshabilitada con (la trae Juan); el vehículo de otro sale (lo trae Juan) y sí se escoge", async () => {
