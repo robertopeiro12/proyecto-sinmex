@@ -100,8 +100,8 @@ describe("PantallaRecarga (T-27)", () => {
     vi.clearAllMocks();
     mockAuth(() => true);
     listarSucursales.mockResolvedValue([
-      { id: "s-tj", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: true },
-      { id: "s-mx", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false },
+      { id: "s-tj", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: true, consumoDiarioMax: 1 },
+      { id: "s-mx", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false, consumoDiarioMax: 1 },
     ]);
     obtenerRejilla.mockResolvedValue(REJILLA);
   });

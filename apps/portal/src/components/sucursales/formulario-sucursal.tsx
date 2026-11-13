@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Campo, Casilla, Entrada } from "@/components/ui/campo";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
+import { AYUDA_CONSUMO_DIARIO, ERROR_CONSUMO_DIARIO, leerConsumoDiarioMax } from "./consumo-diario";
 import { crearSucursal, editarSucursal, type Sucursal } from "@/lib/sucursales";
 
 interface Props {
@@ -18,6 +19,8 @@ export function FormularioSucursal({ sucursal, alGuardar, alCancelar }: Props) {
   const [nombre, setNombre] = useState(sucursal?.nombre ?? "");
   const [activa, setActiva] = useState(sucursal?.activa ?? true);
   const [controlInventario, setControlInventario] = useState(sucursal?.controlInventario ?? false);
+  const [consumo, setConsumo] = useState(String(sucursal?.consumoDiarioMax ?? 1));
+  const consumoDiarioMax = leerConsumoDiarioMax(consumo);
   const { enviando, error, enviar } = useEnvioFormulario(
     "No se pudo guardar la sucursal.",
   );
@@ -26,10 +29,17 @@ export function FormularioSucursal({ sucursal, alGuardar, alCancelar }: Props) {
 
   async function alEnviar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault();
+    // El campo ya pinta su error; con un valor que no vale no se manda nada.
+    if (sucursal && consumoDiarioMax === null) return;
     await enviar(
       () =>
         sucursal
-          ? editarSucursal(sucursal.id, { nombre, activa, controlInventario })
+          ? editarSucursal(sucursal.id, {
+              nombre,
+              activa,
+              controlInventario,
+              consumoDiarioMax: consumoDiarioMax ?? 1,
+            })
           : crearSucursal({ codigo, nombre }),
       alGuardar,
     );
@@ -95,6 +105,29 @@ export function FormularioSucursal({ sucursal, alGuardar, alCancelar }: Props) {
         </div>
       )}
 
+      {!esAlta && (
+        <Campo
+          id="consumo-diario-max"
+          etiqueta="Consumo propio máximo por día"
+          ayuda={AYUDA_CONSUMO_DIARIO}
+          error={consumoDiarioMax === null ? ERROR_CONSUMO_DIARIO : null}
+        >
+          <Entrada
+            id="consumo-diario-max"
+            name="consumoDiarioMax"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            max={99}
+            step={1}
+            disabled={enviando}
+            value={consumo}
+            onChange={(e) => setConsumo(e.target.value)}
+            className="w-24"
+          />
+        </Campo>
+      )}
+
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -105,7 +138,7 @@ export function FormularioSucursal({ sucursal, alGuardar, alCancelar }: Props) {
         <Button type="button" variant="outline" disabled={enviando} onClick={alCancelar}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={enviando}>
+        <Button type="submit" disabled={enviando || (!esAlta && consumoDiarioMax === null)}>
           {enviando ? "Guardando…" : "Guardar"}
         </Button>
       </div>

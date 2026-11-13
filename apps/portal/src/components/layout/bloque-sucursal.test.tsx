@@ -6,8 +6,8 @@ import { BloqueSucursal } from "./bloque-sucursal";
 import type { SucursalActual } from "./use-sucursal-actual";
 
 const OPCIONES: Sucursal[] = [
-  { id: "s1", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false },
-  { id: "s2", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false },
+  { id: "s1", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false, consumoDiarioMax: 1 },
+  { id: "s2", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false, consumoDiarioMax: 1 },
 ];
 
 function sucursal(cambios: Partial<SucursalActual> = {}): SucursalActual {

@@ -6,14 +6,12 @@ import {
   estadoSubida,
   pastillaAlta,
   entradasMenu,
-  esSeccionPendiente,
   filtrarParaAgregar,
   indiceDestino,
   moverElemento,
   motivoDeRechazo,
   primeraLineaDomicilio,
   sinRutaAsignada,
-  SECCIONES_PENDIENTES,
   textoAgregado,
   textoAvisoSinRuta,
   textoBurbuja,
@@ -164,7 +162,7 @@ describe('menu hamburguesa (D9, D16)', () => {
       ['Prospectos capturados', '/(jornada)/prospectos'],
       ['Gastos', '/(jornada)/gastos'],
       ['Inventario', '/(jornada)/inventario'],
-      ['Merma, promoción y consumo', '/(jornada)/pendiente/merma'],
+      ['Merma y consumo', '/(jornada)/merma'],
       ['Ruta y GPS', '/(jornada)/ruta'],
       ['Cerrar el día', '/(jornada)/cerrar-dia'],
     ]);
@@ -178,26 +176,18 @@ describe('menu hamburguesa (D9, D16)', () => {
     expect(deshabilitadas).toEqual(['gastos', 'merma']);
   });
 
-  it('cada pendiente del menu tiene su seccion con ticket', () => {
-    for (const e of entradasMenu(false)) {
-      const seccion = e.destino.replace('/(jornada)/pendiente/', '');
-      if (e.destino.startsWith('/(jornada)/pendiente/')) {
-        expect(esSeccionPendiente(seccion)).toBe(true);
-        expect(SECCIONES_PENDIENTES[seccion as keyof typeof SECCIONES_PENDIENTES].ticket).not.toBe('');
-      }
-    }
-    expect(esSeccionPendiente('otra')).toBe(false);
+  it('ninguna entrada abre una pantalla "Próximamente" por seccion', () => {
+    expect(entradasMenu(false).some((e) => e.destino.startsWith('/(jornada)/pendiente/'))).toBe(false);
+    expect(entradasMenu(false).some((e) => e.descripcion.startsWith('Pendiente: T-27'))).toBe(false);
   });
 
-  it('Gastos ya no es una seccion pendiente (T-30/T-31): abre su pantalla', () => {
-    expect(esSeccionPendiente('gastos')).toBe(false);
+  it('Gastos abre su pantalla (T-30/T-31)', () => {
     const gastos = entradasMenu(false).find((e) => e.clave === 'gastos');
     expect(gastos).toMatchObject({ titulo: 'Gastos', destino: '/(jornada)/gastos', deshabilitada: false });
     expect(gastos?.descripcion).not.toMatch(/Pendiente/);
   });
 
-  it('Inventario ya no es una seccion pendiente (T-27): abre su pantalla y se consulta con el dia cerrado', () => {
-    expect(esSeccionPendiente('inventario')).toBe(false);
+  it('Inventario abre su pantalla (T-27) y se consulta con el dia cerrado', () => {
     const inventario = entradasMenu(true).find((e) => e.clave === 'inventario');
     expect(inventario).toMatchObject({
       titulo: 'Inventario',
@@ -205,6 +195,16 @@ describe('menu hamburguesa (D9, D16)', () => {
       deshabilitada: false,
     });
     expect(inventario?.descripcion).not.toMatch(/Pendiente/);
+  });
+
+  it('Merma y consumo abre su pantalla (T-27 pieza 2)', () => {
+    expect(entradasMenu(false).find((e) => e.clave === 'merma')).toEqual({
+      clave: 'merma',
+      titulo: 'Merma y consumo',
+      descripcion: 'Merma del trayecto y consumo propio',
+      destino: '/(jornada)/merma',
+      deshabilitada: false,
+    });
   });
 });
 

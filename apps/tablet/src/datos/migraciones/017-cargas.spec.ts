@@ -34,11 +34,10 @@ function insertarCarga(bd: BaseDatos, cambios: Record<string, string | number | 
 }
 
 describe('migracion 017: cargas (T-27)', () => {
-  it('la 017 es la ultima y deja versionEsquema en 17', () => {
+  it('la 017 es cargas y deja de ser la ultima con la 018 (T-27 pieza 2)', () => {
     expect(migraciones[16]?.nombre).toBe('cargas');
     expect(migraciones[16]?.version).toBe(17);
-    expect(migraciones).toHaveLength(17);
-    expect(versionEsquema(baseAlDia())).toBe(17);
+    expect(versionEsquema(baseAlDia())).toBe(migraciones.length);
   });
 
   it('el vendedor que ya estaba queda con el control apagado', () => {

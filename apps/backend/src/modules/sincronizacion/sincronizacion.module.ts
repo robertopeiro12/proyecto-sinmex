@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ComprasEgresosModule } from '../compras-egresos/compras-egresos.module';
 import { CarteraClientesModule } from '../cartera-clientes/cartera-clientes.module';
+import { InventarioModule } from '../inventario/inventario.module';
 import { ProduccionModule } from '../produccion/produccion.module';
 import { RutasModule } from '../rutas/rutas.module';
 import { VentasCobranzaModule } from '../ventas-cobranza/ventas-cobranza.module';
@@ -26,6 +27,8 @@ import { SincronizacionService } from './sincronizacion.service';
     ComprasEgresosModule,
     // T-27 suma Produccion: la duena de la carga (pull y respuesta).
     ProduccionModule,
+    // T-27 pieza 2 suma Inventario: el dueno de los movimientos (merma y consumo).
+    InventarioModule,
   ],
   // T-40 (foto): `FotoController` es un canal aparte del lote del `push` — otro
   // controller, otro servicio, otro repositorio. Comparten el prefijo `sync` y

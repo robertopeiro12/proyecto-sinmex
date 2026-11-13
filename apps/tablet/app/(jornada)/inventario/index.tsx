@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { Text, View } from 'react-native';
 
-import { NOTA_CONTROL_APAGADO, pastillaCarga, totalPiezas } from '@/estado/inventario';
+import { filasPorRegresar, NOTA_CONTROL_APAGADO, pastillaCarga, totalPiezas } from '@/estado/inventario';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import { Boton } from '@/ui/boton';
@@ -12,10 +12,12 @@ import { useTema } from '@/ui/tema';
 import { espacio } from '@/ui/tokens';
 
 /**
- * Inventario (T-27 pieza 1, entrada del menu): las cargas de hoy con su estado y
- * total, y por presentacion Cargado − Vendido − Regalado = Existencia. Con el
- * control apagado se muestra igual, con la nota. Toda la cuenta vive en
- * `inventario-reglas.ts` (con pruebas); aqui solo se pinta.
+ * Inventario (T-27, entrada del menu): las cargas de hoy con su estado y total;
+ * por presentacion Cargado − Vendido − Regalado − Merma entregada − Merma del
+ * trayecto − Consumo = Existencia (pieza 2), y lo que hay que regresar a la
+ * planta: piezas buenas y merma. Con el control apagado se muestra igual, con
+ * la nota. Toda la cuenta vive en `inventario-reglas.ts` (con pruebas); aqui
+ * solo se pinta.
  */
 export default function Inventario() {
   const { datos, vendedor, versionCatalogos } = useJawa();
@@ -35,10 +37,12 @@ export default function Inventario() {
     };
   }, [datos, vendedor, versionCatalogos, ultimaSincronizacion]);
 
+  const porRegresar = filasPorRegresar(vista.filas);
+
   return (
     <Pantalla
       titulo="Inventario"
-      subtitulo="Lo que traes hoy: tus cargas aceptadas menos lo que vendiste y regalaste."
+      subtitulo="Lo que traes hoy: tus cargas aceptadas menos lo que vendiste, regalaste, repusiste, se mermó y consumiste."
     >
       {!vista.control ? (
         <Tarjeta estado="pendiente" etiqueta="Control apagado">
@@ -89,12 +93,13 @@ export default function Inventario() {
           <Text style={estilos.textoSuave}>Acepta una carga para ver lo que traes.</Text>
         </Tarjeta>
       ) : (
-        <Tarjeta etiqueta="Cargado − Vendido − Regalado = Existencia">
+        <Tarjeta etiqueta="Cargado − Vendido − Regalado − Merma entregada − Merma del trayecto − Consumo = Existencia">
           {vista.filas.map((f) => (
             <View
               key={f.presentacionId}
               style={{
                 flexDirection: 'row',
+                flexWrap: 'wrap',
                 justifyContent: 'space-between',
                 gap: espacio.sm,
                 marginBottom: espacio.xs,
@@ -103,8 +108,31 @@ export default function Inventario() {
               <Text style={[estilos.textoTarjeta, { flexShrink: 1 }]}>{f.etiqueta}</Text>
               <Text style={estilos.textoSuave}>
                 <Cifra valor={f.cargado} tono="suave" /> − <Cifra valor={f.vendido} tono="suave" /> −{' '}
-                <Cifra valor={f.regalado} tono="suave" /> ={' '}
+                <Cifra valor={f.regalado} tono="suave" /> − <Cifra valor={f.mermaEntregada} tono="suave" /> −{' '}
+                <Cifra valor={f.mermaTrayecto} tono="suave" /> − <Cifra valor={f.consumo} tono="suave" /> ={' '}
                 <Cifra valor={f.existencia} tono={f.existencia <= 0 ? 'peligro' : 'tinta'} />
+              </Text>
+            </View>
+          ))}
+        </Tarjeta>
+      )}
+
+      <Text style={estilos.seccion}>Por regresar a la planta</Text>
+      {porRegresar.length === 0 ? (
+        <Tarjeta etiqueta="Nada por regresar">
+          <Text style={estilos.textoSuave}>Cuando te quede producto o registres merma, aparece aquí.</Text>
+        </Tarjeta>
+      ) : (
+        <Tarjeta etiqueta="Piezas buenas · Merma">
+          {porRegresar.map((f) => (
+            <View
+              key={f.presentacionId}
+              style={{ flexDirection: 'row', justifyContent: 'space-between', gap: espacio.sm, marginBottom: espacio.xs }}
+            >
+              <Text style={[estilos.textoTarjeta, { flexShrink: 1 }]}>{f.etiqueta}</Text>
+              <Text style={estilos.textoSuave}>
+                Buenas <Cifra valor={f.buenas} tono="tinta" /> · Merma{' '}
+                <Cifra valor={f.merma} tono={f.merma > 0 ? 'aviso' : 'suave'} />
               </Text>
             </View>
           ))}

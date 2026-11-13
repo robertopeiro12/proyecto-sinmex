@@ -1,5 +1,6 @@
 import type { RepositorioCobranzas } from '@/datos/repositorios/cobranzas';
 import type { RepositorioJornadas } from '@/datos/repositorios/jornadas';
+import type { RepositorioMovimientos } from '@/datos/repositorios/movimientos';
 import type { RepositorioProspectos } from '@/datos/repositorios/prospectos';
 import type { RepositorioRutas } from '@/datos/repositorios/rutas';
 import type { RepositorioVentas } from '@/datos/repositorios/ventas';
@@ -25,13 +26,16 @@ export interface FuentesConPendientes {
   visitas: RepositorioVisitas;
   /** T-30/T-31: los gastos de la ruta. */
   gastos: RepositorioGastos;
+  /** T-27 pieza 2: merma del cliente, merma del trayecto y consumo propio. */
+  movimientos: RepositorioMovimientos;
   /** T-37: las altas de ruta del vendedor. */
   rutas: RepositorioRutas;
 }
 
 /**
- * Cuenta lo que falta por subir, sumando las 7 fuentes del push de hoy (T-07,
- * T-16, T-40, T-20, T-39, T-30/T-31, T-37): jornada, venta, prospecto, cobranza, visita, gasto y alta de ruta.
+ * Cuenta lo que falta por subir, sumando las 8 fuentes del push de hoy (T-07,
+ * T-16, T-40, T-20, T-39, T-30/T-31, T-37, T-27 pieza 2): jornada, venta,
+ * prospecto, cobranza, visita, gasto, movimiento y alta de ruta.
  *
  * Si una fuente se queda fuera de esta suma, el menu de la jornada y "cerrar
  * el dia" pueden decir "listo" con datos todavia sin subir (I-1, PR #90) — por
@@ -46,6 +50,7 @@ export function contarPendientesDeSubir(datos: FuentesConPendientes): number {
     datos.cobranzas.pendientesDeSincronizar().length +
     datos.visitas.pendientesDeSincronizar().length +
     datos.gastos.pendientesDeSincronizar().length +
+    datos.movimientos.pendientesDeSincronizar().length +
     datos.rutas.pendientesDeSincronizar().length
   );
 }

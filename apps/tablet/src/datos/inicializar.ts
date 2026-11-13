@@ -11,6 +11,7 @@ import { crearRepositorioGastos, type RepositorioGastos } from './repositorios/g
 import { crearRepositorioRutas, type RepositorioRutas } from './repositorios/rutas';
 import { crearRepositorioFolios, type RepositorioFolios } from './repositorios/folios';
 import { crearRepositorioJornadas, type RepositorioJornadas } from './repositorios/jornadas';
+import { crearRepositorioMovimientos, type RepositorioMovimientos } from './repositorios/movimientos';
 import {
   crearRepositorioProspectos,
   type RepositorioProspectos,
@@ -48,6 +49,8 @@ export interface CapaDatos {
   promociones: RepositorioPromociones;
   /** La carga y las recargas del vendedor y su inventario del dia (T-27). */
   cargas: RepositorioCargas;
+  /** Merma del cliente, merma del trayecto y consumo propio (T-27 pieza 2). */
+  movimientos: RepositorioMovimientos;
   /** Version de esquema con la que quedo la base tras migrar. */
   versionEsquema: number;
 }
@@ -94,6 +97,9 @@ export function inicializarCapaDatos(): CapaDatos {
     // El MISMO `catalogos`: `aplicarRespuesta` publica por el la version que
     // observan Inventario, la pantalla principal y la venta.
     cargas: crearRepositorioCargas(deps, { catalogos }),
+    // El MISMO `catalogos`: `registrar` publica por el la version que observan
+    // Inventario, la ficha y "Merma y consumo".
+    movimientos: crearRepositorioMovimientos(deps, { catalogos }),
     versionEsquema: versionFinal,
   };
 }

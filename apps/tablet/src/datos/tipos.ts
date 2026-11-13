@@ -48,6 +48,12 @@ export interface Vendedor {
    * negativo. Baja en el pull; el login sin red no lo pisa.
    */
   control_inventario: Booleano;
+  /**
+   * T-27 pieza 2 (D4): piezas de consumo propio que puede registrar en un dia
+   * (el de su sucursal; 0 = no se ofrece). Baja en el pull; el login sin red no
+   * lo pisa.
+   */
+  consumo_diario_max: number;
   sincronizado_en: MomentoISO;
 }
 
@@ -561,5 +567,35 @@ export interface Carga {
 export interface CargaDetalle {
   carga_id: string;
   presentacion_id: string;
+  piezas: number;
+}
+
+/** T-27 pieza 2: los movimientos que no son venta (D1, D3). */
+export type TipoMovimiento = 'merma_cliente' | 'merma_trayecto' | 'consumo';
+
+/** `recibido` = entra a la camioneta (lo danado que devuelve el cliente); `entregado` = sale. */
+export type SentidoMovimiento = 'recibido' | 'entregado';
+
+/** Un movimiento de inventario (T-27 pieza 2). No se edita ni se borra en la app (D6). */
+export interface Movimiento {
+  id: string;
+  /** Dia de trabajo (`reloj.hoy()`), el de `fecha_operacion`. */
+  fecha: FechaISO;
+  vendedor_id: string;
+  /** Solo en la merma del cliente. */
+  cliente_id: string | null;
+  tipo: TipoMovimiento;
+  comentario: string | null;
+  /** Cuando lo guardo el vendedor. Viaja como `ocurrido_en` y `datos.registrado_en`. */
+  registrado_en: MomentoISO;
+  sync_estado: SyncEstado;
+  sync_error: string | null;
+  sincronizado_en: MomentoISO | null;
+}
+
+export interface MovimientoLinea {
+  movimiento_id: string;
+  presentacion_id: string;
+  sentido: SentidoMovimiento;
   piezas: number;
 }

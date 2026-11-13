@@ -117,8 +117,8 @@ describe("PantallaFlujoDiario", () => {
     obtenerDetalle.mockResolvedValue(DETALLE);
     listarVendedores.mockResolvedValue([]);
     listarSucursales.mockResolvedValue([
-      { id: "1", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false },
-      { id: "2", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false },
+      { id: "1", codigo: "TJ", nombre: "Tijuana", activa: true, controlInventario: false, consumoDiarioMax: 1 },
+      { id: "2", codigo: "MX", nombre: "Mexicali", activa: true, controlInventario: false, consumoDiarioMax: 1 },
     ]);
   });
 

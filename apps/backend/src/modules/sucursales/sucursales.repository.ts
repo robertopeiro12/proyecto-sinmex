@@ -9,6 +9,8 @@ export interface Sucursal {
   activa: boolean;
   /** T-27 (D7). */
   controlInventario: boolean;
+  /** T-27 pieza 2 (D4). */
+  consumoDiarioMax: number;
 }
 
 /** Las columnas que salen a la API. `deleted_at` nunca se expone (ver D6). */
@@ -18,6 +20,7 @@ const CAMPOS = [
   'nombre',
   'activa',
   'control_inventario as controlInventario',
+  'consumo_diario_max as consumoDiarioMax',
 ] as const;
 
 @Injectable()
@@ -68,8 +71,9 @@ export class SucursalesRepository {
    * `cambios` nunca llega vacio: el servicio lo comprueba antes. Un `.set({})`
    * genera SQL invalido, asi que el chequeo no es cortesia, es necesario.
    *
-   * T-27 (D7): si cambia `control_inventario`, en la MISMA transaccion se toca
-   * `updated_at` de los vendedores de la sucursal. La tablet solo baja su propia
+   * T-27 (D7) y pieza 2 (D4): si cambia `control_inventario` o
+   * `consumo_diario_max`, en la MISMA transaccion se toca `updated_at` de los
+   * vendedores de la sucursal. La tablet solo baja su propia
    * ficha de `vendedor` y la baja por `updated_at`: sin esto, el pull
    * incremental nunca le traeria la casilla nueva.
    */
@@ -79,6 +83,7 @@ export class SucursalesRepository {
       nombre?: string;
       activa?: boolean;
       control_inventario?: boolean;
+      consumo_diario_max?: number;
     },
     tocarVendedores: boolean,
   ): Promise<Sucursal> {

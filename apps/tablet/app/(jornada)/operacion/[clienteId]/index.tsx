@@ -5,6 +5,7 @@ import { Alert, Image, Linking, Modal, Pressable, Text, View } from 'react-nativ
 import type { SyncEstado } from '@/datos/tipos';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
 import { firmaPorSubir } from '@/estado/firma';
+import { pastillaMovimiento, resumenMovimiento } from '@/estado/movimiento';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import { estadoSubida, pastillaAlta, urlMapa, urlTelefono } from '@/estado/ruta-del-dia';
@@ -71,6 +72,8 @@ export default function FichaCliente() {
       ventas: datos.ventas.delDia(clienteId),
       cobros: datos.cobranzas.delDia(clienteId),
       visitas: datos.visitas.delDia(clienteId),
+      // T-27 pieza 2: la merma registrada con este cliente hoy.
+      movimientos: datos.movimientos.delDiaDelCliente(clienteId),
       notas: datos.catalogos.notasPendientesDe(clienteId).filter((n) => n.saldo_centavos > 0),
       // Con las mismas dependencias: una venta recien grabada apaga la bienvenida del prospecto.
       promociones: datos.promociones.aplicablesPara(clienteId),
@@ -147,6 +150,7 @@ export default function FichaCliente() {
         : 'neutro';
   // Lo mas grave manda, como en "Ventas de hoy" (T-39, D8).
   const estadoVisitas: Estado = estadoSubida(hoy.visitas.map((v) => v.sync_estado)) ?? 'neutro';
+  const estadoMovimientos: Estado = estadoSubida(hoy.movimientos.map((m) => m.sync_estado)) ?? 'neutro';
 
   const datoTocable = (etiqueta: string, valor: string, onPress: (() => void) | null) => (
     <Pressable
@@ -233,19 +237,16 @@ export default function FichaCliente() {
         />
       </View>
 
-      {/* Secundario: sigue aqui hasta que T-27 de a la entrada del menu una
-          pantalla real (hoy abre un "pendiente"); entonces se quita. El gasto ya
-          tiene su pantalla en el menu (T-30/T-31). */}
-      {esProspecto ? null : (
-        <View style={[estilos.rejilla, { marginTop: espacio.sm }]}>
-          <BotonMenu
-            titulo="Merma, promoción y consumo"
-            descripcion="Registros de campo que afectan el inventario y el corte"
-            destino={{ pathname: '/(jornada)/operacion/[clienteId]/registros', params }}
-            deshabilitado={!menu.operacionesHabilitadas}
-          />
-        </View>
-      )}
+      {/* T-27 pieza 2 (D2): la merma del cliente. Tambien al prospecto: pudo
+          recibir producto dañado en su regalo de bienvenida (Review Focus 4). */}
+      <View style={[estilos.rejilla, { marginTop: espacio.sm }]}>
+        <BotonMenu
+          titulo="Merma"
+          descripcion="Producto dañado que te devuelve y lo que le repones"
+          destino={{ pathname: '/(jornada)/operacion/[clienteId]/merma', params }}
+          deshabilitado={!menu.operacionesHabilitadas}
+        />
+      </View>
 
       {menu.avisoDiaCerrado ? (
         <Tarjeta estado="listo" etiqueta="Día cerrado">
@@ -328,6 +329,28 @@ export default function FichaCliente() {
                 <Text style={estilos.textoTarjeta}>
                   {v.motivo_nombre} · <Cifra valor={formatearHora(v.visitada_en)} />
                 </Text>
+                <Pastilla texto={p.texto} estado={p.estado} />
+                {p.detalle ? <Text style={estilos.error}>{p.detalle}</Text> : null}
+              </View>
+            );
+          })
+        )}
+      </Tarjeta>
+
+      {/* T-27 pieza 2: la merma con este cliente, con su subida. No se edita ni se borra (D6). */}
+      <Tarjeta estado={estadoMovimientos} etiqueta="Movimientos de hoy">
+        {hoy.movimientos.length === 0 ? (
+          <Text style={estilos.textoSuave}>Sin merma registrada hoy.</Text>
+        ) : (
+          hoy.movimientos.map((m) => {
+            const p = pastillaMovimiento(m);
+            return (
+              <View key={m.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
+                <Text style={estilos.textoTarjeta}>
+                  Merma · <Cifra valor={formatearHora(m.registrado_en)} />
+                </Text>
+                <Text style={estilos.textoSuave}>{resumenMovimiento(m)}</Text>
+                {m.comentario ? <Text style={estilos.textoSuave}>{m.comentario}</Text> : null}
                 <Pastilla texto={p.texto} estado={p.estado} />
                 {p.detalle ? <Text style={estilos.error}>{p.detalle}</Text> : null}
               </View>
