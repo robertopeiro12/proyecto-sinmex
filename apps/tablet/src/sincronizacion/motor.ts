@@ -529,6 +529,9 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
     ),
     // T-27: un servidor anterior no manda la coleccion; `undefined` no escribe nada.
     cargas: respuesta.cargas,
+    // Notas asignadas: un servidor anterior no manda estas colecciones; `undefined` no escribe nada.
+    rutasDia: respuesta.rutas_dia,
+    notasAsignadas: respuesta.notas_asignadas,
   };
 }
 

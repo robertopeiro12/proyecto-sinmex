@@ -54,7 +54,10 @@ Fuentes:
 10. **Cuándo se cumple la condición**, con datos locales de la tablet:
     - Una nota con `nota_pendiente.saldo_centavos = 0` **nunca bloquea ni se pide**, la haya cobrado quien sea (regla 9):
       no hay nada que cobrar.
-    - `liquidar`: la nota quedó en saldo 0.
+    - `liquidar`: la nota quedó en saldo 0, o **un cobro registrado hoy en la tablet la dejó en 0** ("liquidada hoy":
+      la línea de su `reparto_json` trae `saldo_despues_centavos = 0`). Lo segundo hace falta porque la sincronización
+      corre el pull antes del push: un pull puede reescribir `nota_pendiente` con el saldo de antes del cobro (viva y
+      con saldo) y la nota volvería a bloquear. Las líneas viejas sin `saldo_despues_centavos` no cuentan como liquidadas.
     - `abonar`: **un cobro del vendedor registrado hoy tocó esa nota**. "Hoy" es la fecha de operación del cobro (el día
       de la jornada), **no** `fecha_pago`, que el vendedor puede retroceder. "Tocó" = la nota recibió dinero en el reparto
       del cobro, la haya elegido él o no; para saberlo la tabla local `cobranza` guarda el reparto (`reparto_json`,
@@ -197,7 +200,7 @@ Pre-flight: una columna con default y una tabla nueva; nada que contar.
     ('pendiente','enviando','sincronizado','error'), sync_error text, sincronizado_en text)` con
     `idx_nota_no_cobrada_sync (sync_estado) where sync_estado <> 'sincronizado'` e índice `(venta_nota_id, fecha)`.
   - `alter table cobranza add column reparto_json text not null default '[]';` — las líneas del reparto del cobro
-    (`[{venta_nota_id, monto_centavos}]`) tal como las calculó la tablet al grabar; `cobranzas.registrar` las guarda
+    (`[{venta_nota_id, monto_centavos, saldo_despues_centavos}]`) tal como las calculó la tablet al grabar; `cobranzas.registrar` las guarda
     desde entonces. Es lo que lee la regla 10. Las cobranzas anteriores a la migración quedan con `[]` (son de días
     pasados: no afectan "hoy").
   - La migración termina llamando `olvidarCursor()` (decisión 16).
@@ -208,8 +211,10 @@ Pre-flight: una columna con default y una tabla nueva; nada que contar.
 - `delDia(fecha)`: asignadas vivas de hoy cruzadas con `nota_pendiente` viva, saldo > 0, con cliente, folio, fecha,
   saldo, días de atraso (`hoy − (fecha + cliente.plazo_credito_dias)`, mínimo 0; sin plazo = 0, igual que el servidor) y
   condición.
-- `porCliente(clienteId, fecha)` y `porAtender(clienteId, fecha)`: las que no tienen cobro de hoy ni comentario de hoy
-  (regla 11).
+- `porCliente(clienteId, fecha)` y `porAtender(clienteId, fecha)`: las que tienen saldo y no tienen cobro de hoy
+  (regla 11: el comentario de hoy **no** la saca; la nota sale otra vez cada que se opera con el cliente). Cada nota
+  trae `tocadaHoy` (un cobro de hoy la tocó en su `reparto_json`), `liquidadaHoy` (ese cobro la dejó en
+  `saldo_despues_centavos = 0`, regla 10) y `comentadaHoy`.
 - `bloqueoDeVenta(clienteId, fecha): string | null`: motivo si alguna asignada con condición no la cumple (regla 10).
   Textos: "Tiene una nota asignada que debe liquidar antes de venderle" / "… que debe abonar antes de venderle".
 - `registrarNoCobrada({ventaNotaId, clienteId, comentario})`: exige jornada abierta, comentario 1..300 recortado,
@@ -249,7 +254,7 @@ Pre-flight: una columna con default y una tabla nueva; nada que contar.
   registrado_en}`. Registrar en `fuentesDelPush` (después de Cobranzas), `FuentesConPendientes` y
   `contarPendientesDeSubir`.
 - Rechazo `nota-no-encontrada` o `nota-no-cobrada-id-ocupado`: la fila queda en `error` con el motivo y se ve en la
-  ficha como las demás; no se reintenta sola.
+  ficha, y se vuelve a enviar en cada sincronización (como gasto y visita): sigue en `error` con el motivo.
 
 ### Cerrar el día
 - Sin cambios. No se exige atender todas las asignadas para cerrar (la oficina lo ve en la revisión de la tarde).

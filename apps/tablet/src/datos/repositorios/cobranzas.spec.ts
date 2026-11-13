@@ -1,4 +1,5 @@
 import { depsDePrueba, FIRMA_DE_PRUEBA, snapshotDePrueba } from '../pruebas-apoyo';
+import { leerReparto } from '../cobranzas-reglas';
 import { crearRepositorioCatalogos } from './catalogos';
 import {
   crearRepositorioCobranzas,
@@ -75,6 +76,7 @@ describe('repositorio de cobranzas (T-20; sin folio desde T-21)', () => {
       sync_estado: 'pendiente',
       sync_error: null,
       sincronizado_en: null,
+      reparto_json: '[{"venta_nota_id":"nota-1","monto_centavos":5000,"saldo_despues_centavos":10000}]',
     });
     expect(cuantas(deps, 'folio_emitido')).toBe(0);
   });
@@ -106,6 +108,19 @@ describe('repositorio de cobranzas (T-20; sin folio desde T-21)', () => {
     expect(nota(deps, 'nota-1')).toMatchObject({ saldo_centavos: 0, activo: 0 });
     expect(nota(deps, 'nota-2')).toMatchObject({ saldo_centavos: 0, activo: 0 });
     expect(catalogos.obtenerCliente('cli-1')?.saldo_favor_centavos).toBe(5000);
+  });
+
+  it('guarda en reparto_json las notas que tocó, en orden, con el saldo en que quedó cada una', () => {
+    const { deps, cobranzas } = montar();
+    const c = cobranzas.registrar(cobro({ montoCentavos: 20000 }));
+    const fila = deps.bd.getFirstSync<{ reparto_json: string }>(
+      'select reparto_json from cobranza where id = $id',
+      { $id: c.id },
+    );
+    expect(leerReparto(fila?.reparto_json ?? '')).toEqual([
+      { venta_nota_id: 'nota-1', monto_centavos: 15000, saldo_despues_centavos: 0 },
+      { venta_nota_id: 'nota-2', monto_centavos: 5000, saldo_despues_centavos: 5000 },
+    ]);
   });
 
   it('previsualizar da el reparto de registrar sin escribir nada', () => {

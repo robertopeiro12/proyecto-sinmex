@@ -45,8 +45,16 @@ export function sinRutaAsignada(grupos: {
   return grupos.enRuta.length === 0 && grupos.visitadosSinVenta.length === 0 && grupos.fueraDeRuta.length === 0;
 }
 
-/** La linea de la fila de "Visitados sin venta": "Cerrado · 10:42". */
-export function textoUltimaVisita(motivo: string | null, en: string | null): string {
+/**
+ * La linea de la fila de "Visitados sin venta": "Cerrado · 10:42". Sin visita
+ * pero con comentario de "Continuar sin cobrar": "No cobró · 10:42".
+ */
+export function textoUltimaVisita(
+  motivo: string | null,
+  en: string | null,
+  comentarioEn: string | null = null,
+): string {
+  if (motivo === null && en === null && comentarioEn !== null) return `No cobró · ${formatearHora(comentarioEn)}`;
   return `${motivo ?? 'Visita'} · ${formatearHora(en)}`;
 }
 
@@ -92,6 +100,11 @@ export function textoAgregado(nombre: string): string {
 /** Lo que lee el lector de pantalla en la burbuja. */
 export function textoBurbuja(notas: number): string {
   return notas === 1 ? '1 nota pendiente' : `${notas} notas pendientes`;
+}
+
+/** La marca de la fila de la ruta con notas asignadas por la oficina. */
+export function textoMarcaAsignadas(n: number): string {
+  return n === 1 ? 'Nota asignada' : `Notas asignadas · ${n}`;
 }
 
 /** Saca el elemento `desde` y lo mete en `hasta`. Fuera de rango, una copia igual. */

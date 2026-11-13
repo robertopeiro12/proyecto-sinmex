@@ -9,6 +9,7 @@ import {
   moverElemento,
   primeraLineaDomicilio,
   textoBurbuja,
+  textoMarcaAsignadas,
   textoUltimaVisita,
 } from '@/estado/ruta-del-dia';
 import { textoEstadoVisitas } from '@/estado/visita';
@@ -21,8 +22,13 @@ import { colores, espacio, fuente, grosor, radio, tipo } from './tokens';
  * Alto FIJO de cada fila (D10): el arrastre calcula a que renglon cae
  * dividiendo el desplazamiento entre el paso de una fila. Una fila mas alta
  * romperia la cuenta; por eso cada texto va en una sola linea.
+ *
+ * 112 y no 96 (notas asignadas, 2026-11-13): con el recado la fila llega a
+ * cuatro lineas (nombre, recado, domicilio y "Por subir"/error); a escala 1.1
+ * son ~21+14+18+14 px de letra (~1.3 de interlineado) mas 3 huecos `xs`, ~98 px.
+ * Todo el arrastre usa `ALTO_FILA + HUECO`, asi que la cuenta sigue cuadrando.
  */
-export const ALTO_FILA = 96;
+export const ALTO_FILA = 112;
 
 /** Hueco entre filas. El paso del arrastre es `ALTO_FILA + HUECO`. */
 const HUECO = espacio.sm;
@@ -313,6 +319,15 @@ function FilaRuta({
           {fila.visitado ? '✓ ' : ''}
           {fila.nombre}
         </Text>
+        {fila.recado ? (
+          <Text
+            numberOfLines={1}
+            accessibilityLabel={`Mensaje de la oficina: ${fila.recado}`}
+            style={{ fontFamily: fuente.cuerpoMedio, fontSize: t(tipo.menor), color: colores.primario }}
+          >
+            {fila.recado}
+          </Text>
+        ) : null}
         <Text
           numberOfLines={1}
           style={{ fontFamily: fuente.cuerpo, fontSize: t(tipo.cuerpo), color: colores.tintaSuave }}
@@ -344,6 +359,7 @@ function FilaRuta({
         ) : null}
       </View>
 
+      {fila.notas_asignadas > 0 ? <MarcaAsignadas notas={fila.notas_asignadas} /> : null}
       {fila.notas_pendientes > 0 ? <Burbuja notas={fila.notas_pendientes} /> : null}
 
       {conError ? (
@@ -422,6 +438,29 @@ export function FilaFueraDeRuta({
       </View>
       {fila.notas_pendientes > 0 ? <Burbuja notas={fila.notas_pendientes} /> : null}
     </Pressable>
+  );
+}
+
+/** La marca de notas que la oficina asigno hoy: tenue y con borde de accion, distinta de la burbuja. */
+function MarcaAsignadas({ notas }: { notas: number }) {
+  const { t } = useTema();
+  return (
+    <View
+      accessible
+      accessibilityLabel={textoMarcaAsignadas(notas)}
+      style={{
+        paddingHorizontal: espacio.sm,
+        paddingVertical: espacio.xs,
+        borderRadius: radio.pastilla,
+        borderWidth: grosor.hairline,
+        borderColor: colores.primario,
+        backgroundColor: colores.primarioTenue,
+      }}
+    >
+      <Text style={{ fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.menor), color: colores.primario }}>
+        {textoMarcaAsignadas(notas)}
+      </Text>
+    </View>
   );
 }
 
@@ -555,7 +594,7 @@ export function FilaVisitadoSinVenta({
   const { t } = useTema();
   const estado = fila.visitas_estado;
   const textoEstado = estado ? textoEstadoVisitas(estado) : null;
-  const linea = textoUltimaVisita(fila.ultima_visita_motivo, fila.ultima_visita_en);
+  const linea = textoUltimaVisita(fila.ultima_visita_motivo, fila.ultima_visita_en, fila.ultimo_comentario_en);
   return (
     <Pressable
       onPress={() => onTocar(fila.cliente_id)}
@@ -588,6 +627,7 @@ export function FilaVisitadoSinVenta({
         >
           {linea}
         </Text>
+        {fila.notas_asignadas > 0 ? <MarcaAsignadas notas={fila.notas_asignadas} /> : null}
         {estado === 'error' && fila.visita_error ? (
           <Text
             numberOfLines={2}

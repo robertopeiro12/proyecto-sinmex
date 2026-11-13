@@ -563,3 +563,54 @@ describe('campos de egreso (T-30/T-31, D6)', () => {
     expect(catalogos.listarCamposEgreso().map((c) => c.id)).not.toContain('ce-gasolina');
   });
 });
+
+describe('guardarSnapshot con ruta del dia y notas asignadas', () => {
+  const rutaDia = {
+    id: 'rd-1',
+    fecha: '2026-08-07',
+    nombre_ruta: 'Ruta Norte',
+    vehiculo_id: null,
+    activo: 1 as const,
+  };
+  const asignada = {
+    id: 'na-1',
+    venta_nota_id: 'nota-1',
+    fecha: '2026-08-07',
+    condicion_venta: 'liquidar' as const,
+    activo: 1 as const,
+  };
+
+  it('guarda rutas_dia y notas_asignadas sellando sincronizado_en', () => {
+    const { deps, catalogos } = conCatalogos();
+
+    catalogos.guardarSnapshot({ rutasDia: [rutaDia], notasAsignadas: [asignada] });
+
+    expect(deps.bd.getAllSync('select * from ruta_dia')).toEqual([
+      { ...rutaDia, sincronizado_en: MOMENTO },
+    ]);
+    expect(deps.bd.getAllSync('select * from nota_asignada')).toEqual([
+      { ...asignada, sincronizado_en: MOMENTO },
+    ]);
+  });
+
+  it('un pull incremental con la asignacion en activo 0 la deja dada de baja', () => {
+    const { deps, catalogos } = conCatalogos();
+    catalogos.guardarSnapshot({ notasAsignadas: [asignada] });
+
+    catalogos.guardarSnapshot({ notasAsignadas: [{ ...asignada, activo: 0 }] });
+
+    expect(
+      deps.bd.getAllSync('select id, activo from nota_asignada'),
+    ).toEqual([{ id: 'na-1', activo: 0 }]);
+  });
+
+  it('un pull sin esas colecciones no borra lo guardado', () => {
+    const { deps, catalogos } = conCatalogos();
+    catalogos.guardarSnapshot({ rutasDia: [rutaDia], notasAsignadas: [asignada] });
+
+    catalogos.guardarSnapshot({ ...snapshotDePrueba() });
+
+    expect(deps.bd.getAllSync('select id from ruta_dia')).toHaveLength(1);
+    expect(deps.bd.getAllSync('select id from nota_asignada')).toHaveLength(1);
+  });
+});

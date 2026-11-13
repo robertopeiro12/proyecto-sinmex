@@ -16,6 +16,7 @@ import type { DepsRepositorio } from './deps';
 import { enTransaccion } from './deps';
 import type { RepositorioFolios } from './folios';
 import { exigirJornadaAbierta } from './jornadas';
+import { crearRepositorioNotasAsignadas } from './notas-asignadas';
 
 /** Error de regla de negocio de la venta (no un fallo tecnico de SQLite). */
 export class ErrorVenta extends Error {
@@ -91,9 +92,13 @@ export type RepositorioVentas = ReturnType<typeof crearRepositorioVentas>;
  * `catalogos` es el que publica la version que observan las pantallas.
  */
 export function crearRepositorioVentas(
-  { bd, reloj, generarId }: DepsRepositorio,
+  deps: DepsRepositorio,
   { catalogos, folios }: { catalogos: RepositorioCatalogos; folios: RepositorioFolios },
 ) {
+  const { bd, reloj, generarId } = deps;
+  // Sin estado propio: lee con el mismo `bd`, asi que dentro de la transaccion
+  // de `registrar` ve la base tal como esta al grabar.
+  const notasAsignadas = crearRepositorioNotasAsignadas(deps);
   const repo = {
     /**
      * Graba una venta y le emite su folio, en **una sola transaccion** (D16).
@@ -243,6 +248,10 @@ export function crearRepositorioVentas(
         if (bloqueo !== null) {
           throw new ErrorVenta(`${bloqueo}. Acéptala en Inventario antes de vender.`);
         }
+        // Notas asignadas: la condicion (liquidar/abonar) se revisa al grabar,
+        // no solo en la pantalla. El servidor no rechaza: el bloqueo es de la tablet.
+        const motivoNota = notasAsignadas.bloqueoDeVenta(datos.clienteId);
+        if (motivoNota !== null) throw new ErrorVenta(`${motivoNota}. Cóbrala antes de vender.`);
         const faltantes = faltantesDeVenta({
           controlInventario: inventario.controlInventario,
           existencias: existencias(inventario.cargas, inventario.ventas, fecha, inventario.movimientos),

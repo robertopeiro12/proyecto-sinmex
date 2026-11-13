@@ -8,10 +8,12 @@ import type {
   FechaISO,
   MomentoISO,
   MotivoVisita,
+  NotaAsignada,
   NotaPendiente,
   Presentacion,
   Promocion,
   Producto,
+  RutaDia,
   Sucursal,
   TipoNegocio,
   Vehiculo,
@@ -65,6 +67,10 @@ export interface SnapshotCatalogos {
    * (`aplicarSnapshotRutas`), no con el upsert generico.
    */
   rutas?: FilaRutaPull[];
+  /** Ruta del dia (nombre y vehiculo). Ausente = no escribe nada. */
+  rutasDia?: Omit<RutaDia, 'sincronizado_en'>[];
+  /** Notas asignadas por la oficina; baja como bandera. Ausente = no escribe nada. */
+  notasAsignadas?: Omit<NotaAsignada, 'sincronizado_en'>[];
   /** T-74. Coleccion nueva del pull; baja como bandera. */
   promociones?: Omit<Promocion, 'sincronizado_en'>[];
   /** T-27. La carga y las recargas del vendedor; regla propia (`aplicarSnapshotCargas`). */
@@ -152,6 +158,8 @@ const COLUMNAS = {
     // T-20: los abonos previos, en JSON.
     'abonos_json',
   ],
+  ruta_dia: ['id', 'fecha', 'nombre_ruta', 'vehiculo_id', 'activo'],
+  nota_asignada: ['id', 'venta_nota_id', 'fecha', 'condicion_venta', 'activo'],
 } as const;
 
 /**
@@ -314,7 +322,10 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
           // fusion propia en `cargas.ts` (una respuesta no se deshace).
           aplicarSnapshotCargas(bd, snapshot.cargas, ahora) +
           upsert(bd, 'cliente_precio', COLUMNAS.cliente_precio, snapshot.precios, ahora) +
-          upsert(bd, 'nota_pendiente', COLUMNAS.nota_pendiente, snapshot.notas, ahora)
+          upsert(bd, 'nota_pendiente', COLUMNAS.nota_pendiente, snapshot.notas, ahora) +
+          // Solo las escribe el pull; sin llaves foraneas (la nota puede no estar aun).
+          upsert(bd, 'ruta_dia', COLUMNAS.ruta_dia, snapshot.rutasDia, ahora) +
+          upsert(bd, 'nota_asignada', COLUMNAS.nota_asignada, snapshot.notasAsignadas, ahora)
         );
       });
 

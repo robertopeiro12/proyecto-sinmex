@@ -15,6 +15,7 @@ import {
   textoAgregado,
   textoAvisoSinRuta,
   textoBurbuja,
+  textoMarcaAsignadas,
   textoUltimaVisita,
   urlMapa,
   urlTelefono,
@@ -251,6 +252,12 @@ describe('textoUltimaVisita y motivoDeRechazo (T-39)', () => {
     expect(textoUltimaVisita(null, null)).toBe('Visita · --:--');
   });
 
+  it('sin visita pero con comentario de nota no cobrada: "No cobró · HH:MM"', () => {
+    const en = new Date(2026, 9, 17, 11, 5).toISOString();
+    expect(textoUltimaVisita(null, null, en)).toBe('No cobró · 11:05');
+    expect(textoUltimaVisita('Cerrado', en, new Date(2026, 9, 17, 12, 0).toISOString())).toBe('Cerrado · 11:05');
+  });
+
   it('el motivo sin el codigo tecnico', () => {
     expect(motivoDeRechazo('visita-id-ocupado: El id de esta visita ya está ocupado.')).toBe(
       'El id de esta visita ya está ocupado.',
@@ -376,5 +383,16 @@ describe('anchoMenuLateral (menu lateral, 2026-10-18)', () => {
   });
   it('un ancho invalido no da negativo', () => {
     expect(anchoMenuLateral(-10)).toBe(0);
+  });
+});
+
+describe('textoMarcaAsignadas', () => {
+  it('una nota, en singular', () => {
+    expect(textoMarcaAsignadas(1)).toBe('Nota asignada');
+  });
+
+  it('varias, con la cuenta', () => {
+    expect(textoMarcaAsignadas(2)).toBe('Notas asignadas · 2');
+    expect(textoMarcaAsignadas(5)).toBe('Notas asignadas · 5');
   });
 });

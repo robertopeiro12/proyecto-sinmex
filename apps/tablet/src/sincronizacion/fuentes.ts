@@ -2,6 +2,7 @@ import type { FuenteOperaciones } from './motor';
 import { fuenteCobranzas } from './fuente-cobranzas';
 import { fuenteGastos } from './fuente-gastos';
 import { fuenteJornadas } from './fuente-jornadas';
+import { fuenteNotasNoCobradas } from './fuente-notas-no-cobradas';
 import { fuenteMovimientos } from './fuente-movimientos';
 import { fuenteProspectos } from './fuente-prospectos';
 import { fuenteRutas } from './fuente-rutas';
@@ -22,7 +23,9 @@ import type { FuentesConPendientes } from './pendientes';
  *   caeria `cliente-fuera-de-alcance` y entraria hasta la siguiente
  *   sincronizacion.
  * - Cobranzas despues de ventas (T-20): nunca antes que una venta del dia.
- * - Visitas despues de cobranzas (T-39): la visita a un prospecto capturado sin red necesita
+ * - Comentarios de nota no cobrada despues de cobranzas: la nota ya existe en el servidor
+ *   (la venta de origen sube antes) y el cobro del dia ya entro.
+ * - Visitas despues de notas no cobradas (T-39): la visita a un prospecto capturado sin red necesita
  *   su alta ya aplicada (el alcance se comprueba una vez por lote, como la venta de bienvenida de T-75).
  * - Gastos despues de visitas (T-30/T-31, D5): no dependen de ningun cliente;
  *   van antes de las altas de ruta para que el orden del spec quede fijo.
@@ -40,6 +43,7 @@ export function fuentesDelPush(datos: FuentesConPendientes): FuenteOperaciones[]
     fuenteProspectos(datos.prospectos),
     fuenteVentas(datos.ventas),
     fuenteCobranzas(datos.cobranzas),
+    fuenteNotasNoCobradas(datos.notasAsignadas),
     fuenteVisitas(datos.visitas),
     fuenteGastos(datos.gastos),
     fuenteMovimientos(datos.movimientos),

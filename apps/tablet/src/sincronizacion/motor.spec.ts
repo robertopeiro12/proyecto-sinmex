@@ -1279,3 +1279,28 @@ describe('aSnapshot (T-74)', () => {
     expect(aSnapshot(respuestaPullDePrueba()).promociones).toBeUndefined();
   });
 });
+
+describe('aSnapshot (notas asignadas)', () => {
+  it('pasa rutas_dia y notas_asignadas y tolera un servidor que no las manda', () => {
+    const rutaDia = {
+      id: 'rd-1',
+      fecha: '2026-08-07',
+      nombre_ruta: 'Norte',
+      vehiculo_id: null,
+      activo: 1 as const,
+    };
+    const asignada = {
+      id: 'na-1',
+      venta_nota_id: 'n-1',
+      fecha: '2026-08-07',
+      condicion_venta: 'abonar' as const,
+      activo: 1 as const,
+    };
+    const s = aSnapshot(respuestaPullDePrueba({ rutas_dia: [rutaDia], notas_asignadas: [asignada] }));
+    expect(s.rutasDia).toEqual([rutaDia]);
+    expect(s.notasAsignadas).toEqual([asignada]);
+    const vacio = aSnapshot(respuestaPullDePrueba());
+    expect(vacio.rutasDia).toBeUndefined();
+    expect(vacio.notasAsignadas).toBeUndefined();
+  });
+});

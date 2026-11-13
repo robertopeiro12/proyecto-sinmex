@@ -33,11 +33,10 @@ function insertarMovimiento(bd: BaseDatos, cambios: Record<string, string | numb
 }
 
 describe('migracion 018: movimientos (T-27 pieza 2)', () => {
-  it('la 018 es la ultima y deja versionEsquema en 18', () => {
+  it('la 018 es movimientos y deja de ser la ultima con la 019', () => {
     expect(migraciones[17]?.nombre).toBe('movimientos');
     expect(migraciones[17]?.version).toBe(18);
-    expect(migraciones).toHaveLength(18);
-    expect(versionEsquema(baseAlDia())).toBe(18);
+    expect(versionEsquema(baseAlDia())).toBe(migraciones.length);
   });
 
   it('el vendedor que ya estaba queda con consumo diario 1 y no acepta negativos', () => {
