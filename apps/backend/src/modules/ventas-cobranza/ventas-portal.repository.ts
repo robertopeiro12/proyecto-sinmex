@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { Transaction } from 'kysely';
+import { sql, type Transaction } from 'kysely';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import type { DB } from '../../database/schema';
 import { buscarSucursalUsuario as buscarSucursalUsuarioCompartido } from '../sucursales/buscar-sucursal-usuario';
@@ -9,6 +9,14 @@ export interface ClienteDeVenta {
   id: string;
   sucursalId: string;
   sucursalCodigo: string;
+}
+
+/** El vendedor de la venta, ya bloqueado, con la casilla de su sucursal. */
+export interface VendedorConInventario {
+  id: string;
+  nombre: string;
+  /** `sucursal.control_inventario` de la sucursal del vendedor (T-27). */
+  controlInventario: boolean;
 }
 
 /** Un vendedor que se puede elegir como repartidor (§4.1). */
@@ -98,6 +106,39 @@ export class VentasPortalRepository {
       .where('deleted_at', 'is', null)
       .executeTakeFirst();
     return fila !== undefined;
+  }
+
+  /**
+   * Bloquea la fila del vendedor (`for no key update OF v`, sin la sucursal) y
+   * devuelve la casilla de inventario de su sucursal. Es el candado de las
+   * cargas, la ruta del dia y el corte: dos ventas del portal del mismo
+   * vendedor se aplican una despues de la otra y la segunda ve la existencia
+   * que dejo la primera. `undefined` si no existe o esta dado de baja.
+   */
+  async bloquearVendedorConInventario(
+    vendedorId: string,
+    trx: Transaction<DB>,
+  ): Promise<VendedorConInventario | undefined> {
+    const r = await sql<{
+      id: string;
+      nombre: string;
+      control_inventario: boolean;
+    }>`
+      select v.id, v.nombre, s.control_inventario
+        from vendedor v
+        join sucursal s on s.id = v.sucursal_id
+       where v.id = ${vendedorId}::uuid
+         and v.deleted_at is null
+         for no key update of v
+    `.execute(trx);
+    const f = r.rows[0];
+    return (
+      f && {
+        id: f.id,
+        nombre: f.nombre,
+        controlInventario: f.control_inventario,
+      }
+    );
   }
 
   /** Producto y volumen de cada presentacion, para pintar el catalogo. */

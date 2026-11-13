@@ -14,6 +14,7 @@ import { FacturasService } from './facturas.service';
 import { FirmasVentaRepository } from './firmas-venta.repository';
 import { FirmasVentaService } from './firmas-venta.service';
 import { FoliosOficinaRepository } from './folios-oficina.repository';
+import { InventarioVentaService } from './inventario-venta.service';
 import { PeticionesController } from './peticiones.controller';
 import { PeticionesRepository } from './peticiones.repository';
 import { PeticionesService } from './peticiones.service';
@@ -55,6 +56,8 @@ import { VentasService } from './ventas.service';
     VentasConsultaRepository,
     VentasEdicionService,
     VentasEdicionRepository,
+    // Corte de mercancia: el portal no vende mas de lo cargado
+    InventarioVentaService,
     // T-73: la firma del cliente en la nota
     FirmasVentaService,
     FirmasVentaRepository,
