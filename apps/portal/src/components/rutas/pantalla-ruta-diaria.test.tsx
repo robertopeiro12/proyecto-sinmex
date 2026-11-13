@@ -116,9 +116,9 @@ describe("PantallaRutaDiaria (lista del día)", () => {
     const [, sinRuta, conRuta] = screen.getAllByRole("row");
     expect(within(sinRuta).getByText("Sin ruta")).toBeInTheDocument();
     expect(within(sinRuta).getByText("Sin vehículo")).toBeInTheDocument();
-    expect(within(sinRuta).getByRole("button", { name: "Asignar ruta" })).toBeInTheDocument();
+    expect(within(sinRuta).getByRole("button", { name: "Asignar ruta/clientes" })).toBeInTheDocument();
     expect(within(sinRuta).queryByRole("button", { name: /Quitar/ })).toBeNull();
-    expect(within(sinRuta).getByText("Asigna primero su ruta")).toBeInTheDocument();
+    expect(within(sinRuta).getByText("Asigna primero su ruta/clientes")).toBeInTheDocument();
 
     expect(conRuta).toHaveTextContent("RUTA 1 (OTAY)");
     expect(conRuta).toHaveTextContent("Nissan blanca");
@@ -130,14 +130,14 @@ describe("PantallaRutaDiaria (lista del día)", () => {
     expect(within(celdas[5]).getAllByRole("button").map((b) => b.textContent)).toEqual(["Editar", "Quitar"]);
     expect(within(conRuta).getByRole("button", { name: "Quitar ruta de Juan Pérez" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Asignar notas" })).toBeNull();
-    expect(within(conRuta).queryByRole("button", { name: "Asignar ruta" })).toBeNull();
+    expect(within(conRuta).queryByRole("button", { name: "Asignar ruta/clientes" })).toBeNull();
   });
 
   it("un día pasado no muestra acciones de cambio", async () => {
     vi.mocked(rutasLib.obtenerDia).mockResolvedValue(dia([renglon({}), CON_RUTA], false, "2026-11-09"));
     render(<PantallaRutaDiaria sucursal="TJ" />);
     await screen.findByText("Juan Pérez");
-    expect(screen.queryByRole("button", { name: "Asignar ruta" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Asignar ruta/clientes" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Quitar/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Asignar" })).toBeNull();
@@ -149,7 +149,7 @@ describe("PantallaRutaDiaria (lista del día)", () => {
     render(<PantallaRutaDiaria sucursal="TJ" />);
     const [, sinRuta] = await screen.findAllByRole("row");
 
-    await usuario.click(within(sinRuta).getByRole("button", { name: "Asignar ruta" }));
+    await usuario.click(within(sinRuta).getByRole("button", { name: "Asignar ruta/clientes" }));
     expect(screen.getByText(`Ruta de v1 el ${HOY}`)).toBeInTheDocument();
 
     await usuario.click(screen.getByRole("button", { name: "Simular guardar" }));
