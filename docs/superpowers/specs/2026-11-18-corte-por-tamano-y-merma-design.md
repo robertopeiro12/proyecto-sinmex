@@ -57,7 +57,7 @@ Los movimientos se toman por `movimiento_inventario.fecha` (la `fecha_operacion`
 
 ## Decisiones mías (el cliente no lo dijo; se pueden cambiar)
 
-- **D1. Total del día por bloque.** "Faltan N piezas" = suma, por tamaño, de los totales de tamaño **positivos**. Un
+- **D1. Total del día por bloque** (confirmado por Roberto el 2026-11-18: un tamaño no compensa a otro). "Faltan N piezas" = suma, por tamaño, de los totales de tamaño **positivos**. Un
   tamaño no compensa a otro (el cliente solo mostró compensación dentro de un tamaño, y los cambios físicos también son
   "misma presentación"). Igual para la merma: "Falta N de merma". Hoy la regla era por presentación (D9 viejo); cambia
   a por tamaño por C6.
