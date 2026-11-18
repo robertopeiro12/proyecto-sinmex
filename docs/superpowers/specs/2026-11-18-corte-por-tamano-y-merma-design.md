@@ -87,12 +87,13 @@ Los movimientos se toman por `movimiento_inventario.fecha` (la `fecha_operacion`
 
 Los tipos están duplicados en `apps/portal/src/lib/cortes.ts` y el backend; se cambian en el mismo commit.
 
-- Línea: agrega `mermaEntregada`, `mermaRecibida`, `mermaAlmacen`, `consumo`, `cambiosEntregados`, `cambiosRecibidos`,
-  `mermaTeorica`, `resultadoMerma`; `deberiaRegresar` pasa a ser la teórica de C3 y `faltante` su resultado; agrega
-  `tamano` (texto de la sección) y `producto` (nombre sin tamaño). Se queda `nombre` ("Horchata 500 ml") para los
-  mensajes.
-- Corte: agrega `tamanos: { tamano, lineas: presentacionId[], totales }[]` en orden (D3), y en `totales` los nuevos
-  `faltanteMerma`; `faltante` cambia de regla (D1).
+- Línea: agrega `producto` (nombre sin tamaño), `volumen`, `mermaEntregada`, `mermaRecibida`, `mermaAlmacen`,
+  `consumo`, `cambiosEntregados`, `cambiosRecibidos`, `mermaTeorica`, `resultadoMerma`; `deberiaRegresar` pasa a ser la
+  teórica de C3 y `faltante` su resultado. Se queda `nombre` ("Horchata 500 ml") para los mensajes.
+- Las líneas llegan **ya ordenadas** por tamaño (D3) y producto. El portal arma las secciones y sus totales con lo que
+  va escribiendo el almacenista (como hoy recalcula el faltante), con la misma regla de tamaño copiada en
+  `lib/cortes.ts` (`claveTamano`, `compararTamano`).
+- `totales` agrega los conceptos nuevos y `faltanteMerma`; `faltante` cambia de regla (D1).
 - Lista: `FilaCorte` agrega `mermaFaltante`.
 - Sin cambio del `PUT` (sigue mandando `buenas` y `merma` por presentación). Sin cambio del contrato de la tablet.
 
