@@ -20,6 +20,14 @@ describe("SelectorSegmentado", () => {
     expect(cliente).toHaveAttribute("tabindex", "-1");
   });
 
+  it("resaltado: la elegida va en relleno oscuro; sin resaltado, en blanco", () => {
+    const { rerender } = render(<SelectorSegmentado etiqueta="Día" opciones={OPCIONES} valor="cliente" onCambio={() => {}} resaltado />);
+    expect(screen.getByRole("radio", { name: "Por cliente" })).toHaveClass("bg-primary");
+    expect(screen.getByRole("radio", { name: "Por producto" })).not.toHaveClass("bg-primary");
+    rerender(<SelectorSegmentado etiqueta="Día" opciones={OPCIONES} valor="cliente" onCambio={() => {}} />);
+    expect(screen.getByRole("radio", { name: "Por cliente" })).toHaveClass("bg-card");
+  });
+
   it("picar la otra avisa su valor", async () => {
     const onCambio = vi.fn();
     render(<SelectorSegmentado etiqueta="Agrupar" opciones={OPCIONES} valor="producto" onCambio={onCambio} />);
