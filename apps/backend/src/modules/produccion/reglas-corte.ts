@@ -1,10 +1,12 @@
 /**
  * Reglas del corte de mercancia, sin base ni Nest: la UNICA fuente de la cuenta
- * "deberia regresar" y del faltante, mas la validacion y el plan del guardado.
- * Spec: docs/superpowers/specs/2026-11-12-corte-de-mercancia-design.md (D7–D9, D13).
+ * "piezas teoricas por regresar" (`deberiaRegresar`), de la merma teorica y de
+ * los faltantes, mas la validacion y el plan del guardado.
+ * Specs: docs/superpowers/specs/2026-11-12-corte-de-mercancia-design.md (D7–D9, D13)
+ * y 2026-11-18-corte-por-tamano-y-merma-design.md (C3–C6, D1, D3, D8, D9).
  *
- * Cuando la tablet registre merma, cambios y consumo (T-33), se restan aqui, en
- * `deberiaRegresar`, sin cambiar la pantalla.
+ * La teorica ya resta merma entregada, merma de almacen y consumo; los cambios
+ * fisicos entran en la cuenta pero valen 0 hasta T-33.
  */
 import {
   esFechaReal,
@@ -23,55 +25,153 @@ export interface MovimientoPresentacion {
   presentacionId: string;
   /** Producto + tamano ("Horchata 1 L"). */
   nombre: string;
+  /** Solo el producto ("Horchata"). */
+  producto: string;
+  /** Tamano tal cual esta en la presentacion ("500 ml"). */
+  volumen: string;
   /** Piezas de cargas aceptadas. */
   cargadas: number;
   /** `cantidad` de lineas vivas de ventas vivas. */
   vendidas: number;
   /** `cantidad_promocion` de esas mismas lineas. */
   regaladas: number;
+  /** Merma del cliente: piezas buenas que se le entregaron. */
+  mermaEntregada: number;
+  /** Merma del cliente: piezas danadas que se recibieron. */
+  mermaRecibida: number;
+  /** Merma del trayecto (almacen). */
+  mermaAlmacen: number;
+  consumo: number;
+  /** Cambios fisicos: no existen todavia (T-33), valen 0. */
+  cambiosEntregados: number;
+  cambiosRecibidos: number;
   /** Lo contado por el almacen (0 si no hay fila). */
   buenas: number;
   merma: number;
 }
 
 export interface LineaCorte extends MovimientoPresentacion {
-  /** Sin recortar: negativo = vendio mas de lo cargado (D13). */
+  /** Piezas teoricas por regresar. Sin recortar: negativo = vendio mas de lo cargado (D13). */
   deberiaRegresar: number;
-  /** `null` si el corte no esta hecho; < 0 = sobrante (D9). */
+  /** Merma teorica por regresar (C4). */
+  mermaTeorica: number;
+  /** Resultado de piezas; `null` si el corte no esta hecho; < 0 = sobrante (D9). */
   faltante: number | null;
+  /** Resultado de merma; `null` si el corte no esta hecho. */
+  resultadoMerma: number | null;
 }
 
 export interface TotalesCorte {
   cargadas: number;
   vendidas: number;
   regaladas: number;
+  mermaEntregada: number;
+  mermaRecibida: number;
+  mermaAlmacen: number;
+  consumo: number;
+  cambiosEntregados: number;
+  cambiosRecibidos: number;
   deberiaRegresar: number;
+  mermaTeorica: number;
   buenas: number;
   merma: number;
   /**
-   * Piezas que faltan: suma de los faltantes > 0 (un sobrante de una
-   * presentacion no compensa lo que falta de otra). `null` si no esta hecho.
+   * Piezas que faltan (D1): suma por tamano de los totales de tamano positivos.
+   * `null` si no esta hecho.
    */
   faltante: number | null;
+  /** Lo mismo para la merma. */
+  faltanteMerma: number | null;
 }
 
-/** Deberia regresar = cargadas − vendidas − regaladas (D7). No se recorta a 0. */
-export function deberiaRegresar(m: {
-  cargadas: number;
-  vendidas: number;
-  regaladas: number;
-}): number {
-  return m.cargadas - m.vendidas - m.regaladas;
+/**
+ * Piezas teoricas por regresar (C3) = cargadas − vendidas − regaladas −
+ * merma entregada − merma de almacen − consumo − cambios entregados +
+ * cambios recibidos. No se recorta a 0.
+ */
+export function deberiaRegresar(
+  m: Pick<
+    MovimientoPresentacion,
+    | 'cargadas'
+    | 'vendidas'
+    | 'regaladas'
+    | 'mermaEntregada'
+    | 'mermaAlmacen'
+    | 'consumo'
+    | 'cambiosEntregados'
+    | 'cambiosRecibidos'
+  >,
+): number {
+  return (
+    m.cargadas -
+    m.vendidas -
+    m.regaladas -
+    m.mermaEntregada -
+    m.mermaAlmacen -
+    m.consumo -
+    m.cambiosEntregados +
+    m.cambiosRecibidos
+  );
+}
+
+/** Merma teorica por regresar (C4) = merma recibida del cliente + merma de almacen. */
+export function mermaTeorica(
+  m: Pick<MovimientoPresentacion, 'mermaRecibida' | 'mermaAlmacen'>,
+): number {
+  return m.mermaRecibida + m.mermaAlmacen;
+}
+
+/** Clave del tamano (D3): minusculas y sin espacios ("500 ml" = "500ML" = "500ml"). */
+export function claveTamano(volumen: string): string {
+  return volumen.toLowerCase().replace(/\s+/g, '');
+}
+
+/**
+ * Mililitros de un volumen ("355 ml" → 355, "1,5 L" → 1500). `null` si no se
+ * lee. Se copia al portal (`lib/cortes.ts`): mantenla pura y autocontenida.
+ */
+export function mililitros(volumen: string): number | null {
+  const m = /^(\d+(?:[.,]\d+)?)(ml|l|lt|lts|litro|litros)$/.exec(
+    claveTamano(volumen),
+  );
+  if (!m) return null;
+  const numero = Number(m[1].replace(',', '.'));
+  return m[2] === 'ml' ? numero : numero * 1000;
+}
+
+/** Orden de tamanos (D3): por mililitros; lo ilegible al final, por texto. */
+export function compararTamano(a: string, b: string): number {
+  const ma = mililitros(a);
+  const mb = mililitros(b);
+  if (ma !== null && mb !== null) return ma - mb;
+  if (ma !== null) return -1;
+  if (mb !== null) return 1;
+  return claveTamano(a).localeCompare(claveTamano(b), 'es');
+}
+
+/**
+ * Faltante del dia (D1): dentro de un tamano los resultados se compensan (C6);
+ * entre tamanos no. Suma por tamano de max(0, suma con signo). `null` cuenta 0.
+ */
+export function faltanteDelDia(
+  lineas: readonly { volumen: string; valor: number | null }[],
+): number {
+  const porTamano = new Map<string, number>();
+  for (const l of lineas) {
+    const clave = claveTamano(l.volumen);
+    porTamano.set(clave, (porTamano.get(clave) ?? 0) + (l.valor ?? 0));
+  }
+  let total = 0;
+  for (const suma of porTamano.values()) total += Math.max(0, suma);
+  return total;
 }
 
 /**
  * Lo que el vendedor todavia trae en la camioneta, por presentacion: la MISMA
- * cuenta que "deberia regresar" (`deberiaRegresar`), en vivo. La usa la venta
- * del portal para no venderle a un vendedor mas de lo que trae cargado (con
- * `sucursal.control_inventario` prendida, como la app de T-27).
- *
- * Cuando exista la merma y el consumo de la tablet (PR #150 / T-33), se restan
- * en `deberiaRegresar` y esta existencia los descuenta sola.
+ * cuenta que "teoricas por regresar" (`deberiaRegresar`), en vivo. La usa la
+ * venta del portal para no venderle a un vendedor mas de lo que trae cargado
+ * (con `sucursal.control_inventario` prendida, como la app de T-27). Descuenta
+ * merma entregada, merma de almacen y consumo; la merma recibida NO suma.
  */
 export function existenciasPorPresentacion(
   movimientos: readonly MovimientoPresentacion[],
@@ -90,45 +190,72 @@ export function faltante(
   return hecho ? deberia - buenas : null;
 }
 
-/** Sin corte, hecho, o hecho con alguna presentacion faltante. */
+/** Sin corte, hecho, o hecho con faltante de piezas o de merma. */
 export function estadoCorte(
   hecho: boolean,
-  lineas: readonly { faltante: number | null }[],
+  totales: Pick<TotalesCorte, 'faltante' | 'faltanteMerma'>,
 ): EstadoCorte {
   if (!hecho) return 'sin_corte';
-  return lineas.some((l) => (l.faltante ?? 0) > 0) ? 'con_faltante' : 'hecho';
+  return (totales.faltante ?? 0) > 0 || (totales.faltanteMerma ?? 0) > 0
+    ? 'con_faltante'
+    : 'hecho';
 }
 
-/** El corte de un vendedor y un dia: lineas con la cuenta, totales y estado. */
+/**
+ * El corte de un vendedor y un dia: lineas (ordenadas por tamano, producto y
+ * presentacion) con la cuenta, totales y estado.
+ */
 export function armarCorte(
   movimientos: readonly MovimientoPresentacion[],
   hecho: boolean,
 ): { lineas: LineaCorte[]; totales: TotalesCorte; estado: EstadoCorte } {
-  const lineas = movimientos.map((m) => {
-    const deberia = deberiaRegresar(m);
-    return {
-      ...m,
-      deberiaRegresar: deberia,
-      faltante: faltante(deberia, m.buenas, hecho),
-    };
-  });
-  const suma = (campo: keyof Omit<TotalesCorte, 'faltante'>) =>
-    lineas.reduce((total, l) => total + l[campo], 0);
-  return {
-    lineas,
-    totales: {
-      cargadas: suma('cargadas'),
-      vendidas: suma('vendidas'),
-      regaladas: suma('regaladas'),
-      deberiaRegresar: suma('deberiaRegresar'),
-      buenas: suma('buenas'),
-      merma: suma('merma'),
-      faltante: hecho
-        ? lineas.reduce((t, l) => t + Math.max(l.faltante ?? 0, 0), 0)
-        : null,
-    },
-    estado: estadoCorte(hecho, lineas),
+  const lineas: LineaCorte[] = movimientos
+    .map((m) => {
+      const deberia = deberiaRegresar(m);
+      const teoricaMerma = mermaTeorica(m);
+      return {
+        ...m,
+        deberiaRegresar: deberia,
+        mermaTeorica: teoricaMerma,
+        faltante: faltante(deberia, m.buenas, hecho),
+        resultadoMerma: hecho ? teoricaMerma - m.merma : null,
+      };
+    })
+    .sort(
+      (a, b) =>
+        compararTamano(a.volumen, b.volumen) ||
+        a.producto.localeCompare(b.producto, 'es') ||
+        a.presentacionId.localeCompare(b.presentacionId),
+    );
+  const suma = (
+    campo: Exclude<keyof TotalesCorte, 'faltante' | 'faltanteMerma'>,
+  ) => lineas.reduce((total, l) => total + l[campo], 0);
+  const totales: TotalesCorte = {
+    cargadas: suma('cargadas'),
+    vendidas: suma('vendidas'),
+    regaladas: suma('regaladas'),
+    mermaEntregada: suma('mermaEntregada'),
+    mermaRecibida: suma('mermaRecibida'),
+    mermaAlmacen: suma('mermaAlmacen'),
+    consumo: suma('consumo'),
+    cambiosEntregados: suma('cambiosEntregados'),
+    cambiosRecibidos: suma('cambiosRecibidos'),
+    deberiaRegresar: suma('deberiaRegresar'),
+    mermaTeorica: suma('mermaTeorica'),
+    buenas: suma('buenas'),
+    merma: suma('merma'),
+    faltante: hecho
+      ? faltanteDelDia(
+          lineas.map((l) => ({ volumen: l.volumen, valor: l.faltante })),
+        )
+      : null,
+    faltanteMerma: hecho
+      ? faltanteDelDia(
+          lineas.map((l) => ({ volumen: l.volumen, valor: l.resultadoMerma })),
+        )
+      : null,
   };
+  return { lineas, totales, estado: estadoCorte(hecho, totales) };
 }
 
 /** Una presentacion del conteo que manda el portal. 0/0 = sin registro. */
