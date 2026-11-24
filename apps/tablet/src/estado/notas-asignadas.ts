@@ -53,6 +53,10 @@ export function crearGuardiaComentario(): GuardiaRegistro {
  * ofrece cobrar o comentar. Sin por atender y con la condicion sin cumplir
  * (p. ej. un abono parcial a una que debe liquidar), queda deshabilitado con
  * el motivo.
+ *
+ * Desde el rediseño (pieza 1) la hoja del cliente solo usa `destino`: si el
+ * boton se enciende lo decide `accionesCliente` (`src/estado/hoja-cliente.ts`),
+ * que lo apaga con la condicion sin cumplir aunque la nota siga por atender.
  */
 export function venderDesdeFicha(notas: NotaAsignadaDeHoy[]): {
   destino: DestinoVender;
