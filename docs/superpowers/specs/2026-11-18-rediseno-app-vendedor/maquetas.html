@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JAWA · Rediseño de la app del vendedor</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#EFEAE0;color:#191410;font-family:"Barlow","Helvetica Neue",Arial,sans-serif;line-height:1.45;--text-primary:#191410;--text-secondary:#5C5147}
+header.top{background:#191410;color:#FBF8F2;padding:36px 40px 30px}
+header.top h1{margin:0 0 6px;font-size:30px;letter-spacing:.01em}
+header.top p{margin:0;max-width:760px;color:#D9CFBF;font-size:16px}
+nav.idx{position:sticky;top:0;z-index:5;background:#FBF8F2;border-bottom:2px solid #191410;padding:10px 40px;display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;font-weight:700}
+nav.idx a{color:#A8380A;text-decoration:none}
+main{padding:8px 40px 60px}
+section{padding:34px 0 30px;border-bottom:1px solid #CFC5B4;scroll-margin-top:48px}
+section h2{margin:0 0 6px;font-size:23px}
+.intro{margin:0 0 10px;max-width:780px;font-size:16px;color:#5C5147}
+ul.reglas{margin:0 0 22px;padding-left:20px;max-width:820px;font-size:15px}
+ul.reglas li{margin-bottom:4px}
+.caja{background:#FBF8F2;border:2px solid #191410;border-radius:10px;padding:16px 20px;max-width:860px;margin-top:26px}
+.caja h3{margin:0 0 8px;font-size:17px}
+.caja ul{margin:0;padding-left:20px;font-size:15px}
+
+.jw{--papel:#F2EDE3;--sup:#FBF8F2;--hund:#E7E0D2;--tinta:#191410;--suave:#5C5147;--borde:#CFC5B4;--prim:#A8380A;--primT:#F7E4D8;--exito:#1D5B3A;--exitoT:#DCEBE2;--aviso:#8A5A00;--avisoT:#F6E9CE;--pel:#8C1A16;
+ display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;font-family:"Barlow","Helvetica Neue",Arial,sans-serif}
+.jw .col{width:320px}
+.jw .cap{font-size:13px;font-weight:700;margin:0 0 4px;color:var(--text-primary)}
+.jw .sub{font-size:12px;color:var(--text-secondary);margin:0 0 10px;min-height:32px;line-height:1.35}
+.jw .tel{position:relative;width:320px;height:620px;background:var(--papel);color:var(--tinta);border:2px solid var(--tinta);border-radius:14px;overflow:hidden;font-size:14px;line-height:1.3}
+.jw .bar{display:flex;align-items:center;gap:8px;height:52px;padding:0 10px;background:var(--tinta);color:#FBF8F2}
+.jw .bar b{flex:1;font-size:17px;letter-spacing:.02em;text-transform:uppercase}
+.jw .ic{width:38px;height:38px;border:2px solid #FBF8F2;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;position:relative}
+.jw .dot{position:absolute;top:-7px;right:-7px;background:var(--prim);color:#fff;font-size:10px;font-weight:700;border-radius:999px;min-width:17px;height:17px;display:flex;align-items:center;justify-content:center;border:1px solid #FBF8F2}
+.jw .body{padding:10px}
+.jw .card{background:var(--sup);border:2px solid var(--tinta);border-radius:10px;padding:10px;margin-bottom:10px}
+.jw .card.av{background:var(--avisoT);border-color:var(--aviso)}
+.jw .lab{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--suave);margin:0 0 4px}
+.jw .inp{border:2px solid var(--tinta);border-radius:6px;background:#fff;padding:9px 10px;margin-bottom:8px;display:flex;justify-content:space-between;font-weight:600}
+.jw .inp.ph{color:#9a8f82;font-weight:400}
+.jw .btn{background:var(--prim);color:#fff;border-radius:6px;padding:12px;text-align:center;font-weight:700;font-size:15px}
+.jw .btn.sec{background:var(--sup);color:var(--tinta);border:2px solid var(--tinta)}
+.jw .btn.off{background:var(--hund);color:#9a8f82;border:2px dashed var(--borde)}
+.jw .sech{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--suave);margin:12px 2px 6px;display:flex;justify-content:space-between}
+.jw .row{display:flex;align-items:center;gap:10px;background:var(--sup);border:1px solid var(--borde);border-radius:8px;padding:9px 10px;margin-bottom:6px}
+.jw .row.dim{opacity:.55}
+.jw .row.vis{background:var(--hund)}
+.jw .n{width:26px;height:26px;border-radius:999px;border:2px solid var(--tinta);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none}
+.jw .n.ok{background:var(--exito);border-color:var(--exito);color:#fff}
+.jw .tx{flex:1;min-width:0}
+.jw .tx b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jw .tx span{font-size:12px;color:var(--suave)}
+.jw .nota{flex:none;display:flex;align-items:center;gap:4px;background:var(--primT);border:2px solid var(--prim);color:var(--prim);border-radius:6px;padding:3px 7px;font-weight:700;font-size:14px}
+.jw .nota i{font-style:normal;font-size:12px}
+.jw .drawer{position:absolute;inset:0 58px 0 0;background:var(--sup);border-right:2px solid var(--tinta);display:flex;flex-direction:column}
+.jw .shade{position:absolute;inset:0;background:rgba(25,20,16,.55)}
+.jw .mi{padding:10px 14px;font-size:15px;font-weight:600;border-bottom:1px solid var(--borde);display:flex;justify-content:space-between;align-items:center}
+.jw .mi.on{background:var(--primT);border-left:4px solid var(--prim);color:var(--prim)}
+.jw .mi small{font-size:11px;font-weight:600;color:var(--suave)}
+.jw .foot{margin-top:auto;background:var(--tinta);color:#FBF8F2;padding:10px 14px;font-size:12px;line-height:1.6}
+.jw .foot b{font-size:14px}
+.jw .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--sup);border-top:2px solid var(--tinta);border-radius:14px 14px 0 0;padding:12px}
+.jw .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.jw .ac{border:2px solid var(--tinta);border-radius:8px;padding:14px 8px;text-align:center;font-weight:700;font-size:15px;background:#fff}
+.jw .ac.pri{background:var(--prim);border-color:var(--prim);color:#fff;grid-column:1/3}
+.jw .ac.off{background:var(--hund);border:2px dashed var(--borde);color:#9a8f82}
+.jw .ac small{display:block;font-size:11px;font-weight:600;margin-top:2px}
+
+.jw{--papel:#F2EDE3;--sup:#FBF8F2;--hund:#E7E0D2;--tinta:#191410;--suave:#5C5147;--borde:#CFC5B4;--prim:#A8380A;--primT:#F7E4D8;--exito:#1D5B3A;--exitoT:#DCEBE2;--aviso:#8A5A00;--avisoT:#F6E9CE;--pel:#8C1A16;
+ display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;font-family:"Barlow","Helvetica Neue",Arial,sans-serif}
+.jw .col{width:320px}
+.jw .cap{font-size:13px;font-weight:700;margin:0 0 4px;color:var(--text-primary)}
+.jw .sub{font-size:12px;color:var(--text-secondary);margin:0 0 10px;min-height:32px;line-height:1.35}
+.jw .tel{position:relative;width:320px;height:620px;background:var(--papel);color:var(--tinta);border:2px solid var(--tinta);border-radius:14px;overflow:hidden;font-size:14px;line-height:1.3}
+.jw .bar{display:flex;align-items:center;gap:8px;height:52px;padding:0 10px;background:var(--tinta);color:#FBF8F2}
+.jw .bar b{flex:1;font-size:17px;letter-spacing:.02em;text-transform:uppercase}
+.jw .ic{width:38px;height:38px;border:2px solid #FBF8F2;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;position:relative}
+.jw .dot{position:absolute;top:-7px;right:-7px;background:var(--prim);color:#fff;font-size:10px;font-weight:700;border-radius:999px;min-width:17px;height:17px;display:flex;align-items:center;justify-content:center;border:1px solid #FBF8F2}
+.jw .body{padding:10px}
+.jw .card{background:var(--sup);border:2px solid var(--tinta);border-radius:10px;padding:10px;margin-bottom:10px}
+.jw .card.av{background:var(--avisoT);border-color:var(--aviso)}
+.jw .lab{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--suave);margin:0 0 4px}
+.jw .inp{border:2px solid var(--tinta);border-radius:6px;background:#fff;padding:9px 10px;margin-bottom:8px;display:flex;justify-content:space-between;font-weight:600}
+.jw .inp.ph{color:#9a8f82;font-weight:400}
+.jw .btn{background:var(--prim);color:#fff;border-radius:6px;padding:12px;text-align:center;font-weight:700;font-size:15px}
+.jw .btn.sec{background:var(--sup);color:var(--tinta);border:2px solid var(--tinta)}
+.jw .btn.off{background:var(--hund);color:#9a8f82;border:2px dashed var(--borde)}
+.jw .sech{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--suave);margin:12px 2px 6px;display:flex;justify-content:space-between}
+.jw .row{display:flex;align-items:center;gap:10px;background:var(--sup);border:1px solid var(--borde);border-radius:8px;padding:9px 10px;margin-bottom:6px}
+.jw .row.dim{opacity:.55}
+.jw .row.vis{background:var(--hund)}
+.jw .n{width:26px;height:26px;border-radius:999px;border:2px solid var(--tinta);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none}
+.jw .n.ok{background:var(--exito);border-color:var(--exito);color:#fff}
+.jw .tx{flex:1;min-width:0}
+.jw .tx b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jw .tx span{font-size:12px;color:var(--suave)}
+.jw .nota{flex:none;display:flex;align-items:center;gap:4px;background:var(--primT);border:2px solid var(--prim);color:var(--prim);border-radius:6px;padding:3px 7px;font-weight:700;font-size:14px}
+.jw .nota i{font-style:normal;font-size:12px}
+.jw .drawer{position:absolute;inset:0 58px 0 0;background:var(--sup);border-right:2px solid var(--tinta);display:flex;flex-direction:column}
+.jw .shade{position:absolute;inset:0;background:rgba(25,20,16,.55)}
+.jw .mi{padding:10px 14px;font-size:15px;font-weight:600;border-bottom:1px solid var(--borde);display:flex;justify-content:space-between;align-items:center}
+.jw .mi.on{background:var(--primT);border-left:4px solid var(--prim);color:var(--prim)}
+.jw .mi small{font-size:11px;font-weight:600;color:var(--suave)}
+.jw .foot{margin-top:auto;background:var(--tinta);color:#FBF8F2;padding:10px 14px;font-size:12px;line-height:1.6}
+.jw .foot b{font-size:14px}
+.jw .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--sup);border-top:2px solid var(--tinta);border-radius:14px 14px 0 0;padding:12px}
+.jw .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.jw .ac{border:2px solid var(--tinta);border-radius:8px;padding:14px 8px;text-align:center;font-weight:700;font-size:15px;background:#fff}
+.jw .ac.pri{background:var(--prim);border-color:var(--prim);color:#fff;grid-column:1/3}
+.jw .ac.off{background:var(--hund);border:2px dashed var(--borde);color:#9a8f82}
+.jw .ac small{display:block;font-size:11px;font-weight:600;margin-top:2px}
+
+.jw .chk{width:24px;height:24px;border:2px solid var(--tinta);border-radius:5px;flex:none;display:flex;align-items:center;justify-content:center;background:#fff}
+.jw .chk.on{background:var(--exito);border-color:var(--exito);color:#fff}
+.jw .qty{font-weight:700;font-size:15px;flex:none}
+.jw .bot{position:absolute;left:0;right:0;bottom:0;background:var(--sup);border-top:2px solid var(--tinta);padding:10px;display:flex;gap:8px}
+.jw .bot .btn{flex:1}
+.jw .tiles{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+.jw .tile{position:relative;background:#fff;border:2px solid var(--tinta);border-radius:8px;padding:14px 4px;text-align:center;font-weight:700;font-size:13px}
+.jw .tile.on{background:var(--primT);border-color:var(--prim);color:var(--prim)}
+.jw .tile .dot{top:-8px;right:-6px}
+.jw .pres{display:flex;align-items:center;gap:8px;background:var(--sup);border:1px solid var(--borde);border-radius:8px;padding:8px 10px;margin-bottom:6px}
+.jw .step{display:flex;align-items:center;gap:0;flex:none}
+.jw .step div{width:38px;height:38px;display:flex;align-items:center;justify-content:center;border:2px solid var(--tinta);font-weight:700;font-size:16px;background:#fff}
+.jw .step div:first-child{border-radius:6px 0 0 6px}.jw .step div:last-child{border-radius:0 6px 6px 0;background:var(--prim);border-color:var(--prim);color:#fff}
+.jw .step div.num{border-left:0;border-right:0;width:44px}
+.jw .ln{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--borde);font-size:13px}
+.jw .tot{display:flex;justify-content:space-between;font-weight:700;font-size:18px;padding:8px 0 0}
+.jw .chips{display:flex;gap:6px;margin-bottom:8px}
+.jw .chip{flex:1;text-align:center;border:2px solid var(--tinta);border-radius:6px;padding:8px 2px;font-weight:700;font-size:12px;background:#fff}
+.jw .chip.on{background:var(--tinta);color:#FBF8F2}
+.jw .tabs{display:flex;border-bottom:2px solid var(--tinta)}
+.jw .tab{flex:1;text-align:center;padding:10px 0;font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--suave)}
+.jw .tab.on{background:var(--tinta);color:#FBF8F2}
+.jw .mini{flex:none;border:2px solid var(--prim);color:var(--prim);border-radius:6px;padding:5px 8px;font-weight:700;font-size:12px;background:#fff}
+.jw .th,.jw .tr{display:grid;grid-template-columns:1fr 54px 54px 60px;gap:4px;padding:6px 4px;font-size:13px;align-items:center}
+.jw .th{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--suave);background:var(--hund);border-radius:6px}
+.jw .tr{border-bottom:1px solid var(--borde)}.jw .tr b:last-child,.jw .th span:not(:first-child),.jw .tr span{text-align:right}
+
+.jw{--papel:#F2EDE3;--sup:#FBF8F2;--hund:#E7E0D2;--tinta:#191410;--suave:#5C5147;--borde:#CFC5B4;--prim:#A8380A;--primT:#F7E4D8;--exito:#1D5B3A;--exitoT:#DCEBE2;--aviso:#8A5A00;--avisoT:#F6E9CE;--pel:#8C1A16;
+ display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;font-family:"Barlow","Helvetica Neue",Arial,sans-serif}
+.jw .col{width:320px}
+.jw .cap{font-size:13px;font-weight:700;margin:0 0 4px;color:var(--text-primary)}
+.jw .sub{font-size:12px;color:var(--text-secondary);margin:0 0 10px;min-height:32px;line-height:1.35}
+.jw .tel{position:relative;width:320px;height:620px;background:var(--papel);color:var(--tinta);border:2px solid var(--tinta);border-radius:14px;overflow:hidden;font-size:14px;line-height:1.3}
+.jw .bar{display:flex;align-items:center;gap:8px;height:52px;padding:0 10px;background:var(--tinta);color:#FBF8F2}
+.jw .bar b{flex:1;font-size:17px;letter-spacing:.02em;text-transform:uppercase}
+.jw .ic{width:38px;height:38px;border:2px solid #FBF8F2;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;position:relative}
+.jw .dot{position:absolute;top:-7px;right:-7px;background:var(--prim);color:#fff;font-size:10px;font-weight:700;border-radius:999px;min-width:17px;height:17px;display:flex;align-items:center;justify-content:center;border:1px solid #FBF8F2}
+.jw .body{padding:10px}
+.jw .card{background:var(--sup);border:2px solid var(--tinta);border-radius:10px;padding:10px;margin-bottom:10px}
+.jw .card.av{background:var(--avisoT);border-color:var(--aviso)}
+.jw .lab{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--suave);margin:0 0 4px}
+.jw .inp{border:2px solid var(--tinta);border-radius:6px;background:#fff;padding:9px 10px;margin-bottom:8px;display:flex;justify-content:space-between;font-weight:600}
+.jw .inp.ph{color:#9a8f82;font-weight:400}
+.jw .btn{background:var(--prim);color:#fff;border-radius:6px;padding:12px;text-align:center;font-weight:700;font-size:15px}
+.jw .btn.sec{background:var(--sup);color:var(--tinta);border:2px solid var(--tinta)}
+.jw .btn.off{background:var(--hund);color:#9a8f82;border:2px dashed var(--borde)}
+.jw .sech{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--suave);margin:12px 2px 6px;display:flex;justify-content:space-between}
+.jw .row{display:flex;align-items:center;gap:10px;background:var(--sup);border:1px solid var(--borde);border-radius:8px;padding:9px 10px;margin-bottom:6px}
+.jw .row.dim{opacity:.55}
+.jw .row.vis{background:var(--hund)}
+.jw .n{width:26px;height:26px;border-radius:999px;border:2px solid var(--tinta);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none}
+.jw .n.ok{background:var(--exito);border-color:var(--exito);color:#fff}
+.jw .tx{flex:1;min-width:0}
+.jw .tx b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jw .tx span{font-size:12px;color:var(--suave)}
+.jw .nota{flex:none;display:flex;align-items:center;gap:4px;background:var(--primT);border:2px solid var(--prim);color:var(--prim);border-radius:6px;padding:3px 7px;font-weight:700;font-size:14px}
+.jw .nota i{font-style:normal;font-size:12px}
+.jw .drawer{position:absolute;inset:0 58px 0 0;background:var(--sup);border-right:2px solid var(--tinta);display:flex;flex-direction:column}
+.jw .shade{position:absolute;inset:0;background:rgba(25,20,16,.55)}
+.jw .mi{padding:10px 14px;font-size:15px;font-weight:600;border-bottom:1px solid var(--borde);display:flex;justify-content:space-between;align-items:center}
+.jw .mi.on{background:var(--primT);border-left:4px solid var(--prim);color:var(--prim)}
+.jw .mi small{font-size:11px;font-weight:600;color:var(--suave)}
+.jw .foot{margin-top:auto;background:var(--tinta);color:#FBF8F2;padding:10px 14px;font-size:12px;line-height:1.6}
+.jw .foot b{font-size:14px}
+.jw .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--sup);border-top:2px solid var(--tinta);border-radius:14px 14px 0 0;padding:12px}
+.jw .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.jw .ac{border:2px solid var(--tinta);border-radius:8px;padding:14px 8px;text-align:center;font-weight:700;font-size:15px;background:#fff}
+.jw .ac.pri{background:var(--prim);border-color:var(--prim);color:#fff;grid-column:1/3}
+.jw .ac.off{background:var(--hund);border:2px dashed var(--borde);color:#9a8f82}
+.jw .ac small{display:block;font-size:11px;font-weight:600;margin-top:2px}
+
+.jw .srch{display:flex;align-items:center;gap:8px;border:2px solid var(--tinta);border-radius:6px;background:#fff;padding:8px 10px;color:#9a8f82;margin-bottom:8px}
+.jw .chips{display:flex;gap:6px;margin-bottom:8px}
+.jw .chip{flex:1;text-align:center;border:2px solid var(--tinta);border-radius:6px;padding:7px 2px;font-weight:700;font-size:12px;background:#fff}
+.jw .chip.on{background:var(--tinta);color:#FBF8F2}
+.jw .tiles{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px 6px}
+.jw .tile{position:relative;background:#fff;border:2px solid var(--tinta);border-radius:8px;height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;font-weight:700;font-size:12.5px;line-height:1.1;padding:0 3px}
+.jw .tile.has{background:var(--primT);border-color:var(--prim);color:var(--prim)}
+.jw .tile.on{background:var(--prim);border-color:var(--prim);color:#fff}
+.jw .tile.out{background:var(--hund);border:2px dashed var(--borde);color:#9a8f82}
+.jw .tile small{font-size:9.5px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.jw .tile .dot{top:-8px;right:-5px}
+.jw .bot{position:absolute;left:0;right:0;bottom:0;background:var(--sup);border-top:2px solid var(--tinta);padding:10px;display:flex;gap:8px;align-items:center}
+.jw .bot .btn{flex:1.1}
+.jw .hoja{position:absolute;left:0;right:0;bottom:0;background:var(--sup);border-top:2px solid var(--tinta);border-radius:14px 14px 0 0;padding:12px}
+.jw .pr{display:flex;align-items:center;gap:8px;background:#fff;border:2px solid var(--borde);border-radius:8px;padding:7px 10px;margin-bottom:6px}
+.jw .pr.act{border-color:var(--prim);background:var(--primT)}
+.jw .q{flex:none;width:60px;height:38px;border:2px solid var(--borde);border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;background:#fff;color:#9a8f82}
+.jw .q.fill{color:var(--tinta);border-color:var(--tinta)}
+.jw .pr.act .q{border-color:var(--prim);color:var(--tinta)}
+.jw .pad{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:8px}
+.jw .k{height:44px;border:2px solid var(--tinta);border-radius:6px;background:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:19px}
+.jw .k.alt{background:var(--hund)}
+.jw .k.sig{background:var(--tinta);color:#FBF8F2;font-size:13px}
+.jw .lin{display:flex;align-items:center;gap:8px;background:var(--sup);border:1px solid var(--borde);border-radius:8px;padding:9px 10px;margin-bottom:6px}
+.jw .lin .tx span{display:block}
+.jw .ancho{width:760px}
+.jw .tableta{position:relative;width:760px;height:540px;background:var(--papel);color:var(--tinta);border:2px solid var(--tinta);border-radius:14px;overflow:hidden;font-size:14px;line-height:1.3;display:flex;flex-direction:column}
+.jw .tableta .dos{flex:1;display:flex;min-height:0}
+.jw .tableta .izq{flex:1;padding:10px}
+.jw .tableta .der{width:270px;border-left:2px solid var(--tinta);background:var(--sup);padding:10px;display:flex;flex-direction:column}
+.jw .tableta .tiles{grid-template-columns:repeat(5,1fr)}
+.jw .tableta .tile{height:44px}
+.jw .tableta .k{height:38px}
+.jw .paso{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:999px;background:var(--prim);color:#fff;font-size:11px;font-weight:700;margin-right:6px}
+
+.jw{--papel:#F2EDE3;--sup:#FBF8F2;--hund:#E7E0D2;--tinta:#191410;--suave:#5C5147;--borde:#CFC5B4;--prim:#A8380A;--primT:#F7E4D8;--exito:#1D5B3A;--exitoT:#DCEBE2;--aviso:#8A5A00;--avisoT:#F6E9CE;--pel:#8C1A16;
+ display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;font-family:"Barlow","Helvetica Neue",Arial,sans-serif}
+.jw .col{width:320px}
+.jw .cap{font-size:13px;font-weight:700;margin:0 0 4px;color:var(--text-primary)}
+.jw .sub{font-size:12px;color:var(--text-secondary);margin:0 0 10px;min-height:32px;line-height:1.35}
+.jw .tel{position:relative;width:320px;height:620px;background:var(--papel);color:var(--tinta);border:2px solid var(--tinta);border-radius:14px;overflow:hidden;font-size:14px;line-height:1.3}
+.jw .bar{display:flex;align-items:center;gap:8px;height:52px;padding:0 10px;background:var(--tinta);color:#FBF8F2}
+.jw .bar b{flex:1;font-size:17px;letter-spacing:.02em;text-transform:uppercase}
+.jw .ic{width:38px;height:38px;border:2px solid #FBF8F2;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;position:relative}
+.jw .dot{position:absolute;top:-7px;right:-7px;background:var(--prim);color:#fff;font-size:10px;font-weight:700;border-radius:999px;min-width:17px;height:17px;display:flex;align-items:center;justify-content:center;border:1px solid #FBF8F2}
+.jw .body{padding:10px}
+.jw .card{background:var(--sup);border:2px solid var(--tinta);border-radius:10px;padding:10px;margin-bottom:10px}
+.jw .card.av{background:var(--avisoT);border-color:var(--aviso)}
+.jw .lab{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--suave);margin:0 0 4px}
+.jw .inp{border:2px solid var(--tinta);border-radius:6px;background:#fff;padding:9px 10px;margin-bottom:8px;display:flex;justify-content:space-between;font-weight:600}
+.jw .inp.ph{color:#9a8f82;font-weight:400}
+.jw .btn{background:var(--prim);color:#fff;border-radius:6px;padding:12px;text-align:center;font-weight:700;font-size:15px}
+.jw .btn.sec{background:var(--sup);color:var(--tinta);border:2px solid var(--tinta)}
+.jw .btn.off{background:var(--hund);color:#9a8f82;border:2px dashed var(--borde)}
+.jw .sech{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--suave);margin:12px 2px 6px;display:flex;justify-content:space-between}
+.jw .row{display:flex;align-items:center;gap:10px;background:var(--sup);border:1px solid var(--borde);border-radius:8px;padding:9px 10px;margin-bottom:6px}
+.jw .row.dim{opacity:.55}
+.jw .row.vis{background:var(--hund)}
+.jw .n{width:26px;height:26px;border-radius:999px;border:2px solid var(--tinta);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none}
+.jw .n.ok{background:var(--exito);border-color:var(--exito);color:#fff}
+.jw .tx{flex:1;min-width:0}
+.jw .tx b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jw .tx span{font-size:12px;color:var(--suave)}
+.jw .nota{flex:none;display:flex;align-items:center;gap:4px;background:var(--primT);border:2px solid var(--prim);color:var(--prim);border-radius:6px;padding:3px 7px;font-weight:700;font-size:14px}
+.jw .nota i{font-style:normal;font-size:12px}
+.jw .drawer{position:absolute;inset:0 58px 0 0;background:var(--sup);border-right:2px solid var(--tinta);display:flex;flex-direction:column}
+.jw .shade{position:absolute;inset:0;background:rgba(25,20,16,.55)}
+.jw .mi{padding:10px 14px;font-size:15px;font-weight:600;border-bottom:1px solid var(--borde);display:flex;justify-content:space-between;align-items:center}
+.jw .mi.on{background:var(--primT);border-left:4px solid var(--prim);color:var(--prim)}
+.jw .mi small{font-size:11px;font-weight:600;color:var(--suave)}
+.jw .foot{margin-top:auto;background:var(--tinta);color:#FBF8F2;padding:10px 14px;font-size:12px;line-height:1.6}
+.jw .foot b{font-size:14px}
+.jw .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--sup);border-top:2px solid var(--tinta);border-radius:14px 14px 0 0;padding:12px}
+.jw .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.jw .ac{border:2px solid var(--tinta);border-radius:8px;padding:14px 8px;text-align:center;font-weight:700;font-size:15px;background:#fff}
+.jw .ac.pri{background:var(--prim);border-color:var(--prim);color:#fff;grid-column:1/3}
+.jw .ac.off{background:var(--hund);border:2px dashed var(--borde);color:#9a8f82}
+.jw .ac small{display:block;font-size:11px;font-weight:600;margin-top:2px}
+
+.jw .sub{min-height:48px}
+.jw .bot{position:absolute;left:0;right:0;bottom:0;background:var(--sup);border-top:2px solid var(--tinta);padding:10px;display:flex;gap:8px;align-items:center}
+.jw .bot .btn{flex:1}
+.jw .chips{display:flex;gap:6px;margin-bottom:8px}
+.jw .chip{flex:1;text-align:center;border:2px solid var(--tinta);border-radius:6px;padding:8px 2px;font-weight:700;font-size:12px;background:#fff}
+.jw .chip.on{background:var(--tinta);color:#FBF8F2}
+.jw .kv{display:flex;justify-content:space-between;padding:3px 0;font-size:13px}
+.jw .kv.big{font-size:18px;font-weight:700;border-top:1px dashed var(--borde);margin-top:4px;padding-top:6px}
+.jw .tag{display:inline-block;background:var(--avisoT);border:1px solid var(--aviso);color:var(--aviso);font-size:11px;font-weight:700;border-radius:999px;padding:2px 8px}
+.jw .seg{display:flex;border:2px solid var(--tinta);border-radius:8px;overflow:hidden;margin-bottom:10px}
+.jw .seg div{flex:1;text-align:center;padding:10px 0;font-weight:700;font-size:14px;background:#fff}
+.jw .seg div.on{background:var(--tinta);color:#FBF8F2}
+.jw .add{display:flex;align-items:center;justify-content:center;gap:6px;border:2px dashed var(--tinta);border-radius:8px;padding:9px;font-weight:700;font-size:13px;margin-bottom:6px}
+.jw .hora{flex:none;width:44px;font-size:12px;font-weight:700;color:var(--suave)}
+.jw .tipo{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-radius:4px;padding:1px 6px;border:1px solid currentColor}
+.jw .tv{color:var(--exito)}.jw .tc{color:var(--prim)}.jw .tn{color:var(--aviso)}
+.jw .nav{position:absolute;left:0;right:0;bottom:0;display:flex;border-top:2px solid var(--tinta);background:var(--sup)}
+.jw .nav div{flex:1;text-align:center;padding:11px 2px;font-size:11.5px;font-weight:700;border-right:1px solid var(--borde);line-height:1.15;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+.jw .nav div.on{background:var(--tinta);color:#FBF8F2}
+.jw .nav div.ok{color:var(--exito)}
+.jw .nav2{bottom:62px}
+.jw .ln{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--borde);font-size:13px}
+.jw .chk{width:24px;height:24px;border:2px solid var(--tinta);border-radius:5px;flex:none;display:flex;align-items:center;justify-content:center;background:#fff}
+.jw .chk.on{background:var(--exito);border-color:var(--exito);color:#fff}
+.jw .qn{flex:none;width:52px;height:34px;border:2px solid var(--tinta);border-radius:6px;display:flex;align-items:center;justify-content:center;font-weight:700;background:#fff}
+
+.jw .sub{min-height:64px}
+</style></head><body>
+<header class="top"><h1>JAWA · Rediseño de la app del vendedor</h1>
+<p>Todas las pantallas en el orden en que el vendedor las vive en un día: entra, empieza su ruta, acepta inventario, visita clientes y hace su corte. Sirve también como manual de uso: cada sección explica qué hace el vendedor y por qué. Los datos son de ejemplo.</p></header>
+<nav class="idx"><a href="#s1">1. Entrar y empezar la ruta</a><a href="#s2">2. Menú lateral</a><a href="#s3">3. Inventario</a><a href="#s4">4. Ruta en curso y acciones del cliente</a><a href="#s5p">5. Promociones</a><a href="#s5">6. Vender</a><a href="#s6">7. Cobranza de la venta e impresión</a><a href="#s7">8. Cobrar</a><a href="#s8">9. Merma y cambios</a><a href="#s9">10. Ventas / Cobranza y Merma / Cambios</a><a href="#s10">11. Gastos</a><a href="#s11">12. Agregar cliente a la ruta y Prospectos</a><a href="#s12">13. Corte</a><a href="#s13">14. La nota impresa</a></nav>
+<main>
+<section id="s1"><h2>1. Entrar y empezar la ruta</h2><p class="intro">Después de iniciar sesión, lo primero que ve el vendedor es su ruta del día: los clientes que va a visitar, en el orden que definió el portal.</p><ul class="reglas"><li>El orden de la ruta no se puede modificar.</li><li>Para empezar elige vehículo y captura el kilometraje. Ya viene elegido el vehículo que el portal le asignó.</li><li>Arriba a la izquierda, el botón de menú. Arriba a la derecha, agregar un cliente a la ruta (funciona con y sin internet) y sincronizar con el servidor.</li><li>En la fila de cada cliente, del lado derecho, un número: cuántas notas pendientes por cobrar trae de ese cliente.</li><li>Mientras no acepte su inventario, la pantalla le pone un acceso directo a Inventario y los clientes no se pueden abrir.</li><li>La app funciona sin internet: todo lo que captura se guarda en la tablet y se sube al servidor al sincronizar. El número sobre el botón de sincronizar dice cuántos datos faltan por subir.</li></ul><div class="jw"><div class="col"><p class="cap">1 · Al entrar (después del login)</p><p class="sub">Ve su ruta en orden fijo. Para empezar elige vehículo (ya viene el asignado en el portal) y captura el kilometraje.</p>
+  <div class="tel">
+   <div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div><b>Ruta</b><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/><path d="M19 8v6M16 11h6"/></svg></div><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/></svg></div></div>
+   <div class="body">
+    <div class="card">
+     <p class="lab">Vehículo</p><div class="inp"><span>NP300 · BC-482-K</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></div>
+     <p class="lab">Kilometraje inicial</p><div class="inp ph">Ej. 84210</div>
+     <div class="btn">Empezar ruta</div>
+    </div>
+    <div class="sech"><span>Clientes de hoy</span><span>6</span></div>
+    <div class="row dim"><div class="n">1</div><div class="tx"><b>Abarrotes La Esperanza</b><span>Blvd. Díaz Ordaz 1420</span></div><div class="nota"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>2</div></div>
+    <div class="row dim"><div class="n">2</div><div class="tx"><b>Mini Súper Otay</b><span>Av. Las Torres 88</span></div></div>
+    <div class="row dim"><div class="n">3</div><div class="tx"><b>Tienda Doña Chuy</b><span>Calle 5 de Mayo 210</span></div><div class="nota"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>1</div></div>
+    <div class="row dim"><div class="n">4</div><div class="tx"><b>Depósito El Florido</b><span>Ruta Matamoros 3301</span></div></div>
+    <div class="row dim"><div class="n">5</div><div class="tx"><b>Cremería San Marcos</b><span>Av. Revolución 912</span></div></div>
+   </div>
+  </div>
+ </div><div class="col"><p class="cap">2 · Con vehículo, sin inventario</p><p class="sub">Mientras no acepte su inventario, sale un acceso directo y los clientes siguen bloqueados.</p>
+  <div class="tel">
+   <div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div><b>Ruta</b><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/><path d="M19 8v6M16 11h6"/></svg></div><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/></svg></div></div>
+   <div class="body">
+    <div class="card av">
+     <b>Falta aceptar tu inventario</b>
+     <p style="margin:4px 0 10px;font-size:13px">Tienes una carga esperando. Acéptala para poder vender.</p>
+     <div class="btn">Ir a inventario</div>
+    </div>
+    <div class="sech"><span>Clientes de hoy</span><span>6</span></div>
+    <div class="row dim"><div class="n">1</div><div class="tx"><b>Abarrotes La Esperanza</b><span>Blvd. Díaz Ordaz 1420</span></div><div class="nota"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>2</div></div>
+    <div class="row dim"><div class="n">2</div><div class="tx"><b>Mini Súper Otay</b><span>Av. Las Torres 88</span></div></div>
+    <div class="row dim"><div class="n">3</div><div class="tx"><b>Tienda Doña Chuy</b><span>Calle 5 de Mayo 210</span></div><div class="nota"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>1</div></div>
+    <div class="row dim"><div class="n">4</div><div class="tx"><b>Depósito El Florido</b><span>Ruta Matamoros 3301</span></div></div>
+    <div class="row dim"><div class="n">5</div><div class="tx"><b>Cremería San Marcos</b><span>Av. Revolución 912</span></div></div>
+    <div class="row dim"><div class="n">6</div><div class="tx"><b>Súper Kiosko Playas</b><span>Paseo Ensenada 45</span></div></div>
+   </div>
+  </div>
+ </div></div></section><section id="s2"><h2>2. Menú lateral</h2><p class="intro">Se despliega con el botón de menú desde cualquier pantalla principal.</p><ul class="reglas"><li>Opciones: Ruta, Inventario, Sugerido de carga, Ventas / Cobranza, Merma / Cambios, Gastos, Corte, Prospectos, Seleccionar impresora, Cerrar sesión.</li><li><b>Ruta</b> regresa a la lista de clientes del día. <b>Inventario</b>: sección 3. <b>Ventas / Cobranza</b> y <b>Merma / Cambios</b>: secciones 9 y 10. <b>Gastos</b>: sección 11. <b>Prospectos</b>: sección 12. <b>Corte</b>: sección 13.</li><li><b>Sugerido de carga</b>: está en definición; por ahora la opción solo avisa que viene después.</li><li><b>Seleccionar impresora</b>: elige la impresora del vendedor y la recuerda. Si no hay impresora o falla, lo grabado no se pierde: se avisa y se puede reimprimir desde Ventas / Cobranza.</li><li>Corte sale con candado mientras falten clientes por visitar.</li><li>Después de las opciones, el indicador de cuántos datos no se han sincronizado y hace cuánto fue la última sincronización.</li><li>Al final: el vendedor, el vehículo (una vez elegido) y la sucursal a la que pertenece.</li></ul><div class="jw"><div class="col"><p class="cap">3 · Menú lateral</p><p class="sub">Corte bloqueado hasta visitar a todos. Abajo: datos sin sincronizar, y vendedor, vehículo y sucursal.</p>
+  <div class="tel">
+   <div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div><b>Ruta</b></div>
+   <div class="shade"></div>
+   <div class="drawer">
+    <div class="mi on">Ruta</div>
+    <div class="mi">Inventario</div><div class="mi">Sugerido de carga</div>
+    <div class="mi">Ventas / Cobranza</div>
+    <div class="mi">Merma / Cambios</div>
+    <div class="mi">Gastos</div>
+    <div class="mi" style="color:#9a8f82">Corte <small><span style="display:inline-flex;align-items:center;gap:4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>faltan 4 clientes</span></small></div>
+    <div class="mi">Prospectos</div>
+    <div class="mi">Seleccionar impresora</div>
+    <div class="mi" style="color:var(--pel)">Cerrar sesión</div>
+    <div class="mi" style="border:0;background:var(--avisoT);color:var(--aviso)"><span style="display:inline-flex;align-items:center;gap:8px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/></svg>3 sin sincronizar</span> <small>hace 12 min</small></div>
+    <div class="foot"><b>Juan Pérez</b><br>Vehículo: NP300 · BC-482-K<br>Sucursal: Tijuana Centro</div>
+   </div>
+  </div>
+ </div></div></section><section id="s3"><h2>3. Inventario</h2><p class="intro">Aquí se acepta la carga del día y las recargas, y se consulta lo que trae.</p><ul class="reglas"><li>Aceptar es un checklist de productos: "Seleccionar todos" o uno por uno.</li><li>Puede aceptar todo, aceptar una parte o rechazar todo. Lo que no palomea no se acepta, y no tiene que escribir motivo.</li><li>Ya aceptado, ve el resumen: lo que cargó, lo que ha salido y lo que le queda de cada producto.</li><li>Las recargas llegan a esta misma pantalla y se aceptan con el mismo checklist.</li></ul><div class="jw"><div class="col"><p class="cap">4 · Inventario: aceptar carga</p><p class="sub">Checklist. "Seleccionar todos" o uno por uno. El botón de abajo dice cuántos acepta; también puede rechazar todo.</p>
+  <div class="tel">
+   <div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div><b>Inventario</b></div>
+   <div class="body">
+    <div class="row" style="border:2px solid var(--tinta)"><div class="chk"></div><div class="tx"><b>Seleccionar todos</b><span>Carga de las 7:40 · 8 productos</span></div></div>
+    <div class="row"><div class="chk on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div class="tx"><b>Jamaica · 500 ml</b></div><div class="qty">48</div></div>
+    <div class="row"><div class="chk on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div class="tx"><b>Jamaica · 1 L</b></div><div class="qty">24</div></div>
+    <div class="row"><div class="chk on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div class="tx"><b>Tamarindo · 500 ml</b></div><div class="qty">36</div></div>
+    <div class="row"><div class="chk"></div><div class="tx"><b>Tamarindo · 1 L</b></div><div class="qty">24</div></div>
+    <div class="row"><div class="chk on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div class="tx"><b>Horchata · 500 ml</b></div><div class="qty">36</div></div>
+    <div class="row"><div class="chk on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div class="tx"><b>Horchata · 1 L</b></div><div class="qty">12</div></div>
+    <div class="row"><div class="chk on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div class="tx"><b>Limón · 500 ml</b></div><div class="qty">24</div></div>
+   </div>
+   <div class="bot"><div class="btn sec" style="flex:.7;color:var(--pel);border-color:var(--pel)">Rechazar todo</div><div class="btn">Aceptar 6 de 8</div></div>
+  </div>
+ </div><div class="col"><p class="cap">5 · Inventario: resumen</p><p class="sub">Ya aceptado: lo que cargó, lo que ha salido y lo que le queda. Si llega una recarga, se acepta aquí mismo con el mismo checklist.</p>
+  <div class="tel">
+   <div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div><b>Inventario</b></div>
+   <div class="body">
+    <div class="card av"><b>Recarga esperando</b><p style="margin:4px 0 10px;font-size:13px">3 productos · enviada 12:15</p><div class="btn">Revisar recarga</div></div>
+    <div class="th"><span>Producto</span><span>Cargado</span><span>Salió</span><span>Te quedan</span></div>
+    <div class="tr"><b>Jamaica 500 ml</b><span>48</span><span>20</span><b>28</b></div>
+    <div class="tr"><b>Jamaica 1 L</b><span>24</span><span>9</span><b>15</b></div>
+    <div class="tr"><b>Tamarindo 500 ml</b><span>36</span><span>36</span><b style="color:var(--pel)">0</b></div>
+    <div class="tr"><b>Horchata 500 ml</b><span>36</span><span>12</span><b>24</b></div>
+    <div class="tr"><b>Horchata 1 L</b><span>12</span><span>2</span><b>10</b></div>
+    <div class="tr"><b>Limón 500 ml</b><span>24</span><span>6</span><b>18</b></div>
+   </div>
+  </div>
+ </div></div></section><section id="s4"><h2>4. Ruta en curso y acciones del cliente</h2><p class="intro">Con vehículo elegido e inventario aceptado, los clientes ya se pueden abrir.</p><ul class="reglas"><li>La ruta se parte en dos: "Por visitar" y "Visitados".</li><li>La primera acción sobre un cliente (venta, visita, cobro, merma o cambio) lo manda a Visitados. Desde ahí se puede volver a abrir y hacer más acciones.</li><li>Al tocar un cliente salen el nombre y teléfono del encargado y el botón "Ir", que abre Google Maps con la dirección ya puesta.</li><li>Botones: Vender, Visita (visita sin venta) y Merma y cambios. Si trae nota pendiente de ese cliente, aparece además Cobrar.</li><li><b>Vender</b>: secciones 5, 6 y 7. <b>Cobrar</b>: sección 8. <b>Merma y cambios</b>: sección 9.</li><li><b>Visita</b> es para cuando el cliente no compra. Es la pantalla que ya existe: se elige el motivo de la lista de la oficina (por ejemplo, aún tenía producto, no tenía dinero, estaba cerrado), se anotan observaciones y, cuando el motivo lo pide, quién atendió y una foto. También manda al cliente a Visitados.</li><li>Si la nota trae condición puesta en el portal, Vender sale apagado hasta que se grabe el cobro.</li></ul><div class="jw"><div class="col"><p class="cap">6 · Ruta en curso</p><p class="sub">El número a la derecha = notas pendientes de ese cliente. Al primer movimiento el cliente baja a "Visitados", pero se puede volver a abrir.</p>
+  <div class="tel">
+   <div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div><b>Ruta</b><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/><path d="M19 8v6M16 11h6"/></svg></div><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/></svg><span class="dot">3</span></div></div>
+   <div class="body">
+    <div class="sech"><span>Por visitar</span><span>4</span></div>
+    <div class="row"><div class="n">3</div><div class="tx"><b>Tienda Doña Chuy</b><span>Calle 5 de Mayo 210</span></div><div class="nota"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>1</div></div>
+    <div class="row"><div class="n">4</div><div class="tx"><b>Depósito El Florido</b><span>Ruta Matamoros 3301</span></div></div>
+    <div class="row"><div class="n">5</div><div class="tx"><b>Cremería San Marcos</b><span>Av. Revolución 912</span></div></div>
+    <div class="row"><div class="n">6</div><div class="tx"><b>Súper Kiosko Playas</b><span>Paseo Ensenada 45</span></div></div>
+    <div class="sech"><span>Visitados</span><span>2</span></div>
+    <div class="row vis"><div class="n ok"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div class="tx"><b>Abarrotes La Esperanza</b><span>Cobro $850 · Venta a crédito $1,240</span></div><div class="nota"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>2</div></div>
+    <div class="row vis"><div class="n ok"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div class="tx"><b>Mini Súper Otay</b><span>Visita sin venta · cerrado</span></div></div>
+   </div>
+  </div>
+ </div><div class="col"><p class="cap">7 · Al tocar un cliente</p><p class="sub">Con nota asignada aparece "Cobrar". Aquí la nota trae condición del portal: "Vender" queda apagado hasta grabar el cobro.</p>
+  <div class="tel">
+   <div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div><b>Ruta</b><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-3.9 3.1-7 7-7s7 3.1 7 7"/><path d="M19 8v6M16 11h6"/></svg></div><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.5 6.2L3 16"/><path d="M3 21v-5h5"/><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8"/><path d="M21 3v5h-5"/></svg></div></div>
+   <div class="body">
+    <div class="sech"><span>Por visitar</span><span>4</span></div>
+    <div class="row"><div class="n">3</div><div class="tx"><b>Tienda Doña Chuy</b><span>Calle 5 de Mayo 210</span></div><div class="nota"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>1</div></div>
+    <div class="row"><div class="n">4</div><div class="tx"><b>Depósito El Florido</b><span>Ruta Matamoros 3301</span></div></div>
+   </div>
+   <div class="shade"></div>
+   <div class="sheet">
+    <b style="font-size:18px">Tienda Doña Chuy</b>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+     <div style="flex:1;font-size:13px"><span style="color:var(--suave)">Encargada</span><br><b>María de Jesús Ramos</b><br>664 555 0142</div>
+     <div class="btn sec" style="padding:10px 14px"><span style="display:inline-flex;align-items:center;gap:6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l18-8-8 18-2-8z"/></svg>Ir</span></div>
+    </div>
+    <div class="grid">
+     <div class="ac pri">Cobrar<small>1 nota asignada · $1,120</small></div>
+     <div class="ac off">Vender<small>Cobra primero</small></div>
+     <div class="ac">Visita<small>sin venta</small></div>
+     <div class="ac" style="grid-column:1/3">Merma y cambios</div>
+    </div>
+   </div>
+  </div>
+ </div></div></section><section id="s5p"><h2>5. Promociones</h2><p class="intro">Al tocar Vender en el cliente, lo primero que sale es Promociones, solo si ese cliente tiene. Después sigue la lista de Vender de siempre.</p><ul class="reglas"><li>Salen las promociones que le tocan a ese cliente hoy, tal como se dieron de alta en el portal.</li><li>A un prospecto le sale además la promoción de bienvenida, solo en su primera venta.</li><li>Si el cliente no tiene promociones, este paso no sale y se va directo a Vender.</li><li>Salen como checklist, todas palomeadas. Quitar la palomita quita la promoción; volver a palomearla la agrega otra vez. También hay "Seleccionar todas".</li><li>Solo se puede palomear o quitar las promociones que le tocan al cliente; no se inventan otras ni se cambian cantidades.</li><li>Si la promoción da un producto que tiene varias presentaciones, el vendedor elige aquí cuál entrega.</li><li>Las piezas de promoción las calcula la app sola con lo vendido. Salen del inventario del vendedor y van en la nota en $0.00, con la frase de la promoción.</li></ul><div class="jw"><div class="col"><p class="cap">8 · Promociones</p><p class="sub">Lo primero al tocar Vender, solo si el cliente tiene promociones. Checklist: palomeada aplica, sin palomear no aplica.</p><div class="tel"><div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M15 5l-7 7 7 7"/></svg></div><b>Promociones</b><span style="font-size:12px;opacity:.8">Tienda Doña Chuy</span></div><div class="body"><p style="font-size:12.5px;color:var(--suave);margin:0 0 8px">Vienen todas palomeadas. Quita la palomita a la que el cliente no quiera.</p><div class="row" style="border:2px solid var(--tinta)"><div class="chk"></div><div class="tx"><b>Seleccionar todas</b><span>2 de 3 palomeadas</span></div></div><div style="border:2px solid var(--exito);background:var(--sup);border-radius:8px;padding:9px 10px;margin-bottom:6px"><div style="display:flex;gap:10px;align-items:flex-start"><div class="chk on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><b style="font-size:14px;flex:1;">Por cada 6 Mango 500 ml, 2 Mango 500 ml gratis</b></div></div><div style="border:2px solid var(--exito);background:var(--sup);border-radius:8px;padding:9px 10px;margin-bottom:6px"><div style="display:flex;gap:10px;align-items:flex-start"><div class="chk on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><b style="font-size:14px;flex:1;">Por cada 12 Fresa 500 ml, 1 Horchata gratis</b></div><p class="lab" style="margin:8px 0 4px 34px">Presentación que se entrega</p><div class="chips" style="margin:0 0 0 34px"><div class="chip on">500 ml</div><div class="chip">1 L</div></div></div><div style="border:2px dashed var(--borde);background:var(--hund);border-radius:8px;padding:9px 10px;margin-bottom:6px"><div style="display:flex;gap:10px;align-items:flex-start"><div class="chk"></div><b style="font-size:14px;flex:1;color:var(--suave)">Al comprar 40 piezas de lo que sea, 1 Jamaica 1 L gratis (una vez)</b></div></div></div><div class="bot"><div class="btn" style="flex:1">Continuar a vender</div></div></div></div></div></section><section id="s5"><h2>6. Vender</h2><p class="intro">Después de Promociones (o directo, si el cliente no tiene) sale la lista. Una sola lista. Solo los productos que el vendedor tiene disponibles, cada uno con su presentación, en orden alfabético. Va bajando o subiendo y pone cantidades.</p><ul class="reglas"><li>Cada renglón es un producto con su presentación (por ejemplo "Jamaica · 1 L"), con precio y cuántas le quedan.</li><li>Solo salen los que tiene en su inventario. Lo que se acaba desaparece de la lista.</li><li>A la derecha de cada renglón, la cantidad. Los renglones con cantidad se pintan para distinguirlos.</li><li>Al tocar una cantidad sale un teclado de números grandes; "Siguiente" baja al renglón que sigue.</li><li>Abajo, siempre a la vista, las piezas, cuántas van de promoción, el total y el botón para pasar a Cobranza.</li><li>Las piezas de promoción las pone la app sola según lo que se va capturando y las promociones que quedaron en el paso anterior.</li></ul><div class="jw"><div class="col"><p class="cap">9 · Vender: la lista</p><p class="sub">Productos disponibles con su presentación, de la A a la Z. Desliza y pone cantidades.</p><div class="tel"><div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M15 5l-7 7 7 7"/></svg></div><b>Vender</b><span style="font-size:12px;opacity:.8">Tienda Doña Chuy</span></div><div class="body"><div class="row"><div class="tx"><b>Arándano · 500 ml</b><span>$18.00 · te quedan 28</span></div><div class="qn"></div></div><div class="row"><div class="tx"><b>Arándano · 1 L</b><span>$32.00 · te quedan 12</span></div><div class="qn"></div></div><div class="row" style="background:var(--primT);border-color:var(--prim)"><div class="tx"><b>Cebada · 500 ml</b><span>$18.00 · te quedan 20</span></div><div class="qn">6</div></div><div class="row"><div class="tx"><b>Cebada · 1 L</b><span>$32.00 · te quedan 9</span></div><div class="qn"></div></div><div class="row"><div class="tx"><b>Chía limón · 500 ml</b><span>$18.00 · te quedan 24</span></div><div class="qn"></div></div><div class="row"><div class="tx"><b>Coco · 1 L</b><span>$34.00 · te quedan 6</span></div><div class="qn"></div></div><div class="row"><div class="tx"><b>Durazno · 500 ml</b><span>$18.00 · te quedan 18</span></div><div class="qn"></div></div><div class="row" style="background:var(--primT);border-color:var(--prim)"><div class="tx"><b>Fresa · 500 ml</b><span>$18.00 · te quedan 30</span></div><div class="qn">12</div></div><div class="row"><div class="tx"><b>Fresa · 1 L</b><span>$32.00 · te quedan 14</span></div><div class="qn"></div></div></div><div class="bot"><div style="flex:1"><span style="font-size:11px;color:var(--suave);font-weight:700">42 PIEZAS + 5 PROMO</span><br><b style="font-size:20px">$948.00</b></div><div class="btn" style="flex:1.1">Ir a cobranza</div></div></div></div><div class="col"><p class="cap">10 · Vender: poner una cantidad</p><p class="sub">Toca la cantidad, teclea y "Siguiente" lo lleva al renglón de abajo sin cerrar el teclado.</p><div class="tel"><div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M15 5l-7 7 7 7"/></svg></div><b>Vender</b><span style="font-size:12px;opacity:.8">Tienda Doña Chuy</span></div><div class="body"><div class="row" style="background:var(--primT);border-color:var(--prim)"><div class="tx"><b>Horchata · 500 ml</b><span>$18.00 · te quedan 24</span></div><div class="qn">6</div></div><div class="row"><div class="tx"><b>Horchata · 1 L</b><span>$32.00 · te quedan 10</span></div><div class="qn"></div></div><div class="row" style="background:var(--primT);border-color:var(--prim)"><div class="tx"><b>Jamaica · 500 ml</b><span>$18.00 · te quedan 28</span></div><div class="qn">12</div></div><div class="row" style="background:var(--primT);border:2px solid var(--prim)"><div class="tx"><b>Jamaica · 1 L</b><span>$32.00 · te quedan 15</span></div><div class="qn" style="border-color:var(--prim)">6</div></div><div class="row"><div class="tx"><b>Jamaica · 4 L</b><span>$110.00 · te quedan 8</span></div><div class="qn"></div></div></div><div class="hoja" style="border-radius:0;padding:8px 10px 10px"><div class="pad" style="margin-top:0"><div class="k">1</div><div class="k">2</div><div class="k">3</div><div class="k">4</div><div class="k">5</div><div class="k">6</div><div class="k">7</div><div class="k">8</div><div class="k">9</div><div class="k alt"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M21 5H9l-6 7 6 7h12z"/><path d="M12 9l6 6M18 9l-6 6"/></svg></div><div class="k">0</div><div class="k sig">Siguiente</div></div></div></div></div></div></section><section id="s6"><h2>7. Cobranza de la venta e impresión</h2><p class="intro">De elegir los artículos se pasa a Cobranza: arriba la nota de lo que se vende con su total y abajo cómo paga el cliente.</p><ul class="reglas"><li>Tres opciones: Liquidar, Abonar y Crédito.</li><li>Liquidar: se pone solo el total de la nota de venta.</li><li>Abonar: el vendedor captura cuánto abona; el resto queda a crédito.</li><li>Crédito: no paga nada hoy; toda la nota queda pendiente.</li><li>En toda venta, de contado o a crédito, se escribe el <b>nombre de quien atiende</b>. Es obligatorio y se imprime en la nota.</li><li>Ya no se firma en la app. El cliente firma a mano la nota impresa, que trae el espacio para la firma.</li><li>Si es Abonar o Crédito, a ese cliente se le suma una nota pendiente.</li><li>Al grabar, la nota se manda a la impresora. Si la impresora falla, la venta queda grabada y se reimprime desde Ventas / Cobranza.</li></ul><div class="jw"><div class="col"><p class="cap">11 · Cobranza: Liquidar</p><p class="sub">Arriba la nota con su total. "Liquidar" pone solo el total de la nota. Se escribe quién atiende y se imprime.</p>
+  <div class="tel">
+   <div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M15 5l-7 7 7 7"/></svg></div><b>Cobranza</b></div>
+   <div class="body">
+    <div class="card">
+     <p class="lab">Nota · Tienda Doña Chuy</p>
+     <div class="ln"><span>12 × Jamaica 500 ml</span><b>$216.00</b></div>
+     <div class="ln"><span>6 × Jamaica 1 L</span><b>$192.00</b></div>
+     <div class="ln"><span>6 × Horchata 500 ml</span><b>$108.00</b></div><div class="ln"><span>12 × Mango 500 ml</span><b>$288.00</b></div>
+     <div class="ln"><span>4 × Mango 500 ml (promoción)</span><b>$0.00</b></div>
+     <div class="tot"><span>Total</span><span>$804.00</span></div>
+    </div>
+    <p class="lab">Cobranza</p>
+    <div class="chips"><div class="chip on">Liquidar</div><div class="chip">Abonar</div><div class="chip">Crédito</div></div>
+    <div class="inp"><span>$ 804.00</span></div>
+    
+   <p class="lab" style="margin-top:10px">Nombre de quien atiende</p><div class="inp"><span>María de Jesús Ramos</span></div></div>
+   <div class="bot"><div class="btn">Grabar e imprimir</div></div>
+  </div>
+ </div><div class="col"><p class="cap">12 · Cobranza: Abonar o Crédito</p><p class="sub">Si abona, captura cuánto. Lo que falta queda a crédito y al cliente se le suma una nota pendiente.</p>
+  <div class="tel">
+   <div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M15 5l-7 7 7 7"/></svg></div><b>Cobranza</b></div>
+   <div class="body">
+    <div class="card">
+     <p class="lab">Nota · Tienda Doña Chuy</p>
+     <div class="ln"><span>12 × Jamaica 500 ml</span><b>$216.00</b></div>
+     <div class="ln"><span>6 × Jamaica 1 L</span><b>$192.00</b></div>
+     <div class="ln"><span>6 × Horchata 500 ml</span><b>$108.00</b></div><div class="ln"><span>12 × Mango 500 ml</span><b>$288.00</b></div>
+     <div class="ln"><span>4 × Mango 500 ml (promoción)</span><b>$0.00</b></div>
+     <div class="tot"><span>Total</span><span>$804.00</span></div>
+    </div>
+    <p class="lab">Cobranza</p>
+    <div class="chips"><div class="chip">Liquidar</div><div class="chip on">Abonar</div><div class="chip">Crédito</div></div>
+    <div class="inp"><span>$ 300.00</span></div>
+    <div class="card av" style="padding:8px 10px;display:flex;gap:8px;align-items:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg><span style="font-size:13px"><b>Saldo pendiente por liquidar $504.00</b></span></div>
+   <p class="lab" style="margin-top:10px">Nombre de quien atiende</p><div class="inp"><span>María de Jesús Ramos</span></div></div>
+   <div class="bot"><div class="btn">Grabar e imprimir</div></div>
+  </div>
+ </div></div></section><section id="s7"><h2>8. Cobrar</h2><p class="intro">Aparece solo cuando el vendedor trae una nota pendiente de ese cliente.</p><ul class="reglas"><li>Abre con la nota asignada al frente: total, abonos anteriores y lo que debe.</li><li>Mismas leyendas que en la venta: Liquidar (se pone solo lo que debe la nota) o Abonar (captura cuánto). El sistema guarda lo abonado y se imprime una nota para el cliente.</li><li>No se firma en la app: el cliente firma a mano la nota impresa.</li><li>El botón "Otras notas pendientes" abre las demás notas del cliente.</li></ul><div class="jw"><div class="col"><p class="cap">13 · Cobrar</p><p class="sub">Abre con la nota asignada al frente. Liquidar pone solo lo que debe; Abonar deja capturar cuánto. Un botón abre las otras notas pendientes del cliente.</p><div class="tel"><div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M15 5l-7 7 7 7"/></svg></div><b>Cobrar</b><span style="font-size:12px;opacity:.8">Tienda Doña Chuy</span></div><div class="body">
+<div class="card"><p class="lab">Nota asignada</p>
+<div style="display:flex;flex-wrap:wrap;gap:4px 8px;justify-content:space-between;align-items:center"><b style="font-size:17px">Nota TJ261103JP07</b><span class="tag">Abonar para poder vender</span></div>
+<div class="kv"><span>Fecha</span><b>3 nov</b></div><div class="kv"><span>Total</span><b>$1,620.00</b></div><div class="kv"><span>Abonado (10 nov)</span><b>$500.00</b></div>
+<div class="kv big"><span>Debe</span><span>$1,120.00</span></div></div>
+<p class="lab">Cobranza</p>
+<div class="chips"><div class="chip">Liquidar</div><div class="chip on">Abonar</div></div>
+<div class="inp"><span>$ 400.00</span></div>
+<div class="kv" style="margin:0 2px 10px"><span>Saldo pendiente por liquidar</span><b>$720.00</b></div>
+<div class="btn sec" style="display:flex;justify-content:center;align-items:center;gap:6px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg> Otras notas pendientes · 1</div>
+</div><div class="bot"><div class="btn">Grabar e imprimir</div></div></div></div></div></section><section id="s8"><h2>9. Merma y cambios</h2><p class="intro">Un solo botón en el cliente; dentro, dos apartados separados.</p><ul class="reglas"><li>Merma: producto dañado o caducado que devuelve el cliente. Se pierde.</li><li>Cambios: producto en buen estado que el cliente cambia por otro. Regresa al inventario del vendedor.</li><li>En los dos se captura lo que me entregó el cliente y lo que le entregué.</li><li>En Merma se elige el motivo, de una lista predefinida en el portal. Aplica a la merma del cliente y a la merma del inventario del vehículo. Los cambios no llevan motivo.</li><li>La merma del inventario del vehículo (lo que se daña en la camioneta, sin cliente) se reporta desde Merma / Cambios en el menú, con el botón "Merma del vehículo". También lleva motivo.</li><li>El consumo propio (la pieza que se toma el vendedor) se registra en el mismo lugar, con el botón "Consumo" junto a "Merma del vehículo". No lleva motivo.</li></ul><div class="jw"><div class="col"><p class="cap">14 · Merma y cambios</p><p class="sub">Un solo botón, dos apartados. En cada uno: lo que me entregó el cliente y lo que le entregué. Los productos se agregan con el mismo selector de la venta.</p><div class="tel"><div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M15 5l-7 7 7 7"/></svg></div><b>Merma y cambios</b></div><div class="body">
+<p class="lab">Tienda Doña Chuy</p>
+<div class="seg"><div class="on">Merma · 5</div><div>Cambios · 0</div></div><p class="lab">Motivo de la merma</p><div class="inp" style="margin-bottom:4px"><span>Envase roto</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M6 9l6 6 6-6"/></svg></div>
+<div class="sech" style="margin-top:4px"><span>Me entregó el cliente (dañado)</span></div>
+<div class="row"><div class="tx"><b>Jamaica · 1 L</b></div><div class="qn">3</div></div><div class="row"><div class="tx"><b>Horchata · 500 ml</b></div><div class="qn">2</div></div>
+<div class="add"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12h14M12 5v14"/></svg> Agregar producto</div>
+<div class="sech"><span>Le entregué</span><span>opcional</span></div>
+<div class="row"><div class="tx"><b>Jamaica · 1 L</b></div><div class="qn">3</div></div>
+<div class="add"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12h14M12 5v14"/></svg> Agregar producto</div>
+<p style="font-size:12px;color:var(--suave);margin:8px 2px">En "Cambios" es igual, pero lo que entrega el cliente está en buen estado y regresa a tu inventario.</p>
+</div><div class="bot"><div class="btn">Grabar</div></div></div></div><div class="col"><p class="cap">15 · Merma / Cambios (menú)</p><p class="sub">Registro del día de mermas y cambios. Arriba, los botones para reportar la merma del vehículo y el consumo propio.</p><div class="tel"><div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div><b>Merma / Cambios</b></div><div class="body">
+<div style="display:flex;gap:8px;margin-bottom:10px"><div class="btn" style="display:flex;justify-content:center;align-items:center;gap:8px;flex:1.4"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M3 6h11v10H3zM14 10h4l3 3v3h-7z"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/></svg> Merma del vehículo</div><div class="btn" style="flex:1;display:flex;justify-content:center;align-items:center;gap:6px;background:#fff;color:var(--tinta);border:2px solid var(--tinta)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M6 3h12l-1.5 18h-9z"/><path d="M6.5 9h11"/></svg> Consumo</div></div>
+<div class="card" style="display:flex;justify-content:space-between;padding:8px 10px"><span>Hoy · 4 movimientos</span><b>15 pzas</b></div>
+<div class="row"><div class="hora">13:10</div><div class="tx"><b>Vehículo</b><span><span class="tipo tn">Merma</span> Envase roto</span></div><b>4 pzas</b><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M9 5l7 7-7 7"/></svg></div>
+<div class="row"><div class="hora">12:05</div><div class="tx"><b>Depósito El Florido</b><span><span class="tipo tv">Cambio</span> Fresa por Mango</span></div><b>6 pzas</b><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M9 5l7 7-7 7"/></svg></div>
+<div class="row"><div class="hora">11:40</div><div class="tx"><b>Tienda Doña Chuy</b><span><span class="tipo tn">Merma</span> Caducado</span></div><b>5 pzas</b><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M9 5l7 7-7 7"/></svg></div>
+<div class="row"><div class="hora">09:30</div><div class="tx"><b>Vehículo</b><span><span class="tipo tn">Merma</span> Se cayó la caja</span></div><b>2 pzas</b><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M9 5l7 7-7 7"/></svg></div>
+</div><div class="nav"><div class="on">Todo</div><div>Merma</div><div style="border:0">Cambios</div></div></div></div><div class="col"><p class="cap">16 · Merma del vehículo</p><p class="sub">Lo que se dañó en la camioneta, sin cliente. Motivo de la lista del portal, producto y piezas.</p><div class="tel"><div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M15 5l-7 7 7 7"/></svg></div><b>Merma del vehículo</b></div><div class="body">
+<p class="lab">Motivo de la merma</p><div class="inp"><span>Envase roto</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M6 9l6 6 6-6"/></svg></div>
+<p class="lab">Producto dañado</p>
+<div class="row"><div class="tx"><b>Arándano · 500 ml</b><span>te quedan 28</span></div><div class="qn"></div></div><div class="row"><div class="tx"><b>Fresa · 500 ml</b><span>te quedan 18</span></div><div class="qn"></div></div><div class="row" style="background:var(--primT);border-color:var(--prim)"><div class="tx"><b>Horchata · 1 L</b><span>te quedan 10</span></div><div class="qn">2</div></div><div class="row" style="background:var(--primT);border-color:var(--prim)"><div class="tx"><b>Jamaica · 1 L</b><span>te quedan 9</span></div><div class="qn">2</div></div><div class="row"><div class="tx"><b>Mango · 500 ml</b><span>te quedan 8</span></div><div class="qn"></div></div>
+<p class="lab" style="margin-top:8px">Comentario (opcional)</p><div class="inp ph">Ej. se rompió al frenar</div>
+</div><div class="bot"><div style="flex:1"><span style="font-size:11px;color:var(--suave);font-weight:700">4 PIEZAS</span></div><div class="btn" style="flex:1.6">Registrar merma</div></div></div></div></div></section><section id="s9"><h2>10. Ventas / Cobranza y Merma / Cambios</h2><p class="intro">Registro de lo que el vendedor ha hecho en el día, para abrirlo y revisarlo.</p><ul class="reglas"><li>Cada renglón: hora, cliente, tipo de movimiento y monto.</li><li>Abajo, los filtros: Todo, Ventas del día, Cobranza y Notas pendientes.</li><li>Al abrir un movimiento: qué se vendió o cobró, cuánto, a quién, a qué hora, y la lista de productos si fue venta. Se puede reimprimir.</li><li>La página de Merma / Cambios lleva la misma forma (ver sección 9).</li></ul><div class="jw"><div class="col"><p class="cap">17 · Ventas / Cobranza</p><p class="sub">Registro del día, lo más nuevo arriba. Abajo los filtros: Todo, Ventas del día, Cobranza y Notas pendientes. Merma / Cambios lleva la misma forma.</p><div class="tel"><div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div><b>Ventas / Cobranza</b></div><div class="body">
+<div class="card" style="display:flex;justify-content:space-between;padding:8px 10px"><span>Hoy · 5 movimientos</span><b>$3,474.00</b></div>
+<div class="row"><div class="hora">12:40</div><div class="tx"><b>Depósito El Florido</b><span><span class="tipo tv">Venta</span> contado</span></div><b>$912</b><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M9 5l7 7-7 7"/></svg></div>
+<div class="row"><div class="hora">11:58</div><div class="tx"><b>Tienda Doña Chuy</b><span><span class="tipo tv">Venta</span> crédito</span></div><b>$624</b><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M9 5l7 7-7 7"/></svg></div>
+<div class="row"><div class="hora">11:52</div><div class="tx"><b>Tienda Doña Chuy</b><span><span class="tipo tc">Cobro</span> nota TJ261103JP07</span></div><b>$400</b><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M9 5l7 7-7 7"/></svg></div>
+<div class="row"><div class="hora">10:15</div><div class="tx"><b>Abarrotes La Esperanza</b><span><span class="tipo tv">Venta</span> abonó $300</span></div><b>$1,240</b><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M9 5l7 7-7 7"/></svg></div>
+<div class="row"><div class="hora">10:09</div><div class="tx"><b>Abarrotes La Esperanza</b><span><span class="tipo tc">Cobro</span> nota TJ261030JP04</span></div><b>$850</b><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M9 5l7 7-7 7"/></svg></div>
+</div><div class="nav"><div class="on">Todo</div><div>Ventas del día</div><div>Cobranza</div><div style="border:0">Notas pendientes</div></div></div></div><div class="col"><p class="cap">18 · Abrir un movimiento</p><p class="sub">Qué se vendió o cobró, a quién, a qué hora, cuánto pagó y cuánto quedó. Solo para revisar: no se edita.</p><div class="tel"><div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M15 5l-7 7 7 7"/></svg></div><b>Venta</b></div><div class="body">
+<div class="card"><p class="lab">Nota TJ261118JP02 · 10:15</p><b style="font-size:17px">Abarrotes La Esperanza</b>
+<div style="margin-top:8px"><div class="ln"><span>24 × Jamaica 500 ml</span><b>$432.00</b></div><div class="ln"><span>12 × Tamarindo 1 L</span><b>$384.00</b></div><div class="ln"><span>12 × Mango 500 ml</span><b>$424.00</b></div><div class="ln"><span>4 × Mango 500 ml (promoción)</span><b>$0.00</b></div></div>
+<div class="kv big"><span>Total</span><span>$1,240.00</span></div>
+<div class="kv"><span>Pagó</span><b>$300.00</b></div><div class="kv"><span>Quedó a crédito</span><b style="color:var(--prim)">$940.00</b></div></div>
+<div class="card" style="font-size:13px"><div class="kv"><span>Vendedor</span><b>Juan Pérez</b></div><div class="kv"><span>Sincronizada</span><b style="color:var(--exito)">Sí</b></div></div>
+<div class="btn sec" style="display:flex;justify-content:center;align-items:center;gap:6px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M7 8V3h10v5"/><rect x="3" y="8" width="18" height="9" rx="2"/><path d="M7 14h10v7H7z"/></svg> Reimprimir</div>
+</div></div></div></div></section><section id="s10"><h2>11. Gastos</h2><p class="intro">Lo más sencillo posible.</p><ul class="reglas"><li>Elige el motivo y pone la cantidad.</li><li>Abajo se listan los gastos del día.</li></ul><div class="jw"><div class="col"><p class="cap">19 · Gastos</p><p class="sub">Motivo y cantidad, nada más. Abajo los gastos del día.</p><div class="tel"><div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div><b>Gastos</b></div><div class="body">
+<div class="card"><p class="lab">Motivo</p><div class="inp"><span>Gasolina</span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M6 9l6 6 6-6"/></svg></div>
+<p class="lab">Cantidad</p><div class="inp"><span>$ 500.00</span></div>
+<div class="btn">Guardar gasto</div></div>
+<div class="sech"><span>Gastos de hoy</span><span>$585.00</span></div>
+<div class="row"><div class="hora">09:20</div><div class="tx"><b>Caseta</b></div><b>$45.00</b></div><div class="row"><div class="hora">13:05</div><div class="tx"><b>Comida</b></div><b>$120.00</b></div><div class="row"><div class="hora">11:30</div><div class="tx"><b>Estacionamiento</b></div><b>$20.00</b></div><div class="row"><div class="hora">08:10</div><div class="tx"><b>Gasolina</b></div><b>$400.00</b></div>
+</div></div></div></div></section><section id="s11"><h2>12. Agregar cliente a la ruta y Prospectos</h2><p class="intro">Son dos cosas separadas: agregar a la ruta un cliente que ya existe, y dar de alta prospectos.</p><ul class="reglas"><li>El botón de arriba a la derecha en Ruta es solo para agregar un cliente de la sucursal a la ruta de hoy, con o sin internet.</li><li>El cliente agregado entra al final de "Por visitar" y cuenta para el corte.</li><li>La opción "Prospectos" del menú es solo para dar de alta prospectos, con la información que ya estaba definida.</li><li>Al tocar un prospecto capturado se abren sus acciones, igual que con un cliente: se le puede vender, y en su primera venta le sale la promoción de bienvenida. Un prospecto no cuenta para el corte.</li></ul><div class="jw"><div class="col"><p class="cap">20 · Agregar cliente a la ruta</p><p class="sub">Se abre con el botón de arriba a la derecha en Ruta. Todos los clientes de la sucursal con buscador; funciona con y sin internet.</p>
+  <div class="tel">
+   <div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M15 5l-7 7 7 7"/></svg></div><b>Agregar a ruta</b></div><div class="body">
+    <div class="inp ph" style="justify-content:flex-start;gap:8px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg> Buscar cliente</div>
+    <div class="row"><div class="tx"><b>Abarrotes La Esperanza</b><span>Blvd. Díaz Ordaz 1420</span></div><span style="font-size:12px;font-weight:700;color:var(--exito)">En ruta</span></div>
+    <div class="row"><div class="tx"><b>Carnicería El Toro</b><span>Av. Internacional 77</span></div><div class="mini">Agregar a ruta</div></div>
+    <div class="row"><div class="tx"><b>Cremería San Marcos</b><span>Av. Revolución 912</span></div><span style="font-size:12px;font-weight:700;color:var(--exito)">En ruta</span></div>
+    <div class="row"><div class="tx"><b>Farmacia Santa Fe</b><span>Blvd. Insurgentes 2040</span></div><div class="mini">Agregar a ruta</div></div>
+    <div class="row"><div class="tx"><b>Frutería Los Compadres</b><span>Calle Novena 315</span></div><div class="mini">Agregar a ruta</div></div>
+    <div class="row"><div class="tx"><b>Mini Súper Otay</b><span>Av. Las Torres 88</span></div><span style="font-size:12px;font-weight:700;color:var(--exito)">En ruta</span></div>
+   </div>
+  </div>
+ </div><div class="col"><p class="cap">21 · Prospectos</p><p class="sub">Desde el menú. Lista de los prospectos capturados y el botón para dar de alta uno nuevo.</p><div class="tel"><div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div><b>Prospectos</b></div><div class="body">
+<div class="btn" style="display:flex;justify-content:center;align-items:center;gap:6px;margin-bottom:10px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12h14M12 5v14"/></svg> Nuevo prospecto</div>
+<div class="sech"><span>Capturados</span><span>3</span></div>
+<div class="row"><div class="tx"><b>Taquería El Paisa</b><span>Av. Tecnológico 510</span></div><span style="font-size:12px;font-weight:700;color:var(--aviso)">Por subir</span></div><div class="row"><div class="tx"><b>Abarrotes Lupita</b><span>Calle Sonora 22</span></div><span style="font-size:12px;font-weight:700;color:var(--exito)">Sincronizado</span></div><div class="row"><div class="tx"><b>Lonchería La Güera</b><span>Blvd. Agua Caliente 9010</span></div><span style="font-size:12px;font-weight:700;color:var(--exito)">Sincronizado</span></div></div></div></div></div></section><section id="s12"><h2>13. Corte</h2><p class="intro">Solo se puede hacer cuando ya se visitaron todos los clientes.</p><ul class="reglas"><li>Arriba, el resumen de todo el día.</li><li>Abajo se mueve entre tres apartados: Efectivo, Notas e Inventario.</li><li>Efectivo: ve cuánto debe traer según el sistema (ventas de contado más abonos y cobros, menos gastos) y captura cuánto trae.</li><li>Notas: palomea cada nota física que trae, las asignadas con saldo y las que generó hoy.</li><li>Inventario: cada producto viene con la cantidad del sistema, ya descontada la merma; confirma o corrige lo que regresa.</li><li>Cada apartado se cierra por separado. El botón "Corte" se enciende hasta que están cerrados los tres.</li><li>Todos los clientes de la ruta deben estar en Visitados, también los agregados. Un cliente que no compró se cierra con Visita.</li><li>Al enviar el corte se pide el kilometraje final y se cierra el día.</li><li>Manda la información del sistema, no la que captura el vendedor.</li></ul><div class="jw"><div class="col"><p class="cap">22 · Corte: efectivo</p><p class="sub">Resumen arriba. Abajo se mueve entre Efectivo, Notas e Inventario. El botón Corte está apagado hasta cerrar los tres.</p><div class="tel"><div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div><b>Corte</b></div><div class="body"><div class="card" style="padding:8px 10px"><p class="lab">Resumen del día · 6 de 6 visitados</p>
+<div class="kv"><span>Ventas</span><b>$5,930.00</b></div><div class="kv"><span>Cobranza</span><b>$1,250.00</b></div><div class="kv"><span>Gastos</span><b>$585.00</b></div></div>
+<div class="sech"><span>Efectivo</span></div>
+<div class="card"><div class="kv"><span>Ventas de contado</span><b>$3,360.00</b></div><div class="kv"><span>Abonos y cobros</span><b>$1,550.00</b></div><div class="kv"><span>Menos gastos</span><b>−$585.00</b></div>
+<div class="kv big"><span>Debes traer</span><span>$4,325.00</span></div></div>
+<p class="lab">¿Cuánto traes?</p><div class="inp ph">$ 0.00</div>
+<div class="btn sec">Cerrar efectivo</div></div><div class="nav nav2"><div class="on">Efectivo</div><div class="">Notas</div><div class="" style="border:0">Inventario</div></div><div class="bot" style="border-top:1px solid var(--borde)"><div class="btn off" style="display:flex;justify-content:center;align-items:center;gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> Corte</div></div></div></div><div class="col"><p class="cap">23 · Corte: notas</p><p class="sub">Palomea cada nota física que trae. Efectivo ya está cerrado (palomita en la pestaña).</p><div class="tel"><div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div><b>Corte</b></div><div class="body"><div class="card" style="padding:8px 10px"><p class="lab">Resumen del día · 6 de 6 visitados</p>
+<div class="kv"><span>Ventas</span><b>$5,930.00</b></div><div class="kv"><span>Cobranza</span><b>$1,250.00</b></div><div class="kv"><span>Gastos</span><b>$585.00</b></div></div>
+<div class="sech"><span>Notas que traes</span><span>3 de 4</span></div>
+<div class="row"><div class="chk on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div class="tx"><b>Nota TJ261030JP04</b><span>Abarrotes La Esperanza · liquidada</span></div><b>$0</b></div><div class="row"><div class="chk on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div class="tx"><b>Nota TJ261103JP07</b><span>Tienda Doña Chuy · abonó $400</span></div><b>$720</b></div><div class="row"><div class="chk on"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div class="tx"><b>Nota TJ261118JP02</b><span>Abarrotes La Esperanza · nueva</span></div><b>$940</b></div><div class="row"><div class="chk"></div><div class="tx"><b>Nota TJ261118JP05</b><span>Tienda Doña Chuy · nueva</span></div><b>$624</b></div>
+<div class="btn off" style="margin-top:6px">Cerrar notas</div></div><div class="nav nav2"><div class="ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Efectivo</div><div class="on">Notas</div><div class="" style="border:0">Inventario</div></div><div class="bot" style="border-top:1px solid var(--borde)"><div class="btn off" style="display:flex;justify-content:center;align-items:center;gap:6px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg> Corte</div></div></div></div><div class="col"><p class="cap">24 · Corte: inventario</p><p class="sub">Confirma o corrige lo que regresa. Con los tres apartados cerrados se enciende Corte.</p><div class="tel"><div class="bar"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M3 6h18M3 12h18M3 18h18"/></svg></div><b>Corte</b></div><div class="body"><div class="card" style="padding:8px 10px"><p class="lab">Resumen del día · 6 de 6 visitados</p>
+<div class="kv"><span>Ventas</span><b>$5,930.00</b></div><div class="kv"><span>Cobranza</span><b>$1,250.00</b></div><div class="kv"><span>Gastos</span><b>$585.00</b></div></div>
+<div class="sech"><span>Inventario que regresas</span><span style="color:var(--exito)">Cerrado</span></div>
+<div class="row"><div class="tx"><b>Jamaica · 500 ml</b><span>Sistema: 8</span></div><div class="qn">8</div></div><div class="row"><div class="tx"><b>Jamaica · 1 L</b><span>Sistema: 6</span></div><div class="qn">6</div></div><div class="row"><div class="tx"><b>Horchata · 500 ml</b><span>Sistema: 12</span></div><div class="qn">12</div></div><div class="row"><div class="tx"><b>Mango · 500 ml</b><span>Sistema: 4</span></div><div class="qn">4</div></div>
+<div class="row" style="background:var(--hund)"><div class="tx"><b>Merma</b><span>Sistema: 5</span></div><div class="qn">5</div></div>
+</div><div class="nav nav2"><div class="ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Efectivo</div><div class="ok"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Notas</div><div class="on" style="border:0"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:none"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Inventario</div></div><div class="bot" style="border-top:1px solid var(--borde)"><div class="btn" style="display:flex;justify-content:center;align-items:center;gap:6px"> Corte</div></div></div></div></div></section>
+<style>
+.jw .tk{width:300px;background:#fff;color:#000;font-family:"Courier New",Courier,monospace;font-size:12.5px;line-height:1.45;padding:18px 16px 26px;border:1px solid #000;
+ -webkit-mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) 50%/14px 100%;mask:conic-gradient(from -45deg at bottom,#0000,#000 1deg 89deg,#0000 90deg) 50%/14px 100%}
+.jw .tk,.jw .tk *{color:#000!important;background-color:transparent}.jw .tk{background:#fff!important}.jw .tk .tkc{text-align:center}.jw .tk .tm{font-size:22px;letter-spacing:.12em}
+.jw .tk .tkl{display:flex;justify-content:space-between;gap:8px}
+.jw .tk .b{font-weight:700}.jw .tk .g{font-size:15px}
+.jw .tk .tkh{border-top:1px dashed #000;margin:6px 0}
+.jw .tk .tkp{display:grid;grid-template-columns:30px 1fr 50px 58px;gap:4px}.jw .tk .tkp span:nth-child(n+3){text-align:right}
+.jw .tk .tks{text-align:center;font-weight:700;font-size:19px;letter-spacing:.14em;border:2px solid #000;margin:10px 0 6px;padding:4px 0}
+</style><section id="s13"><h2>14. La nota impresa</h2><p class="intro">Ejemplo de cómo sale el papel en la impresora térmica. Es la misma nota de venta en sus tres momentos; al final siempre dice en qué estado quedó.</p>
+<ul class="reglas"><li>Todo en blanco y negro, como sale de la impresora térmica.</li><li>Arriba: sucursal, folio, fecha y hora, cliente, quien atendió (el nombre que se escribió en la app) y vendedor.</li><li>En medio: cada producto con cantidad, precio e importe, las piezas de promoción en cero con la frase de su promoción debajo, y el total.</li>
+<li>Al final, el estado en grande: LIQUIDADA si se pagó completa, ABONADO si abonó y queda saldo, CRÉDITO si no pagó nada (todo el total queda como saldo).</li>
+<li>Con ABONADO se listan todos los abonos con su fecha y el saldo pendiente, y queda el espacio para que el cliente firme a mano.</li>
+<li>Cada vez que se cobra o abona una nota pendiente se vuelve a imprimir la nota completa con el abono nuevo, la fecha de reimpresión y quién cobró.</li><li>Cualquier nota se puede reimprimir desde Ventas / Cobranza.</li></ul>
+<div class="jw"><div class="col"><p class="cap">25 · Venta liquidada</p><p class="sub">Pagó todo. Lleva el nombre de quien atendió.</p><div class="tk"><div class="tkc"><b class="tm">JAWA</b><br>Sucursal Tijuana Centro<br><b>NOTA DE VENTA</b></div>
+<div class="tkl b"><span>Folio</span><span>TJ261118JP05</span></div><div class="tkl "><span>Fecha</span><span>18 nov 2026 · 11:58</span></div><div class="tkh"></div>
+<div class="tkl "><span>Cliente</span><span>Tienda Doña Chuy</span></div><div class="tkl "><span>Atendió</span><span>María de Jesús Ramos</span></div><div class="tkl "><span>Vendedor</span><span>Juan Pérez</span></div><div class="tkh"></div>
+<div class="tkp b"><span>Cant</span><span>Producto</span><span>P.U.</span><span>Importe</span></div>
+<div class="tkp"><span>12</span><span>Jamaica 500 ml</span><span>18.00</span><span>216.00</span></div><div class="tkp"><span>6</span><span>Jamaica 1 L</span><span>32.00</span><span>192.00</span></div><div class="tkp"><span>6</span><span>Horchata 500 ml</span><span>18.00</span><span>108.00</span></div><div class="tkp"><span>12</span><span>Mango 500 ml</span><span>24.00</span><span>288.00</span></div><div class="tkp"><span>4</span><span>Mango 500 ml</span><span>PROMO</span><span>0.00</span></div><div style="font-size:11px;padding-left:34px">Por cada 6 Mango 500 ml, 2 Mango 500 ml gratis</div>
+<div class="tkh"></div><div class="tkl "><span>Piezas</span><span>40</span></div><div class="tkl b g"><span>TOTAL</span><span>$804.00</span></div><div class="tkl "><span>Pagó</span><span>$804.00</span></div><div class="tkl "><span>Saldo pendiente</span><span>$0.00</span></div><div class="tks">LIQUIDADA</div><div class="tkc" style="margin-top:10px">Gracias por su compra</div></div></div><div class="col"><p class="cap">26 · Venta con abono</p><p class="sub">Abonó $300. Queda saldo y lleva el espacio para que firme a mano.</p><div class="tk"><div class="tkc"><b class="tm">JAWA</b><br>Sucursal Tijuana Centro<br><b>NOTA DE VENTA</b></div>
+<div class="tkl b"><span>Folio</span><span>TJ261118JP05</span></div><div class="tkl "><span>Fecha</span><span>18 nov 2026 · 11:58</span></div><div class="tkh"></div>
+<div class="tkl "><span>Cliente</span><span>Tienda Doña Chuy</span></div><div class="tkl "><span>Atendió</span><span>María de Jesús Ramos</span></div><div class="tkl "><span>Vendedor</span><span>Juan Pérez</span></div><div class="tkh"></div>
+<div class="tkp b"><span>Cant</span><span>Producto</span><span>P.U.</span><span>Importe</span></div>
+<div class="tkp"><span>12</span><span>Jamaica 500 ml</span><span>18.00</span><span>216.00</span></div><div class="tkp"><span>6</span><span>Jamaica 1 L</span><span>32.00</span><span>192.00</span></div><div class="tkp"><span>6</span><span>Horchata 500 ml</span><span>18.00</span><span>108.00</span></div><div class="tkp"><span>12</span><span>Mango 500 ml</span><span>24.00</span><span>288.00</span></div><div class="tkp"><span>4</span><span>Mango 500 ml</span><span>PROMO</span><span>0.00</span></div><div style="font-size:11px;padding-left:34px">Por cada 6 Mango 500 ml, 2 Mango 500 ml gratis</div>
+<div class="tkh"></div><div class="tkl "><span>Piezas</span><span>40</span></div><div class="tkl b g"><span>TOTAL</span><span>$804.00</span></div><div class="tkh"></div><div class="b">Abonos</div><div class="tkl "><span>18 nov 2026</span><span>$300.00</span></div><div class="tkl b g"><span>SALDO PENDIENTE</span><span>$504.00</span></div><div class="tks">ABONADO</div><div class="tkh"></div><div class="tkc"><div style="height:52px"></div><div style="border-top:1px solid #000;margin:0 24px;padding-top:3px">Firma de quien recibe</div></div><div class="tkc" style="margin-top:10px">Gracias por su compra</div></div></div><div class="col"><p class="cap">27 · Reimpresión al abonar después</p><p class="sub">Una semana después abona $200 más: se imprime de nuevo con los dos abonos.</p><div class="tk"><div class="tkc"><b class="tm">JAWA</b><br>Sucursal Tijuana Centro<br><b>NOTA DE VENTA</b></div>
+<div class="tkl b"><span>Folio</span><span>TJ261118JP05</span></div><div class="tkl "><span>Fecha</span><span>18 nov 2026 · 11:58</span></div><div class="tkh"></div>
+<div class="tkl "><span>Cliente</span><span>Tienda Doña Chuy</span></div><div class="tkl "><span>Atendió</span><span>María de Jesús Ramos</span></div><div class="tkl "><span>Vendedor</span><span>Juan Pérez</span></div><div class="tkh"></div>
+<div class="tkp b"><span>Cant</span><span>Producto</span><span>P.U.</span><span>Importe</span></div>
+<div class="tkp"><span>12</span><span>Jamaica 500 ml</span><span>18.00</span><span>216.00</span></div><div class="tkp"><span>6</span><span>Jamaica 1 L</span><span>32.00</span><span>192.00</span></div><div class="tkp"><span>6</span><span>Horchata 500 ml</span><span>18.00</span><span>108.00</span></div><div class="tkp"><span>12</span><span>Mango 500 ml</span><span>24.00</span><span>288.00</span></div><div class="tkp"><span>4</span><span>Mango 500 ml</span><span>PROMO</span><span>0.00</span></div><div style="font-size:11px;padding-left:34px">Por cada 6 Mango 500 ml, 2 Mango 500 ml gratis</div>
+<div class="tkh"></div><div class="tkl "><span>Piezas</span><span>40</span></div><div class="tkl b g"><span>TOTAL</span><span>$804.00</span></div><div class="tkh"></div><div class="b">Abonos</div><div class="tkl "><span>18 nov 2026</span><span>$300.00</span></div><div class="tkl "><span>25 nov 2026</span><span>$200.00</span></div><div class="tkl b g"><span>SALDO PENDIENTE</span><span>$304.00</span></div><div class="tks">ABONADO</div><div class="tkl "><span>Reimpresión</span><span>25 nov 2026 · 10:20</span></div><div class="tkl "><span>Cobró</span><span>Juan Pérez</span></div><div class="tkh"></div><div class="tkc"><div style="height:52px"></div><div style="border-top:1px solid #000;margin:0 24px;padding-top:3px">Firma de quien recibe</div></div><div class="tkc" style="margin-top:10px">Gracias por su compra</div></div></div></div></section></main></body></html>
