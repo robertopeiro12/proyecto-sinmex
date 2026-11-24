@@ -86,4 +86,19 @@ describe("Pestanas", () => {
     expect(onCambio).toHaveBeenLastCalledWith("asignar");
     expect(onCambio).toHaveBeenCalledTimes(2);
   });
+
+  it("con valor, la pantalla decide: picar solo avisa y el foco no cambia de pestaña", async () => {
+    const usuario = userEvent.setup();
+    const onCambio = vi.fn();
+    const { rerender } = render(<Pestanas pestanas={PESTANAS} valor="asignar" onCambio={onCambio} />);
+    await usuario.click(screen.getByRole("tab", { name: "Buscar y corregir" }));
+    expect(onCambio).toHaveBeenLastCalledWith("buscar");
+    expect(screen.getByRole("tab", { name: "Asignar" })).toHaveAttribute("aria-selected", "true");
+    onCambio.mockClear();
+    screen.getByRole("tab", { name: "Asignar" }).focus();
+    await usuario.keyboard("{ArrowRight}");
+    expect(onCambio).not.toHaveBeenCalled();
+    rerender(<Pestanas pestanas={PESTANAS} valor="buscar" onCambio={onCambio} />);
+    expect(screen.getByRole("tab", { name: "Buscar y corregir" })).toHaveAttribute("aria-selected", "true");
+  });
 });
