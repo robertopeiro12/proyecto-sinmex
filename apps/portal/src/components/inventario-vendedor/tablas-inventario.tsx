@@ -26,9 +26,8 @@ import {
 const SEPARADOR = "border-l-2 border-l-foreground/20";
 const TITULO_BLOQUE =
   "text-xs font-semibold uppercase tracking-wide text-foreground";
-// Alto de la primera fila del encabezado: la segunda se pega debajo. Valor provisional;
-// se mide en el navegador (Tarea 6).
-const TOP2 = "top-[32px]";
+// Alto de la primera fila del encabezado (32,5 px medidos a 1366 y 1920): la segunda se pega debajo.
+const TOP2 = "top-[32.5px]";
 const VACIO = "No hubo carga ni venta ese día.";
 
 /**

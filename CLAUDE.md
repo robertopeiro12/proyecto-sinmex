@@ -78,6 +78,8 @@ circula para pnpm/yarn): con el layout de npm rompe el bundle. Ver los comentari
 
 Health check una vez levantado: `GET http://localhost:3000/health`.
 
+**No compiles (`npm run build`) el backend ni el portal con sus servidores de desarrollo prendidos:** el build borra `dist/` / `.next` y los tumba. Apágalos antes, o valida con lint, typecheck y pruebas.
+
 **A qué base de datos apunta cada cosa (importante, no es obvio):**
 
 | Comando | Archivo de entorno | Base de datos |
@@ -770,6 +772,24 @@ usuario con sesion pasa.
     Pre-flight: `select count(*) from retorno where piezas <= 0` debe dar 0 (el check nuevo admite 0 solo con merma > 0, y
     las filas viejas son > 0), y `select count(*) from (select distinct fecha, vendedor_id from retorno where deleted_at is
     null) t` cuenta los encabezados que el relleno va a crear (va al comentario del PR). Backend antes que el portal.
+- **Inventario por vendedor (2026-11-24).** *Producción → Inventario por vendedor* (`/produccion/inventario-vendedor`):
+  lo que cargó, vendió y regresó cada vendedor, **por tamaño**, en tres pestañas (Inventario, Recargas, Merma). Solo lectura,
+  sin migración. Spec: `docs/superpowers/specs/2026-11-24-inventario-por-vendedor-design.md`.
+  - `GET /inventario-vendedor?fecha&sucursal&vendedor` (`modules/produccion/`), permiso **`inventario.ver`** (ya existía).
+    Alcance como el corte: sucursal ajena 403, vendedor ajeno o dado de baja 404, fecha futura 400 con `hoyEnTijuana`.
+    Una sola cuenta: teórica, merma teórica, resultados, faltantes y tamaños salen de `reglas-corte.ts` (portal: `lib/cortes.ts`).
+  - **"Todos los vendedores"** = suma por presentación de los vendedores de la sucursal; el resultado y las piezas reales
+    **solo suman vendedores con corte hecho** y `vendedoresSinCorte` los cuenta (aviso amarillo; nunca se tratan como 0).
+    **Sin corte, reales y resultado van `null` = celda vacía**, no 0. Resultado > 0 en rojo; negativo sin rojo. Pie
+    **"Faltantes del día"** (`Faltan N` / `N de merma`). Recargas muestra también las pendientes y rechazadas, con su estado,
+    pero Inventario solo cuenta las aceptadas. Vendedor sin movimiento = tabla vacía con mensaje, no error.
+  - **Dashboard y Flujo diario**: la columna Inventario trae la **pastilla del corte** (`FilaVendedorDia.corte`: Sin corte /
+    Corte hecho / "Falta N · N de merma") y `ResumenDia.faltantesCorte`; picarla abre el detalle en la pestaña **Inventario**
+    (la misma tabla; sin `inventario.ver` dice "No tienes permiso" y el resto del detalle sigue). En Flujo con varios días,
+    cada renglón (vendedor, fecha) trae el estado de **su** corte.
+  - **Tipos duplicados** backend ↔ portal en `apps/portal/src/lib/inventario-vendedor.ts` y `lib/flujo-diario.ts`: si cambias
+    uno, cambia el otro en el mismo commit. La segunda fila del encabezado es `sticky` con `TOP2` (`top-[32.5px]`, medido:
+    la primera fila mide 32,5 px a 1366 y 1920); si cambias el texto del encabezado, vuelve a medir.
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
   - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).
