@@ -51,7 +51,7 @@ function fila(p: Partial<ResumenVendedorDia>): ResumenVendedorDia {
     clientesEnRuta: 10, atendidosEnRuta: 4, piezas: 100, montoCentavos: 120000,
     contadoCentavos: 30000, anterioresCentavos: 20000, aFavorCentavos: 0, gastoCentavos: 1000,
     jornadaCerrada: true, vehiculo: null, rutaNombre: null, vehiculoAsignado: null, cobranzaCentavos: 50000, tesoreriaCentavos: 49000,
-    notasNoEntregadas: null, estatus: "terminado", ...p,
+    notasNoEntregadas: null, corte: { estado: "sin_corte", piezasFaltantes: null, mermaFaltante: null }, estatus: "terminado", ...p,
   };
 }
 
@@ -67,8 +67,8 @@ const DOS_SUCURSALES: FlujoDiario = {
   hasta: "2026-11-09",
   porVendedor: [RICARDO, LUIS],
   porDia: [
-    { fecha: "2026-11-09", sucursalCodigo: "TJ", totales: TOT_TJ, oficinaCentavos: 0 },
-    { fecha: "2026-11-09", sucursalCodigo: "MX", totales: TOT_MX, oficinaCentavos: 0 },
+    { fecha: "2026-11-09", sucursalCodigo: "TJ", totales: TOT_TJ, oficinaCentavos: 0, faltantesCorte: null },
+    { fecha: "2026-11-09", sucursalCodigo: "MX", totales: TOT_MX, oficinaCentavos: 0, faltantesCorte: null },
   ],
   bloques: [
     { sucursalCodigo: "MX", porVendedor: TOT_MX, porDia: TOT_MX },

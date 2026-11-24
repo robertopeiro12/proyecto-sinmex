@@ -33,7 +33,7 @@ function fila(p: Partial<ResumenVendedorDia>): ResumenVendedorDia {
     clientesEnRuta: 16, atendidosEnRuta: 6, piezas: 402, montoCentavos: 400000,
     contadoCentavos: 134000, anterioresCentavos: 0, aFavorCentavos: 0, gastoCentavos: 0,
     jornadaCerrada: false, vehiculo: null, rutaNombre: null, vehiculoAsignado: null, cobranzaCentavos: 134000, tesoreriaCentavos: 134000,
-    notasNoEntregadas: null, estatus: "en_ruta", ...p,
+    notasNoEntregadas: null, corte: { estado: "sin_corte", piezasFaltantes: null, mermaFaltante: null }, estatus: "en_ruta", ...p,
   };
 }
 
