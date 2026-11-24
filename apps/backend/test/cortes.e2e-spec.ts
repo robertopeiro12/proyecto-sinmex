@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Test, type TestingModule } from '@nestjs/testing';
@@ -40,7 +41,7 @@ const LOGIN_TIJUANA = `e2e-cor-tj-${SUFIJO}`;
 const LOGIN_SIN_PERMISO = `e2e-cor-sin-${SUFIJO}`;
 const PRODUCTO = `ZZ-cor-${SUFIJO}`;
 
-const DIAS_DE_LA_CORRIDA = 10;
+const DIAS_DE_LA_CORRIDA = 15;
 const DIA_BASE = Date.now() % 2900;
 function diaDeLaCorrida(desplazamiento: number): string {
   return new Date(
@@ -270,6 +271,50 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
     }
   };
 
+  /** Un movimiento de la tablet (merma o consumo) escrito directo en las tablas. */
+  const crearMovimiento = async (opciones: {
+    vendedorId: string;
+    sucursalId: string;
+    fecha: string;
+    tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo';
+    clienteId?: string;
+    borrado?: boolean;
+    lineas: {
+      presentacionId: string;
+      sentido: 'recibido' | 'entregado';
+      piezas: number;
+    }[];
+  }): Promise<void> => {
+    const id = randomUUID();
+    await db
+      .insertInto('movimiento_inventario')
+      .values({
+        id,
+        sucursal_id: opciones.sucursalId,
+        vendedor_id: opciones.vendedorId,
+        cliente_id:
+          opciones.tipo === 'merma_cliente'
+            ? (opciones.clienteId ?? clienteTj)
+            : null,
+        tipo: opciones.tipo,
+        fecha: sql<Date>`${opciones.fecha}::date`,
+        registrado_en: sql<Date>`now()`,
+        deleted_at: opciones.borrado ? sql<Date>`now()` : null,
+      })
+      .execute();
+    await db
+      .insertInto('movimiento_inventario_linea')
+      .values(
+        opciones.lineas.map((l) => ({
+          movimiento_id: id,
+          presentacion_id: l.presentacionId,
+          sentido: l.sentido,
+          piezas: l.piezas,
+        })),
+      )
+      .execute();
+  };
+
   const lista = (cookie: string, query: Record<string, string>) =>
     request(app.getHttpServer())
       .get(`/cortes?${new URLSearchParams(query).toString()}`)
@@ -374,6 +419,21 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
       .execute();
     await db
       .deleteFrom('corte_mercancia')
+      .where('vendedor_id', 'in', vendedorIds)
+      .execute();
+    await db
+      .deleteFrom('movimiento_inventario_linea')
+      .where(
+        'movimiento_id',
+        'in',
+        db
+          .selectFrom('movimiento_inventario')
+          .select('id')
+          .where('vendedor_id', 'in', vendedorIds),
+      )
+      .execute();
+    await db
+      .deleteFrom('movimiento_inventario')
       .where('vendedor_id', 'in', vendedorIds)
       .execute();
     const cargas = db
@@ -563,6 +623,7 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
         estado: 'sin_corte',
         sinCarga: false,
         piezasFaltantes: null,
+        mermaFaltante: null,
         hechoEn: null,
       });
       expect(fila(tj, soloVenta)).toMatchObject({
@@ -671,23 +732,41 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
         {
           presentacionId: litro,
           nombre: `${PRODUCTO} 1 L`,
+          producto: PRODUCTO,
+          volumen: '1 L',
           cargadas: 40,
           vendidas: 10,
           regaladas: 2,
+          mermaEntregada: 0,
+          mermaRecibida: 0,
+          mermaAlmacen: 0,
+          consumo: 0,
+          cambiosEntregados: 0,
+          cambiosRecibidos: 0,
           deberiaRegresar: 28,
           buenas: 0,
           merma: 0,
+          mermaTeorica: 0,
           faltante: null,
+          resultadoMerma: null,
         },
       ]);
       expect(corte.totales).toEqual({
         cargadas: 40,
         vendidas: 10,
         regaladas: 2,
+        mermaEntregada: 0,
+        mermaRecibida: 0,
+        mermaAlmacen: 0,
+        consumo: 0,
+        cambiosEntregados: 0,
+        cambiosRecibidos: 0,
         deberiaRegresar: 28,
+        mermaTeorica: 0,
         buenas: 0,
         merma: 0,
         faltante: null,
+        faltanteMerma: null,
       });
     });
 
@@ -912,6 +991,222 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
         buenas: 4,
         faltante: 0,
       });
+    });
+  });
+
+  describe('merma, consumo y tamanos', () => {
+    it('la merma y el consumo de la tablet bajan la teorica y arman la merma teorica', async () => {
+      const dia = diaDeLaCorrida(10);
+      const v = await crearVendedor('Cor merma', tjId);
+      await crearCarga({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'aceptada',
+        lineas: [{ presentacionId: medio, piezas: 50 }],
+      });
+      await crearVenta({
+        vendedorId: v,
+        clienteId: clienteTj,
+        sucursalId: tjId,
+        fecha: dia,
+        lineas: [{ presentacionId: medio, cantidad: 30 }],
+      });
+      await crearMovimiento({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        tipo: 'merma_cliente',
+        lineas: [
+          { presentacionId: medio, sentido: 'recibido', piezas: 4 },
+          { presentacionId: medio, sentido: 'entregado', piezas: 3 },
+        ],
+      });
+      await crearMovimiento({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        tipo: 'merma_trayecto',
+        lineas: [{ presentacionId: medio, sentido: 'entregado', piezas: 2 }],
+      });
+      await crearMovimiento({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        tipo: 'consumo',
+        lineas: [{ presentacionId: medio, sentido: 'entregado', piezas: 1 }],
+      });
+
+      const antes = (
+        await leer(cookieGeneral, { fecha: dia, vendedor: v }).expect(200)
+      ).body as CorteVendedor;
+      expect(linea(antes, medio)).toMatchObject({
+        producto: `${PRODUCTO}-b`,
+        volumen: '500 ml',
+        cargadas: 50,
+        vendidas: 30,
+        mermaEntregada: 3,
+        mermaRecibida: 4,
+        mermaAlmacen: 2,
+        consumo: 1,
+        cambiosEntregados: 0,
+        cambiosRecibidos: 0,
+        deberiaRegresar: 14,
+        mermaTeorica: 6,
+        faltante: null,
+        resultadoMerma: null,
+      });
+
+      const corte = (
+        await guardar(cookieGeneral, {
+          fecha: dia,
+          vendedor: v,
+          lineas: [{ presentacionId: medio, buenas: 13, merma: 5 }],
+        }).expect(200)
+      ).body as CorteVendedor;
+      expect(linea(corte, medio)).toMatchObject({
+        faltante: 1,
+        resultadoMerma: 1,
+      });
+      expect(corte.totales).toMatchObject({
+        deberiaRegresar: 14,
+        mermaTeorica: 6,
+        faltante: 1,
+        faltanteMerma: 1,
+      });
+
+      const dia1 = (await lista(cookieGeneral, { fecha: dia }).expect(200))
+        .body as CortesDelDia;
+      expect(fila(dia1, v)).toMatchObject({
+        piezasFaltantes: 1,
+        mermaFaltante: 1,
+        estado: 'con_faltante',
+      });
+    });
+
+    it('un movimiento borrado, de otro dia o de otro vendedor no cuenta', async () => {
+      const dia = diaDeLaCorrida(11);
+      const v = await crearVendedor('Cor mov ajenos', tjId);
+      const otro = await crearVendedor('Cor mov otro', tjId);
+      await crearCarga({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'aceptada',
+        lineas: [{ presentacionId: litro, piezas: 20 }],
+      });
+      const consumo = (
+        vendedorId: string,
+        fecha: string,
+        piezas: number,
+        borrado = false,
+      ) =>
+        crearMovimiento({
+          vendedorId,
+          sucursalId: tjId,
+          fecha,
+          tipo: 'consumo',
+          borrado,
+          lineas: [{ presentacionId: litro, sentido: 'entregado', piezas }],
+        });
+      await consumo(v, dia, 5, true);
+      await consumo(v, diaDeLaCorrida(12), 6);
+      await consumo(otro, dia, 7);
+      await consumo(v, dia, 1);
+
+      const corte = (
+        await leer(cookieGeneral, { fecha: dia, vendedor: v }).expect(200)
+      ).body as CorteVendedor;
+      expect(linea(corte, litro)).toMatchObject({
+        consumo: 1,
+        deberiaRegresar: 19,
+      });
+    });
+
+    it('un vendedor con solo merma o consumo ese dia sale en la lista', async () => {
+      const dia = diaDeLaCorrida(12);
+      const v = await crearVendedor('Cor solo merma', tjId);
+      await crearMovimiento({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        tipo: 'merma_trayecto',
+        lineas: [{ presentacionId: litro, sentido: 'entregado', piezas: 2 }],
+      });
+      const tj = (
+        await lista(cookieGeneral, { fecha: dia, sucursal: 'TJ' }).expect(200)
+      ).body as CortesDelDia;
+      expect(fila(tj, v)).toMatchObject({
+        piezasCargadas: 0,
+        sinCarga: true,
+        estado: 'sin_corte',
+        piezasFaltantes: null,
+        mermaFaltante: null,
+      });
+    });
+
+    it('las lineas vienen ordenadas por tamano y producto, con producto y volumen', async () => {
+      const dia = diaDeLaCorrida(13);
+      const v = await crearVendedor('Cor orden', tjId);
+      const seiscientos = await crearPresentacion(`${PRODUCTO}-o1`, '600 ml');
+      const trescientos = await crearPresentacion(`${PRODUCTO}-o2`, '355 ml');
+      const uno = await crearPresentacion(`${PRODUCTO}-o3`, '1 L');
+      await crearCarga({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'aceptada',
+        lineas: [
+          { presentacionId: seiscientos, piezas: 1 },
+          { presentacionId: trescientos, piezas: 1 },
+          { presentacionId: uno, piezas: 1 },
+        ],
+      });
+      const corte = (
+        await leer(cookieGeneral, { fecha: dia, vendedor: v }).expect(200)
+      ).body as CorteVendedor;
+      expect(
+        corte.lineas.map((l) => [l.presentacionId, l.volumen, l.producto]),
+      ).toEqual([
+        [trescientos, '355 ml', `${PRODUCTO}-o2`],
+        [seiscientos, '600 ml', `${PRODUCTO}-o1`],
+        [uno, '1 L', `${PRODUCTO}-o3`],
+      ]);
+    });
+
+    it('dentro de un tamano un sobrante tapa un faltante; entre tamanos no', async () => {
+      const dia = diaDeLaCorrida(14);
+      const v = await crearVendedor('Cor tamanos', tjId);
+      const a = await crearPresentacion(`${PRODUCTO}-t1`, '355 ml');
+      const b = await crearPresentacion(`${PRODUCTO}-t2`, '355 ml');
+      const c = await crearPresentacion(`${PRODUCTO}-t3`, '500 ml');
+      await crearCarga({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'aceptada',
+        lineas: [
+          { presentacionId: a, piezas: 10 },
+          { presentacionId: b, piezas: 10 },
+          { presentacionId: c, piezas: 10 },
+        ],
+      });
+      // a: sobra 1 (−1), b: falta 1 (+1) → 355 ml suma 0; c: falta 2.
+      const corte = (
+        await guardar(cookieGeneral, {
+          fecha: dia,
+          vendedor: v,
+          lineas: [
+            { presentacionId: a, buenas: 11, merma: 0 },
+            { presentacionId: b, buenas: 9, merma: 0 },
+            { presentacionId: c, buenas: 8, merma: 0 },
+          ],
+        }).expect(200)
+      ).body as CorteVendedor;
+      expect(linea(corte, a)?.faltante).toBe(-1);
+      expect(linea(corte, b)?.faltante).toBe(1);
+      expect(linea(corte, c)?.faltante).toBe(2);
+      expect(corte.totales.faltante).toBe(2);
     });
   });
 

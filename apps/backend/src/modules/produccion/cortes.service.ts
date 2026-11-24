@@ -51,8 +51,10 @@ export interface FilaCorte {
   estado: EstadoCorte;
   /** No tiene ninguna carga aceptada ese dia (D13). */
   sinCarga: boolean;
-  /** Suma de faltantes > 0; `null` si el corte no esta hecho. */
+  /** Faltante del dia por tamano (D1); `null` si el corte no esta hecho. */
   piezasFaltantes: number | null;
+  /** Lo mismo para la merma (D1); `null` si el corte no esta hecho. */
+  mermaFaltante: number | null;
   hechoEn: string | null;
 }
 
@@ -79,13 +81,23 @@ export type LineaCortePantalla = Pick<
   LineaCorte,
   | 'presentacionId'
   | 'nombre'
+  | 'producto'
+  | 'volumen'
   | 'cargadas'
   | 'vendidas'
   | 'regaladas'
+  | 'mermaEntregada'
+  | 'mermaRecibida'
+  | 'mermaAlmacen'
+  | 'consumo'
+  | 'cambiosEntregados'
+  | 'cambiosRecibidos'
   | 'deberiaRegresar'
   | 'buenas'
-  | 'merma'
   | 'faltante'
+  | 'merma'
+  | 'mermaTeorica'
+  | 'resultadoMerma'
 >;
 
 /**
@@ -101,7 +113,7 @@ export type LineaCortePantalla = Pick<
 export class CortesService {
   constructor(private readonly repo: CortesRepository) {}
 
-  /** `GET /cortes`: los vendedores con carga aceptada, venta o conteo ese dia (D11). */
+  /** `GET /cortes`: los vendedores con carga aceptada, venta, merma, consumo o conteo ese dia (D11). */
   async lista(usuarioId: string, q: ConsultaCortesDto): Promise<CortesDelDia> {
     const hoy = await this.exigirFecha(q.fecha);
     const usuario = await this.usuario(usuarioId);
@@ -137,6 +149,7 @@ export class CortesService {
           estado: corte.estado,
           sinCarga: !corte.lineas.some((l) => l.cargadas > 0),
           piezasFaltantes: corte.totales.faltante,
+          mermaFaltante: corte.totales.faltanteMerma,
           hechoEn: v.hechoEn,
         };
       }),
@@ -257,13 +270,23 @@ export class CortesService {
       lineas: corte.lineas.map((l) => ({
         presentacionId: l.presentacionId,
         nombre: l.nombre,
+        producto: l.producto,
+        volumen: l.volumen,
         cargadas: l.cargadas,
         vendidas: l.vendidas,
         regaladas: l.regaladas,
+        mermaEntregada: l.mermaEntregada,
+        mermaRecibida: l.mermaRecibida,
+        mermaAlmacen: l.mermaAlmacen,
+        consumo: l.consumo,
+        cambiosEntregados: l.cambiosEntregados,
+        cambiosRecibidos: l.cambiosRecibidos,
         deberiaRegresar: l.deberiaRegresar,
         buenas: l.buenas,
-        merma: l.merma,
         faltante: l.faltante,
+        merma: l.merma,
+        mermaTeorica: l.mermaTeorica,
+        resultadoMerma: l.resultadoMerma,
       })),
       totales: corte.totales,
       hecho: encabezado
