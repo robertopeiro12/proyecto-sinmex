@@ -1,5 +1,8 @@
 import { Module } from '@nestjs/common';
 import { AuthModule } from '../auth/auth.module';
+import { CarteraClientesModule } from '../cartera-clientes/cartera-clientes.module';
+import { ProduccionModule } from '../produccion/produccion.module';
+import { RutasModule } from '../rutas/rutas.module';
 import { MovimientosRepository } from './movimientos.repository';
 import { MovimientosService } from './movimientos.service';
 import { ProcesosController } from './procesos.controller';
@@ -20,9 +23,12 @@ import { ProductosService } from './productos.service';
 // Operacion -> Procesos (PR A): merma, cambios, consumos, promocion y
 // descuentos que captura la oficina (tablas `proceso_oficina*`), solo para el
 // portal. Importa `AuthModule` para exigir el permiso del tipo con
-// `PermisosRepository`.
+// `PermisosRepository`. Lee el corte (`ProduccionModule`) para precargar
+// descuentos, las notas con saldo (`RutasModule`) y las promociones vigentes
+// (`CarteraClientesModule`) para el resumen del cliente. Ninguno de los tres
+// importa a Inventario: no hay ciclo.
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, ProduccionModule, RutasModule, CarteraClientesModule],
   controllers: [ProductosController, ProcesosController],
   providers: [
     ProductosService,

@@ -8,6 +8,10 @@ import {
 import type { Transaction } from 'kysely';
 import type { DB } from '../../database/schema';
 import { PermisosRepository } from '../auth/permisos.repository';
+import { PromocionesService } from '../cartera-clientes/promociones.service';
+import { CortesService } from '../produccion/cortes.service';
+import type { ConsultaCorteVendedorDto } from '../produccion/dto/corte.dto';
+import { NotasRutaRepository } from '../rutas/notas-ruta.repository';
 import {
   esFechaReal,
   MENSAJE_FECHA_FUTURA,
@@ -29,6 +33,7 @@ import {
   type FilaProceso,
 } from './procesos.repository';
 import {
+  TIPOS_PROCESO,
   validarProceso,
   type EntradaProcesoLimpia,
   type MermaDe,
@@ -43,7 +48,9 @@ export const MOTIVO_CLIENTE_AJENO =
   'El cliente no existe o no es de esta sucursal.';
 export const MOTIVO_VENDEDOR_AJENO =
   'El vendedor no existe o no es de esta sucursal.';
+export const MOTIVO_CLIENTE_INEXISTENTE = 'No existe ese cliente.';
 const MOTIVO_SIN_PERMISO = 'No tienes permiso para este tipo de proceso.';
+const MOTIVO_SIN_PERMISO_PROCESOS = 'No tienes permiso para Procesos.';
 
 export interface LineaProceso {
   presentacionId: string;
@@ -80,6 +87,32 @@ export interface ProcesosDelDia {
 }
 
 /**
+ * `GET /procesos/descuentos/precarga`: los faltantes de piezas del corte de un
+ * vendedor y dia, para precargar un descuento. Sin corte hecho, `lineas` vacio.
+ */
+export interface PrecargaDescuentos {
+  corteHecho: boolean;
+  /** Solo las presentaciones con faltante > 0, en el orden del corte. */
+  lineas: { presentacionId: string; nombre: string; piezas: number }[];
+}
+
+/** `GET /procesos/cliente/:id`: lo que la oficina ve del cliente al capturar. */
+export interface ResumenCliente {
+  id: string;
+  nombre: string;
+  tipo: 'cliente' | 'prospecto';
+  tipoNegocio: string | null;
+  diasCredito: number | null;
+  /** Saldo de sus notas con saldo (la regla de `NotasRutaRepository.notasConSaldo`). */
+  deudaCentavos: number;
+  notasConSaldo: number;
+  /** `AAAA-MM-DD` de su venta viva mas reciente. */
+  ultimaCompra: string | null;
+  /** Frases de las promociones vigentes (`textoPromocion`), propias primero. */
+  promociones: string[];
+}
+
+/**
  * Operacion -> Procesos (PR A): merma, cambios, consumos, promocion y
  * descuentos que captura la oficina. Un solo recurso; el servicio exige el
  * permiso del tipo (`proceso.<tipo>`) en listar, crear, corregir y dar de baja.
@@ -93,7 +126,71 @@ export class ProcesosService {
   constructor(
     private readonly repo: ProcesosRepository,
     private readonly permisos: PermisosRepository,
+    private readonly cortes: CortesService,
+    private readonly notasRuta: NotasRutaRepository,
+    private readonly promociones: PromocionesService,
   ) {}
+
+  /**
+   * `GET /procesos/descuentos/precarga`: lee el corte ya calculado
+   * (`CortesService.leer`, misma fecha, alcance y 404 de vendedor ajeno o dado
+   * de baja) y no recalcula la regla: los `faltante > 0` por presentacion.
+   */
+  async precargaDescuentos(
+    usuarioId: string,
+    q: ConsultaCorteVendedorDto,
+  ): Promise<PrecargaDescuentos> {
+    await this.exigirPermiso(usuarioId, 'descuento');
+    const corte = await this.cortes.leer(usuarioId, q);
+    if (corte.hecho === null) return { corteHecho: false, lineas: [] };
+    return {
+      corteHecho: true,
+      lineas: corte.lineas
+        .filter((l) => (l.faltante ?? 0) > 0)
+        .map((l) => ({
+          presentacionId: l.presentacionId,
+          nombre: l.nombre,
+          piezas: l.faltante as number,
+        })),
+    };
+  }
+
+  /**
+   * `GET /procesos/cliente/:id` (cualquiera de los cinco permisos): ficha corta
+   * del cliente. Otra sucursal, dado de baja o inexistente = el mismo 404.
+   */
+  async resumenCliente(
+    usuarioId: string,
+    clienteId: string,
+  ): Promise<ResumenCliente> {
+    const permisos = await this.permisos.permisosDe(usuarioId);
+    if (!TIPOS_PROCESO.some((t) => permisos.has(`proceso.${t}`)))
+      throw new ForbiddenException(MOTIVO_SIN_PERMISO_PROCESOS);
+    const usuario = await this.usuario(usuarioId);
+    const id = clienteId.toLowerCase();
+    const cliente = await this.repo.clienteResumen(id);
+    if (
+      !cliente ||
+      (usuario.codigo !== null && usuario.codigo !== cliente.sucursalCodigo)
+    )
+      throw new NotFoundException(MOTIVO_CLIENTE_INEXISTENTE);
+    const hoy = await this.repo.hoyEnTijuana();
+    const [notas, promociones] = await Promise.all([
+      this.notasRuta.notasConSaldo([id], hoy),
+      this.promociones.vigentesDeCliente(id),
+    ]);
+    return {
+      id: cliente.id,
+      nombre: cliente.nombre,
+      tipo: cliente.tipo,
+      tipoNegocio: cliente.tipoNegocio,
+      diasCredito: cliente.diasCredito,
+      deudaCentavos: notas.reduce((t, n) => t + n.saldoCentavos, 0),
+      notasConSaldo: notas.length,
+      ultimaCompra: cliente.ultimaCompra,
+      promociones,
+    };
+  }
 
   /** `GET /procesos`. */
   async listar(

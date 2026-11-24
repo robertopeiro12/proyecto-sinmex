@@ -11,6 +11,18 @@ import type {
   TipoProceso,
 } from './reglas-procesos';
 
+/** Lo que el resumen de Procesos lee del cliente. */
+export interface ClienteResumen {
+  id: string;
+  nombre: string;
+  tipo: 'cliente' | 'prospecto';
+  tipoNegocio: string | null;
+  diasCredito: number | null;
+  sucursalCodigo: string;
+  /** `AAAA-MM-DD` de su venta viva mas reciente; `null` si nunca ha comprado. */
+  ultimaCompra: string | null;
+}
+
 /** Un proceso tal como sale de la base, sin lineas. */
 export interface FilaProceso {
   id: string;
@@ -206,6 +218,34 @@ export class ProcesosRepository {
   }
 
   /** Un cliente (o prospecto) vivo de esa sucursal. */
+  /**
+   * El cliente vivo (o prospecto) para el resumen de Procesos, con su tipo de
+   * negocio, dias de credito y la fecha de su venta viva mas reciente.
+   */
+  async clienteResumen(id: string): Promise<ClienteResumen | undefined> {
+    return this.db
+      .selectFrom('cliente as c')
+      .innerJoin('sucursal as s', 's.id', 'c.sucursal_id')
+      .leftJoin('tipo_negocio as tn', 'tn.id', 'c.tipo_negocio_id')
+      .select([
+        'c.id as id',
+        'c.nombre as nombre',
+        sql<'cliente' | 'prospecto'>`c.tipo`.as('tipo'),
+        'tn.nombre as tipoNegocio',
+        'c.plazo_credito_dias as diasCredito',
+        's.codigo as sucursalCodigo',
+        sql<string | null>`(
+          select to_char(max(vn.fecha), 'YYYY-MM-DD')
+            from venta_nota vn
+           where vn.cliente_id = c.id
+             and vn.deleted_at is null
+        )`.as('ultimaCompra'),
+      ])
+      .where('c.id', '=', id)
+      .where('c.deleted_at', 'is', null)
+      .executeTakeFirst();
+  }
+
   async clienteDeSucursal(
     clienteId: string,
     sucursalId: string,

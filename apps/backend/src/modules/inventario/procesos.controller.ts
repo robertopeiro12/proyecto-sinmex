@@ -11,6 +11,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { UsuarioActual } from '../auth/usuario-actual.decorator';
+import { ConsultaCorteVendedorDto } from '../produccion/dto/corte.dto';
 import {
   ConsultaProcesosDto,
   CrearProcesoDto,
@@ -18,8 +19,10 @@ import {
 } from './dto/proceso.dto';
 import {
   ProcesosService,
+  type PrecargaDescuentos,
   type Proceso,
   type ProcesosDelDia,
+  type ResumenCliente,
 } from './procesos.service';
 
 // Operacion -> Procesos (PR A). Un solo recurso para los cinco tipos: aqui no
@@ -36,6 +39,23 @@ export class ProcesosController {
     @Query() q: ConsultaProcesosDto,
   ): Promise<ProcesosDelDia> {
     return this.procesos.listar(usuarioId, q);
+  }
+
+  // Antes de cualquier ruta con `:id`.
+  @Get('descuentos/precarga')
+  precarga(
+    @UsuarioActual() usuarioId: string,
+    @Query() q: ConsultaCorteVendedorDto,
+  ): Promise<PrecargaDescuentos> {
+    return this.procesos.precargaDescuentos(usuarioId, q);
+  }
+
+  @Get('cliente/:id')
+  resumenCliente(
+    @UsuarioActual() usuarioId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ResumenCliente> {
+    return this.procesos.resumenCliente(usuarioId, id);
   }
 
   @Post()

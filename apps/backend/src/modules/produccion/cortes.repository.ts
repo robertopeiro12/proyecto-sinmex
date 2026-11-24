@@ -69,8 +69,10 @@ function cargasAceptadasDelDia(fecha: string, db: Kysely<DB>) {
  * regalado (lineas vivas de ventas vivas con esa `fecha`, de cualquier status;
  * las de mostrador no tienen vendedor y no cuentan), la merma y el consumo de
  * la tablet (`movimiento_inventario` vivo de esa `fecha`: merma del cliente
- * entregada/recibida, merma del trayecto y consumo) y lo contado (filas vivas
- * de `retorno`). Los cambios fisicos valen 0 hasta T-33. Solo salen las
+ * entregada/recibida, merma del trayecto y consumo), los procesos de la oficina
+ * con vendedor (`proceso_oficina` vivo: merma de cliente y de almacen, cambios,
+ * consumo y promocion; el descuento no cuenta) y lo contado (filas vivas de
+ * `retorno`). Solo salen las
  * presentaciones con algun movimiento, aunque esten desactivadas o dadas de baja. Vendidas se leen en vivo: editar o
  * eliminar una venta (T-17) cambia el teorico.
  *
@@ -97,12 +99,14 @@ export async function movimientosDelDia(
     with mov as (
       select cg.vendedor_id, cg.presentacion_id,
              cg.piezas as cargadas, 0 as vendidas, 0 as regaladas, 0 as buenas, 0 as merma,
-             0 as merma_entregada, 0 as merma_recibida, 0 as merma_almacen, 0 as consumo
+             0 as merma_entregada, 0 as merma_recibida, 0 as merma_almacen, 0 as consumo,
+             0 as cambios_entregados, 0 as cambios_recibidos
         from (${cargasAceptadasDelDia(fecha, db)}) cg
       union all
       select vn.vendedor_id, d.presentacion_id,
              0, d.cantidad, d.cantidad_promocion, 0, 0,
-             0, 0, 0, 0
+             0, 0, 0, 0,
+             0, 0
         from venta_nota vn
         join venta_nota_detalle d on d.venta_nota_id = vn.id
        where vn.fecha = ${fecha}::date
@@ -112,7 +116,8 @@ export async function movimientosDelDia(
       union all
       select rt.vendedor_id, rt.presentacion_id,
              0, 0, 0, rt.piezas, rt.piezas_merma,
-             0, 0, 0, 0
+             0, 0, 0, 0,
+             0, 0
         from retorno rt
        where rt.fecha = ${fecha}::date
          and rt.deleted_at is null
@@ -122,11 +127,32 @@ export async function movimientosDelDia(
              case when mi.tipo = 'merma_cliente' and l.sentido = 'entregado' then l.piezas else 0 end,
              case when mi.tipo = 'merma_cliente' and l.sentido = 'recibido' then l.piezas else 0 end,
              case when mi.tipo = 'merma_trayecto' then l.piezas else 0 end,
-             case when mi.tipo = 'consumo' then l.piezas else 0 end
+             case when mi.tipo = 'consumo' then l.piezas else 0 end,
+             0, 0
         from movimiento_inventario mi
         join movimiento_inventario_linea l on l.movimiento_id = mi.id
        where mi.fecha = ${fecha}::date
          and mi.deleted_at is null
+      union all
+      -- Procesos de la oficina con vendedor (Operacion -> Procesos, D4). Sin
+      -- vendedor son de Oficina y no tocan ninguna camioneta; el descuento es
+      -- la consecuencia del faltante y no mueve la cuenta.
+      select po.vendedor_id, l.presentacion_id,
+             0, 0,
+             case when po.tipo = 'promocion' then l.piezas else 0 end,
+             0, 0,
+             case when po.tipo = 'merma' and po.merma_de = 'cliente' and l.sentido = 'entregado' then l.piezas else 0 end,
+             case when po.tipo = 'merma' and po.merma_de = 'cliente' and l.sentido = 'recibido' then l.piezas else 0 end,
+             case when po.tipo = 'merma' and po.merma_de = 'almacen' then l.piezas else 0 end,
+             case when po.tipo = 'consumo' then l.piezas else 0 end,
+             case when po.tipo = 'cambio' and l.sentido = 'entregado' then l.piezas else 0 end,
+             case when po.tipo = 'cambio' and l.sentido = 'recibido' then l.piezas else 0 end
+        from proceso_oficina po
+        join proceso_oficina_linea l on l.proceso_id = po.id
+       where po.fecha = ${fecha}::date
+         and po.deleted_at is null
+         and po.vendedor_id is not null
+         and po.tipo <> 'descuento'
     )
     select m.vendedor_id as "vendedorId",
            m.presentacion_id as "presentacionId",
@@ -140,8 +166,8 @@ export async function movimientosDelDia(
            sum(m.merma_recibida)::int as "mermaRecibida",
            sum(m.merma_almacen)::int as "mermaAlmacen",
            sum(m.consumo)::int as consumo,
-           0 as "cambiosEntregados",
-           0 as "cambiosRecibidos",
+           sum(m.cambios_entregados)::int as "cambiosEntregados",
+           sum(m.cambios_recibidos)::int as "cambiosRecibidos",
            sum(m.buenas)::int as buenas,
            sum(m.merma)::int as merma
       from mov m
