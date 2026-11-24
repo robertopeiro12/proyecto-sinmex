@@ -17,6 +17,7 @@ import {
   type TipoOperacion,
 } from "@/lib/operaciones-almacen";
 import { hoyEnTijuana } from "@/lib/ventas";
+import { diaDeEnvio, SelectorDiaEnvio } from "./selector-dia-envio";
 
 const COLUMNAS = 7;
 const ORIGEN = { produccion: "Producción", compra: "Compra" } as const;
@@ -55,7 +56,7 @@ function datoDe(o: OperacionAlmacen): string {
 
 const detalleDe = (o: OperacionAlmacen) => o.lineas.map((l) => `${l.nombre} × ${l.piezas}`).join(", ");
 
-/** La lista de un tipo para un día (Hoy · Ayer o, salvo en Envíos, cualquier día anterior). */
+/** La lista de un tipo para un día (Hoy · Ayer; en Envíos, solo esos dos días). */
 export function ListaOperaciones({
   tipo,
   sucursal,
@@ -71,9 +72,8 @@ export function ListaOperaciones({
 }) {
   const hoy = hoyEnTijuana();
   const ayer = diaAnterior(hoy);
-  const minimo = tipo === "envio" ? ayer : undefined;
-  // Un envío solo vive hoy o ayer: si venía un día más viejo de otra pestaña, se acomoda.
-  const dia = minimo && fecha < minimo ? ayer : fecha;
+  // Un envío solo vive hoy o ayer: si venía otro día de otra pestaña, se muestra hoy.
+  const dia = tipo === "envio" ? diaDeEnvio(fecha) : fecha;
   const [datos, setDatos] = useState<OperacionesDelDia | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +101,7 @@ export function ListaOperaciones({
   }, [dia, tipo, sucursal, vuelta]);
 
   function cambiar(nueva: string) {
-    if (nueva === "" || nueva > hoy || (minimo && nueva < minimo)) return;
+    if (nueva === "" || nueva > hoy) return;
     onFecha(nueva);
   }
 
@@ -125,17 +125,23 @@ export function ListaOperaciones({
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-end gap-3">
-        <Campo id={`dia-${tipo}`} etiqueta="Día" className="w-48">
-          <Entrada type="date" required min={minimo} max={hoy} value={dia} onChange={(e) => cambiar(e.target.value)} />
-        </Campo>
-        <div role="group" aria-label="Atajos de día" className="flex items-center gap-0.5">
-          <Button type="button" variant="ghost" size="sm" onClick={() => cambiar(hoy)}>
-            Hoy
-          </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => cambiar(ayer)}>
-            Ayer
-          </Button>
-        </div>
+        {tipo === "envio" ? (
+          <SelectorDiaEnvio valor={dia} onCambio={cambiar} />
+        ) : (
+          <>
+            <Campo id={`dia-${tipo}`} etiqueta="Día" className="w-48">
+              <Entrada type="date" required max={hoy} value={dia} onChange={(e) => cambiar(e.target.value)} />
+            </Campo>
+            <div role="group" aria-label="Atajos de día" className="flex items-center gap-0.5">
+              <Button type="button" variant="ghost" size="sm" onClick={() => cambiar(hoy)}>
+                Hoy
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => cambiar(ayer)}>
+                Ayer
+              </Button>
+            </div>
+          </>
+        )}
         <div className="ml-auto">
           <Button type="button" onClick={() => onCapturar(null)}>
             {TEXTO_REGISTRAR[tipo]}

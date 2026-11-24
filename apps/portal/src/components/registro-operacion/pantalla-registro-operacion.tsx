@@ -6,10 +6,10 @@ import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantall
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { Pestanas } from "@/components/ui/pestanas";
 import { infoDeTipo, TIPOS_OPERACION, type OperacionAlmacen, type TipoOperacion } from "@/lib/operaciones-almacen";
-import { diaAnterior } from "@/lib/fechas";
 import { hoyEnTijuana } from "@/lib/ventas";
 import { CapturaOperacion } from "./captura-operacion";
 import { ListaOperaciones } from "./lista-operaciones";
+import { diaDeEnvio } from "./selector-dia-envio";
 
 const TITULO = "Registro de Operación";
 const DESCRIPCION = "Anota lo que entra, sale o se pierde del almacén cada día.";
@@ -20,11 +20,9 @@ interface Captura {
   fecha: string;
 }
 
-/** Un envío nuevo solo admite hoy o ayer: con un día más viejo en la pestaña, abre en hoy. */
+/** Un envío nuevo solo admite hoy o ayer: con otro día en la pestaña, abre en hoy. */
 function fechaDeNueva(tipo: TipoOperacion, fecha: string): string {
-  const hoy = hoyEnTijuana();
-  if (tipo === "envio" && fecha < diaAnterior(hoy)) return hoy;
-  return fecha;
+  return tipo === "envio" ? diaDeEnvio(fecha) : fecha;
 }
 
 /**

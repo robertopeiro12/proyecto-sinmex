@@ -25,6 +25,7 @@ import {
 import { listarProductos, type Producto } from "@/lib/productos";
 import { listarSucursales, type Sucursal } from "@/lib/sucursales";
 import { hoyEnTijuana } from "@/lib/ventas";
+import { diaDeEnvio, SelectorDiaEnvio } from "./selector-dia-envio";
 
 interface Renglon {
   presentacionId: string;
@@ -67,11 +68,10 @@ function agruparPorTamano(renglones: Renglon[]): { tamano: string; renglones: Re
  * Día con que abre la captura: el de la operación que se corrige; en una nueva, el de la
  * pestaña si cabe en la regla del tipo (nunca futuro; el envío, solo hoy o ayer), si no, hoy.
  */
-function fechaInicial(tipo: TipoOperacion, fecha: string, operacion: OperacionAlmacen | null, hoy: string, ayer: string): string {
+function fechaInicial(tipo: TipoOperacion, fecha: string, operacion: OperacionAlmacen | null, hoy: string): string {
+  if (tipo === "envio") return diaDeEnvio(operacion?.fecha ?? fecha);
   if (operacion) return fecha > hoy ? hoy : fecha;
-  if (fecha > hoy) return hoy;
-  if (tipo === "envio" && fecha < ayer) return hoy;
-  return fecha;
+  return fecha > hoy ? hoy : fecha;
 }
 
 const ENTERO = /^\d+$/;
@@ -101,12 +101,11 @@ export function CapturaOperacion({
   const info = infoDeTipo(tipo);
   const hoy = hoyEnTijuana();
   const ayer = diaAnterior(hoy);
-  const minimo = tipo === "envio" ? ayer : undefined;
 
   const [productos, setProductos] = useState<Producto[] | null>(null);
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
   const [motivos, setMotivos] = useState<MotivoMerma[]>([]);
-  const [dia, setDia] = useState(fechaInicial(tipo, fecha, operacion, hoy, ayer));
+  const [dia, setDia] = useState(fechaInicial(tipo, fecha, operacion, hoy));
   const [origen, setOrigen] = useState<OrigenEntrada>(operacion?.origen ?? "produccion");
   const [destino, setDestino] = useState(operacion?.destino?.codigo ?? "");
   const [motivoId, setMotivoId] = useState(operacion?.motivo?.id ?? "");
@@ -199,9 +198,16 @@ export function CapturaOperacion({
       />
 
       <div className="flex flex-wrap items-start gap-4">
-        <Campo id="op-fecha" etiqueta="Día" className="w-48">
-          <Entrada type="date" required min={minimo} max={hoy} value={dia} onChange={(e) => setDia(e.target.value)} />
-        </Campo>
+        {tipo === "envio" ? (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium">Día</span>
+            <SelectorDiaEnvio valor={dia} onCambio={setDia} />
+          </div>
+        ) : (
+          <Campo id="op-fecha" etiqueta="Día" className="w-48">
+            <Entrada type="date" required max={hoy} value={dia} onChange={(e) => setDia(e.target.value)} />
+          </Campo>
+        )}
         {tipo === "entrada" && (
           <Campo id="op-origen" etiqueta="Origen" className="w-48">
             <Lista value={origen} onChange={(e) => setOrigen(e.target.value as OrigenEntrada)}>
