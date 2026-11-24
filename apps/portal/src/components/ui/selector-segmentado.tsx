@@ -13,11 +13,14 @@ export function SelectorSegmentado<T extends string>({
   valor,
   onCambio,
   etiqueta,
+  resaltado = false,
 }: {
   opciones: { valor: T; texto: string }[];
   valor: T;
   onCambio: (v: T) => void;
   etiqueta: string;
+  /** La elegida en relleno oscuro y un poco más grande, para cuando es la única forma de elegir (Envíos: Hoy · Ayer). */
+  resaltado?: boolean;
 }) {
   // Si `valor` no coincide con ninguna opción, la primera es la tabulable.
   const hayElegida = opciones.some((o) => o.valor === valor);
@@ -52,9 +55,12 @@ export function SelectorSegmentado<T extends string>({
             onClick={() => onCambio(o.valor)}
             onKeyDown={(e) => alTeclear(e, i)}
             className={cn(
-              "rounded-md px-3.5 py-1.5 text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sucursal",
+              "rounded-md outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sucursal",
+              resaltado ? "px-5 py-2 text-sm font-semibold" : "px-3.5 py-1.5 text-[13px] font-medium",
               elegida
-                ? "bg-card text-card-foreground shadow-sm"
+                ? resaltado
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-card text-card-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground",
             )}>
             {o.texto}

@@ -16,6 +16,7 @@ export function SelectorDiaEnvio({ valor, onCambio }: { valor: string; onCambio:
   return (
     <SelectorSegmentado
       etiqueta="Día del envío"
+      resaltado
       valor={diaDeEnvio(valor)}
       onCambio={onCambio}
       opciones={[
