@@ -141,7 +141,7 @@ export default function VisitaSinVenta() {
     try {
       datos.visitas.registrar({ vendedorId: vendedor.id, clienteId, ...validacion.visita });
       avisar('Visita registrada');
-      // D7.7: regresa a la ruta del dia, donde el cliente ya sale en "Visitados sin venta".
+      // D7.7: regresa a la ruta del dia, donde el cliente ya sale en "Visitados".
       router.dismissTo('/(jornada)');
     } catch (e) {
       guardando.current = false;

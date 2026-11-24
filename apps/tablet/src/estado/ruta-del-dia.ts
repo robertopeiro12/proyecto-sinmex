@@ -240,7 +240,7 @@ export interface AtendidoFueraDeRuta {
 /**
  * Clientes y prospectos con venta **o visita** del dia en esta tablet que la
  * ruta NO pinta (T-75, D7; T-39 D8): ni vivos ni quitados-con-actividad (esos ya
- * salen en "Fuera de ruta" o "Visitados sin venta"). Uno por cliente, con el
+ * salen en "Visitados" o "Fuera de ruta"). Uno por cliente, con el
  * estado mas grave de sus ventas y visitas; `soloVisita` si no tiene venta.
  */
 export function atendidosFueraDeRuta(

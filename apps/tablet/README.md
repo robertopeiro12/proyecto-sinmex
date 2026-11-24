@@ -188,17 +188,21 @@ de vendedores es **T-62**).
   oscura o "atrás" de Android lo cierra. Arriba del menú van el vendedor, la jornada y la pastilla "por subir".
   Hecho con `Animated` de React Native (`useNativeDriver`), sin recompilar el APK.
 - **Dos tablas locales** (migración 011): `ruta` la escribe el pull con su regla de fusión
-  (`aplicarSnapshotRutas` en `src/datos/repositorios/rutas.ts`) y `ruta_orden_local` solo el dedo del vendedor.
-  Ningún pull toca el orden local, y el orden **no sube** al servidor.
+  (`aplicarSnapshotRutas` en `src/datos/repositorios/rutas.ts`); `ruta_orden_local` era el orden que arrastraba el
+  vendedor y desde el rediseño (pieza 1) ya no se escribe ni se lee: la ruta va en el orden del portal
+  (`r.orden, c.nombre`). La tabla se queda y `purgar` la sigue limpiando.
 - **Las altas del vendedor suben como `ruta-alta`** (`src/sincronizacion/fuente-rutas.ts`). `ruta-duplicada` no es
   error: la fila queda sincronizada y el pull posterior la funde con la del servidor. Un alta rechazada por otro
   motivo se ve en rojo bajo la fila y el vendedor la puede quitar (`quitarRechazada`).
-- **"Visitado" se deriva** (venta, cobro **o visita** de hoy en la tablet; T-39) y la **burbuja** cuenta las notas con saldo; los dos
-  salen de `rutas.delDia()`.
-- **"Visitados sin venta"** (T-39): el cliente de la ruta viva con visita hoy y sin venta ni cobro sale de la lista y
-  aparece después de ella, con el motivo y la hora de la última visita y la subida de sus visitas (`agruparRuta`). Una fila que la oficina quitó se queda en "Fuera de ruta" solo si hoy tuvo actividad.
-- **Reordenar**: mantener presionado y arrastrar (`PanResponder`, `src/ui/lista-ruta.tsx`), con ▲/▼ siempre como
-  respaldo. Si el arrastre resulta frágil en un equipo, `ARRASTRE_HABILITADO = false` deja solo los botones.
+- **"Visitado" se deriva** (venta, cobro, visita, comentario de no cobro **o merma del cliente** de hoy en la tablet) y
+  sale de `rutas.delDia()`, con las sumas de venta de contado, a crédito y cobro de hoy.
+- **"Por visitar" y "Visitados"** (rediseño, pieza 1; `agruparRutaEnCurso`): toda fila viva con algo hecho hoy, con o
+  sin venta, baja a "Visitados" con el resumen de lo hecho (`resumenVisitado`: "Cobro $850.00 · Venta a crédito
+  $1,240.00", "Visita sin venta · cerrado") y se puede volver a abrir. El número de la fila es su lugar fijo en la ruta.
+  Una fila que la oficina quitó se queda en "Fuera de ruta" solo si hoy tuvo actividad. Ya no se reordena.
+- **Notas que trae** (icono de nota y número a la derecha, nada si es 0): `notasAsignadas.queTraePorCliente`, las
+  asignadas de hoy con saldo y sin liquidar hoy más las ventas a crédito de hoy del vendedor (sin contar dos veces una
+  que ya bajó como nota o está asignada).
 - La lógica de la pantalla vive en `src/estado/ruta-del-dia.ts` (puro, con pruebas). "Abrir el día" purga la ruta
   de hace más de 7 días (`rutas.purgar`), conservando las altas `pendiente` (las rechazadas en `error` de esos días
   sí se borran: si no, se reintentarían en cada sincronización).
@@ -285,7 +289,7 @@ Spec: `docs/superpowers/specs/2026-10-18-t-39-visita-sin-venta-design.md`. Panta
   (`foto_cache_subida_en`). **Nunca renueva la sesión** (la rotación del refresh token con detección de reuso podría
   revocar las sesiones del vendedor si chocara con una sincronización): un 401 deja "sin foto" hasta la siguiente
   sincronización. La URI lleva `?v=<foto_subida_en>` para que Android no reuse la imagen anterior (`uriFotoCliente`).
-- **Ruta**: "Visitados sin venta" y "Visitas de hoy" en la ficha; ver la sección de la ruta del día.
+- **Ruta**: el visitado sin venta pasa a "Visitados" ("Visita sin venta · motivo") y "Visitas de hoy" sale en la ficha; ver la sección de la ruta del día.
 
 ## Gastos de la ruta (T-30/T-31)
 

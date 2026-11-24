@@ -145,7 +145,7 @@ export function pastillaVisita(
   }
 }
 
-/** La palabra del estado agregado de las visitas de un cliente ("Visitados sin venta"). */
+/** La palabra del estado agregado de las visitas de un cliente (la fila de "Visitados"). */
 export function textoEstadoVisitas(e: EstadoSubida): string {
   return { error: 'rechazada', pendiente: 'por subir', listo: 'subida' }[e];
 }

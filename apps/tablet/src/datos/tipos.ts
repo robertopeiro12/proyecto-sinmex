@@ -365,7 +365,7 @@ export interface Ruta {
   id: string;
   cliente_id: string;
   fecha: FechaISO;
-  /** El del servidor. Lo que el vendedor arrastra vive en `ruta_orden_local`. */
+  /** El del servidor: el orden de la ruta (el vendedor ya no lo cambia; `ruta_orden_local` quedo sin uso). */
   orden: number;
   origen: OrigenRuta;
   /** `0` = la oficina lo quito de la ruta. La pantalla decide si se ve (D16). */
