@@ -18,16 +18,15 @@ import {
   type FacturaVenta,
   type LineaCaptura,
   type Venta,
+  validarAtendio,
 } from '@/datos';
 import { motivoBloqueoVenta } from '@/datos/notas-asignadas-reglas';
+import { LARGO_MAX_ATENDIO } from '@/datos/ventas-reglas';
 import {
   crearGrabadorVenta,
   ErrorFirma,
   FIRMA_VACIA,
   hayFirma,
-  LARGO_MAX_NOMBRE_FIRMA,
-  MENSAJE_FALLO_FIRMA,
-  normalizarNombreFirma,
   puedeGrabarVenta,
   textoFirmada,
   type EstadoFirma,
@@ -267,13 +266,15 @@ export default function PantallaVenta() {
     // `revisar` no deja llegar aqui sin elegir; la comprobacion es para el tipo.
     if (contadoCredito === null) return;
     const pago = contadoCredito;
-    let nombre: string | null = null;
-    try {
-      nombre = normalizarNombreFirma(firma.nombre);
-    } catch (e) {
-      setProblemas([e instanceof ErrorFirma ? e.message : MENSAJE_FALLO_FIRMA]);
+    // Rediseno pieza 2 (interino hasta Task 5): el campo de nombre ya es quien
+    // atendio, obligatorio. Se valida antes de exportar la firma: un nombre
+    // vacio no escribe JPG ni llama a `registrar`.
+    const problemaAtendio = validarAtendio(firma.nombre);
+    if (problemaAtendio !== null) {
+      setProblemas([problemaAtendio]);
       return;
     }
+    const atendio = firma.nombre.trim();
     setGrabando(true);
     const resultado = await grabador.grabar({
       exportarPng: () => {
@@ -283,7 +284,7 @@ export default function PantallaVenta() {
           : Promise.reject(new ErrorFirma('El recuadro de firma no está en pantalla.'));
       },
       guardarJpg: (png) => guardarFirmaJpg(ventaId, png),
-      registrar: (firmaUri) =>
+      registrar: () =>
         datos.ventas.registrar({
           id: ventaId,
           vendedorId,
@@ -308,8 +309,8 @@ export default function PantallaVenta() {
               cantidad: r.cantidad,
               texto: r.texto,
             })),
-          // T-73: misma transaccion que la venta, sus lineas y su folio.
-          firma: { uri: firmaUri, nombre },
+          // Rediseno pieza 2: la venta ya no guarda la firma; Task 5 quita el recuadro.
+          atendio,
         }),
     });
     // Segundo toque mientras el primero corre: el primero se encarga de todo.
@@ -485,10 +486,10 @@ export default function PantallaVenta() {
             deshabilitado={grabando}
           />
           <Campo
-            etiqueta="Nombre de quien firma (opcional)"
+            etiqueta="Nombre de quien atiende"
             value={firma.nombre}
             onChangeText={(nombre) => setFirma((previa) => ({ ...previa, nombre }))}
-            maxLength={LARGO_MAX_NOMBRE_FIRMA}
+            maxLength={LARGO_MAX_ATENDIO}
             editable={!grabando}
           />
         </Tarjeta>

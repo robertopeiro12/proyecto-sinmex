@@ -64,6 +64,9 @@ export {
   textoPromocion,
 } from './promociones-reglas';
 export type { CatalogoPromociones, PromocionAplicable, Regalo } from './promociones-reglas';
+// `LARGO_MAX_ATENDIO` de la venta NO se reexporta: `repositorios/visitas` ya
+// exporta uno con ese nombre (y otro valor). Quien lo necesite lo importa de
+// `ventas-reglas`.
 export {
   LARGO_MAX_COMENTARIOS,
   LARGO_MAX_NUM_NOTA,
@@ -71,6 +74,7 @@ export {
   MAX_LINEAS_VENTA,
   problemasDeCaptura,
   resumirCaptura,
+  validarAtendio,
 } from './ventas-reglas';
 export type {
   CapturaVenta,

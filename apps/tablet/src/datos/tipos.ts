@@ -324,8 +324,9 @@ export interface Venta {
   sincronizado_en: MomentoISO | null;
   /**
    * T-73: ruta local del JPG de la firma del cliente
-   * (`documentDirectory/firmas/firma-<id>.jpg`). `null` solo en ventas
-   * anteriores a la migracion 016: desde entonces la firma es obligatoria (D1).
+   * (`documentDirectory/firmas/firma-<id>.jpg`). `null` en ventas anteriores a
+   * la migracion 016 y en las grabadas desde el rediseno pieza 2, que ya no
+   * piden firma: solo las ventas viejas con firma por subir la tienen.
    */
   firma_local: string | null;
   /** Quien firmo; `null` si no lo dijo (D2). */
@@ -336,6 +337,17 @@ export interface Venta {
   firma_error: string | null;
   /** `1` = no recuperable (la venta se elimino en el portal, 413, 415, archivo perdido): no se reintenta. */
   firma_descartada: Booleano;
+  /**
+   * Rediseno pieza 2 (migracion 020): quien atendio al vendedor, recortado,
+   * de 1 a 80. `null` solo en ventas anteriores a la 020.
+   */
+  atendio_nombre: string | null;
+  /**
+   * Rediseno pieza 2 (migracion 020): lo que pago el cliente al recibir una
+   * venta a credito, `0 < abono < monto_total_centavos`. `null` = sin abono
+   * (siempre en contado).
+   */
+  abono_centavos: number | null;
 }
 
 export interface VentaLinea {

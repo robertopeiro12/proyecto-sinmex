@@ -1,4 +1,4 @@
-import { depsDePrueba, FIRMA_DE_PRUEBA, insertarVentaDePrueba, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
+import { depsDePrueba, ATENDIO_DE_PRUEBA, insertarVentaDePrueba, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
 import { crearRepositorioCatalogos } from './catalogos';
 import { crearRepositorioCobranzas } from './cobranzas';
 import { crearRepositorioFolios } from './folios';
@@ -78,7 +78,7 @@ function venderA(ventas: ReturnType<typeof montar>['ventas']) {
     factura: 'N/A',
     comentarios: null,
     lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
-    firma: FIRMA_DE_PRUEBA,
+    atendio: ATENDIO_DE_PRUEBA,
   });
 }
 
@@ -583,6 +583,37 @@ describe('delDia con notas asignadas, recado y comentario (notas-asignadas-table
     insertarVentaDePrueba(deps, { id: 'v-1', folio: 'F1', montoCentavos: 124000, contadoCredito: 'credito' });
     expect(rutas.delDia('ven-1', HOY)[0]!.notas_que_trae).toBe(1);
     expect(rutas.delDia('otro-vendedor')[0]!.notas_que_trae).toBe(0);
+  });
+
+  it('una venta a credito con abono al vender sigue contando como nota que trae y suma su total a credito', () => {
+    const { rutas, deps, catalogos, notasAsignadas } = montar();
+    rutas.aplicarSnapshot([delServidor()]);
+    insertarVentaDePrueba(deps, {
+      id: 'v-abono',
+      folio: 'F-ABONO',
+      montoCentavos: 80400,
+      contadoCredito: 'credito',
+      abonoCentavos: 30000,
+    });
+    // Antes de que el servidor la proyecte: cuenta por ser credito de hoy.
+    expect(rutas.delDia('ven-1', HOY)[0]).toMatchObject({ notas_que_trae: 1, venta_credito_centavos: 80400 });
+
+    // Ya proyectada: nace abonada con saldo = total - abono, y sigue contando.
+    catalogos.guardarSnapshot({
+      notas: [
+        {
+          ...snapshotDePrueba().notas![0]!,
+          id: 'nota-abono',
+          folio: 'F-ABONO',
+          fecha: HOY,
+          status: 'abonado',
+          monto_total_centavos: 80400,
+          saldo_centavos: 50400,
+        },
+      ],
+    });
+    expect(rutas.delDia('ven-1', HOY)[0]).toMatchObject({ notas_que_trae: 1, venta_credito_centavos: 80400 });
+    expect(notasAsignadas.queTraePorCliente('ven-1').get('cli-1')).toBe(1);
   });
 
   it('el recado de la ruta baja a la fila (y es null sin recado)', () => {

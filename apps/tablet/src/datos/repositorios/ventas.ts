@@ -8,8 +8,7 @@ import type {
   VentaPromocion,
 } from '../tipos';
 import { bloqueoDeVenta, existencias, faltantesDeVenta, textoFaltante } from '../inventario-reglas';
-import { LARGO_MAX_NOMBRE_FIRMA, nombreFirmaValido } from '../reglas-firma';
-import { problemasDeCaptura, resumirCaptura, type LineaCaptura } from '../ventas-reglas';
+import { problemasDeCaptura, resumirCaptura, validarAtendio, type LineaCaptura } from '../ventas-reglas';
 import { leerInventarioDelDia } from './cargas';
 import type { RepositorioCatalogos } from './catalogos';
 import type { DepsRepositorio } from './deps';
@@ -45,13 +44,8 @@ export interface RegaloRegistroVenta {
   texto: string;
 }
 
-/** La firma del cliente (T-73): el JPG ya escrito y el nombre ya normalizado por la pantalla. */
-export interface FirmaRegistroVenta {
-  /** Ruta local del JPG (`documentDirectory/firmas/firma-<id>.jpg`). */
-  uri: string;
-  /** `null` = no dijo su nombre (D2). */
-  nombre: string | null;
-}
+/** Mensaje del abono fuera de regla (rediseno pieza 2). */
+export const MENSAJE_ABONO_INVALIDO = 'El abono debe ser mayor a $0.00 y menor al total.';
 
 /**
  * Lo que captura la pantalla. **Sin precios, a proposito** (D15): el precio lo
@@ -59,18 +53,17 @@ export interface FirmaRegistroVenta {
  * error de la pantalla grabe un precio distinto al del catalogo.
  */
 export interface DatosRegistroVenta {
-  /**
-   * T-73: el id lo genera la pantalla ANTES de grabar, para nombrar con el el
-   * archivo de la firma. Sin el, lo genera este repositorio (como antes).
-   */
+  /** Id que da la pantalla, si ya lo genero; sin el, lo genera este repositorio. */
   id?: string;
   vendedorId: string;
   clienteId: string;
-  /** El # del block de papel; en blanco = sin nota (se graba null). */
-  numNota: string;
+  /** El # del block de papel; ausente o en blanco = sin nota (se graba null). */
+  numNota?: string;
   contadoCredito: ContadoCredito;
-  factura: FacturaVenta;
-  comentarios: string | null;
+  /** Por omision `'N/A'`. */
+  factura?: FacturaVenta;
+  /** Por omision `null`. */
+  comentarios?: string | null;
   lineas: LineaRegistroVenta[];
   /**
    * Los regalos que la pantalla ya aplico. El repositorio **vuelve a
@@ -78,8 +71,17 @@ export interface DatosRegistroVenta {
    * `datos-venta.ts` del servidor) y que ninguno viene incompleto.
    */
   regalos?: RegaloRegistroVenta[];
-  /** T-73 (D1): obligatoria. Se guarda en la misma transaccion que la venta y su folio. */
-  firma: FirmaRegistroVenta;
+  /**
+   * Rediseno pieza 2: quien atendio al vendedor en el negocio. Obligatorio; se
+   * recorta y lleva de 1 a 80 (`validarAtendio`). Reemplaza a la firma dibujada
+   * (T-73), que ya no se pide.
+   */
+  atendio: string;
+  /**
+   * Rediseno pieza 2: lo que pago el cliente al recibir, en centavos enteros.
+   * Solo a credito y `0 < abono < total`; ausente o `null` = sin abono.
+   */
+  abonoCentavos?: number | null;
 }
 
 export type RepositorioVentas = ReturnType<typeof crearRepositorioVentas>;
@@ -172,8 +174,9 @@ export function crearRepositorioVentas(
         };
       });
 
+      const numNota = datos.numNota ?? '';
       const problemas = problemasDeCaptura({
-        numNota: datos.numNota,
+        numNota,
         contadoCredito: datos.contadoCredito,
         comentarios: datos.comentarios ?? '',
         lineas,
@@ -219,16 +222,21 @@ export function crearRepositorioVentas(
         }
       }
 
-      // T-73 (D1): sin firma no hay venta. La pantalla no deja llegar aqui sin
-      // ella; esto es la red por si otra pantalla llamara a `registrar`. Va antes
-      // de abrir la transaccion: no se quema folio.
-      if (datos.firma.uri.trim() === '') {
-        throw new ErrorVenta('Falta la firma del cliente. Pídele que firme antes de grabar.');
-      }
-      if (!nombreFirmaValido(datos.firma.nombre)) {
-        throw new ErrorVenta(
-          `El nombre de quien firma no es válido (de 1 a ${LARGO_MAX_NOMBRE_FIRMA} caracteres, sin espacios al inicio ni al final).`,
-        );
+      // Rediseno pieza 2: quien atendio es obligatorio y el abono solo cabe en
+      // una venta a credito, `0 < abono < total` (espejo del servidor). Antes
+      // de abrir la transaccion: un rechazo no quema folio.
+      const atendio = typeof datos.atendio === 'string' ? datos.atendio : '';
+      const problemaAtendio = validarAtendio(atendio);
+      if (problemaAtendio !== null) throw new ErrorVenta(problemaAtendio);
+      const abono = datos.abonoCentavos ?? null;
+      if (
+        abono !== null &&
+        (datos.contadoCredito !== 'credito' ||
+          !Number.isInteger(abono) ||
+          abono <= 0 ||
+          abono >= resumen.totalCentavos)
+      ) {
+        throw new ErrorVenta(MENSAJE_ABONO_INVALIDO);
       }
 
       const id = datos.id ?? generarId();
@@ -273,11 +281,11 @@ export function crearRepositorioVentas(
           `insert into venta (
              id, fecha, cliente_id, vendedor_id, sucursal_id, folio, num_nota,
              contado_credito, factura, comentarios, monto_total_centavos,
-             grabada_en, sync_estado, firma_local, firma_nombre
+             grabada_en, sync_estado, atendio_nombre, abono_centavos
            ) values (
              $id, $fecha, $cliente_id, $vendedor_id, $sucursal_id, $folio, $num_nota,
              $contado_credito, $factura, $comentarios, $monto_total_centavos,
-             $grabada_en, 'pendiente', $firma_local, $firma_nombre
+             $grabada_en, 'pendiente', $atendio_nombre, $abono_centavos
            )`,
           {
             $id: id,
@@ -288,15 +296,16 @@ export function crearRepositorioVentas(
             $vendedor_id: datos.vendedorId,
             $sucursal_id: emitido.sucursal_id,
             $folio: emitido.folio,
-            $num_nota: datos.numNota.trim() || null,
+            $num_nota: numNota.trim() || null,
             $contado_credito: datos.contadoCredito,
-            $factura: datos.factura,
+            $factura: datos.factura ?? 'N/A',
             $comentarios: comentarios,
             $monto_total_centavos: resumen.totalCentavos,
             $grabada_en: ahora,
-            // T-73: la firma entra o sale con la venta y el folio.
-            $firma_local: datos.firma.uri,
-            $firma_nombre: datos.firma.nombre,
+            // Rediseno pieza 2: sin firma (firma_local queda null y la venta
+            // nunca entra a la cola de firmas).
+            $atendio_nombre: atendio.trim(),
+            $abono_centavos: abono,
           },
         );
 

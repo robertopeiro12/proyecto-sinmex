@@ -1,10 +1,12 @@
 import {
+  LARGO_MAX_ATENDIO,
   leerCantidad,
   MAX_LINEAS_VENTA,
   problemasDeCaptura,
   resumirCaptura,
   type CapturaVenta,
   type LineaCaptura,
+  validarAtendio,
 } from './ventas-reglas';
 
 const linea = (extra: Partial<LineaCaptura> = {}): LineaCaptura => ({
@@ -187,5 +189,27 @@ describe('problemasDeCaptura', () => {
       }),
     );
     expect(problemas).not.toContain('El total de la venta es demasiado grande.');
+  });
+});
+
+describe('validarAtendio (rediseno pieza 2)', () => {
+  it('el largo maximo es 80', () => {
+    expect(LARGO_MAX_ATENDIO).toBe(80);
+  });
+
+  it('un nombre de 1 a 80 (ya recortado) es valido', () => {
+    expect(validarAtendio('Lupe')).toBeNull();
+    expect(validarAtendio('  Lupe  ')).toBeNull();
+    expect(validarAtendio('x')).toBeNull();
+    expect(validarAtendio(`  ${'x'.repeat(80)}  `)).toBeNull();
+  });
+
+  it('vacio o en blanco pide el nombre', () => {
+    expect(validarAtendio('')).toBe('Escribe el nombre de quien atiende.');
+    expect(validarAtendio('   ')).toBe('Escribe el nombre de quien atiende.');
+  });
+
+  it('mas de 80 despues de recortar es error', () => {
+    expect(validarAtendio('x'.repeat(81))).toBe('El nombre de quien atiende lleva hasta 80 caracteres.');
   });
 });

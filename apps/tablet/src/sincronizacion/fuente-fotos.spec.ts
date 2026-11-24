@@ -1,4 +1,4 @@
-import { depsDePrueba, snapshotDePrueba } from '@/datos/pruebas-apoyo';
+import { ATENDIO_DE_PRUEBA, depsDePrueba, simularFirmaVieja, snapshotDePrueba } from '@/datos/pruebas-apoyo';
 import { crearRepositorioCatalogos } from '@/datos/repositorios/catalogos';
 import { crearRepositorioProspectos } from '@/datos/repositorios/prospectos';
 import { crearRepositorioVisitas } from '@/datos/repositorios/visitas';
@@ -221,14 +221,15 @@ describe('firmas de ventas en la cola combinada (T-73)', () => {
       fuenteFotosGastos(gastos),
       fuenteFirmasVentas(ventas),
     ]);
-    return { gastos, ventas, fuente };
+    return { deps, gastos, ventas, fuente };
   }
 
+  /** Una venta vieja (T-73) con su firma por subir: las nuevas ya no llevan firma (rediseno pieza 2). */
   const ventaFirmada = (
-    ventas: ReturnType<typeof montarConVentas>['ventas'],
+    { deps, ventas }: Pick<ReturnType<typeof montarConVentas>, 'deps' | 'ventas'>,
     uri = 'file:///documentos/firmas/firma-v.jpg',
-  ) =>
-    ventas.registrar({
+  ) => {
+    const v = ventas.registrar({
       vendedorId: 'ven-1',
       clienteId: 'cli-1',
       numNota: '',
@@ -236,13 +237,16 @@ describe('firmas de ventas en la cola combinada (T-73)', () => {
       factura: 'N/A',
       comentarios: null,
       lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
-      firma: { uri, nombre: 'Doña Lupe' },
+      atendio: ATENDIO_DE_PRUEBA,
     });
+    simularFirmaVieja(deps, v.id, { uri, nombre: 'Doña Lupe' });
+    return v;
+  };
 
   it('la firma sale solo cuando la venta ya esta sincronizada; una rechazada no (Review Focus 4)', () => {
-    const { ventas, fuente } = montarConVentas();
-    const v = ventaFirmada(ventas);
-    const rechazada = ventaFirmada(ventas, 'file:///documentos/firmas/firma-r.jpg');
+    const { deps, ventas, fuente } = montarConVentas();
+    const v = ventaFirmada({ deps, ventas });
+    const rechazada = ventaFirmada({ deps, ventas }, 'file:///documentos/firmas/firma-r.jpg');
     ventas.marcarError(rechazada.id, 'precio-no-asignado: sin precio');
     expect(fuente.pendientes()).toEqual([]);
 
@@ -251,8 +255,8 @@ describe('firmas de ventas en la cola combinada (T-73)', () => {
   });
 
   it('gastos antes que ventas, y cada resultado vuelve a SU repositorio', () => {
-    const { gastos, ventas, fuente } = montarConVentas();
-    const v = ventaFirmada(ventas);
+    const { deps, gastos, ventas, fuente } = montarConVentas();
+    const v = ventaFirmada({ deps, ventas });
     ventas.marcarSincronizada(v.id);
     const g = gastos.registrar({
       vendedorId: 'ven-1',
@@ -270,8 +274,8 @@ describe('firmas de ventas en la cola combinada (T-73)', () => {
   });
 
   it('un 404 es definitivo solo para la firma; un 409 no (Review Focus 5)', () => {
-    const { gastos, ventas, fuente } = montarConVentas();
-    const v = ventaFirmada(ventas);
+    const { deps, gastos, ventas, fuente } = montarConVentas();
+    const v = ventaFirmada({ deps, ventas });
     ventas.marcarSincronizada(v.id);
     const g = gastos.registrar({
       vendedorId: 'ven-1',
@@ -289,8 +293,8 @@ describe('firmas de ventas en la cola combinada (T-73)', () => {
   });
 
   it('descartar la firma la saca de la cola sin tocar la venta', () => {
-    const { ventas, fuente } = montarConVentas();
-    const v = ventaFirmada(ventas);
+    const { deps, ventas, fuente } = montarConVentas();
+    const v = ventaFirmada({ deps, ventas });
     ventas.marcarSincronizada(v.id);
     fuente.pendientes();
     fuente.descartar(v.id, 'Esa venta ya no existe.');

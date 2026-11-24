@@ -1,4 +1,4 @@
-import { depsDePrueba, FIRMA_DE_PRUEBA, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
+import { depsDePrueba, ATENDIO_DE_PRUEBA, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
 import type { Booleano, EstadoCarga } from '../tipos';
 import { aplicarSnapshotCargas, crearRepositorioCargas, type FilaCargaPull } from './cargas';
 import { crearRepositorioCatalogos } from './catalogos';
@@ -142,7 +142,7 @@ describe('el inventario del dia', () => {
       comentarios: null,
       lineas: [{ presentacionId: 'pre-1', cantidad: 10, cantidadPromocion: 1 }],
       regalos: [{ promocionId: 'promo-general', presentacionId: 'pre-1', cantidad: 1, texto: 'Por cada 10 Jamaica, 1 Jamaica gratis' }],
-      firma: FIRMA_DE_PRUEBA,
+      atendio: ATENDIO_DE_PRUEBA,
     });
     expect(cargas.filasInventario('ven-1')).toEqual([
       {

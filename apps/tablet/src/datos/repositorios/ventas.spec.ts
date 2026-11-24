@@ -1,4 +1,4 @@
-import { depsDePrueba, FIRMA_DE_PRUEBA, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
+import { ATENDIO_DE_PRUEBA, depsDePrueba, MOMENTO, simularFirmaVieja, snapshotDePrueba } from '../pruebas-apoyo';
 import { relojFijo } from '../reloj';
 import type { EstadoCarga } from '../tipos';
 import { aplicarSnapshotCargas } from './cargas';
@@ -49,7 +49,7 @@ const venta = (extra: Partial<DatosRegistroVenta> = {}): DatosRegistroVenta => (
   lineas: [{ presentacionId: 'pre-1', cantidad: 24, cantidadPromocion: 2 }],
   // T-74: las 2 piezas de promocion de la linea llegan como regalo aplicado.
   regalos: [{ promocionId: 'promo-general', presentacionId: 'pre-1', cantidad: 2, texto: TEXTO_GENERAL }],
-  firma: FIRMA_DE_PRUEBA,
+  atendio: ATENDIO_DE_PRUEBA,
   ...extra,
 });
 
@@ -173,7 +173,7 @@ describe('repositorio de ventas (T-16)', () => {
         factura: 'N/A',
         comentarios: null,
         lineas: [{ presentacionId: 'pre-1', cantidad: 3, cantidadPromocion: 0 }],
-        firma: FIRMA_DE_PRUEBA,
+        atendio: ATENDIO_DE_PRUEBA,
       });
       expect(ventas.regalosDe(v.id)).toEqual([]);
       expect(ventas.hayAlgunaDe('cli-1')).toBe(true);
@@ -321,60 +321,96 @@ describe('repositorio de ventas (T-16)', () => {
   });
 });
 
-describe('firma del cliente (T-73)', () => {
-  const FIRMA = { uri: 'file:///documentos/firmas/firma-x.jpg', nombre: 'Doña Lupe' };
-
-  it('graba la firma en la misma venta: ruta y nombre, por subir y sin error', () => {
+describe('quien atendio y abono al vender (rediseno pieza 2)', () => {
+  it('registra sin firma: guarda atendio recortado y abono null, sin firma_local', () => {
     const { ventas } = montar();
-    const v = ventas.registrar(venta({ firma: FIRMA }));
+    const v = ventas.registrar(venta({ atendio: '  Doña Lupe  ' }));
     expect(v).toMatchObject({
-      firma_local: 'file:///documentos/firmas/firma-x.jpg',
-      firma_nombre: 'Doña Lupe',
-      firma_subida_en: null,
-      firma_error: null,
-      firma_descartada: 0,
+      atendio_nombre: 'Doña Lupe',
+      abono_centavos: null,
+      firma_local: null,
+      firma_nombre: null,
       sync_estado: 'pendiente',
     });
   });
 
-  it('usa el id que le da la pantalla: el archivo de la firma ya se nombro con el', () => {
+  it('numNota, factura y comentarios son opcionales: null, N/A y null', () => {
+    const { ventas } = montar();
+    const v = ventas.registrar({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      contadoCredito: 'contado',
+      lineas: [{ presentacionId: 'pre-1', cantidad: 3, cantidadPromocion: 0 }],
+      atendio: 'Lupe',
+    });
+    expect(v).toMatchObject({ num_nota: null, factura: 'N/A', comentarios: null });
+  });
+
+  it('usa el id que le da la pantalla', () => {
     const { folios, ventas } = montar();
     const v = ventas.registrar(venta({ id: 'venta-de-la-pantalla' }));
     expect(v.id).toBe('venta-de-la-pantalla');
     expect(folios.porOperacion('venta-de-la-pantalla')?.folio).toBe(v.folio);
   });
 
-  it('sin firma no graba ni quema folio (D1)', () => {
+  it('sin atendio, en blanco o de 81 no graba ni quema folio', () => {
     const { deps, folios, ventas } = montar();
-    expect(() => ventas.registrar(venta({ firma: { uri: '   ', nombre: null } }))).toThrow(ErrorVenta);
-    expect(folios.consecutivoDe('ven-1')).toBe(0);
-    expect(cuantas(deps, 'venta')).toBe(0);
-  });
-
-  it('un nombre sin recortar o de mas de 80 caracteres no se graba', () => {
-    const { deps, ventas } = montar();
-    expect(() => ventas.registrar(venta({ firma: { uri: FIRMA.uri, nombre: 'x'.repeat(81) } }))).toThrow(
-      ErrorVenta,
+    expect(() =>
+      ventas.registrar({ ...venta(), atendio: undefined as unknown as string }),
+    ).toThrow(new ErrorVenta('Escribe el nombre de quien atiende.'));
+    expect(() => ventas.registrar(venta({ atendio: '   ' }))).toThrow(
+      new ErrorVenta('Escribe el nombre de quien atiende.'),
     );
-    expect(() => ventas.registrar(venta({ firma: { uri: FIRMA.uri, nombre: ' Lupe ' } }))).toThrow(ErrorVenta);
-    expect(cuantas(deps, 'venta')).toBe(0);
-  });
-
-  it('un fallo dentro de la transaccion no deja firma ni folio', () => {
-    const { deps, folios, ventas } = montar();
-    deps.bd.execSync('drop table venta_linea;');
-    expect(() => ventas.registrar(venta({ firma: FIRMA }))).toThrow();
+    expect(() => ventas.registrar(venta({ atendio: 'x'.repeat(81) }))).toThrow(ErrorVenta);
     expect(folios.consecutivoDe('ven-1')).toBe(0);
-    expect(
-      deps.bd.getFirstSync<{ n: number }>('select count(*) as n from venta where firma_local is not null')?.n,
-    ).toBe(0);
+    expect(cuantas(deps, 'venta')).toBe(0);
+    expect(cuantas(deps, 'folio_emitido')).toBe(0);
   });
 
+  it('atendio de 80 si entra', () => {
+    const { ventas } = montar();
+    expect(ventas.registrar(venta({ atendio: 'x'.repeat(80) })).atendio_nombre).toBe('x'.repeat(80));
+  });
+
+  it('credito con abono 30000 sobre el total guarda abono_centavos', () => {
+    const { ventas } = montar();
+    // El catalogo de prueba solo tiene pre-1 a $28.00: 80400 (el ejemplo del
+    // plan) no sale con piezas enteras, asi que el total es 24 x 28.00 = 67200.
+    const v = ventas.registrar(venta({ abonoCentavos: 30000 }));
+    expect(v.monto_total_centavos).toBe(67200);
+    expect(v).toMatchObject({ contado_credito: 'credito', abono_centavos: 30000 });
+  });
+
+  it('abono 0, igual al total, mayor, no entero o con contado no graba ni quema folio', () => {
+    const { deps, folios, ventas } = montar();
+    const MENSAJE = new ErrorVenta('El abono debe ser mayor a $0.00 y menor al total.');
+    // Total de venta(): 67200.
+    expect(() => ventas.registrar(venta({ abonoCentavos: 0 }))).toThrow(MENSAJE);
+    expect(() => ventas.registrar(venta({ abonoCentavos: 67200 }))).toThrow(MENSAJE);
+    expect(() => ventas.registrar(venta({ abonoCentavos: 70000 }))).toThrow(MENSAJE);
+    expect(() => ventas.registrar(venta({ abonoCentavos: -100 }))).toThrow(MENSAJE);
+    expect(() => ventas.registrar(venta({ abonoCentavos: 100.5 }))).toThrow(MENSAJE);
+    expect(() => ventas.registrar(venta({ contadoCredito: 'contado', abonoCentavos: 30000 }))).toThrow(MENSAJE);
+    expect(folios.consecutivoDe('ven-1')).toBe(0);
+    expect(cuantas(deps, 'venta')).toBe(0);
+    expect(cuantas(deps, 'folio_emitido')).toBe(0);
+  });
+
+  it('contado o credito sin abono guardan abono_centavos null', () => {
+    const { ventas } = montar();
+    expect(ventas.registrar(venta({ contadoCredito: 'contado', abonoCentavos: null })).abono_centavos).toBeNull();
+    expect(ventas.registrar(venta({ numNota: '2347' })).abono_centavos).toBeNull();
+  });
+});
+
+describe('firma de ventas viejas (T-73)', () => {
   describe('cola de firmas', () => {
     it('solo ofrece firmas de ventas ya sincronizadas: ni pendientes ni rechazadas (Review Focus 4)', () => {
-      const { ventas } = montar();
+      const { deps, ventas } = montar();
       const aceptada = ventas.registrar(venta());
       const rechazada = ventas.registrar(venta({ numNota: '2347' }));
+      simularFirmaVieja(deps, aceptada.id);
+      simularFirmaVieja(deps, rechazada.id);
       ventas.marcarError(rechazada.id, 'precio-no-asignado: el cliente no tiene precio');
       expect(ventas.firmasPendientes()).toEqual([]);
 
@@ -382,17 +418,17 @@ describe('firma del cliente (T-73)', () => {
       expect(ventas.firmasPendientes().map((v) => v.id)).toEqual([aceptada.id]);
     });
 
-    it('una venta anterior a la 016 (sin firma_local) nunca entra a la cola', () => {
-      const { deps, ventas } = montar();
+    it('una venta sin firma_local (anterior a la 016 o nueva sin firma) nunca entra a la cola', () => {
+      const { ventas } = montar();
       const v = ventas.registrar(venta());
-      deps.bd.runSync('update venta set firma_local = null where id = $id', { $id: v.id });
       ventas.marcarSincronizada(v.id);
       expect(ventas.firmasPendientes()).toEqual([]);
     });
 
     it('marcarFirmaSubida la saca de la cola y limpia el error, sin tocar sync_estado', () => {
-      const { ventas } = montar();
+      const { deps, ventas } = montar();
       const v = ventas.registrar(venta());
+      simularFirmaVieja(deps, v.id);
       ventas.marcarSincronizada(v.id);
       ventas.anotarErrorFirma(v.id, 'sin red');
       ventas.marcarFirmaSubida(v.id, '2026-08-07T16:00:00.000Z');
@@ -405,9 +441,11 @@ describe('firma del cliente (T-73)', () => {
     });
 
     it('anotarErrorFirma la deja en la cola; descartarFirma la saca; ninguna toca sync_estado', () => {
-      const { ventas } = montar();
+      const { deps, ventas } = montar();
       const temporal = ventas.registrar(venta());
       const definitiva = ventas.registrar(venta({ numNota: '2347' }));
+      simularFirmaVieja(deps, temporal.id);
+      simularFirmaVieja(deps, definitiva.id);
       ventas.marcarSincronizada(temporal.id);
       ventas.marcarSincronizada(definitiva.id);
 

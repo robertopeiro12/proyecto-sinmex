@@ -14,7 +14,10 @@ import type { FuenteOperaciones } from './motor';
  *   local de la tablet). El servidor rechaza un folio cuya fecha no coincide.
  * - **`cliente_id` y `folio`** van en el sobre, no en `datos` (contrato §6).
  * - **`datos`** no lleva monto ni status: los calcula el servidor.
- * - **`firma`** (T-73): `{ nombre }` en toda venta con firma local; la imagen sube aparte (`fuenteFirmasVentas`).
+ * - **`firma`** (T-73): `{ nombre }` solo en una venta vieja con firma local; la imagen sube aparte
+ *   (`fuenteFirmasVentas`). Las ventas del rediseno pieza 2 ya no llevan firma.
+ * - **`atendio`** y **`abono_centavos`** (rediseno pieza 2): solo si no son null. Una venta de
+ *   antes de la 020 manda exactamente lo mismo que antes.
  *
  * Las que el servidor rechazo siguen en la cola (D19): se vuelven a mandar en
  * la siguiente sincronizacion.
@@ -52,8 +55,10 @@ export function fuenteVentas(ventas: RepositorioVentas): FuenteOperaciones {
               }
             : {}),
           // T-73: presente = el servidor espera la imagen por el canal de fotos.
-          // Una venta anterior a la 016 no tiene firma_local y no la manda.
+          // Solo una venta vieja (016 a antes del rediseno) tiene firma_local.
           ...(v.firma_local !== null ? { firma: { nombre: v.firma_nombre } } : {}),
+          ...(v.atendio_nombre !== null ? { atendio: v.atendio_nombre } : {}),
+          ...(v.abono_centavos !== null ? { abono_centavos: v.abono_centavos } : {}),
         };
 
         return {

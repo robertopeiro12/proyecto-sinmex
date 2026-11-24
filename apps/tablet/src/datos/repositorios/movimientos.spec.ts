@@ -1,4 +1,4 @@
-import { depsDePrueba, FIRMA_DE_PRUEBA, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
+import { depsDePrueba, ATENDIO_DE_PRUEBA, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
 import type { EstadoCarga } from '../tipos';
 import { aplicarSnapshotCargas, crearRepositorioCargas } from './cargas';
 import { crearRepositorioCatalogos } from './catalogos';
@@ -236,7 +236,7 @@ describe('movimientos.registrar (T-27 pieza 2)', () => {
         comentarios: null,
         lineas: [{ presentacionId: 'pre-1', cantidad: 3, cantidadPromocion: 0 }],
         regalos: [],
-        firma: FIRMA_DE_PRUEBA,
+        atendio: ATENDIO_DE_PRUEBA,
       }),
     ).toThrow('Jamaica 1 L: falta 1 pieza');
   });

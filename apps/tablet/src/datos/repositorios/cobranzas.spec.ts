@@ -1,4 +1,4 @@
-import { depsDePrueba, FIRMA_DE_PRUEBA, snapshotDePrueba } from '../pruebas-apoyo';
+import { depsDePrueba, ATENDIO_DE_PRUEBA, snapshotDePrueba } from '../pruebas-apoyo';
 import { leerReparto } from '../cobranzas-reglas';
 import { crearRepositorioCatalogos } from './catalogos';
 import {
@@ -154,7 +154,7 @@ describe('repositorio de cobranzas (T-20; sin folio desde T-21)', () => {
       factura: 'N/A',
       comentarios: null,
       lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
-      firma: FIRMA_DE_PRUEBA,
+      atendio: ATENDIO_DE_PRUEBA,
     });
     expect(v.folio).toBe('TJ260807AP01');
   });

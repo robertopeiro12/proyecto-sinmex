@@ -14,13 +14,28 @@ import type { SnapshotCatalogos } from './repositorios/catalogos';
 export const MOMENTO = '2026-08-07T15:00:00.000Z';
 
 /**
- * La firma de una venta de prueba (T-73): `ventas.registrar()` la exige (D1).
- * La ruta nunca se abre en las pruebas: solo se guarda y viaja en la cola.
+ * Quien atendio en una venta de prueba (rediseno pieza 2): `ventas.registrar()`
+ * lo exige; la firma dibujada ya no se pide.
  */
-export const FIRMA_DE_PRUEBA: { uri: string; nombre: string | null } = {
-  uri: 'file:///documentos/firmas/firma-prueba.jpg',
-  nombre: null,
-};
+export const ATENDIO_DE_PRUEBA = 'Doña Lupe';
+
+/**
+ * Convierte una venta ya grabada en una **venta vieja con firma** (T-73, antes
+ * del rediseno pieza 2): le pone `firma_local` y `firma_nombre` por SQL. Sirve
+ * para probar que la cola de firmas y el push siguen atendiendo a las ventas
+ * que aun tienen una imagen por subir.
+ */
+export function simularFirmaVieja(
+  deps: DepsRepositorio,
+  ventaId: string,
+  firma: { uri?: string; nombre?: string | null } = {},
+): void {
+  deps.bd.runSync('update venta set firma_local = $uri, firma_nombre = $nombre where id = $id', {
+    $uri: firma.uri ?? 'file:///documentos/firmas/firma-prueba.jpg',
+    $nombre: firma.nombre ?? null,
+    $id: ventaId,
+  });
+}
 
 /** Base en memoria, migrada al dia, con reloj y generador de ids deterministas. */
 export function depsDePrueba(momento: string = MOMENTO): DepsRepositorio {
@@ -37,7 +52,7 @@ export function depsDePrueba(momento: string = MOMENTO): DepsRepositorio {
 
 /**
  * Una venta grabada **directo** en SQLite, sin `ventas.registrar()` (que exige
- * firma, precios y existencia): para las pruebas que solo leen la tabla
+ * quien atendio, precios y existencia): para las pruebas que solo leen la tabla
  * `venta` (la ruta y las notas que trae el vendedor). Por omision, de `ven-1`
  * a `cli-1`, de hoy y de contado.
  */
@@ -51,13 +66,15 @@ export function insertarVentaDePrueba(
     clienteId?: string;
     vendedorId?: string;
     fecha?: string;
+    /** Rediseno pieza 2: lo que pago al recibir una venta a credito. */
+    abonoCentavos?: number | null;
   },
 ): void {
   deps.bd.runSync(
     `insert into venta (id, fecha, cliente_id, vendedor_id, sucursal_id, folio, num_nota,
-                        contado_credito, monto_total_centavos, grabada_en)
+                        contado_credito, monto_total_centavos, grabada_en, abono_centavos)
      values ($id, $fecha, $cliente_id, $vendedor_id, 'suc-tj', $folio, null,
-             $contado_credito, $monto, $grabada_en)`,
+             $contado_credito, $monto, $grabada_en, $abono_centavos)`,
     {
       $id: venta.id,
       $fecha: venta.fecha ?? deps.reloj.hoy(),
@@ -67,6 +84,7 @@ export function insertarVentaDePrueba(
       $contado_credito: venta.contadoCredito ?? 'contado',
       $monto: venta.montoCentavos,
       $grabada_en: deps.reloj.ahora(),
+      $abono_centavos: venta.abonoCentavos ?? null,
     },
   );
 }
