@@ -86,6 +86,12 @@ describe('validarGasto (D9)', () => {
     expect(r.gasto).toEqual({ campoEgresoId: 'ce-hielo', montoCentavos: 8000, comentario: null, fotoUri: null });
   });
 
+  it('un gasto con solo motivo y cantidad es válido', () => {
+    const r = validarGasto(entrada({ monto: '500.00', comentario: '', fotoUri: null }));
+    expect(r.faltantes).toEqual([]);
+    expect(r.gasto).toEqual({ campoEgresoId: 'ce-hielo', montoCentavos: 50000, comentario: null, fotoUri: null });
+  });
+
   it('recorta las observaciones y pasa la foto tal cual', () => {
     const r = validarGasto(entrada({ comentario: ' Bolsa de 5 kg ', fotoUri: 'file:///t.jpg' }));
     expect(r.gasto).toEqual({

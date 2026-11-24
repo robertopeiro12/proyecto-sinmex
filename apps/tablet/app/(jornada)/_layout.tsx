@@ -68,7 +68,6 @@ export default function LayoutJornada() {
       <Stack.Screen name="operacion/[clienteId]/merma" options={{ title: 'Merma' }} />
       <Stack.Screen name="prospectos" options={{ title: 'Prospectos', headerShown: false }} />
       <Stack.Screen name="gastos/index" options={{ title: 'Gastos', headerShown: false }} />
-      <Stack.Screen name="gastos/registrar" options={{ title: 'Registrar gasto' }} />
       <Stack.Screen name="merma/index" options={{ title: 'Merma y consumo', headerShown: false }} />
       <Stack.Screen name="merma/registrar" options={{ title: 'Merma y consumo' }} />
       <Stack.Screen name="inventario/index" options={{ title: 'Inventario', headerShown: false }} />

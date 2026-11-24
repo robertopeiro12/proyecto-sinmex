@@ -6,7 +6,7 @@ import {
   estadoSubida,
   pastillaAlta,
   entradasMenu,
-  filtrarParaAgregar,
+  clientesParaAgregar,
   motivoDeRechazo,
   primeraLineaDomicilio,
   resumenVisitado,
@@ -119,31 +119,39 @@ describe('urlMapa y urlTelefono (ficha del cliente)', () => {
   });
 });
 
-describe('filtrarParaAgregar ("Agregar a mi ruta")', () => {
-  const c = (id: string, nombre: string, extra: { tipo?: 'cliente' | 'prospecto'; activo?: 0 | 1 } = {}) => ({
+describe('clientesParaAgregar ("Agregar a mi ruta")', () => {
+  const c = (id: string, nombre: string, tipo: 'cliente' | 'prospecto' = 'cliente', activo: 0 | 1 = 1) => ({
     id,
     nombre,
-    tipo: extra.tipo ?? ('cliente' as const),
-    activo: extra.activo ?? (1 as const),
+    tipo,
+    activo,
   });
 
-  it('ofrece clientes activos que no estan en la ruta de hoy, buscando sin acentos ni mayusculas', () => {
-    const clientes = [
-      c('1', 'Abarrotes Doña Lupe'),
-      c('2', 'Tienda La Esquina'),
-      c('3', 'Abarrotes El Güero'),
-      c('4', 'Abarrotes Prospecto', { tipo: 'prospecto' }),
-      c('5', 'Abarrotes de baja', { activo: 0 }),
-    ];
-    expect(filtrarParaAgregar(clientes, new Set(['3']), 'abarrotes dona').map((x) => x.id)).toEqual([
-      '1',
+  it('agregar a ruta muestra a todos con su marca "En ruta"', () => {
+    const r = clientesParaAgregar(
+      [
+        c('1', 'Mini Súper Otay'),
+        c('2', 'Abarrotes La Esperanza'),
+        c('3', 'Prospecto X', 'prospecto'),
+        c('4', 'Baja', 'cliente', 0),
+      ],
+      new Set(['1']),
+      '',
+    );
+    expect(r.map((x) => [x.nombre, x.enRuta])).toEqual([
+      ['Abarrotes La Esperanza', false],
+      ['Mini Súper Otay', true],
     ]);
-    expect(filtrarParaAgregar(clientes, new Set(['3']), '').map((x) => x.id)).toEqual(['1', '2']);
+  });
+
+  it('busca sin acentos', () => {
+    expect(clientesParaAgregar([c('1', 'Mini Súper Otay')], new Set(), 'super').length).toBe(1);
+    expect(clientesParaAgregar([c('1', 'Abarrotes Doña Lupe')], new Set(), 'DONA').length).toBe(1);
   });
 
   it('corta en el limite', () => {
     const muchos = Array.from({ length: 80 }, (_, i) => c(String(i), `Cliente ${i}`));
-    expect(filtrarParaAgregar(muchos, new Set(), '')).toHaveLength(50);
+    expect(clientesParaAgregar(muchos, new Set(), '')).toHaveLength(50);
   });
 });
 

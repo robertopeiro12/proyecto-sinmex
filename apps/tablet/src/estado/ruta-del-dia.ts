@@ -128,20 +128,23 @@ function normalizar(texto: string): string {
 }
 
 /**
- * Los clientes que se pueden agregar a la ruta de hoy: activos, `tipo =
- * 'cliente'` (D7) y que no estan ya vivos en la ruta, filtrados por nombre.
+ * "Agregar a mi ruta" (rediseno pieza 1, maqueta 20): todos los clientes activos
+ * de la sucursal (`tipo = 'cliente'`, D7) en orden alfabetico, filtrados por
+ * nombre sin acentos, cada uno con `enRuta` (ya vivo en la ruta de hoy).
  */
-export function filtrarParaAgregar<T extends Pick<Cliente, 'id' | 'nombre' | 'tipo' | 'activo'>>(
+export function clientesParaAgregar<T extends Pick<Cliente, 'id' | 'nombre' | 'tipo' | 'activo'>>(
   clientes: readonly T[],
   enRuta: ReadonlySet<string>,
   busqueda: string,
   limite = 50,
-): T[] {
+): (T & { enRuta: boolean })[] {
   const q = normalizar(busqueda);
   return clientes
-    .filter((c) => c.tipo === 'cliente' && c.activo === 1 && !enRuta.has(c.id))
+    .filter((c) => c.tipo === 'cliente' && c.activo === 1)
     .filter((c) => q === '' || normalizar(c.nombre).includes(q))
-    .slice(0, limite);
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }))
+    .slice(0, limite)
+    .map((c) => ({ ...c, enRuta: enRuta.has(c.id) }));
 }
 
 /**
