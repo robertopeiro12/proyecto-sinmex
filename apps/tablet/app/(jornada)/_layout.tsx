@@ -48,7 +48,17 @@ export default function LayoutJornada() {
     <Stack screenOptions={cabecera}>
       {/* La ruta dibuja su propia cabecera: se desliza con el menu lateral (2026-10-18). */}
       <Stack.Screen name="index" options={{ title: 'Ruta del día', headerShown: false }} />
-      <Stack.Screen name="operacion/[clienteId]/index" options={{ title: 'Cliente' }} />
+      {/* Rediseño, pieza 1 (maqueta 7): la hoja del cliente sube sobre la Ruta y se arrastra a pantalla completa. */}
+      <Stack.Screen
+        name="operacion/[clienteId]/index"
+        options={{
+          title: 'Cliente',
+          presentation: 'formSheet',
+          sheetAllowedDetents: [0.6, 1],
+          sheetGrabberVisible: true,
+          headerShown: false,
+        }}
+      />
       <Stack.Screen name="operacion/[clienteId]/venta" options={{ title: 'Venta' }} />
       <Stack.Screen name="operacion/[clienteId]/cobranza" options={{ title: 'Cobranza / abono' }} />
       <Stack.Screen

@@ -1,11 +1,13 @@
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Image, Linking, Modal, Pressable, Text, View } from 'react-native';
 
 import { motivoBloqueoVenta, porAtender } from '@/datos/notas-asignadas-reglas';
 import type { SyncEstado } from '@/datos/tipos';
-import { estadoMenuJornada } from '@/estado/menu-jornada';
+import { TEXTO_CANDADO } from '@/estado/empezar-ruta';
 import { firmaPorSubir } from '@/estado/firma';
+import { accionesCliente } from '@/estado/hoja-cliente';
+import { estadoMenuJornada } from '@/estado/menu-jornada';
 import { pastillaMovimiento, resumenMovimiento } from '@/estado/movimiento';
 import { etiquetaCondicionPendiente, venderDesdeFicha } from '@/estado/notas-asignadas';
 import { useJawa } from '@/estado/proveedor-jawa';
@@ -15,8 +17,9 @@ import { pastillaVisita } from '@/estado/visita';
 import { fotoParaFicha, uriFotoCliente } from '@/fotos/descarga';
 import { rutaCacheFotoCliente } from '@/fotos/expo';
 import { Boton } from '@/ui/boton';
-import { BotonMenu } from '@/ui/boton-menu';
 import { Cifra, pesos } from '@/ui/cifra';
+import { Icono } from '@/ui/icono';
+import type { NombreIcono } from '@/ui/iconos';
 import { formatearHora } from '@/ui/momento';
 import { Pantalla, Pastilla, Tarjeta, type Estado } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
@@ -46,15 +49,87 @@ function abrir(url: string | null, queAbre: string) {
 }
 
 /**
- * Ficha del cliente (T-37, D16): sus datos tocables, las tres acciones del dia
- * y lo que debe y lo que ya paso hoy.
+ * Un boton de la hoja (maqueta 7): icono, nombre y, debajo, su nota corta.
+ * `principal` lo pinta destacado y a lo ancho (Cobrar con asignada por atender).
+ * Apagado se atenua como `Boton` inactivo (0.35) y no navega.
+ */
+function BotonAccion({
+  titulo,
+  icono,
+  nota,
+  destino,
+  habilitado,
+  principal = false,
+}: {
+  titulo: string;
+  icono: NombreIcono;
+  nota: string | null;
+  destino: Href;
+  habilitado: boolean;
+  principal?: boolean;
+}) {
+  const { dispositivo, t } = useTema();
+  return (
+    <Pressable
+      onPress={() => {
+        if (habilitado) router.push(destino);
+      }}
+      disabled={!habilitado}
+      accessibilityRole="button"
+      accessibilityLabel={nota ? `${titulo}. ${nota}` : titulo}
+      accessibilityState={{ disabled: !habilitado }}
+      style={({ pressed }) => [
+        {
+          flexGrow: 1,
+          flexBasis: principal ? '100%' : '45%',
+          minHeight: Math.max(dispositivo.tactil + espacio.lg, 80),
+          justifyContent: 'center',
+          gap: espacio.xs,
+          padding: espacio.md,
+          borderRadius: radio.medio,
+          borderWidth: grosor.fuerte,
+          borderColor: principal ? colores.primario : colores.bordeFuerte,
+          backgroundColor: principal ? colores.primarioTenue : colores.superficie,
+        },
+        pressed && habilitado && { transform: [{ translateY: grosor.fuerte }], opacity: 0.9 },
+        !habilitado && { opacity: 0.35 },
+      ]}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: espacio.sm }}>
+        <Icono nombre={icono} tamano={24} color={principal ? colores.primario : colores.tinta} />
+        <Text
+          style={{
+            fontFamily: fuente.tituloMedio,
+            fontSize: t(tipo.subtitulo),
+            color: principal ? colores.primario : colores.tinta,
+          }}
+        >
+          {titulo}
+        </Text>
+      </View>
+      {nota ? (
+        <Text style={{ fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.menor), color: colores.tintaSuave }}>
+          {nota}
+        </Text>
+      ) : null}
+    </Pressable>
+  );
+}
+
+/**
+ * Hoja del cliente (rediseño, pieza 1; spec §6, maqueta 7). Sube sobre la Ruta
+ * (`formSheet` en `_layout.tsx`): nombre, encargado y su telefono, "Ir" (Maps)
+ * y los botones Cobrar / Vender / Visita / Merma. El recado de la oficina y las
+ * notas asignadas por atender se quedan a la vista; lo demas que tenia la ficha
+ * (T-37, D16) va plegado en "Ver más", con la misma logica.
  */
 export default function FichaCliente() {
   const { clienteId } = useLocalSearchParams<{ clienteId: string }>();
   const { datos, jornada, versionCatalogos } = useJawa();
-  const { ultimaSincronizacion, descargarFotoCliente } = useSesion();
+  const { vendedor, ultimaSincronizacion, descargarFotoCliente } = useSesion();
   const { estilos, t } = useTema();
   const [verFoto, setVerFoto] = useState(false);
+  const [verMas, setVerMas] = useState(false);
   const menu = estadoMenuJornada(jornada);
 
   // Se relee al volver de vender o cobrar (`useFocusEffect`): grabar no mueve
@@ -87,6 +162,15 @@ export default function FichaCliente() {
       recado: datos.rutas.recadoDeHoy(clienteId),
     };
   }, [datos, clienteId, vueltas, ultimaSincronizacion, versionCatalogos]);
+
+  // El mismo candado de la Ruta (sin ruta empezada o sin inventario aceptado):
+  // la Ruta ya no abre al cliente, pero una ruta profunda si podria.
+  const candado = useMemo(() => {
+    void vueltas;
+    void versionCatalogos;
+    void ultimaSincronizacion;
+    return vendedor ? datos.cargas.candadoDeHoy(vendedor.id, jornada) : null;
+  }, [datos, vendedor, jornada, vueltas, versionCatalogos, ultimaSincronizacion]);
 
   const cliente = datos.catalogos.obtenerCliente(clienteId);
 
@@ -149,8 +233,11 @@ export default function FichaCliente() {
   // Notas asignadas (spec 2026-11-13): todo sale de una sola lectura.
   const asignadasConSaldo = hoy.asignadas.filter((n) => n.saldoCentavos > 0);
   const asignadasPorAtender = porAtender(hoy.asignadas);
-  const vender = venderDesdeFicha(hoy.asignadas);
   const motivoVenta = motivoBloqueoVenta(hoy.asignadas);
+  // Spec §6: Vender se apaga con la condicion sin cumplir (`accionesCliente`);
+  // el destino sigue siendo el de la ficha vieja (una asignada sin condicion
+  // pasa primero por la pantalla de la nota).
+  const vender = venderDesdeFicha(hoy.asignadas);
   const destinoVender =
     vender.destino.tipo === 'notas'
       ? ({
@@ -158,6 +245,40 @@ export default function FichaCliente() {
           params: { clienteId, siguiente: vender.destino.siguiente },
         } as const)
       : ({ pathname: '/(jornada)/operacion/[clienteId]/venta', params } as const);
+
+  const acciones = accionesCliente({
+    asignadas: hoy.asignadas,
+    notasConSaldo: hoy.notas.length,
+    esProspecto,
+    operacionesHabilitadas: menu.operacionesHabilitadas,
+    candado,
+  });
+  // Con candado o con el dia cerrado todo se apaga; Cobrar y "Continuar sin
+  // cobrar" siguen la misma regla que Visita.
+  const operable = acciones.visita.habilitado;
+  const avisoCandado =
+    candado === null
+      ? null
+      : candado.tipo === 'empezar'
+        ? 'Empieza tu ruta para atender clientes'
+        : TEXTO_CANDADO[candado.tipo].titulo;
+  const destinoCobrar: Href =
+    acciones.cobrar?.principal && asignadasPorAtender[0]
+      ? {
+          pathname: '/(jornada)/operacion/[clienteId]/cobranza',
+          params: { clienteId, notaId: asignadasPorAtender[0].ventaNotaId },
+        }
+      : { pathname: '/(jornada)/operacion/[clienteId]/cobranza', params };
+  const botonCobrar = acciones.cobrar?.visible ? (
+    <BotonAccion
+      titulo="Cobrar"
+      icono="cobrar"
+      nota={acciones.cobrar.nota}
+      destino={destinoCobrar}
+      habilitado={operable}
+      principal={acciones.cobrar.principal}
+    />
+  ) : null;
 
   // Lo mas grave manda: un error sobre "falta subir", y "falta subir" sobre "todo subido".
   const estadoVentas: Estado = hoy.ventas.some((v) => v.sync_estado === 'error')
@@ -207,33 +328,96 @@ export default function FichaCliente() {
   );
 
   return (
-    <Pantalla
-      titulo={cliente.nombre}
-      subtitulo={`${esProspecto ? 'Prospecto · ' : ''}${
-        cliente.encargado ? `Atiende ${cliente.encargado}` : 'Sin encargado registrado'
-      }`}
-    >
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: espacio.sm }}>
-        {datoTocable(
-          'Teléfono',
-          cliente.telefono || 'sin teléfono',
-          telefono ? () => abrir(telefono, 'el marcador') : null,
-        )}
-        {datoTocable(
-          'Dirección',
-          cliente.domicilio ?? (mapa ? 'Ver ubicación' : 'sin domicilio'),
-          mapa ? () => abrir(mapa, 'Maps') : null,
-        )}
-        {foto ? datoTocable('Foto del lugar', 'Ver foto', () => setVerFoto(true)) : null}
+    <Pantalla titulo={cliente.nombre} subtitulo={esProspecto ? 'Prospecto' : undefined}>
+      {/* Maqueta 7: encargado con su telefono (toca → marcador) y "Ir" (Maps). */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: espacio.md, marginBottom: espacio.md }}>
+        <View style={{ flex: 1, gap: espacio.xs }}>
+          <Text style={estilos.etiqueta}>Encargado</Text>
+          <Text
+            style={{ fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.destacado), color: colores.tinta }}
+            numberOfLines={2}
+          >
+            {cliente.encargado || 'Sin encargado registrado'}
+          </Text>
+          {telefono ? (
+            <Pressable
+              onPress={() => abrir(telefono, 'el marcador')}
+              accessibilityRole="link"
+              accessibilityLabel={`Llamar al ${cliente.telefono}`}
+              hitSlop={8}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: espacio.xs }}
+            >
+              <Icono nombre="telefono" tamano={18} color={colores.primario} />
+              <Text style={{ fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.cuerpo), color: colores.primario }}>
+                {cliente.telefono}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text style={estilos.textoSuave}>Sin teléfono</Text>
+          )}
+        </View>
+        <Boton
+          etiqueta="Ir"
+          icono="mapa"
+          tono="neutra"
+          ancho="ajustado"
+          deshabilitado={mapa === null}
+          onPress={() => abrir(mapa, 'Maps')}
+        />
       </View>
 
+      {/* Es un aviso, no un detalle: se queda arriba de los botones. */}
       {hoy.recado ? (
         <Tarjeta estado="accion" etiqueta="Mensaje de la oficina">
           <Text style={estilos.textoTarjeta}>{hoy.recado}</Text>
         </Tarjeta>
       ) : null}
 
-      {/* Spec 2026-11-13 §6: arriba, antes de los botones; la nota sale primero cada vez. */}
+      {avisoCandado ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: espacio.sm, marginBottom: espacio.sm }}>
+          <Icono nombre="candado" tamano={18} color={colores.aviso} />
+          <Text style={{ fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.cuerpo), color: colores.aviso }}>
+            {avisoCandado}
+          </Text>
+        </View>
+      ) : null}
+
+      {menu.avisoDiaCerrado ? (
+        <Tarjeta estado="listo" etiqueta="Día cerrado">
+          <Text style={estilos.textoTarjeta}>{menu.avisoDiaCerrado}</Text>
+        </Tarjeta>
+      ) : null}
+
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: espacio.sm, marginBottom: espacio.md }}>
+        {acciones.cobrar?.principal ? botonCobrar : null}
+        <BotonAccion
+          titulo="Vender"
+          icono="vender"
+          nota={acciones.vender.nota}
+          destino={destinoVender}
+          habilitado={acciones.vender.habilitado}
+        />
+        {acciones.cobrar?.principal ? null : botonCobrar}
+        <BotonAccion
+          titulo="Visita"
+          icono="visita"
+          nota="sin venta"
+          destino={{ pathname: '/(jornada)/operacion/[clienteId]/visita-sin-venta', params }}
+          habilitado={acciones.visita.habilitado}
+        />
+        {/* T-27 pieza 2 (D2): la merma del cliente. Tambien al prospecto: pudo
+            recibir producto dañado en su regalo de bienvenida. */}
+        <BotonAccion
+          titulo="Merma"
+          icono="merma"
+          nota={null}
+          destino={{ pathname: '/(jornada)/operacion/[clienteId]/merma', params }}
+          habilitado={acciones.merma.habilitado}
+        />
+      </View>
+
+      {/* Spec 2026-11-13 §6 (pregunta abierta 3 sin resolver): la tarjeta y
+          "Continuar sin cobrar" se quedan a la vista, debajo de los botones. */}
       {asignadasConSaldo.length > 0 ? (
         <Tarjeta
           estado={asignadasPorAtender.length > 0 ? 'pendiente' : 'neutro'}
@@ -262,19 +446,9 @@ export default function FichaCliente() {
           {asignadasPorAtender.length > 0 ? (
             <View style={estilos.filaAcciones}>
               <Boton
-                etiqueta="Cobrar"
-                deshabilitado={!menu.operacionesHabilitadas}
-                onPress={() =>
-                  router.push({
-                    pathname: '/(jornada)/operacion/[clienteId]/cobranza',
-                    params: { clienteId, notaId: asignadasPorAtender[0]!.ventaNotaId },
-                  })
-                }
-              />
-              <Boton
                 etiqueta="Continuar sin cobrar"
                 tono="neutra"
-                deshabilitado={!menu.operacionesHabilitadas}
+                deshabilitado={!operable}
                 onPress={() =>
                   // Con el comentario ya abierto: un toque basta.
                   router.push({
@@ -288,177 +462,163 @@ export default function FichaCliente() {
         </Tarjeta>
       ) : null}
 
-      <View style={[estilos.rejilla, { marginTop: espacio.md }]}>
-        <BotonMenu
-          titulo="Vender"
-          descripcion={
-            vender.bloqueo ??
-            (esProspecto
-              ? 'Solo regalo de bienvenida: el prospecto no tiene lista de precios'
-              : 'Capturar cantidades; el total se calcula con el precio del cliente')
-          }
-          destino={destinoVender}
-          deshabilitado={!menu.operacionesHabilitadas || vender.bloqueo !== null}
-          destacada
-        />
-        {/* T-75 (D6): un prospecto no tiene notas ni inventario que ajustar; la conversion es del portal. */}
-        {esProspecto ? null : (
-          <BotonMenu
-            titulo="Cobrar"
-            descripcion="Cobrar o abonar una nota pendiente"
-            destino={{ pathname: '/(jornada)/operacion/[clienteId]/cobranza', params }}
-            deshabilitado={!menu.operacionesHabilitadas}
-          />
-        )}
-        <BotonMenu
-          titulo="Visita"
-          descripcion="Visita sin venta: por qué no compró, con hora y ubicación"
-          destino={{ pathname: '/(jornada)/operacion/[clienteId]/visita-sin-venta', params }}
-          deshabilitado={!menu.operacionesHabilitadas}
-        />
-      </View>
+      <Pressable
+        onPress={() => setVerMas((v) => !v)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: verMas }}
+        accessibilityLabel={verMas ? 'Ver menos' : 'Ver más'}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: espacio.xs,
+          minHeight: 48,
+          marginBottom: espacio.md,
+        }}
+      >
+        <Text style={{ fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.cuerpo), color: colores.primario }}>
+          {verMas ? 'Ver menos' : 'Ver más'}
+        </Text>
+      </Pressable>
 
-      {/* T-27 pieza 2 (D2): la merma del cliente. Tambien al prospecto: pudo
-          recibir producto dañado en su regalo de bienvenida (Review Focus 4). */}
-      <View style={[estilos.rejilla, { marginTop: espacio.sm }]}>
-        <BotonMenu
-          titulo="Merma"
-          descripcion="Producto dañado que te devuelve y lo que le repones"
-          destino={{ pathname: '/(jornada)/operacion/[clienteId]/merma', params }}
-          deshabilitado={!menu.operacionesHabilitadas}
-        />
-      </View>
+      {verMas ? (
+        <View>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: espacio.sm, marginBottom: espacio.md }}>
+            {datoTocable(
+              'Dirección',
+              cliente.domicilio ?? (mapa ? 'Ver ubicación' : 'sin domicilio'),
+              mapa ? () => abrir(mapa, 'Maps') : null,
+            )}
+            {foto ? datoTocable('Foto del lugar', 'Ver foto', () => setVerFoto(true)) : null}
+          </View>
 
-      {menu.avisoDiaCerrado ? (
-        <Tarjeta estado="listo" etiqueta="Día cerrado">
-          <Text style={estilos.textoTarjeta}>{menu.avisoDiaCerrado}</Text>
-        </Tarjeta>
-      ) : null}
+          {/* T-20 (D5): se crea al cobrar de mas; usarlo es del portal. */}
+          {cliente.saldo_favor_centavos > 0 ? (
+            <Tarjeta estado="listo" etiqueta="Saldo a favor">
+              <Cifra valor={pesos(cliente.saldo_favor_centavos)} tamano="destacado" tono="exito" />
+              <Text style={estilos.textoSuave}>Lo aplica la oficina desde el portal.</Text>
+            </Tarjeta>
+          ) : null}
 
-      {/* T-20 (D5): se crea al cobrar de mas; usarlo es del portal. */}
-      {cliente.saldo_favor_centavos > 0 ? (
-        <Tarjeta estado="listo" etiqueta="Saldo a favor">
-          <Cifra valor={pesos(cliente.saldo_favor_centavos)} tamano="destacado" tono="exito" />
-          <Text style={estilos.textoSuave}>Lo aplica la oficina desde el portal.</Text>
-        </Tarjeta>
-      ) : null}
+          {/* T-74 (D11): lo que le toca hoy, en lenguaje llano; la venta lo calcula sola. */}
+          <Tarjeta estado={hoy.promociones.length > 0 ? 'listo' : 'neutro'} etiqueta="Promociones">
+            {hoy.promociones.length === 0 ? (
+              <Text style={estilos.textoSuave}>Sin promoción.</Text>
+            ) : (
+              hoy.promociones.map((p) => (
+                <Text key={p.id} style={estilos.textoTarjeta}>
+                  {p.texto}
+                  {p.audiencia === 'prospecto' ? ' (primera venta)' : ''}
+                </Text>
+              ))
+            )}
+            {alta !== null ? (
+              <>
+                <Pastilla texto={alta.texto} estado={alta.estado} />
+                {alta.detalle ? <Text style={estilos.textoSuave}>{alta.detalle}</Text> : null}
+              </>
+            ) : null}
+          </Tarjeta>
 
-      {/* T-74 (D11): lo que le toca hoy, en lenguaje llano; la venta lo calcula sola. */}
-      <Tarjeta estado={hoy.promociones.length > 0 ? 'listo' : 'neutro'} etiqueta="Promociones">
-        {hoy.promociones.length === 0 ? (
-          <Text style={estilos.textoSuave}>Sin promoción.</Text>
-        ) : (
-          hoy.promociones.map((p) => (
-            <Text key={p.id} style={estilos.textoTarjeta}>
-              {p.texto}
-              {p.audiencia === 'prospecto' ? ' (primera venta)' : ''}
-            </Text>
-          ))
-        )}
-        {alta !== null ? (
-          <>
-            <Pastilla texto={alta.texto} estado={alta.estado} />
-            {alta.detalle ? <Text style={estilos.textoSuave}>{alta.detalle}</Text> : null}
-          </>
-        ) : null}
-      </Tarjeta>
-
-      {esProspecto ? null : (
-        <Tarjeta estado={hoy.notas.length > 0 ? 'pendiente' : 'neutro'} etiqueta="Notas pendientes">
-          {hoy.notas.length === 0 ? (
-            <Text style={estilos.textoSuave}>No debe nada.</Text>
-          ) : (
-            hoy.notas.map((n) => (
-              <Text key={n.id} style={estilos.textoTarjeta}>
-                <Cifra valor={n.folio} /> · {n.fecha} · debe <Cifra valor={pesos(n.saldo_centavos)} />
-              </Text>
-            ))
+          {esProspecto ? null : (
+            <Tarjeta estado={hoy.notas.length > 0 ? 'pendiente' : 'neutro'} etiqueta="Notas pendientes">
+              {hoy.notas.length === 0 ? (
+                <Text style={estilos.textoSuave}>No debe nada.</Text>
+              ) : (
+                hoy.notas.map((n) => (
+                  <Text key={n.id} style={estilos.textoTarjeta}>
+                    <Cifra valor={n.folio} /> · {n.fecha} · debe <Cifra valor={pesos(n.saldo_centavos)} />
+                  </Text>
+                ))
+              )}
+            </Tarjeta>
           )}
-        </Tarjeta>
-      )}
 
-      <Tarjeta estado={estadoVentas} etiqueta="Ventas de hoy">
-        {hoy.ventas.length === 0 ? (
-          <Text style={estilos.textoSuave}>Todavía no le has vendido hoy.</Text>
-        ) : (
-          hoy.ventas.map((v) => (
-            <View key={v.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
-              <Text style={estilos.textoTarjeta}>
-                <Cifra valor={v.folio} /> · <Cifra valor={pesos(v.monto_total_centavos)} /> ·{' '}
-                {v.contado_credito === 'contado' ? 'contado' : 'crédito'}
-              </Text>
-              <Pastilla texto={ETIQUETA_SYNC[v.sync_estado]} estado={ESTADO_SYNC[v.sync_estado]} />
-              {/* T-73: la firma sube aparte, cuando la venta ya esta arriba. */}
-              {firmaPorSubir(v) ? <Pastilla texto="Firma por subir" estado="pendiente" /> : null}
-              {v.sync_estado === 'error' && v.sync_error ? (
-                <Text style={estilos.error}>{v.sync_error}</Text>
-              ) : null}
-            </View>
-          ))
-        )}
-      </Tarjeta>
+          <Tarjeta estado={estadoVentas} etiqueta="Ventas de hoy">
+            {hoy.ventas.length === 0 ? (
+              <Text style={estilos.textoSuave}>Todavía no le has vendido hoy.</Text>
+            ) : (
+              hoy.ventas.map((v) => (
+                <View key={v.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
+                  <Text style={estilos.textoTarjeta}>
+                    <Cifra valor={v.folio} /> · <Cifra valor={pesos(v.monto_total_centavos)} /> ·{' '}
+                    {v.contado_credito === 'contado' ? 'contado' : 'crédito'}
+                  </Text>
+                  <Pastilla texto={ETIQUETA_SYNC[v.sync_estado]} estado={ESTADO_SYNC[v.sync_estado]} />
+                  {/* T-73: la firma sube aparte, cuando la venta ya esta arriba. */}
+                  {firmaPorSubir(v) ? <Pastilla texto="Firma por subir" estado="pendiente" /> : null}
+                  {v.sync_estado === 'error' && v.sync_error ? (
+                    <Text style={estilos.error}>{v.sync_error}</Text>
+                  ) : null}
+                </View>
+              ))
+            )}
+          </Tarjeta>
 
-      {/* T-39 (D8): cada visita con su motivo, hora y subida. La rechazada trae su motivo. */}
-      <Tarjeta estado={estadoVisitas} etiqueta="Visitas de hoy">
-        {hoy.visitas.length === 0 ? (
-          <Text style={estilos.textoSuave}>Sin visitas registradas hoy.</Text>
-        ) : (
-          hoy.visitas.map((v) => {
-            const p = pastillaVisita(v);
-            return (
-              <View key={v.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
-                <Text style={estilos.textoTarjeta}>
-                  {v.motivo_nombre} · <Cifra valor={formatearHora(v.visitada_en)} />
-                </Text>
-                <Pastilla texto={p.texto} estado={p.estado} />
-                {p.detalle ? <Text style={estilos.error}>{p.detalle}</Text> : null}
-              </View>
-            );
-          })
-        )}
-      </Tarjeta>
+          {/* T-39 (D8): cada visita con su motivo, hora y subida. La rechazada trae su motivo. */}
+          <Tarjeta estado={estadoVisitas} etiqueta="Visitas de hoy">
+            {hoy.visitas.length === 0 ? (
+              <Text style={estilos.textoSuave}>Sin visitas registradas hoy.</Text>
+            ) : (
+              hoy.visitas.map((v) => {
+                const p = pastillaVisita(v);
+                return (
+                  <View key={v.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
+                    <Text style={estilos.textoTarjeta}>
+                      {v.motivo_nombre} · <Cifra valor={formatearHora(v.visitada_en)} />
+                    </Text>
+                    <Pastilla texto={p.texto} estado={p.estado} />
+                    {p.detalle ? <Text style={estilos.error}>{p.detalle}</Text> : null}
+                  </View>
+                );
+              })
+            )}
+          </Tarjeta>
 
-      {/* T-27 pieza 2: la merma con este cliente, con su subida. No se edita ni se borra (D6). */}
-      <Tarjeta estado={estadoMovimientos} etiqueta="Movimientos de hoy">
-        {hoy.movimientos.length === 0 ? (
-          <Text style={estilos.textoSuave}>Sin merma registrada hoy.</Text>
-        ) : (
-          hoy.movimientos.map((m) => {
-            const p = pastillaMovimiento(m);
-            return (
-              <View key={m.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
-                <Text style={estilos.textoTarjeta}>
-                  Merma · <Cifra valor={formatearHora(m.registrado_en)} />
-                </Text>
-                <Text style={estilos.textoSuave}>{resumenMovimiento(m)}</Text>
-                {m.comentario ? <Text style={estilos.textoSuave}>{m.comentario}</Text> : null}
-                <Pastilla texto={p.texto} estado={p.estado} />
-                {p.detalle ? <Text style={estilos.error}>{p.detalle}</Text> : null}
-              </View>
-            );
-          })
-        )}
-      </Tarjeta>
+          {/* T-27 pieza 2: la merma con este cliente, con su subida. No se edita ni se borra (D6). */}
+          <Tarjeta estado={estadoMovimientos} etiqueta="Movimientos de hoy">
+            {hoy.movimientos.length === 0 ? (
+              <Text style={estilos.textoSuave}>Sin merma registrada hoy.</Text>
+            ) : (
+              hoy.movimientos.map((m) => {
+                const p = pastillaMovimiento(m);
+                return (
+                  <View key={m.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
+                    <Text style={estilos.textoTarjeta}>
+                      Merma · <Cifra valor={formatearHora(m.registrado_en)} />
+                    </Text>
+                    <Text style={estilos.textoSuave}>{resumenMovimiento(m)}</Text>
+                    {m.comentario ? <Text style={estilos.textoSuave}>{m.comentario}</Text> : null}
+                    <Pastilla texto={p.texto} estado={p.estado} />
+                    {p.detalle ? <Text style={estilos.error}>{p.detalle}</Text> : null}
+                  </View>
+                );
+              })
+            )}
+          </Tarjeta>
 
-      {esProspecto ? null : (
-        <Tarjeta etiqueta="Cobros de hoy">
-          {hoy.cobros.length === 0 ? (
-            <Text style={estilos.textoSuave}>Todavía no le has cobrado hoy.</Text>
-          ) : (
-            hoy.cobros.map((c) => (
-              <View key={c.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
-                <Text style={estilos.textoTarjeta}>
-                  <Cifra valor={pesos(c.monto_centavos)} /> · {c.metodo_pago}
-                </Text>
-                <Pastilla texto={ETIQUETA_SYNC[c.sync_estado]} estado={ESTADO_SYNC[c.sync_estado]} />
-                {c.sync_estado === 'error' && c.sync_error ? (
-                  <Text style={estilos.error}>{c.sync_error}</Text>
-                ) : null}
-              </View>
-            ))
+          {esProspecto ? null : (
+            <Tarjeta etiqueta="Cobros de hoy">
+              {hoy.cobros.length === 0 ? (
+                <Text style={estilos.textoSuave}>Todavía no le has cobrado hoy.</Text>
+              ) : (
+                hoy.cobros.map((c) => (
+                  <View key={c.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
+                    <Text style={estilos.textoTarjeta}>
+                      <Cifra valor={pesos(c.monto_centavos)} /> · {c.metodo_pago}
+                    </Text>
+                    <Pastilla texto={ETIQUETA_SYNC[c.sync_estado]} estado={ESTADO_SYNC[c.sync_estado]} />
+                    {c.sync_estado === 'error' && c.sync_error ? (
+                      <Text style={estilos.error}>{c.sync_error}</Text>
+                    ) : null}
+                  </View>
+                ))
+              )}
+            </Tarjeta>
           )}
-        </Tarjeta>
-      )}
+
+        </View>
+      ) : null}
 
       {foto ? (
         <Modal visible={verFoto} transparent animationType="fade" onRequestClose={() => setVerFoto(false)}>
