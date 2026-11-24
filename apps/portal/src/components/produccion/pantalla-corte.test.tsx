@@ -65,6 +65,7 @@ const fila = (
   estado: "sin_corte",
   sinCarga: false,
   piezasFaltantes: null,
+  mermaFaltante: null,
   hechoEn: null,
   ...m,
 });
@@ -85,10 +86,18 @@ const corteVacio: CorteVendedor = {
     cargadas: 0,
     vendidas: 0,
     regaladas: 0,
+    mermaEntregada: 0,
+    mermaRecibida: 0,
+    mermaAlmacen: 0,
+    consumo: 0,
+    cambiosEntregados: 0,
+    cambiosRecibidos: 0,
     deberiaRegresar: 0,
+    mermaTeorica: 0,
     buenas: 0,
     merma: 0,
     faltante: null,
+    faltanteMerma: null,
   },
   hecho: null,
 };
@@ -126,7 +135,14 @@ describe("PantallaCorte (lista del día)", () => {
         }),
         fila("v3", "Cata Lara", "TJ", {
           estado: "con_faltante",
-          piezasFaltantes: 4,
+          piezasFaltantes: 3,
+          mermaFaltante: 1,
+          hechoEn: "2026-11-12T20:00:00Z",
+        }),
+        fila("v5", "Eli Mora", "TJ", {
+          estado: "con_faltante",
+          piezasFaltantes: 0,
+          mermaFaltante: 2,
           hechoEn: "2026-11-12T20:00:00Z",
         }),
         fila("v4", "Dani Soto", "TJ", { sinCarga: true, piezasCargadas: 0 }),
@@ -172,10 +188,11 @@ describe("PantallaCorte (lista del día)", () => {
     expect(
       renglon("Beto Ruiz").getByRole("button", { name: "Ver corte" }),
     ).toBeInTheDocument();
-    expect(renglon("Cata Lara").getByText("Faltan 4")).toHaveAttribute(
+    expect(renglon("Cata Lara").getByText("Faltan 3 · 1 de merma")).toHaveAttribute(
       "data-tono",
       "error",
     );
+    expect(renglon("Eli Mora").getByText("Faltan 2 de merma")).toBeInTheDocument();
     expect(renglon("Dani Soto").getByText("Sin carga")).toBeInTheDocument();
   });
 

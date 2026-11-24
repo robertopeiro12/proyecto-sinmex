@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
 import { Campo, Entrada, Lista } from "@/components/ui/campo";
@@ -10,11 +10,14 @@ import {
   Pantalla,
 } from "@/components/ui/encabezado-pantalla";
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
+import { Ayuda } from "@/components/ui/ayuda";
 import { Etiqueta } from "@/components/ui/etiqueta";
 import {
   CajaTabla,
   Fila,
+  FilaGrupo,
   FilaTotal,
+  FilaVacia,
   Tabla,
   Td,
   Th,
@@ -38,9 +41,7 @@ import {
 import { formatearDiaLargo } from "@/lib/formato";
 import { listarProductos, type Producto } from "@/lib/productos";
 
-const COLUMNAS = 8;
-const LEYENDA =
-  "Debería regresar = cargadas − vendidas − regaladas. La merma, los cambios y el consumo de la tablet se restarán cuando la app los registre.";
+const COLUMNAS = 7;
 
 /**
  * El corte de un vendedor y un día (pantalla completa, como editar una venta). Los campos
@@ -100,7 +101,7 @@ export function CorteVendedor({
   const estado = etiquetaEstadoCorte(
     corte
       ? estadoDeCorte(corte)
-      : { estado: "sin_corte", piezasFaltantes: null },
+      : { estado: "sin_corte", piezasFaltantes: null, mermaFaltante: null },
   );
 
   function editar(id: string, campo: "buenas" | "merma", valor: string) {
@@ -117,7 +118,7 @@ export function CorteVendedor({
     if (!elegida) return;
     setAgregadas((prev) => [
       ...prev,
-      lineaAgregada(elegida.id, elegida.nombre),
+      lineaAgregada(elegida.id, elegida.producto, elegida.volumen),
     ]);
     setPorAgregar("");
   }
@@ -171,7 +172,7 @@ export function CorteVendedor({
     <Pantalla key="corte">
       <EncabezadoPantalla
         titulo={`Corte · ${vendedor.nombre}`}
-        descripcion={`${formatearDiaLargo(fecha)}. Cuenta lo que regresó y anota las buenas y la merma de cada presentación.`}
+        descripcion={`${formatearDiaLargo(fecha)}. Cuenta lo que regresó y anota las piezas buenas y la merma de cada producto.`}
         acciones={
           <Button
             type="button"
@@ -201,106 +202,144 @@ export function CorteVendedor({
             >
               <colgroup>
                 <col />
-                <col className="w-24" />
-                <col className="w-24" />
-                <col className="w-24" />
-                <col className="w-24" />
-                <col className="w-28" />
-                <col className="w-28" />
-                <col className="w-28" />
+                {[1, 2, 3, 4, 5, 6].map((n) => (
+                  <col key={n} className="w-28" />
+                ))}
               </colgroup>
               <thead>
                 <tr>
-                  <Th>Presentación</Th>
-                  <Th alinear="derecha">Cargadas</Th>
-                  <Th alinear="derecha">Vendidas</Th>
-                  <Th alinear="derecha">Regaladas</Th>
-                  <Th alinear="derecha" className="whitespace-normal">
-                    Debería regresar
+                  <Th rowSpan={2} className="align-bottom">
+                    Producto
                   </Th>
-                  <Th alinear="derecha">Buenas</Th>
-                  <Th alinear="derecha">Merma</Th>
-                  <Th alinear="derecha">Faltante</Th>
+                  <Th colSpan={3} alinear="centro">
+                    Producto terminado
+                  </Th>
+                  <Th colSpan={3} alinear="centro">
+                    Merma
+                  </Th>
+                </tr>
+                <tr>
+                  <Th alinear="derecha" className="top-[37px] whitespace-normal">
+                    Piezas teóricas por regresar
+                    <Ayuda
+                      tema="Piezas teóricas por regresar"
+                      texto="Cargadas − vendidas − promoción − merma entregada al cliente − merma de almacén − consumo − cambios entregados + cambios recibidos."
+                    />
+                  </Th>
+                  <Th alinear="derecha" className="top-[37px] whitespace-normal">
+                    Piezas reales retornadas
+                  </Th>
+                  <Th alinear="derecha" className="top-[37px]">
+                    Resultado
+                  </Th>
+                  <Th alinear="derecha" className="top-[37px] whitespace-normal">
+                    Merma teórica por regresar
+                    <Ayuda
+                      tema="Merma teórica por regresar"
+                      texto="Merma recibida del cliente + merma de almacén."
+                    />
+                  </Th>
+                  <Th alinear="derecha" className="top-[37px] whitespace-normal">
+                    Merma real validada
+                  </Th>
+                  <Th alinear="derecha" className="top-[37px]">
+                    Resultado
+                  </Th>
                 </tr>
               </thead>
               <tbody>
                 {vista.filas.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={COLUMNAS}
-                      className="px-3 py-6 text-center text-muted-foreground"
-                    >
-                      No hubo carga ni venta ese día. Si regresó algo, agrega la
-                      presentación.
-                    </td>
-                  </tr>
+                  <FilaVacia columnas={COLUMNAS}>
+                    No hubo carga ni venta ese día. Si regresó algo, agrega la
+                    presentación.
+                  </FilaVacia>
                 )}
-                {vista.filas.map((f) => {
-                  const l = f.linea;
-                  return (
-                    <Fila key={l.presentacionId} className="align-middle">
-                      <Td>
-                        <span className="block truncate">{l.nombre}</span>
-                        {l.deberiaRegresar < 0 && (
-                          <span className="block text-xs font-medium text-warning">
-                            Vendió más de lo cargado
-                          </span>
-                        )}
-                      </Td>
-                      <Td alinear="derecha">{l.cargadas}</Td>
-                      <Td alinear="derecha">{l.vendidas}</Td>
-                      <Td alinear="derecha">{l.regaladas}</Td>
-                      <Td alinear="derecha" className="font-semibold">
-                        {l.deberiaRegresar}
-                      </Td>
+                {vista.grupos.map((g) => (
+                  <Fragment key={g.tamano}>
+                    <FilaGrupo columnas={COLUMNAS}>{g.tamano}</FilaGrupo>
+                    {g.filas.map((f) => {
+                      const l = f.linea;
+                      return (
+                        <Fila key={l.presentacionId} className="align-middle">
+                          <Td>
+                            <span className="block truncate">{l.producto}</span>
+                            {l.deberiaRegresar < 0 && (
+                              <span className="block text-xs font-medium text-warning">
+                                Vendió más de lo cargado
+                              </span>
+                            )}
+                          </Td>
+                          <Td alinear="derecha">{l.deberiaRegresar}</Td>
+                          <Td alinear="derecha">
+                            <CampoConteo
+                              etiqueta={`Piezas reales de ${l.nombre}`}
+                              valor={borrador[l.presentacionId]?.buenas ?? ""}
+                              invalido={f.buenas === null}
+                              deshabilitado={guardando}
+                              onCambio={(v) =>
+                                editar(l.presentacionId, "buenas", v)
+                              }
+                            />
+                          </Td>
+                          <Td alinear="derecha">
+                            <Resultado valor={f.faltante} />
+                          </Td>
+                          <Td alinear="derecha">{l.mermaTeorica}</Td>
+                          <Td alinear="derecha">
+                            <CampoConteo
+                              etiqueta={`Merma real de ${l.nombre}`}
+                              valor={borrador[l.presentacionId]?.merma ?? ""}
+                              invalido={f.merma === null}
+                              deshabilitado={guardando}
+                              onCambio={(v) =>
+                                editar(l.presentacionId, "merma", v)
+                              }
+                            />
+                          </Td>
+                          <Td alinear="derecha">
+                            <Resultado valor={f.resultadoMerma} />
+                          </Td>
+                        </Fila>
+                      );
+                    })}
+                    <FilaTotal>
+                      <Td>{`Total ${g.tamano}`}</Td>
+                      <Td alinear="derecha">{g.totales.deberiaRegresar}</Td>
+                      <Td alinear="derecha">{g.totales.buenas}</Td>
                       <Td alinear="derecha">
-                        <CampoConteo
-                          etiqueta={`Buenas de ${l.nombre}`}
-                          valor={borrador[l.presentacionId]?.buenas ?? ""}
-                          invalido={f.buenas === null}
-                          deshabilitado={guardando}
-                          onCambio={(v) =>
-                            editar(l.presentacionId, "buenas", v)
-                          }
-                        />
+                        <Resultado valor={g.totales.faltante} />
                       </Td>
+                      <Td alinear="derecha">{g.totales.mermaTeorica}</Td>
+                      <Td alinear="derecha">{g.totales.merma}</Td>
                       <Td alinear="derecha">
-                        <CampoConteo
-                          etiqueta={`Merma de ${l.nombre}`}
-                          valor={borrador[l.presentacionId]?.merma ?? ""}
-                          invalido={f.merma === null}
-                          deshabilitado={guardando}
-                          onCambio={(v) => editar(l.presentacionId, "merma", v)}
-                        />
+                        <Resultado valor={g.totales.resultadoMerma} />
                       </Td>
-                      <Td alinear="derecha">
-                        <Faltante valor={f.faltante} />
-                      </Td>
-                    </Fila>
-                  );
-                })}
+                    </FilaTotal>
+                  </Fragment>
+                ))}
               </tbody>
-              <tfoot>
-                <FilaTotal>
-                  <Td>Total</Td>
-                  <Td alinear="derecha">{vista.totales.cargadas}</Td>
-                  <Td alinear="derecha">{vista.totales.vendidas}</Td>
-                  <Td alinear="derecha">{vista.totales.regaladas}</Td>
-                  <Td alinear="derecha">{vista.totales.deberiaRegresar}</Td>
-                  <Td alinear="derecha">{vista.totales.buenas}</Td>
-                  <Td alinear="derecha">{vista.totales.merma}</Td>
-                  {/* Suma solo lo que falta (un sobrante no tapa un faltante): no es Debería − Buenas. */}
-                  <Td alinear="derecha" className="whitespace-nowrap">
-                    {(vista.totales.faltante ?? 0) > 0 && (
-                      <span className="text-destructive">{`Faltan ${vista.totales.faltante}`}</span>
-                    )}
-                  </Td>
-                </FilaTotal>
-              </tfoot>
+              {vista.filas.length > 0 && (
+                <tfoot>
+                  {/* Suma por tamaño solo lo que falta (un sobrante no tapa un faltante): no es la suma de los resultados. */}
+                  <FilaTotal>
+                    <Td>Faltantes del día</Td>
+                    <Td colSpan={2} />
+                    <Td alinear="derecha" className="whitespace-nowrap">
+                      {(vista.totales.faltante ?? 0) > 0 && (
+                        <span className="text-destructive">{`Faltan ${vista.totales.faltante}`}</span>
+                      )}
+                    </Td>
+                    <Td colSpan={2} />
+                    <Td alinear="derecha" className="whitespace-nowrap">
+                      {(vista.totales.faltanteMerma ?? 0) > 0 && (
+                        <span className="text-destructive">{`${vista.totales.faltanteMerma} de merma`}</span>
+                      )}
+                    </Td>
+                  </FilaTotal>
+                </tfoot>
+              )}
             </Tabla>
           </CajaTabla>
-
-          <p className="text-xs text-muted-foreground">{LEYENDA}</p>
 
           {opciones.length > 0 && (
             <div className="flex flex-wrap items-end gap-3">
@@ -388,10 +427,10 @@ function CampoConteo({
   );
 }
 
-/** > 0 en rojo; < 0 es sobrante, sin rojo; 0 nada; `null` (sin corte) nada. */
-function Faltante({ valor }: { valor: number | null }) {
-  if (valor === null || valor === 0) return null;
+/** > 0 falta: rojo y negrita; < 0 sobra: el número con signo en gris; 0 "0"; `null` vacío. */
+function Resultado({ valor }: { valor: number | null }) {
+  if (valor === null) return null;
   if (valor > 0)
     return <span className="font-semibold text-destructive">{valor}</span>;
-  return <span className="text-muted-foreground">{`Sobran ${-valor}`}</span>;
+  return <span className="text-muted-foreground">{valor}</span>;
 }
