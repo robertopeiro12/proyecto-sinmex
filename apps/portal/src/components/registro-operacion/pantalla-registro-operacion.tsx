@@ -7,7 +7,10 @@ import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { Pestanas } from "@/components/ui/pestanas";
 import { infoDeTipo, TIPOS_OPERACION, type OperacionAlmacen, type TipoOperacion } from "@/lib/operaciones-almacen";
 import { hoyEnTijuana } from "@/lib/ventas";
+import type { CargaRejilla, Rejilla } from "@/lib/cargas";
 import { CapturaOperacion } from "./captura-operacion";
+import { CapturaRecarga } from "./captura-recarga";
+import { ListaRecargas } from "./lista-recargas";
 import { ListaOperaciones } from "./lista-operaciones";
 import { diaDeEnvio } from "./selector-dia-envio";
 
@@ -18,6 +21,24 @@ interface Captura {
   tipo: TipoOperacion;
   operacion: OperacionAlmacen | null;
   fecha: string;
+}
+
+interface CapturaDeRecarga {
+  rejilla: Rejilla;
+  carga: CargaRejilla | null;
+  vendedorId: string;
+}
+
+/**
+ * Las pestañas de la pantalla, en el orden del cliente. Las recargas no son una operación
+ * de almacén (usan /cargas): van aparte de TIPOS_OPERACION, que es del backend de operaciones.
+ */
+type PestanaPantalla = { valor: string; etiqueta: string; permiso: string; tipo: TipoOperacion | "recarga" };
+const PESTANA_RECARGA: PestanaPantalla = { valor: "recarga", etiqueta: "Recargas", permiso: "carga.gestionar", tipo: "recarga" };
+
+function pestanasDePantalla(): PestanaPantalla[] {
+  const deOperacion = TIPOS_OPERACION.map((t): PestanaPantalla => ({ valor: t.tipo, etiqueta: infoDeTipo(t.tipo).etiqueta, permiso: t.permiso, tipo: t.tipo }));
+  return [deOperacion[0], PESTANA_RECARGA, ...deOperacion.slice(1)];
 }
 
 /** Un envío nuevo solo admite hoy o ayer: con otro día en la pestaña, abre en hoy. */
@@ -41,13 +62,36 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
   // Cambia al guardar o dar de baja: las listas se vuelven a pedir.
   const [version, setVersion] = useState(0);
   const [fecha, setFecha] = useState(hoyEnTijuana());
+  const [recarga, setRecarga] = useState<CapturaDeRecarga | null>(null);
+  const [avisoRecarga, setAvisoRecarga] = useState<string | null>(null);
 
   if (cargando) return <EstadoPantalla titulo={TITULO} tipo="cargando" />;
-  const tipos = TIPOS_OPERACION.filter((t) => puede(t.permiso));
+  const tipos = pestanasDePantalla().filter((t) => puede(t.permiso));
   if (tipos.length === 0) return <EstadoPantalla titulo={TITULO} tipo="sin-permiso" />;
 
   const codigo = usuario?.sucursal?.codigo ?? (sucursal && sucursal.toLowerCase() !== "todas" ? sucursal.toUpperCase() : null);
   if (!codigo) return <EstadoPantalla titulo={TITULO} tipo="elige-sucursal" />;
+
+  if (recarga) {
+    return (
+      <CapturaRecarga
+        key={recarga.carga?.id ?? "nueva"}
+        rejilla={recarga.rejilla}
+        carga={recarga.carga}
+        vendedorId={recarga.vendedorId}
+        onVolver={() => {
+          setInicialLista(actual);
+          setRecarga(null);
+        }}
+        onGuardado={(aviso) => {
+          setInicialLista(actual);
+          setRecarga(null);
+          setAvisoRecarga(aviso);
+          setVersion((v) => v + 1);
+        }}
+      />
+    );
+  }
 
   if (captura) {
     return (
@@ -81,17 +125,25 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
         onCambio={setActual}
         pestanas={tipos.map((t) => ({
           valor: t.tipo,
-          etiqueta: infoDeTipo(t.tipo).etiqueta,
-          contenido: (
+          etiqueta: t.etiqueta,
+          contenido:
+            t.tipo === "recarga" ? (
+              <ListaRecargas
+                key={`recarga-${version}`}
+                sucursal={codigo}
+                aviso={avisoRecarga}
+                onCapturar={(rejilla, carga, vendedorId) => setRecarga({ rejilla, carga, vendedorId })}
+              />
+            ) : (
             <ListaOperaciones
               key={`${t.tipo}-${version}`}
-              tipo={t.tipo}
+              tipo={t.tipo as TipoOperacion}
               sucursal={codigo}
               fecha={fecha}
               onFecha={setFecha}
-              onCapturar={(operacion) => setCaptura({ tipo: t.tipo, operacion, fecha: operacion?.fecha ?? fechaDeNueva(t.tipo, fecha) })}
+              onCapturar={(operacion) => setCaptura({ tipo: t.tipo as TipoOperacion, operacion, fecha: operacion?.fecha ?? fechaDeNueva(t.tipo as TipoOperacion, fecha) })}
             />
-          ),
+            ),
         }))}
       />
     </Pantalla>
