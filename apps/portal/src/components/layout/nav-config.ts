@@ -62,7 +62,7 @@ export const navSections: NavSection[] = [
       // día es la pestaña Entradas del Registro: sus direcciones viejas redirigen.)
       { label: "Recarga", href: "/produccion/recarga" },
       { label: "Corte", href: "/produccion/corte" },
-      { label: "Registro de Operación", href: "/produccion/registro-operacion", pronto: true },
+      { label: "Registro de Operación", href: "/produccion/registro-operacion" },
       { label: "Almacenes", href: "/produccion/almacenes", pronto: true },
     ],
   },

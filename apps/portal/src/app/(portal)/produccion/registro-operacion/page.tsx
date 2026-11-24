@@ -1,6 +1,12 @@
-import { Placeholder } from "@/components/layout/placeholder";
+import { PantallaRegistroOperacion } from "@/components/registro-operacion/pantalla-registro-operacion";
 
-// Provisional: la Tarea 5 la reemplaza por la pantalla real (y quita `pronto` del menú).
-export default function Page() {
-  return <Placeholder title="Registro de Operación" />;
+// Producción → Registro de Operación. `key`: cambiar la sucursal del selector global vuelve
+// a montar la pantalla (listas y captura limpias), como Corte.
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ sucursal?: string; pestana?: string }>;
+}) {
+  const { sucursal, pestana } = await searchParams;
+  return <PantallaRegistroOperacion key={sucursal ?? ""} sucursal={sucursal ?? null} pestana={pestana ?? null} />;
 }
