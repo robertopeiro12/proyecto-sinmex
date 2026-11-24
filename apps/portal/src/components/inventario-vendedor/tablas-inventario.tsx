@@ -183,6 +183,20 @@ function TablaInventario({ datos }: { datos: InventarioVendedor }) {
             </Fragment>
           ))}
         </tbody>
+        {grupos.length > 0 && (
+          <tfoot>
+            {/* Suma por tamaño solo lo que falta: lo manda el servidor, no es la suma de los resultados. */}
+            <FilaTotal>
+              <Td>Faltantes del día</Td>
+              <Td colSpan={9} className={SEPARADOR} />
+              <Td alinear="derecha" className="whitespace-nowrap">
+                {(datos.totales.faltante ?? 0) > 0 && (
+                  <span className="text-destructive">{`Faltan ${datos.totales.faltante}`}</span>
+                )}
+              </Td>
+            </FilaTotal>
+          </tfoot>
+        )}
       </Tabla>
     </CajaTabla>
   );
@@ -265,6 +279,20 @@ function TablaMerma({ datos }: { datos: InventarioVendedor }) {
             </Fragment>
           ))}
         </tbody>
+        {grupos.length > 0 && (
+          <tfoot>
+            {/* Suma por tamaño solo lo que falta: lo manda el servidor, no es la suma de los resultados. */}
+            <FilaTotal>
+              <Td>Faltantes del día</Td>
+              <Td colSpan={4} className={SEPARADOR} />
+              <Td alinear="derecha" className="whitespace-nowrap">
+                {(datos.totales.faltanteMerma ?? 0) > 0 && (
+                  <span className="text-destructive">{`${datos.totales.faltanteMerma} de merma`}</span>
+                )}
+              </Td>
+            </FilaTotal>
+          </tfoot>
+        )}
       </Tabla>
     </CajaTabla>
   );

@@ -52,7 +52,7 @@ beforeEach(() => {
   vi.mocked(lib.leerInventarioVendedor).mockResolvedValue(vacio());
   vi.mocked(vendedoresLib.listarVendedores).mockResolvedValue([
     { id: "v1", nombre: "Luis", login: "l", sucursalId: "s", sucursalCodigo: "TJ", folioSegmento: "LU", activo: true },
-    { id: "v2", nombre: "Baja", login: "b", sucursalId: "s", sucursalCodigo: "TJ", folioSegmento: "BA", activo: false },
+    { id: "v2", nombre: "Beto", login: "b", sucursalId: "s", sucursalCodigo: "TJ", folioSegmento: "BE", activo: false },
   ]);
 });
 
@@ -66,7 +66,7 @@ describe("PantallaInventarioVendedor", () => {
     expect(screen.getByText("Lo que cargó, vendió y regresó cada vendedor, por tamaño.")).toBeInTheDocument();
     const lista = await screen.findByRole("combobox", { name: "Vendedor" });
     const opciones = Array.from(lista.querySelectorAll("option")).map((o) => o.textContent);
-    expect(opciones).toEqual(["Todos los vendedores", "Luis"]);
+    expect(opciones).toEqual(["Todos los vendedores", "Luis", "Beto (inactivo)"]);
   });
 
   it("Ayer y elegir un vendedor vuelven a consultar", async () => {

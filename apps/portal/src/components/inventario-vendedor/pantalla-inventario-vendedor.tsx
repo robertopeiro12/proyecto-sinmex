@@ -52,7 +52,7 @@ function Inventario({ sucursal }: { sucursal: string }) {
     let vigente = true;
     listarVendedores(sucursal).then(
       (lista) => {
-        if (vigente) setVendedores(lista.filter((v) => v.activo));
+        if (vigente) setVendedores(lista);
       },
       () => {
         // Sin lista, queda "Todos los vendedores".
@@ -109,7 +109,7 @@ function Inventario({ sucursal }: { sucursal: string }) {
             <option value="todos">Todos los vendedores</option>
             {vendedores.map((v) => (
               <option key={v.id} value={v.id}>
-                {v.nombre}
+                {v.activo ? v.nombre : `${v.nombre} (inactivo)`}
               </option>
             ))}
           </Lista>

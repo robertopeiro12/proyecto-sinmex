@@ -177,4 +177,40 @@ describe("TablasInventario", () => {
       ),
     ).toBeInTheDocument();
   });
+
+  it("pie 'Faltantes del día' en Inventario y Merma; vacío con null o 0", async () => {
+    const totales = (faltante: number | null, faltanteMerma: number | null) =>
+      ({ faltante, faltanteMerma }) as InventarioVendedor["totales"];
+    const { rerender } = render(<TablasInventario datos={datos({ totales: totales(7, 2) })} />);
+    const pie = () => within(screen.getByRole("table", { name: /Inventario|Merma/ })).getByText("Faltantes del día").closest("tr")!;
+    expect(within(pie()).getByText("Faltan 7")).toHaveClass("text-destructive");
+    await userEvent.click(screen.getByRole("tab", { name: "Merma" }));
+    expect(within(pie()).getByText("2 de merma")).toHaveClass("text-destructive");
+    rerender(<TablasInventario datos={datos({ totales: totales(null, 0) })} />);
+    expect(within(pie()).queryByText(/^Faltan \d|\d de merma$/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Inventario" }));
+    expect(within(pie()).queryByText(/^Faltan \d|\d de merma$/)).not.toBeInTheDocument();
+  });
+
+  it("resultado negativo sin rojo; resultadoMerma null vacío", async () => {
+    render(
+      <TablasInventario
+        datos={datos({ lineas: [linea({ faltante: -2, resultadoMerma: null })] })}
+      />,
+    );
+    const fila = screen.getByRole("cell", { name: "Horchata" }).closest("tr")!;
+    const neg = within(fila).getByText("-2");
+    expect(neg).not.toHaveClass("text-destructive");
+    await userEvent.click(screen.getByRole("tab", { name: "Merma" }));
+    const f2 = screen.getByRole("cell", { name: "Horchata" }).closest("tr")!;
+    const c = within(f2).getAllByRole("cell");
+    expect(c[5]).toHaveTextContent("");
+  });
+
+  it("aviso en singular", () => {
+    render(<TablasInventario datos={datos({ vendedor: null, vendedoresSinCorte: 1 })} />);
+    expect(
+      screen.getByText("1 vendedor sin corte: sus piezas reales y resultados no se suman."),
+    ).toBeInTheDocument();
+  });
 });
