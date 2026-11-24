@@ -26,6 +26,7 @@ const fila = (extra: Partial<FilaVendedorDia>): FilaVendedorDia => ({
   rutaNombre: null,
   vehiculoAsignado: null,
   notasNoEntregadas: null,
+  corte: { estado: 'sin_corte', piezasFaltantes: null, mermaFaltante: null },
   ...extra,
 });
 
@@ -265,5 +266,47 @@ describe('contarNotasNoEntregadas', () => {
     expect(
       contarNotasNoEntregadas({ porRevisar: 4, revisadas: 3, noEntregadas: 2 }),
     ).toBe(2);
+  });
+});
+
+describe('faltantesCorte por día', () => {
+  const hecho = (piezas: number, merma: number) => ({
+    estado: 'con_faltante' as const,
+    piezasFaltantes: piezas,
+    mermaFaltante: merma,
+  });
+
+  it('suma los faltantes de los cortes hechos de ese día y sucursal', () => {
+    const r = armarFlujoDiario(
+      '2026-11-07',
+      '2026-11-07',
+      [
+        fila({ vendedorId: 'a', corte: hecho(1, 4) }),
+        fila({ vendedorId: 'b', corte: hecho(2, 0) }),
+        fila({ vendedorId: 'c' }),
+      ],
+      [],
+    );
+    expect(r.porDia[0].faltantesCorte).toEqual({ piezas: 3, merma: 4 });
+  });
+
+  it('ninguno hecho: null (no 0)', () => {
+    const r = armarFlujoDiario(
+      '2026-11-07',
+      '2026-11-07',
+      [fila({ vendedorId: 'a' })],
+      [{ fecha: '2026-11-07', sucursalCodigo: 'TJ', montoCentavos: 5 }],
+    );
+    expect(r.porDia[0].faltantesCorte).toBeNull();
+  });
+
+  it('un día solo de oficina (sin renglones) también es null', () => {
+    const r = armarFlujoDiario(
+      '2026-11-07',
+      '2026-11-07',
+      [],
+      [{ fecha: '2026-11-07', sucursalCodigo: 'TJ', montoCentavos: 5 }],
+    );
+    expect(r.porDia[0].faltantesCorte).toBeNull();
   });
 });

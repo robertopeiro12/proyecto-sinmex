@@ -15,7 +15,14 @@ import type {
   FlujoDiarioDto,
 } from './dto/flujo-diario.dto';
 import { validarRango } from './reglas-kilometraje';
-import { armarFlujoDiario, type FlujoDiario } from './reglas-flujo-diario';
+import { CortesService } from '../produccion/cortes.service';
+import {
+  armarFlujoDiario,
+  SIN_CORTE,
+  type FilaVendedorDia,
+  type FilaVendedorDiaBase,
+  type FlujoDiario,
+} from './reglas-flujo-diario';
 import { FlujoDiarioRepository } from './flujo-diario.repository';
 import { DetalleRepository } from './detalle.repository';
 import {
@@ -30,7 +37,32 @@ export class FlujoDiarioService {
   constructor(
     private readonly repo: FlujoDiarioRepository,
     private readonly detalle: DetalleRepository,
+    private readonly cortes: CortesService,
   ) {}
+
+  /**
+   * Le pone a cada renglon el estado de su corte (el mismo que la lista de
+   * Produccion → Corte): una consulta por fecha presente, no por renglon.
+   */
+  async conCorte(
+    filas: FilaVendedorDiaBase[],
+    codigoSucursal: string | null,
+  ): Promise<FilaVendedorDia[]> {
+    const fechas = [...new Set(filas.map((f) => f.fecha))];
+    const estados = new Map<string, FilaVendedorDia['corte']>();
+    for (const fecha of fechas) {
+      for (const [k, v] of await this.cortes.estadosDelRango(
+        fecha,
+        fecha,
+        codigoSucursal,
+      ))
+        estados.set(k, v);
+    }
+    return filas.map((f) => ({
+      ...f,
+      corte: estados.get(`${f.vendedorId}|${f.fecha}`) ?? SIN_CORTE,
+    }));
+  }
 
   async flujo(usuarioId: string, q: FlujoDiarioDto): Promise<FlujoDiario> {
     const error = validarRango(q.desde, q.hasta);
@@ -53,7 +85,10 @@ export class FlujoDiarioService {
       codigoSucursal: alcance.tipo === 'una' ? alcance.codigo : null,
     };
 
-    const filas = await this.repo.filas({ ...filtro, vendedorId });
+    const filas = await this.conCorte(
+      await this.repo.filas({ ...filtro, vendedorId }),
+      filtro.codigoSucursal,
+    );
     // Con un vendedor elegido, "Por dia" suma solo a el: sin la oficina.
     const oficina = vendedorId ? [] : await this.repo.oficina(filtro);
     return armarFlujoDiario(q.desde, q.hasta, filas, oficina);

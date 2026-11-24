@@ -37,6 +37,6 @@ import { ProduccionService } from './produccion.service';
     ProduccionService,
     ProduccionRepository,
   ],
-  exports: [CargasService],
+  exports: [CargasService, CortesService],
 })
 export class ProduccionModule {}
