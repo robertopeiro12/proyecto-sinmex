@@ -174,5 +174,22 @@ describe("Pestaña Recargas del Registro de Operación", () => {
     await u.click(screen.getByRole("button", { name: "Eliminar recarga" }));
     await waitFor(() => expect(cargasLib.eliminarCarga).toHaveBeenCalledWith("c3", 3));
     expect(confirmar).not.toHaveBeenCalled();
+    expect(await screen.findByText("Recarga n.º 1 de Juan Pérez eliminada.")).toBeInTheDocument();
+  });
+
+  it("al eliminar desaparece el aviso de guardado anterior", async () => {
+    const u = userEvent.setup();
+    vi.mocked(cargasLib.crearCarga).mockResolvedValue(carga("n", 3, "pendiente"));
+    vi.mocked(cargasLib.eliminarCarga).mockResolvedValue({ id: "c3" });
+    await abrir();
+    await u.click(await screen.findByRole("button", { name: "Registrar recarga" }));
+    await u.type(screen.getByLabelText("Piezas de Horchata 500 ml"), "20");
+    await u.selectOptions(screen.getByLabelText("Vendedor"), "v3");
+    await u.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(await screen.findByText(/Recarga guardada/)).toBeInTheDocument();
+    await u.click(within(await screen.findByRole("row", { name: /Juan Pérez/ })).getByRole("button", { name: "Eliminar" }));
+    await u.click(await screen.findByRole("button", { name: "Eliminar recarga" }));
+    expect(await screen.findByText("Recarga n.º 1 de Juan Pérez eliminada.")).toBeInTheDocument();
+    expect(screen.queryByText(/Recarga guardada/)).toBeNull();
   });
 });

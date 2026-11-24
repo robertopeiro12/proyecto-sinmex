@@ -41,6 +41,8 @@ export function ListaRecargas({
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [vuelta, setVuelta] = useState(0);
+  // El de esta pantalla (eliminar) pisa al que trae la captura anterior.
+  const [avisoLocal, setAvisoLocal] = useState<string | null>(null);
   const ultima = useRef(0);
   const { confirmar, ventana } = useConfirmar();
 
@@ -77,8 +79,11 @@ export function ListaRecargas({
     if (!si) return;
     try {
       await eliminarCarga(carga.id, carga.version);
+      setError(null);
+      setAvisoLocal(`Recarga n.º ${carga.numero} de ${vendedor} eliminada.`);
       setVuelta((v) => v + 1);
     } catch (err) {
+      setAvisoLocal("");
       setError(mensajeDe(err, "No se pudo eliminar la recarga."));
       if (err instanceof ErrorApi && err.status === 409) setVuelta((v) => v + 1);
     }
@@ -102,7 +107,11 @@ export function ListaRecargas({
         </div>
       </div>
 
-      {aviso && <Aviso tono={aviso.tono}>{aviso.texto}</Aviso>}
+      {avisoLocal ? (
+        <Aviso tono="exito">{avisoLocal}</Aviso>
+      ) : (
+        avisoLocal === null && aviso && <Aviso tono={aviso.tono}>{aviso.texto}</Aviso>
+      )}
       {error && <Aviso tono="error">{error}</Aviso>}
       {cargando && !rejilla && <EstadoPantalla tipo="cargando" />}
 
