@@ -822,7 +822,7 @@ usuario con sesion pasa.
       − cambios entregados + cambios recibidos, **en vivo** y sin recortar (negativo = "Salió más de lo cargado").
       **Merma teórica (C4)** = merma recibida del cliente + merma de almacén. Los movimientos salen de `movimiento_inventario`
       vivo (`merma_cliente` entregado/recibido, `merma_trayecto` = de almacén, `consumo`) por `fecha` y vendedor. **Cambios
-      físicos = 0 siempre** (no existen hasta T-33; los campos ya están para que solo se llene la consulta).
+      físicos** salen de Procesos (ver el bloque Procesos (PR A)); la app todavía no los captura (T-33).
     - Cargadas = solo cargas **aceptadas**; vendidas/regaladas = `cantidad`/`cantidad_promocion` de líneas **vivas** de
       ventas **vivas** del vendedor con esa `fecha`, de cualquier status. Un vendedor con solo merma o consumo ese día también
       sale en la lista.
@@ -840,7 +840,7 @@ usuario con sesion pasa.
     Los tipos están duplicados en `apps/portal/src/lib/cortes.ts` y `cortes.service.ts`/`reglas-corte.ts`: si cambias uno,
     cambia el otro en el mismo commit. No se tocó la tablet ni el contrato de sincronización.
   - **Fuera de alcance.** El **dinero** que entrega el vendedor (R-5) sigue **pendiente de decidir**. Un faltante **no** se
-    registra solo como descuento (lo hará Administración a mano en Procesos → Descuentos, pieza futura). Cambios físicos
+    registra solo como descuento (lo hace Administración a mano en Procesos → Descuentos, que precarga los faltantes). Cambios físicos
     (T-33), Info de inventario por vendedor y los inventarios de producto terminado son otros pasos; T-24 leerá este corte.
   - **Con la casilla de inventario prendida, el portal tampoco vende más de lo cargado** (ver el bloque de la venta del
     portal, T-17): el aviso "Salió más de lo cargado" queda como red de seguridad (ventas de la tablet sin red, o de
@@ -873,6 +873,46 @@ usuario con sesion pasa.
   - **Tipos duplicados** backend ↔ portal en `apps/portal/src/lib/inventario-vendedor.ts` y `lib/flujo-diario.ts`: si cambias
     uno, cambia el otro en el mismo commit. La segunda fila del encabezado es `sticky` con `TOP2` (`top-[32.5px]`, medido:
     la primera fila mide 32,5 px a 1366 y 1920); si cambias el texto del encabezado, vuelve a medir.
+- **Procesos (PR A).** *Operación → Procesos* (`/operacion/procesos`): lo que **Administración** captura de lo que pasó en la
+  calle, por cliente (como el Procesos del viejo). Cliente arriba (tarjeta con tipo de negocio, crédito, "Debe $X en N notas",
+  última compra y promociones vigentes) y pestañas **Merma · Cambios · Consumos · Promoción · Descuentos**, cada una con la
+  captura arriba y la lista del día abajo. Ventas y Notas llegan en el PR B. Spec:
+  `docs/superpowers/specs/2026-11-25-procesos-design.md` (boceto en `img/2026-11-25-procesos-boceto-merma.png`).
+  - **Tablas.** `proceso_oficina` (`tipo` `merma|cambio|consumo|promocion|descuento`, `sucursal_id`, `fecha`, `cliente_id`,
+    `vendedor_id` **null = Oficina**, `merma_de` `cliente|almacen` solo en merma, `comentario` 1..300 recortado o `null`,
+    `capturo_usuario_id`/`actualizado_por_usuario_id`, baja lógica) + `proceso_oficina_linea` (`sentido` `recibido|entregado`,
+    piezas 1..100000, máx. 200, una por presentación y sentido). Checks **totales** por tipo; lo que no cabe en un check lo
+    exige el servicio (`inventario/procesos.*`, reglas puras en `reglas-procesos.ts`).
+  - **Por tipo.** Merma de cliente y Cambios: cliente obligatorio, recibido **y** entregado, **total entregado = total recibido**
+    de cualquier producto y tamaño (si no, 400; el portal pinta la barra de cuadre y no deja guardar). Merma de almacén: sin
+    cliente, solo recibido. Consumo: sin cliente, solo entregado. Promoción: cliente, solo entregado. Descuento: **vendedor
+    obligatorio** (sin Oficina), sin cliente, solo entregado. Cliente y vendedor vivos y de la sucursal del proceso (otro = 400);
+    al editar se conservan los ya guardados aunque se hayan dado de baja. Fecha: hoy o antes (Tijuana).
+  - **Endpoints** (`/procesos`): `GET ?tipo&fecha&sucursal[&cliente]`, `POST`, `PATCH /:id`, `DELETE /:id` (204),
+    `GET /procesos/descuentos/precarga?vendedor&fecha` y `GET /procesos/cliente/:id` (resumen de la tarjeta; otra sucursal,
+    baja o inexistente = 404). **Permisos por tipo exigidos en el servicio** (`PermisosRepository.permisosDe`, como el Registro
+    de Operación): `proceso.merma|cambio|consumo|promocion|descuento` (grupo Operacion Comercial); sin el del tipo = 403. El
+    resumen pide cualquiera de los cinco. Alcance como el Registro: atado a otra sucursal = 403 al listar, proceso de otra = 404,
+    `todas` = 400 "Elige una sucursal.".
+  - **Camioneta (D4).** Con vendedor, cuenta en su corte del día: `movimientosDelDia` (`produccion/cortes.repository.ts`) une
+    `proceso_oficina` vivo: merma de cliente → `mermaRecibida`/`mermaEntregada`, de almacén → `mermaAlmacen`, cambio →
+    `cambiosRecibidos`/`cambiosEntregados` (Procesos es su primera fuente; ya no valen 0), consumo → `consumo`, promoción →
+    `regaladas`. **Descuento no cuenta** (es la consecuencia del faltante) ni nada de Oficina. Lo leen solos el Corte,
+    Inventario por vendedor, la pastilla de Dashboard/Flujo diario y **el candado de la venta del portal**: una promoción o
+    consumo con vendedor capturado aquí también le resta a lo que el portal le deja vender.
+  - **Precarga de descuentos por tamaño (Roberto, 2026-11-25).** Respeta D1 del corte: por **tamaño** (`claveTamano`) se toma el
+    neto con signo de los faltantes; ≤ 0 = nada de ese tamaño; N > 0 se reparte entre sus presentaciones con faltante > 0, de
+    mayor faltante a menor (empate por nombre), hasta sumar N. La suma precargada = `totales.faltante` del corte
+    (`precargaPorTamano` en `reglas-procesos.ts`). Sin corte hecho: `corteHecho: false`, nada que precargar. Hereda el alcance
+    de `CortesService.leer` y solo pide `proceso.descuento`.
+  - **Portal** (`components/procesos/`, `lib/procesos.ts`; tipos duplicados con el backend: si cambias uno, cambia el otro).
+    Cambiar de cliente o de pestaña con algo escrito pregunta (`useConfirmar`); la pestaña se monta con `key` = tipo + cliente.
+    Merma de cliente, Cambios y Promoción sin cliente: solo "Elige un cliente arriba." (sin lista). Pasar Merma a Almacén
+    descarta "Le entregué" (preguntando si había algo). Descuentos precarga al cambiar vendedor o día; "Otro día" sin cambiar la
+    fecha no vuelve a precargar; si la caja se corrigió a mano pregunta antes de reemplazarla; "Elige un vendedor…" la vacía.
+    `Pestanas` ganó el modo controlado (`valor`; sin `valor` no cambia nada).
+  - **Nube**: `20261126120000_procesos.sql` se sube a `sinmex dev` después del merge, con el protocolo de push (pre-flight:
+    nada que contar; tablas nuevas y cinco permisos). **Backend y portal juntos.** La tablet no cambia.
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
   - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).

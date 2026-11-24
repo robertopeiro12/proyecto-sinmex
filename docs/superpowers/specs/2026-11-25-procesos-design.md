@@ -80,8 +80,9 @@ vendedor** cuenta además en su camioneta (corte e Inventario por vendedor).
   - *Consumos*: sin cliente; solo **entregado** (piezas que se tomaron).
   - *Promoción*: cliente obligatorio; solo **entregado** (piezas regaladas fuera de una venta).
   - *Descuentos*: vendedor obligatorio (sin Oficina), sin cliente; solo **entregado** = piezas que se le descuentan;
-    precarga = faltantes positivos de piezas del corte de ese vendedor y día (por presentación). Sin corte hecho = aviso
-    y nada que precargar.
+    precarga = lo que el corte de ese vendedor y día dice que falta, **por tamaño** (Roberto, 2026-11-25: el neto con signo
+    de cada tamaño; si es N > 0 se reparte entre sus presentaciones con faltante, de mayor a menor, hasta sumar N; la suma
+    = `totales.faltante`). Sin corte hecho = aviso y nada que precargar.
 - **D4. Camioneta (corte e Inventario por vendedor).** Con vendedor, se suman a la cuenta del corte del día como las de
   la app: merma recibida/entregada, **cambios recibidos/entregados** (hoy en 0: Procesos es su primera fuente),
   promoción (regaladas) y consumo. Los **descuentos no cambian la cuenta** (son la consecuencia del faltante). Un solo
