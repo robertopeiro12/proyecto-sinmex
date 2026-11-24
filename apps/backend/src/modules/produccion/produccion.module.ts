@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module';
 import { CargasController } from './cargas.controller';
 import { CargasRepository } from './cargas.repository';
 import { CargasService } from './cargas.service';
@@ -8,26 +9,30 @@ import { CortesService } from './cortes.service';
 import { MotivosMermaController } from './motivos-merma.controller';
 import { MotivosMermaRepository } from './motivos-merma.repository';
 import { MotivosMermaService } from './motivos-merma.service';
-import { ProduccionController } from './produccion.controller';
-import { ProduccionRepository } from './produccion.repository';
-import { ProduccionService } from './produccion.service';
+import { OperacionesAlmacenController } from './operaciones-almacen.controller';
+import { OperacionesAlmacenRepository } from './operaciones-almacen.repository';
+import { OperacionesAlmacenService } from './operaciones-almacen.service';
 
 // T-27 pieza 1: la carga y las recargas del vendedor (tabla `carga`). Exporta
 // `CargasService` para que sincronizacion/ baje las cargas en el pull y atienda
 // la respuesta de la tablet (ADR-0009: la dependencia va de sincronizacion hacia
 // aqui, nunca al reves).
 //
-// T-25: la produccion por dia (tabla `produccion`), solo para el portal.
+// Registro de Operacion (parte 1): entradas, envios, merma de almacen, consumo y
+// descuentos (tablas `operacion_almacen*`), solo para el portal. Reemplaza a la
+// produccion por dia de T-25 (`/produccion` se quito). Importa `AuthModule` para
+// exigir el permiso del tipo con `PermisosRepository`.
 //
 // Corte de mercancia (tablas `retorno` y `corte_mercancia`), solo para el
 // portal: absorbe a Retorno (`/retornos` se quito). Lee cargas y ventas para
 // calcular lo que deberia regresar; no las toca.
 @Module({
+  imports: [AuthModule],
   controllers: [
     CargasController,
     CortesController,
     MotivosMermaController,
-    ProduccionController,
+    OperacionesAlmacenController,
   ],
   providers: [
     CargasService,
@@ -36,8 +41,8 @@ import { ProduccionService } from './produccion.service';
     CortesRepository,
     MotivosMermaService,
     MotivosMermaRepository,
-    ProduccionService,
-    ProduccionRepository,
+    OperacionesAlmacenService,
+    OperacionesAlmacenRepository,
   ],
   exports: [CargasService],
 })

@@ -13,7 +13,7 @@ import {
   MENSAJE_FECHA_FUTURA,
   MENSAJE_FECHA_INVALIDA,
   MENSAJE_PRESENTACION_REPETIDA,
-} from './reglas-produccion';
+} from './reglas-comunes';
 
 export type EstadoCorte = 'sin_corte' | 'hecho' | 'con_faltante';
 
