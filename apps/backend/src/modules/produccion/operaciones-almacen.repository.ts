@@ -3,7 +3,12 @@ import { sql, type Kysely, type Transaction } from 'kysely';
 import { DB_CONNECTION, type Database } from '../../database/database.tokens';
 import type { DB } from '../../database/schema';
 import { buscarSucursalUsuario } from '../sucursales/buscar-sucursal-usuario';
-import type { LineaPedida, LineaViva, TipoOperacion } from './reglas-operacion';
+import type {
+  EstadoRetiro,
+  LineaPedida,
+  LineaViva,
+  TipoOperacion,
+} from './reglas-operacion';
 
 export interface SucursalOperacion {
   id: string;
@@ -28,6 +33,12 @@ export interface FilaOperacion {
   capturo: string;
   /** `HH:MI` de Tijuana, de `created_at`. */
   hora: string;
+  /** Solo `retiro_merma`; null en los demas tipos. */
+  estado: EstadoRetiro | null;
+  resueltoPor: string | null;
+  /** `AAAA-MM-DD HH24:MI` de Tijuana. */
+  resueltoEn: string | null;
+  motivoRechazo: string | null;
 }
 
 export interface LineaOperacion {
@@ -117,6 +128,53 @@ export class OperacionesAlmacenRepository {
       .execute() as Promise<FilaOperacion[]>;
   }
 
+  /** Los retiros pendientes (de una sucursal o de todas), en el orden en que se pidieron. */
+  async pendientesDeRetiro(
+    sucursalId: string | null,
+  ): Promise<FilaOperacion[]> {
+    let q = this.consulta(this.db)
+      .where('o.tipo', '=', 'retiro_merma')
+      .where('o.estado', '=', 'pendiente');
+    if (sucursalId !== null) q = q.where('o.sucursal_id', '=', sucursalId);
+    return q.orderBy('o.created_at').orderBy('o.id').execute() as Promise<
+      FilaOperacion[]
+    >;
+  }
+
+  /** Autoriza o rechaza (la fila ya esta bloqueada y pendiente). */
+  async resolverRetiro(
+    id: string,
+    estado: 'autorizado' | 'rechazado',
+    motivo: string | null,
+    usuarioId: string,
+    trx: Transaction<DB>,
+  ): Promise<void> {
+    await trx
+      .updateTable('operacion_almacen')
+      .set({
+        estado,
+        motivo_rechazo: motivo,
+        resuelto_por_usuario_id: usuarioId,
+        resuelto_en: sql`now()`,
+      })
+      .where('id', '=', id)
+      .execute();
+  }
+
+  /** Un rechazado corregido vuelve a pendiente y pierde su resolucion. */
+  async reabrirRetiro(id: string, trx: Transaction<DB>): Promise<void> {
+    await trx
+      .updateTable('operacion_almacen')
+      .set({
+        estado: 'pendiente',
+        motivo_rechazo: null,
+        resuelto_por_usuario_id: null,
+        resuelto_en: null,
+      })
+      .where('id', '=', id)
+      .execute();
+  }
+
   async porId(
     id: string,
     db: Kysely<DB> = this.db,
@@ -149,6 +207,7 @@ export class OperacionesAlmacenRepository {
       .innerJoin('usuario as u', 'u.id', 'o.capturo_usuario_id')
       .leftJoin('sucursal as d', 'd.id', 'o.sucursal_destino_id')
       .leftJoin('motivo_merma as m', 'm.id', 'o.motivo_merma_id')
+      .leftJoin('usuario as r', 'r.id', 'o.resuelto_por_usuario_id')
       .select([
         'o.id as id',
         'o.tipo as tipo',
@@ -166,6 +225,14 @@ export class OperacionesAlmacenRepository {
         sql<string>`to_char(o.created_at at time zone 'America/Tijuana', 'HH24:MI')`.as(
           'hora',
         ),
+        'o.estado as estado',
+        'r.nombre as resueltoPor',
+        sql<
+          string | null
+        >`to_char(o.resuelto_en at time zone 'America/Tijuana', 'YYYY-MM-DD HH24:MI')`.as(
+          'resueltoEn',
+        ),
+        'o.motivo_rechazo as motivoRechazo',
       ])
       .where('o.deleted_at', 'is', null);
   }
@@ -256,6 +323,7 @@ export class OperacionesAlmacenRepository {
         trabajador: datos.trabajador,
         comentario: datos.comentario,
         capturo_usuario_id: usuarioId,
+        estado: tipo === 'retiro_merma' ? 'pendiente' : null,
       })
       .returning('id')
       .executeTakeFirstOrThrow();

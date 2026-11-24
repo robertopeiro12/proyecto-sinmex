@@ -919,7 +919,7 @@ describe('Registro de Operacion (e2e)', () => {
       await http()
         .post('/operaciones-almacen')
         .set('Cookie', cookieK)
-        .send(cuerpo('consumo', { tipo: 'retiro_merma' }))
+        .send(cuerpo('consumo', { tipo: 'robo' }))
         .expect(400);
     });
 

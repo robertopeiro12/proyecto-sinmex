@@ -18,11 +18,20 @@ export const TIPOS_OPERACION = [
   'merma',
   'consumo',
   'descuento',
+  'retiro_merma',
 ] as const;
 export type TipoOperacion = (typeof TIPOS_OPERACION)[number];
 
 export const ORIGENES_ENTRADA = ['produccion', 'compra'] as const;
 export type OrigenEntrada = (typeof ORIGENES_ENTRADA)[number];
+
+/** Retiro de merma (parte 2): el estado de la autorizacion. */
+export const ESTADOS_RETIRO = ['pendiente', 'autorizado', 'rechazado'] as const;
+export type EstadoRetiro = (typeof ESTADOS_RETIRO)[number];
+
+export const MAX_MOTIVO_RECHAZO = 300;
+export const MENSAJE_MOTIVO_RECHAZO = 'Escribe el motivo del rechazo.';
+export const MENSAJE_MOTIVO_RECHAZO_LARGO = `El motivo no puede pasar de ${MAX_MOTIVO_RECHAZO} caracteres.`;
 
 export const MAX_LINEAS = 200;
 export const MAX_PIEZAS = 100_000;
@@ -162,3 +171,34 @@ export function planLineas(
   }
   return { crear, actualizar, borrar };
 }
+
+/** Producción puede corregir o dar de baja un retiro pendiente o rechazado; uno autorizado es final. */
+export function retiroEditable(estado: EstadoRetiro | null): boolean {
+  return estado !== 'autorizado';
+}
+
+/** Administración solo resuelve (autoriza o rechaza) un retiro pendiente. */
+export function retiroResoluble(estado: EstadoRetiro | null): boolean {
+  return estado === 'pendiente';
+}
+
+/** Mensajes del motivo de un rechazo; `[]` = valido. */
+export function validarMotivoRechazo(
+  motivo: string | null | undefined,
+): string[] {
+  const m = (motivo ?? '').trim();
+  if (m === '') return [MENSAJE_MOTIVO_RECHAZO];
+  if (m.length > MAX_MOTIVO_RECHAZO) return [MENSAJE_MOTIVO_RECHAZO_LARGO];
+  return [];
+}
+
+/** Mensaje del 409 cuando el retiro ya no está en el estado que la acción necesita. */
+export function mensajeRetiroNoPendiente(estado: EstadoRetiro | null): string {
+  if (estado === 'autorizado') return 'Este retiro ya fue autorizado.';
+  if (estado === 'rechazado')
+    return 'Este retiro ya fue rechazado; Producción lo tiene que corregir y reenviar.';
+  return 'Este retiro no está pendiente de autorización.';
+}
+
+export const MENSAJE_RETIRO_AUTORIZADO =
+  'Un retiro autorizado ya no se puede corregir ni dar de baja.';

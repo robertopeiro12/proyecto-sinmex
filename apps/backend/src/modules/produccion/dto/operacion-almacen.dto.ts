@@ -8,10 +8,18 @@ import {
   IsString,
   IsUUID,
   Matches,
+  IsNotEmpty,
   Max,
+  MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { MENSAJE_PIEZAS, TIPOS_OPERACION } from '../reglas-operacion';
+import {
+  MAX_MOTIVO_RECHAZO,
+  MENSAJE_MOTIVO_RECHAZO,
+  MENSAJE_MOTIVO_RECHAZO_LARGO,
+  MENSAJE_PIEZAS,
+  TIPOS_OPERACION,
+} from '../reglas-operacion';
 
 /** El tope de la columna `piezas` (integer): mas alla seria un 500, no un 400. */
 const MAX_INTEGER_POSTGRES = 2_147_483_647;
@@ -93,4 +101,23 @@ export class CrearOperacionDto extends EditarOperacionDto {
   /** Codigo de la sucursal donde se registra (la que manda, en un envio). */
   @IsString({ message: 'Elige la sucursal.' })
   sucursal!: string;
+}
+
+/** `GET /operaciones-almacen/retiros-pendientes`. */
+export class ConsultaRetirosPendientesDto {
+  /** Codigo de sucursal o `todas`: lo interpreta `resolverAlcance`. */
+  @IsOptional()
+  @IsString({ message: 'La sucursal no es válida.' })
+  sucursal?: string;
+}
+
+/** `POST /operaciones-almacen/:id/rechazar`. */
+export class RechazarRetiroDto {
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @IsString({ message: MENSAJE_MOTIVO_RECHAZO })
+  @IsNotEmpty({ message: MENSAJE_MOTIVO_RECHAZO })
+  @MaxLength(MAX_MOTIVO_RECHAZO, { message: MENSAJE_MOTIVO_RECHAZO_LARGO })
+  motivo!: string;
 }
