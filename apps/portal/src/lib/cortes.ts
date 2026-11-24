@@ -3,11 +3,13 @@ import { formatearDiaLargo } from "./formato";
 import { leerPiezas } from "./produccion";
 import type { Producto } from "./productos";
 
-// Copia normativa de `CortesDelDia`, `CorteVendedor` y `LineaCortePantalla` en
-// apps/backend/src/modules/produccion/cortes.service.ts, y de `TotalesCorte` en
-// reglas-corte.ts. El portal no importa del backend: un cambio de forma en un lado
-// exige el equivalente en el otro. Spec:
-// docs/superpowers/specs/2026-11-12-corte-de-mercancia-design.md (§5).
+// Copia normativa de `CortesDelDia`, `CorteVendedor`, `FilaCorte` y `LineaCortePantalla`
+// en apps/backend/src/modules/produccion/cortes.service.ts, y de `TotalesCorte`,
+// `claveTamano`, `mililitros`, `compararTamano` y `faltanteDelDia` en
+// apps/backend/src/modules/produccion/reglas-corte.ts. El portal no importa del
+// backend: un cambio de forma en un lado exige el equivalente en el otro. Spec:
+// docs/superpowers/specs/2026-11-18-corte-por-tamano-y-merma-design.md (base:
+// 2026-11-12-corte-de-mercancia-design.md §5).
 
 export type EstadoCorte = "sin_corte" | "hecho" | "con_faltante";
 
@@ -19,8 +21,10 @@ export interface FilaCorte {
   estado: EstadoCorte;
   /** No tiene ninguna carga aceptada ese día (vendió con una carga sin aceptar o sin capturar). */
   sinCarga: boolean;
-  /** Suma de faltantes > 0; `null` si el corte no está hecho. */
+  /** Faltante del día por tamaño (D1); `null` si el corte no está hecho. */
   piezasFaltantes: number | null;
+  /** Lo mismo para la merma (D1); `null` si el corte no está hecho. */
+  mermaFaltante: number | null;
   hechoEn: string | null;
 }
 
@@ -37,27 +41,48 @@ export interface LineaCorte {
   presentacionId: string;
   /** Producto + tamaño ("Horchata 1 L"). */
   nombre: string;
+  producto: string;
+  volumen: string;
   cargadas: number;
   vendidas: number;
   regaladas: number;
-  /** cargadas − vendidas − regaladas, sin recortar: negativo = vendió más de lo cargado. */
+  mermaEntregada: number;
+  mermaRecibida: number;
+  mermaAlmacen: number;
+  consumo: number;
+  cambiosEntregados: number;
+  cambiosRecibidos: number;
+  /** Piezas teóricas por regresar, sin recortar: negativo = vendió más de lo cargado. */
   deberiaRegresar: number;
   /** Lo contado y guardado (0 si no hay). */
   buenas: number;
-  merma: number;
   /** `null` si el corte no está hecho; < 0 = sobrante. */
   faltante: number | null;
+  merma: number;
+  /** Merma teórica por regresar (C4). */
+  mermaTeorica: number;
+  /** `null` si el corte no está hecho. */
+  resultadoMerma: number | null;
 }
 
 export interface TotalesCorte {
   cargadas: number;
   vendidas: number;
   regaladas: number;
+  mermaEntregada: number;
+  mermaRecibida: number;
+  mermaAlmacen: number;
+  consumo: number;
+  cambiosEntregados: number;
+  cambiosRecibidos: number;
   deberiaRegresar: number;
+  mermaTeorica: number;
   buenas: number;
   merma: number;
-  /** Suma de los faltantes > 0 (un sobrante no compensa lo que falta de otra); `null` sin corte. */
+  /** Piezas que faltan (D1): suma por tamaño de los totales de tamaño positivos; `null` sin corte. */
   faltante: number | null;
+  /** Lo mismo para la merma. */
+  faltanteMerma: number | null;
 }
 
 /** `GET` y `PUT /cortes/vendedor`. */
@@ -114,25 +139,76 @@ export function guardarCorteVendedor(datos: {
 
 /** La pastilla de estado de la lista: "Sin corte" gris, "Corte hecho", "Faltan N" rojo. */
 export function etiquetaEstadoCorte(
-  fila: Pick<FilaCorte, "estado" | "piezasFaltantes">,
+  fila: Pick<FilaCorte, "estado" | "piezasFaltantes" | "mermaFaltante">,
 ): { texto: string; tono: "neutro" | "exito" | "error" } {
   if (fila.estado === "sin_corte")
     return { texto: "Sin corte", tono: "neutro" };
-  if (fila.estado === "con_faltante")
-    return { texto: `Faltan ${fila.piezasFaltantes ?? 0}`, tono: "error" };
+  if (fila.estado === "con_faltante") {
+    const piezas = fila.piezasFaltantes ?? 0;
+    const merma = fila.mermaFaltante ?? 0;
+    if (piezas > 0 && merma > 0)
+      return { texto: `Faltan ${piezas} · ${merma} de merma`, tono: "error" };
+    if (merma > 0) return { texto: `Faltan ${merma} de merma`, tono: "error" };
+    return { texto: `Faltan ${piezas}`, tono: "error" };
+  }
   return { texto: "Corte hecho", tono: "exito" };
 }
 
 /** El estado de un corte ya leído, con la misma regla que la lista del servidor. */
 export function estadoDeCorte(
   corte: Pick<CorteVendedor, "hecho" | "totales">,
-): Pick<FilaCorte, "estado" | "piezasFaltantes"> {
-  if (!corte.hecho) return { estado: "sin_corte", piezasFaltantes: null };
+): Pick<FilaCorte, "estado" | "piezasFaltantes" | "mermaFaltante"> {
+  if (!corte.hecho)
+    return { estado: "sin_corte", piezasFaltantes: null, mermaFaltante: null };
   const faltan = corte.totales.faltante ?? 0;
+  const faltanMerma = corte.totales.faltanteMerma ?? 0;
   return {
-    estado: faltan > 0 ? "con_faltante" : "hecho",
+    estado: faltan > 0 || faltanMerma > 0 ? "con_faltante" : "hecho",
     piezasFaltantes: faltan,
+    mermaFaltante: faltanMerma,
   };
+}
+
+/** Clave del tamaño (D3): minúsculas y sin espacios. Normativa: `reglas-corte.ts` del backend. */
+export function claveTamano(volumen: string): string {
+  return volumen.toLowerCase().replace(/\s+/g, "");
+}
+
+/** Mililitros de un volumen; `null` si no se lee. Normativa: `reglas-corte.ts` del backend. */
+export function mililitros(volumen: string): number | null {
+  const m = /^(\d+(?:[.,]\d+)?)(ml|l|lt|lts|litro|litros)$/.exec(
+    claveTamano(volumen),
+  );
+  if (!m) return null;
+  const numero = Number(m[1].replace(",", "."));
+  return m[2] === "ml" ? numero : numero * 1000;
+}
+
+/** Orden de tamaños (D3): por mililitros; lo ilegible al final, por texto. */
+export function compararTamano(a: string, b: string): number {
+  const ma = mililitros(a);
+  const mb = mililitros(b);
+  if (ma !== null && mb !== null) return ma - mb;
+  if (ma !== null) return -1;
+  if (mb !== null) return 1;
+  return claveTamano(a).localeCompare(claveTamano(b), "es");
+}
+
+/**
+ * Faltante del día (D1): dentro de un tamaño los resultados se compensan; entre
+ * tamaños no. Suma por tamaño de max(0, suma con signo). Normativa: `reglas-corte.ts`.
+ */
+function faltanteDelDia(
+  lineas: readonly { volumen: string; valor: number | null }[],
+): number {
+  const porTamano = new Map<string, number>();
+  for (const l of lineas) {
+    const clave = claveTamano(l.volumen);
+    porTamano.set(clave, (porTamano.get(clave) ?? 0) + (l.valor ?? 0));
+  }
+  let total = 0;
+  for (const suma of porTamano.values()) total += Math.max(0, suma);
+  return total;
 }
 
 /** Lo guardado como texto del campo: vacío si no hay (nunca el teórico prellenado). */
@@ -154,18 +230,29 @@ export function borradorDeCorte(lineas: readonly LineaCorte[]): BorradorCorte {
 /** Una línea vacía para una presentación agregada a mano (sin movimiento ese día). */
 export function lineaAgregada(
   presentacionId: string,
-  nombre: string,
+  producto: string,
+  volumen: string,
 ): LineaCorte {
   return {
     presentacionId,
-    nombre,
+    nombre: `${producto} ${volumen}`,
+    producto,
+    volumen,
     cargadas: 0,
     vendidas: 0,
     regaladas: 0,
+    mermaEntregada: 0,
+    mermaRecibida: 0,
+    mermaAlmacen: 0,
+    consumo: 0,
+    cambiosEntregados: 0,
+    cambiosRecibidos: 0,
     deberiaRegresar: 0,
     buenas: 0,
-    merma: 0,
     faltante: null,
+    merma: 0,
+    mermaTeorica: 0,
+    resultadoMerma: null,
   };
 }
 
@@ -176,10 +263,30 @@ export interface FilaVistaCorte {
   merma: number | null;
   /** Debería − buenas; `null` mientras no se muestra (corte sin hacer y renglón sin tocar) o con buenas inválidas. */
   faltante: number | null;
+  /** Merma teórica − merma escrita; misma regla de visibilidad que `faltante`. */
+  resultadoMerma: number | null;
+}
+
+/** Una sección de la tabla: todas las presentaciones de un tamaño. */
+export interface GrupoVistaCorte {
+  /** Volumen de la primera fila. */
+  tamano: string;
+  filas: FilaVistaCorte[];
+  totales: {
+    deberiaRegresar: number;
+    buenas: number;
+    /** Suma con signo de los visibles; `null` si ninguno se muestra. */
+    faltante: number | null;
+    mermaTeorica: number;
+    merma: number;
+    resultadoMerma: number | null;
+  };
 }
 
 export interface VistaCorte {
   filas: FilaVistaCorte[];
+  /** Por tamaño (`compararTamano`), dentro por producto. */
+  grupos: GrupoVistaCorte[];
   totales: TotalesCorte;
   hayInvalidas: boolean;
   /** Algo de lo escrito difiere de lo guardado. */
@@ -212,25 +319,81 @@ export function vistaCorte(
   const cambios = leidas.some(
     (f) => f.buenas !== f.linea.buenas || f.merma !== f.linea.merma,
   );
-  const filas = leidas.map((f) => ({
-    ...f,
-    faltante:
-      (hecho || tocadas.has(f.linea.presentacionId)) && f.buenas !== null
-        ? f.linea.deberiaRegresar - f.buenas
-        : null,
-  }));
+  const filas: FilaVistaCorte[] = leidas.map((f) => {
+    const visible = hecho || tocadas.has(f.linea.presentacionId);
+    return {
+      ...f,
+      faltante:
+        visible && f.buenas !== null
+          ? f.linea.deberiaRegresar - f.buenas
+          : null,
+      resultadoMerma:
+        visible && f.merma !== null ? f.linea.mermaTeorica - f.merma : null,
+    };
+  });
   const suma = (valor: (f: FilaVistaCorte) => number) =>
     filas.reduce((t, f) => t + valor(f), 0);
+  const sumaVisible = (
+    fs: FilaVistaCorte[],
+    valor: (f: FilaVistaCorte) => number | null,
+  ) => {
+    const v = fs.map(valor).filter((x): x is number => x !== null);
+    return v.length === 0 ? null : v.reduce((t, x) => t + x, 0);
+  };
+  const porClave = new Map<string, FilaVistaCorte[]>();
+  for (const f of filas) {
+    const clave = claveTamano(f.linea.volumen);
+    porClave.set(clave, [...(porClave.get(clave) ?? []), f]);
+  }
+  const grupos: GrupoVistaCorte[] = [...porClave.values()]
+    .map((fs) =>
+      [...fs].sort((a, b) =>
+        a.linea.producto.localeCompare(b.linea.producto, "es"),
+      ),
+    )
+    .sort((a, b) => compararTamano(a[0].linea.volumen, b[0].linea.volumen))
+    .map((fs) => ({
+      tamano: fs[0].linea.volumen,
+      filas: fs,
+      totales: {
+        deberiaRegresar: fs.reduce((t, f) => t + f.linea.deberiaRegresar, 0),
+        buenas: fs.reduce((t, f) => t + (f.buenas ?? 0), 0),
+        faltante: sumaVisible(fs, (f) => f.faltante),
+        mermaTeorica: fs.reduce((t, f) => t + f.linea.mermaTeorica, 0),
+        merma: fs.reduce((t, f) => t + (f.merma ?? 0), 0),
+        resultadoMerma: sumaVisible(fs, (f) => f.resultadoMerma),
+      },
+    }));
   return {
     filas,
+    grupos,
     totales: {
       cargadas: suma((f) => f.linea.cargadas),
       vendidas: suma((f) => f.linea.vendidas),
       regaladas: suma((f) => f.linea.regaladas),
+      mermaEntregada: suma((f) => f.linea.mermaEntregada),
+      mermaRecibida: suma((f) => f.linea.mermaRecibida),
+      mermaAlmacen: suma((f) => f.linea.mermaAlmacen),
+      consumo: suma((f) => f.linea.consumo),
+      cambiosEntregados: suma((f) => f.linea.cambiosEntregados),
+      cambiosRecibidos: suma((f) => f.linea.cambiosRecibidos),
       deberiaRegresar: suma((f) => f.linea.deberiaRegresar),
+      mermaTeorica: suma((f) => f.linea.mermaTeorica),
       buenas: suma((f) => f.buenas ?? 0),
       merma: suma((f) => f.merma ?? 0),
-      faltante: hecho ? suma((f) => Math.max(f.faltante ?? 0, 0)) : null,
+      faltante: hecho
+        ? faltanteDelDia(
+            filas.map((f) => ({ volumen: f.linea.volumen, valor: f.faltante })),
+          )
+        : null,
+      faltanteMerma: hecho
+        ? faltanteDelDia(
+            filas.map((f) => ({
+              volumen: f.linea.volumen,
+              valor: f.resultadoMerma,
+            })),
+          )
+        : null,
     },
     hayInvalidas,
     cambios,
@@ -251,7 +414,7 @@ export function conteosDe(vista: VistaCorte): ConteoCorte[] {
 export function presentacionesParaAgregar(
   productos: readonly Producto[],
   enTabla: readonly { presentacionId: string }[],
-): { id: string; nombre: string }[] {
+): { id: string; nombre: string; producto: string; volumen: string }[] {
   const ya = new Set(enTabla.map((l) => l.presentacionId));
   return productos
     .filter((p) => p.activo)
@@ -259,6 +422,8 @@ export function presentacionesParaAgregar(
       p.presentaciones.map((pr) => ({
         id: pr.id,
         nombre: `${p.nombre} ${pr.volumen}`,
+        producto: p.nombre,
+        volumen: pr.volumen,
       })),
     )
     .filter((pr) => !ya.has(pr.id))
