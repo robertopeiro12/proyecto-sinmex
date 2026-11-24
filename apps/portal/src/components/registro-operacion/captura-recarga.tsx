@@ -39,7 +39,7 @@ export function CapturaRecarga({
   vendedorId: string;
   onVolver: () => void;
   /** Avisa con el texto para la lista. */
-  onGuardado: (aviso: string) => void;
+  onGuardado: (aviso: string, tono: "exito" | "error") => void;
 }) {
   const [vendedor, setVendedor] = useState(vendedorId);
   const [borrador, setBorrador] = useState<Borrador>(() => borradorDe(carga, rejilla.presentaciones));
@@ -68,12 +68,12 @@ export function CapturaRecarga({
     try {
       if (carga) await editarCarga(carga.id, { version: carga.version, lineas });
       else await crearCarga({ vendedorId: vendedor, lineas });
-      onGuardado("Recarga guardada. Le llega al vendedor cuando sincronice.");
+      onGuardado("Recarga guardada. Le llega al vendedor cuando sincronice.", "exito");
     } catch (err) {
       const mensaje = mensajeDe(err, "No se pudo guardar la recarga. Vuelve a intentar.");
       if (err instanceof ErrorApi && err.status === 409) {
         // Lo capturado ya no aplica a la carga actual: se vuelve a la lista con lo que hay.
-        onGuardado(mensaje);
+        onGuardado(mensaje, "error");
       } else {
         setError(mensaje);
         setGuardando(false);

@@ -34,7 +34,7 @@ export function ListaRecargas({
 }: {
   /** Código de la sucursal del menú lateral. */
   sucursal: string;
-  aviso: string | null;
+  aviso: { texto: string; tono: "exito" | "error" } | null;
   onCapturar: (rejilla: Rejilla, carga: CargaRejilla | null, vendedorId: string) => void;
 }) {
   const [rejilla, setRejilla] = useState<Rejilla | null>(null);
@@ -102,7 +102,7 @@ export function ListaRecargas({
         </div>
       </div>
 
-      {aviso && <Aviso tono="exito">{aviso}</Aviso>}
+      {aviso && <Aviso tono={aviso.tono}>{aviso.texto}</Aviso>}
       {error && <Aviso tono="error">{error}</Aviso>}
       {cargando && !rejilla && <EstadoPantalla tipo="cargando" />}
 

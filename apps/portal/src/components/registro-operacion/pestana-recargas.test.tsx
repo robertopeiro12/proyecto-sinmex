@@ -160,7 +160,7 @@ describe("Pestaña Recargas del Registro de Operación", () => {
     await abrir();
     await u.click(within(await screen.findByRole("row", { name: /Ricardo.*Pendiente/ })).getByRole("button", { name: "Editar" }));
     await u.click(screen.getByRole("button", { name: "Guardar" }));
-    expect(await screen.findByText("Ya la aceptó el vendedor.")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Ya la aceptó el vendedor.");
     await waitFor(() => expect(cargasLib.obtenerRejilla).toHaveBeenCalledTimes(2));
   });
 

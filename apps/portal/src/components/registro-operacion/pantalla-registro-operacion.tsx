@@ -63,7 +63,7 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
   const [version, setVersion] = useState(0);
   const [fecha, setFecha] = useState(hoyEnTijuana());
   const [recarga, setRecarga] = useState<CapturaDeRecarga | null>(null);
-  const [avisoRecarga, setAvisoRecarga] = useState<string | null>(null);
+  const [avisoRecarga, setAvisoRecarga] = useState<{ texto: string; tono: "exito" | "error" } | null>(null);
 
   if (cargando) return <EstadoPantalla titulo={TITULO} tipo="cargando" />;
   const tipos = pestanasDePantalla().filter((t) => puede(t.permiso));
@@ -83,10 +83,10 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
           setInicialLista(actual);
           setRecarga(null);
         }}
-        onGuardado={(aviso) => {
+        onGuardado={(texto, tono) => {
           setInicialLista(actual);
           setRecarga(null);
-          setAvisoRecarga(aviso);
+          setAvisoRecarga({ texto, tono });
           setVersion((v) => v + 1);
         }}
       />
