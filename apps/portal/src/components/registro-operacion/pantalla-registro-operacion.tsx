@@ -7,11 +7,9 @@ import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { Pestanas } from "@/components/ui/pestanas";
 import { infoDeTipo, TIPOS_OPERACION, type OperacionAlmacen, type TipoOperacion } from "@/lib/operaciones-almacen";
 import { hoyEnTijuana } from "@/lib/ventas";
-import type { CargaRejilla, Rejilla } from "@/lib/cargas";
 import { CapturaOperacion } from "./captura-operacion";
-import { CapturaRecarga } from "./captura-recarga";
-import { ListaRecargas } from "./lista-recargas";
 import { ListaOperaciones } from "./lista-operaciones";
+import { RejillaRecargas } from "./rejilla-recargas";
 import { diaDeEnvio } from "./selector-dia-envio";
 
 const TITULO = "Registro de Operación";
@@ -21,12 +19,6 @@ interface Captura {
   tipo: TipoOperacion;
   operacion: OperacionAlmacen | null;
   fecha: string;
-}
-
-interface CapturaDeRecarga {
-  rejilla: Rejilla;
-  carga: CargaRejilla | null;
-  vendedorId: string;
 }
 
 /**
@@ -62,8 +54,6 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
   // Cambia al guardar o dar de baja: las listas se vuelven a pedir.
   const [version, setVersion] = useState(0);
   const [fecha, setFecha] = useState(hoyEnTijuana());
-  const [recarga, setRecarga] = useState<CapturaDeRecarga | null>(null);
-  const [avisoRecarga, setAvisoRecarga] = useState<{ texto: string; tono: "exito" | "error" } | null>(null);
 
   if (cargando) return <EstadoPantalla titulo={TITULO} tipo="cargando" />;
   const tipos = pestanasDePantalla().filter((t) => puede(t.permiso));
@@ -71,28 +61,6 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
 
   const codigo = usuario?.sucursal?.codigo ?? (sucursal && sucursal.toLowerCase() !== "todas" ? sucursal.toUpperCase() : null);
   if (!codigo) return <EstadoPantalla titulo={TITULO} tipo="elige-sucursal" />;
-
-  if (recarga) {
-    return (
-      <CapturaRecarga
-        key={recarga.carga?.id ?? "nueva"}
-        rejilla={recarga.rejilla}
-        carga={recarga.carga}
-        vendedorId={recarga.vendedorId}
-        onVolver={() => {
-          setInicialLista(actual);
-          setAvisoRecarga(null);
-          setRecarga(null);
-        }}
-        onGuardado={(texto, tono) => {
-          setInicialLista(actual);
-          setRecarga(null);
-          setAvisoRecarga({ texto, tono });
-          setVersion((v) => v + 1);
-        }}
-      />
-    );
-  }
 
   if (captura) {
     return (
@@ -123,24 +91,13 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
       <Pestanas
         etiqueta="Tipo de operación"
         valorInicial={inicial}
-        onCambio={(v) => {
-          setActual(v);
-          setAvisoRecarga(null);
-        }}
+        onCambio={setActual}
         pestanas={tipos.map((t) => ({
           valor: t.tipo,
           etiqueta: t.etiqueta,
           contenido:
             t.tipo === "recarga" ? (
-              <ListaRecargas
-                key={`recarga-${version}`}
-                sucursal={codigo}
-                aviso={avisoRecarga}
-                onCapturar={(rejilla, carga, vendedorId) => {
-                  setAvisoRecarga(null);
-                  setRecarga({ rejilla, carga, vendedorId });
-                }}
-              />
+              <RejillaRecargas sucursal={codigo} />
             ) : (
             <ListaOperaciones
               key={`${t.tipo}-${version}`}

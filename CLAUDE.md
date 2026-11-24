@@ -662,16 +662,22 @@ usuario con sesion pasa.
   - **Contrato** (aditivo, `CONTRATO_ACTUAL` sigue en 1): colección `cargas` en el pull (las del vendedor desde
     `current_date - 1`, baja con `activo: 0`) y `VendedorPull.control_inventario`. Cambiar la casilla toca
     `vendedor.updated_at` de esa sucursal (`SucursalesRepository.actualizar`).
-  - **Portal**: pestaña **Recargas** de *Producción → Registro de Operación* (`components/registro-operacion/`:
-    `lista-recargas.tsx`, `captura-recarga.tsx`; `lib/cargas.ts`), con el permiso `carga.gestionar` y en el lugar que pidió el
-    cliente (Entradas · Recargas · Envíos · …). **Solo hoy** (sin fecha) y con la **sucursal del menú lateral**, sin selector
-    propio. Lista de las cargas de hoy (una fila por carga: vendedor, n.º, piezas, productos, estado con el motivo del rechazo
-    en rojo; "Editar"/"Eliminar" solo en pendiente o rechazada, con `aria-label` que dice cuál) y **captura en pantalla
-    completa** con la rejilla de todas las presentaciones activas por tamaño, TAB de un campo al siguiente y el foco en el
-    primer campo al elegir vendedor; una presentación dada de baja que traía la carga avisa que se quita al guardar. Un 409
-    deja el mensaje en rojo y recarga. Eliminar confirma con `useConfirmar`. `/produccion/recarga` **redirige** a la pestaña
-    (conserva `?sucursal`) y "Recarga" salió del menú; el historial de días anteriores se ve en *Inventario por vendedor →
-    Recargas*. *Catálogo › Sucursales*: casilla "Control de inventario en la app".
+  - **Portal**: pestaña **Recargas** de *Producción → Registro de Operación* (`components/registro-operacion/rejilla-recargas.tsx`;
+    `lib/cargas.ts`), con el permiso `carga.gestionar` y en el lugar que pidió el cliente (Entradas · Recargas · Envíos · …).
+    **Solo hoy** (sin fecha) y con la **sucursal del menú lateral**, sin selector propio. Es **una sola rejilla de todos los
+    vendedores a la vez**, como el portal viejo pero volteada ("Cambios v2.0" del cliente): renglones = presentaciones por
+    tamaño y, dentro, por producto alfabético; columnas = vendedores, cada uno con una subcolumna por carga de hoy (n.º, estado,
+    motivo del rechazo en rojo; solo lectura) y una **"Nueva"**. **Fijos**: el `thead` (vendedores, `sticky top-0`) y la columna
+    de productos (`sticky left-0`) dentro de una `CajaTabla` con alto máximo; la página no se desplaza de lado a 1366 px, la caja
+    sí. **TAB baja por la columna del vendedor** (manejado con `onKeyDown`, no con `tabIndex`) y al terminar pasa al primer
+    producto del siguiente vendedor. Un solo **"Guardar recarga"** crea una carga por vendedor con piezas, una por una; si alguna
+    falla, las guardadas se limpian y la fallida conserva lo escrito con su mensaje en rojo bajo el nombre del vendedor.
+    "Descartar" confirma con `useConfirmar`. Editar (lápiz) / Eliminar (bote) solo en pendiente o rechazada, con `aria-label`
+    que dice cuál: editar convierte esa subcolumna en campos con Guardar/Cancelar propios y bloquea lo demás; una presentación
+    dada de baja que traía la carga avisa que se quita al guardar (las dadas de baja salen como renglón sin campo). Un 409 deja
+    el mensaje en rojo (no se borra al recargar) y recarga la rejilla. `/produccion/recarga` **redirige** a la pestaña (conserva
+    `?sucursal`) y "Recarga" salió del menú; el historial de días anteriores se ve en *Inventario por vendedor → Recargas*.
+    *Catálogo › Sucursales*: casilla "Control de inventario en la app".
   - **Tablet** (migración local 017): `carga`, `carga_detalle`, `vendedor.control_inventario` (el login sin red no la
     pisa: `NO_BORRAR_CON_NULO` ahora lleva el valor con que nace una fila nueva). La mezcla del pull
     (`repositorios/cargas.ts`) reemplaza las líneas y **no deja que un pull viejo deshaga una respuesta**. Reglas puras
