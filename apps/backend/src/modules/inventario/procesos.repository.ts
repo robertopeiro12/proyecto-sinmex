@@ -217,6 +217,24 @@ export class ProcesosRepository {
     return new Set(filas.map((f) => f.id));
   }
 
+  /**
+   * "Producto volumen" de esas presentaciones, vivas o no (para decir cual se
+   * rechazo). Un id que no existe no sale.
+   */
+  async nombresDePresentaciones(
+    ids: readonly string[],
+    trx: Transaction<DB>,
+  ): Promise<Map<string, string>> {
+    if (ids.length === 0) return new Map();
+    const filas = await trx
+      .selectFrom('presentacion as pr')
+      .innerJoin('producto as p', 'p.id', 'pr.producto_id')
+      .select(['pr.id as id', 'p.nombre as producto', 'pr.volumen as volumen'])
+      .where('pr.id', 'in', [...ids])
+      .execute();
+    return new Map(filas.map((f) => [f.id, `${f.producto} ${f.volumen}`]));
+  }
+
   /** Un cliente (o prospecto) vivo de esa sucursal. */
   /**
    * El cliente vivo (o prospecto) para el resumen de Procesos, con su tipo de

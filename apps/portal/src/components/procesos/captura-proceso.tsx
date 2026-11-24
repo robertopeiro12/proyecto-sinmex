@@ -83,6 +83,7 @@ export function CapturaProceso({
   onCancelar,
   onGuardado,
   onSucio,
+  avisoQuien = null,
 }: {
   tipo: TipoProceso;
   sucursal: string;
@@ -102,6 +103,8 @@ export function CapturaProceso({
   onCancelar: () => void;
   onGuardado: () => void;
   onSucio: (sucio: boolean) => void;
+  /** Aviso informativo bajo la fila de opciones (Descuentos: ya hay uno de ese vendedor ese día). */
+  avisoQuien?: string | null;
 }) {
   const info = infoDeProceso(tipo);
   const mermaDeTipo = tipo === "merma" ? mermaDe : null;
@@ -119,6 +122,8 @@ export function CapturaProceso({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [avisoPrecarga, setAvisoPrecarga] = useState<string | null>(null);
+  // Descuentos: hay una precarga en camino (no se guarda ni se toca la caja hasta que llegue).
+  const [precargando, setPrecargando] = useState(false);
   const precargaVigente = useRef(0);
   // Lo último que precargó Descuentos: si la caja sigue igual, no hay nada escrito a mano.
   const [precargado, setPrecargado] = useState<RenglonCaja[]>([]);
@@ -130,28 +135,37 @@ export function CapturaProceso({
   }, [sucio, onSucio]);
   useEffect(() => () => onSucio(false), [onSucio]);
 
-  /** Descuentos (R3): al elegir vendedor o día se precargan los faltantes del corte. */
+  /**
+   * Descuentos (R3): al elegir vendedor o día se precargan los faltantes del corte. La caja
+   * se vacía ANTES de pedirlos y se queda vacía si la consulta falla: nunca quedan las piezas
+   * de otro vendedor o día bajo el elegido (un descuento se le cobra a esa persona). Una
+   * respuesta que llega tarde, de una elección anterior, se ignora.
+   */
   async function precargar(vendedor: string, dia: string) {
     const esta = ++precargaVigente.current;
     setAvisoPrecarga(null);
     if (tipo !== "descuento" || editando || dia === "") return;
+    setEntregado([]);
+    setPrecargado([]);
+    setError(null);
     if (vendedor === "") {
-      setEntregado([]);
-      setPrecargado([]);
+      setPrecargando(false);
       return;
     }
+    setPrecargando(true);
     try {
       const r = await precargaDescuentos(vendedor, dia);
       if (esta !== precargaVigente.current) return;
       const renglones = r.lineas.map((l) => renglonDe(l, opciones));
       setEntregado(renglones);
       setPrecargado(renglones);
-      setError(null);
       if (!r.corteHecho) setAvisoPrecarga("Ese día no tiene corte hecho: no hay faltantes que precargar.");
       else if (r.lineas.length === 0) setAvisoPrecarga("Ese día no le faltó ninguna pieza.");
     } catch (err) {
       if (esta !== precargaVigente.current) return;
       setError(mensajeDe(err, "No se pudieron precargar los faltantes."));
+    } finally {
+      if (esta === precargaVigente.current) setPrecargando(false);
     }
   }
 
@@ -222,6 +236,7 @@ export function CapturaProceso({
   const sinCliente = necesitaCliente && !cliente;
   const puedeGuardar =
     !guardando &&
+    !precargando &&
     !sinCliente &&
     todas.length > 0 &&
     !hayInvalidas &&
@@ -322,6 +337,8 @@ export function CapturaProceso({
         </Campo>
       </div>
 
+      {avisoQuien && <Aviso tono="informacion">{avisoQuien}</Aviso>}
+
       {editando && (
         <Aviso tono="informacion">
           {`Corrigiendo el registro de las ${editando.hora}${editando.cliente ? ` de ${editando.cliente.nombre}` : ""}.`}
@@ -345,7 +362,7 @@ export function CapturaProceso({
             </div>
           ) : (
             <div className="max-w-xl">
-              <CajaProductos titulo={titulos.entregado!} tono="neutro" renglones={entregado} opciones={opciones} onCambio={setEntregado} disabled={guardando} />
+              <CajaProductos titulo={titulos.entregado!} tono="neutro" renglones={entregado} opciones={opciones} onCambio={setEntregado} disabled={guardando || precargando} />
             </div>
           )}
 

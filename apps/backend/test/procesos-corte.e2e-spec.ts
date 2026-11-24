@@ -736,6 +736,71 @@ describe('Procesos en el corte, precarga y resumen (e2e)', () => {
       expect(suma).toBe((await corte(vendedorT, hoy)).totales.faltante);
     });
 
+    it('descuento (m-1): una presentacion dada de baja con movimiento en el corte de ese vendedor y dia se acepta; sin movimiento = 400 con su nombre', async () => {
+      const vendedorD = await crearVendedor(kId);
+      const vieja = await crearPresentacion('3 L');
+      await crearCargaAceptada(vendedorD, hoy, [
+        { presentacionId: vieja, piezas: 10 },
+      ]);
+      await http()
+        .put('/cortes/vendedor')
+        .set('Cookie', cookieGeneral)
+        .send({
+          vendedor: vendedorD,
+          fecha: hoy,
+          lineas: [{ presentacionId: vieja, buenas: 6, merma: 0 }],
+        })
+        .expect(200);
+      await db
+        .updateTable('presentacion')
+        .set({ deleted_at: sql<Date>`now()` })
+        .where('id', '=', vieja)
+        .execute();
+
+      const pre = (await precarga(cookieK, vendedorD, hoy).expect(200))
+        .body as PrecargaDescuentos;
+      expect(pre.lineas).toEqual([
+        { presentacionId: vieja, nombre: `${PRODUCTO} 3 L`, piezas: 4 },
+      ]);
+      const cuerpo = (vendedorId: string, presentacionId: string) => ({
+        tipo: 'descuento',
+        sucursal: K,
+        fecha: hoy,
+        clienteId: null,
+        vendedorId,
+        mermaDe: null,
+        comentario: null,
+        lineas: [{ presentacionId, sentido: 'entregado', piezas: 4 }],
+      });
+      await http()
+        .post('/procesos')
+        .set('Cookie', cookieK)
+        .send(cuerpo(vendedorD, vieja))
+        .expect(201);
+
+      // Otro vendedor sin movimiento de esa presentacion ese dia: 400, y dice cual.
+      const res = await http()
+        .post('/procesos')
+        .set('Cookie', cookieK)
+        .send(cuerpo(vendedorB, vieja))
+        .expect(400);
+      expect((res.body as { message: string }).message).toBe(
+        `La presentación ${PRODUCTO} 3 L está dada de baja o desactivada.`,
+      );
+      // Otro dia del mismo vendedor (sin movimiento): tambien 400.
+      await http()
+        .post('/procesos')
+        .set('Cookie', cookieK)
+        .send({ ...cuerpo(vendedorD, vieja), fecha: ayer })
+        .expect(400);
+      // Fuera de descuento no cambia nada: un consumo con ella = 400.
+      await http()
+        .post('/procesos')
+        .set('Cookie', cookieK)
+        .send({ ...cuerpo(vendedorD, vieja), tipo: 'consumo' })
+        .expect(400);
+    });
+
     it('vendedor de otra sucursal o dado de baja = 404; sin permiso de descuento = 403', async () => {
       await precarga(cookieK, vendedorOtra, hoy).expect(404);
       await precarga(cookieK, vendedorBaja, hoy).expect(404);

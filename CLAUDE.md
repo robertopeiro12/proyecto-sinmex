@@ -234,8 +234,10 @@ usuario con sesion pasa.
 - **Con `sucursal.control_inventario` prendida, el portal no le vende a un vendedor más de lo que trae cargado** (cliente,
   2026-11-12; la misma casilla y la misma regla que la app de T-27). Aplica a `POST /ventas` y a `PATCH /ventas/:id` solo
   si la venta tiene vendedor (Oficina nunca se revisa): existencia = las piezas teóricas por regresar del corte (cargadas aceptadas − vendidas − regaladas − merma entregada − merma de
-  almacén − consumo) de ese vendedor en la **fecha de la venta**, la misma cuenta del corte (`movimientosDelDia` de
-  `produccion/cortes.repository.ts` + `existenciasPorPresentacion` de `reglas-corte.ts`; la merma **recibida** no suma a lo vendible). Si no alcanza → **409** "No le alcanza el producto a …: Horchata 1 L, faltan 3; …" antes del folio (no
+  almacén − consumo − cambios entregados + cambios recibidos) de ese vendedor en la **fecha de la venta**, la misma cuenta del corte (`movimientosDelDia` de
+  `produccion/cortes.repository.ts` + `existenciasPorPresentacion` de `reglas-corte.ts`; la merma **recibida** no suma a lo vendible). Esas cuentas incluyen lo que la oficina captura en
+  **Procesos** a nombre del vendedor (merma entregada, merma de almacén, consumo, promoción como regaladas y cambios; el
+  descuento no), además de lo de la tablet. Si no alcanza → **409** "No le alcanza el producto a …: Horchata 1 L, faltan 3; …" antes del folio (no
   lo quema). Al editar se suman de vuelta las líneas de la propia venta si sigue con el mismo vendedor, y una presentación
   que no sube nunca se rechaza. Una carga **pendiente** no bloquea en el portal (la app sí). Reglas puras en
   `ventas-cobranza/inventario-venta.ts`, candado en `inventario-venta.service.ts`. **Orden de candados: `vendedor`
@@ -910,6 +912,15 @@ usuario con sesion pasa.
     Merma de cliente, Cambios y Promoción sin cliente: solo "Elige un cliente arriba." (sin lista). Pasar Merma a Almacén
     descarta "Le entregué" (preguntando si había algo). Descuentos precarga al cambiar vendedor o día; "Otro día" sin cambiar la
     fecha no vuelve a precargar; si la caja se corrigió a mano pregunta antes de reemplazarla; "Elige un vendedor…" la vacía.
+  - **Descuentos: nunca a la persona equivocada (revisión final).** Al cambiar de vendedor o día la caja se **vacía antes** de
+    pedir la precarga y **se queda vacía si falla**; mientras va en camino, Guardar y la caja están deshabilitados, y una
+    respuesta que llega tarde (de una elección anterior) se ignora (`precargar` en `captura-proceso.tsx`). Si la lista del día
+    ya trae un descuento del vendedor elegido para esa fecha, sale el aviso informativo "Ya hay un descuento de <Nombre> para
+    ese día." (no bloquea; `ListaProcesos.onCargada`). En el **servidor**, un descuento acepta una presentación desactivada o
+    dada de baja si tuvo movimiento en el corte de ese vendedor y fecha (`movimientosDelDia`, el mismo criterio D13 del
+    corte), porque la precarga la trae del corte; los demás tipos no cambian. El 400 de presentación dice cuál: "La
+    presentación Horchata 1 L está dada de baja o desactivada." (un id que nunca existió conserva "Una de las presentaciones
+    no existe.").
     `Pestanas` ganó el modo controlado (`valor`; sin `valor` no cambia nada).
   - **Nube**: `20261126120000_procesos.sql` se sube a `sinmex dev` después del merge, con el protocolo de push (pre-flight:
     nada que contar; tablas nuevas y cinco permisos). **Backend y portal juntos.** La tablet no cambia.

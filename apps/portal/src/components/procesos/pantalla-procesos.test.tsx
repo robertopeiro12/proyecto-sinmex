@@ -516,4 +516,81 @@ describe("PantallaProcesos", () => {
     await screen.findByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" });
     expect(screen.queryByRole("alert")).toBeNull();
   });
+
+  it("Descuentos (I-1): si la precarga del vendedor nuevo falla, la caja queda vacía y no se puede guardar", async () => {
+    mockAuth(["proceso.descuento"]);
+    const u = userEvent.setup();
+    vi.mocked(procesosLib.precargaDescuentos)
+      .mockResolvedValueOnce({ corteHecho: true, lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", piezas: 3 }] })
+      .mockRejectedValueOnce(new ErrorApi("x", 404, "No existe ese vendedor."));
+    render(<PantallaProcesos sucursal={null} />);
+    const vendedor = await screen.findByLabelText("Vendedor");
+    await u.selectOptions(vendedor, "Pedro");
+    await screen.findByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" });
+    expect(screen.getByRole("button", { name: "Guardar descuento" })).toBeEnabled();
+    await u.selectOptions(vendedor, "Ricardo");
+    expect(await screen.findByRole("alert")).toHaveTextContent("No existe ese vendedor.");
+    expect(screen.queryByRole("textbox", { name: /Piezas de/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Guardar descuento" })).toBeDisabled();
+  });
+
+  it("Descuentos (I-1): mientras la precarga va en camino no se puede guardar ni tocar la caja", async () => {
+    mockAuth(["proceso.descuento"]);
+    const u = userEvent.setup();
+    let responder: (v: Awaited<ReturnType<typeof procesosLib.precargaDescuentos>>) => void = () => {};
+    vi.mocked(procesosLib.precargaDescuentos)
+      .mockResolvedValueOnce({ corteHecho: true, lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", piezas: 3 }] })
+      .mockImplementationOnce(() => new Promise((r) => (responder = r)));
+    render(<PantallaProcesos sucursal={null} />);
+    const vendedor = await screen.findByLabelText("Vendedor");
+    await u.selectOptions(vendedor, "Pedro");
+    await screen.findByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" });
+    await u.selectOptions(vendedor, "Ricardo");
+    await waitFor(() => expect(procesosLib.precargaDescuentos).toHaveBeenLastCalledWith("v1", HOY));
+    expect(screen.queryByRole("textbox", { name: /Piezas de/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Guardar descuento" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Agregar producto a Productos" })).toBeDisabled();
+    responder({ corteHecho: true, lineas: [{ presentacionId: "p3", nombre: "Jamaica 500 ml", piezas: 2 }] });
+    expect(await screen.findByRole("textbox", { name: "Piezas de Jamaica 500 ml en Productos" })).toHaveValue("2");
+    expect(screen.getByRole("button", { name: "Guardar descuento" })).toBeEnabled();
+  });
+
+  it("Descuentos (I-1): una precarga que llega tarde, de un vendedor que ya no está elegido, se ignora", async () => {
+    mockAuth(["proceso.descuento"]);
+    const u = userEvent.setup();
+    type Precarga = Awaited<ReturnType<typeof procesosLib.precargaDescuentos>>;
+    const pendientes: Record<string, (v: Precarga) => void> = {};
+    vi.mocked(procesosLib.precargaDescuentos).mockImplementation((v) => new Promise<Precarga>((r) => (pendientes[v] = r)));
+    render(<PantallaProcesos sucursal={null} />);
+    const vendedor = await screen.findByLabelText("Vendedor");
+    await u.selectOptions(vendedor, "Pedro");
+    await u.selectOptions(vendedor, "Ricardo");
+    await waitFor(() => expect(pendientes.v1).toBeDefined());
+    pendientes.v1({ corteHecho: true, lineas: [{ presentacionId: "p3", nombre: "Jamaica 500 ml", piezas: 2 }] });
+    await screen.findByRole("textbox", { name: "Piezas de Jamaica 500 ml en Productos" });
+    pendientes.v2({ corteHecho: true, lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", piezas: 3 }] });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Piezas de Jamaica 500 ml en Productos" })).toHaveValue("2");
+    expect(screen.getByLabelText("Vendedor")).toHaveValue("v1");
+  });
+
+  it("Descuentos (m-2): si en la lista del día ya hay un descuento del vendedor elegido, avisa sin bloquear", async () => {
+    mockAuth(["proceso.descuento"]);
+    const u = userEvent.setup();
+    vi.mocked(procesosLib.listarProcesos).mockResolvedValue(
+      delDia([proceso({ tipo: "descuento", mermaDe: null, cliente: null, vendedor: { id: "v2", nombre: "Pedro" }, lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", sentido: "entregado", piezas: 3 }] })]),
+    );
+    vi.mocked(procesosLib.precargaDescuentos).mockResolvedValue({ corteHecho: true, lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", piezas: 3 }] });
+    render(<PantallaProcesos sucursal={null} />);
+    const vendedor = await screen.findByLabelText("Vendedor");
+    await screen.findByRole("table", { name: "Descuentos del día" });
+    expect(screen.queryByText(/Ya hay un descuento de/)).toBeNull();
+    await u.selectOptions(vendedor, "Ricardo");
+    await screen.findByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" });
+    expect(screen.queryByText(/Ya hay un descuento de/)).toBeNull();
+    await u.selectOptions(vendedor, "Pedro");
+    expect(await screen.findByText("Ya hay un descuento de Pedro para ese día.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Guardar descuento" })).toBeEnabled());
+  });
 });

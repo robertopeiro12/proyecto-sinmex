@@ -9,6 +9,7 @@ import type { Transaction } from 'kysely';
 import type { DB } from '../../database/schema';
 import { PermisosRepository } from '../auth/permisos.repository';
 import { PromocionesService } from '../cartera-clientes/promociones.service';
+import { movimientosDelDia } from '../produccion/cortes.repository';
 import { CortesService } from '../produccion/cortes.service';
 import type { ConsultaCorteVendedorDto } from '../produccion/dto/corte.dto';
 import { NotasRutaRepository } from '../rutas/notas-ruta.repository';
@@ -323,19 +324,41 @@ export class ProcesosService {
 
   /**
    * Toda presentacion que no estaba ya en el proceso tiene que estar viva y
-   * activa. Una que ya estaba pasa aunque ya no lo este.
+   * activa. Una que ya estaba pasa aunque ya no lo este. En un descuento
+   * tambien pasa una desactivada o dada de baja que tuvo movimiento en el corte
+   * de ese vendedor y dia (el mismo criterio del corte, D13): la precarga la
+   * trae del corte y el guardado no la debe rechazar.
    */
   private async exigirPresentaciones(
     datos: EntradaProcesoLimpia,
     yaEstaban: ReadonlySet<string>,
     trx: Transaction<DB>,
   ): Promise<void> {
-    const porRevisar = [
+    let porRevisar = [
       ...new Set(datos.lineas.map((l) => l.presentacionId)),
     ].filter((id) => !yaEstaban.has(id));
+    if (porRevisar.length === 0) return;
+    if (datos.tipo === 'descuento' && datos.vendedorId !== null) {
+      const delCorte = new Set(
+        (
+          await movimientosDelDia(trx, datos.fecha, {
+            vendedorId: datos.vendedorId,
+          })
+        ).map((m) => m.presentacionId),
+      );
+      porRevisar = porRevisar.filter((id) => !delCorte.has(id));
+    }
     const existen = await this.repo.idsPresentacionesActivas(porRevisar, trx);
-    if (porRevisar.some((id) => !existen.has(id)))
-      throw new BadRequestException(MOTIVO_PRESENTACION_INEXISTENTE);
+    const rechazada = porRevisar.find((id) => !existen.has(id));
+    if (rechazada === undefined) return;
+    const nombre = (
+      await this.repo.nombresDePresentaciones([rechazada], trx)
+    ).get(rechazada);
+    throw new BadRequestException(
+      nombre === undefined
+        ? MOTIVO_PRESENTACION_INEXISTENTE
+        : `La presentación ${nombre} está dada de baja o desactivada.`,
+    );
   }
 
   /**

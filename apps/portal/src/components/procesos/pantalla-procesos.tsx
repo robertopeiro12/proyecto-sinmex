@@ -9,7 +9,7 @@ import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { Pestanas } from "@/components/ui/pestanas";
 import { listarClientes, type ClienteResumen } from "@/lib/clientes";
 import { presentacionesParaAgregar } from "@/lib/cortes";
-import { llevaCliente, TIPOS_PROCESO, type MermaDe, type Proceso, type TipoProceso } from "@/lib/procesos";
+import { llevaCliente, TIPOS_PROCESO, type MermaDe, type Proceso, type ProcesosDelDia, type TipoProceso } from "@/lib/procesos";
 import { listarProductos, type Producto } from "@/lib/productos";
 import { listarVendedores, type Vendedor } from "@/lib/vendedores";
 import { hoyEnTijuana } from "@/lib/ventas";
@@ -159,6 +159,7 @@ function PestanaProceso({
   // `captura` vuelve a montar la captura (limpia) al guardar; `version` vuelve a pedir la lista.
   const [captura, setCaptura] = useState(0);
   const [version, setVersion] = useState(0);
+  const [delDia, setDelDia] = useState<ProcesosDelDia | null>(null);
 
   const mermaDeTipo = tipo === "merma" ? mermaDe : null;
   const conCliente = llevaCliente(tipo, mermaDeTipo);
@@ -166,6 +167,13 @@ function PestanaProceso({
   // aviso "Elige un cliente arriba."); de la sucursal en lo demás.
   const filtro = conCliente && cliente ? { id: cliente.id } : null;
   const mostrarLista = !conCliente || cliente !== null;
+
+  // m-2: un descuento no cambia el corte, así que volver a elegir al mismo vendedor y día
+  // precarga los mismos faltantes. Se avisa (sin bloquear) con la lista que ya se cargó.
+  const yaDescontado =
+    tipo === "descuento" && !editando && quien !== "" && delDia?.fecha === fecha
+      ? delDia.procesos.find((p) => p.vendedor?.id === quien)?.vendedor ?? null
+      : null;
 
   async function editar(p: Proceso) {
     if (editando?.id === p.id) return;
@@ -209,6 +217,7 @@ function PestanaProceso({
           setVersion((v) => v + 1);
         }}
         onSucio={onSucio}
+        avisoQuien={yaDescontado ? `Ya hay un descuento de ${yaDescontado.nombre} para ese día.` : null}
       />
       {mostrarLista && (
         <ListaProcesos
@@ -223,6 +232,7 @@ function PestanaProceso({
           onEliminado={(p) => {
             if (editando?.id === p.id) terminar();
           }}
+          onCargada={setDelDia}
         />
       )}
     </div>

@@ -768,7 +768,7 @@ describe('Procesos (e2e)', () => {
             { presentacionId: inactiva, sentido: 'entregado', piezas: 1 },
           ],
         },
-        'Una de las presentaciones no existe.',
+        `La presentación ${PRODUCTO}-inactivo 2 L está dada de baja o desactivada.`,
       );
       // La que ya estaba se conserva al editar.
       const editado = (
@@ -798,6 +798,20 @@ describe('Procesos (e2e)', () => {
         'consumo',
         {
           lineas: [{ presentacionId: baja, sentido: 'entregado', piezas: 1 }],
+        },
+        `La presentación ${PRODUCTO} baja está dada de baja o desactivada.`,
+      );
+      // Un id que nunca existio conserva el mensaje generico.
+      await rechaza(
+        'consumo',
+        {
+          lineas: [
+            {
+              presentacionId: '00000000-0000-4000-8000-000000000000',
+              sentido: 'entregado',
+              piezas: 1,
+            },
+          ],
         },
         'Una de las presentaciones no existe.',
       );

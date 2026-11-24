@@ -51,6 +51,7 @@ export function ListaProcesos({
   editandoId,
   onEditar,
   onEliminado,
+  onCargada,
 }: {
   tipo: TipoProceso;
   sucursal: string;
@@ -63,6 +64,8 @@ export function ListaProcesos({
   editandoId: string | null;
   onEditar: (p: Proceso) => void;
   onEliminado: (p: Proceso) => void;
+  /** Avisa cada lista que llega (la pantalla la usa para el aviso de descuento repetido). */
+  onCargada?: (datos: ProcesosDelDia) => void;
 }) {
   const info = infoDeProceso(tipo);
   const [datos, setDatos] = useState<ProcesosDelDia | null>(null);
@@ -73,6 +76,11 @@ export function ListaProcesos({
   const ultima = useRef(0);
   const { confirmar, ventana } = useConfirmar();
   const clienteId = cliente?.id ?? null;
+  // En un ref: la lista no se vuelve a pedir porque cambie quien escucha.
+  const avisarCargada = useRef(onCargada);
+  useEffect(() => {
+    avisarCargada.current = onCargada;
+  });
 
   useEffect(() => {
     const esta = ++ultima.current;
@@ -82,6 +90,7 @@ export function ListaProcesos({
         if (esta !== ultima.current) return;
         setDatos(r);
         setError(null);
+        avisarCargada.current?.(r);
       })
       .catch((err: unknown) => {
         if (esta !== ultima.current) return;
