@@ -1,4 +1,4 @@
-# Operación → Procesos — diseño
+# Operación → Procesos — diseño (PR A: pantalla y las 5 pestañas nuevas)
 
 Fecha: 2026-11-25 · Rama: `feature/procesos` · Portal + backend (Roberto). La tablet no cambia.
 
@@ -17,14 +17,22 @@ por la app o que hay que corregir. Ambos alimentarán el Inventario de PT con Ve
 vendedor** cuenta además en su camioneta (corte e Inventario por vendedor).
 
 ## Decisiones de Roberto (2026-11-25)
-- **R1.** Solo las 5 pestañas nuevas: **Merma · Cambios · Consumos · Promoción · Descuentos**. Ventas y Notas se quedan
-  en sus pantallas (Registrar venta, Ventas, Cobranza). **Pendiente: comentárselo al tío.**
+- **R1 (cambiada el mismo día).** Procesos **como el viejo, todo dentro**: pestañas **Ventas** (= Registrar venta) ·
+  **Notas** (= Ventas + Facturas + Cobranza juntas: buscar, filtrar por factura/pendiente, detalle, historial de abonos,
+  abonar, editar, eliminar) · **Merma · Cambios · Consumos · Promoción · Descuentos**. Registrar venta, Ventas,
+  Facturas y Cobranza salen del menú de Operación (sus direcciones redirigen a su pestaña). **Cuentas por Cobrar**
+  (reporte) y **Promociones** (configuración de reglas) se quedan donde están. Se entrega en **dos PRs**: (A) la
+  pantalla de Procesos con las 5 pestañas nuevas; (B) mover Ventas y juntar Notas, con su propio diseño basado en la
+  pestaña Notas del viejo y en las pantallas actuales.
 - **R2.** Cada captura (salvo Descuentos) elige **vendedor u Oficina**, como Registrar venta: con vendedor cuenta en su
   camioneta (corte e Inventario por vendedor); con Oficina, solo en el almacén.
 - **R3.** Descuentos por faltante: se elige vendedor y día y se **precargan las piezas que le faltaron según el corte**
   (editable antes de guardar).
 
 ## Decisiones mías
+- **D0. Cliente arriba, como el viejo** ("Seleccionar cliente"): un buscador de cliente de la sucursal encima de las
+  pestañas; lo usan Ventas, Notas, Merma (de cliente), Cambios y Promoción. Consumos y Descuentos no lo usan (piden su
+  vendedor u Oficina). Si una pestaña que lo necesita no tiene cliente elegido, dice "Elige un cliente".
 - **D1. Pantalla** *Operación → Procesos* (`/operacion/procesos`, hoy "pronto"), sucursal del menú lateral, una pestaña
   por tipo, lista del día (hoy o anteriores) + "Registrar …" en pantalla completa con rejilla por tamaño y TAB, como el
   Registro de Operación. Permisos por pestaña: `proceso.merma`, `proceso.cambio`, `proceso.consumo`,
