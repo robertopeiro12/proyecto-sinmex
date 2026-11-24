@@ -10,6 +10,11 @@ nuevo que sea Descuentos […] solamente cuando sean descuentos"), `10-Dominio/S
 por cliente, pestañas Ventas · Notas · Merma · Cambios · Consumos · Promoción; merma con producto recibido, casilla
 "Merma Almacén", número de mermas y producto entregado al cliente).
 
+Revisión del Procesos viejo en vivo (2026-11-25): `10-Dominio/Sistema viejo del cliente.md` § "Procesos a detalle".
+Lo nuestro **se parece en qué pide y qué permite, no en cómo se ve** (Roberto): mismas pestañas y datos, con nuestra
+captura por tamaño (varios productos de un jalón), fecha (pedida en "Cambios v2.0") y la lista de lo capturado del día,
+que el viejo no tiene.
+
 ## Para qué
 Registro de Operación es lo que **Producción** anota del **almacén**. Procesos es lo que **Administración** captura de lo
 que pasó **en la calle** (clientes y vendedores): mermas, cambios, consumos, promociones y descuentos que no llegaron
@@ -26,6 +31,9 @@ vendedor** cuenta además en su camioneta (corte e Inventario por vendedor).
   pestaña Notas del viejo y en las pantallas actuales.
 - **R2.** Cada captura (salvo Descuentos) elige **vendedor u Oficina**, como Registrar venta: con vendedor cuenta en su
   camioneta (corte e Inventario por vendedor); con Oficina, solo en el almacén.
+- **R4 (tras revisar el viejo).** Merma de cliente y Cambios: **el total entregado tiene que ser igual al total
+  recibido**, de cualquier producto y tamaño (como el viejo: "Revisar las cantidades!!"). Si no cuadra = 400 y el portal
+  no deja guardar.
 - **R3.** Descuentos por faltante: se elige vendedor y día y se **precargan las piezas que le faltaron según el corte**
   (editable antes de guardar).
 
@@ -42,9 +50,10 @@ vendedor** cuenta además en su camioneta (corte e Inventario por vendedor).
   `proceso_oficina_linea` (`presentacion_id`, `sentido` `recibido|entregado`, `piezas` 1..100000). Checks por tipo.
 - **D3. Por tipo.**
   - *Merma*: "De un cliente" (cliente obligatorio) o "De almacén" (sin cliente); líneas **recibido** (dañadas) y
-    **entregado** (reposición buena, cualquier sabor del mismo tamaño). De almacén solo recibido.
-  - *Cambios*: cliente obligatorio; **recibido** (buenas que devuelve) y **entregado** (otro sabor); por cada tamaño el
-    total recibido = total entregado (cambio físico 1 a 1, "mismo tamaño").
+    **entregado** (reposición buena, de cualquier producto). Con cliente, **el total entregado = el total recibido**
+    (R4). De almacén solo recibido.
+  - *Cambios*: cliente obligatorio; **recibido** (buenas que devuelve) y **entregado** (otro producto); **el total
+    entregado = el total recibido** (R4), sin importar el tamaño.
   - *Consumos*: sin cliente; solo **entregado** (piezas que se tomaron).
   - *Promoción*: cliente obligatorio; solo **entregado** (piezas regaladas fuera de una venta).
   - *Descuentos*: vendedor obligatorio (sin Oficina), sin cliente; solo **entregado** = piezas que se le descuentan;
@@ -61,6 +70,6 @@ vendedor** cuenta además en su camioneta (corte e Inventario por vendedor).
 Una migración (tablas nuevas, checks, permisos). Pre-flight: nada que contar. Backend y portal juntos.
 
 ## Pruebas
-pgTAP de checks; unit de reglas (cambio 1 a 1 por tamaño, precarga de faltantes); e2e por tipo (alta, edición, baja,
+pgTAP de checks; unit de reglas (total entregado = recibido en merma de cliente y cambios, precarga de faltantes); e2e por tipo (alta, edición, baja,
 permisos, alcance) y que una merma/cambio/promoción/consumo con vendedor cambia su corte y una con Oficina no; portal:
 pestañas por permiso, captura por tipo, precarga de descuentos. Navegador a 1366 px.
