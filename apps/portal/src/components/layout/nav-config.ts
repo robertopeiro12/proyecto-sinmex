@@ -58,9 +58,8 @@ export const navSections: NavSection[] = [
   {
     label: "Producción",
     items: [
-      // Recarga · Corte · Registro de Operación. (Retorno es parte del Corte; Producción del
+      // Corte · Registro de Operación (Recargas es una de sus pestañas). (Retorno es parte del Corte; Producción del
       // día es la pestaña Entradas del Registro: sus direcciones viejas redirigen.)
-      { label: "Recarga", href: "/produccion/recarga" },
       { label: "Corte", href: "/produccion/corte" },
       { label: "Inventario por vendedor", href: "/produccion/inventario-vendedor" },
       { label: "Registro de Operación", href: "/produccion/registro-operacion" },

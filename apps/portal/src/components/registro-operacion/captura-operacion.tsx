@@ -27,7 +27,7 @@ import { listarSucursales, type Sucursal } from "@/lib/sucursales";
 import { hoyEnTijuana } from "@/lib/ventas";
 import { diaDeEnvio, SelectorDiaEnvio } from "./selector-dia-envio";
 
-interface Renglon {
+export interface Renglon {
   presentacionId: string;
   nombre: string;
   producto: string;
@@ -51,7 +51,7 @@ function renglonesDe(productos: Producto[], operacion: OperacionAlmacen | null):
   return lista;
 }
 
-function agruparPorTamano(renglones: Renglon[]): { tamano: string; renglones: Renglon[] }[] {
+export function agruparPorTamano(renglones: Renglon[]): { tamano: string; renglones: Renglon[] }[] {
   const grupos = new Map<string, { tamano: string; renglones: Renglon[] }>();
   for (const r of renglones) {
     const clave = claveTamano(r.volumen);

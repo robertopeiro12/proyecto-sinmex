@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
+import { useConfirmar } from "@/components/ui/confirmar";
 import { Pestanas } from "@/components/ui/pestanas";
 import { infoDeTipo, TIPOS_OPERACION, type OperacionAlmacen, type TipoOperacion } from "@/lib/operaciones-almacen";
 import { hoyEnTijuana } from "@/lib/ventas";
 import { CapturaOperacion } from "./captura-operacion";
 import { ListaOperaciones } from "./lista-operaciones";
+import { RejillaRecargas } from "./rejilla-recargas";
 import { diaDeEnvio } from "./selector-dia-envio";
 
 const TITULO = "Registro de Operación";
@@ -18,6 +20,18 @@ interface Captura {
   tipo: TipoOperacion;
   operacion: OperacionAlmacen | null;
   fecha: string;
+}
+
+/**
+ * Las pestañas de la pantalla, en el orden del cliente. Las recargas no son una operación
+ * de almacén (usan /cargas): van aparte de TIPOS_OPERACION, que es del backend de operaciones.
+ */
+type PestanaPantalla = { valor: string; etiqueta: string; permiso: string; tipo: TipoOperacion | "recarga" };
+const PESTANA_RECARGA: PestanaPantalla = { valor: "recarga", etiqueta: "Recargas", permiso: "carga.gestionar", tipo: "recarga" };
+
+function pestanasDePantalla(): PestanaPantalla[] {
+  const deOperacion = TIPOS_OPERACION.map((t): PestanaPantalla => ({ valor: t.tipo, etiqueta: infoDeTipo(t.tipo).etiqueta, permiso: t.permiso, tipo: t.tipo }));
+  return [deOperacion[0], PESTANA_RECARGA, ...deOperacion.slice(1)];
 }
 
 /** Un envío nuevo solo admite hoy o ayer: con otro día en la pestaña, abre en hoy. */
@@ -41,9 +55,31 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
   // Cambia al guardar o dar de baja: las listas se vuelven a pedir.
   const [version, setVersion] = useState(0);
   const [fecha, setFecha] = useState(hoyEnTijuana());
+  // Piezas de Recargas escritas sin guardar: abrir la captura de otra pestaña desmonta la
+  // rejilla, así que antes se pregunta (cambiar de pestaña no: quedan montadas).
+  const recargasPendientes = useRef(false);
+  const avisarPendientesRecarga = useCallback((hay: boolean) => {
+    recargasPendientes.current = hay;
+  }, []);
+  const { confirmar, ventana } = useConfirmar();
+
+  async function abrirCaptura(nueva: Captura) {
+    if (
+      recargasPendientes.current &&
+      !(await confirmar({
+        titulo: "¿Salir sin guardar la recarga?",
+        descripcion: "Las piezas que escribiste en Recargas y no guardaste se pierden.",
+        confirmar: "Salir sin guardar",
+        tono: "normal",
+      }))
+    )
+      return;
+    recargasPendientes.current = false;
+    setCaptura(nueva);
+  }
 
   if (cargando) return <EstadoPantalla titulo={TITULO} tipo="cargando" />;
-  const tipos = TIPOS_OPERACION.filter((t) => puede(t.permiso));
+  const tipos = pestanasDePantalla().filter((t) => puede(t.permiso));
   if (tipos.length === 0) return <EstadoPantalla titulo={TITULO} tipo="sin-permiso" />;
 
   const codigo = usuario?.sucursal?.codigo ?? (sucursal && sucursal.toLowerCase() !== "todas" ? sucursal.toUpperCase() : null);
@@ -71,6 +107,7 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
   }
 
   const inicial = tipos.some((t) => t.tipo === inicialLista) ? (inicialLista as string) : tipos[0].tipo;
+  const visible = tipos.some((t) => t.tipo === actual) ? (actual as string) : inicial;
 
   return (
     <Pantalla key="lista">
@@ -78,22 +115,30 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
       <Pestanas
         etiqueta="Tipo de operación"
         valorInicial={inicial}
+        conservarMontadas
         onCambio={setActual}
         pestanas={tipos.map((t) => ({
           valor: t.tipo,
-          etiqueta: infoDeTipo(t.tipo).etiqueta,
-          contenido: (
+          etiqueta: t.etiqueta,
+          // Las pestañas quedan montadas (`conservarMontadas`) para que Recargas no pierda lo
+          // escrito al ir a otra; las listas de operaciones solo se pintan en la suya, así que
+          // como antes se piden al entrar y empiezan limpias.
+          contenido:
+            t.tipo === "recarga" ? (
+              <RejillaRecargas sucursal={codigo} onPendientes={avisarPendientesRecarga} />
+            ) : visible !== t.tipo ? null : (
             <ListaOperaciones
               key={`${t.tipo}-${version}`}
-              tipo={t.tipo}
+              tipo={t.tipo as TipoOperacion}
               sucursal={codigo}
               fecha={fecha}
               onFecha={setFecha}
-              onCapturar={(operacion) => setCaptura({ tipo: t.tipo, operacion, fecha: operacion?.fecha ?? fechaDeNueva(t.tipo, fecha) })}
+              onCapturar={(operacion) => void abrirCaptura({ tipo: t.tipo as TipoOperacion, operacion, fecha: operacion?.fecha ?? fechaDeNueva(t.tipo as TipoOperacion, fecha) })}
             />
-          ),
+            ),
         }))}
       />
+      {ventana}
     </Pantalla>
   );
 }

@@ -22,7 +22,7 @@ describe("navSections", () => {
       "Ruta Semanal",
     ]);
     expect(navSections[1].items.slice(0, 3).map((i) => i.label)).toEqual(["Clientes", "Vendedores", "Vehículos"]);
-    expect(navSections[2].items.slice(0, 4).map((i) => i.label)).toEqual(["Recarga", "Corte", "Inventario por vendedor", "Registro de Operación"]);
+    expect(navSections[2].items.slice(0, 3).map((i) => i.label)).toEqual(["Corte", "Inventario por vendedor", "Registro de Operación"]);
   });
 
   it("Corte ya es pantalla y Retorno salió del menú (es parte del Corte)", () => {
@@ -31,8 +31,8 @@ describe("navSections", () => {
     expect(produccion.some((i) => i.href === "/produccion/retorno")).toBe(false);
   });
 
-  it("Producción: Recarga · Corte · Inventario por vendedor · Registro de Operación · Almacenes, sin Peticiones ni Producción del día", () => {
-    expect(navSections[2].items.map((i) => i.label)).toEqual(["Recarga", "Corte", "Inventario por vendedor", "Registro de Operación", "Almacenes"]);
+  it("Producción: Corte · Inventario por vendedor · Registro de Operación · Almacenes, sin Peticiones ni Producción del día", () => {
+    expect(navSections[2].items.map((i) => i.label)).toEqual(["Corte", "Inventario por vendedor", "Registro de Operación", "Almacenes"]);
   });
 
   it("Catálogo trae Motivos de merma", () => {

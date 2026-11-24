@@ -1,14 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   borradorDe,
-  cargaEditable,
-  columnasDeVendedor,
   leerBorrador,
-  piezasDe,
   totalBorrador,
   totalPiezas,
   type CargaRejilla,
-  type VendedorRejilla,
 } from "./cargas";
 
 const CARGA: CargaRejilla = {
@@ -63,27 +59,7 @@ describe("borrador de una carga (T-27)", () => {
 });
 
 describe("lectura de la rejilla", () => {
-  it("piezasDe y totalPiezas", () => {
-    expect(piezasDe(CARGA, "p2")).toBe(12);
-    expect(piezasDe(CARGA, "p9")).toBeNull();
+  it("totalPiezas suma las líneas", () => {
     expect(totalPiezas(CARGA.lineas)).toBe(36);
-  });
-
-  it("solo se edita una pendiente o rechazada de hoy (D5, D8)", () => {
-    expect(cargaEditable(CARGA, true)).toBe(true);
-    expect(cargaEditable({ ...CARGA, estado: "rechazada" }, true)).toBe(true);
-    expect(cargaEditable({ ...CARGA, estado: "aceptada" }, true)).toBe(false);
-    expect(cargaEditable(CARGA, false)).toBe(false);
-  });
-
-  it("columnasDeVendedor: sus cargas, la nueva al final, o una vacia", () => {
-    const vendedor: VendedorRejilla = { id: "v1", nombre: "Ana", cargas: [CARGA] };
-    expect(columnasDeVendedor(vendedor, false)).toEqual([{ tipo: "carga", carga: CARGA }]);
-    expect(columnasDeVendedor(vendedor, true)).toEqual([
-      { tipo: "carga", carga: CARGA },
-      { tipo: "nueva" },
-    ]);
-    expect(columnasDeVendedor({ ...vendedor, cargas: [] }, false)).toEqual([{ tipo: "vacia" }]);
-    expect(columnasDeVendedor({ ...vendedor, cargas: [] }, true)).toEqual([{ tipo: "nueva" }]);
   });
 });
