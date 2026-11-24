@@ -61,6 +61,7 @@ export const navSections: NavSection[] = [
       { label: "Peticiones", href: "/produccion/peticiones", pronto: true },
       { label: "Recarga", href: "/produccion/recarga" },
       { label: "Corte", href: "/produccion/corte" },
+      { label: "Inventario por vendedor", href: "/produccion/inventario-vendedor" },
       // Nuevas. (Retorno ya no está: es parte del Corte y su dirección lleva ahí.)
       { label: "Producción del día", href: "/produccion/produccion-del-dia" },
       { label: "Almacenes", href: "/produccion/almacenes", pronto: true },
