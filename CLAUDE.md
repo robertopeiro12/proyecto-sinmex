@@ -672,7 +672,10 @@ usuario con sesion pasa.
     sí. **TAB baja por la columna del vendedor** (manejado con `onKeyDown`, no con `tabIndex`) y al terminar pasa al primer
     producto del siguiente vendedor. Un solo **"Guardar recarga"** crea una carga por vendedor con piezas, una por una; si alguna
     falla, las guardadas se limpian y la fallida conserva lo escrito con su mensaje en rojo bajo el nombre del vendedor.
-    "Descartar" confirma con `useConfirmar`. Editar (lápiz) / Eliminar (bote) solo en pendiente o rechazada, con `aria-label`
+    "Descartar" confirma con `useConfirmar`. Un pie fijo (`tfoot sticky bottom-0`) da el total de cada subcolumna; la caja
+    lleva sombra a la derecha si hay más vendedores y `scroll-padding` para que el campo al que llega TAB no quede bajo lo fijo.
+    **Lo escrito no se pierde**: las pestañas quedan montadas (`conservarMontadas`; las listas de operaciones solo se pintan en
+    la suya), `beforeunload` avisa al salir y abrir la captura de otra pestaña pregunta antes. Un "0" cuenta como vacío. Editar (lápiz) / Eliminar (bote) solo en pendiente o rechazada, con `aria-label`
     que dice cuál: editar convierte esa subcolumna en campos con Guardar/Cancelar propios y bloquea lo demás; una presentación
     dada de baja que traía la carga avisa que se quita al guardar (las dadas de baja salen como renglón sin campo). Un 409 deja
     el mensaje en rojo (no se borra al recargar) y recarga la rejilla. `/produccion/recarga` **redirige** a la pestaña (conserva

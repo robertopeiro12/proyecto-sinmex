@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import {
   MAX_PIEZAS_LINEA,
   obtenerRejilla,
   totalBorrador,
+  totalPiezas,
   type Borrador,
   type CargaRejilla,
   type EstadoCarga,
@@ -33,15 +34,16 @@ import { hoyEnTijuana } from "@/lib/ventas";
 
 const TONO: Record<EstadoCarga, TonoEtiqueta> = { pendiente: "advertencia", aceptada: "exito", rechazada: "error" };
 
-/** Vacío = sin línea; si no, un entero de 1 a MAX_PIEZAS_LINEA. */
+/** Vacío o 0 = sin línea (como `leerBorrador`); si no, un entero de 1 a MAX_PIEZAS_LINEA. */
 function textoValido(texto: string): boolean {
   const limpio = texto.trim();
-  if (limpio === "") return true;
+  if (limpio === "" || /^0+$/.test(limpio)) return true;
   return /^\d+$/.test(limpio) && Number(limpio) >= 1 && Number(limpio) <= MAX_PIEZAS_LINEA;
 }
 
 const hayInvalidos = (b: Borrador) => Object.values(b).some((t) => !textoValido(t));
-const hayAlgo = (b: Borrador | undefined) => Object.values(b ?? {}).some((t) => t.trim() !== "");
+/** Algo que sí sería línea (un 0 o un vacío no cuentan). */
+const hayAlgo = (b: Borrador | undefined) => Object.values(b ?? {}).some((t) => t.trim() !== "" && !/^0+$/.test(t.trim()));
 
 interface GrupoTamano {
   tamano: string;
@@ -97,7 +99,14 @@ const CAMPO =
  * tiene una subcolumna por carga de hoy y una "Nueva" para capturar; TAB baja por la
  * columna del vendedor y al terminar pasa al siguiente.
  */
-export function RejillaRecargas({ sucursal }: { sucursal: string }) {
+export function RejillaRecargas({
+  sucursal,
+  onPendientes,
+}: {
+  sucursal: string;
+  /** Avisa si hay piezas escritas sin guardar (nuevas o una corrección abierta). */
+  onPendientes?: (hay: boolean) => void;
+}) {
   const [rejilla, setRejilla] = useState<Rejilla | null>(null);
   const [cargando, setCargando] = useState(true);
   const [vuelta, setVuelta] = useState(0);
@@ -105,11 +114,14 @@ export function RejillaRecargas({ sucursal }: { sucursal: string }) {
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
   const [nuevas, setNuevas] = useState<Record<string, Borrador>>({});
-  const [erroresVendedor, setErroresVendedor] = useState<Record<string, string>>({});
+  // Lo que no se guardó, por vendedor; el nombre va aparte por si deja de salir en la rejilla.
+  const [erroresVendedor, setErroresVendedor] = useState<Record<string, { nombre: string; mensaje: string }>>({});
   const [edicion, setEdicion] = useState<Edicion | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const ultima = useRef(0);
   const campos = useRef(new Map<string, HTMLInputElement>());
+  const caja = useRef<HTMLDivElement>(null);
+  const [masDerecha, setMasDerecha] = useState(false);
   const { confirmar, ventana } = useConfirmar();
 
   useEffect(() => {
@@ -134,6 +146,46 @@ export function RejillaRecargas({ sucursal }: { sucursal: string }) {
       });
   }, [sucursal, vuelta]);
 
+  // Un vendedor que ya no sale (dado de baja, cambió de sucursal): lo escrito para él se tira.
+  useEffect(() => {
+    if (!rejilla) return;
+    const ids = new Set(rejilla.vendedores.map((v) => v.id));
+    setNuevas((n) => (Object.keys(n).every((id) => ids.has(id)) ? n : Object.fromEntries(Object.entries(n).filter(([id]) => ids.has(id)))));
+  }, [rejilla]);
+
+  const pendientes = Object.values(nuevas).some((b) => hayAlgo(b)) || edicion !== null;
+  useEffect(() => {
+    onPendientes?.(pendientes);
+  }, [pendientes, onPendientes]);
+  useEffect(() => {
+    if (!pendientes) return;
+    const avisar = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", avisar);
+    return () => window.removeEventListener("beforeunload", avisar);
+  }, [pendientes]);
+
+  // La sombra de la orilla derecha: hay más vendedores si la caja aún se puede desplazar.
+  const medirOrilla = useCallback(() => {
+    const el = caja.current;
+    if (!el) return;
+    setMasDerecha(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+    // Lo fijo no tapa el campo al que se llega: el desplazamiento deja ese margen.
+    const thead = el.querySelector("thead");
+    const tfoot = el.querySelector("tfoot");
+    const fija = el.querySelector("tbody th[scope=row]") as HTMLElement | null;
+    el.style.scrollPaddingTop = `${thead?.offsetHeight ?? 0}px`;
+    el.style.scrollPaddingBottom = `${tfoot?.offsetHeight ?? 0}px`;
+    el.style.scrollPaddingLeft = `${fija?.offsetWidth ?? 0}px`;
+  }, []);
+  useEffect(() => {
+    medirOrilla();
+    window.addEventListener("resize", medirOrilla);
+    return () => window.removeEventListener("resize", medirOrilla);
+  }, [medirOrilla, rejilla, edicion]);
+
   const grupos = useMemo(() => gruposDe(rejilla?.presentaciones ?? []), [rejilla]);
   const activas = useMemo(() => grupos.flatMap((g) => g.presentaciones.filter((p) => p.activa)), [grupos]);
 
@@ -151,8 +203,10 @@ export function RejillaRecargas({ sucursal }: { sucursal: string }) {
     const campo = destino ? campos.current.get(destino) : undefined;
     if (i < 0 || !campo) return; // en la orilla, TAB sigue su camino normal
     e.preventDefault();
-    campo.focus();
+    campo.focus({ preventScroll: true });
     campo.select();
+    // `nearest` respeta el scroll-padding de la caja: el campo no queda bajo lo fijo.
+    campo.closest("td")?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }
 
   function registrarCampo(clave: string) {
@@ -175,6 +229,9 @@ export function RejillaRecargas({ sucursal }: { sucursal: string }) {
 
   const vendedores = rejilla?.vendedores ?? [];
   const hayNuevas = vendedores.some((v) => hayAlgo(nuevas[v.id]));
+  const visibles = new Set(vendedores.map((v) => v.id));
+  const fallasVisibles = Object.keys(erroresVendedor).filter((id) => visibles.has(id)).length;
+  const fallasOcultas = Object.entries(erroresVendedor).filter(([id]) => !visibles.has(id));
   const nuevasInvalidas = vendedores.some((v) => hayInvalidos(nuevas[v.id] ?? {}));
   const totalNuevas = vendedores.reduce((t, v) => t + totalBorrador(nuevas[v.id] ?? {}), 0);
   const puedeGuardar = !ocupado && edicion === null && hayNuevas && !nuevasInvalidas;
@@ -194,7 +251,7 @@ export function RejillaRecargas({ sucursal }: { sucursal: string }) {
     setErroresVendedor({});
     setOcupado(true);
     const guardadas: string[] = [];
-    const fallas: Record<string, string> = {};
+    const fallas: Record<string, { nombre: string; mensaje: string }> = {};
     // Una por una: si una falla, las demás siguen y cada vendedor se queda con su resultado.
     for (const { vendedor, lineas } of porGuardar) {
       try {
@@ -206,19 +263,11 @@ export function RejillaRecargas({ sucursal }: { sucursal: string }) {
           return resto;
         });
       } catch (err) {
-        fallas[vendedor.id] = mensajeDe(err, "No se pudo guardar la recarga.");
+        fallas[vendedor.id] = { nombre: vendedor.nombre, mensaje: mensajeDe(err, "No se pudo guardar la recarga.") };
       }
     }
     if (guardadas.length > 0) {
       setAviso(`${guardadas.length === 1 ? "Recarga guardada" : "Recargas guardadas"}: ${guardadas.join(", ")}.`);
-    }
-    const fallidas = Object.keys(fallas).length;
-    if (fallidas > 0) {
-      setError(
-        fallidas === 1
-          ? "Una recarga no se guardó: su mensaje está en rojo arriba de su columna."
-          : `${fallidas} recargas no se guardaron: sus mensajes están en rojo arriba de su columna.`,
-      );
     }
     setErroresVendedor(fallas);
     setOcupado(false);
@@ -234,6 +283,16 @@ export function RejillaRecargas({ sucursal }: { sucursal: string }) {
     if (!si) return;
     setNuevas({});
     setErroresVendedor({});
+  }
+
+  function escribirNueva(vendedorId: string, presentacionId: string, texto: string) {
+    setNuevas((n) => ({ ...n, [vendedorId]: { ...n[vendedorId], [presentacionId]: texto } }));
+    setErroresVendedor((e) => {
+      if (!(vendedorId in e)) return e;
+      const resto = { ...e };
+      delete resto[vendedorId];
+      return resto;
+    });
   }
 
   function empezarEdicion(vendedor: VendedorRejilla, carga: CargaRejilla) {
@@ -305,6 +364,20 @@ export function RejillaRecargas({ sucursal }: { sucursal: string }) {
 
       {aviso && <Aviso tono="exito">{aviso}</Aviso>}
       {error && <Aviso tono="error">{error}</Aviso>}
+      {(fallasVisibles > 0 || fallasOcultas.length > 0) && (
+        <Aviso tono="error">
+          {fallasVisibles > 0 && (
+            <p>
+              {fallasVisibles === 1
+                ? "Una recarga no se guardó: su mensaje está en rojo bajo el nombre del vendedor."
+                : `${fallasVisibles} recargas no se guardaron: sus mensajes están en rojo bajo el nombre de cada vendedor.`}
+            </p>
+          )}
+          {fallasOcultas.map(([id, f]) => (
+            <p key={id}>{`No se guardó la recarga de ${f.nombre}: ${f.mensaje} Ya no sale en la rejilla; lo escrito se descartó.`}</p>
+          ))}
+        </Aviso>
+      )}
       {bajasEnEdicion.map((p) => (
         <Aviso key={p.id} tono="advertencia">{`${nombreDe(p)} ya no se vende; al guardar se quita de la recarga.`}</Aviso>
       ))}
@@ -312,7 +385,8 @@ export function RejillaRecargas({ sucursal }: { sucursal: string }) {
 
       {rejilla && vendedores.length > 0 && (
         <>
-          <CajaTabla altoMaximo="62vh" className={cn("w-fit max-w-full", cargando && "opacity-60")}>
+          <div className="relative w-fit max-w-full">
+          <CajaTabla ref={caja} onScroll={medirOrilla} altoMaximo="62vh" className={cn(cargando && "opacity-60")}>
             <Tabla aria-label="Recargas de hoy" densidad="compacta" className="w-max border-separate border-spacing-0">
               <thead className="sticky top-0 z-[3] bg-menu">
                 <tr>
@@ -320,12 +394,13 @@ export function RejillaRecargas({ sucursal }: { sucursal: string }) {
                     Producto
                   </th>
                   {vendedores.map((v) => (
-                    <th key={v.id} colSpan={v.cargas.length + 1} scope="colgroup" className={cn(ENC, "max-w-0 text-center text-foreground")}>
-                      <span className="block truncate" title={v.nombre}>
+                    <th key={v.id} colSpan={v.cargas.length + 1} scope="colgroup" className={cn(ENC, "max-w-0 text-foreground")}>
+                      {/* Pegado a la orilla de la columna de productos: el nombre no se sale de la vista. */}
+                      <span className="sticky left-[11.5rem] inline-block max-w-full truncate align-top" title={v.nombre}>
                         {v.nombre}
                       </span>
                       {erroresVendedor[v.id] && (
-                        <span className="mt-0.5 block text-[11px] font-normal whitespace-normal text-destructive">{erroresVendedor[v.id]}</span>
+                        <span className="mt-0.5 block text-[11px] font-normal whitespace-normal text-destructive">{erroresVendedor[v.id].mensaje}</span>
                       )}
                     </th>
                   ))}
@@ -385,7 +460,7 @@ export function RejillaRecargas({ sucursal }: { sucursal: string }) {
                                   />
                                 </td>
                               ) : (
-                                <td key={c.id} className={cn(CELDA, "text-foreground")}>
+                                <td key={c.id} className={cn(CELDA, "text-foreground", c.estado === "rechazada" && "bg-destructive-soft/40")}>
                                   {c.lineas.find((l) => l.presentacionId === p.id)?.piezas ?? ""}
                                 </td>
                               ),
@@ -398,7 +473,7 @@ export function RejillaRecargas({ sucursal }: { sucursal: string }) {
                                   deshabilitado={ocupado || edicion !== null}
                                   referencia={registrarCampo(claveCampo(`nueva-${v.id}`, p.id))}
                                   onTeclear={(e) => alTeclear(e, claveCampo(`nueva-${v.id}`, p.id))}
-                                  onCambio={(t) => setNuevas((n) => ({ ...n, [v.id]: { ...n[v.id], [p.id]: t } }))}
+                                  onCambio={(t) => escribirNueva(v.id, p.id, t)}
                                 />
                               )}
                             </td>
@@ -409,8 +484,33 @@ export function RejillaRecargas({ sucursal }: { sucursal: string }) {
                   </Fragment>
                 ))}
               </tbody>
+              <tfoot className="sticky bottom-0 z-[3] bg-menu">
+                <tr>
+                  <th scope="row" className={cn(FIJA, "z-[4] border-t bg-menu py-1.5 font-semibold")}>
+                    Total
+                  </th>
+                  {vendedores.map((v) => (
+                    <Fragment key={v.id}>
+                      {v.cargas.map((c) => (
+                        <td key={c.id} className={cn(CELDA, "border-t border-b-0 py-1.5 font-semibold")}>
+                          {edicion?.carga.id === c.id ? totalBorrador(edicion.borrador) : totalPiezas(c.lineas)}
+                        </td>
+                      ))}
+                      <td className={cn(CELDA, "border-t border-b-0 py-1.5 font-semibold")}>{totalBorrador(nuevas[v.id] ?? {})}</td>
+                    </Fragment>
+                  ))}
+                </tr>
+              </tfoot>
             </Tabla>
           </CajaTabla>
+          {masDerecha && (
+            <div
+              aria-hidden
+              data-testid="hay-mas-a-la-derecha"
+              className="pointer-events-none absolute inset-y-px right-px w-6 rounded-r-[10px] bg-gradient-to-l from-foreground/15 to-transparent"
+            />
+          )}
+          </div>
 
           {nuevasInvalidas && <Aviso tono="error">{`Las piezas son números enteros de 1 a ${MAX_PIEZAS_LINEA}. Corrige las casillas en rojo.`}</Aviso>}
 
