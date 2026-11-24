@@ -9,7 +9,6 @@ import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { CajaTabla, Fila, FilaVacia, Tabla, Td, Th } from "@/components/ui/tabla";
 import { ErrorApi, mensajeDe } from "@/lib/api";
 import {
-  cargaEditable,
   eliminarCarga,
   ETIQUETA_ESTADO,
   obtenerRejilla,
@@ -43,6 +42,8 @@ export function ListaRecargas({
   const [vuelta, setVuelta] = useState(0);
   // El de esta pantalla (eliminar) pisa al que trae la captura anterior.
   const [avisoLocal, setAvisoLocal] = useState<string | null>(null);
+  const [ocultarAviso, setOcultarAviso] = useState(false);
+  const [eliminando, setEliminando] = useState(false);
   const ultima = useRef(0);
   const { confirmar, ventana } = useConfirmar();
 
@@ -58,7 +59,6 @@ export function ListaRecargas({
       .then((r) => {
         if (esta !== ultima.current) return;
         setRejilla(r);
-        setError(null);
       })
       .catch((err: unknown) => {
         if (esta !== ultima.current) return;
@@ -77,15 +77,20 @@ export function ListaRecargas({
       confirmar: "Eliminar recarga",
     });
     if (!si) return;
+    // Cada acción empieza limpia: el error no se borra al recargar la lista, para que un 409 se alcance a leer.
+    setError(null);
+    setAvisoLocal(null);
+    setOcultarAviso(true);
+    setEliminando(true);
     try {
       await eliminarCarga(carga.id, carga.version);
-      setError(null);
       setAvisoLocal(`Recarga n.º ${carga.numero} de ${vendedor} eliminada.`);
       setVuelta((v) => v + 1);
     } catch (err) {
-      setAvisoLocal("");
       setError(mensajeDe(err, "No se pudo eliminar la recarga."));
       if (err instanceof ErrorApi && err.status === 409) setVuelta((v) => v + 1);
+    } finally {
+      setEliminando(false);
     }
   }
 
@@ -101,7 +106,7 @@ export function ListaRecargas({
           Solo se capturan recargas de hoy. Las de días anteriores se ven en Inventario por vendedor → Recargas.
         </p>
         <div className="ml-auto">
-          <Button type="button" disabled={!rejilla || rejilla.vendedores.length === 0} onClick={() => rejilla && onCapturar(rejilla, null, "")}>
+          <Button type="button" disabled={!rejilla || rejilla.vendedores.length === 0 || eliminando} onClick={() => rejilla && onCapturar(rejilla, null, "")}>
             Registrar recarga
           </Button>
         </div>
@@ -110,8 +115,9 @@ export function ListaRecargas({
       {avisoLocal ? (
         <Aviso tono="exito">{avisoLocal}</Aviso>
       ) : (
-        avisoLocal === null && aviso && <Aviso tono={aviso.tono}>{aviso.texto}</Aviso>
+        !ocultarAviso && aviso && <Aviso tono={aviso.tono}>{aviso.texto}</Aviso>
       )}
+      {rejilla && rejilla.vendedores.length === 0 && <Aviso tono="informacion">Esta sucursal no tiene vendedores activos.</Aviso>}
       {error && <Aviso tono="error">{error}</Aviso>}
       {cargando && !rejilla && <EstadoPantalla tipo="cargando" />}
 
@@ -159,12 +165,12 @@ export function ListaRecargas({
                         )}
                       </Td>
                       <Td alinear="derecha">
-                        {cargaEditable(carga, true) && (
+                        {carga.estado !== "aceptada" && (
                           <div className="flex justify-end gap-1">
-                            <Button type="button" size="sm" variant="outline" onClick={() => onCapturar(rejilla, carga, vendedor.id)}>
+                            <Button type="button" size="sm" variant="outline" disabled={eliminando} aria-label={`Editar la recarga n.º ${carga.numero} de ${vendedor.nombre}`} onClick={() => onCapturar(rejilla, carga, vendedor.id)}>
                               Editar
                             </Button>
-                            <Button type="button" size="sm" variant="outline" onClick={() => void eliminar(vendedor.nombre, carga)}>
+                            <Button type="button" size="sm" variant="outline" disabled={eliminando} aria-label={`Eliminar la recarga n.º ${carga.numero} de ${vendedor.nombre}`} onClick={() => void eliminar(vendedor.nombre, carga)}>
                               Eliminar
                             </Button>
                           </div>

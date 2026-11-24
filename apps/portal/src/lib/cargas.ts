@@ -126,24 +126,6 @@ export function totalBorrador(borrador: Borrador): number {
   }, 0);
 }
 
-export function piezasDe(carga: CargaRejilla, presentacionId: string): number | null {
-  return carga.lineas.find((l) => l.presentacionId === presentacionId)?.piezas ?? null;
-}
-
 export function totalPiezas(lineas: readonly LineaCarga[]): number {
   return lineas.reduce((total, l) => total + l.piezas, 0);
-}
-
-/** Pendiente o rechazada, y de hoy (D5, D8). El servidor lo vuelve a comprobar (409). */
-export function cargaEditable(carga: CargaRejilla, esHoy: boolean): boolean {
-  return esHoy && carga.estado !== "aceptada";
-}
-
-export type Columna = { tipo: "carga"; carga: CargaRejilla } | { tipo: "nueva" } | { tipo: "vacia" };
-
-/** Las subcolumnas de un vendedor: sus cargas por numero, la nueva al final, o una vacia. */
-export function columnasDeVendedor(vendedor: VendedorRejilla, conNueva: boolean): Columna[] {
-  const columnas: Columna[] = vendedor.cargas.map((carga) => ({ tipo: "carga", carga }));
-  if (conNueva) columnas.push({ tipo: "nueva" });
-  return columnas.length > 0 ? columnas : [{ tipo: "vacia" }];
 }

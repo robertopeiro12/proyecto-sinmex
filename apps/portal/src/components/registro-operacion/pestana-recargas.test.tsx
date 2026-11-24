@@ -52,6 +52,7 @@ const rejilla = (): Rejilla => ({
   fecha: HOY,
   sucursal: { id: "s-TJ", codigo: "TJ", nombre: "Tijuana" },
   presentaciones: [
+    { id: "p0", productoNombre: "Horchata", volumen: "355 ml", activa: true },
     { id: "p1", productoNombre: "Horchata", volumen: "500 ml", activa: true },
     { id: "p2", productoNombre: "Jamaica", volumen: "500 ml", activa: true },
     { id: "p3", productoNombre: "Horchata", volumen: "1 L", activa: true },
@@ -101,14 +102,14 @@ describe("Pestaña Recargas del Registro de Operación", () => {
   it("filas con estado, productos y motivo del rechazo; Editar/Eliminar solo si no está aceptada", async () => {
     await abrir();
     const aceptada = within(await screen.findByRole("row", { name: /Ricardo.*Aceptada/ }));
-    expect(aceptada.queryByRole("button", { name: "Editar" })).toBeNull();
+    expect(aceptada.queryByRole("button", { name: /^Editar/ })).toBeNull();
     expect(aceptada.getByText("Horchata 500 ml × 50")).toBeInTheDocument();
     const pendiente = within(screen.getByRole("row", { name: /Ricardo.*Pendiente/ }));
-    expect(pendiente.getByRole("button", { name: "Editar" })).toBeInTheDocument();
+    expect(pendiente.getByRole("button", { name: /^Editar/ })).toBeInTheDocument();
     const rechazada = within(screen.getByRole("row", { name: /Juan Pérez/ }));
     expect(rechazada.getByText("Rechazada")).toBeInTheDocument();
     expect(rechazada.getByText("Faltó hielo")).toBeInTheDocument();
-    expect(rechazada.getByRole("button", { name: "Eliminar" })).toBeInTheDocument();
+    expect(rechazada.getByRole("button", { name: /^Eliminar/ })).toBeInTheDocument();
   });
 
   it("Registrar abre la captura con vendedor y todos los productos activos por tamaño; TAB pasa al siguiente", async () => {
@@ -144,7 +145,7 @@ describe("Pestaña Recargas del Registro de Operación", () => {
     const u = userEvent.setup();
     vi.mocked(cargasLib.editarCarga).mockResolvedValue(carga("c2", 2, "pendiente"));
     await abrir();
-    await u.click(within(await screen.findByRole("row", { name: /Ricardo.*Pendiente/ })).getByRole("button", { name: "Editar" }));
+    await u.click(within(await screen.findByRole("row", { name: /Ricardo.*Pendiente/ })).getByRole("button", { name: /^Editar/ }));
     expect(screen.getByLabelText("Vendedor")).toBeDisabled();
     const campo = screen.getByLabelText("Piezas de Horchata 500 ml");
     expect(campo).toHaveValue("50");
@@ -158,7 +159,7 @@ describe("Pestaña Recargas del Registro de Operación", () => {
     const u = userEvent.setup();
     vi.mocked(cargasLib.editarCarga).mockRejectedValue(new ErrorApi("Conflicto", 409, "Ya la aceptó el vendedor."));
     await abrir();
-    await u.click(within(await screen.findByRole("row", { name: /Ricardo.*Pendiente/ })).getByRole("button", { name: "Editar" }));
+    await u.click(within(await screen.findByRole("row", { name: /Ricardo.*Pendiente/ })).getByRole("button", { name: /^Editar/ }));
     await u.click(screen.getByRole("button", { name: "Guardar" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Ya la aceptó el vendedor.");
     await waitFor(() => expect(cargasLib.obtenerRejilla).toHaveBeenCalledTimes(2));
@@ -169,7 +170,7 @@ describe("Pestaña Recargas del Registro de Operación", () => {
     vi.mocked(cargasLib.eliminarCarga).mockResolvedValue({ id: "c3" });
     const confirmar = vi.spyOn(window, "confirm");
     await abrir();
-    await u.click(within(await screen.findByRole("row", { name: /Juan Pérez/ })).getByRole("button", { name: "Eliminar" }));
+    await u.click(within(await screen.findByRole("row", { name: /Juan Pérez/ })).getByRole("button", { name: /^Eliminar/ }));
     expect(await screen.findByText("¿Eliminar la recarga n.º 1 de Juan Pérez?")).toBeInTheDocument();
     await u.click(screen.getByRole("button", { name: "Eliminar recarga" }));
     await waitFor(() => expect(cargasLib.eliminarCarga).toHaveBeenCalledWith("c3", 3));
@@ -187,9 +188,96 @@ describe("Pestaña Recargas del Registro de Operación", () => {
     await u.selectOptions(screen.getByLabelText("Vendedor"), "v3");
     await u.click(screen.getByRole("button", { name: "Guardar" }));
     expect(await screen.findByText(/Recarga guardada/)).toBeInTheDocument();
-    await u.click(within(await screen.findByRole("row", { name: /Juan Pérez/ })).getByRole("button", { name: "Eliminar" }));
+    await u.click(within(await screen.findByRole("row", { name: /Juan Pérez/ })).getByRole("button", { name: /^Eliminar/ }));
     await u.click(await screen.findByRole("button", { name: "Eliminar recarga" }));
     expect(await screen.findByText("Recarga n.º 1 de Juan Pérez eliminada.")).toBeInTheDocument();
     expect(screen.queryByText(/Recarga guardada/)).toBeNull();
+  });
+
+  it("el 409 al eliminar se queda a la vista en rojo después de recargar la lista", async () => {
+    const u = userEvent.setup();
+    vi.mocked(cargasLib.eliminarCarga).mockRejectedValue(new ErrorApi("Conflicto", 409, "Ya la aceptó el vendedor."));
+    await abrir();
+    await u.click(within(await screen.findByRole("row", { name: /Juan Pérez/ })).getByRole("button", { name: /^Eliminar/ }));
+    await u.click(await screen.findByRole("button", { name: "Eliminar recarga" }));
+    await waitFor(() => expect(cargasLib.obtenerRejilla).toHaveBeenCalledTimes(2));
+    await screen.findByText("Juan Pérez");
+    expect(screen.getByRole("alert")).toHaveTextContent("Ya la aceptó el vendedor.");
+  });
+
+  it("Editar y Eliminar dicen de qué recarga son", async () => {
+    await abrir();
+    expect(await screen.findByRole("button", { name: "Editar la recarga n.º 2 de Ricardo" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eliminar la recarga n.º 1 de Juan Pérez" })).toBeInTheDocument();
+  });
+
+  it("sin vendedores: mensaje y botón deshabilitado", async () => {
+    vi.mocked(cargasLib.obtenerRejilla).mockImplementation(async () => ({ ...rejilla(), vendedores: [] }));
+    await abrir();
+    expect(await screen.findByText("Esta sucursal no tiene vendedores activos.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Registrar recarga" })).toBeDisabled();
+  });
+
+  it("al editar una carga con un producto dado de baja avisa que se quita", async () => {
+    const u = userEvent.setup();
+    vi.mocked(cargasLib.obtenerRejilla).mockImplementation(async () => {
+      const r = rejilla();
+      r.vendedores[1].cargas[0].lineas = [{ presentacionId: "p1", piezas: 5 }, { presentacionId: "p4", piezas: 9 }];
+      return r;
+    });
+    await abrir();
+    await u.click(within(await screen.findByRole("row", { name: /Juan Pérez/ })).getByRole("button", { name: /^Editar/ }));
+    expect(screen.getByRole("status")).toHaveTextContent("Viejo 1 L ya no se vende; al guardar se quita de la recarga.");
+  });
+
+  it("el aviso de guardado no se queda pegado: se va al abrir una captura, al volver y al cambiar de pestaña", async () => {
+    const u = userEvent.setup();
+    vi.mocked(cargasLib.crearCarga).mockResolvedValue(carga("n", 3, "pendiente"));
+    async function guardarUna() {
+      await u.click(await screen.findByRole("button", { name: "Registrar recarga" }));
+      await u.type(screen.getByLabelText("Piezas de Horchata 500 ml"), "20");
+      await u.selectOptions(screen.getByLabelText("Vendedor"), "v3");
+      await u.click(screen.getByRole("button", { name: "Guardar" }));
+      await screen.findByText(/Recarga guardada/);
+    }
+    await abrir();
+    await guardarUna();
+    await u.click(screen.getByRole("button", { name: "Registrar recarga" }));
+    await u.click(screen.getByRole("button", { name: /Volver a Recargas/ }));
+    await screen.findByRole("button", { name: "Registrar recarga" });
+    expect(screen.queryByText(/Recarga guardada/)).toBeNull();
+    await guardarUna();
+    await u.click(screen.getByRole("tab", { name: "Merma" }));
+    await u.click(screen.getByRole("tab", { name: "Recargas" }));
+    await screen.findByRole("button", { name: "Registrar recarga" });
+    expect(screen.queryByText(/Recarga guardada/)).toBeNull();
+  });
+
+  it("mientras guarda dice Guardando… y deshabilita los campos", async () => {
+    const u = userEvent.setup();
+    vi.mocked(cargasLib.crearCarga).mockReturnValue(new Promise(() => {}));
+    await abrir();
+    await u.click(await screen.findByRole("button", { name: "Registrar recarga" }));
+    await u.type(screen.getByLabelText("Piezas de Horchata 500 ml"), "20");
+    await u.selectOptions(screen.getByLabelText("Vendedor"), "v3");
+    await u.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(screen.getByRole("button", { name: "Guardando…" })).toBeDisabled();
+    expect(screen.getByLabelText("Piezas de Horchata 500 ml")).toBeDisabled();
+    expect(screen.getByLabelText("Vendedor")).toBeDisabled();
+  });
+
+  it("el foco va al primer campo de piezas al elegir vendedor y al abrir una edición", async () => {
+    const u = userEvent.setup();
+    await abrir();
+    await u.click(await screen.findByRole("button", { name: "Registrar recarga" }));
+    await u.selectOptions(screen.getByLabelText("Vendedor"), "v3");
+    expect(screen.getByLabelText("Piezas de Horchata 355 ml")).toHaveFocus();
+  });
+
+  it("al abrir una edición el foco va al primer campo", async () => {
+    const u = userEvent.setup();
+    await abrir();
+    await u.click(within(await screen.findByRole("row", { name: /Ricardo.*Pendiente/ })).getByRole("button", { name: /^Editar/ }));
+    expect(document.activeElement).toBe(screen.getAllByRole("textbox")[0]);
   });
 });

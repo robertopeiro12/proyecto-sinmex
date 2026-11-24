@@ -81,6 +81,7 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
         vendedorId={recarga.vendedorId}
         onVolver={() => {
           setInicialLista(actual);
+          setAvisoRecarga(null);
           setRecarga(null);
         }}
         onGuardado={(texto, tono) => {
@@ -122,7 +123,10 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
       <Pestanas
         etiqueta="Tipo de operación"
         valorInicial={inicial}
-        onCambio={setActual}
+        onCambio={(v) => {
+          setActual(v);
+          setAvisoRecarga(null);
+        }}
         pestanas={tipos.map((t) => ({
           valor: t.tipo,
           etiqueta: t.etiqueta,
@@ -132,7 +136,10 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
                 key={`recarga-${version}`}
                 sucursal={codigo}
                 aviso={avisoRecarga}
-                onCapturar={(rejilla, carga, vendedorId) => setRecarga({ rejilla, carga, vendedorId })}
+                onCapturar={(rejilla, carga, vendedorId) => {
+                  setAvisoRecarga(null);
+                  setRecarga({ rejilla, carga, vendedorId });
+                }}
               />
             ) : (
             <ListaOperaciones

@@ -662,10 +662,16 @@ usuario con sesion pasa.
   - **Contrato** (aditivo, `CONTRATO_ACTUAL` sigue en 1): colección `cargas` en el pull (las del vendedor desde
     `current_date - 1`, baja con `activo: 0`) y `VendedorPull.control_inventario`. Cambiar la casilla toca
     `vendedor.updated_at` de esa sucursal (`SucursalesRepository.actualizar`).
-  - **Portal**: *Producción › Recarga* (`components/produccion/`, `lib/cargas.ts`): rejilla presentaciones × vendedores
-    con subcolumnas por carga (pastilla de estado, motivo del rechazo en rojo), "Nueva carga", "Editar", "Eliminar";
-    días anteriores en solo lectura; caja con scroll propio a 1366 px. *Catálogo › Sucursales*: casilla "Control de
-    inventario en la app".
+  - **Portal**: pestaña **Recargas** de *Producción → Registro de Operación* (`components/registro-operacion/`:
+    `lista-recargas.tsx`, `captura-recarga.tsx`; `lib/cargas.ts`), con el permiso `carga.gestionar` y en el lugar que pidió el
+    cliente (Entradas · Recargas · Envíos · …). **Solo hoy** (sin fecha) y con la **sucursal del menú lateral**, sin selector
+    propio. Lista de las cargas de hoy (una fila por carga: vendedor, n.º, piezas, productos, estado con el motivo del rechazo
+    en rojo; "Editar"/"Eliminar" solo en pendiente o rechazada, con `aria-label` que dice cuál) y **captura en pantalla
+    completa** con la rejilla de todas las presentaciones activas por tamaño, TAB de un campo al siguiente y el foco en el
+    primer campo al elegir vendedor; una presentación dada de baja que traía la carga avisa que se quita al guardar. Un 409
+    deja el mensaje en rojo y recarga. Eliminar confirma con `useConfirmar`. `/produccion/recarga` **redirige** a la pestaña
+    (conserva `?sucursal`) y "Recarga" salió del menú; el historial de días anteriores se ve en *Inventario por vendedor →
+    Recargas*. *Catálogo › Sucursales*: casilla "Control de inventario en la app".
   - **Tablet** (migración local 017): `carga`, `carga_detalle`, `vendedor.control_inventario` (el login sin red no la
     pisa: `NO_BORRAR_CON_NULO` ahora lleva el valor con que nace una fila nueva). La mezcla del pull
     (`repositorios/cargas.ts`) reemplaza las líneas y **no deja que un pull viejo deshaga una respuesta**. Reglas puras
@@ -940,10 +946,10 @@ usuario con sesion pasa.
   - **Tesorería › Movimientos:** "Registrar operación" es un formulario fijo arriba; editar un movimiento abre una
     `Ventana` y no toca lo que el de arriba tenga escrito. Consulta al entrar y al picar **Mostrar**.
   - Todas las pantallas propias del portal **dentro del marco** ya usan las piezas comunes (el login y los
-    placeholders "Pronto" conservan su aspecto; Recarga y Gastos son de Mario) (Etapa 4: Registrar venta, Promociones, Ruta
+    placeholders "Pronto" conservan su aspecto; Gastos es de Mario) (Etapa 4: Registrar venta, Promociones, Ruta
     diaria). Registrar venta y Editar venta comparten los campos; Ruta diaria confirma con `useConfirmar` al descartar
     cambios. El modo `pantalla` de `PantallaCatalogo` pinta `EncabezadoPantalla` con `tituloFormulario` (el `h1`).
-  - **Recarga y Gastos son de Mario:** no se tocan sin él. Recarga conserva su `window.confirm` (el único que queda).
+  - **Gastos es de Mario:** no se toca sin él. Ya no queda ningún `window.confirm` en el portal.
 
 `npm run supabase -- migration up --local` aplica migraciones nuevas al Postgres local (ojo con el
 `--`: sin él, npm se come los argumentos).

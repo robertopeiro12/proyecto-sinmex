@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
 import { Campo, Entrada, Lista } from "@/components/ui/campo";
@@ -45,6 +45,16 @@ export function CapturaRecarga({
   const [borrador, setBorrador] = useState<Borrador>(() => borradorDe(carga, rejilla.presentaciones));
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const cuerpo = useRef<HTMLDivElement>(null);
+  // Capturar rápido: al elegir vendedor (o abrir una edición) el cursor cae en el primer campo.
+  useEffect(() => {
+    if (vendedor !== "") cuerpo.current?.querySelector("input")?.focus();
+  }, [vendedor]);
+
+  const bajas = (carga?.lineas ?? [])
+    .map((l) => rejilla.presentaciones.find((p) => p.id === l.presentacionId))
+    .filter((p) => p !== undefined && !p.activa);
 
   const grupos = useMemo(() => {
     const renglones: Renglon[] = rejilla.presentaciones
@@ -95,7 +105,7 @@ export function CapturaRecarga({
 
       <div className="flex flex-wrap items-start gap-4">
         <Campo id="recarga-vendedor" etiqueta="Vendedor" className="w-72">
-          <Lista value={vendedor} disabled={carga !== null} onChange={(e) => setVendedor(e.target.value)}>
+          <Lista value={vendedor} disabled={carga !== null || guardando} onChange={(e) => setVendedor(e.target.value)}>
             <option value="">Elige uno…</option>
             {rejilla.vendedores.map((v) => (
               <option key={v.id} value={v.id}>
@@ -106,10 +116,14 @@ export function CapturaRecarga({
         </Campo>
       </div>
 
+      {bajas.map((p) => (
+        <Aviso key={p!.id} tono="advertencia">{`${p!.productoNombre} ${p!.volumen} ya no se vende; al guardar se quita de la recarga.`}</Aviso>
+      ))}
       {error && <Aviso tono="error">{error}</Aviso>}
       {hayInvalidas && <Aviso tono="error">{`Las piezas son números enteros de 1 a ${MAX_PIEZAS_LINEA}.`}</Aviso>}
 
-      <CajaTabla altoMaximo="55vh">
+      <div ref={cuerpo}>
+      <CajaTabla altoMaximo="55vh" className="max-w-xl">
         <Tabla aria-label="Piezas por producto" className="table-fixed">
           <colgroup>
             <col />
@@ -123,15 +137,16 @@ export function CapturaRecarga({
           </thead>
           <tbody>
             {grupos.map((g) => (
-              <GrupoTamano key={claveTamano(g.tamano)} grupo={g} borrador={borrador} onPiezas={(id, t) => setBorrador((b) => ({ ...b, [id]: t }))} />
+              <GrupoTamano key={claveTamano(g.tamano)} grupo={g} deshabilitado={guardando} borrador={borrador} onPiezas={(id, t) => setBorrador((b) => ({ ...b, [id]: t }))} />
             ))}
           </tbody>
         </Tabla>
       </CajaTabla>
+      </div>
 
       <div className="flex items-center gap-2">
         <Button type="button" disabled={!puedeGuardar} onClick={() => void guardar()}>
-          Guardar
+          {guardando ? "Guardando…" : "Guardar"}
         </Button>
         <Button type="button" variant="outline" onClick={onVolver}>
           Cancelar
@@ -145,8 +160,10 @@ export function CapturaRecarga({
 function GrupoTamano({
   grupo,
   borrador,
+  deshabilitado,
   onPiezas,
 }: {
+  deshabilitado: boolean;
   grupo: { tamano: string; renglones: Renglon[] };
   borrador: Borrador;
   onPiezas: (id: string, texto: string) => void;
@@ -171,6 +188,7 @@ function GrupoTamano({
                 aria-label={`Piezas de ${r.nombre}`}
                 aria-invalid={invalido || undefined}
                 className="w-28 text-right"
+                disabled={deshabilitado}
                 value={texto}
                 onChange={(e) => onPiezas(r.presentacionId, e.target.value)}
               />
