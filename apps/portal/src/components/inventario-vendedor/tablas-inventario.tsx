@@ -79,10 +79,12 @@ function TablaInventario({ datos }: { datos: InventarioVendedor }) {
   return (
     <CajaTabla>
       <Tabla aria-label="Inventario" className="table-fixed">
+        {/* Producto con ancho proporcional y las 10 columnas de números se reparten el resto: al
+            esconder el menú lateral crece toda la tabla, no solo Producto. */}
         <colgroup>
-          <col />
+          <col className="w-[16%]" />
           {Array.from({ length: 10 }, (_, n) => (
-            <col key={n} className="w-[76px]" />
+            <col key={n} />
           ))}
         </colgroup>
         <thead>
@@ -209,9 +211,9 @@ function TablaMerma({ datos }: { datos: InventarioVendedor }) {
     <CajaTabla>
       <Tabla aria-label="Merma" className="table-fixed">
         <colgroup>
-          <col />
+          <col className="w-[24%]" />
           {[1, 2, 3, 4, 5].map((n) => (
-            <col key={n} className="w-32" />
+            <col key={n} />
           ))}
         </colgroup>
         <thead>
@@ -306,12 +308,12 @@ function TablaRecargas({ datos }: { datos: InventarioVendedor }) {
     <CajaTabla>
       <Tabla aria-label="Recargas" className="table-fixed">
         <colgroup>
-          {conVendedor && <col className="w-40" />}
+          {conVendedor && <col className="w-[16%]" />}
+          <col className="w-[22%]" />
+          <col className="w-[20%]" />
+          <col className="w-[12%]" />
+          <col className="w-[12%]" />
           <col />
-          <col className="w-44" />
-          <col className="w-28" />
-          <col className="w-32" />
-          <col className="w-56" />
         </colgroup>
         <thead>
           <tr>

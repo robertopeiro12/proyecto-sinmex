@@ -203,10 +203,11 @@ export function CorteVendedor({
               aria-label="Corte del vendedor"
               className="table-fixed min-w-[900px]"
             >
+              {/* Producto proporcional y los números se reparten el resto: crece toda la tabla. */}
               <colgroup>
-                <col />
+                <col className="w-[22%]" />
                 {[1, 2, 3, 4, 5, 6].map((n) => (
-                  <col key={n} className="w-28" />
+                  <col key={n} />
                 ))}
               </colgroup>
               <thead>
