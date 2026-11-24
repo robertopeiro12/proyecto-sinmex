@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -31,7 +32,13 @@ import {
 } from './reglas-comunes';
 import {
   fechaPermitida,
+  mensajeRetiroNoPendiente,
+  MENSAJE_RETIRO_AUTORIZADO,
   planLineas,
+  retiroEditable,
+  retiroResoluble,
+  validarMotivoRechazo,
+  type EstadoRetiro,
   validarOperacion,
   type LineaPedida,
   type TipoOperacion,
@@ -45,6 +52,8 @@ export const MOTIVO_MOTIVO_MERMA =
   'El motivo de la merma no existe o no aplica al almacén.';
 export const MOTIVO_ENVIO_CERRADO =
   'Un envío solo se puede corregir o dar de baja el día que se hizo o el siguiente.';
+export const MENSAJE_RETIRO_CAMBIO =
+  'El retiro cambió desde que lo viste; revisa la cantidad nueva.';
 const MOTIVO_SIN_PERMISO = 'No tienes permiso para este tipo de operación.';
 
 /** Una operacion tal como la recibe el portal. */
@@ -69,6 +78,15 @@ export interface OperacionAlmacen {
   capturo: string;
   /** `HH:MM` de Tijuana de la captura. */
   hora: string;
+  /** Solo `retiro_merma`: pendiente, autorizado o rechazado (null en los demas tipos). */
+  estado: EstadoRetiro | null;
+  /** Quien autorizo o rechazo (`en` = `AAAA-MM-DD HH24:MI` de Tijuana); null si sigue pendiente. */
+  resolucion: { por: string; en: string; motivo: string | null } | null;
+  /**
+   * Marca de la version de la fila (`updated_at`, ISO UTC con microsegundos,
+   * exacto): Autorizar y Rechazar la devuelven para decir que version vieron.
+   */
+  actualizadoEn: string;
   /** Se puede corregir o dar de baja (fecha dentro de su regla y no es un envio visto desde el destino). */
   editable: boolean;
   /** Un envio visto en Entradas del destino: solo lectura ahi. */
@@ -202,6 +220,7 @@ export class OperacionesAlmacenService {
       const fila = await this.repo.bloquear(id, trx);
       if (!fila) throw new NotFoundException(MOTIVO_OPERACION_INEXISTENTE);
       this.exigirFechaAbierta(fila, hoy);
+      await this.exigirRetiroEditable(fila, hoy, trx);
       const datos = await this.datosDe(
         fila.tipo,
         dto,
@@ -217,6 +236,8 @@ export class OperacionesAlmacenService {
       );
       const plan = planLineas(vivas, lineas);
       await this.repo.actualizar(id, datos, usuarioId, trx);
+      // R3: un rechazado corregido vuelve a pendiente.
+      if (fila.estado === 'rechazado') await this.repo.reabrirRetiro(id, trx);
       await this.repo.borrarLineas(plan.borrar, trx);
       await this.repo.actualizarLineas(plan.actualizar, trx);
       await this.repo.insertarLineas(id, plan.crear, trx);
@@ -232,7 +253,128 @@ export class OperacionesAlmacenService {
       const fila = await this.repo.bloquear(id, trx);
       if (!fila) throw new NotFoundException(MOTIVO_OPERACION_INEXISTENTE);
       this.exigirFechaAbierta(fila, hoy);
+      await this.exigirRetiroEditable(fila, hoy, trx);
       await this.repo.darDeBaja(id, usuarioId, trx);
+    });
+  }
+
+  /** `GET /operaciones-almacen/retiros-pendientes`: la bandeja de Administracion. */
+  async retirosPendientes(
+    usuarioId: string,
+    pedida: string | undefined,
+  ): Promise<{ retiros: OperacionAlmacen[] }> {
+    const usuario = await this.usuario(usuarioId);
+    const alcance = resolverAlcance(
+      usuario.codigo,
+      normalizarSucursalPedida(pedida),
+    );
+    let sucursalId: string | null = null;
+    if (alcance.tipo === 'una') {
+      const sucursal = await this.repo.sucursalPorCodigo(alcance.codigo);
+      if (!sucursal) throw new NotFoundException(MOTIVO_SUCURSAL_INEXISTENTE);
+      sucursalId = sucursal.id;
+    }
+    const hoy = await this.repo.hoyEnTijuana();
+    const filas = await this.repo.pendientesDeRetiro(sucursalId);
+    const lineas = await this.repo.lineasDe(filas.map((f) => f.id));
+    return { retiros: filas.map((f) => this.armar(f, lineas, hoy, false)) };
+  }
+
+  /** `POST /operaciones-almacen/:id/autorizar`. */
+  autorizarRetiro(
+    usuarioId: string,
+    id: string,
+    vista: string,
+  ): Promise<OperacionAlmacen> {
+    return this.resolverRetiro(usuarioId, id, 'autorizado', null, vista);
+  }
+
+  /** `POST /operaciones-almacen/:id/rechazar`. */
+  rechazarRetiro(
+    usuarioId: string,
+    id: string,
+    motivo: string,
+    vista: string,
+  ): Promise<OperacionAlmacen> {
+    const errores = validarMotivoRechazo(motivo);
+    if (errores.length > 0) throw new BadRequestException(errores);
+    return this.resolverRetiro(
+      usuarioId,
+      id,
+      'rechazado',
+      motivo.trim(),
+      vista,
+    );
+  }
+
+  /**
+   * Solo un retiro pendiente de la sucursal del usuario (otra, otro tipo o
+   * inexistente = el mismo 404). Se decide sobre la fila bloqueada: si ya no
+   * esta pendiente, 409 con la operacion como quedo.
+   */
+  private async resolverRetiro(
+    usuarioId: string,
+    id: string,
+    estado: 'autorizado' | 'rechazado',
+    motivo: string | null,
+    vista: string,
+  ): Promise<OperacionAlmacen> {
+    const usuario = await this.usuario(usuarioId);
+    const previa = await this.repo.porId(id);
+    if (
+      !previa ||
+      previa.tipo !== 'retiro_merma' ||
+      (usuario.codigo !== null && usuario.codigo !== previa.sucursalCodigo)
+    )
+      throw new NotFoundException(MOTIVO_OPERACION_INEXISTENTE);
+    const hoy = await this.repo.hoyEnTijuana();
+
+    await this.repo.enTransaccion(async (trx) => {
+      const fila = await this.repo.bloquear(id, trx);
+      if (!fila) throw new NotFoundException(MOTIVO_OPERACION_INEXISTENTE);
+      if (!retiroResoluble(fila.estado))
+        throw await this.conflicto(
+          mensajeRetiroNoPendiente(fila.estado),
+          fila,
+          hoy,
+          trx,
+        );
+      // Solo se resuelve lo que se vio: si Produccion lo corrigio mientras
+      // Administracion lo revisaba, la marca ya no coincide.
+      if (fila.actualizadoEn !== vista)
+        throw await this.conflicto(MENSAJE_RETIRO_CAMBIO, fila, hoy, trx);
+      await this.repo.resolverRetiro(id, estado, motivo, usuarioId, trx);
+    });
+    return this.armarConLineas((await this.repo.porId(id))!, hoy);
+  }
+
+  /** Un retiro autorizado es final: corregirlo o darlo de baja = 409. */
+  private async exigirRetiroEditable(
+    fila: FilaOperacion,
+    hoy: string,
+    trx: Transaction<DB>,
+  ): Promise<void> {
+    if (fila.tipo === 'retiro_merma' && !retiroEditable(fila.estado))
+      throw await this.conflicto(MENSAJE_RETIRO_AUTORIZADO, fila, hoy, trx);
+  }
+
+  /** 409 con la operacion tal como esta ahora. */
+  private async conflicto(
+    mensaje: string,
+    fila: FilaOperacion,
+    hoy: string,
+    trx: Transaction<DB>,
+  ): Promise<ConflictException> {
+    return new ConflictException({
+      statusCode: 409,
+      error: 'Conflict',
+      message: mensaje,
+      operacion: this.armar(
+        fila,
+        await this.repo.lineasDe([fila.id], trx),
+        hoy,
+        false,
+      ),
     });
   }
 
@@ -376,6 +518,16 @@ export class OperacionesAlmacenService {
       piezas: lineas.reduce((suma, l) => suma + l.piezas, 0),
       capturo: f.capturo,
       hora: f.hora,
+      estado: f.estado,
+      actualizadoEn: f.actualizadoEn,
+      resolucion:
+        f.estado !== null && f.estado !== 'pendiente'
+          ? {
+              por: f.resueltoPor ?? '',
+              en: f.resueltoEn ?? '',
+              motivo: f.motivoRechazo,
+            }
+          : null,
     };
     if (comoEntradaDelDestino) {
       // El envio visto desde el destino: una entrada de esa sucursal, de solo
@@ -399,7 +551,8 @@ export class OperacionesAlmacenService {
         f.destinoId !== null
           ? { id: f.destinoId, codigo: f.destinoCodigo! }
           : null,
-      editable: fechaPermitida(f.tipo, f.fecha, hoy),
+      editable:
+        fechaPermitida(f.tipo, f.fecha, hoy) && retiroEditable(f.estado),
       envio: null,
     };
   }

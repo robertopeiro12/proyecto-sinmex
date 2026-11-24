@@ -44,6 +44,15 @@ export function formatearDiaLargo(iso: string): string {
 }
 
 /**
+ * `AAAA-MM-DD hh:mm` (hora de Tijuana, como la manda el servidor) → "el martes 24 de noviembre
+ * a las 12:08". Lo que no tenga esa forma sale tal cual.
+ */
+export function formatearDiaHoraTijuana(texto: string): string {
+  const m = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})$/.exec(texto);
+  return m ? `el ${formatearDiaLargo(m[1])} a las ${m[2]}` : texto;
+}
+
+/**
  * `AAAA-MM-DD hh:mm` → `dd/mm/aaaa hh:mm`. El servidor ya la manda en hora de Tijuana
  * (`to_char(... at time zone 'America/Tijuana', 'YYYY-MM-DD HH24:MI')`). Una hora UTC
  * (`...T19:00:00.000Z`) sale tal cual: convertirla aquí sería adivinar la zona.

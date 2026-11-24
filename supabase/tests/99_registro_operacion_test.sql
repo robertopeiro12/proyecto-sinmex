@@ -101,7 +101,7 @@ select throws_ok($$insert into operacion_almacen (sucursal_id, tipo, fecha, trab
 select throws_ok($$insert into operacion_almacen (sucursal_id, tipo, fecha, trabajador, capturo_usuario_id)
   select tj, 'consumo', '2098-01-02', 'Juan', ua from _r$$, '23514', null, 'trabajador en otro tipo');
 select throws_ok($$insert into operacion_almacen (sucursal_id, tipo, fecha, capturo_usuario_id)
-  select tj, 'retiro_merma', '2098-01-02', ua from _r$$, '23514', null, 'tipo desconocido');
+  select tj, 'robo', '2098-01-02', ua from _r$$, '23514', null, 'tipo desconocido');
 
 -- Lineas: topes y unicidad.
 create temporary table _op on commit drop as

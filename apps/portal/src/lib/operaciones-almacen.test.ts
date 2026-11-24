@@ -14,13 +14,14 @@ vi.mock("./api", () => ({ apiFetch: vi.fn(), apiFetchSinCuerpo: vi.fn() }));
 describe("operaciones-almacen", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("los cinco tipos con su etiqueta y su permiso", () => {
+  it("los seis tipos con su etiqueta y su permiso", () => {
     expect(TIPOS_OPERACION.map((t) => [t.tipo, t.etiqueta, t.permiso])).toEqual([
       ["entrada", "Entradas/Compras", "operacion.entrada"],
       ["envio", "Envíos", "operacion.envio"],
       ["merma", "Merma", "operacion.merma"],
       ["consumo", "Consumo", "operacion.consumo"],
       ["descuento", "Descuentos", "operacion.descuento"],
+      ["retiro_merma", "Retiro de merma", "operacion.retiro_merma"],
     ]);
     expect(infoDeTipo("envio").etiqueta).toBe("Envíos");
   });

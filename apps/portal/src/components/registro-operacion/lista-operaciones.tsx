@@ -1,17 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
 import { Campo, Entrada } from "@/components/ui/campo";
 import { useConfirmar } from "@/components/ui/confirmar";
+import { Etiqueta, type TonoEtiqueta } from "@/components/ui/etiqueta";
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { CajaTabla, Fila, FilaVacia, Tabla, Td, Th } from "@/components/ui/tabla";
 import { mensajeDe } from "@/lib/api";
 import { diaAnterior } from "@/lib/fechas";
+import { formatearDiaHoraTijuana } from "@/lib/formato";
+import { esConflicto409 } from "@/lib/peticiones";
 import {
   eliminarOperacion,
   listarOperaciones,
+  type EstadoRetiro,
   type OperacionAlmacen,
   type OperacionesDelDia,
   type TipoOperacion,
@@ -28,6 +32,7 @@ const TEXTO_REGISTRAR: Record<TipoOperacion, string> = {
   merma: "Registrar merma",
   consumo: "Registrar consumo",
   descuento: "Registrar descuento",
+  retiro_merma: "Registrar retiro de merma",
 };
 
 const TITULO_DATO: Record<TipoOperacion, string> = {
@@ -36,9 +41,36 @@ const TITULO_DATO: Record<TipoOperacion, string> = {
   merma: "Motivo",
   consumo: "Detalle",
   descuento: "Trabajador",
+  retiro_merma: "Estado",
 };
 
-function datoDe(o: OperacionAlmacen): string {
+const ETIQUETA_ESTADO: Record<EstadoRetiro, { texto: string; tono: TonoEtiqueta }> = {
+  pendiente: { texto: "Pendiente", tono: "advertencia" },
+  autorizado: { texto: "Autorizado", tono: "exito" },
+  rechazado: { texto: "Rechazado", tono: "error" },
+};
+
+/** "Autorizó X el martes 24 de noviembre a las 12:08" / "Rechazó X …: motivo" (la hora ya viene en Tijuana). */
+function textoResolucion(o: OperacionAlmacen): string | null {
+  if (!o.resolucion || !o.estado) return null;
+  const { por, en, motivo } = o.resolucion;
+  if (o.estado === "autorizado") return `Autorizó ${por} ${formatearDiaHoraTijuana(en)}`;
+  return `Rechazó ${por} ${formatearDiaHoraTijuana(en)}${motivo ? `: ${motivo}` : ""}`;
+}
+
+function CeldaRetiro({ o }: { o: OperacionAlmacen }) {
+  if (!o.estado) return <>—</>;
+  const { texto, tono } = ETIQUETA_ESTADO[o.estado];
+  const hecho = textoResolucion(o);
+  return (
+    <div className="flex flex-col items-start gap-1 whitespace-normal">
+      <Etiqueta tono={tono}>{texto}</Etiqueta>
+      {hecho && <span className="text-xs text-muted-foreground">{hecho}</span>}
+    </div>
+  );
+}
+
+function datoDe(o: OperacionAlmacen): ReactNode {
   if (o.envio) return `Envío desde ${o.envio.origen.codigo}`;
   switch (o.tipo) {
     case "entrada":
@@ -49,6 +81,8 @@ function datoDe(o: OperacionAlmacen): string {
       return o.motivo?.nombre ?? "—";
     case "descuento":
       return o.trabajador ?? "—";
+    case "retiro_merma":
+      return <CeldaRetiro o={o} />;
     default:
       return o.comentario ?? "—";
   }
@@ -76,7 +110,10 @@ export function ListaOperaciones({
   const dia = tipo === "envio" ? diaDeEnvio(fecha) : fecha;
   const [datos, setDatos] = useState<OperacionesDelDia | null>(null);
   const [cargando, setCargando] = useState(true);
+  // Dos avisos: el de la carga se limpia al cargar bien; el de una acción (eliminar) se queda
+  // a la vista aunque la lista se vuelva a pedir (un 409 recarga y su mensaje debe seguir).
   const [error, setError] = useState<string | null>(null);
+  const [errorAccion, setErrorAccion] = useState<string | null>(null);
   const [vuelta, setVuelta] = useState(0);
   const ultima = useRef(0);
   const { confirmar, ventana } = useConfirmar();
@@ -112,11 +149,14 @@ export function ListaOperaciones({
       confirmar: "Eliminar registro",
     });
     if (!si) return;
+    setErrorAccion(null);
     try {
       await eliminarOperacion(o.id);
       setVuelta((v) => v + 1);
     } catch (err) {
-      setError(mensajeDe(err, "No se pudo eliminar el registro."));
+      setErrorAccion(mensajeDe(err, "No se pudo eliminar el registro."));
+      // Un 409 es que el retiro ya se resolvió: se vuelve a pedir la lista para que no queden Editar/Eliminar.
+      if (esConflicto409(err)) setVuelta((v) => v + 1);
     }
   }
 
@@ -150,6 +190,7 @@ export function ListaOperaciones({
       </div>
 
       {error && <Aviso tono="error">{error}</Aviso>}
+      {errorAccion && <Aviso tono="error">{errorAccion}</Aviso>}
       {cargando && !datos && <EstadoPantalla tipo="cargando" />}
 
       {datos && (
@@ -159,7 +200,7 @@ export function ListaOperaciones({
               <col className="w-20" />
               <col className="w-36" />
               <col className="w-20" />
-              <col className="w-44" />
+              <col className={tipo === "retiro_merma" ? "w-72" : "w-44"} />
               <col />
               <col className="w-52" />
             </colgroup>
@@ -184,7 +225,7 @@ export function ListaOperaciones({
                     <Td>{o.hora}</Td>
                     <Td className="truncate">{o.capturo}</Td>
                     <Td alinear="derecha">{o.piezas}</Td>
-                    <Td className="truncate">{datoDe(o)}</Td>
+                    <Td className={tipo === "retiro_merma" ? undefined : "truncate"}>{datoDe(o)}</Td>
                     <Td className="truncate text-muted-foreground" title={detalleDe(o)}>
                       {detalleDe(o)}
                     </Td>

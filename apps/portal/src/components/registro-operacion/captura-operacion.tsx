@@ -197,6 +197,10 @@ export function CapturaOperacion({
         descripcion={`Sucursal ${sucursal}. Captura solo las piezas de lo que se movió; deja en blanco el resto.`}
       />
 
+      {operacion?.estado === "rechazado" && (
+        <Aviso tono="advertencia">Este retiro fue rechazado. Al guardar vuelve a Pendiente para que lo autoricen de nuevo.</Aviso>
+      )}
+
       <div className="flex flex-wrap items-start gap-4">
         {tipo === "envio" ? (
           <div className="flex flex-col gap-1.5">

@@ -61,8 +61,11 @@ const op = (id: string, tipo: OperacionAlmacen["tipo"], m: Partial<OperacionAlma
   piezas: 12,
   capturo: "Lupe",
   hora: "08:15",
+  actualizadoEn: "2026-11-24T16:15:00.123456Z",
   editable: true,
   envio: null,
+  estado: null,
+  resolucion: null,
   ...m,
 });
 

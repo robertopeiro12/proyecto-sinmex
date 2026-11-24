@@ -282,10 +282,14 @@ export interface OperacionAlmacen {
   comentario: string | null;
   created_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
+  estado: string | null;
   fecha: Timestamp;
   id: Generated<string>;
   motivo_merma_id: string | null;
+  motivo_rechazo: string | null;
   origen: string | null;
+  resuelto_en: Timestamp | null;
+  resuelto_por_usuario_id: string | null;
   sucursal_destino_id: string | null;
   sucursal_id: string;
   tipo: string;

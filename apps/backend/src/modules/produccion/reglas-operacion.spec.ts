@@ -1,4 +1,7 @@
 import {
+  retiroEditable,
+  retiroResoluble,
+  validarMotivoRechazo,
   diaAnterior,
   fechaPermitida,
   planLineas,
@@ -191,5 +194,39 @@ describe('planLineas', () => {
       actualizar: [{ id: 'l1', piezas: 9 }],
       borrar: [],
     });
+  });
+});
+
+describe('Retiro de merma', () => {
+  it('admite hoy y cualquier dia anterior, no futuro', () => {
+    expect(fechaPermitida('retiro_merma', HOY, HOY)).toBe(true);
+    expect(fechaPermitida('retiro_merma', '2026-01-02', HOY)).toBe(true);
+    expect(fechaPermitida('retiro_merma', '2026-11-25', HOY)).toBe(false);
+  });
+
+  it('se captura como cualquier operacion con lineas', () => {
+    expect(errores({ tipo: 'retiro_merma' })).toEqual([]);
+    expect(errores({ tipo: 'retiro_merma', lineas: [] })).not.toEqual([]);
+  });
+
+  it('transiciones: pendiente y rechazado se corrigen; autorizado es final', () => {
+    expect(retiroEditable('pendiente')).toBe(true);
+    expect(retiroEditable('rechazado')).toBe(true);
+    expect(retiroEditable('autorizado')).toBe(false);
+  });
+
+  it('solo un pendiente se autoriza o rechaza', () => {
+    expect(retiroResoluble('pendiente')).toBe(true);
+    expect(retiroResoluble('autorizado')).toBe(false);
+    expect(retiroResoluble('rechazado')).toBe(false);
+    expect(retiroResoluble(null)).toBe(false);
+  });
+
+  it('el motivo del rechazo: obligatorio y de 300 como mucho', () => {
+    expect(validarMotivoRechazo('No coincide')).toEqual([]);
+    expect(validarMotivoRechazo('x'.repeat(300))).toEqual([]);
+    expect(validarMotivoRechazo('   ')).toHaveLength(1);
+    expect(validarMotivoRechazo(undefined)).toHaveLength(1);
+    expect(validarMotivoRechazo('x'.repeat(301))).toHaveLength(1);
   });
 });

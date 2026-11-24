@@ -26,7 +26,7 @@ export const EXPLICACION_PERMISO: Record<string, string> = {
   "cobranza.registrar": "Puede registrar cuando un cliente paga o abona.",
   "merma.gestionar": "Puede registrar producto dañado o perdido (merma).",
   "peticiones.gestionar":
-    "Puede aprobar o rechazar solicitudes para eliminar una venta o un cobro ya registrado.",
+    "Puede aprobar o rechazar solicitudes para eliminar una venta o un cobro ya registrado, y autorizar o rechazar los retiros de merma.",
   "motivo_visita.gestionar":
     "Puede dar de alta, editar o dar de baja los motivos por los que un cliente no compró (visita sin venta).",
   "campo_egreso.gestionar":
@@ -59,6 +59,8 @@ export const EXPLICACION_PERMISO: Record<string, string> = {
     "Abre la pestaña Consumo del Registro de Operación: puede registrar, corregir y eliminar el producto que se consumió.",
   "operacion.descuento":
     "Abre la pestaña Descuentos del Registro de Operación: puede registrar, corregir y eliminar el producto que se descuenta a un trabajador.",
+  "operacion.retiro_merma":
+    "Abre la pestaña Retiro de merma del Registro de Operación: puede pedir, corregir y eliminar retiros; los autoriza quien gestiona Peticiones.",
   "motivo_merma.gestionar":
     "Puede dar de alta, editar o dar de baja los motivos de merma del catálogo.",
   "almacen_sucursal.gestionar":

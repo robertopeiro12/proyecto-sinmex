@@ -729,7 +729,7 @@ usuario con sesion pasa.
   rejilla de productos por tamaño (TAB pasa a la siguiente casilla). **Reemplaza a Producción del día (T-25)**: su pantalla y
   los endpoints `/produccion` se retiraron y `/produccion/produccion-del-dia` redirige a la pestaña Entradas. **Aún no alimenta
   inventario** (T-24) ni almacenes (T-63). Issue #162 (T-81); spec
-  `docs/superpowers/specs/2026-11-24-registro-de-operacion-parte-1-design.md`. La **parte 2** trae Retiro de merma y Recargas.
+  `docs/superpowers/specs/2026-11-24-registro-de-operacion-parte-1-design.md`. La **parte 2** (Retiro de merma y Recargas) está abajo.
   - **Tablas.** `operacion_almacen` (`tipo` en un solo check: `entrada|envio|merma|consumo|descuento`, para agregar
     `retiro_merma` sin tocar más) + `operacion_almacen_linea` (piezas 1..100000, máx. 200 por operación, una por presentación).
     Checks por tipo: `origen` (`produccion|compra`) solo en entrada; `sucursal_destino_id` solo en envío y distinto de la
@@ -764,6 +764,40 @@ usuario con sesion pasa.
     (escribiría en `produccion` y la copia es única). Post-flight: `select count(*) from produccion where greatest(created_at,
     updated_at, coalesce(deleted_at, created_at)) > '<hora del push>';` debe dar 0 (lo que se escriba en `produccion` después
     se pierde) y los grants vivos de `operacion.entrada` deben ser al menos los conteos de antes.
+- **Registro de Operación (parte 2): Retiro de merma y Recargas.** Spec:
+  `docs/superpowers/specs/2026-11-25-retiro-de-merma-design.md`. **Recargas ya es pestaña** del Registro (rejilla
+  presentaciones × vendedores, PR #167; el tío confirmó que vaya ahí) y los Envíos eligen Hoy/Ayer con fecha (PR #166).
+  - **Retiro de merma** = tipo `retiro_merma` en `operacion_almacen` (sin tabla nueva) con `estado` (`pendiente|autorizado|
+    rechazado`, nulo en los demás tipos), `motivo_rechazo` (1..300, solo y obligatorio en `rechazado`) y `resuelto_por_usuario_id`/
+    `resuelto_en` (presentes en autorizado/rechazado, nulos en pendiente): todo con **checks totales** (cubren todos los estados).
+    Fecha: hoy o antes (Tijuana).
+  - **Transiciones.** pendiente → autorizado | rechazado (Administración); **rechazado → pendiente al editar** (el aviso sale en la
+    pantalla de corregir); **autorizado es final** (editar, eliminar, autorizar o rechazar = 409). Toda transición bloquea la fila
+    `for update` y lee dentro de la transacción: dos autorizaciones a la vez, una gana y la otra recibe 409.
+  - **Autorizar y rechazar lo que se vio.** Producción puede corregir un pendiente mientras Administración lo revisa, así que
+    `POST /:id/autorizar` y `/rechazar` **exigen `actualizadoEn`** (sin él = 400): el `updated_at` de la fila como texto ISO UTC
+    con **microsegundos** (`2026-11-24T16:15:00.123456Z`, formateado en SQL; un `Date` de JS los recorta). Cada operación lo trae
+    como `OperacionAlmacen.actualizadoEn` y la bandeja manda el de la fila que muestra. Sobre la fila bloqueada, si ya no está
+    pendiente = 409 del estado; si la marca no coincide = **409** "El retiro cambió desde que lo viste; revisa la cantidad
+    nueva." con la `operacion` actual (no se resuelve nada). Cualquier edición mueve `updated_at` (trigger), así que la marca
+    cubre cantidades, comentario y fecha. La bandeja recarga con 409 **y** con 404; la lista del Registro recarga si Eliminar da 409.
+  - **Fechas de la resolución en formato largo**: "Autorizó Roberto el martes 24 de noviembre a las 12:08" (y "Rechazó …:
+    motivo"). El servidor sigue mandando `AAAA-MM-DD hh:mm` de Tijuana; el portal lo pinta con `formatearDiaHoraTijuana`
+    (`lib/formato.ts`, la misma que `textoHecho` del Corte; una forma desconocida sale tal cual). La bandeja muestra "Pidió" así y
+    el comentario del retiro bajo Productos.
+  - **Permisos.** Pedir, corregir y eliminar: `operacion.retiro_merma` (grupo Produccion/Almacen, con su ⓘ en
+    `lib/explicacion-permisos.ts`; exigido en el servicio, como los otros tipos). Autorizar y rechazar: `peticiones.gestionar`
+    (el mismo de T-34). Los perfiles siguen vacíos: los configura el cliente. Alcance de sucursal como el resto; un atado a TJ no
+    ve ni resuelve retiros de MX.
+  - **Endpoints** (`produccion/operaciones-almacen.*`): los de siempre con `tipo=retiro_merma`, más
+    `GET /operaciones-almacen/retiros-pendientes` (bandeja), `POST /:id/autorizar` y `POST /:id/rechazar` (`{ motivo }`).
+  - **Portal.** Pestaña *Retiro de merma* en el Registro (columna Estado con quién resolvió, cuándo y el motivo del rechazo; sin
+    Editar/Eliminar cuando está autorizado) y pestaña *Retiro de merma* en *Operación → Peticiones* (`bandeja-retiros-merma.tsx`:
+    Autorizar con confirmación, Rechazar con ventana de motivo). Un rechazado corregido vuelve a la bandeja. `resuelto.en` viaja
+    como texto de Tijuana. Tipos duplicados en `lib/operaciones-almacen.ts`. Revisado en navegador a 1366 px, sin scroll horizontal.
+  - **Aún no alimenta inventario** (T-24): autorizar solo cambia el estado.
+  - **Nube**: `20261125120000_retiro_merma.sql` se sube a `sinmex dev` después del merge, con el protocolo de push. Pre-flight:
+    nada que contar (columnas nulas, checks que todas las filas cumplen en null y un permiso nuevo). **Backend y portal juntos.**
 - **Corte de mercancía (pieza 3).** *Producción → Corte* (`/produccion/corte`) absorbe al Retorno: por vendedor y día, el
   almacenista cuenta lo que regresó (**buenas** y **merma**) y el portal le muestra cuánto **faltó**. La vieja
   `/produccion/retorno` redirige a Corte (conserva `?sucursal`) y los endpoints `/retornos` **se quitaron** (404). Spec:
