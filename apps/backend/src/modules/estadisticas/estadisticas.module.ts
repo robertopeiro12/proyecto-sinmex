@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ProduccionModule } from '../produccion/produccion.module';
 import { ReporteClientesNuevosRepository } from './reporte-clientes-nuevos.repository';
 import { ReporteClientesNuevosService } from './reporte-clientes-nuevos.service';
 import { DashboardController } from './dashboard.controller';
@@ -17,6 +18,7 @@ import { ReporteVentasService } from './reporte-ventas.service';
 // T-49, Ventas (lee `venta_nota`);
 // T-51, Clientes nuevos (lee `cliente`). Ninguno escribe nada.
 @Module({
+  imports: [ProduccionModule],
   controllers: [ReportesController, FlujoDiarioController, DashboardController],
   providers: [
     ReporteKilometrajeService,

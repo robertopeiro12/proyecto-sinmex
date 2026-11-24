@@ -13,7 +13,7 @@ import {
 } from "@/lib/flujo-diario";
 import { formatearFecha, formatearPesos } from "@/lib/formato";
 import { DetalleVendedor, ETIQUETA_PESTANA_VENDEDOR, type PestanaDetalleVendedor } from "./detalle-vendedor";
-import { BotonNumero, BotonRenglon, BotonVer, CeldaNotasVentas, formatearPiezas, Pronto } from "./piezas";
+import { BotonNumero, BotonRenglon, BotonVer, CeldaNotasVentas, formatearPiezas, PastillaCorte } from "./piezas";
 import { useCerrarConPendientes, useDetalleAbierto } from "./use-detalle-abierto";
 import { VentanaDetalle } from "./ventana-detalle";
 
@@ -100,7 +100,7 @@ export function TablaPorVendedor({
           <BotonVer etiqueta={`Mermas/Cambios/Promociones de ${f.vendedor}`} onClick={() => verEn("mermas")} />
         </Td>
         <Td alinear="centro">
-          <Pronto />
+          <PastillaCorte corte={f.corte} etiqueta={`Inventario de ${f.vendedor}`} onClick={() => verEn("inventario")} />
         </Td>
       </Fila>
     );
@@ -124,6 +124,7 @@ export function TablaPorVendedor({
         {(detalle) => (
           <DetalleVendedor
             key={visto?.vez}
+            sucursal={filaAbierta ? filaAbierta.sucursalCodigo : ""}
             detalle={detalle}
             modo="flujo"
             pestanaInicial={visto?.pestana}
@@ -133,7 +134,7 @@ export function TablaPorVendedor({
           />
         )}
       </VentanaDetalle>
-      <Tabla aria-label="Por vendedor" className="min-w-[91rem] table-fixed">
+      <Tabla aria-label="Por vendedor" className="min-w-[97rem] table-fixed">
         <colgroup>
           <col className="w-24" />
           <col />
@@ -147,7 +148,7 @@ export function TablaPorVendedor({
           <col className="w-20" />
           <col className="w-16" />
           <col className="w-22" />
-          <col className="w-22" />
+          <col className="w-36" />
         </colgroup>
         <thead>
           <tr>

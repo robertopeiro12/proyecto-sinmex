@@ -6,7 +6,7 @@ import { buscarSucursalUsuario } from '../sucursales/buscar-sucursal-usuario';
 import {
   contarNotasNoEntregadas,
   type CobranzaOficinaDia,
-  type FilaVendedorDia,
+  type FilaVendedorDiaBase,
 } from './reglas-flujo-diario';
 
 export interface FiltroFlujoDiario {
@@ -40,7 +40,7 @@ export class FlujoDiarioRepository {
        */
       soloVigentesEnRuta?: boolean;
     },
-  ): Promise<FilaVendedorDia[]> {
+  ): Promise<FilaVendedorDiaBase[]> {
     const condiciones = [sql`true`];
     if (f.codigoSucursal !== null)
       condiciones.push(sql`s.codigo = ${f.codigoSucursal}`);

@@ -242,7 +242,7 @@ describe("CorteVendedor", () => {
     expect(buenas("Jamaica 1 L")).toHaveValue("3");
     expect(merma("Jamaica 1 L")).toHaveValue("1");
     expect(
-      screen.getByText("Faltan 2 · 3 de merma", { selector: "[data-tono]" }),
+      screen.getByText("Faltan: 2 pz p/Almacen · 3 pz merma", { selector: "[data-tono]" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Hecho por Luis Almacén/)).toBeInTheDocument();
     expect(celda("Jamaica 1 L", 3)).toHaveTextContent("2");
@@ -254,8 +254,8 @@ describe("CorteVendedor", () => {
     expect(celda("Horchata 500 ml", 6)).toHaveTextContent("0");
     expect(celda("Horchata 500 ml", 6)).not.toHaveClass("text-destructive");
     // Los faltantes del día no se compensan entre renglones.
-    expect(screen.getByText("Faltan 2")).toHaveClass("text-destructive");
-    expect(screen.getByText("3 de merma")).toHaveClass("text-destructive");
+    expect(screen.getByText("Faltan: 2 pz p/Almacen")).toHaveClass("text-destructive");
+    expect(screen.getByText("Faltan: 3 pz merma")).toHaveClass("text-destructive");
   });
 
   it("escribir la merma real recalcula el resultado de merma", async () => {
@@ -311,7 +311,7 @@ describe("CorteVendedor", () => {
     expect(buenas("Jamaica 500 ml")).toBeInTheDocument();
   });
 
-  it("la pastilla dice Falta 1 · 1 de merma con el corte guardado", async () => {
+  it("la pastilla dice Faltan: 1 pz p/Almacen · 1 pz merma con el corte guardado", async () => {
     vi.mocked(lib.leerCorteVendedor).mockResolvedValue(
       corte(
         [linea("p1", "Jamaica", "1 L", { buenas: 4, faltante: 1, resultadoMerma: 1 })],
@@ -321,7 +321,7 @@ describe("CorteVendedor", () => {
     );
     montar();
     await screen.findByRole("table", { name: "Corte del vendedor" });
-    expect(screen.getByText("Falta 1 · 1 de merma")).toBeInTheDocument();
+    expect(screen.getByText("Faltan: 1 pz p/Almacen · 1 pz merma")).toBeInTheDocument();
   });
 
   it("Guardar corte manda todas las líneas con vacío = 0 y avisa", async () => {

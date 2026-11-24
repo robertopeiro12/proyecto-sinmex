@@ -12,6 +12,8 @@ import { MotivosMermaService } from './motivos-merma.service';
 import { OperacionesAlmacenController } from './operaciones-almacen.controller';
 import { OperacionesAlmacenRepository } from './operaciones-almacen.repository';
 import { OperacionesAlmacenService } from './operaciones-almacen.service';
+import { InventarioVendedorController } from './inventario-vendedor.controller';
+import { InventarioVendedorService } from './inventario-vendedor.service';
 
 // T-27 pieza 1: la carga y las recargas del vendedor (tabla `carga`). Exporta
 // `CargasService` para que sincronizacion/ baje las cargas en el pull y atienda
@@ -33,6 +35,7 @@ import { OperacionesAlmacenService } from './operaciones-almacen.service';
     CortesController,
     MotivosMermaController,
     OperacionesAlmacenController,
+    InventarioVendedorController,
   ],
   providers: [
     CargasService,
@@ -43,7 +46,8 @@ import { OperacionesAlmacenService } from './operaciones-almacen.service';
     MotivosMermaRepository,
     OperacionesAlmacenService,
     OperacionesAlmacenRepository,
+    InventarioVendedorService,
   ],
-  exports: [CargasService],
+  exports: [CargasService, CortesService],
 })
 export class ProduccionModule {}

@@ -157,6 +157,24 @@ export async function movimientosDelDia(
   return r.rows;
 }
 
+/** Una linea de una carga viva del dia, en cualquier estado (Recargas de Inventario por vendedor). */
+export interface RecargaDelDia {
+  cargaId: string;
+  numero: number;
+  vendedorId: string;
+  vendedor: string;
+  presentacionId: string;
+  nombre: string;
+  producto: string;
+  volumen: string;
+  piezas: number;
+  capturo: string;
+  /** `HH24:MI` de Tijuana, de `created_at`. */
+  hora: string;
+  estado: 'pendiente' | 'aceptada' | 'rechazada';
+  motivoRechazo: string | null;
+}
+
 /**
  * SQL del corte de mercancia. Los metodos que escriben reciben la `trx` del
  * servicio; ninguno abre la suya. Cargas y ventas solo se leen.
@@ -416,5 +434,59 @@ export class CortesRepository {
       .orderBy('v.nombre')
       .orderBy('v.id')
       .execute();
+  }
+
+  /** La sucursal por codigo, o `undefined` si no existe. */
+  async sucursalPorCodigo(
+    codigo: string,
+  ): Promise<{ id: string; codigo: string } | undefined> {
+    return this.db
+      .selectFrom('sucursal')
+      .select(['id', 'codigo'])
+      .where('codigo', '=', codigo)
+      .executeTakeFirst();
+  }
+
+  /**
+   * Una fila por linea de carga viva de ese dia (pendiente, aceptada o
+   * rechazada) de un vendedor o de toda una sucursal; vendedores vivos. Orden:
+   * hora, vendedor, producto.
+   */
+  async recargas(
+    fecha: string,
+    filtro: { vendedorId: string } | { sucursalCodigo: string },
+  ): Promise<RecargaDelDia[]> {
+    const condicion =
+      'vendedorId' in filtro
+        ? sql`v.id = ${filtro.vendedorId}`
+        : sql`s.codigo = ${filtro.sucursalCodigo}`;
+    const r = await sql<RecargaDelDia>`
+      select c.id as "cargaId",
+             c.numero as numero,
+             v.id as "vendedorId",
+             v.nombre as vendedor,
+             cd.presentacion_id as "presentacionId",
+             p.nombre || ' ' || pr.volumen as nombre,
+             p.nombre as producto,
+             pr.volumen as volumen,
+             cd.piezas as piezas,
+             u.nombre as capturo,
+             to_char(c.created_at at time zone 'America/Tijuana', 'HH24:MI') as hora,
+             c.estado as estado,
+             c.motivo_rechazo as "motivoRechazo"
+        from carga c
+        join carga_detalle cd on cd.carga_id = c.id
+        join vendedor v on v.id = c.vendedor_id
+        join sucursal s on s.id = v.sucursal_id
+        join presentacion pr on pr.id = cd.presentacion_id
+        join producto p on p.id = pr.producto_id
+        join usuario u on u.id = c.capturo_usuario_id
+       where c.fecha = ${fecha}::date
+         and c.deleted_at is null
+         and v.deleted_at is null
+         and ${condicion}
+       order by c.created_at, v.nombre, p.nombre, pr.volumen, c.id, cd.id
+    `.execute(this.db);
+    return r.rows;
   }
 }

@@ -188,11 +188,11 @@ describe("PantallaCorte (lista del día)", () => {
     expect(
       renglon("Beto Ruiz").getByRole("button", { name: "Ver corte" }),
     ).toBeInTheDocument();
-    expect(renglon("Cata Lara").getByText("Faltan 3 · 1 de merma")).toHaveAttribute(
+    expect(renglon("Cata Lara").getByText("Faltan: 3 pz p/Almacen · 1 pz merma")).toHaveAttribute(
       "data-tono",
       "error",
     );
-    expect(renglon("Eli Mora").getByText("Faltan 2 de merma")).toBeInTheDocument();
+    expect(renglon("Eli Mora").getByText("Faltan: 2 pz merma")).toBeInTheDocument();
     expect(renglon("Dani Soto").getByText("Sin carga")).toBeInTheDocument();
   });
 

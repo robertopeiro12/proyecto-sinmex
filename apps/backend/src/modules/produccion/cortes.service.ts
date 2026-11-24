@@ -58,6 +58,19 @@ export interface FilaCorte {
   hechoEn: string | null;
 }
 
+/** El estado del corte de un (vendedor, dia), como lo muestran Dashboard y Flujo diario. */
+export interface EstadoCorteFila {
+  estado: EstadoCorte;
+  piezasFaltantes: number | null;
+  mermaFaltante: number | null;
+}
+
+function diaSiguiente(fecha: string): string {
+  const d = new Date(`${fecha}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 /** `GET /cortes`. */
 export interface CortesDelDia {
   fecha: string;
@@ -122,8 +135,45 @@ export class CortesService {
       normalizarSucursalPedida(q.sucursal),
     );
     const codigo = alcance.tipo === 'una' ? alcance.codigo : null;
+    return {
+      fecha: q.fecha,
+      hoy,
+      vendedores: await this.filasDelDia(q.fecha, codigo),
+    };
+  }
 
-    const movimientos = await this.repo.movimientos(q.fecha, {
+  /**
+   * El estado del corte de cada (vendedor, dia) del rango, con la MISMA regla
+   * que `lista` (`filasDelDia`): llave `${vendedorId}|${fecha}`. Solo salen los
+   * dias con movimiento o corte; quien no esta, no tiene corte. Hace una
+   * consulta por dia del rango: quien tiene las fechas presentes (Dashboard y
+   * Flujo diario) la llama una vez por fecha, con `desde = hasta`. Sin
+   * validacion de alcance: la sucursal ya la resolvio quien llama.
+   */
+  async estadosDelRango(
+    desde: string,
+    hasta: string,
+    codigoSucursal: string | null,
+  ): Promise<Map<string, EstadoCorteFila>> {
+    const estados = new Map<string, EstadoCorteFila>();
+    for (let f = desde; f <= hasta; f = diaSiguiente(f)) {
+      for (const fila of await this.filasDelDia(f, codigoSucursal)) {
+        estados.set(`${fila.vendedor.id}|${f}`, {
+          estado: fila.estado,
+          piezasFaltantes: fila.piezasFaltantes,
+          mermaFaltante: fila.mermaFaltante,
+        });
+      }
+    }
+    return estados;
+  }
+
+  /** Los vendedores de la lista del dia (D11) con su corte armado. */
+  private async filasDelDia(
+    fecha: string,
+    codigo: string | null,
+  ): Promise<FilaCorte[]> {
+    const movimientos = await this.repo.movimientos(fecha, {
       sucursalCodigo: codigo,
     });
     const porVendedor = new Map<string, MovimientoVendedor[]>();
@@ -132,28 +182,23 @@ export class CortesService {
       lista.push(m);
       porVendedor.set(m.vendedorId, lista);
     }
-    const vendedores = await this.repo.vendedoresDelDia(q.fecha, codigo, [
+    const vendedores = await this.repo.vendedoresDelDia(fecha, codigo, [
       ...porVendedor.keys(),
     ]);
-
-    return {
-      fecha: q.fecha,
-      hoy,
-      vendedores: vendedores.map((v) => {
-        const hecho = v.hechoEn !== null;
-        const corte = armarCorte(porVendedor.get(v.id) ?? [], hecho);
-        return {
-          vendedor: { id: v.id, nombre: v.nombre },
-          sucursal: { id: v.sucursalId, codigo: v.sucursalCodigo },
-          piezasCargadas: corte.totales.cargadas,
-          estado: corte.estado,
-          sinCarga: !corte.lineas.some((l) => l.cargadas > 0),
-          piezasFaltantes: corte.totales.faltante,
-          mermaFaltante: corte.totales.faltanteMerma,
-          hechoEn: v.hechoEn,
-        };
-      }),
-    };
+    return vendedores.map((v) => {
+      const hecho = v.hechoEn !== null;
+      const corte = armarCorte(porVendedor.get(v.id) ?? [], hecho);
+      return {
+        vendedor: { id: v.id, nombre: v.nombre },
+        sucursal: { id: v.sucursalId, codigo: v.sucursalCodigo },
+        piezasCargadas: corte.totales.cargadas,
+        estado: corte.estado,
+        sinCarga: !corte.lineas.some((l) => l.cargadas > 0),
+        piezasFaltantes: corte.totales.faltante,
+        mermaFaltante: corte.totales.faltanteMerma,
+        hechoEn: v.hechoEn,
+      };
+    });
   }
 
   /** `GET /cortes/vendedor`. */

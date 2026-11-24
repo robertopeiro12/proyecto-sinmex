@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 import { Etiqueta } from "@/components/ui/etiqueta";
 import { Monto } from "@/components/ui/monto";
 import { Td } from "@/components/ui/tabla";
-import { etiquetaLiquidada, type MetodoPago, type NotaDetalle, type PagoDetalle } from "@/lib/flujo-diario";
+import { etiquetaEstadoCorte } from "@/lib/cortes";
+import { etiquetaLiquidada, type EstadoCorteFila, type MetodoPago, type NotaDetalle, type PagoDetalle } from "@/lib/flujo-diario";
 import { formatearPesos } from "@/lib/formato";
 
 /*
@@ -248,7 +249,21 @@ export function BotonRenglon({ children, onClick }: { children: ReactNode; onCli
   );
 }
 
-/** "Pronto" en gris (Inventario). */
-export function Pronto() {
-  return <span className="text-muted-foreground">Pronto</span>;
+/** La pastilla del estado del corte del renglón ("Sin corte", "Corte hecho", "Faltan 7"); picarla abre el Inventario. */
+export function PastillaCorte({ corte, etiqueta, onClick }: { corte: EstadoCorteFila; etiqueta: string; onClick: () => void }) {
+  const { texto, tono } = etiquetaEstadoCorte(corte);
+  return (
+    <button
+      type="button"
+      aria-label={etiqueta}
+      aria-haspopup="dialog"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-sucursal"
+    >
+      <Etiqueta tono={tono}>{texto}</Etiqueta>
+    </button>
+  );
 }

@@ -7,6 +7,8 @@ import { diaAnterior } from "@/lib/fechas";
 import { hoyEnTijuana } from "@/lib/ventas";
 import * as fd from "@/lib/flujo-diario";
 import type { DetalleVendedorDia } from "@/lib/flujo-diario";
+import * as inv from "@/lib/inventario-vendedor";
+import type { InventarioVendedor } from "@/lib/inventario-vendedor";
 import { DetalleVendedor } from "./detalle-vendedor";
 
 vi.mock("@/components/auth/auth-provider");
@@ -14,7 +16,17 @@ vi.mock("@/lib/flujo-diario", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/flujo-diario")>();
   return { ...real, guardarNotasEntregadas: vi.fn() };
 });
+vi.mock("@/lib/inventario-vendedor", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/inventario-vendedor")>();
+  return { ...real, leerInventarioVendedor: vi.fn() };
+});
 const guardarNotasEntregadas = vi.mocked(fd.guardarNotasEntregadas);
+const leerInventario = vi.mocked(inv.leerInventarioVendedor);
+const INVENTARIO: InventarioVendedor = {
+  fecha: "2026-11-09", hoy: "2026-11-09", sucursal: { id: "s", codigo: "TJ" },
+  vendedor: { id: "ricardo", nombre: "Ricardo" }, lineas: [], totales: {} as InventarioVendedor["totales"],
+  recargas: [], vendedoresSinCorte: 0, corte: null,
+};
 
 function mockAuth(permisos: string[]) {
   vi.mocked(useAuth).mockReturnValue({
@@ -27,6 +39,8 @@ function mockAuth(permisos: string[]) {
 
 beforeEach(() => {
   guardarNotasEntregadas.mockReset();
+  leerInventario.mockReset();
+  leerInventario.mockResolvedValue(INVENTARIO);
   mockAuth(["nota_papel.revisar"]);
 });
 
@@ -81,7 +95,7 @@ const DETALLE: DetalleVendedorDia = {
 describe("DetalleVendedor", () => {
   it("Venta general: Por producto agrupado por presentación; el selector pasa a Por cliente", async () => {
     const u = userEvent.setup();
-    render(<DetalleVendedor detalle={DETALLE} modo="flujo" />);
+    render(<DetalleVendedor detalle={DETALLE} sucursal="TJ" modo="flujo" />);
     expect(screen.getByRole("radio", { name: "Por producto" })).toHaveAttribute("aria-checked", "true");
     // El encabezado de cada presentación lleva solo su nombre (el total ya se ve en sus renglones).
     expect(screen.getByText("600 ml")).toBeInTheDocument();
@@ -115,7 +129,7 @@ describe("DetalleVendedor", () => {
 
   it("Cobranza: Sí, Abonado con lo que resta, el método si no es efectivo y lo que quedó a favor", async () => {
     const u = userEvent.setup();
-    render(<DetalleVendedor detalle={DETALLE} modo="flujo" />);
+    render(<DetalleVendedor detalle={DETALLE} sucursal="TJ" modo="flujo" />);
     await u.click(screen.getByRole("tab", { name: "Cobranza" }));
     const panel = screen.getByRole("tabpanel");
     expect(within(panel).getByText("Sí")).toBeInTheDocument();
@@ -141,15 +155,36 @@ describe("DetalleVendedor", () => {
     expect(within(productos).getAllByRole("row")[1]).toHaveTextContent("$11.50");
   });
 
-  it("modo flujo no tiene Corte; Inventario está deshabilitada", () => {
-    render(<DetalleVendedor detalle={DETALLE} modo="flujo" />);
+  it("modo flujo no tiene Corte; Inventario es una pestaña real y no pide nada hasta abrirla", async () => {
+    const u = userEvent.setup();
+    render(<DetalleVendedor detalle={DETALLE} sucursal="TJ" modo="flujo" />);
     expect(screen.queryByRole("tab", { name: "Corte" })).not.toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Inventario · pronto" })).toHaveAttribute("aria-disabled", "true");
+    const tab = screen.getByRole("tab", { name: "Inventario" });
+    expect(tab).not.toHaveAttribute("aria-disabled", "true");
+    expect(leerInventario).not.toHaveBeenCalled();
+    await u.click(tab);
+    expect(leerInventario).toHaveBeenCalledWith("2026-11-09", "TJ", "ricardo");
+    expect(await screen.findByRole("table", { name: "Inventario" })).toBeInTheDocument();
+  });
+
+  it("Inventario sin permiso (403): lo dice y las otras pestañas siguen", async () => {
+    const u = userEvent.setup();
+    leerInventario.mockRejectedValue(new ErrorApi("Prohibido", 403));
+    render(<DetalleVendedor detalle={DETALLE} sucursal="TJ" modo="dashboard" pestanaInicial="inventario" />);
+    expect(await screen.findByText("No tienes permiso para ver esta sección.")).toBeInTheDocument();
+    await u.click(screen.getByRole("tab", { name: "Cobranza" }));
+    expect(screen.getByRole("table", { name: "Cobranza ventas de contado" })).toBeInTheDocument();
+  });
+
+  it("Inventario con otro error lo muestra dentro de la pestaña", async () => {
+    leerInventario.mockRejectedValue(new Error("x"));
+    render(<DetalleVendedor detalle={DETALLE} sucursal="TJ" modo="flujo" pestanaInicial="inventario" />);
+    expect(await screen.findByText("No se pudo cargar el inventario.")).toBeInTheDocument();
   });
 
   it("modo dashboard sin corte: el vendedor no ha terminado su ruta", async () => {
     const u = userEvent.setup();
-    render(<DetalleVendedor detalle={DETALLE} modo="dashboard" />);
+    render(<DetalleVendedor detalle={DETALLE} sucursal="TJ" modo="dashboard" />);
     await u.click(screen.getByRole("tab", { name: "Corte" }));
     expect(screen.getByText("El vendedor no ha terminado su ruta.")).toBeInTheDocument();
   });
@@ -157,7 +192,7 @@ describe("DetalleVendedor", () => {
   it("modo dashboard con corte: Tesorería y el renglón a favor solo si hay", async () => {
     const u = userEvent.setup();
     const corte = { contadoCentavos: 187400, anterioresCentavos: 92250, aFavorCentavos: 0, gastoCentavos: 1000, tesoreriaCentavos: 278650 };
-    const { unmount } = render(<DetalleVendedor detalle={{ ...DETALLE, corte }} modo="dashboard" />);
+    const { unmount } = render(<DetalleVendedor detalle={{ ...DETALLE, corte }} sucursal="TJ" modo="dashboard" />);
     await u.click(screen.getByRole("tab", { name: "Corte" }));
     const tabla = screen.getByRole("table", { name: "Corte" });
     expect(within(tabla).getByText("$2,786.50")).toBeInTheDocument();
@@ -167,14 +202,14 @@ describe("DetalleVendedor", () => {
     expect(within(tabla).getByText("Ventas contado")).toBeInTheDocument();
     expect(within(tabla).getByText("Ventas anteriores")).toBeInTheDocument();
     unmount();
-    render(<DetalleVendedor detalle={{ ...DETALLE, corte: { ...corte, aFavorCentavos: 5000 } }} modo="dashboard" />);
+    render(<DetalleVendedor detalle={{ ...DETALLE, corte: { ...corte, aFavorCentavos: 5000 } }} sucursal="TJ" modo="dashboard" />);
     await u.click(screen.getByRole("tab", { name: "Corte" }));
     expect(within(screen.getByRole("table", { name: "Corte" })).getByText("Quedó a favor del cliente")).toBeInTheDocument();
   });
 
   it("Ruta (las visitas, como el viejo) en hora de Tijuana; Notas de ventas y promociones por cliente", async () => {
     const u = userEvent.setup();
-    render(<DetalleVendedor detalle={DETALLE} modo="flujo" />);
+    render(<DetalleVendedor detalle={DETALLE} sucursal="TJ" modo="flujo" />);
     expect(screen.queryByRole("tab", { name: "Visitas" })).not.toBeInTheDocument();
     await u.click(screen.getByRole("tab", { name: "Ruta" }));
     expect(screen.getByText("8:42")).toBeInTheDocument();
@@ -221,7 +256,7 @@ describe("DetalleVendedor", () => {
               }),
             ],
           }}
-          modo="dashboard"
+          sucursal="TJ" modo="dashboard"
         />,
       );
       await abrir(u);
@@ -244,7 +279,7 @@ describe("DetalleVendedor", () => {
               nueva("TJ261102AP03", null, { condicionVenta: "ninguna" }),
             ],
           }}
-          modo="dashboard"
+          sucursal="TJ" modo="dashboard"
         />,
       );
       await abrir(u);
@@ -256,7 +291,7 @@ describe("DetalleVendedor", () => {
 
     it("las tres listas con sus nombres; las casillas vienen palomeadas si no se han revisado", async () => {
       const u = userEvent.setup();
-      render(<DetalleVendedor detalle={REVISION} modo="dashboard" />);
+      render(<DetalleVendedor detalle={REVISION} sucursal="TJ" modo="dashboard" />);
       await abrir(u);
       const cobradas = screen.getByRole("table", { name: "Notas Asignadas Cobradas" });
       expect(within(cobradas).getByText("Pagó Ya")).toBeInTheDocument();
@@ -282,7 +317,7 @@ describe("DetalleVendedor", () => {
       const u = userEvent.setup();
       const guardadas = vi.fn();
       guardarNotasEntregadas.mockResolvedValue(undefined);
-      render(<DetalleVendedor detalle={REVISION} modo="dashboard" onNotasGuardadas={guardadas} />);
+      render(<DetalleVendedor detalle={REVISION} sucursal="TJ" modo="dashboard" onNotasGuardadas={guardadas} />);
       await abrir(u);
       // Con notas sin revisar se puede guardar sin tocar nada (todo llegó)...
       const guardar = screen.getByRole("button", { name: "Guardar revisión" });
@@ -314,7 +349,7 @@ describe("DetalleVendedor", () => {
         notasCredito: [nueva("TJ261111RB11", false)],
       };
       const cambios = vi.fn();
-      render(<DetalleVendedor detalle={revisado} modo="dashboard" onCambiosPendientes={cambios} />);
+      render(<DetalleVendedor detalle={revisado} sucursal="TJ" modo="dashboard" onCambiosPendientes={cambios} />);
       await abrir(u);
       const guardar = screen.getByRole("button", { name: "Guardar revisión" });
       const cancelar = screen.getByRole("button", { name: "Cancelar" });
@@ -338,7 +373,7 @@ describe("DetalleVendedor", () => {
     it("abrir con notas sin revisar no cuenta como cambio pendiente (no pregunta al cerrar)", async () => {
       const u = userEvent.setup();
       const cambios = vi.fn();
-      render(<DetalleVendedor detalle={REVISION} modo="dashboard" onCambiosPendientes={cambios} />);
+      render(<DetalleVendedor detalle={REVISION} sucursal="TJ" modo="dashboard" onCambiosPendientes={cambios} />);
       await abrir(u);
       expect(cambios).not.toHaveBeenCalledWith(true);
     });
@@ -347,7 +382,7 @@ describe("DetalleVendedor", () => {
       const u = userEvent.setup();
       const guardadas = vi.fn();
       guardarNotasEntregadas.mockRejectedValue(new ErrorApi("x", 400, "Ese día ya no se puede revisar."));
-      render(<DetalleVendedor detalle={REVISION} modo="dashboard" onNotasGuardadas={guardadas} />);
+      render(<DetalleVendedor detalle={REVISION} sucursal="TJ" modo="dashboard" onNotasGuardadas={guardadas} />);
       await abrir(u);
       await u.click(screen.getByRole("button", { name: "Guardar revisión" }));
       expect(await screen.findByText("Ese día ya no se puede revisar.")).toBeInTheDocument();
@@ -362,13 +397,13 @@ describe("DetalleVendedor", () => {
         asignadasPorEntregar: [],
         notasCredito: [nueva("TJ261111RB10", entregada)],
       });
-      const { rerender } = render(<DetalleVendedor detalle={una(null)} modo="dashboard" />);
+      const { rerender } = render(<DetalleVendedor detalle={una(null)} sucursal="TJ" modo="dashboard" />);
       await abrir(u);
       await u.click(screen.getByRole("checkbox", { name: "Entregada TJ261111RB10" }));
       await u.click(screen.getByRole("button", { name: "Guardar revisión" }));
       await waitFor(() => expect(guardarNotasEntregadas).toHaveBeenCalledTimes(1));
       // Llega el detalle nuevo: otra persona la dejó como entregada después.
-      rerender(<DetalleVendedor detalle={una(true)} modo="dashboard" />);
+      rerender(<DetalleVendedor detalle={una(true)} sucursal="TJ" modo="dashboard" />);
       expect(screen.getByRole("checkbox", { name: "Entregada TJ261111RB10" })).toBeChecked();
       expect(screen.getByRole("button", { name: "Guardar revisión" })).toBeDisabled();
     });
@@ -383,7 +418,7 @@ describe("DetalleVendedor", () => {
           { folio: "TJ261105RB03", cliente: "Tacos Beto", fecha: "2026-11-05", totalCentavos: 30000, pendienteCentavos: 12000 },
         ],
       };
-      render(<DetalleVendedor detalle={detalle} modo="dashboard" />);
+      render(<DetalleVendedor detalle={detalle} sucursal="TJ" modo="dashboard" />);
       await abrir(u);
       const tabla = screen.getByRole("table", { name: "Notas de Ventas NO Entregadas" });
       expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
@@ -415,7 +450,7 @@ describe("DetalleVendedor", () => {
         asignadasPorEntregar: [nueva("TJ261102AP03", true)],
         notasCredito: [nueva("TJ261111RB11", true)],
       };
-      render(<DetalleVendedor detalle={detalle} modo="dashboard" onNotasGuardadas={guardadas} />);
+      render(<DetalleVendedor detalle={detalle} sucursal="TJ" modo="dashboard" onNotasGuardadas={guardadas} />);
       await abrir(u);
       const cobradas = screen.getByRole("table", { name: "Notas Asignadas Cobradas" });
       // La que nunca se revisó solo se ve; la revisada lleva su casilla, sin palomita.
@@ -451,7 +486,7 @@ describe("DetalleVendedor", () => {
         asignadasPorEntregar: [],
         notasCredito: [nueva("TJ261111RB10", null)],
       };
-      render(<DetalleVendedor detalle={detalle} modo="dashboard" onNotasGuardadas={guardadas} />);
+      render(<DetalleVendedor detalle={detalle} sucursal="TJ" modo="dashboard" onNotasGuardadas={guardadas} />);
       await abrir(u);
       await u.click(screen.getByRole("button", { name: "Guardar revisión" }));
       expect(guardarNotasEntregadas).toHaveBeenCalledWith(
@@ -471,7 +506,7 @@ describe("DetalleVendedor", () => {
           nueva("TJ261101AP05", true, { pendienteCentavos: 0 }),
         ],
       };
-      render(<DetalleVendedor detalle={detalle} modo="dashboard" />);
+      render(<DetalleVendedor detalle={detalle} sucursal="TJ" modo="dashboard" />);
       await abrir(u);
       const cobradas = screen.getByRole("table", { name: "Notas Asignadas Cobradas" });
       expect(within(cobradas).getByText("TJ261101AP01").closest("tr")).toHaveTextContent(/—$/);
@@ -482,7 +517,7 @@ describe("DetalleVendedor", () => {
     it("sin notas NO entregadas, esa lista no sale", async () => {
       const u = userEvent.setup();
       const detalle: DetalleVendedorDia = { ...REVISION, notasCredito: [nueva("TJ261111RB10", true)] };
-      render(<DetalleVendedor detalle={detalle} modo="dashboard" />);
+      render(<DetalleVendedor detalle={detalle} sucursal="TJ" modo="dashboard" />);
       await abrir(u);
       expect(screen.queryByText("Notas de Ventas NO Entregadas")).not.toBeInTheDocument();
     });
@@ -490,7 +525,7 @@ describe("DetalleVendedor", () => {
     it("sin nota_papel.revisar: solo consulta (Sí / No / Sin revisar), sin casillas ni botones", async () => {
       const u = userEvent.setup();
       mockAuth([]);
-      render(<DetalleVendedor detalle={REVISION} modo="dashboard" />);
+      render(<DetalleVendedor detalle={REVISION} sucursal="TJ" modo="dashboard" />);
       await abrir(u);
       expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Guardar revisión" })).not.toBeInTheDocument();
@@ -505,7 +540,7 @@ describe("DetalleVendedor", () => {
       const u = userEvent.setup();
       guardarNotasEntregadas.mockResolvedValue(undefined);
       const ayer = diaAnterior(HOY);
-      render(<DetalleVendedor detalle={{ ...REVISION, fecha: ayer }} modo="flujo" />);
+      render(<DetalleVendedor detalle={{ ...REVISION, fecha: ayer }} sucursal="TJ" modo="flujo" />);
       await abrir(u);
       await u.click(screen.getByRole("button", { name: "Guardar revisión" }));
       expect(guardarNotasEntregadas).toHaveBeenCalledWith(expect.objectContaining({ fecha: ayer }));
@@ -513,7 +548,7 @@ describe("DetalleVendedor", () => {
 
     it("Flujo diario: un día anterior a ayer es solo consulta", async () => {
       const u = userEvent.setup();
-      render(<DetalleVendedor detalle={{ ...REVISION, fecha: diaAnterior(diaAnterior(HOY)) }} modo="flujo" />);
+      render(<DetalleVendedor detalle={{ ...REVISION, fecha: diaAnterior(diaAnterior(HOY)) }} sucursal="TJ" modo="flujo" />);
       await abrir(u);
       expect(screen.getByRole("table", { name: "Notas Asignadas NO cobradas por Entregar" })).toBeInTheDocument();
       expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
@@ -527,7 +562,7 @@ describe("DetalleVendedor", () => {
       ...DETALLE,
       promociones: [{ cliente: "Don Gallo", producto: "Horchata 500 ml", cantidad: 1200 }],
     };
-    render(<DetalleVendedor detalle={muchas} modo="flujo" />);
+    render(<DetalleVendedor detalle={muchas} sucursal="TJ" modo="flujo" />);
     await u.click(screen.getByRole("tab", { name: "Mermas/Cambios/Promociones" }));
     const promos = screen.getByRole("table", { name: "Promociones de Don Gallo" });
     expect(within(promos).getAllByRole("row")[1]).toHaveTextContent("Horchata 500 ml1,200");
@@ -539,7 +574,7 @@ describe("DetalleVendedor", () => {
   it("sin datos: los textos de vacío", async () => {
     const u = userEvent.setup();
     const vacio: DetalleVendedorDia = { ...DETALLE, notasCredito: [], promociones: [] };
-    render(<DetalleVendedor detalle={vacio} modo="flujo" />);
+    render(<DetalleVendedor detalle={vacio} sucursal="TJ" modo="flujo" />);
     await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
     expect(screen.getByText("No hay notas pendientes.")).toBeInTheDocument();
     await u.click(screen.getByRole("tab", { name: "Mermas/Cambios/Promociones" }));
