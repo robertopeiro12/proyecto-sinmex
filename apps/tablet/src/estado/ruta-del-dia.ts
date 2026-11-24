@@ -130,13 +130,14 @@ function normalizar(texto: string): string {
 /**
  * "Agregar a mi ruta" (rediseno pieza 1, maqueta 20): todos los clientes activos
  * de la sucursal (`tipo = 'cliente'`, D7) en orden alfabetico, filtrados por
- * nombre sin acentos, cada uno con `enRuta` (ya vivo en la ruta de hoy).
+ * nombre sin acentos, cada uno con `enRuta` (ya vivo en la ruta de hoy). Sin tope
+ * por omision (la pantalla virtualiza); `limite` solo si alguien lo pide.
  */
 export function clientesParaAgregar<T extends Pick<Cliente, 'id' | 'nombre' | 'tipo' | 'activo'>>(
   clientes: readonly T[],
   enRuta: ReadonlySet<string>,
   busqueda: string,
-  limite = 50,
+  limite?: number,
 ): (T & { enRuta: boolean })[] {
   const q = normalizar(busqueda);
   return clientes

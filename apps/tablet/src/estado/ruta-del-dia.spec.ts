@@ -149,9 +149,20 @@ describe('clientesParaAgregar ("Agregar a mi ruta")', () => {
     expect(clientesParaAgregar([c('1', 'Abarrotes Doña Lupe')], new Set(), 'DONA').length).toBe(1);
   });
 
-  it('corta en el limite', () => {
-    const muchos = Array.from({ length: 80 }, (_, i) => c(String(i), `Cliente ${i}`));
-    expect(clientesParaAgregar(muchos, new Set(), '')).toHaveLength(50);
+  it('no recorta: 60 clientes sin busqueda salen todos, alfabeticos y con su marca', () => {
+    const muchos = Array.from({ length: 60 }, (_, i) => c(String(i), `Cliente ${String(59 - i).padStart(2, '0')}`));
+    const r = clientesParaAgregar(muchos, new Set(['0', '59']), '');
+    expect(r).toHaveLength(60);
+    expect(r.map((x) => x.nombre)).toEqual(
+      Array.from({ length: 60 }, (_, i) => `Cliente ${String(i).padStart(2, '0')}`),
+    );
+    expect(
+      r
+        .filter((x) => x.enRuta)
+        .map((x) => x.id)
+        .sort(),
+    ).toEqual(['0', '59']);
+    expect(clientesParaAgregar(muchos, new Set(), '', 10)).toHaveLength(10);
   });
 });
 

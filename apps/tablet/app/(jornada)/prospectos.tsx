@@ -1,10 +1,10 @@
-import { useMemo, useRef, useState } from "react";
-import { router } from "expo-router";
-import { Pressable, Text, View } from "react-native";
+import { useMemo, useRef, useState } from 'react';
+import { router } from 'expo-router';
+import { Pressable, Text, View } from 'react-native';
 
-import { ErrorJornada, ErrorProspecto } from "@/datos";
-import { LARGO_MAX_DOMICILIO } from "@/datos/repositorios/prospectos";
-import type { Prospecto, TipoNegocio } from "@/datos/tipos";
+import { ErrorJornada, ErrorProspecto } from '@/datos';
+import { LARGO_MAX_DOMICILIO } from '@/datos/repositorios/prospectos';
+import type { Prospecto, TipoNegocio } from '@/datos/tipos';
 import {
   ayudaDomicilio,
   avisoUbicacionAlta,
@@ -12,20 +12,20 @@ import {
   ubicacionRecibida,
   validarAltaProspecto,
   type UbicacionAlta,
-} from "@/estado/alta-prospecto";
-import { useJawa } from "@/estado/proveedor-jawa";
-import { enlaceAFicha, primeraLineaDomicilio } from "@/estado/ruta-del-dia";
-import { useSesion } from "@/estado/proveedor-sesion";
-import { OBJETIVO_BYTES, type FotoComprimida } from "@/fotos/comprimir";
-import { capturarFoto } from "@/fotos/expo";
-import { obtenerUbicacion } from "@/ubicacion/obtener";
-import { Boton } from "@/ui/boton";
-import { Campo } from "@/ui/campo";
-import { Cifra } from "@/ui/cifra";
-import { MarcoMenu } from "@/ui/marco-menu";
-import { Pantalla, Pastilla, Tarjeta, type Estado } from "@/ui/pantalla";
-import { useTema } from "@/ui/tema";
-import { colores, espacio, grosor } from "@/ui/tokens";
+} from '@/estado/alta-prospecto';
+import { useJawa } from '@/estado/proveedor-jawa';
+import { enlaceAFicha, primeraLineaDomicilio } from '@/estado/ruta-del-dia';
+import { useSesion } from '@/estado/proveedor-sesion';
+import { OBJETIVO_BYTES, type FotoComprimida } from '@/fotos/comprimir';
+import { capturarFoto } from '@/fotos/expo';
+import { obtenerUbicacion } from '@/ubicacion/obtener';
+import { Boton } from '@/ui/boton';
+import { Campo } from '@/ui/campo';
+import { Cifra } from '@/ui/cifra';
+import { MarcoMenu } from '@/ui/marco-menu';
+import { Pantalla, Pastilla, Tarjeta, type Estado } from '@/ui/pantalla';
+import { useTema } from '@/ui/tema';
+import { colores, espacio, grosor } from '@/ui/tokens';
 
 /**
  * Alta de prospectos en ruta (T-40).
@@ -72,17 +72,17 @@ export default function Prospectos() {
     return datos.catalogos.listarTiposNegocio();
   }, [datos, versionCatalogos]);
 
-  const [nombre, setNombre] = useState("");
-  const [telefono, setTelefono] = useState("");
-  const [encargado, setEncargado] = useState("");
-  const [comentarios, setComentarios] = useState("");
+  const [nombre, setNombre] = useState('');
+  const [telefono, setTelefono] = useState('');
+  const [encargado, setEncargado] = useState('');
+  const [comentarios, setComentarios] = useState('');
   const [tipoElegido, setTipoElegido] = useState<string | null>(null);
   // T-72 (D1): la ubicacion como estado de `validarAltaProspecto`. `sin-tomar`
   // tambien es "sin GPS": sin tocar "Usar mi ubicación" se exige la direccion.
   const [ubicacion, setUbicacion] = useState<UbicacionAlta>({
-    estado: "sin-tomar",
+    estado: 'sin-tomar',
   });
-  const [domicilio, setDomicilio] = useState("");
+  const [domicilio, setDomicilio] = useState('');
   const [foto, setFoto] = useState<FotoComprimida | null>(null);
   const [avisoFoto, setAvisoFoto] = useState<string | null>(null);
   const [tomandoFoto, setTomandoFoto] = useState(false);
@@ -138,7 +138,7 @@ export default function Prospectos() {
 
   async function ubicar() {
     const alPedir = formulario.current;
-    setUbicacion({ estado: "buscando" });
+    setUbicacion({ estado: 'buscando' });
     // `obtenerUbicacion` nunca lanza: permiso negado y sin senal llegan como estado.
     const r = await obtenerUbicacion();
     // `formulario.current` se lee despues del `await`: es el formulario de ahora.
@@ -157,28 +157,48 @@ export default function Prospectos() {
     setAvisoFoto(null);
     setTomandoFoto(true);
     try {
-      const r = await capturarFoto("prospecto");
-      if (r.estado === "ok") {
+      const r = await capturarFoto('prospecto');
+      if (r.estado === 'ok') {
         setFoto(r.foto);
         if (!r.foto.objetivoAlcanzado) {
           // Pesa mas de lo previsto pero el servidor la acepta. Se avisa sin
           // alarmar: la foto es buena, solo va a tardar un poco mas en subir.
           setAvisoFoto(
-            "La foto quedó más pesada de lo normal; va a subir igual.",
+            'La foto quedó más pesada de lo normal; va a subir igual.',
           );
         }
         return;
       }
       setFoto(null);
-      if (r.estado === "cancelado") return; // se echo para atras: ni aviso
+      if (r.estado === 'cancelado') return; // se echo para atras: ni aviso
       setAvisoFoto(
-        r.estado === "permiso-negado"
-          ? "Sin permiso de cámara. Puedes guardar el prospecto igual; la foto es opcional."
-          : "No se pudo preparar la foto. Puedes guardar el prospecto igual y volver a intentarlo.",
+        r.estado === 'permiso-negado'
+          ? 'Sin permiso de cámara. Puedes guardar el prospecto igual; la foto es opcional.'
+          : 'No se pudo preparar la foto. Puedes guardar el prospecto igual y volver a intentarlo.',
       );
     } finally {
       setTomandoFoto(false);
     }
+  }
+
+  /** Deja el formulario en blanco (tras guardar o al cancelar); invalida un GPS en vuelo. */
+  function limpiarFormulario() {
+    formulario.current += 1;
+    setNombre('');
+    setTelefono('');
+    setEncargado('');
+    setComentarios('');
+    setTipoElegido(null);
+    setUbicacion({ estado: 'sin-tomar' });
+    setDomicilio('');
+    setFoto(null);
+    setAvisoFoto(null);
+    setError(null);
+  }
+
+  function alternarFormulario() {
+    if (formularioAbierto) limpiarFormulario();
+    setFormularioAbierto((v) => !v);
   }
 
   function guardar() {
@@ -186,12 +206,12 @@ export default function Prospectos() {
     setGuardado(null);
     setUltimoId(null);
     if (!vendedor || !sucursalId) {
-      setError("No hay vendedor con sesión iniciada.");
+      setError('No hay vendedor con sesión iniciada.');
       return;
     }
     const datosUbicacion = validacion.ubicacion;
     if (datosUbicacion === null) {
-      setError(validacion.faltantes.join(" "));
+      setError(validacion.faltantes.join(' '));
       return;
     }
     try {
@@ -202,7 +222,7 @@ export default function Prospectos() {
         telefono,
         encargado: encargado.trim(),
         tipoNegocioId,
-        comentarios: comentarios.trim() === "" ? null : comentarios,
+        comentarios: comentarios.trim() === '' ? null : comentarios,
         // Una lectura invalida del GPS ya llega como null (T-39 D7).
         lat: datosUbicacion.lat,
         lng: datosUbicacion.lng,
@@ -215,16 +235,7 @@ export default function Prospectos() {
 
       // Se limpia el formulario, no se navega: lo normal es registrar varios
       // prospectos seguidos en la misma calle.
-      formulario.current += 1;
-      setNombre("");
-      setTelefono("");
-      setEncargado("");
-      setComentarios("");
-      setTipoElegido(null);
-      setUbicacion({ estado: "sin-tomar" });
-      setDomicilio("");
-      setFoto(null);
-      setAvisoFoto(null);
+      limpiarFormulario();
       setGuardado(
         p.lat === null
           ? `Guardado "${p.nombre}" sin GPS, con su dirección: la oficina lo ubicará con ella. Queda pendiente de subir.`
@@ -237,7 +248,7 @@ export default function Prospectos() {
       setError(
         e instanceof ErrorProspecto || e instanceof ErrorJornada
           ? e.message
-          : "No se pudo guardar el prospecto.",
+          : 'No se pudo guardar el prospecto.',
       );
     }
   }
@@ -246,10 +257,10 @@ export default function Prospectos() {
     <MarcoMenu titulo="Prospectos">
       <Pantalla subtitulo="Registra un negocio nuevo. El alta de clientes la hace la oficina; aquí solo prospectos.">
         <Boton
-          etiqueta={formularioAbierto ? "Cancelar" : "Nuevo prospecto"}
-          icono={formularioAbierto ? undefined : "prospecto"}
-          tono={formularioAbierto ? "neutra" : "primaria"}
-          onPress={() => setFormularioAbierto((v) => !v)}
+          etiqueta={formularioAbierto ? 'Cancelar' : 'Nuevo prospecto'}
+          icono={formularioAbierto ? undefined : 'prospecto'}
+          tono={formularioAbierto ? 'neutra' : 'primaria'}
+          onPress={alternarFormulario}
         />
 
         {guardado && !formularioAbierto ? (
@@ -266,7 +277,7 @@ export default function Prospectos() {
                 tono="neutra"
                 onPress={() =>
                   router.push({
-                    pathname: "/(jornada)/operacion/[clienteId]",
+                    pathname: '/(jornada)/operacion/[clienteId]',
                     params: { clienteId: ultimoId },
                   })
                 }
@@ -385,13 +396,13 @@ export default function Prospectos() {
 
             <Tarjeta
               estado={
-                ubicacion.estado === "ok" && !validacion.domicilioObligatorio
-                  ? "listo"
-                  : "neutro"
+                ubicacion.estado === 'ok' && !validacion.domicilioObligatorio
+                  ? 'listo'
+                  : 'neutro'
               }
               etiqueta="Ubicación del negocio"
             >
-              {ubicacion.estado === "ok" && !validacion.domicilioObligatorio ? (
+              {ubicacion.estado === 'ok' && !validacion.domicilioObligatorio ? (
                 <>
                   <Pastilla texto="ubicación capturada" estado="listo" />
                   {/* Toda cifra que el vendedor lea va en monoespaciada (regla 3). */}
@@ -408,14 +419,14 @@ export default function Prospectos() {
 
               <Boton
                 etiqueta={
-                  ubicacion.estado === "ok"
-                    ? "Volver a ubicar"
-                    : "Usar mi ubicación"
+                  ubicacion.estado === 'ok'
+                    ? 'Volver a ubicar'
+                    : 'Usar mi ubicación'
                 }
                 tono="neutra"
                 icono="ubicacion"
                 onPress={ubicar}
-                ocupado={ubicacion.estado === "buscando"}
+                ocupado={ubicacion.estado === 'buscando'}
                 estilo={{ marginTop: espacio.sm }}
               />
 
@@ -439,7 +450,7 @@ export default function Prospectos() {
             />
 
             <Tarjeta
-              estado={foto ? "listo" : "neutro"}
+              estado={foto ? 'listo' : 'neutro'}
               etiqueta="Foto del lugar"
             >
               {foto ? (
@@ -460,7 +471,7 @@ export default function Prospectos() {
               )}
 
               <Boton
-                etiqueta={foto ? "Volver a tomar la foto" : "Tomar foto"}
+                etiqueta={foto ? 'Volver a tomar la foto' : 'Tomar foto'}
                 tono="neutra"
                 icono="foto"
                 onPress={tomarFoto}
@@ -473,7 +484,7 @@ export default function Prospectos() {
               ) : null}
 
               <Text style={estilos.textoSuave}>
-                Se guarda en la tablet y sube sola con la sincronización (máximo{" "}
+                Se guarda en la tablet y sube sola con la sincronización (máximo{' '}
                 {Math.round(OBJETIVO_BYTES / 1024)} kB).
               </Text>
             </Tarjeta>
@@ -489,7 +500,7 @@ export default function Prospectos() {
 
             {validacion.faltantes.length > 0 ? (
               <Text style={estilos.textoSuave}>
-                {validacion.faltantes.join(" ")}
+                {validacion.faltantes.join(' ')}
               </Text>
             ) : null}
           </>
@@ -511,18 +522,18 @@ export default function Prospectos() {
 function estadoFoto(p: Prospecto): { texto: string; estado: Estado } | null {
   if (p.foto_uri === null) return null;
   if (p.foto_subida_en !== null)
-    return { texto: "foto subida", estado: "listo" };
+    return { texto: 'foto subida', estado: 'listo' };
   if (p.foto_descartada === 1)
-    return { texto: "foto no subió", estado: "error" };
-  return { texto: "foto por subir", estado: "pendiente" };
+    return { texto: 'foto no subió', estado: 'error' };
+  return { texto: 'foto por subir', estado: 'pendiente' };
 }
 
 /** Estado de sincronizacion de una fila, en color + palabra (nunca color solo). */
 const ESTADO_SYNC = {
-  pendiente: { estado: "pendiente" as const, texto: "Por subir" },
-  enviando: { estado: "pendiente" as const, texto: "Subiendo" },
-  sincronizado: { estado: "listo" as const, texto: "Sincronizado" },
-  error: { estado: "error" as const, texto: "Rechazado" },
+  pendiente: { estado: 'pendiente' as const, texto: 'Por subir' },
+  enviando: { estado: 'pendiente' as const, texto: 'Subiendo' },
+  sincronizado: { estado: 'listo' as const, texto: 'Sincronizado' },
+  error: { estado: 'error' as const, texto: 'Rechazado' },
 };
 
 function FilaProspecto({ prospecto }: { prospecto: Prospecto }) {
@@ -547,14 +558,14 @@ function FilaProspecto({ prospecto }: { prospecto: Prospecto }) {
   const tarjeta = (
     <Tarjeta
       estado={pastilla.estado}
-      etiqueta={tipo?.nombre ?? "Sin tipo de negocio"}
+      etiqueta={tipo?.nombre ?? 'Sin tipo de negocio'}
     >
       <Text style={estilos.textoTarjeta}>{prospecto.nombre}</Text>
       <Text style={estilos.textoSuave}>
         {primeraLineaDomicilio(prospecto.domicilio)}
       </Text>
       <View
-        style={{ flexDirection: "row", gap: espacio.xs, marginTop: espacio.xs }}
+        style={{ flexDirection: 'row', gap: espacio.xs, marginTop: espacio.xs }}
       >
         <Pastilla texto={pastilla.texto} estado={pastilla.estado} />
         {prospecto.lat === null ? (
@@ -590,7 +601,7 @@ function FilaProspecto({ prospecto }: { prospecto: Prospecto }) {
       accessibilityLabel={`${prospecto.nombre}, abrir ficha`}
       onPress={() =>
         router.push({
-          pathname: "/(jornada)/operacion/[clienteId]",
+          pathname: '/(jornada)/operacion/[clienteId]',
           params: { clienteId: destino },
         })
       }

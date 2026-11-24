@@ -1,26 +1,26 @@
-import { useMemo, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { useMemo, useRef, useState } from 'react';
+import { Text, View } from 'react-native';
 
-import { ErrorGasto, ErrorJornada } from "@/datos";
-import type { CampoEgreso } from "@/datos/tipos";
+import { ErrorGasto, ErrorJornada } from '@/datos';
+import type { CampoEgreso } from '@/datos/tipos';
 import {
   camposParaGasto,
   pastillaGasto,
   puedeGuardarGasto,
   validarGasto,
-} from "@/estado/gasto";
-import { estadoMenuJornada } from "@/estado/menu-jornada";
-import { useJawa } from "@/estado/proveedor-jawa";
-import { useSesion } from "@/estado/proveedor-sesion";
-import { Boton } from "@/ui/boton";
-import { Campo } from "@/ui/campo";
-import { Cifra, pesos } from "@/ui/cifra";
-import { formatearHora } from "@/ui/momento";
-import { MarcoMenu } from "@/ui/marco-menu";
-import { Opcion } from "@/ui/opcion";
-import { Pantalla, Pastilla, Tarjeta } from "@/ui/pantalla";
-import { useTema } from "@/ui/tema";
-import { espacio } from "@/ui/tokens";
+} from '@/estado/gasto';
+import { estadoMenuJornada } from '@/estado/menu-jornada';
+import { useJawa } from '@/estado/proveedor-jawa';
+import { useSesion } from '@/estado/proveedor-sesion';
+import { Boton } from '@/ui/boton';
+import { Campo } from '@/ui/campo';
+import { Cifra, pesos } from '@/ui/cifra';
+import { formatearHora } from '@/ui/momento';
+import { MarcoMenu } from '@/ui/marco-menu';
+import { Opcion } from '@/ui/opcion';
+import { Pantalla, Pastilla, Tarjeta } from '@/ui/pantalla';
+import { useTema } from '@/ui/tema';
+import { espacio } from '@/ui/tokens';
 
 /**
  * Gastos (T-30/T-31, D9; maqueta 19): una sola pantalla. Arriba el formulario
@@ -55,7 +55,7 @@ export default function Gastos() {
   const sinCatalogo = campos.length === 0;
 
   const [campoId, setCampoId] = useState<string | null>(null);
-  const [monto, setMonto] = useState("");
+  const [monto, setMonto] = useState('');
   const [error, setError] = useState<string | null>(null);
   // Guardia contra doble toque (leccion de T-39): `registrar()` genera un id
   // nuevo cada vez. El ref corta en el mismo tick; el estado deshabilita el boton.
@@ -74,7 +74,7 @@ export default function Gastos() {
   const validacion = validarGasto({
     campo,
     monto,
-    comentario: "",
+    comentario: '',
     fotoUri: null,
     diaCerrado: !menu.operacionesHabilitadas,
   });
@@ -82,7 +82,7 @@ export default function Gastos() {
   function guardar() {
     setError(null);
     if (!vendedor) {
-      setError("No hay vendedor con sesión iniciada.");
+      setError('No hay vendedor con sesión iniciada.');
       return;
     }
     if (validacion.gasto === null) return;
@@ -93,7 +93,7 @@ export default function Gastos() {
       datos.gastos.registrar({ vendedorId: vendedor.id, ...validacion.gasto });
       // La lista de abajo se relee sola: `registrar` mueve `versionCatalogos`.
       setCampoId(null);
-      setMonto("");
+      setMonto('');
       // La guardia se queda puesta: un segundo toque en cola ve el formulario
       // viejo y grabaria otro gasto. Se suelta al elegir motivo o escribir cantidad.
     } catch (e) {
@@ -103,7 +103,7 @@ export default function Gastos() {
       setError(
         e instanceof ErrorGasto || e instanceof ErrorJornada
           ? e.message
-          : "No se pudo guardar el gasto.",
+          : 'No se pudo guardar el gasto.',
       );
     }
   }
@@ -150,7 +150,7 @@ export default function Gastos() {
               placeholder="0.00"
               keyboardType="decimal-pad"
               invalido={
-                monto.trim() !== "" && validacion.montoCentavos === null
+                monto.trim() !== '' && validacion.montoCentavos === null
               }
             />
           </>
@@ -192,7 +192,7 @@ export default function Gastos() {
                   style={{ gap: espacio.xs, marginBottom: espacio.sm }}
                 >
                   <Text style={estilos.textoTarjeta}>
-                    {g.campo_nombre} · <Cifra valor={pesos(g.monto_centavos)} />{" "}
+                    {g.campo_nombre} · <Cifra valor={pesos(g.monto_centavos)} />{' '}
                     · <Cifra valor={formatearHora(g.registrado_en)} />
                   </Text>
                   <Pastilla texto={p.texto} estado={p.estado} />
@@ -206,7 +206,7 @@ export default function Gastos() {
         </Tarjeta>
 
         <Tarjeta
-          estado={hoy.total > 0 ? "accion" : "neutro"}
+          estado={hoy.total > 0 ? 'accion' : 'neutro'}
           etiqueta="Total del día"
         >
           <Cifra valor={pesos(hoy.total)} tamano="destacado" />

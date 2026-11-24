@@ -1,24 +1,31 @@
-import { useMemo, useState } from "react";
-import { Alert, Platform, Text, ToastAndroid, View } from "react-native";
+import { useMemo, useState } from 'react';
+import {
+  Alert,
+  FlatList,
+  Platform,
+  Text,
+  ToastAndroid,
+  View,
+} from 'react-native';
 
-import { ErrorJornada, ErrorRuta } from "@/datos";
-import type { Cliente } from "@/datos/tipos";
-import { estadoMenuJornada } from "@/estado/menu-jornada";
-import { useJawa } from "@/estado/proveedor-jawa";
+import { ErrorJornada, ErrorRuta } from '@/datos';
+import type { Cliente } from '@/datos/tipos';
+import { estadoMenuJornada } from '@/estado/menu-jornada';
+import { useJawa } from '@/estado/proveedor-jawa';
 import {
   clientesParaAgregar,
   primeraLineaDomicilio,
   textoAgregado,
-} from "@/estado/ruta-del-dia";
-import { Boton } from "@/ui/boton";
-import { Campo } from "@/ui/campo";
-import { Pantalla, Pastilla, Tarjeta } from "@/ui/pantalla";
-import { useTema } from "@/ui/tema";
-import { colores, espacio, fuente, grosor, radio, tipo } from "@/ui/tokens";
+} from '@/estado/ruta-del-dia';
+import { Boton } from '@/ui/boton';
+import { Campo } from '@/ui/campo';
+import { Pastilla, Tarjeta } from '@/ui/pantalla';
+import { useTema } from '@/ui/tema';
+import { colores, espacio, fuente, grosor, radio, tipo } from '@/ui/tokens';
 
 /** El aviso breve al volver a la lista (D16). La app es Android; en otra plataforma, un Alert. */
 function avisar(texto: string) {
-  if (Platform.OS === "android") ToastAndroid.show(texto, ToastAndroid.SHORT);
+  if (Platform.OS === 'android') ToastAndroid.show(texto, ToastAndroid.SHORT);
   else Alert.alert(texto);
 }
 
@@ -31,7 +38,7 @@ function avisar(texto: string) {
 export default function AgregarARuta() {
   const { datos, vendedor, sucursalId, jornada, versionCatalogos } = useJawa();
   const { estilos, t } = useTema();
-  const [busqueda, setBusqueda] = useState("");
+  const [busqueda, setBusqueda] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [refrescos, setRefrescos] = useState(0);
   const menu = estadoMenuJornada(jornada);
@@ -58,7 +65,7 @@ export default function AgregarARuta() {
   function agregar(cliente: Cliente) {
     setError(null);
     if (!vendedor || !sucursalId) {
-      setError("No hay vendedor con sesión iniciada.");
+      setError('No hay vendedor con sesión iniciada.');
       return;
     }
     try {
@@ -69,16 +76,19 @@ export default function AgregarARuta() {
       setError(
         e instanceof ErrorRuta || e instanceof ErrorJornada
           ? e.message
-          : "No se pudo agregar el cliente a la ruta.",
+          : 'No se pudo agregar el cliente a la ruta.',
       );
     }
   }
 
-  return (
-    <Pantalla
-      titulo="Agregar a mi ruta"
-      subtitulo="Clientes de tu sucursal. Los que agregues quedan al final de la ruta de hoy."
-    >
+  const cabecera = (
+    <View style={{ gap: espacio.md }}>
+      <Text style={estilos.titulo}>Agregar a mi ruta</Text>
+      <Text style={estilos.subtitulo}>
+        Clientes de tu sucursal. Los que agregues quedan al final de la ruta de
+        hoy.
+      </Text>
+
       {menu.avisoDiaCerrado ? (
         <Tarjeta estado="listo" etiqueta="Día cerrado">
           <Text style={estilos.textoTarjeta}>{menu.avisoDiaCerrado}</Text>
@@ -94,59 +104,68 @@ export default function AgregarARuta() {
       />
 
       {error ? <Text style={estilos.error}>{error}</Text> : null}
+    </View>
+  );
 
-      {candidatos.length === 0 ? (
+  // Lista virtualizada: la sucursal puede tener cientos de clientes y todos se
+  // listan (alfabetico), asi que no se mapean dentro de un ScrollView.
+  return (
+    <FlatList
+      style={estilos.pantalla}
+      contentContainerStyle={[estilos.contenido, { gap: espacio.sm }]}
+      keyboardShouldPersistTaps="handled"
+      data={candidatos}
+      keyExtractor={(c) => c.id}
+      ListHeaderComponent={cabecera}
+      ListHeaderComponentStyle={{ marginBottom: espacio.sm }}
+      ListEmptyComponent={
         <Text style={estilos.textoSuave}>
-          {busqueda.trim() === ""
-            ? "No hay clientes activos en tu sucursal."
-            : "Ningún cliente coincide con esa búsqueda."}
+          {busqueda.trim() === ''
+            ? 'No hay clientes activos en tu sucursal.'
+            : 'Ningún cliente coincide con esa búsqueda.'}
         </Text>
-      ) : (
-        <View style={{ gap: espacio.sm }}>
-          {candidatos.map((cliente) => (
-            <View
-              key={cliente.id}
+      }
+      renderItem={({ item: cliente }) => (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: espacio.md,
+            padding: espacio.md,
+            borderRadius: radio.medio,
+            borderWidth: grosor.fuerte,
+            borderColor: colores.bordeFuerte,
+            backgroundColor: colores.superficie,
+          }}
+        >
+          <View style={{ flex: 1, gap: espacio.xs }}>
+            <Text
               style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: espacio.md,
-                padding: espacio.md,
-                borderRadius: radio.medio,
-                borderWidth: grosor.fuerte,
-                borderColor: colores.bordeFuerte,
-                backgroundColor: colores.superficie,
+                fontFamily: fuente.cuerpoFuerte,
+                fontSize: t(tipo.destacado),
+                color: colores.tinta,
               }}
             >
-              <View style={{ flex: 1, gap: espacio.xs }}>
-                <Text
-                  style={{
-                    fontFamily: fuente.cuerpoFuerte,
-                    fontSize: t(tipo.destacado),
-                    color: colores.tinta,
-                  }}
-                >
-                  {cliente.nombre}
-                </Text>
-                <Text style={estilos.textoSuave}>
-                  {primeraLineaDomicilio(cliente.domicilio)}
-                </Text>
-              </View>
-              {cliente.enRuta ? (
-                <Pastilla texto="En ruta" estado="listo" />
-              ) : (
-                <Boton
-                  etiqueta="Agregar a mi ruta"
-                  icono="agregar-cliente"
-                  ancho="ajustado"
-                  deshabilitado={!puedeAgregar}
-                  onPress={() => agregar(cliente)}
-                />
-              )}
-            </View>
-          ))}
+              {cliente.nombre}
+            </Text>
+            <Text style={estilos.textoSuave}>
+              {primeraLineaDomicilio(cliente.domicilio)}
+            </Text>
+          </View>
+          {cliente.enRuta ? (
+            <Pastilla texto="En ruta" estado="listo" />
+          ) : (
+            <Boton
+              etiqueta="Agregar a ruta"
+              icono="agregar-cliente"
+              ancho="ajustado"
+              deshabilitado={!puedeAgregar}
+              onPress={() => agregar(cliente)}
+            />
+          )}
         </View>
       )}
-    </Pantalla>
+    />
   );
 }
