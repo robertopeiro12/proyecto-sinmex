@@ -22,13 +22,21 @@ describe("navSections", () => {
       "Ruta Semanal",
     ]);
     expect(navSections[1].items.slice(0, 3).map((i) => i.label)).toEqual(["Clientes", "Vendedores", "Vehículos"]);
-    expect(navSections[2].items.slice(0, 3).map((i) => i.label)).toEqual(["Peticiones", "Recarga", "Corte"]);
+    expect(navSections[2].items.slice(0, 3).map((i) => i.label)).toEqual(["Recarga", "Corte", "Registro de Operación"]);
   });
 
   it("Corte ya es pantalla y Retorno salió del menú (es parte del Corte)", () => {
     const produccion = navSections[2].items;
     expect(produccion.find((i) => i.label === "Corte")).toEqual({ label: "Corte", href: "/produccion/corte" });
     expect(produccion.some((i) => i.href === "/produccion/retorno")).toBe(false);
+  });
+
+  it("Producción: Recarga · Corte · Registro de Operación · Almacenes, sin Peticiones ni Producción del día", () => {
+    expect(navSections[2].items.map((i) => i.label)).toEqual(["Recarga", "Corte", "Registro de Operación", "Almacenes"]);
+  });
+
+  it("Catálogo trae Motivos de merma", () => {
+    expect(navSections[1].items).toContainEqual({ label: "Motivos de merma", href: "/catalogo/motivos-de-merma" });
   });
 
   it("toda pantalla que todavía es Placeholder lleva pronto, y ninguna otra", () => {

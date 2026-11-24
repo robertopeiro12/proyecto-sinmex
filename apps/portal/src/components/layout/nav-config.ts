@@ -47,6 +47,7 @@ export const navSections: NavSection[] = [
       // Nuevas.
       { label: "Sucursales", href: "/catalogo/sucursales" },
       { label: "Motivos de visita", href: "/catalogo/motivos-de-visita" },
+      { label: "Motivos de merma", href: "/catalogo/motivos-de-merma" },
       { label: "Campos de egreso", href: "/catalogo/campos-de-egreso" },
       { label: "Productos", href: "/catalogo/productos" },
       { label: "Listas de Precios", href: "/catalogo/precios" },
@@ -57,12 +58,11 @@ export const navSections: NavSection[] = [
   {
     label: "Producción",
     items: [
-      // Como el viejo: Peticiones · Información (aún sin pantalla) · Recarga · Corte.
-      { label: "Peticiones", href: "/produccion/peticiones", pronto: true },
+      // Recarga · Corte · Registro de Operación. (Retorno es parte del Corte; Producción del
+      // día es la pestaña Entradas del Registro: sus direcciones viejas redirigen.)
       { label: "Recarga", href: "/produccion/recarga" },
       { label: "Corte", href: "/produccion/corte" },
-      // Nuevas. (Retorno ya no está: es parte del Corte y su dirección lleva ahí.)
-      { label: "Producción del día", href: "/produccion/produccion-del-dia" },
+      { label: "Registro de Operación", href: "/produccion/registro-operacion", pronto: true },
       { label: "Almacenes", href: "/produccion/almacenes", pronto: true },
     ],
   },
