@@ -353,7 +353,15 @@ describe('Retiro de merma (e2e)', () => {
         motivo: null,
       });
       expect(a.resolucion!.en).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
-      await editar(r.id).expect(409);
+      const conflicto = await editar(r.id).expect(409);
+      const cuerpo409 = conflicto.body as {
+        message: string;
+        operacion: OperacionAlmacen;
+      };
+      expect(cuerpo409.message).toBe(
+        'Un retiro autorizado ya no se puede corregir ni dar de baja.',
+      );
+      expect(cuerpo409.operacion.estado).toBe('autorizado');
       await http()
         .delete(`/operaciones-almacen/${r.id}`)
         .set('Cookie', cookiePide)

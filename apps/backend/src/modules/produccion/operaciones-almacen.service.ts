@@ -213,7 +213,7 @@ export class OperacionesAlmacenService {
       const fila = await this.repo.bloquear(id, trx);
       if (!fila) throw new NotFoundException(MOTIVO_OPERACION_INEXISTENTE);
       this.exigirFechaAbierta(fila, hoy);
-      await this.exigirRetiroEditable(fila, hoy);
+      await this.exigirRetiroEditable(fila, hoy, trx);
       const datos = await this.datosDe(
         fila.tipo,
         dto,
@@ -246,7 +246,7 @@ export class OperacionesAlmacenService {
       const fila = await this.repo.bloquear(id, trx);
       if (!fila) throw new NotFoundException(MOTIVO_OPERACION_INEXISTENTE);
       this.exigirFechaAbierta(fila, hoy);
-      await this.exigirRetiroEditable(fila, hoy);
+      await this.exigirRetiroEditable(fila, hoy, trx);
       await this.repo.darDeBaja(id, usuarioId, trx);
     });
   }
@@ -318,6 +318,7 @@ export class OperacionesAlmacenService {
           mensajeRetiroNoPendiente(fila.estado),
           fila,
           hoy,
+          trx,
         );
       await this.repo.resolverRetiro(id, estado, motivo, usuarioId, trx);
     });
@@ -328,9 +329,10 @@ export class OperacionesAlmacenService {
   private async exigirRetiroEditable(
     fila: FilaOperacion,
     hoy: string,
+    trx: Transaction<DB>,
   ): Promise<void> {
     if (fila.tipo === 'retiro_merma' && !retiroEditable(fila.estado))
-      throw await this.conflicto(MENSAJE_RETIRO_AUTORIZADO, fila, hoy);
+      throw await this.conflicto(MENSAJE_RETIRO_AUTORIZADO, fila, hoy, trx);
   }
 
   /** 409 con la operacion tal como esta ahora. */
@@ -338,12 +340,18 @@ export class OperacionesAlmacenService {
     mensaje: string,
     fila: FilaOperacion,
     hoy: string,
+    trx: Transaction<DB>,
   ): Promise<ConflictException> {
     return new ConflictException({
       statusCode: 409,
       error: 'Conflict',
       message: mensaje,
-      operacion: await this.armarConLineas(fila, hoy),
+      operacion: this.armar(
+        fila,
+        await this.repo.lineasDe([fila.id], trx),
+        hoy,
+        false,
+      ),
     });
   }
 

@@ -1,5 +1,5 @@
 begin;
-select plan(21);
+select plan(23);
 
 -- Retiro de merma con autorizacion: lo que la BASE garantiza. Prefijo `zz-pgtap-retiro`.
 
@@ -53,6 +53,10 @@ select throws_ok($$insert into operacion_almacen (sucursal_id, tipo, fecha, esta
   select tj, 'retiro_merma', '2098-02-05', 'pendiente', 'x', ua from _r$$, '23514', null, 'pendiente con motivo');
 select throws_ok($$insert into operacion_almacen (sucursal_id, tipo, fecha, resuelto_por_usuario_id, capturo_usuario_id)
   select tj, 'consumo', '2098-02-05', ua, ua from _r$$, '23514', null, 'resolucion en otro tipo');
+select throws_ok($$insert into operacion_almacen (sucursal_id, tipo, fecha, resuelto_por_usuario_id, resuelto_en, capturo_usuario_id)
+  select tj, 'consumo', '2098-02-05', ua, now(), ua from _r$$, '23514', null, 'resolucion completa en otro tipo');
+select throws_ok($$insert into operacion_almacen (sucursal_id, tipo, fecha, motivo_rechazo, capturo_usuario_id)
+  select tj, 'consumo', '2098-02-05', 'x', ua from _r$$, '23514', null, 'motivo de rechazo en otro tipo');
 
 select * from finish();
 rollback;

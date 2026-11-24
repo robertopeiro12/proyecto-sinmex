@@ -23,16 +23,22 @@ alter table operacion_almacen add constraint ck_operacion_almacen_estado check (
   (tipo = 'retiro_merma' and estado is not null and estado in ('pendiente', 'autorizado', 'rechazado'))
   or (tipo <> 'retiro_merma' and estado is null));
 
+-- Checks totales (coalesce): con `estado` nulo la logica trivalente daria NULL y
+-- dejaria pasar datos sueltos en los demas tipos.
 alter table operacion_almacen add constraint ck_operacion_almacen_resolucion check (
-  (estado = 'pendiente' and resuelto_por_usuario_id is null and resuelto_en is null)
-  or (estado in ('autorizado', 'rechazado')
-      and resuelto_por_usuario_id is not null and resuelto_en is not null)
-  or (estado is null and resuelto_por_usuario_id is null and resuelto_en is null));
+  case estado
+    when 'pendiente' then resuelto_por_usuario_id is null and resuelto_en is null
+    when 'autorizado' then resuelto_por_usuario_id is not null and resuelto_en is not null
+    when 'rechazado' then resuelto_por_usuario_id is not null and resuelto_en is not null
+    else resuelto_por_usuario_id is null and resuelto_en is null
+  end);
 
 alter table operacion_almacen add constraint ck_operacion_almacen_motivo_rechazo check (
-  (estado = 'rechazado' and motivo_rechazo is not null
-     and char_length(btrim(motivo_rechazo)) >= 1 and char_length(motivo_rechazo) <= 300)
-  or (estado is distinct from 'rechazado' and motivo_rechazo is null));
+  case estado
+    when 'rechazado' then motivo_rechazo is not null
+      and char_length(btrim(motivo_rechazo)) >= 1 and char_length(motivo_rechazo) <= 300
+    else motivo_rechazo is null
+  end);
 
 insert into permiso (clave, grupo, descripcion) values
   ('operacion.retiro_merma', 'Produccion/Almacen', 'Registro de Operación: retiro de merma (pedir, corregir y eliminar)')
