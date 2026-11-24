@@ -8,7 +8,7 @@ import { estadoMenuJornada } from '@/estado/menu-jornada';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import {
-  agruparRuta,
+  agruparRutaEnCurso,
   atendidosFueraDeRuta,
   sinRutaAsignada,
   textoAvisoSinRuta,
@@ -16,7 +16,7 @@ import {
 import type { MotivoAbandono } from '@/sincronizacion/motor';
 import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 import { Boton } from '@/ui/boton';
-import { FilaAtendidoFueraDeRuta, FilaFueraDeRuta, FilaVisitadoSinVenta, ListaRuta } from '@/ui/lista-ruta';
+import { FilaAtendidoFueraDeRuta, FilaFueraDeRuta, ListaRuta } from '@/ui/lista-ruta';
 import { BotonIcono } from '@/ui/boton-icono';
 import { Cifra } from '@/ui/cifra';
 import { MarcoMenu } from '@/ui/marco-menu';
@@ -43,7 +43,8 @@ const MENSAJE: Record<MotivoAbandono, string> = {
 
 /**
  * La jornada abre en la ruta del dia (T-37, D16): la que asigno la oficina mas
- * lo que agrego el vendedor, en el orden en que el la recorre.
+ * lo que agrego el vendedor, en el orden del portal, partida en "Por visitar" y
+ * "Visitados" (rediseño, spec §4 y §6, maqueta 6).
  *
  * Todo lo que esta pantalla decide vive en funciones puras con prueba
  * (`src/estado/ruta-del-dia.ts`, `menu-jornada.ts`); aqui solo se pinta.
@@ -53,7 +54,6 @@ export default function RutaDelDia() {
   const { sincronizar, ultimaSincronizacion } = useSesion();
   const { estilos } = useTema();
   const [sincronizando, setSincronizando] = useState(false);
-  const [arrastrando, setArrastrando] = useState(false);
 
   // Se relee al volver a esta pantalla (`useFocusEffect`): vender o cobrar en
   // la ficha no mueve `datos`, y esta pantalla sigue montada debajo.
@@ -65,16 +65,25 @@ export default function RutaDelDia() {
   );
 
   // `versionCatalogos` sube cuando el pull escribe y cuando la ruta cambia
-  // (agregar, reordenar, quitar publican el cambio).
+  // (agregar y quitar publican el cambio). Con el vendedor, `notas_que_trae`
+  // cuenta tambien sus ventas a credito de hoy.
+  const vendedorId = vendedor?.id ?? null;
   const filas = useMemo(() => {
     void vueltas;
     void versionCatalogos;
     void ultimaSincronizacion;
-    return datos.rutas.delDia();
-  }, [datos, vueltas, versionCatalogos, ultimaSincronizacion]);
-  // Memoizado: un arreglo nuevo en cada render rehace el `PanResponder` de cada
-  // fila (y reinicia su `dy`) en cuanto el arrastre cambia el estado de aqui.
-  const { enRuta, visitadosSinVenta, fueraDeRuta } = useMemo(() => agruparRuta(filas), [filas]);
+    return datos.rutas.delDia(undefined, vendedorId);
+  }, [datos, vendedorId, vueltas, versionCatalogos, ultimaSincronizacion]);
+  const { porVisitar, visitados, fueraDeRuta } = useMemo(() => agruparRutaEnCurso(filas), [filas]);
+  // El numero de cada cliente es su lugar fijo en la ruta viva (maqueta 6): no
+  // cambia cuando pasa a Visitados.
+  const numeroDe = useMemo(() => {
+    const numeros = new Map<string, number>();
+    for (const f of filas) {
+      if (f.activo === 1 && !numeros.has(f.cliente_id)) numeros.set(f.cliente_id, numeros.size + 1);
+    }
+    return (clienteId: string) => numeros.get(clienteId) ?? 0;
+  }, [filas]);
 
   // T-75 (D7): a quien se le vendio hoy sin estar en la ruta (prospectos de bienvenida incluidos).
   const atendidos = useMemo(() => {
@@ -123,7 +132,7 @@ export default function RutaDelDia() {
   // T-38 (D6 capa 2): con el dia cerrado, la lista queda en solo lectura.
   const menu = estadoMenuJornada(jornada);
   const soloLectura = !menu.operacionesHabilitadas;
-  const sinRuta = sinRutaAsignada({ enRuta, visitadosSinVenta, fueraDeRuta });
+  const sinRuta = sinRutaAsignada({ porVisitar, visitados, fueraDeRuta });
 
   /**
    * "Refrescar" es el "Sincronizar ahora" de siempre (D6): pull, push, fotos y
@@ -160,13 +169,6 @@ export default function RutaDelDia() {
   // Atenua todo lo que lista clientes mientras haya candado.
   const atenuado = bloqueada ? { opacity: 0.45 } : null;
 
-  const reordenar = useCallback(
-    (clienteIds: string[]) => {
-      if (jornada) datos.rutas.reordenar(jornada.fecha, clienteIds);
-    },
-    [datos, jornada],
-  );
-
   const quitar = useCallback(
     (id: string) => {
       try {
@@ -181,10 +183,10 @@ export default function RutaDelDia() {
   const derecha = (
     <>
       <BotonIcono
-        icono="mas"
-        etiqueta="Registrar prospecto"
+        icono="agregar-cliente"
+        etiqueta="Agregar cliente a la ruta"
         deshabilitado={soloLectura || sinEmpezar}
-        onPress={() => router.push('/(jornada)/prospectos')}
+        onPress={() => router.push('/(jornada)/agregar-a-ruta')}
       />
       <BotonIcono
         icono="sincronizar"
@@ -201,7 +203,6 @@ export default function RutaDelDia() {
         <ScrollView
           style={estilos.pantalla}
           contentContainerStyle={estilos.contenido}
-          scrollEnabled={!arrastrando}
           keyboardShouldPersistTaps="handled"
         >
           <Text style={estilos.subtitulo}>
@@ -267,16 +268,30 @@ export default function RutaDelDia() {
             </Tarjeta>
           ) : (
             <>
-              <View style={atenuado}>
-                <ListaRuta
-                  filas={enRuta}
-                  soloLectura={soloLectura || bloqueada}
-                  onTocar={abrirCliente}
-                  onReordenar={reordenar}
-                  onQuitar={quitar}
-                  onArrastrando={setArrastrando}
-                />
-              </View>
+              {porVisitar.length > 0 ? (
+                <View style={[{ gap: espacio.sm }, atenuado]}>
+                  <EncabezadoSeccion titulo="Por visitar" cuenta={porVisitar.length} />
+                  <ListaRuta
+                    filas={porVisitar}
+                    visitados={false}
+                    numeroDe={numeroDe}
+                    onTocar={abrirCliente}
+                    onQuitar={quitar}
+                  />
+                </View>
+              ) : null}
+              {visitados.length > 0 ? (
+                <View style={[{ gap: espacio.sm, marginTop: espacio.lg }, atenuado]}>
+                  <EncabezadoSeccion titulo="Visitados" cuenta={visitados.length} />
+                  <ListaRuta
+                    filas={visitados}
+                    visitados
+                    numeroDe={numeroDe}
+                    onTocar={abrirCliente}
+                    onQuitar={quitar}
+                  />
+                </View>
+              ) : null}
               {/* La accion principal de la pantalla, a lo ancho y al final de
                   la ruta: es donde el vendedor la busca cuando ya recorrio la lista. */}
               <Boton
@@ -288,16 +303,6 @@ export default function RutaDelDia() {
               />
             </>
           )}
-
-          {/* T-39 (D8): despues de la lista y antes de "Fuera de ruta". */}
-          {visitadosSinVenta.length > 0 ? (
-            <View style={[{ gap: espacio.sm, marginTop: espacio.lg }, atenuado]}>
-              <Text style={estilos.seccion}>Visitados sin venta</Text>
-              {visitadosSinVenta.map((fila) => (
-                <FilaVisitadoSinVenta key={fila.id} fila={fila} onTocar={abrirCliente} />
-              ))}
-            </View>
-          ) : null}
 
           {fueraDeRuta.length > 0 ? (
             <View style={[{ gap: espacio.sm, marginTop: espacio.lg }, atenuado]}>
@@ -318,5 +323,16 @@ export default function RutaDelDia() {
           ) : null}
         </ScrollView>
     </MarcoMenu>
+  );
+}
+
+/** "Por visitar 4": el titulo de la seccion y, a la derecha, cuantos clientes trae. */
+function EncabezadoSeccion({ titulo, cuenta }: { titulo: string; cuenta: number }) {
+  const { estilos } = useTema();
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+      <Text style={estilos.seccion}>{titulo}</Text>
+      <Cifra valor={cuenta} tono="suave" />
+    </View>
   );
 }

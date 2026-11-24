@@ -1,8 +1,9 @@
-import { depsDePrueba, FIRMA_DE_PRUEBA, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
+import { depsDePrueba, FIRMA_DE_PRUEBA, insertarVentaDePrueba, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
 import { crearRepositorioCatalogos } from './catalogos';
 import { crearRepositorioCobranzas } from './cobranzas';
 import { crearRepositorioFolios } from './folios';
 import { crearRepositorioJornadas, ErrorJornada, MENSAJE_DIA_CERRADO } from './jornadas';
+import { crearRepositorioMovimientos } from './movimientos';
 import { crearRepositorioNotasAsignadas } from './notas-asignadas';
 import { crearRepositorioRutas, ErrorRuta, type FilaRutaPull } from './rutas';
 import { crearRepositorioVentas } from './ventas';
@@ -52,6 +53,8 @@ function montar() {
     ventas: crearRepositorioVentas(deps, { catalogos, folios: crearRepositorioFolios(deps) }),
     cobranzas: crearRepositorioCobranzas(deps, { catalogos }),
     visitas: crearRepositorioVisitas(deps, { catalogos }),
+    movimientos: crearRepositorioMovimientos(deps, { catalogos }),
+    notasAsignadas: crearRepositorioNotasAsignadas(deps),
   };
 }
 
@@ -83,21 +86,19 @@ const clientesDelDia = (rutas: ReturnType<typeof montar>['rutas'], fecha = HOY) 
   rutas.delDia(fecha).map((f) => f.cliente_id);
 
 describe('aplicarSnapshot: la regla de fusion al refrescar (D15)', () => {
-  it('una fila nueva viva aparece al final, sin posicion local', () => {
+  it('una fila nueva viva aparece en su orden del servidor', () => {
     const { rutas } = montar();
     rutas.aplicarSnapshot([
       delServidor({ id: 'srv-1', cliente_id: 'cli-1', orden: 1 }),
       delServidor({ id: 'srv-3', cliente_id: 'cli-3', orden: 2 }),
     ]);
-    rutas.reordenar(HOY, ['cli-3', 'cli-1']);
 
     rutas.aplicarSnapshot([delServidor({ id: 'srv-4', cliente_id: 'cli-4', orden: 3 })]);
 
-    expect(clientesDelDia(rutas)).toEqual(['cli-3', 'cli-1', 'cli-4']);
-    expect(rutas.delDia().map((f) => f.posicion)).toEqual([1, 2, null]);
+    expect(clientesDelDia(rutas)).toEqual(['cli-1', 'cli-3', 'cli-4']);
   });
 
-  it('una fila conocida con otro orden se actualiza; sin posicion local manda el del servidor', () => {
+  it('una fila conocida con otro orden se actualiza y manda el del servidor', () => {
     const { rutas } = montar();
     rutas.aplicarSnapshot([
       delServidor({ id: 'srv-1', cliente_id: 'cli-1', orden: 1 }),
@@ -108,20 +109,6 @@ describe('aplicarSnapshot: la regla de fusion al refrescar (D15)', () => {
 
     expect(rutas.porId('srv-1')?.orden).toBe(3);
     expect(clientesDelDia(rutas)).toEqual(['cli-3', 'cli-1']);
-  });
-
-  it('una fila conocida con otro orden, con posicion local: manda la local', () => {
-    const { rutas } = montar();
-    rutas.aplicarSnapshot([
-      delServidor({ id: 'srv-1', cliente_id: 'cli-1', orden: 1 }),
-      delServidor({ id: 'srv-3', cliente_id: 'cli-3', orden: 2 }),
-    ]);
-    rutas.reordenar(HOY, ['cli-1', 'cli-3']);
-
-    rutas.aplicarSnapshot([delServidor({ id: 'srv-1', cliente_id: 'cli-1', orden: 5 })]);
-
-    expect(rutas.porId('srv-1')?.orden).toBe(5);
-    expect(clientesDelDia(rutas)).toEqual(['cli-1', 'cli-3']);
   });
 
   it('una baja de un cliente SIN actividad hoy queda con la bandera y sin visitar (la pantalla la oculta)', () => {
@@ -143,10 +130,9 @@ describe('aplicarSnapshot: la regla de fusion al refrescar (D15)', () => {
     expect(rutas.delDia()).toMatchObject([{ id: 'srv-1', activo: 0, visitado: true }]);
   });
 
-  it('una fila viva del servidor funde el alta local del mismo cliente: queda la del servidor y la posicion sobrevive', () => {
+  it('una fila viva del servidor funde el alta local del mismo cliente: queda la del servidor', () => {
     const { rutas } = montar();
     const alta = rutas.agregar('cli-3', CTX);
-    rutas.reordenar(HOY, ['cli-3']);
 
     rutas.aplicarSnapshot([
       delServidor({ id: 'srv-9', cliente_id: 'cli-3', orden: 4, origen: 'vendedor' }),
@@ -154,7 +140,7 @@ describe('aplicarSnapshot: la regla de fusion al refrescar (D15)', () => {
 
     expect(rutas.porId(alta.id)).toBeNull();
     expect(rutas.delDia()).toMatchObject([
-      { id: 'srv-9', cliente_id: 'cli-3', posicion: 1, sync_estado: 'sincronizada' },
+      { id: 'srv-9', cliente_id: 'cli-3', orden: 4, sync_estado: 'sincronizada' },
     ]);
     // Ya no hay nada que subir: si la operacion seguia pendiente, el servidor
     // la habria respondido `ruta-duplicada`.
@@ -199,10 +185,12 @@ describe('aplicarSnapshot: la regla de fusion al refrescar (D15)', () => {
     expect(rutas.delDia().map((f) => f.id)).toEqual(['srv-1']);
   });
 
-  it('un pull nunca toca el orden local', () => {
+  it('un pull nunca toca ruta_orden_local (ya no se escribe, pero la tabla sigue)', () => {
     const { rutas, deps } = montar();
     rutas.aplicarSnapshot([delServidor()]);
-    rutas.reordenar(HOY, ['cli-1']);
+    deps.bd.runSync(
+      `insert into ruta_orden_local (fecha, cliente_id, posicion) values ('${HOY}', 'cli-1', 1)`,
+    );
 
     rutas.aplicarSnapshot([delServidor({ orden: 7 }), delServidor({ activo: 0 })]);
 
@@ -213,17 +201,26 @@ describe('aplicarSnapshot: la regla de fusion al refrescar (D15)', () => {
 });
 
 describe('delDia', () => {
-  it('ordena por la posicion local y despues por el orden del servidor', () => {
-    const { rutas } = montar();
+  it('el orden es el del servidor aunque exista ruta_orden_local', () => {
+    const { rutas, deps } = montar();
     rutas.aplicarSnapshot([
       delServidor({ id: 'srv-1', cliente_id: 'cli-1', orden: 1 }),
       delServidor({ id: 'srv-3', cliente_id: 'cli-3', orden: 2 }),
-      delServidor({ id: 'srv-4', cliente_id: 'cli-4', orden: 3 }),
     ]);
+    deps.bd.runSync(
+      `insert into ruta_orden_local (fecha, cliente_id, posicion) values ('${HOY}', 'cli-3', 0)`,
+    );
 
-    rutas.reordenar(HOY, ['cli-4']);
+    expect(rutas.delDia().map((f) => f.cliente_id)).toEqual(['cli-1', 'cli-3']);
+  });
 
-    expect(clientesDelDia(rutas)).toEqual(['cli-4', 'cli-1', 'cli-3']);
+  it('con el mismo orden, desempata por nombre', () => {
+    const { rutas } = montar();
+    rutas.aplicarSnapshot([
+      delServidor({ id: 'srv-4', cliente_id: 'cli-4', orden: 1 }),
+      delServidor({ id: 'srv-3', cliente_id: 'cli-3', orden: 1 }),
+    ]);
+    expect(clientesDelDia(rutas)).toEqual(['cli-3', 'cli-4']);
   });
 
   it('trae nombre y domicilio del cliente, y solo las filas de esa fecha', () => {
@@ -353,38 +350,6 @@ describe('agregar', () => {
   });
 });
 
-describe('reordenar', () => {
-  it('reescribe el orden local de esa fecha y no toca las demas', () => {
-    const { rutas, deps } = montar();
-    rutas.reordenar(MANANA, ['cli-4']);
-    rutas.reordenar(HOY, ['cli-3', 'cli-1']);
-    rutas.reordenar(HOY, ['cli-1']);
-
-    expect(
-      deps.bd.getAllSync(
-        'select fecha, cliente_id, posicion from ruta_orden_local order by fecha, posicion',
-      ),
-    ).toEqual([
-      { fecha: HOY, cliente_id: 'cli-1', posicion: 1 },
-      { fecha: MANANA, cliente_id: 'cli-4', posicion: 1 },
-    ]);
-  });
-
-  it('es transaccional: si falla a la mitad, se queda el orden anterior', () => {
-    const { rutas } = montar();
-    rutas.aplicarSnapshot([
-      delServidor({ id: 'srv-1', cliente_id: 'cli-1', orden: 1 }),
-      delServidor({ id: 'srv-3', cliente_id: 'cli-3', orden: 2 }),
-    ]);
-    rutas.reordenar(HOY, ['cli-3', 'cli-1']);
-
-    // Un id repetido viola la llave primaria en el segundo insert.
-    expect(() => rutas.reordenar(HOY, ['cli-1', 'cli-1'])).toThrow();
-
-    expect(clientesDelDia(rutas)).toEqual(['cli-3', 'cli-1']);
-  });
-});
-
 describe('la cola del push', () => {
   it('pendientesDeSincronizar trae las altas pendientes y con error, nunca las filas del servidor', () => {
     const { rutas } = montar();
@@ -430,7 +395,9 @@ describe('purgar', () => {
       delServidor({ id: 'srv-viejo', fecha: '2026-07-30' }),
       delServidor({ id: 'srv-limite', fecha: '2026-07-31' }),
     ]);
-    rutas.reordenar('2026-07-30', ['cli-1']);
+    deps.bd.runSync(
+      "insert into ruta_orden_local (fecha, cliente_id, posicion) values ('2026-07-30', 'cli-1', 1)",
+    );
     const altaVieja = rutas.agregar('cli-3', CTX, '2026-07-01');
 
     rutas.purgar();
@@ -579,31 +546,43 @@ describe('delDia con notas asignadas, recado y comentario (notas-asignadas-table
       })),
     });
 
-  it('notas_asignadas cuenta las asignadas de hoy con saldo y sin cobro de hoy', () => {
+  it('notas_que_trae cuenta las asignadas de hoy con saldo', () => {
     const { rutas, catalogos } = montar();
     rutas.aplicarSnapshot([delServidor()]);
-    expect(rutas.delDia()[0]!.notas_asignadas).toBe(0);
+    expect(rutas.delDia(HOY, 'ven-1')[0]!.notas_que_trae).toBe(0);
 
     asignar(catalogos, ['nota-1', 'nota-2']);
-    expect(rutas.delDia()[0]!.notas_asignadas).toBe(2);
+    expect(rutas.delDia(HOY, 'ven-1')[0]!.notas_que_trae).toBe(2);
   });
 
-  it('la misma regla que porAtender: un cobro de hoy a la nota la saca de la cuenta', () => {
-    const { rutas, catalogos, cobranzas, deps } = montar();
+  it('notas_que_trae es la cuenta de notasAsignadas.queTraePorCliente: un abono no la saca, liquidar si', () => {
+    const { rutas, catalogos, cobranzas, notasAsignadas } = montar();
     rutas.aplicarSnapshot([delServidor()]);
     asignar(catalogos, ['nota-1', 'nota-2']);
-    cobranzas.registrar({
-      vendedorId: 'ven-1',
-      clienteId: 'cli-1',
-      ventaNotaId: 'nota-1',
-      montoCentavos: 5000,
-      metodoPago: 'efectivo',
-      fechaPago: HOY,
-    });
-    expect(rutas.delDia()[0]!.notas_asignadas).toBe(1);
-    expect(rutas.delDia()[0]!.notas_asignadas).toBe(
-      crearRepositorioNotasAsignadas(deps).conteoDeHoyPorCliente().get('cli-1') ?? 0,
+    const cobrar = (montoCentavos: number) =>
+      cobranzas.registrar({
+        vendedorId: 'ven-1',
+        clienteId: 'cli-1',
+        ventaNotaId: 'nota-1',
+        montoCentavos,
+        metodoPago: 'efectivo',
+        fechaPago: HOY,
+      });
+    cobrar(5000);
+    expect(rutas.delDia(HOY, 'ven-1')[0]!.notas_que_trae).toBe(2);
+    cobrar(10000);
+    expect(rutas.delDia(HOY, 'ven-1')[0]!.notas_que_trae).toBe(1);
+    expect(rutas.delDia(HOY, 'ven-1')[0]!.notas_que_trae).toBe(
+      notasAsignadas.queTraePorCliente('ven-1').get('cli-1') ?? 0,
     );
+  });
+
+  it('notas_que_trae suma la venta a credito de hoy del vendedor; sin vendedor no la cuenta', () => {
+    const { rutas, deps } = montar();
+    rutas.aplicarSnapshot([delServidor()]);
+    insertarVentaDePrueba(deps, { id: 'v-1', folio: 'F1', montoCentavos: 124000, contadoCredito: 'credito' });
+    expect(rutas.delDia(HOY, 'ven-1')[0]!.notas_que_trae).toBe(1);
+    expect(rutas.delDia()[0]!.notas_que_trae).toBe(0);
   });
 
   it('el recado de la ruta baja a la fila (y es null sin recado)', () => {
@@ -657,5 +636,58 @@ describe('delDia con notas asignadas, recado y comentario (notas-asignadas-table
     });
     venderA(ventas);
     expect(rutas.delDia()[0]).toMatchObject({ visitado: true, visita_sin_venta: false });
+  });
+});
+
+describe('delDia: lo hecho hoy (rediseño, spec §6)', () => {
+  it('una merma del cliente hoy lo manda a visitados', () => {
+    const { rutas, jornadas, movimientos } = montar();
+    rutas.aplicarSnapshot([delServidor()]);
+    jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
+    expect(rutas.delDia()[0]).toMatchObject({ visitado: false, con_merma: false });
+
+    movimientos.registrar({
+      vendedorId: 'ven-1',
+      tipo: 'merma_cliente',
+      clienteId: 'cli-1',
+      comentario: null,
+      lineas: [{ presentacionId: 'pre-1', sentido: 'recibido', piezas: 2 }],
+    });
+
+    expect(rutas.delDia()[0]).toMatchObject({ visitado: true, con_merma: true, visita_sin_venta: false });
+  });
+
+  it('suma venta de contado, a crédito y cobro de hoy', () => {
+    const { rutas, deps, catalogos, cobranzas } = montar();
+    catalogos.guardarSnapshot({
+      notas: [{ ...snapshotDePrueba().notas![0]!, saldo_centavos: 100000 }],
+    });
+    rutas.aplicarSnapshot([delServidor()]);
+    expect(rutas.delDia()[0]).toMatchObject({
+      venta_contado_centavos: 0,
+      venta_credito_centavos: 0,
+      cobro_centavos: 0,
+    });
+
+    insertarVentaDePrueba(deps, { id: 'v-contado', folio: 'F1', montoCentavos: 50000 });
+    insertarVentaDePrueba(deps, { id: 'v-credito', folio: 'F2', montoCentavos: 124000, contadoCredito: 'credito' });
+    // Una venta de ayer no suma.
+    insertarVentaDePrueba(deps, { id: 'v-ayer', folio: 'F0', montoCentavos: 99900, fecha: '2026-08-06' });
+    cobranzas.registrar({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      ventaNotaId: 'nota-1',
+      montoCentavos: 85000,
+      metodoPago: 'efectivo',
+      fechaPago: HOY,
+    });
+
+    expect(rutas.delDia()[0]).toMatchObject({
+      visitado: true,
+      venta_contado_centavos: 50000,
+      venta_credito_centavos: 124000,
+      cobro_centavos: 85000,
+      con_merma: false,
+    });
   });
 });

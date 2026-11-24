@@ -1,4 +1,4 @@
-import { depsDePrueba, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
+import { depsDePrueba, insertarVentaDePrueba, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
 import type { NotaAsignada } from '../tipos';
 import { crearRepositorioCatalogos } from './catalogos';
 import { crearRepositorioCobranzas, type DatosRegistroCobranza } from './cobranzas';
@@ -317,5 +317,84 @@ describe('repositorio de notas asignadas', () => {
     ]);
     notas.marcarSincronizada(b.id);
     expect(notas.pendientesDeSincronizar()).toEqual([]);
+  });
+
+  describe('queTraePorCliente (spec §4: el numero de la ruta)', () => {
+    const notaF1 = (cambios: Record<string, unknown> = {}) => ({
+      id: 'nota-f1',
+      cliente_id: 'cli-1',
+      folio: 'F1',
+      num_nota: null,
+      fecha: HOY,
+      status: 'pendiente' as const,
+      monto_total_centavos: 124000,
+      saldo_centavos: 124000,
+      abonos_json: '[]',
+      activo: 1 as const,
+      ...cambios,
+    });
+
+    it('notas que trae: asignada con saldo + venta a crédito de hoy, sin contar doble', () => {
+      const { deps, catalogos, cobranzas, notas } = montar([]);
+      const trae = () => notas.queTraePorCliente('ven-1').get('cli-1') ?? 0;
+      expect(trae()).toBe(0);
+
+      // 1. Una asignada de hoy a una nota de cli-1 con saldo de 1,000.00.
+      catalogos.guardarSnapshot({
+        notas: [notaUnoDelPull(100000, [])],
+        notasAsignadas: [asignacion({ condicion_venta: 'ninguna' })],
+      });
+      expect(trae()).toBe(1);
+
+      // 2. Una venta a credito de hoy a cli-1, que todavia no baja como nota.
+      insertarVentaDePrueba(deps, { id: 'ven-f1', folio: 'F1', montoCentavos: 124000, contadoCredito: 'credito' });
+      expect(trae()).toBe(2);
+
+      // 3. La venta baja del servidor como nota pendiente: es la misma, no otra.
+      catalogos.guardarSnapshot({ notas: [notaF1()] });
+      expect(trae()).toBe(2);
+
+      // 4. Y ademas la oficina se la asigna: tampoco cuenta dos veces.
+      catalogos.guardarSnapshot({
+        notasAsignadas: [asignacion({ id: 'asg-f1', venta_nota_id: 'nota-f1', condicion_venta: 'ninguna' })],
+      });
+      expect(trae()).toBe(2);
+
+      // 5. Un cobro de hoy liquida la nota del paso 1.
+      cobranzas.registrar(cobro({ montoCentavos: 100000 }));
+      expect(trae()).toBe(1);
+
+      // 6. Una venta de contado no es nota por cobrar.
+      insertarVentaDePrueba(deps, { id: 'ven-contado', folio: 'C1', montoCentavos: 5000 });
+      expect(trae()).toBe(1);
+
+      // 7. La nota F1 se pago en la oficina: baja inactiva.
+      catalogos.guardarSnapshot({ notas: [notaF1({ activo: 0 })] });
+      expect(trae()).toBe(0);
+    });
+
+    it('un abono de hoy que no liquida la asignada la sigue contando', () => {
+      const { cobranzas, notas } = montar([asignacion({ condicion_venta: 'ninguna' })]);
+      cobranzas.registrar(cobro({ montoCentavos: 5000 }));
+      expect(notas.queTraePorCliente('ven-1').get('cli-1')).toBe(1);
+    });
+
+    it('solo cuenta las ventas a credito de hoy y de este vendedor', () => {
+      const { deps, notas } = montar([]);
+      insertarVentaDePrueba(deps, { id: 'v-ayer', folio: 'A1', montoCentavos: 100, contadoCredito: 'credito', fecha: AYER });
+      insertarVentaDePrueba(deps, { id: 'v-otro', folio: 'O1', montoCentavos: 100, contadoCredito: 'credito', vendedorId: 'ven-2' });
+      expect(notas.queTraePorCliente('ven-1').get('cli-1') ?? 0).toBe(0);
+      insertarVentaDePrueba(deps, { id: 'v-hoy', folio: 'H1', montoCentavos: 100, contadoCredito: 'credito', clienteId: 'cli-2' });
+      expect(notas.queTraePorCliente('ven-1').get('cli-2')).toBe(1);
+    });
+
+    it('una venta de hoy cuya nota ya se liquido hoy en la tablet no cuenta', () => {
+      const { deps, catalogos, cobranzas, notas } = montar([]);
+      insertarVentaDePrueba(deps, { id: 'ven-f1', folio: 'F1', montoCentavos: 124000, contadoCredito: 'credito' });
+      catalogos.guardarSnapshot({ notas: [notaF1()] });
+      expect(notas.queTraePorCliente('ven-1').get('cli-1')).toBe(1);
+      cobranzas.registrar(cobro({ ventaNotaId: 'nota-f1', montoCentavos: 124000 }));
+      expect(notas.queTraePorCliente('ven-1').get('cli-1') ?? 0).toBe(0);
+    });
   });
 });

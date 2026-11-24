@@ -1,7 +1,8 @@
 import type { FilaRutaDelDia } from '@/datos/repositorios/rutas';
 import type { Cliente, Prospecto, SyncEstado, Venta, Visita } from '@/datos/tipos';
 import type { NombreIcono } from '@/ui/iconos';
-import { formatearHora, formatearMomento } from '@/ui/momento';
+import { formatearMomento } from '@/ui/momento';
+import { pesos } from '@/ui/pesos';
 
 /**
  * Lo que la pantalla principal decide (T-37, D16), sin React: la tablet no tiene
@@ -9,54 +10,72 @@ import { formatearHora, formatearMomento } from '@/ui/momento';
  * aqui (mismo criterio que `menu-jornada.ts`, T-38).
  */
 
-/** Lo minimo que `agruparRuta` necesita de una fila. */
-export type FilaAgrupable = Pick<FilaRutaDelDia, 'cliente_id' | 'activo' | 'visitado' | 'visita_sin_venta'>;
+/** Lo minimo que `agruparRutaEnCurso` necesita de una fila. */
+export type FilaAgrupable = Pick<FilaRutaDelDia, 'cliente_id' | 'activo' | 'visitado'>;
 
 /**
- * Reparte las filas del dia (ya ordenadas por `rutas.delDia`) entre la ruta,
- * "Visitados sin venta" y "Fuera de ruta" (D5, D16; T-39 D8):
+ * Reparte las filas del dia (ya en el orden del portal, `rutas.delDia`) entre
+ * "Por visitar", "Visitados" y "Fuera de ruta" (rediseño §6; D16):
  *
- * - Viva sin visita-sin-venta → en la ruta, visitada o no (la palomita no la saca).
- * - Viva con visita y SIN venta ni cobro → "Visitados sin venta". Si despues
- *   compra, `visita_sin_venta` pasa a `false` y regresa a la ruta con su palomita.
- * - Quitada por la oficina **con** actividad hoy (venta, cobro o visita) → "Fuera de ruta".
+ * - Viva sin nada hecho hoy → "Por visitar".
+ * - Viva con algo hecho hoy (venta, cobro, visita, comentario de no cobro o
+ *   merma), con o sin venta → "Visitados". Se puede volver a abrir.
+ * - Quitada por la oficina **con** actividad hoy → "Fuera de ruta".
  * - Quitada **sin** actividad → desaparece.
  * - Si el cliente quitado volvio a la ruta (otra fila viva), no se pinta dos veces.
  */
-export function agruparRuta<T extends FilaAgrupable>(
+export function agruparRutaEnCurso<T extends FilaAgrupable>(
   filas: readonly T[],
-): { enRuta: T[]; visitadosSinVenta: T[]; fueraDeRuta: T[] } {
+): { porVisitar: T[]; visitados: T[]; fueraDeRuta: T[] } {
   const vivos = new Set(filas.filter((f) => f.activo === 1).map((f) => f.cliente_id));
   return {
-    enRuta: filas.filter((f) => f.activo === 1 && !f.visita_sin_venta),
-    visitadosSinVenta: filas.filter((f) => f.activo === 1 && f.visita_sin_venta),
+    porVisitar: filas.filter((f) => f.activo === 1 && !f.visitado),
+    visitados: filas.filter((f) => f.activo === 1 && f.visitado),
     fueraDeRuta: filas.filter((f) => f.activo === 0 && f.visitado && !vivos.has(f.cliente_id)),
   };
 }
 
 /**
  * ¿La oficina no asigno ruta hoy? Solo si las TRES secciones estan vacias: con
- * todos los clientes visitados sin venta la lista queda vacia, pero si hay ruta.
+ * todos los clientes visitados "Por visitar" queda vacia, pero si hay ruta.
  */
 export function sinRutaAsignada(grupos: {
-  enRuta: readonly unknown[];
-  visitadosSinVenta: readonly unknown[];
+  porVisitar: readonly unknown[];
+  visitados: readonly unknown[];
   fueraDeRuta: readonly unknown[];
 }): boolean {
-  return grupos.enRuta.length === 0 && grupos.visitadosSinVenta.length === 0 && grupos.fueraDeRuta.length === 0;
+  return grupos.porVisitar.length === 0 && grupos.visitados.length === 0 && grupos.fueraDeRuta.length === 0;
 }
 
 /**
- * La linea de la fila de "Visitados sin venta": "Cerrado · 10:42". Sin visita
- * pero con comentario de "Continuar sin cobrar": "No cobró · 10:42".
+ * La linea bajo el nombre en "Visitados" (rediseño §6, maqueta 6): lo que se
+ * hizo hoy con el cliente, en este orden y unido con " · ": "Cobro $850.00",
+ * "Venta $1,240.00" (contado), "Venta a crédito $1,240.00", "Merma". Sin
+ * ninguna de esas y con visita: "Visita sin venta · <motivo en minusculas>"
+ * ("Visita sin venta" a secas sin motivo, p. ej. solo el comentario de no
+ * cobro). Dinero con centavos, como en toda la app (`pesos`).
  */
-export function textoUltimaVisita(
-  motivo: string | null,
-  en: string | null,
-  comentarioEn: string | null = null,
+export function resumenVisitado(
+  f: Pick<
+    FilaRutaDelDia,
+    | 'venta_contado_centavos'
+    | 'venta_credito_centavos'
+    | 'cobro_centavos'
+    | 'con_merma'
+    | 'ultima_visita_motivo'
+    | 'visita_sin_venta'
+  >,
 ): string {
-  if (motivo === null && en === null && comentarioEn !== null) return `No cobró · ${formatearHora(comentarioEn)}`;
-  return `${motivo ?? 'Visita'} · ${formatearHora(en)}`;
+  const partes: string[] = [];
+  if (f.cobro_centavos > 0) partes.push(`Cobro ${pesos(f.cobro_centavos)}`);
+  if (f.venta_contado_centavos > 0) partes.push(`Venta ${pesos(f.venta_contado_centavos)}`);
+  if (f.venta_credito_centavos > 0) partes.push(`Venta a crédito ${pesos(f.venta_credito_centavos)}`);
+  if (f.con_merma) partes.push('Merma');
+  if (partes.length === 0 && f.visita_sin_venta) {
+    const motivo = f.ultima_visita_motivo?.trim();
+    return motivo ? `Visita sin venta · ${motivo.toLowerCase()}` : 'Visita sin venta';
+  }
+  return partes.join(' · ');
 }
 
 /** El aviso de la lista vacia (D3), con la hora de la ultima sincronizacion. */
@@ -98,33 +117,9 @@ export function textoAgregado(nombre: string): string {
   return `${nombre} agregado al final`;
 }
 
-/** Lo que lee el lector de pantalla en la burbuja. */
-export function textoBurbuja(notas: number): string {
-  return notas === 1 ? '1 nota pendiente' : `${notas} notas pendientes`;
-}
-
-/** La marca de la fila de la ruta con notas asignadas por la oficina. */
-export function textoMarcaAsignadas(n: number): string {
-  return n === 1 ? 'Nota asignada' : `Notas asignadas · ${n}`;
-}
-
-/** Saca el elemento `desde` y lo mete en `hasta`. Fuera de rango, una copia igual. */
-export function moverElemento<T>(lista: readonly T[], desde: number, hasta: number): T[] {
-  const copia = [...lista];
-  if (desde < 0 || desde >= copia.length || hasta < 0 || hasta >= copia.length) return copia;
-  const [movido] = copia.splice(desde, 1);
-  copia.splice(hasta, 0, movido as T);
-  return copia;
-}
-
-/**
- * A que posicion cae una fila arrastrada `dy` puntos, con filas de alto fijo
- * (D10). Redondea al renglon mas cercano y nunca se sale de la lista.
- */
-export function indiceDestino(desde: number, dy: number, altoFila: number, total: number): number {
-  if (total <= 0 || altoFila <= 0) return desde;
-  const destino = desde + Math.round(dy / altoFila);
-  return Math.min(total - 1, Math.max(0, destino));
+/** Lo que lee el lector de pantalla en el contador de notas de la fila. */
+export function textoNotasQueTrae(notas: number): string {
+  return notas === 1 ? 'Trae 1 nota por cobrar' : `Trae ${notas} notas por cobrar`;
 }
 
 /** Sin acentos y en minusculas: "Doña" se encuentra escribiendo "dona". */

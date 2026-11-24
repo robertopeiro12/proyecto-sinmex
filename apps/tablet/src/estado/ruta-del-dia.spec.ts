@@ -1,5 +1,5 @@
 import {
-  agruparRuta,
+  agruparRutaEnCurso,
   anchoMenuLateral,
   atendidosFueraDeRuta,
   enlaceAFicha,
@@ -7,16 +7,13 @@ import {
   pastillaAlta,
   entradasMenu,
   filtrarParaAgregar,
-  indiceDestino,
-  moverElemento,
   motivoDeRechazo,
   primeraLineaDomicilio,
+  resumenVisitado,
   sinRutaAsignada,
   textoAgregado,
   textoAvisoSinRuta,
-  textoBurbuja,
-  textoMarcaAsignadas,
-  textoUltimaVisita,
+  textoNotasQueTrae,
   urlMapa,
   urlTelefono,
 } from './ruta-del-dia';
@@ -28,27 +25,45 @@ const fila = (cliente_id: string, activo: 0 | 1, visitado: boolean, visita_sin_v
   visita_sin_venta,
 });
 
-describe('agruparRuta (D5, D16)', () => {
-  it('las vivas van a la ruta, visitadas o no, en el orden que llegan', () => {
-    const r = agruparRuta([fila('a', 1, true), fila('b', 1, false)]);
-    expect(r.enRuta.map((f) => f.cliente_id)).toEqual(['a', 'b']);
-    expect(r.fueraDeRuta).toEqual([]);
+describe('agruparRutaEnCurso (spec §6, maqueta 6)', () => {
+  it('por visitar, visitados (con o sin venta) y fuera de ruta', () => {
+    const g = agruparRutaEnCurso([
+      fila('a', 1, false), fila('b', 1, true), fila('c', 1, true, true), fila('d', 0, true), fila('e', 0, false),
+    ]);
+    expect(g.porVisitar.map((f) => f.cliente_id)).toEqual(['a']);
+    expect(g.visitados.map((f) => f.cliente_id)).toEqual(['b', 'c']);
+    expect(g.fueraDeRuta.map((f) => f.cliente_id)).toEqual(['d']);
   });
 
-  it('una baja SIN actividad hoy desaparece', () => {
-    expect(agruparRuta([fila('a', 0, false)])).toEqual({ enRuta: [], visitadosSinVenta: [], fueraDeRuta: [] });
-  });
-
-  it('una baja CON actividad hoy va a "Fuera de ruta"', () => {
-    const r = agruparRuta([fila('a', 1, false), fila('b', 0, true)]);
-    expect(r.enRuta.map((f) => f.cliente_id)).toEqual(['a']);
-    expect(r.fueraDeRuta.map((f) => f.cliente_id)).toEqual(['b']);
+  it('respeta el orden en que llegan', () => {
+    const g = agruparRutaEnCurso([fila('c', 1, true), fila('a', 1, false), fila('b', 1, true), fila('d', 1, false)]);
+    expect(g.porVisitar.map((f) => f.cliente_id)).toEqual(['a', 'd']);
+    expect(g.visitados.map((f) => f.cliente_id)).toEqual(['c', 'b']);
   });
 
   it('si el cliente quitado volvio a la ruta, no se pinta dos veces', () => {
-    const r = agruparRuta([fila('a', 1, true), fila('a', 0, true)]);
-    expect(r.enRuta).toHaveLength(1);
-    expect(r.fueraDeRuta).toEqual([]);
+    const g = agruparRutaEnCurso([fila('a', 1, true), fila('a', 0, true)]);
+    expect(g.visitados).toHaveLength(1);
+    expect(g.fueraDeRuta).toEqual([]);
+  });
+});
+
+describe('resumenVisitado (spec §6)', () => {
+  test('resumen de lo hecho', () => {
+    const base = { venta_contado_centavos: 0, venta_credito_centavos: 0, cobro_centavos: 0, con_merma: false, ultima_visita_motivo: null, visita_sin_venta: false };
+    expect(resumenVisitado({ ...base, cobro_centavos: 85000, venta_credito_centavos: 124000 })).toBe('Cobro $850.00 · Venta a crédito $1,240.00');
+    expect(resumenVisitado({ ...base, venta_contado_centavos: 50000, con_merma: true })).toBe('Venta $500.00 · Merma');
+    expect(resumenVisitado({ ...base, visita_sin_venta: true, ultima_visita_motivo: 'Cerrado' })).toBe('Visita sin venta · cerrado');
+    expect(resumenVisitado({ ...base, visita_sin_venta: true })).toBe('Visita sin venta');
+    expect(resumenVisitado({ ...base, con_merma: true })).toBe('Merma');
+  });
+
+  test('todo junto, en su orden; con algo hecho la visita no se menciona', () => {
+    const base = { venta_contado_centavos: 0, venta_credito_centavos: 0, cobro_centavos: 0, con_merma: false, ultima_visita_motivo: null, visita_sin_venta: false };
+    expect(
+      resumenVisitado({ ...base, cobro_centavos: 100, venta_contado_centavos: 200, venta_credito_centavos: 300, con_merma: true }),
+    ).toBe('Cobro $1.00 · Venta $2.00 · Venta a crédito $3.00 · Merma');
+    expect(resumenVisitado({ ...base, con_merma: true, visita_sin_venta: true, ultima_visita_motivo: 'Cerrado' })).toBe('Merma');
   });
 });
 
@@ -69,10 +84,10 @@ describe('textos', () => {
     expect(primeraLineaDomicilio('   ')).toBe('sin domicilio');
   });
 
-  it('el aviso al agregar y la etiqueta de la burbuja', () => {
+  it('el aviso al agregar y lo que se lee del contador de notas', () => {
     expect(textoAgregado('Abarrotes La Esquina')).toBe('Abarrotes La Esquina agregado al final');
-    expect(textoBurbuja(1)).toBe('1 nota pendiente');
-    expect(textoBurbuja(3)).toBe('3 notas pendientes');
+    expect(textoNotasQueTrae(1)).toBe('Trae 1 nota por cobrar');
+    expect(textoNotasQueTrae(3)).toBe('Trae 3 notas por cobrar');
   });
 });
 
@@ -101,30 +116,6 @@ describe('urlMapa y urlTelefono (ficha del cliente)', () => {
     expect(urlTelefono('+52 664 123 4567')).toBe('tel:+526641234567');
     expect(urlTelefono('')).toBeNull();
     expect(urlTelefono(null)).toBeNull();
-  });
-});
-
-describe('reordenar con el dedo (D10)', () => {
-  it('moverElemento saca y vuelve a meter, sin mutar la lista', () => {
-    const lista = ['a', 'b', 'c', 'd'];
-    expect(moverElemento(lista, 0, 2)).toEqual(['b', 'c', 'a', 'd']);
-    expect(moverElemento(lista, 3, 0)).toEqual(['d', 'a', 'b', 'c']);
-    expect(moverElemento(lista, 1, 1)).toEqual(lista);
-    expect(lista).toEqual(['a', 'b', 'c', 'd']);
-  });
-
-  it('moverElemento fuera de rango devuelve una copia igual', () => {
-    expect(moverElemento(['a', 'b'], 5, 0)).toEqual(['a', 'b']);
-    expect(moverElemento(['a', 'b'], 0, -1)).toEqual(['a', 'b']);
-  });
-
-  it('indiceDestino redondea el desplazamiento a filas y no se sale de la lista', () => {
-    expect(indiceDestino(1, 0, 96, 5)).toBe(1);
-    expect(indiceDestino(1, 50, 96, 5)).toBe(2);
-    expect(indiceDestino(1, 40, 96, 5)).toBe(1);
-    expect(indiceDestino(1, -100, 96, 5)).toBe(0);
-    expect(indiceDestino(1, 1000, 96, 5)).toBe(4);
-    expect(indiceDestino(0, 300, 0, 5)).toBe(0);
   });
 });
 
@@ -203,46 +194,23 @@ describe('estadoSubida (T-75)', () => {
     expect(estadoSubida(['pendiente', 'error', 'sincronizado'])).toBe('error');
   });
 
-  it('T-39: la viva visitada sin venta sale de la lista y va a "Visitados sin venta", en su orden', () => {
-    const r = agruparRuta([fila('a', 1, true, true), fila('b', 1, false), fila('c', 1, true, true)]);
-    expect(r.enRuta.map((f) => f.cliente_id)).toEqual(['b']);
-    expect(r.visitadosSinVenta.map((f) => f.cliente_id)).toEqual(['a', 'c']);
-  });
-
-  it('T-39: visitada CON venta sigue en la ruta con su palomita (Review Focus 3)', () => {
-    const r = agruparRuta([fila('a', 1, true, false)]);
-    expect(r.enRuta.map((f) => f.cliente_id)).toEqual(['a']);
-    expect(r.visitadosSinVenta).toEqual([]);
-  });
-
   it('T-39: una baja que solo fue visitada va a "Fuera de ruta"', () => {
-    const r = agruparRuta([fila('a', 0, true, true)]);
+    const r = agruparRutaEnCurso([fila('a', 0, true, true)]);
     expect(r.fueraDeRuta.map((f) => f.cliente_id)).toEqual(['a']);
-    expect(r.visitadosSinVenta).toEqual([]);
+    expect(r.visitados).toEqual([]);
   });
 });
 
 describe('sinRutaAsignada (T-39)', () => {
   it('solo sin ninguna fila en las tres secciones', () => {
-    expect(sinRutaAsignada({ enRuta: [], visitadosSinVenta: [], fueraDeRuta: [] })).toBe(true);
-    // Todos visitados sin venta: hay ruta, aunque la lista quede vacia (Review Focus 3).
-    expect(sinRutaAsignada({ enRuta: [], visitadosSinVenta: [fila('a', 1, true, true)], fueraDeRuta: [] })).toBe(false);
-    expect(sinRutaAsignada({ enRuta: [], visitadosSinVenta: [], fueraDeRuta: [fila('b', 0, true)] })).toBe(false);
+    expect(sinRutaAsignada({ porVisitar: [], visitados: [], fueraDeRuta: [] })).toBe(true);
+    // Todos visitados: hay ruta, aunque "Por visitar" quede vacia (Review Focus 3).
+    expect(sinRutaAsignada({ porVisitar: [], visitados: [fila('a', 1, true, true)], fueraDeRuta: [] })).toBe(false);
+    expect(sinRutaAsignada({ porVisitar: [], visitados: [], fueraDeRuta: [fila('b', 0, true)] })).toBe(false);
   });
 });
 
-describe('textoUltimaVisita y motivoDeRechazo (T-39)', () => {
-  it('motivo y hora local', () => {
-    expect(textoUltimaVisita('Cerrado', new Date(2026, 9, 17, 10, 42).toISOString())).toBe('Cerrado · 10:42');
-    expect(textoUltimaVisita(null, null)).toBe('Visita · --:--');
-  });
-
-  it('sin visita pero con comentario de nota no cobrada: "No cobró · HH:MM"', () => {
-    const en = new Date(2026, 9, 17, 11, 5).toISOString();
-    expect(textoUltimaVisita(null, null, en)).toBe('No cobró · 11:05');
-    expect(textoUltimaVisita('Cerrado', en, new Date(2026, 9, 17, 12, 0).toISOString())).toBe('Cerrado · 11:05');
-  });
-
+describe('motivoDeRechazo (T-39)', () => {
   it('el motivo sin el codigo tecnico', () => {
     expect(motivoDeRechazo('visita-id-ocupado: El id de esta visita ya está ocupado.')).toBe(
       'El id de esta visita ya está ocupado.',
@@ -371,13 +339,3 @@ describe('anchoMenuLateral (menu lateral, 2026-10-18)', () => {
   });
 });
 
-describe('textoMarcaAsignadas', () => {
-  it('una nota, en singular', () => {
-    expect(textoMarcaAsignadas(1)).toBe('Nota asignada');
-  });
-
-  it('varias, con la cuenta', () => {
-    expect(textoMarcaAsignadas(2)).toBe('Notas asignadas · 2');
-    expect(textoMarcaAsignadas(5)).toBe('Notas asignadas · 5');
-  });
-});

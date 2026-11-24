@@ -35,6 +35,42 @@ export function depsDePrueba(momento: string = MOMENTO): DepsRepositorio {
   };
 }
 
+/**
+ * Una venta grabada **directo** en SQLite, sin `ventas.registrar()` (que exige
+ * firma, precios y existencia): para las pruebas que solo leen la tabla
+ * `venta` (la ruta y las notas que trae el vendedor). Por omision, de `ven-1`
+ * a `cli-1`, de hoy y de contado.
+ */
+export function insertarVentaDePrueba(
+  deps: DepsRepositorio,
+  venta: {
+    id: string;
+    folio: string;
+    montoCentavos: number;
+    contadoCredito?: 'contado' | 'credito';
+    clienteId?: string;
+    vendedorId?: string;
+    fecha?: string;
+  },
+): void {
+  deps.bd.runSync(
+    `insert into venta (id, fecha, cliente_id, vendedor_id, sucursal_id, folio, num_nota,
+                        contado_credito, monto_total_centavos, grabada_en)
+     values ($id, $fecha, $cliente_id, $vendedor_id, 'suc-tj', $folio, null,
+             $contado_credito, $monto, $grabada_en)`,
+    {
+      $id: venta.id,
+      $fecha: venta.fecha ?? deps.reloj.hoy(),
+      $cliente_id: venta.clienteId ?? 'cli-1',
+      $vendedor_id: venta.vendedorId ?? 'ven-1',
+      $folio: venta.folio,
+      $contado_credito: venta.contadoCredito ?? 'contado',
+      $monto: venta.montoCentavos,
+      $grabada_en: deps.reloj.ahora(),
+    },
+  );
+}
+
 /** Snapshot minimo pero coherente: 1 sucursal, 1 vendedor, 1 vehiculo, 2 clientes. */
 export function snapshotDePrueba(): SnapshotCatalogos {
   return {

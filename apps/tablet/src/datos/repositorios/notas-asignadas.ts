@@ -180,6 +180,68 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
       return conteo;
     },
 
+    /**
+     * Cuantas notas por cobrar **trae** el vendedor de cada cliente hoy: el
+     * numero de la fila de la ruta (spec del rediseño, §4). Sin entrada = 0.
+     *
+     * - Asignadas de hoy con saldo > 0 y **no liquidadas hoy** (un abono que no
+     *   liquida la deja contando: la nota de papel sigue en su mano). No es
+     *   `porAtender`, que saca cualquier nota tocada hoy.
+     * - Mas las ventas **a credito** de hoy de este vendedor. Una que ya bajo
+     *   como `nota_pendiente` (mismo `folio`) cuenta solo si esa nota sigue
+     *   activa, con saldo y sin liquidar hoy en la tablet; si ademas esta
+     *   asignada, ya la conto la asignacion y no se cuenta dos veces.
+     */
+    queTraePorCliente(vendedorId: string): Map<string, number> {
+      const hoy = reloj.hoy();
+      const conteo = new Map<string, number>();
+      const sumar = (clienteId: string) => conteo.set(clienteId, (conteo.get(clienteId) ?? 0) + 1);
+
+      const asignadas = new Set<string>();
+      for (const n of deHoy(null)) {
+        asignadas.add(n.ventaNotaId);
+        if (n.saldoCentavos > 0 && !n.liquidadaHoy) sumar(n.clienteId);
+      }
+
+      const ventas = bd.getAllSync<{
+        cliente_id: string;
+        nota_id: string | null;
+        nota_activo: number | null;
+        nota_saldo: number | null;
+      }>(
+        `select v.cliente_id,
+                np.id as nota_id, np.activo as nota_activo, np.saldo_centavos as nota_saldo
+           from venta v
+           left join nota_pendiente np on np.folio = v.folio
+          where v.vendedor_id = $vendedor_id and v.fecha = $hoy and v.contado_credito = 'credito'
+          order by v.rowid`,
+        { $vendedor_id: vendedorId, $hoy: hoy },
+      );
+      if (ventas.length === 0) return conteo;
+
+      const liquidadas = new Set<string>();
+      for (const c of bd.getAllSync<{ reparto_json: string }>(
+        'select reparto_json from cobranza where fecha = $hoy',
+        { $hoy: hoy },
+      )) {
+        for (const r of leerReparto(c.reparto_json)) {
+          if (r.saldo_despues_centavos === 0) liquidadas.add(r.venta_nota_id);
+        }
+      }
+
+      for (const v of ventas) {
+        if (v.nota_id === null) {
+          sumar(v.cliente_id);
+          continue;
+        }
+        if (asignadas.has(v.nota_id)) continue;
+        if (v.nota_activo === 1 && (v.nota_saldo ?? 0) > 0 && !liquidadas.has(v.nota_id)) {
+          sumar(v.cliente_id);
+        }
+      }
+      return conteo;
+    },
+
     /** El motivo por el que la tablet no deja venderle, o `null`. El servidor no rechaza. */
     bloqueoDeVenta(clienteId: string): string | null {
       return motivoBloqueoVenta(deHoy(clienteId));
