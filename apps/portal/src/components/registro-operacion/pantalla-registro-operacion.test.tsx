@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorApi } from "@/lib/api";
 import { diaAnterior } from "@/lib/fechas";
+import { formatearDiaLargo } from "@/lib/formato";
 import * as ops from "@/lib/operaciones-almacen";
 import type { OperacionAlmacen } from "@/lib/operaciones-almacen";
 import * as motivosLib from "@/lib/motivos-merma";
@@ -204,13 +205,15 @@ describe("PantallaRegistroOperacion", () => {
     render(<PantallaRegistroOperacion sucursal={null} pestana="envio" />);
     const grupo = await screen.findByRole("radiogroup", { name: "Día del envío" });
     expect(document.querySelector("input[type=date]")).toBeNull();
-    expect(within(grupo).getByRole("radio", { name: "Hoy" })).toHaveAttribute("aria-checked", "true");
-    expect(within(grupo).getByRole("radio", { name: "Ayer" })).toHaveAttribute("aria-checked", "false");
-    await u.click(within(grupo).getByRole("radio", { name: "Ayer" }));
+    expect(within(grupo).getByRole("radio", { name: /^Hoy · / })).toHaveAttribute("aria-checked", "true");
+    expect(within(grupo).getByRole("radio", { name: `Hoy · ${formatearDiaLargo(HOY)}` })).toBeInTheDocument();
+    expect(within(grupo).getByRole("radio", { name: `Ayer · ${formatearDiaLargo(diaAnterior(HOY))}` })).toBeInTheDocument();
+    expect(within(grupo).getByRole("radio", { name: /^Ayer · / })).toHaveAttribute("aria-checked", "false");
+    await u.click(within(grupo).getByRole("radio", { name: /^Ayer · / }));
     await waitFor(() =>
       expect(ops.listarOperaciones).toHaveBeenLastCalledWith({ fecha: diaAnterior(HOY), tipo: "envio", sucursal: "TJ" }),
     );
-    expect(within(grupo).getByRole("radio", { name: "Ayer" })).toHaveAttribute("aria-checked", "true");
+    expect(within(grupo).getByRole("radio", { name: /^Ayer · / })).toHaveAttribute("aria-checked", "true");
   });
 
   it("al entrar a Envíos con un día anterior a ayer, la lista muestra hoy", async () => {
@@ -222,7 +225,7 @@ describe("PantallaRegistroOperacion", () => {
     await waitFor(() => expect(ops.listarOperaciones).toHaveBeenLastCalledWith({ fecha: viejo, tipo: "entrada", sucursal: "TJ" }));
     await u.click(screen.getByRole("tab", { name: "Envíos" }));
     await waitFor(() => expect(ops.listarOperaciones).toHaveBeenLastCalledWith({ fecha: HOY, tipo: "envio", sucursal: "TJ" }));
-    expect(await screen.findByRole("radio", { name: "Hoy" })).toHaveAttribute("aria-checked", "true");
+    expect(await screen.findByRole("radio", { name: /^Hoy · / })).toHaveAttribute("aria-checked", "true");
   });
 
   describe("captura", () => {
@@ -387,18 +390,18 @@ describe("PantallaRegistroOperacion", () => {
       await waitFor(() => expect(ops.listarOperaciones).toHaveBeenLastCalledWith({ fecha: viejo, tipo: "entrada", sucursal: "TJ" }));
       await u.click(screen.getByRole("tab", { name: "Envíos" }));
       await u.click(await screen.findByRole("button", { name: "Registrar envío" }));
-      expect(await screen.findByRole("radio", { name: "Hoy" })).toHaveAttribute("aria-checked", "true");
+      expect(await screen.findByRole("radio", { name: /^Hoy · / })).toHaveAttribute("aria-checked", "true");
     });
 
     it("un envío nuevo conserva ayer como día de la pestaña y la captura no tiene calendario", async () => {
       mockAuth(TODOS);
       const u = userEvent.setup();
       render(<PantallaRegistroOperacion sucursal={null} pestana="envio" />);
-      await u.click(await screen.findByRole("radio", { name: "Ayer" }));
+      await u.click(await screen.findByRole("radio", { name: /^Ayer · / }));
       await u.click(await screen.findByRole("button", { name: "Registrar envío" }));
       const grupo = await screen.findByRole("radiogroup", { name: "Día del envío" });
       expect(document.querySelector("input[type=date]")).toBeNull();
-      expect(within(grupo).getByRole("radio", { name: "Ayer" })).toHaveAttribute("aria-checked", "true");
+      expect(within(grupo).getByRole("radio", { name: /^Ayer · / })).toHaveAttribute("aria-checked", "true");
     });
 
     it("en la captura de un envío, elegir Ayer manda la fecha de ayer", async () => {
@@ -407,7 +410,7 @@ describe("PantallaRegistroOperacion", () => {
       vi.mocked(ops.crearOperacion).mockResolvedValue(op("n", "envio"));
       render(<PantallaRegistroOperacion sucursal={null} pestana="envio" />);
       await u.click(await screen.findByRole("button", { name: "Registrar envío" }));
-      await u.click(await screen.findByRole("radio", { name: "Ayer" }));
+      await u.click(await screen.findByRole("radio", { name: /^Ayer · / }));
       const destino = await screen.findByLabelText("Sucursal destino");
       await waitFor(() => expect(within(destino).getAllByRole("option").map((o) => o.textContent)).toContain("Mexicali"));
       await u.selectOptions(destino, "MX");
@@ -427,7 +430,7 @@ describe("PantallaRegistroOperacion", () => {
       render(<PantallaRegistroOperacion sucursal={null} pestana="envio" />);
       await u.click(await screen.findByRole("button", { name: "Editar" }));
       const grupo = await screen.findByRole("radiogroup", { name: "Día del envío" });
-      expect(within(grupo).getByRole("radio", { name: "Ayer" })).toHaveAttribute("aria-checked", "true");
+      expect(within(grupo).getByRole("radio", { name: /^Ayer · / })).toHaveAttribute("aria-checked", "true");
     });
 
     it("si fallan los motivos o las sucursales lo dice", async () => {
