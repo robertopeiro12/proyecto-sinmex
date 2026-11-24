@@ -134,6 +134,8 @@ describe("Retiro de merma en el Registro de Operación", () => {
     const despues = within(await screen.findByRole("row", { name: /Lupe/ }));
     await waitFor(() => expect(despues.queryByRole("button", { name: "Eliminar" })).toBeNull());
     expect(despues.queryByRole("button", { name: "Editar" })).toBeNull();
+    // El mensaje del 409 sigue a la vista aunque la lista se haya vuelto a pedir.
+    expect(screen.getByText("Un retiro autorizado ya no se puede corregir ni dar de baja.")).toBeInTheDocument();
   });
 
   it("registrar un retiro lo manda con tipo retiro_merma", async () => {

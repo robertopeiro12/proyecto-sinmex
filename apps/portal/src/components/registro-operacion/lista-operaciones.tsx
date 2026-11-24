@@ -110,7 +110,10 @@ export function ListaOperaciones({
   const dia = tipo === "envio" ? diaDeEnvio(fecha) : fecha;
   const [datos, setDatos] = useState<OperacionesDelDia | null>(null);
   const [cargando, setCargando] = useState(true);
+  // Dos avisos: el de la carga se limpia al cargar bien; el de una acción (eliminar) se queda
+  // a la vista aunque la lista se vuelva a pedir (un 409 recarga y su mensaje debe seguir).
   const [error, setError] = useState<string | null>(null);
+  const [errorAccion, setErrorAccion] = useState<string | null>(null);
   const [vuelta, setVuelta] = useState(0);
   const ultima = useRef(0);
   const { confirmar, ventana } = useConfirmar();
@@ -146,11 +149,12 @@ export function ListaOperaciones({
       confirmar: "Eliminar registro",
     });
     if (!si) return;
+    setErrorAccion(null);
     try {
       await eliminarOperacion(o.id);
       setVuelta((v) => v + 1);
     } catch (err) {
-      setError(mensajeDe(err, "No se pudo eliminar el registro."));
+      setErrorAccion(mensajeDe(err, "No se pudo eliminar el registro."));
       // Un 409 es que el retiro ya se resolvió: se vuelve a pedir la lista para que no queden Editar/Eliminar.
       if (esConflicto409(err)) setVuelta((v) => v + 1);
     }
@@ -186,6 +190,7 @@ export function ListaOperaciones({
       </div>
 
       {error && <Aviso tono="error">{error}</Aviso>}
+      {errorAccion && <Aviso tono="error">{errorAccion}</Aviso>}
       {cargando && !datos && <EstadoPantalla tipo="cargando" />}
 
       {datos && (

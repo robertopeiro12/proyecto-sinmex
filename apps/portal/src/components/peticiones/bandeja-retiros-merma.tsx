@@ -9,7 +9,6 @@ import { Fecha } from "@/components/ui/fecha";
 import { CajaTabla, Tabla, Td, Th } from "@/components/ui/tabla";
 import { Ventana } from "@/components/ui/ventana";
 import { ErrorApi, mensajeDe } from "@/lib/api";
-import { formatearDiaHoraTijuana } from "@/lib/formato";
 import {
   autorizarRetiro,
   listarRetirosPendientes,
@@ -145,7 +144,7 @@ export function BandejaRetirosMerma({ sucursal }: { sucursal: string | null }) {
                     <Td>
                       <Fecha valor={o.fecha} />
                     </Td>
-                    <Td>{`${o.capturo} ${formatearDiaHoraTijuana(`${o.fecha} ${o.hora}`)}`}</Td>
+                    <Td>{`${o.capturo} a las ${o.hora}`}</Td>
                     <Td alinear="derecha">{o.piezas}</Td>
                     <Td>
                       {detalleDe(o)}

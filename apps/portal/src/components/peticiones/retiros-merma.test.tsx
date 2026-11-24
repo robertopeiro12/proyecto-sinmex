@@ -140,7 +140,7 @@ describe("Peticiones › Retiro de merma", () => {
     await abrirPestana();
     const fila = within(await screen.findByRole("row", { name: /Lupe/ }));
     expect(fila.getByText("Se cayó una tarima")).toBeInTheDocument();
-    expect(fila.getByText("Lupe el martes 24 de noviembre a las 08:15")).toBeInTheDocument();
+    expect(fila.getByText("Lupe a las 08:15")).toBeInTheDocument();
   });
 
   it("al cambiar de sucursal no se ven los retiros de la anterior mientras carga", async () => {
