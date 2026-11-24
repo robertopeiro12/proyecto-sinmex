@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
+import { ErrorApi } from "@/lib/api";
 import * as ops from "@/lib/operaciones-almacen";
 import type { OperacionAlmacen } from "@/lib/operaciones-almacen";
 import * as motivosLib from "@/lib/motivos-merma";
@@ -44,6 +45,7 @@ const retiro = (id: string, m: Partial<OperacionAlmacen> = {}): OperacionAlmacen
   piezas: 12,
   capturo: "Lupe",
   hora: "08:15",
+  actualizadoEn: "2026-11-24T16:15:00.123456Z",
   editable: true,
   envio: null,
   estado: "pendiente",
@@ -93,7 +95,7 @@ describe("Retiro de merma en el Registro de Operación", () => {
     render(<PantallaRegistroOperacion sucursal={null} pestana={null} />);
     const fila = within(await screen.findByRole("row", { name: /Lupe/ }));
     expect(fila.getByText("Autorizado")).toHaveAttribute("data-tono", "exito");
-    expect(fila.getByText("Autorizó Roberto el 2026-11-25 10:30")).toBeInTheDocument();
+    expect(fila.getByText("Autorizó Roberto el miércoles 25 de noviembre a las 10:30")).toBeInTheDocument();
     expect(fila.queryByRole("button", { name: "Editar" })).toBeNull();
     expect(fila.queryByRole("button", { name: "Eliminar" })).toBeNull();
   });
@@ -109,9 +111,29 @@ describe("Retiro de merma en el Registro de Operación", () => {
     render(<PantallaRegistroOperacion sucursal={null} pestana={null} />);
     const fila = within(await screen.findByRole("row", { name: /Lupe/ }));
     expect(fila.getByText("Rechazado")).toHaveAttribute("data-tono", "error");
-    expect(fila.getByText("Rechazó Roberto el 2026-11-25 10:30: Faltan fotos")).toBeInTheDocument();
+    expect(fila.getByText("Rechazó Roberto el miércoles 25 de noviembre a las 10:30: Faltan fotos")).toBeInTheDocument();
     await u.click(fila.getByRole("button", { name: "Editar" }));
     expect(await screen.findByText(/vuelve a Pendiente/)).toBeInTheDocument();
+  });
+
+  it("un 409 al eliminar recarga la lista (si ya lo autorizaron, desaparecen Editar y Eliminar)", async () => {
+    mockAuth(["operacion.retiro_merma"]);
+    const u = userEvent.setup();
+    vi.mocked(ops.listarOperaciones).mockResolvedValueOnce({ fecha: HOY, hoy: HOY, operaciones: [retiro("r1")] });
+    vi.mocked(ops.listarOperaciones).mockResolvedValue({
+      fecha: HOY,
+      hoy: HOY,
+      operaciones: [retiro("r1", { estado: "autorizado", editable: false, resolucion: { por: "Roberto", en: "2026-11-25 10:30", motivo: null } })],
+    });
+    vi.mocked(ops.eliminarOperacion).mockRejectedValue(new ErrorApi("conflicto", 409, "Un retiro autorizado ya no se puede corregir ni dar de baja."));
+    render(<PantallaRegistroOperacion sucursal={null} pestana={null} />);
+    const fila = within(await screen.findByRole("row", { name: /Lupe/ }));
+    await u.click(fila.getByRole("button", { name: "Eliminar" }));
+    await u.click(await screen.findByRole("button", { name: "Eliminar registro" }));
+    await waitFor(() => expect(ops.listarOperaciones).toHaveBeenCalledTimes(2));
+    const despues = within(await screen.findByRole("row", { name: /Lupe/ }));
+    await waitFor(() => expect(despues.queryByRole("button", { name: "Eliminar" })).toBeNull());
+    expect(despues.queryByRole("button", { name: "Editar" })).toBeNull();
   });
 
   it("registrar un retiro lo manda con tipo retiro_merma", async () => {

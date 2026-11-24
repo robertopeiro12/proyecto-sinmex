@@ -8,7 +8,8 @@ import { useConfirmar } from "@/components/ui/confirmar";
 import { Fecha } from "@/components/ui/fecha";
 import { CajaTabla, Tabla, Td, Th } from "@/components/ui/tabla";
 import { Ventana } from "@/components/ui/ventana";
-import { mensajeDe } from "@/lib/api";
+import { ErrorApi, mensajeDe } from "@/lib/api";
+import { formatearDiaHoraTijuana } from "@/lib/formato";
 import {
   autorizarRetiro,
   listarRetirosPendientes,
@@ -16,7 +17,9 @@ import {
   rechazarRetiro,
   type OperacionAlmacen,
 } from "@/lib/operaciones-almacen";
-import { esConflicto409 } from "@/lib/peticiones";
+
+/** El retiro cambió (409) o ya no existe (404): se vuelve a pedir la lista en vez de seguir mostrando lo viejo. */
+const esCambio = (err: unknown): err is ErrorApi => err instanceof ErrorApi && (err.status === 409 || err.status === 404);
 
 const detalleDe = (o: OperacionAlmacen) => o.lineas.map((l) => `${l.nombre} × ${l.piezas}`).join(", ");
 
@@ -35,6 +38,12 @@ export function BandejaRetirosMerma({ sucursal }: { sucursal: string | null }) {
   const [enviando, setEnviando] = useState(false);
   const [errorRechazo, setErrorRechazo] = useState<string | null>(null);
   const { confirmar, ventana } = useConfirmar();
+
+  // Al cambiar de sucursal se vacía la lista: no se ven los retiros de la anterior mientras carga.
+  useEffect(() => {
+    setRetiros(null);
+    setErrorCarga(null);
+  }, [sucursal]);
 
   useEffect(() => {
     let vigente = true;
@@ -69,10 +78,10 @@ export function BandejaRetirosMerma({ sucursal }: { sucursal: string | null }) {
     });
     if (!si) return;
     try {
-      await autorizarRetiro(o.id);
+      await autorizarRetiro(o.id, o.actualizadoEn);
       terminar({ aviso: "Retiro autorizado." });
     } catch (err) {
-      if (esConflicto409(err)) terminar({ alerta: err.mensajeApi ?? "El retiro cambió; se recargó la lista." });
+      if (esCambio(err)) terminar({ alerta: err.mensajeApi ?? "El retiro cambió; se recargó la lista." });
       else setFin({ alerta: mensajeDe(err, "No se pudo autorizar el retiro.") });
     }
   }
@@ -91,11 +100,11 @@ export function BandejaRetirosMerma({ sucursal }: { sucursal: string | null }) {
     setEnviando(true);
     setErrorRechazo(null);
     try {
-      await rechazarRetiro(aRechazar.id, motivoLimpio);
+      await rechazarRetiro(aRechazar.id, motivoLimpio, aRechazar.actualizadoEn);
       setARechazar(null);
       terminar({ aviso: "Retiro rechazado." });
     } catch (err) {
-      if (esConflicto409(err)) {
+      if (esCambio(err)) {
         setARechazar(null);
         terminar({ alerta: err.mensajeApi ?? "El retiro cambió; se recargó la lista." });
       } else setErrorRechazo(mensajeDe(err, "No se pudo rechazar el retiro."));
@@ -136,9 +145,12 @@ export function BandejaRetirosMerma({ sucursal }: { sucursal: string | null }) {
                     <Td>
                       <Fecha valor={o.fecha} />
                     </Td>
-                    <Td>{`${o.capturo} · ${o.hora}`}</Td>
+                    <Td>{`${o.capturo} ${formatearDiaHoraTijuana(`${o.fecha} ${o.hora}`)}`}</Td>
                     <Td alinear="derecha">{o.piezas}</Td>
-                    <Td>{detalleDe(o)}</Td>
+                    <Td>
+                      {detalleDe(o)}
+                      {o.comentario && <p className="mt-1 text-xs text-muted-foreground">{o.comentario}</p>}
+                    </Td>
                     <Td alinear="derecha">
                       <div className="flex justify-end gap-2">
                         <Button

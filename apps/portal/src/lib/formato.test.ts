@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatearDiaLargo, formatearFecha, formatearFechaHora, formatearPesos, iniciales, plural } from "./formato";
+import { formatearDiaHoraTijuana, formatearDiaLargo, formatearFecha, formatearFechaHora, formatearPesos, iniciales, plural } from "./formato";
 import * as reportes from "./reportes";
 import * as ventas from "./ventas";
 
@@ -72,5 +72,15 @@ describe("formatearDiaLargo", () => {
 
   it("lo que no es AAAA-MM-DD sale tal cual", () => {
     expect(formatearDiaLargo("mañana")).toBe("mañana");
+  });
+});
+
+describe("formatearDiaHoraTijuana", () => {
+  it("AAAA-MM-DD hh:mm → el día largo y la hora", () => {
+    expect(formatearDiaHoraTijuana("2026-11-24 12:08")).toBe("el martes 24 de noviembre a las 12:08");
+  });
+  it("lo que no tiene esa forma sale tal cual", () => {
+    expect(formatearDiaHoraTijuana("ayer")).toBe("ayer");
+    expect(formatearDiaHoraTijuana("2026-11-24T19:00:00.000Z")).toBe("2026-11-24T19:00:00.000Z");
   });
 });

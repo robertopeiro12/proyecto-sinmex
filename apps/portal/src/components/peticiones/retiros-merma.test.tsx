@@ -35,6 +35,7 @@ const retiro = (id: string, m: Partial<OperacionAlmacen> = {}): OperacionAlmacen
   piezas: 15,
   capturo: "Lupe",
   hora: "08:15",
+  actualizadoEn: "2026-11-24T16:15:00.123456Z",
   editable: true,
   envio: null,
   estado: "pendiente",
@@ -86,7 +87,7 @@ describe("Peticiones › Retiro de merma", () => {
     expect(ops.autorizarRetiro).not.toHaveBeenCalled();
     vi.mocked(ops.listarRetirosPendientes).mockResolvedValue({ retiros: [] });
     await u.click(await screen.findByRole("button", { name: "Autorizar retiro" }));
-    await waitFor(() => expect(ops.autorizarRetiro).toHaveBeenCalledWith("r1"));
+    await waitFor(() => expect(ops.autorizarRetiro).toHaveBeenCalledWith("r1", "2026-11-24T16:15:00.123456Z"));
     expect(await screen.findByText("No hay retiros de merma pendientes.")).toBeInTheDocument();
   });
 
@@ -102,7 +103,7 @@ describe("Peticiones › Retiro de merma", () => {
     expect(screen.getByLabelText("Motivo")).toHaveAttribute("maxlength", "300");
     vi.mocked(ops.listarRetirosPendientes).mockResolvedValue({ retiros: [] });
     await u.click(enviar);
-    await waitFor(() => expect(ops.rechazarRetiro).toHaveBeenCalledWith("r1", "Faltan fotos"));
+    await waitFor(() => expect(ops.rechazarRetiro).toHaveBeenCalledWith("r1", "Faltan fotos", "2026-11-24T16:15:00.123456Z"));
     expect(await screen.findByText("No hay retiros de merma pendientes.")).toBeInTheDocument();
   });
 
@@ -113,5 +114,44 @@ describe("Peticiones › Retiro de merma", () => {
     await u.click(await screen.findByRole("button", { name: "Autorizar retiro" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Ese retiro ya no está pendiente.");
     await waitFor(() => expect(ops.listarRetirosPendientes).toHaveBeenCalledTimes(2));
+  });
+
+  it("un 404 al autorizar muestra el mensaje y recarga", async () => {
+    const u = await abrirPestana();
+    vi.mocked(ops.autorizarRetiro).mockRejectedValue(new ErrorApi("no existe", 404, "No existe esa operación."));
+    await u.click(await screen.findByRole("button", { name: /Autorizar retiro/ }));
+    await u.click(await screen.findByRole("button", { name: "Autorizar retiro" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("No existe esa operación.");
+    await waitFor(() => expect(ops.listarRetirosPendientes).toHaveBeenCalledTimes(2));
+  });
+
+  it("un 404 al rechazar cierra la ventana y recarga", async () => {
+    const u = await abrirPestana();
+    vi.mocked(ops.rechazarRetiro).mockRejectedValue(new ErrorApi("no existe", 404, "No existe esa operación."));
+    await u.click(await screen.findByRole("button", { name: /Rechazar retiro/ }));
+    await u.type(screen.getByLabelText("Motivo"), "No");
+    await u.click(screen.getByRole("button", { name: "Confirmar rechazo" }));
+    await waitFor(() => expect(ops.listarRetirosPendientes).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("alert")).toHaveTextContent("No existe esa operación.");
+  });
+
+  it("muestra el comentario del retiro y cuándo se pidió en formato largo", async () => {
+    vi.mocked(ops.listarRetirosPendientes).mockResolvedValue({ retiros: [retiro("r1", { comentario: "Se cayó una tarima" })] });
+    await abrirPestana();
+    const fila = within(await screen.findByRole("row", { name: /Lupe/ }));
+    expect(fila.getByText("Se cayó una tarima")).toBeInTheDocument();
+    expect(fila.getByText("Lupe el martes 24 de noviembre a las 08:15")).toBeInTheDocument();
+  });
+
+  it("al cambiar de sucursal no se ven los retiros de la anterior mientras carga", async () => {
+    vi.mocked(peticionesLib.listarPeticiones).mockResolvedValue([]);
+    const u = userEvent.setup();
+    const { rerender } = render(<PantallaPeticiones sucursal="TJ" />);
+    await u.click(screen.getByRole("tab", { name: "Retiro de merma" }));
+    expect(await screen.findByRole("row", { name: /Lupe/ })).toBeInTheDocument();
+    vi.mocked(ops.listarRetirosPendientes).mockReturnValue(new Promise(() => {}));
+    rerender(<PantallaPeticiones sucursal="MX" />);
+    expect(screen.queryByRole("row", { name: /Lupe/ })).toBeNull();
+    expect(screen.getByText("Cargando…")).toBeInTheDocument();
   });
 });

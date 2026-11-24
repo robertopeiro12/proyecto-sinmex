@@ -1,5 +1,5 @@
 import { apiFetch } from "./api";
-import { formatearDiaLargo } from "./formato";
+import { formatearDiaHoraTijuana } from "./formato";
 import { leerPiezas } from "./produccion";
 import type { Producto } from "./productos";
 
@@ -441,7 +441,5 @@ export function presentacionesParaAgregar(
  * `AAAA-MM-DD hh:mm` en hora de Tijuana; si no trae esa forma se muestra tal cual.
  */
 export function textoHecho(hecho: { en: string; por: string }): string {
-  const m = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})$/.exec(hecho.en);
-  const cuando = m ? `el ${formatearDiaLargo(m[1])} a las ${m[2]}` : hecho.en;
-  return `Hecho por ${hecho.por} ${cuando}.`;
+  return `Hecho por ${hecho.por} ${formatearDiaHoraTijuana(hecho.en)}.`;
 }

@@ -774,6 +774,17 @@ usuario con sesion pasa.
   - **Transiciones.** pendiente → autorizado | rechazado (Administración); **rechazado → pendiente al editar** (el aviso sale en la
     pantalla de corregir); **autorizado es final** (editar, eliminar, autorizar o rechazar = 409). Toda transición bloquea la fila
     `for update` y lee dentro de la transacción: dos autorizaciones a la vez, una gana y la otra recibe 409.
+  - **Autorizar y rechazar lo que se vio.** Producción puede corregir un pendiente mientras Administración lo revisa, así que
+    `POST /:id/autorizar` y `/rechazar` **exigen `actualizadoEn`** (sin él = 400): el `updated_at` de la fila como texto ISO UTC
+    con **microsegundos** (`2026-11-24T16:15:00.123456Z`, formateado en SQL; un `Date` de JS los recorta). Cada operación lo trae
+    como `OperacionAlmacen.actualizadoEn` y la bandeja manda el de la fila que muestra. Sobre la fila bloqueada, si ya no está
+    pendiente = 409 del estado; si la marca no coincide = **409** "El retiro cambió desde que lo viste; revisa la cantidad
+    nueva." con la `operacion` actual (no se resuelve nada). Cualquier edición mueve `updated_at` (trigger), así que la marca
+    cubre cantidades, comentario y fecha. La bandeja recarga con 409 **y** con 404; la lista del Registro recarga si Eliminar da 409.
+  - **Fechas de la resolución en formato largo**: "Autorizó Roberto el martes 24 de noviembre a las 12:08" (y "Rechazó …:
+    motivo"). El servidor sigue mandando `AAAA-MM-DD hh:mm` de Tijuana; el portal lo pinta con `formatearDiaHoraTijuana`
+    (`lib/formato.ts`, la misma que `textoHecho` del Corte; una forma desconocida sale tal cual). La bandeja muestra "Pidió" así y
+    el comentario del retiro bajo Productos.
   - **Permisos.** Pedir, corregir y eliminar: `operacion.retiro_merma` (grupo Produccion/Almacen, con su ⓘ en
     `lib/explicacion-permisos.ts`; exigido en el servicio, como los otros tipos). Autorizar y rechazar: `peticiones.gestionar`
     (el mismo de T-34). Los perfiles siguen vacíos: los configura el cliente. Alcance de sucursal como el resto; un atado a TJ no

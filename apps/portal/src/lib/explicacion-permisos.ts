@@ -60,7 +60,7 @@ export const EXPLICACION_PERMISO: Record<string, string> = {
   "operacion.descuento":
     "Abre la pestaña Descuentos del Registro de Operación: puede registrar, corregir y eliminar el producto que se descuenta a un trabajador.",
   "operacion.retiro_merma":
-    "Registro de Operación: Retiro de merma — pedir, corregir y eliminar retiros de merma; los autoriza quien gestiona Peticiones.",
+    "Abre la pestaña Retiro de merma del Registro de Operación: puede pedir, corregir y eliminar retiros; los autoriza quien gestiona Peticiones.",
   "motivo_merma.gestionar":
     "Puede dar de alta, editar o dar de baja los motivos de merma del catálogo.",
   "almacen_sucursal.gestionar":

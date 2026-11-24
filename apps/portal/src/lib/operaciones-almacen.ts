@@ -60,6 +60,8 @@ export interface OperacionAlmacen {
   editable: boolean;
   /** Un envío visto en Entradas del destino: solo lectura ahí (no pidas su detalle por id: da 404). */
   envio: { origen: { id: string; codigo: string } } | null;
+  /** `updated_at` de la fila (ISO UTC con microsegundos, exacto): la versión vista; Autorizar y Rechazar la devuelven. */
+  actualizadoEn: string;
   /** Solo `retiro_merma`: pendiente, autorizado o rechazado (null en los demás tipos). */
   estado: EstadoRetiro | null;
   /** Quién autorizó o rechazó un retiro y cuándo (`en` ya viene en hora de Tijuana, `AAAA-MM-DD HH:MM`). */
@@ -128,14 +130,18 @@ export function listarRetirosPendientes(sucursal: string | null): Promise<{ reti
   return apiFetch<{ retiros: OperacionAlmacen[] }>(`/operaciones-almacen/retiros-pendientes${texto ? `?${texto}` : ""}`);
 }
 
-export function autorizarRetiro(id: string): Promise<OperacionAlmacen> {
-  return apiFetch<OperacionAlmacen>(`/operaciones-almacen/${encodeURIComponent(id)}/autorizar`, { method: "POST" });
+/** `actualizadoEn` es la versión que se vio: si el retiro cambió después, el servidor contesta 409. */
+export function autorizarRetiro(id: string, actualizadoEn: string): Promise<OperacionAlmacen> {
+  return apiFetch<OperacionAlmacen>(`/operaciones-almacen/${encodeURIComponent(id)}/autorizar`, {
+    method: "POST",
+    body: JSON.stringify({ actualizadoEn }),
+  });
 }
 
-export function rechazarRetiro(id: string, motivo: string): Promise<OperacionAlmacen> {
+export function rechazarRetiro(id: string, motivo: string, actualizadoEn: string): Promise<OperacionAlmacen> {
   return apiFetch<OperacionAlmacen>(`/operaciones-almacen/${encodeURIComponent(id)}/rechazar`, {
     method: "POST",
-    body: JSON.stringify({ motivo }),
+    body: JSON.stringify({ motivo, actualizadoEn }),
   });
 }
 

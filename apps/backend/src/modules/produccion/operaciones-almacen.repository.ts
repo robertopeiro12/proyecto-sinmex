@@ -39,6 +39,8 @@ export interface FilaOperacion {
   /** `AAAA-MM-DD HH24:MI` de Tijuana. */
   resueltoEn: string | null;
   motivoRechazo: string | null;
+  /** `updated_at` como ISO UTC con microsegundos: la marca de la version que se vio. */
+  actualizadoEn: string;
 }
 
 export interface LineaOperacion {
@@ -233,6 +235,9 @@ export class OperacionesAlmacenRepository {
           'resueltoEn',
         ),
         'o.motivo_rechazo as motivoRechazo',
+        sql<string>`to_char(o.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`.as(
+          'actualizadoEn',
+        ),
       ])
       .where('o.deleted_at', 'is', null);
   }

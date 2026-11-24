@@ -163,13 +163,43 @@ describe('Retiro de merma (e2e)', () => {
     ...extra,
   });
 
-  const autorizar = (id: string, cookie = cookieAdminK) =>
-    http().post(`/operaciones-almacen/${id}/autorizar`).set('Cookie', cookie);
-  const rechazar = (id: string, motivo: unknown, cookie = cookieAdminK) =>
-    http()
-      .post(`/operaciones-almacen/${id}/rechazar`)
-      .set('Cookie', cookie)
-      .send({ motivo });
+  /** La marca de la version de la fila ahora (lo que el portal leyo), en ISO con microsegundos. */
+  const marcaActual = async (id: string): Promise<string> =>
+    (
+      await sql<{ m: string }>`
+        select to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as m
+        from operacion_almacen where id = ${id}::uuid`.execute(db)
+    ).rows[0]?.m ?? '2026-01-01T00:00:00.000000Z';
+  /** Pide en diferido (la marca se lee de la base) y se usa igual que un Test de supertest. */
+  const diferido = (armar: () => Promise<{ t: request.Test }>) => ({
+    expect: (estado: number) => armar().then(({ t }) => t.expect(estado)),
+    then: <T>(
+      ok: (r: request.Response) => T,
+      mal?: (e: unknown) => T,
+    ): Promise<T> =>
+      armar()
+        .then(({ t }) => t, undefined)
+        .then(ok, mal),
+  });
+  const autorizar = (id: string, cookie = cookieAdminK, vista?: string) =>
+    diferido(async () => ({
+      t: http()
+        .post(`/operaciones-almacen/${id}/autorizar`)
+        .set('Cookie', cookie)
+        .send({ actualizadoEn: vista ?? (await marcaActual(id)) }),
+    }));
+  const rechazar = (
+    id: string,
+    motivo: unknown,
+    cookie = cookieAdminK,
+    vista?: string,
+  ) =>
+    diferido(async () => ({
+      t: http()
+        .post(`/operaciones-almacen/${id}/rechazar`)
+        .set('Cookie', cookie)
+        .send({ motivo, actualizadoEn: vista ?? (await marcaActual(id)) }),
+    }));
   const editar = (id: string, extra = {}, cookie = cookiePide) =>
     http()
       .put(`/operaciones-almacen/${id}`)
@@ -470,6 +500,67 @@ describe('Retiro de merma (e2e)', () => {
     });
   });
 
+  describe('autorizar y rechazar lo que se vio', () => {
+    it('la operacion trae actualizadoEn como ISO con microsegundos', async () => {
+      const r = await crear();
+      expect(r.actualizadoEn).toMatch(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/,
+      );
+      expect(r.actualizadoEn).toBe(await marcaActual(r.id));
+      const lista = (await pendientes(cookieAdminK, K)).retiros.find(
+        (x) => x.id === r.id,
+      )!;
+      expect(lista.actualizadoEn).toBe(r.actualizadoEn);
+    });
+
+    it('editar entre la lectura y autorizar: 409 con la operacion actual; con la marca nueva, 200', async () => {
+      const r = await crear();
+      const vista = r.actualizadoEn;
+      const e = (await editar(r.id).expect(200)).body as OperacionAlmacen;
+      expect(e.actualizadoEn).not.toBe(vista);
+      const res = await autorizar(r.id, cookieAdminK, vista).expect(409);
+      const cuerpo = res.body as {
+        message: string;
+        operacion: OperacionAlmacen;
+      };
+      expect(cuerpo.message).toBe(
+        'El retiro cambió desde que lo viste; revisa la cantidad nueva.',
+      );
+      expect(cuerpo.operacion.piezas).toBe(7);
+      expect(cuerpo.operacion.actualizadoEn).toBe(e.actualizadoEn);
+      const ok = await autorizar(r.id, cookieAdminK, e.actualizadoEn).expect(
+        200,
+      );
+      expect((ok.body as OperacionAlmacen).estado).toBe('autorizado');
+    });
+
+    it('rechazar con una marca vieja = 409 y sigue pendiente', async () => {
+      const r = await crear();
+      await editar(r.id).expect(200);
+      await rechazar(r.id, 'no', cookieAdminK, r.actualizadoEn).expect(409);
+      const fila = await db
+        .selectFrom('operacion_almacen')
+        .select('estado')
+        .where('id', '=', r.id)
+        .executeTakeFirstOrThrow();
+      expect(fila.estado).toBe('pendiente');
+    });
+
+    it('sin marca (o vacia) = 400', async () => {
+      const r = await crear();
+      await http()
+        .post(`/operaciones-almacen/${r.id}/autorizar`)
+        .set('Cookie', cookieAdminK)
+        .send({})
+        .expect(400);
+      await http()
+        .post(`/operaciones-almacen/${r.id}/rechazar`)
+        .set('Cookie', cookieAdminK)
+        .send({ motivo: 'x' })
+        .expect(400);
+    });
+  });
+
   describe('carreras (Review Focus 1 y 2)', () => {
     it('autorizar dos veces a la vez: una gana, la otra 409', async () => {
       const r = await crear();
@@ -486,22 +577,22 @@ describe('Retiro de merma (e2e)', () => {
       expect([a.status, b.status].sort()).toEqual([200, 409]);
     });
 
-    it('editar y autorizar a la vez: el que llega despues ve el estado nuevo', async () => {
+    it('editar y autorizar a la vez: nunca se autoriza una cantidad que no se vio', async () => {
       for (let i = 0; i < 4; i++) {
         const r = await crear();
-        const [e, a] = await Promise.all([editar(r.id), autorizar(r.id)]);
-        // Autorizar siempre se aplica (el pendiente sigue pendiente tras editar);
-        // editar gana o pierde con un 409 segun quien tomo el candado primero.
-        expect(a.status).toBe(200);
-        expect([200, 409]).toContain(e.status);
+        const [e, a] = await Promise.all([
+          editar(r.id),
+          autorizar(r.id, cookieAdminK, r.actualizadoEn),
+        ]);
+        // Gana quien toma el candado primero: si editar, la marca vista ya no
+        // vale (409 y sigue pendiente); si autorizar, editar da 409.
+        expect([a.status, e.status].sort()).toEqual([200, 409]);
         const fila = await db
           .selectFrom('operacion_almacen')
           .select('estado')
           .where('id', '=', r.id)
           .executeTakeFirstOrThrow();
-        expect(fila.estado).toBe('autorizado');
-        if (e.status === 200)
-          expect((e.body as OperacionAlmacen).estado).toBe('pendiente');
+        expect(fila.estado).toBe(a.status === 200 ? 'autorizado' : 'pendiente');
       }
     });
   });

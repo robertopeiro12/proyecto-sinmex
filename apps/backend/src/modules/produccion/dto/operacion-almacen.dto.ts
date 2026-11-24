@@ -111,8 +111,17 @@ export class ConsultaRetirosPendientesDto {
   sucursal?: string;
 }
 
+const MENSAJE_VISTA = 'Falta la versión del retiro que viste.';
+
+/** `POST /operaciones-almacen/:id/autorizar`: la version que se vio. */
+export class AutorizarRetiroDto {
+  @IsString({ message: MENSAJE_VISTA })
+  @IsNotEmpty({ message: MENSAJE_VISTA })
+  actualizadoEn!: string;
+}
+
 /** `POST /operaciones-almacen/:id/rechazar`. */
-export class RechazarRetiroDto {
+export class RechazarRetiroDto extends AutorizarRetiroDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )

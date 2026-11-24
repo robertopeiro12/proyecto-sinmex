@@ -52,6 +52,8 @@ export const MOTIVO_MOTIVO_MERMA =
   'El motivo de la merma no existe o no aplica al almacén.';
 export const MOTIVO_ENVIO_CERRADO =
   'Un envío solo se puede corregir o dar de baja el día que se hizo o el siguiente.';
+export const MENSAJE_RETIRO_CAMBIO =
+  'El retiro cambió desde que lo viste; revisa la cantidad nueva.';
 const MOTIVO_SIN_PERMISO = 'No tienes permiso para este tipo de operación.';
 
 /** Una operacion tal como la recibe el portal. */
@@ -80,6 +82,11 @@ export interface OperacionAlmacen {
   estado: EstadoRetiro | null;
   /** Quien autorizo o rechazo (`en` = `AAAA-MM-DD HH24:MI` de Tijuana); null si sigue pendiente. */
   resolucion: { por: string; en: string; motivo: string | null } | null;
+  /**
+   * Marca de la version de la fila (`updated_at`, ISO UTC con microsegundos,
+   * exacto): Autorizar y Rechazar la devuelven para decir que version vieron.
+   */
+  actualizadoEn: string;
   /** Se puede corregir o dar de baja (fecha dentro de su regla y no es un envio visto desde el destino). */
   editable: boolean;
   /** Un envio visto en Entradas del destino: solo lectura ahi. */
@@ -274,8 +281,12 @@ export class OperacionesAlmacenService {
   }
 
   /** `POST /operaciones-almacen/:id/autorizar`. */
-  autorizarRetiro(usuarioId: string, id: string): Promise<OperacionAlmacen> {
-    return this.resolverRetiro(usuarioId, id, 'autorizado', null);
+  autorizarRetiro(
+    usuarioId: string,
+    id: string,
+    vista: string,
+  ): Promise<OperacionAlmacen> {
+    return this.resolverRetiro(usuarioId, id, 'autorizado', null, vista);
   }
 
   /** `POST /operaciones-almacen/:id/rechazar`. */
@@ -283,10 +294,17 @@ export class OperacionesAlmacenService {
     usuarioId: string,
     id: string,
     motivo: string,
+    vista: string,
   ): Promise<OperacionAlmacen> {
     const errores = validarMotivoRechazo(motivo);
     if (errores.length > 0) throw new BadRequestException(errores);
-    return this.resolverRetiro(usuarioId, id, 'rechazado', motivo.trim());
+    return this.resolverRetiro(
+      usuarioId,
+      id,
+      'rechazado',
+      motivo.trim(),
+      vista,
+    );
   }
 
   /**
@@ -299,6 +317,7 @@ export class OperacionesAlmacenService {
     id: string,
     estado: 'autorizado' | 'rechazado',
     motivo: string | null,
+    vista: string,
   ): Promise<OperacionAlmacen> {
     const usuario = await this.usuario(usuarioId);
     const previa = await this.repo.porId(id);
@@ -320,6 +339,10 @@ export class OperacionesAlmacenService {
           hoy,
           trx,
         );
+      // Solo se resuelve lo que se vio: si Produccion lo corrigio mientras
+      // Administracion lo revisaba, la marca ya no coincide.
+      if (fila.actualizadoEn !== vista)
+        throw await this.conflicto(MENSAJE_RETIRO_CAMBIO, fila, hoy, trx);
       await this.repo.resolverRetiro(id, estado, motivo, usuarioId, trx);
     });
     return this.armarConLineas((await this.repo.porId(id))!, hoy);
@@ -496,6 +519,7 @@ export class OperacionesAlmacenService {
       capturo: f.capturo,
       hora: f.hora,
       estado: f.estado,
+      actualizadoEn: f.actualizadoEn,
       resolucion:
         f.estado !== null && f.estado !== 'pendiente'
           ? {

@@ -10,6 +10,8 @@ import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { CajaTabla, Fila, FilaVacia, Tabla, Td, Th } from "@/components/ui/tabla";
 import { mensajeDe } from "@/lib/api";
 import { diaAnterior } from "@/lib/fechas";
+import { formatearDiaHoraTijuana } from "@/lib/formato";
+import { esConflicto409 } from "@/lib/peticiones";
 import {
   eliminarOperacion,
   listarOperaciones,
@@ -48,12 +50,12 @@ const ETIQUETA_ESTADO: Record<EstadoRetiro, { texto: string; tono: TonoEtiqueta 
   rechazado: { texto: "Rechazado", tono: "error" },
 };
 
-/** "Autorizó X el …" / "Rechazó X el …: motivo". La hora ya viene en Tijuana: se pinta tal cual. */
+/** "Autorizó X el martes 24 de noviembre a las 12:08" / "Rechazó X …: motivo" (la hora ya viene en Tijuana). */
 function textoResolucion(o: OperacionAlmacen): string | null {
   if (!o.resolucion || !o.estado) return null;
   const { por, en, motivo } = o.resolucion;
-  if (o.estado === "autorizado") return `Autorizó ${por} el ${en}`;
-  return `Rechazó ${por} el ${en}${motivo ? `: ${motivo}` : ""}`;
+  if (o.estado === "autorizado") return `Autorizó ${por} ${formatearDiaHoraTijuana(en)}`;
+  return `Rechazó ${por} ${formatearDiaHoraTijuana(en)}${motivo ? `: ${motivo}` : ""}`;
 }
 
 function CeldaRetiro({ o }: { o: OperacionAlmacen }) {
@@ -149,6 +151,8 @@ export function ListaOperaciones({
       setVuelta((v) => v + 1);
     } catch (err) {
       setError(mensajeDe(err, "No se pudo eliminar el registro."));
+      // Un 409 es que el retiro ya se resolvió: se vuelve a pedir la lista para que no queden Editar/Eliminar.
+      if (esConflicto409(err)) setVuelta((v) => v + 1);
     }
   }
 

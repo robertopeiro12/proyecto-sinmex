@@ -15,6 +15,7 @@ import { UsuarioActual } from '../auth/usuario-actual.decorator';
 import {
   ConsultaOperacionesDto,
   ConsultaRetirosPendientesDto,
+  AutorizarRetiroDto,
   RechazarRetiroDto,
   CrearOperacionDto,
   EditarOperacionDto,
@@ -74,8 +75,9 @@ export class OperacionesAlmacenController {
   autorizar(
     @UsuarioActual() usuarioId: string,
     @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AutorizarRetiroDto,
   ): Promise<OperacionAlmacen> {
-    return this.operaciones.autorizarRetiro(usuarioId, id);
+    return this.operaciones.autorizarRetiro(usuarioId, id, dto.actualizadoEn);
   }
 
   @Post(':id/rechazar')
@@ -86,7 +88,12 @@ export class OperacionesAlmacenController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: RechazarRetiroDto,
   ): Promise<OperacionAlmacen> {
-    return this.operaciones.rechazarRetiro(usuarioId, id, dto.motivo);
+    return this.operaciones.rechazarRetiro(
+      usuarioId,
+      id,
+      dto.motivo,
+      dto.actualizadoEn,
+    );
   }
 
   @Put(':id')
