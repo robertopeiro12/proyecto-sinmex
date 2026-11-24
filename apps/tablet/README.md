@@ -27,20 +27,21 @@ actualizarla hace falta un APK nuevo (`expo prebuild -p android --clean` y `expo
 apps/tablet/
 ├── app/                       # rutas de expo-router (navegacion basada en archivos)
 │   ├── _layout.tsx            # abre la BD, migra, lee la sesion, monta el Stack
-│   ├── index.tsx              # login -> abrir-dia -> jornada (en ese orden)
+│   ├── index.tsx              # login -> jornada (en ese orden)
 │   ├── login.tsx              # login del vendedor (en linea o sin red)
-│   ├── abrir-dia.tsx          # vehiculo + km inicial (BLOQUEANTE)
-│   └── (jornada)/             # todo lo que exige sesion + jornada abierta
+│   └── (jornada)/             # todo lo que exige sesion; sin jornada de hoy solo pasa la Ruta
 │       ├── _layout.tsx        # guardia de sesion + del kilometraje inicial
-│       ├── index.tsx          # la ruta del dia (pantalla principal, T-37)
-│       ├── agregar-a-ruta.tsx # clientes existentes que el vendedor suma a su ruta
-│       ├── operacion/         # todos los clientes -> ficha -> venta / cobranza / visita / merma
-│       ├── gastos/            # Gastos de hoy y Registrar gasto (T-30/T-31)
+│       ├── index.tsx          # la Ruta (pantalla principal); sin jornada, tarjeta "Empezar ruta"
+│       ├── agregar-a-ruta.tsx # clientes de la sucursal que el vendedor suma a su ruta
+│       ├── operacion/         # hoja del cliente -> venta / cobranza / visita / merma
+│       ├── gastos/            # Gastos: motivo + cantidad y los de hoy, una pantalla (T-30/T-31)
 │       ├── inventario/        # Inventario y el detalle de una carga (T-27)
 │       ├── merma/             # Merma y consumo: trayecto y consumo propio (T-27 pieza 2)
-│       ├── prospectos.tsx
-│       ├── ruta.tsx           # Ruta y GPS (T-41)
-│       └── cerrar-dia.tsx     # km final (el corte es T-33)
+│       ├── prospectos.tsx     # capturados hoy, nuevo prospecto y los de la sucursal
+│       ├── registros.tsx      # Ventas / Cobranza (provisional; pieza 5)
+│       ├── sugerido-de-carga.tsx # provisional (pieza 7)
+│       ├── impresora.tsx      # provisional (pieza 8)
+│       └── cerrar-dia.tsx     # entrada Corte del menu: km final (la pieza 6 lo rehace)
 ├── src/
 │   ├── datos/                 # capa de datos local (SQLite)
 │   ├── seguridad/             # SHA-256 / PBKDF2 / verificador local (T-06)
@@ -166,9 +167,13 @@ de vendedores es **T-62**).
 
 ## Jornada: cerrar el día cierra las operaciones (T-38)
 
-- **Cerrar el día no tiene vuelta atrás.** `cerrar-dia.tsx` pide confirmación; con la jornada de hoy `cerrada`,
-  el menú deshabilita *Operación por cliente*, *Prospectos* y *Ruta y GPS* (`src/estado/menu-jornada.ts`) y
-  `ventas`/`cobranzas`/`prospectos.registrar` lanzan `ErrorJornada` (`exigirJornadaAbierta` en
+- **Empezar la ruta** (rediseño, pieza 1, `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md`):
+  ya no hay `abrir-dia.tsx`. Sin jornada de hoy la Ruta pinta la tarjeta "Empezar ruta" (vehículo + km inicial, `src/ui/tarjeta-empezar-ruta.tsx`), la guardia
+  de `(jornada)/_layout.tsx` regresa a la Ruta cualquier otra pantalla y el menú apaga todo menos Ruta y Cerrar
+  sesión con la nota "Empieza tu ruta" (`entradasMenu({ sinJornada })`).
+- **Cerrar el día no tiene vuelta atrás.** `cerrar-dia.tsx` (entrada **Corte** del menú) pide confirmación; con la
+  jornada de hoy `cerrada` el menú apaga Merma y Gastos (`entradasMenu({ diaCerrado })`), la hoja del cliente no deja
+  vender ni cobrar, y `ventas`/`cobranzas`/`prospectos.registrar` lanzan `ErrorJornada` (`exigirJornadaAbierta` en
   `src/datos/repositorios/jornadas.ts`). El candado de datos es el que vale: las pantallas se pueden saltar.
 - **El contador de "registros por subir" cuenta solo lo que viaja.** La jornada abierta no se sube (el buzón
   del servidor es de solo escritura hasta T-43), así que `jornadas.pendientesDeSincronizar()` solo devuelve
@@ -185,8 +190,12 @@ de vendedores es **T-62**).
   lo que falta por subir). *Agregar a mi ruta* es un botón a lo ancho debajo de la lista.
 - **Menú lateral que empuja la pantalla** (`src/ui/menu-lateral.tsx`): al tocar ☰ la pantalla entera se desliza a
   la derecha el ancho del menu (`anchoMenuLateral`: 82% con tope de 320dp) y queda oscurecida; tocar la franja
-  oscura o "atrás" de Android lo cierra. Arriba del menú van el vendedor, la jornada y la pastilla "por subir".
-  Hecho con `Animated` de React Native (`useNativeDriver`), sin recompilar el APK.
+  oscura o "atrás" de Android lo cierra. Al pie del menú van lo que falta por subir, el vendedor, el vehículo y la
+  sucursal (`MarcoMenu`, `src/ui/marco-menu.tsx`). Hecho con `Animated` de React Native (`useNativeDriver`), sin
+  recompilar el APK.
+- **El menú no apila pantallas** (`accionMenu` en `src/estado/ruta-del-dia.ts`, con prueba): Ruta hace
+  `router.dismissTo('/(jornada)')`; desde la Ruta las demás entradas hacen `push`; desde otra pantalla del menú,
+  `replace`; la entrada de la pantalla actual no hace nada. Cada pantalla del menú le pasa su `clave` a `MarcoMenu`.
 - **Dos tablas locales** (migración 011): `ruta` la escribe el pull con su regla de fusión
   (`aplicarSnapshotRutas` en `src/datos/repositorios/rutas.ts`); `ruta_orden_local` era el orden que arrastraba el
   vendedor y desde el rediseño (pieza 1) ya no se escribe ni se lee: la ruta va en el orden del portal
@@ -195,7 +204,7 @@ de vendedores es **T-62**).
   error: la fila queda sincronizada y el pull posterior la funde con la del servidor. Un alta rechazada por otro
   motivo se ve en rojo bajo la fila y el vendedor la puede quitar (`quitarRechazada`).
 - **"Visitado" se deriva** (venta, cobro, visita, comentario de no cobro **o merma del cliente** de hoy en la tablet) y
-  sale de `rutas.delDia()`, con las sumas de venta de contado, a crédito y cobro de hoy.
+  sale de `rutas.delDia(vendedorId)`, con las sumas de venta de contado, a crédito y cobro de hoy.
 - **"Por visitar" y "Visitados"** (rediseño, pieza 1; `agruparRutaEnCurso`): toda fila viva con algo hecho hoy, con o
   sin venta, baja a "Visitados" con el resumen de lo hecho (`resumenVisitado`: "Cobro $850.00 · Venta a crédito
   $1,240.00", "Visita sin venta · cerrado") y se puede volver a abrir. El número de la fila es su lugar fijo en la ruta.
@@ -203,7 +212,7 @@ de vendedores es **T-62**).
 - **Notas que trae** (icono de nota y número a la derecha, nada si es 0): `notasAsignadas.queTraePorCliente`, las
   asignadas de hoy con saldo y sin liquidar hoy más las ventas a crédito de hoy del vendedor (sin contar dos veces una
   que ya bajó como nota o está asignada).
-- La lógica de la pantalla vive en `src/estado/ruta-del-dia.ts` (puro, con pruebas). "Abrir el día" purga la ruta
+- La lógica de la pantalla vive en `src/estado/ruta-del-dia.ts` (puro, con pruebas). "Empezar ruta" purga la ruta
   de hace más de 7 días (`rutas.purgar`), conservando las altas `pendiente` (las rechazadas en `error` de esos días
   sí se borran: si no, se reintentarían en cada sincronización).
 - **"Atendidos fuera de ruta"** (T-75): clientes y prospectos con venta del día en esta tablet que no están en la
@@ -243,8 +252,10 @@ Spec: `docs/superpowers/specs/2026-10-14-t-75-camino-prospecto-design.md`. Flujo
 
 1. **Captura** (sin red): "Guardar prospecto" inserta la fila de `prospecto` **y** su espejo en `cliente` (mismo id,
    `tipo = 'prospecto'`, sin precios) en una transacción (`repositorios/prospectos.ts`).
-2. **Ficha**: "Abrir su ficha" en la tarjeta "Listo", o la fila de "Prospectos de hoy", o la pestaña Prospectos de
-   "Todos los clientes" (`listarProspectos`). La ficha muestra la bienvenida y la pastilla del alta (`pastillaAlta`);
+2. **Ficha**: "Abrir su ficha" en la tarjeta "Listo", o una fila de la pantalla Prospectos: "Capturados hoy" y, debajo
+   del formulario, "Otros prospectos de la sucursal" (todos los vivos, `listarProspectos`; regla en `listaProspectos`,
+   rediseño pieza 1), así se abre también el capturado otro día o en otra tablet. Solo lo capturado en esta tablet
+   lleva la pastilla de subida. La ficha muestra la bienvenida y la pastilla del alta (`pastillaAlta`);
    botones Vender y Visita, **sin Cobrar**.
 3. **Venta de solo regalo**: nota en $0 con folio y `venta_promocion`. Aparece en "Atendidos fuera de ruta" de la
    jornada (`ventas.delDiaDelVendedor` + `atendidosFueraDeRuta`), con su estado de subida (`estadoSubida`).
@@ -260,8 +271,8 @@ Spec: `docs/superpowers/specs/2026-10-14-t-75-camino-prospecto-design.md`. Flujo
   `prospecto.domicilio` y en el espejo (`cliente.domicilio`; migración 014), sube como `domicilio` en la operación y
   el servidor la geocodifica después del commit, sin que el push espere; la coordenada baja en el pull con
   `ubicacion_origen` (se guarda, no se muestra).
-- **Prospectos capturados antes de T-75** no tienen espejo local con su id: "Prospectos de hoy" los muestra sin
-  enlace (`enlaceAFicha` da `null`) y se alcanzan por la pestaña Prospectos cuando el pull los baje.
+- **Prospectos capturados antes de T-75** no tienen espejo local con su id: "Capturados hoy" los muestra sin
+  enlace (`enlaceAFicha` da `null`) y se alcanzan por "Otros prospectos de la sucursal" cuando el pull los baje.
 - Un alta rechazada (p. ej. tipo de negocio dado de baja) deja alta y venta en `error`; con `tipo-negocio-inexistente` entran solas
   cuando la oficina reactive el tipo de negocio (la tablet reenvía el mismo id); con cualquier otro rechazo hay que
   avisar a la oficina: la tablet no tiene cómo descartar ni corregir un alta. El vendedor **no debe volver a capturar**
@@ -293,16 +304,18 @@ Spec: `docs/superpowers/specs/2026-10-18-t-39-visita-sin-venta-design.md`. Panta
 
 ## Gastos de la ruta (T-30/T-31)
 
-Spec: `docs/superpowers/specs/2026-10-20-t-30-31-gastos-de-ruta-design.md`. Pantallas:
-`app/(jornada)/gastos/index.tsx` (entrada **Gastos** del menú) y `app/(jornada)/gastos/registrar.tsx`.
+Spec: `docs/superpowers/specs/2026-10-20-t-30-31-gastos-de-ruta-design.md`; desde el rediseño (pieza 1,
+`docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md`) es **una sola pantalla**, `app/(jornada)/gastos/index.tsx` (entrada **Gastos** del menú).
+Ya no hay `registrar.tsx`.
 
-- **Lista**: "Gastos de hoy" con campo, monto, hora y pastilla (por subir, subido, rechazado con su motivo) y el
+- **Arriba, registrar** (sin red): Motivo (solo los campos activos con "Se usa en la app", `camposParaGasto`) y
+  Cantidad en pesos (`montoACentavos`: "12.5" → 1250; "12.345", "0", ".5" y la coma no valen), y "Guardar gasto".
+  Sin observaciones ni foto del ticket: la pantalla manda `comentario: ''` y `fotoUri: null` (el contrato no cambia).
+  Toda la validación es `validarGasto` (`src/estado/gasto.ts`, con pruebas); en cuanto el vendedor empieza a
+  capturar, lo que falta sale bajo el botón (`faltantesVisiblesGasto`). Ignora el segundo toque mientras guarda
+  (`puedeGuardarGasto`). Con el día cerrado o sin catálogo no deja registrar.
+- **Abajo, "Gastos de hoy"**: motivo, monto, hora y pastilla (por subir, subido, rechazado con su motivo) y el
   **total del día**, que suma todos los gastos de hoy sin importar si ya subieron (`gastos.totalDelDia`).
-- **Registrar** (sin red): campo (solo los activos con "Se usa en la app", `camposParaGasto`), monto en pesos
-  (`montoACentavos`: "12.5" → 1250; "12.345", "0", ".5" y la coma no valen), observaciones (≤ 200) y foto del ticket
-  opcional (`capturarFoto('gasto')`). El método se muestra fijo: "Efectivo cobranza del día". Toda la validación es
-  `validarGasto` (`src/estado/gasto.ts`, con pruebas). Ignora el segundo toque mientras guarda. Con el día cerrado o
-  sin catálogo no deja registrar.
 - **Datos** (migración 015, `src/datos/repositorios/gastos.ts`): `campo_egreso` baja con el pull (`campos_egreso`,
   casilla como 0/1); el gasto nace `pendiente` con `campo_nombre` copiado. Un campo dado de baja o sin la casilla
   después de elegirlo se guarda y sube igual. **Un gasto grabado no se edita ni se borra en la app**: las

@@ -313,7 +313,10 @@ usuario con sesion pasa.
   - Solo jornadas **cerradas** hasta T-43. Las que llegaron antes de T-38 siguen en el buzón sin proyectar (sin
     backfill). El reporte de Kilometraje del portal es T-50 (ver el bloque Reportes y Excel, más abajo).
   - En la tablet, con la jornada de hoy cerrada **no se registra** venta, cobranza ni prospecto
-    (`exigirJornadaAbierta`); no hay reabrir.
+    (`exigirJornadaAbierta`); no hay reabrir. Desde el rediseño (pieza 1, `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md`) ya no hay pantalla
+    `abrir-dia`: sin jornada de hoy la Ruta pinta la tarjeta "Empezar ruta" (vehículo + km inicial) y el menú apaga todo
+    menos Ruta y Cerrar sesión ("Empieza tu ruta"); la guardia de `(jornada)/_layout.tsx` regresa a la Ruta cualquier
+    otra pantalla. El cierre se hace desde la entrada **Corte** del menú (hoy `cerrar-dia.tsx`; la pieza 6 lo rehace).
 - **Ruta semanal y Ruta diaria (T-37 + 2026-11-10).** La oficina tiene rutas fijas por día (*Operación → Ruta Semanal*), le
   asigna una a cada vendedor cada mañana (*Ruta Diaria*), la ajusta, le pone vehículo y le asigna notas por cobrar; el
   vendedor la complementa desde la tablet con la operación **`ruta-alta`** (no `ruta`, que sigue guardada sin proyectar; la
@@ -368,8 +371,9 @@ usuario con sesion pasa.
     `apps/tablet/.../contrato.ts`): `rutas` del vendedor del token desde `current_date - 1` en adelante (reloj de
     Postgres, UTC), sin tope, baja con `activo: 0`; **`origen: 'semanal'` baja como `oficina`** (el SQLite de la tablet
     tiene un check de dos valores y uno nuevo tumbaría todos los pulls); `RutaPull.recado`; colecciones **`rutas_dia`**
-    (`fecha`, `nombre_ruta`, `vehiculo_id`) y **`notas_asignadas`** (`venta_nota_id`, `fecha`). El orden que arrastra
-    el vendedor **no sube** (vive en `ruta_orden_local`). **Eliminar una venta (T-17) da de baja sus `nota_asignada`
+    (`fecha`, `nombre_ruta`, `vehiculo_id`) y **`notas_asignadas`** (`venta_nota_id`, `fecha`). Desde el rediseño de la app
+    (pieza 1, `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md` §4) **el vendedor ya no reordena**: la ruta sale en el orden del portal; la columna local
+    `ruta_orden_local` sigue en la base pero nadie la escribe ni la lee, y nunca subió. **Eliminar una venta (T-17) da de baja sus `nota_asignada`
     vivas** en la misma transacción (`ventas-edicion.repository.ts`, `eliminarVenta`, tras el `for update of vn` y sin
     bloquear `vendedor`), así que la baja viaja en el pull incremental como `activo: 0`.
   - **Dashboard y Flujo diario**: "Ruta asignada" muestra `nombre_ruta` ("Sin ruta · N clientes"); vehículo de la
@@ -395,14 +399,17 @@ usuario con sesion pasa.
     `nota_pendiente`), `nota_no_cobrada` y `cobranza.reparto_json` (líneas `{venta_nota_id, monto_centavos,
     saldo_despues_centavos}`); borra el cursor del pull, así que la primera sincronización tras instalar es completa, sin
     `pm clear`. Reglas puras en `src/datos/notas-asignadas-reglas.ts`; repositorio `repositorios/notas-asignadas.ts`
-    (`deHoyDelCliente`, `bloqueoDeVenta`, `conteoDeHoyPorCliente`, `registrarNoCobradas` atómico); estado de pantallas en
+    (`deHoyDelCliente`, `bloqueoDeVenta`, `queTraePorCliente`, `registrarNoCobradas` atómico); estado de pantallas en
     `src/estado/notas-asignadas.ts`. "Cobro de hoy" = `cobranza.fecha` + `reparto_json` (tocadaHoy / liquidadaHoy), nunca
     `fecha_pago` ni `abonos_json` (el pull los pisa y trae cobros de la oficina; el pull va antes del push). La nota sale al
     abrir la ficha y al picar Vender (`operacion/[clienteId]/notas-asignadas.tsx`): Cobrar o Continuar sin cobrar
     (comentario obligatorio, una fila por nota e intento); vuelve a salir al reabrir hasta que un cobro de hoy la toque.
     Vender se bloquea según la condición, también dentro de `ventas.registrar()` antes del folio; el servidor no rechaza la
-    venta. Push `nota-no-cobrada` después de cobranzas; la ruta marca "Nota asignada" (1) / "Notas asignadas · N" (más), muestra el recado ("Mensaje de la
-    oficina") y el comentario cuenta como visita. `ALTO_FILA` de la ruta subió a 112.
+    venta. Push `nota-no-cobrada` después de cobranzas; la ruta muestra el recado ("Mensaje de la oficina") y el comentario
+    cuenta como visita. Desde el rediseño (pieza 1, §4 y §6 del spec) la fila de la ruta dice "Trae N notas por cobrar"
+    (`rutas.delDia(vendedorId).notas_que_trae` = `queTraePorCliente`: asignadas con saldo no liquidadas hoy más las
+    ventas a crédito de hoy del vendedor) y la hoja del cliente apaga Vender con "Cobra primero" mientras una asignada
+    traiga la condición sin cumplir (`accionesCliente`, `src/estado/hoja-cliente.ts`).
 
 - **Promociones (T-74).** Regla de regalo por compra, configurada en el portal (*Operación → Promociones*, permiso
   `promocion.gestionar`; backend en `cartera-clientes/promociones.*`, `/promociones`) y **aplicada solo por la
@@ -459,11 +466,14 @@ usuario con sesion pasa.
     arrastra a su venta (queda en `error`): con `tipo-negocio-inexistente` ambas entran solas cuando la oficina reactive el
     tipo de negocio; con otro rechazo hay que avisar a la oficina (la tablet no puede descartar ni corregir un alta) y el
     vendedor no debe volver a capturar al prospecto.
-  - **El prospecto no entra a la ruta** (D5, D7): se atiende desde su ficha (sin Cobrar), desde "Abrir su ficha" en
-    Prospectos o la pestaña **Prospectos** de "Todos los clientes", y la sección **"Atendidos fuera de ruta"** de la
-    jornada lo muestra con el estado de subida de sus ventas (puros en `src/estado/ruta-del-dia.ts`:
-    `atendidosFueraDeRuta`, `pastillaAlta`, `enlaceAFicha`, `estadoSubida`). Los prospectos capturados antes de T-75
-    no tienen espejo local: salen en "Prospectos de hoy" sin enlace. La foto se liga por id (`fotoLocalDe`, con respaldo
+  - **El prospecto no entra a la ruta** (D5, D7): se atiende desde su hoja (sin Cobrar), desde "Abrir su ficha" o la lista de
+    la pantalla Prospectos, y la sección **"Atendidos fuera de ruta"** de la jornada lo muestra con el estado de subida
+    de sus ventas (puros en `src/estado/ruta-del-dia.ts`: `atendidosFueraDeRuta`, `pastillaAlta`, `enlaceAFicha`,
+    `estadoSubida`). "Todos los clientes" ya no existe (rediseño, pieza 1, `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md` §5 y §16-bis): la pantalla
+    Prospectos lista lo capturado hoy en esta tablet y, debajo, **todos los prospectos vivos de la sucursal**
+    (`catalogos.listarProspectos`, regla en `listaProspectos`), para abrir la hoja del capturado otro día o en otra
+    tablet; la pastilla de subida solo sale en lo capturado en esta tablet. Los prospectos capturados antes de T-75
+    no tienen espejo local: salen en "Capturados hoy" sin enlace. La foto se liga por id (`fotoLocalDe`, con respaldo
     por nombre + teléfono). e2e: `apps/backend/test/prospecto-venta.e2e-spec.ts`.
 
 - **Tesorería (T-28 / T-29).** *Finanzas → Tesorería* (`/finanzas/tesoreria`), backend en `modules/tesoreria/`
@@ -538,7 +548,8 @@ usuario con sesion pasa.
   - **Tablet** (migración local 013): `motivo_visita`, `visita` (la foto usa `foto_local`/`foto_subida_en`/
     `foto_error`/`foto_descartada`, como la del prospecto; **no** hay `foto_estado`) y
     `cliente.foto_subida_en`/`foto_cache_subida_en`. El cliente de la ruta visitado sin venta pasa a
-    **"Visitados sin venta"**; si después compra, regresa a la ruta con su palomita (atendido gana a visitado). La
+    **"Visitados"** con su palomita, igual que el que compró (rediseño, pieza 1, `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md` §4: ya no hay una sección
+    "Visitados sin venta"; la fila lo resume). La
     lógica vive en `src/estado/ruta-del-dia.ts` y `src/estado/visita.ts`, con pruebas. Sin pantalla de visitas en el
     portal (T-55 y reportes leen la tabla `visita`).
   - **Nube**: la migración `20261018120000_visita_sin_venta.sql` debe subirse a `sinmex dev` después del merge,
@@ -608,11 +619,14 @@ usuario con sesion pasa.
     `GET /gastos/:id/foto` (permiso `gasto.ver`; otra sucursal = 404).
   - **Portal** *Finanzas → Gastos* (`/finanzas/gastos`): `GET /gastos?desde&hasta&sucursal&vendedor&campo` (permiso
     `gasto.ver`, grupo Finanzas; alcance de sucursal; máximo 366 días), con total. Diseñada para 1366 px (`table-fixed` + `colgroup`, 736 px fijos y Comentario flexible); medir en navegador.
-  - **Tablet** (migración local 015): `campo_egreso` y `gasto` (foto con el esquema derivado de la visita). Pantallas
-    `app/(jornada)/gastos/index.tsx` (lista del día, entrada Gastos del menú) y `registrar.tsx`; la lista se refresca
-    con `versionCatalogos`/`ultimaSincronizacion` (no al enfocar). Los topes compartidos viven en
-    `src/datos/reglas-gasto.ts` y la lógica pura en `src/estado/gasto.ts` (`montoACentavos` exacto, `validarGasto`,
-    `camposParaGasto`, `faltantesVisiblesGasto`, `puedeRegistrarGasto`), con pruebas. Un gasto grabado no se edita ni
+  - **Tablet** (migración local 015): `campo_egreso` y `gasto` (foto con el esquema derivado de la visita). Pantalla
+    `app/(jornada)/gastos/index.tsx` (entrada Gastos del menú): desde el rediseño (pieza 1, `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md`) es **una
+    sola pantalla** con Motivo + Cantidad + "Guardar gasto" arriba y "Gastos de hoy" con su total abajo; ya no hay
+    `registrar.tsx`, ni observaciones, ni foto del ticket en la app (manda `comentario: ''` y `fotoUri: null`; el
+    contrato y el servidor no cambian). La lista se refresca con `versionCatalogos`/`ultimaSincronizacion` (no al
+    enfocar). Los topes compartidos viven en `src/datos/reglas-gasto.ts` y la lógica pura en `src/estado/gasto.ts`
+    (`montoACentavos` exacto, `validarGasto`, `camposParaGasto`, `faltantesVisiblesGasto`, `puedeGuardarGasto`), con
+    pruebas. Un gasto grabado no se edita ni
     se borra en la app. La ficha ya no tiene ese botón: su "Merma" es de T-27 pieza 2.
   - **Nube**: la migración `20261020120000_gastos_ruta.sql` se sube a `sinmex dev` después del merge, con el protocolo
     de push (pre-flight: tablas nuevas, inserts de permisos y semilla; no hay nada que contar). Esta rama lleva el
