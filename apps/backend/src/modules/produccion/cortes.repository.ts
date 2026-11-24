@@ -70,8 +70,8 @@ function cargasAceptadasDelDia(fecha: string, db: Kysely<DB>) {
  * las de mostrador no tienen vendedor y no cuentan), la merma y el consumo de
  * la tablet (`movimiento_inventario` vivo de esa `fecha`: merma del cliente
  * entregada/recibida, merma del trayecto y consumo) y lo contado (filas vivas
- * de `retorno`). Los cambios fisicos valen 0 hasta T-33. Solo salen las presentaciones con algun movimiento, aunque
- * esten desactivadas o dadas de baja. Vendidas se leen en vivo: editar o
+ * de `retorno`). Los cambios fisicos valen 0 hasta T-33. Solo salen las
+ * presentaciones con algun movimiento, aunque esten desactivadas o dadas de baja. Vendidas se leen en vivo: editar o
  * eliminar una venta (T-17) cambia el teorico.
  *
  * `filtro`: un vendedor, o una sucursal por codigo (`null` = todas). Siempre

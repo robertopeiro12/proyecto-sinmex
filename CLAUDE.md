@@ -231,10 +231,9 @@ usuario con sesion pasa.
   (`ck_venta_nota_origen_actores`). Toda venta de la tablet sigue llevando vendedor.
 - **Con `sucursal.control_inventario` prendida, el portal no le vende a un vendedor más de lo que trae cargado** (cliente,
   2026-11-12; la misma casilla y la misma regla que la app de T-27). Aplica a `POST /ventas` y a `PATCH /ventas/:id` solo
-  si la venta tiene vendedor (Oficina nunca se revisa): existencia = cargas **aceptadas** − vendidas − regaladas de ese
-  vendedor en la **fecha de la venta**, la misma cuenta que "piezas teóricas por regresar" del corte (`movimientosDelDia` de
-  `produccion/cortes.repository.ts` + `existenciasPorPresentacion` de `reglas-corte.ts`; ya descuenta merma entregada al
-  cliente, merma de almacén y consumo de la tablet; la merma **recibida** no suma a lo vendible). Si no alcanza → **409** "No le alcanza el producto a …: Horchata 1 L, faltan 3; …" antes del folio (no
+  si la venta tiene vendedor (Oficina nunca se revisa): existencia = las piezas teóricas por regresar del corte (cargadas aceptadas − vendidas − regaladas − merma entregada − merma de
+  almacén − consumo) de ese vendedor en la **fecha de la venta**, la misma cuenta del corte (`movimientosDelDia` de
+  `produccion/cortes.repository.ts` + `existenciasPorPresentacion` de `reglas-corte.ts`; la merma **recibida** no suma a lo vendible). Si no alcanza → **409** "No le alcanza el producto a …: Horchata 1 L, faltan 3; …" antes del folio (no
   lo quema). Al editar se suman de vuelta las líneas de la propia venta si sigue con el mismo vendedor, y una presentación
   que no sube nunca se rechaza. Una carga **pendiente** no bloquea en el portal (la app sí). Reglas puras en
   `ventas-cobranza/inventario-venta.ts`, candado en `inventario-venta.service.ts`. **Orden de candados: `vendedor`
@@ -741,7 +740,7 @@ usuario con sesion pasa.
     **producto terminado** y **merma**, cada uno teórica · real · resultado (resultado = teórica − real; **> 0 falta**, en
     rojo; negativo se muestra y no bloquea).
     - **Teórica (C3)** = cargadas aceptadas − vendidas − regaladas − merma entregada al cliente − merma de almacén − consumo
-      − cambios entregados + cambios recibidos, **en vivo** y sin recortar (negativo = "Vendió más de lo cargado").
+      − cambios entregados + cambios recibidos, **en vivo** y sin recortar (negativo = "Salió más de lo cargado").
       **Merma teórica (C4)** = merma recibida del cliente + merma de almacén. Los movimientos salen de `movimiento_inventario`
       vivo (`merma_cliente` entregado/recibido, `merma_trayecto` = de almacén, `consumo`) por `fecha` y vendedor. **Cambios
       físicos = 0 siempre** (no existen hasta T-33; los campos ya están para que solo se llene la consulta).
@@ -765,7 +764,7 @@ usuario con sesion pasa.
     registra solo como descuento (lo hará Administración a mano en Procesos → Descuentos, pieza futura). Cambios físicos
     (T-33), Info de inventario por vendedor y los inventarios de producto terminado son otros pasos; T-24 leerá este corte.
   - **Con la casilla de inventario prendida, el portal tampoco vende más de lo cargado** (ver el bloque de la venta del
-    portal, T-17): el aviso "Vendió más de lo cargado" queda como red de seguridad (ventas de la tablet sin red, o de
+    portal, T-17): el aviso "Salió más de lo cargado" queda como red de seguridad (ventas de la tablet sin red, o de
     cuando la casilla estaba apagada).
   - **Nube**: `20261112120000_corte_mercancia.sql` se sube a `sinmex dev` después del merge, con el protocolo de push.
     Pre-flight: `select count(*) from retorno where piezas <= 0` debe dar 0 (el check nuevo admite 0 solo con merma > 0, y

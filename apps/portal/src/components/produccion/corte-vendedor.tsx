@@ -265,7 +265,7 @@ export function CorteVendedor({
                             <span className="block truncate">{l.producto}</span>
                             {l.deberiaRegresar < 0 && (
                               <span className="block text-xs font-medium text-warning">
-                                Vendió más de lo cargado
+                                Salió más de lo cargado
                               </span>
                             )}
                           </Td>

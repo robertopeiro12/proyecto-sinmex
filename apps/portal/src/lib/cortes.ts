@@ -146,10 +146,15 @@ export function etiquetaEstadoCorte(
   if (fila.estado === "con_faltante") {
     const piezas = fila.piezasFaltantes ?? 0;
     const merma = fila.mermaFaltante ?? 0;
+    const faltan = (n: number) => (n === 1 ? "Falta" : "Faltan");
     if (piezas > 0 && merma > 0)
-      return { texto: `Faltan ${piezas} · ${merma} de merma`, tono: "error" };
-    if (merma > 0) return { texto: `Faltan ${merma} de merma`, tono: "error" };
-    return { texto: `Faltan ${piezas}`, tono: "error" };
+      return {
+        texto: `${faltan(piezas)} ${piezas} · ${merma} de merma`,
+        tono: "error",
+      };
+    if (merma > 0)
+      return { texto: `${faltan(merma)} ${merma} de merma`, tono: "error" };
+    return { texto: `${faltan(piezas)} ${piezas}`, tono: "error" };
   }
   return { texto: "Corte hecho", tono: "exito" };
 }

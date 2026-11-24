@@ -200,15 +200,15 @@ describe("CorteVendedor", () => {
     expect(pos("500 ml")).toBeLessThan(pos("Total 500 ml"));
   });
 
-  it("debería negativo lleva el aviso Vendió más de lo cargado", async () => {
+  it("debería negativo lleva el aviso Salió más de lo cargado", async () => {
     montar();
     await screen.findByRole("table", { name: "Corte del vendedor" });
     expect(
-      renglon("Horchata 1 L").getByText("Vendió más de lo cargado"),
+      renglon("Horchata 1 L").getByText("Salió más de lo cargado"),
     ).toBeInTheDocument();
     expect(renglon("Horchata 1 L").getByText("-3")).toBeInTheDocument();
     expect(
-      renglon("Jamaica 1 L").queryByText("Vendió más de lo cargado"),
+      renglon("Jamaica 1 L").queryByText("Salió más de lo cargado"),
     ).toBeNull();
   });
 
@@ -311,7 +311,7 @@ describe("CorteVendedor", () => {
     expect(buenas("Jamaica 500 ml")).toBeInTheDocument();
   });
 
-  it("la pastilla dice Faltan 1 · 1 de merma con el corte guardado", async () => {
+  it("la pastilla dice Falta 1 · 1 de merma con el corte guardado", async () => {
     vi.mocked(lib.leerCorteVendedor).mockResolvedValue(
       corte(
         [linea("p1", "Jamaica", "1 L", { buenas: 4, faltante: 1, resultadoMerma: 1 })],
@@ -321,7 +321,7 @@ describe("CorteVendedor", () => {
     );
     montar();
     await screen.findByRole("table", { name: "Corte del vendedor" });
-    expect(screen.getByText("Faltan 1 · 1 de merma")).toBeInTheDocument();
+    expect(screen.getByText("Falta 1 · 1 de merma")).toBeInTheDocument();
   });
 
   it("Guardar corte manda todas las líneas con vacío = 0 y avisa", async () => {

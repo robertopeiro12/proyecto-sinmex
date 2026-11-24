@@ -63,7 +63,7 @@ Los movimientos se toman por `movimiento_inventario.fecha` (la `fecha_operacion`
   a por tamaño por C6.
 - **D2. Estado del corte** (pastilla de la lista y de la pantalla): *Sin corte* / *Corte hecho* / *Faltan …* en rojo
   si cualquiera de los dos totales (piezas o merma) es > 0. La lista del día muestra los dos números
-  ("Faltan 3 · Merma 1").
+  ("Faltan 3 · 1 de merma"; con 1, "Falta 1" y "Falta 1 de merma").
 - **D3. Agrupar por tamaño** con `presentacion.volumen` normalizado (minúsculas, sin espacios: "500 ml" = "500ml").
   Título de la sección = el volumen tal cual de la primera presentación. Orden de menor a mayor leyendo el número
   (`L` = ×1000 ml); lo que no se pueda leer va al final, por nombre. Dentro del tamaño, por nombre de producto.
@@ -73,7 +73,7 @@ Los movimientos se toman por `movimiento_inventario.fecha` (la `fecha_operacion`
   el encabezado de cada teórica explica la fórmula.
 - **D6. Campos vacíos**: siguen trayendo lo guardado o vacío, nunca el teórico (como hoy: es un conteo, no un
   "aceptar"). Sin corte hecho, el resultado solo se ve en los renglones tocados (D9 viejo).
-- **D7. "Vendió más de lo cargado"** (teórica negativa) se sigue avisando bajo el producto, como hoy.
+- **D7. "Salió más de lo cargado"** (teórica negativa; Roberto, 2026-11-24: ya puede ser por merma entregada o consumo, no solo ventas) se avisa bajo el producto.
 - **D8. Una sola cuenta.** `reglas-corte.ts` sigue siendo la única fuente de la teórica. La existencia que usa la
   venta del portal con "Control de inventario" (`existenciasPorPresentacion`) usa la teórica nueva: ahora también
   descuenta merma entregada, merma de almacén y consumo, igual que la existencia de la app (cierra el pendiente "el

@@ -144,6 +144,9 @@ describe("etiquetaEstadoCorte", () => {
     expect(e("con_faltante", 3, 1).texto).toBe("Faltan 3 · 1 de merma");
     expect(e("con_faltante", 0, 2).texto).toBe("Faltan 2 de merma");
     expect(e("con_faltante", 3, 0).texto).toBe("Faltan 3");
+    expect(e("con_faltante", 1, 0).texto).toBe("Falta 1");
+    expect(e("con_faltante", 0, 1).texto).toBe("Falta 1 de merma");
+    expect(e("con_faltante", 1, 2).texto).toBe("Falta 1 · 2 de merma");
   });
 
   it("estadoDeCorte sigue la regla de la lista", () => {
