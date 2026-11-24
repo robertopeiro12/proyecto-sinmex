@@ -38,13 +38,36 @@ vendedor** cuenta además en su camioneta (corte e Inventario por vendedor).
   (editable antes de guardar).
 
 ## Decisiones mías
-- **D0. Cliente arriba, como el viejo** ("Seleccionar cliente"): un buscador de cliente de la sucursal encima de las
-  pestañas; lo usan Ventas, Notas, Merma (de cliente), Cambios y Promoción. Consumos y Descuentos no lo usan (piden su
-  vendedor u Oficina). Si una pestaña que lo necesita no tiene cliente elegido, dice "Elige un cliente".
-- **D1. Pantalla** *Operación → Procesos* (`/operacion/procesos`, hoy "pronto"), sucursal del menú lateral, una pestaña
-  por tipo, lista del día (hoy o anteriores) + "Registrar …" en pantalla completa con rejilla por tamaño y TAB, como el
-  Registro de Operación. Permisos por pestaña: `proceso.merma`, `proceso.cambio`, `proceso.consumo`,
-  `proceso.promocion`, `proceso.descuento` (grupo Operacion Comercial).
+- **D0. Cliente arriba, como el viejo** ("Seleccionar cliente"): una tarjeta con el buscador de clientes **de la
+  sucursal** (clientes vivos; prospectos también, porque la app ya les vende) y, al elegir uno, sus datos en pastillas:
+  tipo de negocio, días de crédito, **cuánto debe y en cuántas notas** (la misma regla de "nota con saldo" de Cuentas por
+  Cobrar), última compra y sus promociones vigentes (texto de `promociones-texto`). El cliente elegido se conserva al
+  cambiar de pestaña. Lo usan Ventas, Notas (PR B), Merma (de cliente), Cambios y Promoción; Consumos y Descuentos no.
+  Una pestaña que lo necesita sin cliente dice "Elige un cliente arriba.". Con "Todas" en el menú lateral la pantalla
+  pide elegir sucursal (como Registro de Operación).
+- **D1. Pantalla (boceto aprobado por Roberto, `img/2026-11-25-procesos-boceto-merma.png`).** *Operación → Procesos*
+  (`/operacion/procesos`, hoy "pronto"). Encabezado "Procesos" + "Lo que la oficina captura de cada cliente: ventas,
+  notas, merma, cambios, consumos y promoción."; tarjeta de cliente; pestañas Ventas · Notas · Merma · Cambios ·
+  Consumos · Promoción · Descuentos (Ventas y Notas llegan en el PR B: en el A no se pintan). Cada pestaña es **la
+  captura arriba y la lista abajo**, en la misma vista (no pantalla aparte):
+  - Opciones en una fila: (solo Merma) "Merma de: Este cliente | Almacén" con `SelectorSegmentado`; "Fecha: Hoy · mar 25
+    nov | Otro día" (Otro día abre un campo de fecha, hoy o anteriores); "¿Quién?" = vendedor de la sucursal u
+    **Oficina** (en Merma la etiqueta es "¿Quién la recogió?").
+  - Captura **por listas de productos, no rejilla por tamaño**: Merma y Cambios llevan dos cajas lado a lado con una
+    flecha →: **"Recibí dañado"** (rojo suave; en Cambios "Me regresó") y **"Le entregué"** (verde suave), cada una con
+    renglones producto · tamaño · piezas · ✕ y "+ Agregar producto" (buscador de presentaciones activas de la sucursal;
+    una presentación una vez por caja). El total de piezas en el encabezado de cada caja. Consumos, Promoción y
+    Descuentos llevan una sola caja ("Productos").
+  - **Barra de cuadre** (Merma de cliente y Cambios): verde "✓ Cuadra: recibió 5 y se le entregaron 5."; amarilla
+    "Recibió 5 y llevas 3 entregadas — faltan 2." (o "sobran 2"); con amarilla, Guardar se deshabilita.
+  - Comentario opcional (≤ 300), "Limpiar" y "Guardar <tipo>". Editar desde la lista carga el registro arriba con
+    "Guardar cambios" / "Cancelar".
+  - Lista **"<Tipo> de <fecha> de este cliente"** (o de la sucursal en Consumos, Descuentos y Merma de almacén): Hora ·
+    Quién (vendedor u "Oficina") · Recibido / Entregado (pastillas "Horchata 500 ml · 5" roja/verde) o Productos ·
+    Capturó · Editar · Eliminar (`useConfirmar`). Muestra la fecha elegida arriba.
+  - Cabe a 1366 px sin desplazamiento lateral. Piezas comunes de `components/ui/`.
+  - Permisos por pestaña: `proceso.merma`, `proceso.cambio`, `proceso.consumo`, `proceso.promocion`,
+    `proceso.descuento` (grupo Operacion Comercial, con su ⓘ). Sin permiso, la pestaña no sale.
 - **D2. Datos.** Tabla nueva `proceso_oficina` (`tipo`, `sucursal_id`, `fecha`, `cliente_id` null, `vendedor_id` null =
   Oficina, `merma_de` `cliente|almacen` solo en merma, `comentario`, `capturo_usuario_id`, tiempos, `deleted_at`) y
   `proceso_oficina_linea` (`presentacion_id`, `sentido` `recibido|entregado`, `piezas` 1..100000). Checks por tipo.
