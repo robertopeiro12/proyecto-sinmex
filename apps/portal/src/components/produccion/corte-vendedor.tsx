@@ -42,6 +42,9 @@ import { formatearDiaLargo } from "@/lib/formato";
 import { listarProductos, type Producto } from "@/lib/productos";
 
 const COLUMNAS = 7;
+// Línea vertical que separa el bloque de producto terminado del de merma (y del producto).
+const SEPARADOR = "border-l-2 border-l-foreground/20";
+const TITULO_BLOQUE = "text-xs font-semibold uppercase tracking-wide text-foreground";
 
 /**
  * El corte de un vendedor y un día (pantalla completa, como editar una venta). Los campos
@@ -211,38 +214,38 @@ export function CorteVendedor({
                   <Th rowSpan={2} className="align-bottom">
                     Producto
                   </Th>
-                  <Th colSpan={3} alinear="centro">
+                  <Th colSpan={3} alinear="centro" className={`${SEPARADOR} ${TITULO_BLOQUE}`}>
                     Producto terminado
                   </Th>
-                  <Th colSpan={3} alinear="centro">
+                  <Th colSpan={3} alinear="centro" className={`${SEPARADOR} ${TITULO_BLOQUE}`}>
                     Merma
                   </Th>
                 </tr>
                 <tr>
-                  <Th alinear="derecha" className="top-[34px] whitespace-normal">
+                  <Th alinear="derecha" className={`top-[32px] whitespace-normal ${SEPARADOR}`}>
                     Piezas teóricas por regresar
                     <Ayuda
                       tema="Piezas teóricas por regresar"
                       texto="Cargadas − vendidas − promoción − merma entregada al cliente − merma de almacén − consumo − cambios entregados + cambios recibidos."
                     />
                   </Th>
-                  <Th alinear="derecha" className="top-[34px] whitespace-normal">
+                  <Th alinear="derecha" className="top-[32px] whitespace-normal">
                     Piezas reales retornadas
                   </Th>
-                  <Th alinear="derecha" className="top-[34px]">
+                  <Th alinear="derecha" className="top-[32px]">
                     Resultado
                   </Th>
-                  <Th alinear="derecha" className="top-[34px] whitespace-normal">
+                  <Th alinear="derecha" className={`top-[32px] whitespace-normal ${SEPARADOR}`}>
                     Merma teórica por regresar
                     <Ayuda
                       tema="Merma teórica por regresar"
                       texto="Merma recibida del cliente + merma de almacén."
                     />
                   </Th>
-                  <Th alinear="derecha" className="top-[34px] whitespace-normal">
+                  <Th alinear="derecha" className="top-[32px] whitespace-normal">
                     Merma real validada
                   </Th>
-                  <Th alinear="derecha" className="top-[34px]">
+                  <Th alinear="derecha" className="top-[32px]">
                     Resultado
                   </Th>
                 </tr>
@@ -269,7 +272,7 @@ export function CorteVendedor({
                               </span>
                             )}
                           </Td>
-                          <Td alinear="derecha">{l.deberiaRegresar}</Td>
+                          <Td alinear="derecha" className={SEPARADOR}>{l.deberiaRegresar}</Td>
                           <Td alinear="derecha">
                             <CampoConteo
                               etiqueta={`Piezas reales de ${l.nombre}`}
@@ -284,7 +287,7 @@ export function CorteVendedor({
                           <Td alinear="derecha">
                             <Resultado valor={f.faltante} />
                           </Td>
-                          <Td alinear="derecha">{l.mermaTeorica}</Td>
+                          <Td alinear="derecha" className={SEPARADOR}>{l.mermaTeorica}</Td>
                           <Td alinear="derecha">
                             <CampoConteo
                               etiqueta={`Merma real de ${l.nombre}`}
@@ -304,12 +307,12 @@ export function CorteVendedor({
                     })}
                     <FilaTotal>
                       <Td>{`Total ${g.tamano}`}</Td>
-                      <Td alinear="derecha">{g.totales.deberiaRegresar}</Td>
+                      <Td alinear="derecha" className={SEPARADOR}>{g.totales.deberiaRegresar}</Td>
                       <Td alinear="derecha">{g.totales.buenas}</Td>
                       <Td alinear="derecha">
                         <Resultado valor={g.totales.faltante} />
                       </Td>
-                      <Td alinear="derecha">{g.totales.mermaTeorica}</Td>
+                      <Td alinear="derecha" className={SEPARADOR}>{g.totales.mermaTeorica}</Td>
                       <Td alinear="derecha">{g.totales.merma}</Td>
                       <Td alinear="derecha">
                         <Resultado valor={g.totales.resultadoMerma} />
@@ -323,13 +326,13 @@ export function CorteVendedor({
                   {/* Suma por tamaño solo lo que falta (un sobrante no tapa un faltante): no es la suma de los resultados. */}
                   <FilaTotal>
                     <Td>Faltantes del día</Td>
-                    <Td colSpan={2} />
+                    <Td colSpan={2} className={SEPARADOR} />
                     <Td alinear="derecha" className="whitespace-nowrap">
                       {(vista.totales.faltante ?? 0) > 0 && (
                         <span className="text-destructive">{`Faltan ${vista.totales.faltante}`}</span>
                       )}
                     </Td>
-                    <Td colSpan={2} />
+                    <Td colSpan={2} className={SEPARADOR} />
                     <Td alinear="derecha" className="whitespace-nowrap">
                       {(vista.totales.faltanteMerma ?? 0) > 0 && (
                         <span className="text-destructive">{`${vista.totales.faltanteMerma} de merma`}</span>
