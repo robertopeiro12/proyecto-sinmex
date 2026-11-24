@@ -5,7 +5,8 @@ import { apiFetch, apiFetchSinCuerpo } from "./api";
 // backend). Un cambio de forma en un lado exige el equivalente en el otro.
 // Registro de Operación, parte 1.
 
-export type TipoOperacion = "entrada" | "envio" | "merma" | "consumo" | "descuento";
+export type TipoOperacion = "entrada" | "envio" | "merma" | "consumo" | "descuento" | "retiro_merma";
+export type EstadoRetiro = "pendiente" | "autorizado" | "rechazado";
 export type OrigenEntrada = "produccion" | "compra";
 
 export const MAX_LINEAS = 200;
@@ -26,6 +27,7 @@ export const TIPOS_OPERACION: TipoOperacionInfo[] = [
   { tipo: "merma", etiqueta: "Merma", permiso: "operacion.merma" },
   { tipo: "consumo", etiqueta: "Consumo", permiso: "operacion.consumo" },
   { tipo: "descuento", etiqueta: "Descuentos", permiso: "operacion.descuento" },
+  { tipo: "retiro_merma", etiqueta: "Retiro de merma", permiso: "operacion.retiro_merma" },
 ];
 
 export function infoDeTipo(tipo: TipoOperacion): TipoOperacionInfo {
@@ -58,6 +60,10 @@ export interface OperacionAlmacen {
   editable: boolean;
   /** Un envío visto en Entradas del destino: solo lectura ahí (no pidas su detalle por id: da 404). */
   envio: { origen: { id: string; codigo: string } } | null;
+  /** Solo `retiro_merma`: pendiente, autorizado o rechazado (null en los demás tipos). */
+  estado: EstadoRetiro | null;
+  /** Quién autorizó o rechazó un retiro y cuándo (`en` ya viene en hora de Tijuana, `AAAA-MM-DD HH:MM`). */
+  resolucion: { por: string; en: string; motivo: string | null } | null;
 }
 
 /** `GET /operaciones-almacen`. */
@@ -113,3 +119,24 @@ export function editarOperacion(id: string, datos: DatosEditarOperacion): Promis
 export function eliminarOperacion(id: string): Promise<void> {
   return apiFetchSinCuerpo(`/operaciones-almacen/${id}`, { method: "DELETE" });
 }
+
+/** `GET /operaciones-almacen/retiros-pendientes`: la bandeja de Peticiones (`peticiones.gestionar`). */
+export function listarRetirosPendientes(sucursal: string | null): Promise<{ retiros: OperacionAlmacen[] }> {
+  const q = new URLSearchParams();
+  if (sucursal) q.set("sucursal", sucursal);
+  const texto = q.toString();
+  return apiFetch<{ retiros: OperacionAlmacen[] }>(`/operaciones-almacen/retiros-pendientes${texto ? `?${texto}` : ""}`);
+}
+
+export function autorizarRetiro(id: string): Promise<OperacionAlmacen> {
+  return apiFetch<OperacionAlmacen>(`/operaciones-almacen/${encodeURIComponent(id)}/autorizar`, { method: "POST" });
+}
+
+export function rechazarRetiro(id: string, motivo: string): Promise<OperacionAlmacen> {
+  return apiFetch<OperacionAlmacen>(`/operaciones-almacen/${encodeURIComponent(id)}/rechazar`, {
+    method: "POST",
+    body: JSON.stringify({ motivo }),
+  });
+}
+
+export const MAX_MOTIVO_RECHAZO = 300;

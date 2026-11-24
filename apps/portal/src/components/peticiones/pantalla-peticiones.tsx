@@ -5,6 +5,7 @@ import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantall
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { Pestanas } from "@/components/ui/pestanas";
 import { BandejaPeticiones } from "./bandeja-peticiones";
+import { BandejaRetirosMerma } from "./bandeja-retiros-merma";
 
 /** Operación → Peticiones (T-34): autorizar o denegar el borrado de pagos. */
 export function PantallaPeticiones({ sucursal }: { sucursal: string | null }) {
@@ -19,7 +20,7 @@ export function PantallaPeticiones({ sucursal }: { sucursal: string | null }) {
     <Pantalla>
       <EncabezadoPantalla
         titulo="Peticiones"
-        descripcion="Autoriza o niega las peticiones para borrar un pago. Al autorizar se borra el pago completo."
+        descripcion="Autoriza o niega las peticiones para borrar un pago y los retiros de merma del almacén."
       />
       {/* Sin conservarMontadas: cambiar de pestaña empieza limpio (sin avisos ni paneles de la otra). */}
       <Pestanas
@@ -34,6 +35,11 @@ export function PantallaPeticiones({ sucursal }: { sucursal: string | null }) {
             valor: "historial",
             etiqueta: "Historial",
             contenido: <BandejaPeticiones status="historial" sucursal={sucursal} />,
+          },
+          {
+            valor: "retiro-merma",
+            etiqueta: "Retiro de merma",
+            contenido: <BandejaRetirosMerma sucursal={sucursal} />,
           },
         ]}
       />

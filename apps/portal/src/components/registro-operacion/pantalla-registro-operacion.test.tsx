@@ -63,6 +63,8 @@ const op = (id: string, tipo: OperacionAlmacen["tipo"], m: Partial<OperacionAlma
   hora: "08:15",
   editable: true,
   envio: null,
+  estado: null,
+  resolucion: null,
   ...m,
 });
 
