@@ -1,12 +1,14 @@
-import { PantallaProduccionDia } from "@/components/produccion/pantalla-produccion-dia";
+import { redirect } from "next/navigation";
 
-// Server component delgado (mismo patrón que /produccion/recarga): lee el selector
-// global de sucursal y lo baja; toda la interacción vive en el cliente.
+// Producción del día se volvió la pestaña Entradas del Registro de Operación (spec
+// 2026-11-24, D17): la dirección vieja lleva ahí y conserva la sucursal elegida.
 export default async function Page({
   searchParams,
 }: {
   searchParams: Promise<{ sucursal?: string }>;
 }) {
   const { sucursal } = await searchParams;
-  return <PantallaProduccionDia sucursal={sucursal ?? null} />;
+  const params = new URLSearchParams({ pestana: "entrada" });
+  if (sucursal) params.set("sucursal", sucursal);
+  redirect(`/produccion/registro-operacion?${params.toString()}`);
 }

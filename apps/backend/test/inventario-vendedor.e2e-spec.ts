@@ -13,7 +13,7 @@ import {
 } from './../src/database/database.tokens';
 import { PasswordService } from './../src/modules/auth/password.service';
 import type { InventarioVendedor } from './../src/modules/produccion/inventario-vendedor.service';
-import { MENSAJE_FECHA_FUTURA } from './../src/modules/produccion/reglas-produccion';
+import { MENSAJE_FECHA_FUTURA } from './../src/modules/produccion/reglas-comunes';
 
 /**
  * Inventario por vendedor (GET /inventario-vendedor): un vendedor, "todos",

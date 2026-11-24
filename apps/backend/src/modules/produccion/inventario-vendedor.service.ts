@@ -29,7 +29,7 @@ import {
   esFechaReal,
   MENSAJE_FECHA_FUTURA,
   MENSAJE_FECHA_INVALIDA,
-} from './reglas-produccion';
+} from './reglas-comunes';
 
 export const MOTIVO_ELIGE_SUCURSAL = 'Elige una sucursal.';
 export const MOTIVO_SUCURSAL_INEXISTENTE = 'No existe esa sucursal.';

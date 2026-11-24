@@ -48,7 +48,19 @@ export const EXPLICACION_PERMISO: Record<string, string> = {
     "Puede anotar el número de factura del SAT en las ventas, corregirlo o quitarlo.",
   "venta.registrar": "Puede registrar una venta nueva.",
   "almacen_general.gestionar":
-    "Puede registrar entradas y salidas de mercancía en el almacén general (planta).",
+    "Sin uso por ahora: las entradas pasaron a Producción → Registro de Operación (permiso Entradas/Compras).",
+  "operacion.entrada":
+    "Abre la pestaña Entradas/Compras del Registro de Operación: puede ver, registrar, corregir y eliminar lo que entra al almacén (producción o compras).",
+  "operacion.envio":
+    "Abre la pestaña Envíos del Registro de Operación: puede registrar, corregir y eliminar envíos de mercancía a otra sucursal (solo de hoy o ayer).",
+  "operacion.merma":
+    "Abre la pestaña Merma del Registro de Operación: puede registrar, corregir y eliminar la merma del almacén, con su motivo.",
+  "operacion.consumo":
+    "Abre la pestaña Consumo del Registro de Operación: puede registrar, corregir y eliminar el producto que se consumió.",
+  "operacion.descuento":
+    "Abre la pestaña Descuentos del Registro de Operación: puede registrar, corregir y eliminar el producto que se descuenta a un trabajador.",
+  "motivo_merma.gestionar":
+    "Puede dar de alta, editar o dar de baja los motivos de merma del catálogo.",
   "almacen_sucursal.gestionar":
     "Puede registrar entradas y salidas de mercancía en el almacén de una sucursal.",
   "carga.gestionar": "Puede registrar qué mercancía sale cargada en cada vehículo.",

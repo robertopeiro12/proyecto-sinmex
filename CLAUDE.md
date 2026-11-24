@@ -709,18 +709,46 @@ usuario con sesion pasa.
     regresar a la planta". La pantalla "Próximamente" (`pendiente/[seccion]`) ya no existe.
   - **Nube**: `20261025120000_movimiento_inventario.sql` se sube a `sinmex dev` después del merge, con el protocolo de
     push (pre-flight: tablas nuevas y una columna con default; nada que contar). Backend antes que la app.
-- **Producción por día (T-25).** Producción captura en el portal lo producido por sabor y tamaño (*Producción → Producción
-  del día*, `/produccion/produccion-del-dia`); es la entrada del Almacén General, pero **aún no alimenta inventario**
-  (T-24) ni almacenes (T-63). Spec: `docs/superpowers/specs/2026-10-21-t25-produccion-por-dia-design.md`.
-  - Tabla `produccion`: una fila **viva** por fecha, sucursal y presentación (índice único parcial), piezas enteras > 0.
-    Backend en `modules/produccion/` (`GET`/`PUT /produccion`, reglas puras en `reglas-produccion.ts`), permiso
-    `almacen_general.gestionar` (ya existía) y alcance de sucursal.
-  - `PUT` reemplaza el día: **0 da de baja** la fila (no deja una con 0) y volver a capturarla crea otra. Fecha futura
-    = 400 con `hoyEnTijuana`; "hoy" es el de Tijuana. Una presentación desactivada con piezas ese día sigue en el `GET`.
-    Dos guardados del mismo día y sucursal se serializan (fila de `sucursal` bloqueada `for no key update`, como el
-    vendedor en las cargas); el 409 del índice único queda como red de seguridad.
-  - **Nube**: `20261023120000_produccion.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
-    (pre-flight: tabla nueva; nada que contar).
+- **Registro de Operación (parte 1).** *Producción → Registro de Operación* (`/produccion/registro-operacion`, pestañas
+  Entradas/Compras · Envíos · Merma · Consumo · Descuentos): el almacén captura por día lo que entra, sale o se pierde, con la
+  rejilla de productos por tamaño (TAB pasa a la siguiente casilla). **Reemplaza a Producción del día (T-25)**: su pantalla y
+  los endpoints `/produccion` se retiraron y `/produccion/produccion-del-dia` redirige a la pestaña Entradas. **Aún no alimenta
+  inventario** (T-24) ni almacenes (T-63). Issue #162 (T-81); spec
+  `docs/superpowers/specs/2026-11-24-registro-de-operacion-parte-1-design.md`. La **parte 2** trae Retiro de merma y Recargas.
+  - **Tablas.** `operacion_almacen` (`tipo` en un solo check: `entrada|envio|merma|consumo|descuento`, para agregar
+    `retiro_merma` sin tocar más) + `operacion_almacen_linea` (piezas 1..100000, máx. 200 por operación, una por presentación).
+    Checks por tipo: `origen` (`produccion|compra`) solo en entrada; `sucursal_destino_id` solo en envío y distinto de la
+    sucursal; `motivo_merma_id` solo en merma; `trabajador` (1..120) solo en descuento. Baja lógica.
+  - **Fechas (Tijuana, reloj de Postgres).** Entrada, merma, consumo y descuento: hoy o antes. **Envío: solo hoy o ayer**, y la
+    regla vale para crear, editar y dar de baja (un envío de antier = 400). Reglas puras en `produccion/reglas-operacion.ts`;
+    lo que comparte con cargas y cortes (hoy de Tijuana, fecha futura) en `reglas-comunes.ts`.
+  - **Permisos por tipo, exigidos en el servicio**, no con `@RequierePermiso` (depende del tipo): `operacion.entrada`,
+    `.envio`, `.merma`, `.consumo`, `.descuento` (grupo Produccion/Almacen), consultados con `PermisosRepository.permisosDe`
+    (no se duplica la resolución). Sin el del tipo: 403 al listar, crear y editar. Los grants de `almacen_general.gestionar`
+    pasaron a `operacion.entrada`. Endpoints: `/operaciones-almacen` en `produccion/operaciones-almacen.*`.
+  - **Alcance** como el corte: atado solo ve la suya (ajena al listar = 403, operación de otra sucursal = 404); `todas` = 400
+    "Elige una sucursal.".
+  - **El envío se ve en el destino.** `GET ?tipo=entrada&sucursal=X` incluye los envíos con destino X (con
+    `envio: { origen: {id, codigo} }`, "Envío desde TJ" en el portal), **de solo lectura** allá (sin Editar ni Eliminar); un
+    usuario atado a X con `operacion.entrada` los ve aunque no alcance la sucursal de origen.
+  - **Catálogo `motivo_merma`** global (como `motivo_visita`), con `aplica_almacen`/`aplica_cliente`/`aplica_vehiculo`, baja
+    lógica y semilla de 4 motivos; `/motivos-merma`, permiso `motivo_merma.gestionar` (grupo General); portal *Catálogo →
+    Motivos de merma*. Un motivo dado de baja o sin "almacén" no se acepta en una merma nueva, pero una existente lo conserva
+    al editar si no se cambia.
+  - Tipos duplicados backend ↔ portal (`lib/operaciones-almacen.ts`, `lib/motivos-merma.ts`): si cambias uno, cambia el otro.
+  - **Nube**: `20261124120000_registro_operacion.sql` se sube a `sinmex dev` después del merge, con el protocolo de push.
+    Copia **una sola vez** `produccion` a entradas (una por fecha y sucursal, solo filas vivas, con la hora de la fila más
+    antigua del grupo). **Backend y portal juntos** (el portal nuevo ya no llama a `/produccion`). Pre-flight (cada una debe
+    dar 0): `select count(*) from produccion where deleted_at is null and piezas > 100000;` y
+    `select count(*) from (select 1 from produccion where deleted_at is null group by fecha, sucursal_id having count(*) > 200) t;`.
+    Antes del push, anota para comparar después: los grants vivos de `almacen_general.gestionar`
+    (`select count(*) from perfil_permiso pp join permiso p on p.id = pp.permiso_id where p.clave = 'almacen_general.gestionar'
+    and pp.deleted_at is null;` y lo mismo con `usuario_permiso`), las entradas que va a crear la copia
+    (`select count(*) from (select distinct fecha, sucursal_id from produccion where deleted_at is null) t;`) y la hora del
+    push; todo va al comentario del PR. **Avisa a Mario** que no corra un backend viejo contra `sinmex dev` durante el push
+    (escribiría en `produccion` y la copia es única). Post-flight: `select count(*) from produccion where greatest(created_at,
+    updated_at, coalesce(deleted_at, created_at)) > '<hora del push>';` debe dar 0 (lo que se escriba en `produccion` después
+    se pierde) y los grants vivos de `operacion.entrada` deben ser al menos los conteos de antes.
 - **Corte de mercancía (pieza 3).** *Producción → Corte* (`/produccion/corte`) absorbe al Retorno: por vendedor y día, el
   almacenista cuenta lo que regresó (**buenas** y **merma**) y el portal le muestra cuánto **faltó**. La vieja
   `/produccion/retorno` redirige a Corte (conserva `?sucursal`) y los endpoints `/retornos` **se quitaron** (404). Spec:

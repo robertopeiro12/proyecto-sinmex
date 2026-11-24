@@ -39,7 +39,7 @@ import {
   MENSAJE_FECHA_INVALIDA,
   MOTIVO_GUARDADO_SIMULTANEO,
   MOTIVO_PRESENTACION_INEXISTENTE,
-} from './reglas-produccion';
+} from './reglas-comunes';
 
 export const MOTIVO_VENDEDOR_INEXISTENTE = 'No existe ese vendedor.';
 

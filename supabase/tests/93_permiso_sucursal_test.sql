@@ -13,11 +13,13 @@ select is(
 -- 28 cuentas_cobrar.ver (T-22), 29 tesoreria.ver y 30 tesoreria.gestionar (T-28),
 -- 31 motivo_visita.gestionar (T-39), 32 flujo_efectivo.ver (T-32),
 -- 33 campo_egreso.gestionar y 34 gasto.ver (T-30/T-31), 35 dashboard.ver
--- (Dashboard) y 36 nota_papel.revisar (casilla Entregada de las notas).
+-- (Dashboard) y 36 nota_papel.revisar (casilla Entregada de las notas),
+-- 37-41 operacion.entrada/envio/merma/consumo/descuento y 42 motivo_merma.gestionar
+-- (Registro de Operación).
 select is(
   (select count(*)::int from permiso where deleted_at is null),
-  36,
-  'el catalogo de permisos tiene 36 claves'
+  42,
+  'el catalogo de permisos tiene 42 claves'
 );
 
 select * from finish();

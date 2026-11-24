@@ -22,7 +22,7 @@ import type {
 import {
   MENSAJE_FECHA_FUTURA,
   MOTIVO_PRESENTACION_INEXISTENTE,
-} from './../src/modules/produccion/reglas-produccion';
+} from './../src/modules/produccion/reglas-comunes';
 
 /**
  * Corte de mercancia (absorbe a Retorno), de punta a punta: la lista del dia

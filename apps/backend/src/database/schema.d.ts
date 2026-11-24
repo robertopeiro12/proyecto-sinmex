@@ -204,6 +204,17 @@ export interface ListaPrecio {
   updated_at: Generated<Timestamp>;
 }
 
+export interface MotivoMerma {
+  actualizado_en: Generated<Timestamp>;
+  aplica_almacen: Generated<boolean>;
+  aplica_cliente: Generated<boolean>;
+  aplica_vehiculo: Generated<boolean>;
+  creado_en: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  id: Generated<string>;
+  nombre: string;
+}
+
 export interface MotivoVisita {
   actualizado_en: Generated<Timestamp>;
   creado_en: Generated<Timestamp>;
@@ -263,6 +274,30 @@ export interface NotaNoCobrada {
   updated_at: Generated<Timestamp>;
   vendedor_id: string;
   venta_nota_id: string;
+}
+
+export interface OperacionAlmacen {
+  actualizado_por_usuario_id: string | null;
+  capturo_usuario_id: string;
+  comentario: string | null;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  fecha: Timestamp;
+  id: Generated<string>;
+  motivo_merma_id: string | null;
+  origen: string | null;
+  sucursal_destino_id: string | null;
+  sucursal_id: string;
+  tipo: string;
+  trabajador: string | null;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface OperacionAlmacenLinea {
+  id: Generated<string>;
+  operacion_id: string;
+  piezas: number;
+  presentacion_id: string;
 }
 
 export interface Perfil {
@@ -691,11 +726,14 @@ export interface DB {
   gasto: Gasto;
   jornada: Jornada;
   lista_precio: ListaPrecio;
+  motivo_merma: MotivoMerma;
   motivo_visita: MotivoVisita;
   movimiento_inventario: MovimientoInventario;
   movimiento_inventario_linea: MovimientoInventarioLinea;
   nota_asignada: NotaAsignada;
   nota_no_cobrada: NotaNoCobrada;
+  operacion_almacen: OperacionAlmacen;
+  operacion_almacen_linea: OperacionAlmacenLinea;
   perfil: Perfil;
   perfil_permiso: PerfilPermiso;
   permiso: Permiso;

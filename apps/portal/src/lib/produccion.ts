@@ -1,43 +1,8 @@
-import { apiFetch } from "./api";
-
-// Copia normativa de `DiaProduccion` en
-// apps/backend/src/modules/produccion/produccion.service.ts (T-25). Un cambio de
-// forma en un lado exige el equivalente en el otro.
-
-export interface LineaProduccion {
-  presentacionId: string;
-  producto: string;
-  presentacion: string;
-  /** `false` = presentación dada de baja que ese día tiene piezas: sale para no esconderlas. */
-  activa: boolean;
-  /** 0 = sin registro. */
-  piezas: number;
-}
-
-export interface DiaProduccion {
-  fecha: string;
-  sucursal: { id: string; codigo: string };
-  lineas: LineaProduccion[];
-  totalPiezas: number;
-  actualizadoEn: string | null;
-}
+// Lo que queda de la pantalla "Producción del día" (retirada: ahora es la pestaña Entradas
+// del Registro de Operación): el Corte sigue leyendo las piezas con `leerPiezas`.
 
 /** El tope que valida el servidor (la columna es `integer`). */
 export const MAX_PIEZAS_PRODUCCION = 2_147_483_647;
-
-export function obtenerProduccion(fecha: string, sucursal: string): Promise<DiaProduccion> {
-  const params = new URLSearchParams({ fecha, sucursal });
-  return apiFetch<DiaProduccion>(`/produccion?${params.toString()}`);
-}
-
-/** Reemplaza la producción del día con TODAS las líneas; 0 da de baja la presentación. */
-export function guardarProduccion(datos: {
-  fecha: string;
-  sucursal: string;
-  lineas: { presentacionId: string; piezas: number }[];
-}): Promise<DiaProduccion> {
-  return apiFetch<DiaProduccion>("/produccion", { method: "PUT", body: JSON.stringify(datos) });
-}
 
 /**
  * Lo tecleado en una celda → piezas enteras. Vacío = 0 (sin registro); `null` si no es

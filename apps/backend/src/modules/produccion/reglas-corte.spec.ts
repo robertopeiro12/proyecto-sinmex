@@ -18,7 +18,7 @@ import {
   MENSAJE_FECHA_FUTURA,
   MENSAJE_FECHA_INVALIDA,
   MENSAJE_PRESENTACION_REPETIDA,
-} from './reglas-produccion';
+} from './reglas-comunes';
 
 const A = '3f2504e0-4f89-41d3-9a0c-0305e82c3301';
 const B = '3f2504e0-4f89-41d3-9a0c-0305e82c3302';
