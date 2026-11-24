@@ -162,9 +162,10 @@ function PestanaProceso({
 
   const mermaDeTipo = tipo === "merma" ? mermaDe : null;
   const conCliente = llevaCliente(tipo, mermaDeTipo);
-  // La lista: de este cliente en Merma de cliente, Cambios y Promoción; de la sucursal en lo demás.
+  // La lista: de este cliente en Merma de cliente, Cambios y Promoción (sin cliente, solo el
+  // aviso "Elige un cliente arriba."); de la sucursal en lo demás.
   const filtro = conCliente && cliente ? { id: cliente.id } : null;
-  const mostrarLista = !conCliente || cliente !== null || tipo === "merma";
+  const mostrarLista = !conCliente || cliente !== null;
 
   async function editar(p: Proceso) {
     if (editando?.id === p.id) return;

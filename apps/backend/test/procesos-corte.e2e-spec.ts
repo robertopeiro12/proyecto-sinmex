@@ -133,17 +133,22 @@ describe('Procesos en el corte, precarga y resumen (e2e)', () => {
     return id;
   };
 
-  const crearPresentacion = async (volumen: string): Promise<string> => {
-    let productoId = productoIds[0];
+  const productoPorNombre = new Map<string, string>();
+  const crearPresentacion = async (
+    volumen: string,
+    nombre = PRODUCTO,
+  ): Promise<string> => {
+    let productoId = productoPorNombre.get(nombre);
     if (!productoId) {
       productoId = (
         await db
           .insertInto('producto')
-          .values({ nombre: PRODUCTO, activo: true })
+          .values({ nombre, activo: true })
           .returning('id')
           .executeTakeFirstOrThrow()
       ).id;
       productoIds.push(productoId);
+      productoPorNombre.set(nombre, productoId);
     }
     return (
       await db
@@ -688,6 +693,47 @@ describe('Procesos en el corte, precarga y resumen (e2e)', () => {
           },
         ],
       });
+    });
+
+    it('por tamano: lo que sobra de un sabor tapa lo que falta de otro del mismo tamano (D1)', async () => {
+      const otro = `${PRODUCTO} B`;
+      const litroB = await crearPresentacion('1 L', otro);
+      const medioB = await crearPresentacion('500 ml', otro);
+      const vendedorT = await crearVendedor(kId);
+      await crearCargaAceptada(vendedorT, hoy, [
+        { presentacionId: litro, piezas: 10 },
+        { presentacionId: litroB, piezas: 10 },
+        { presentacionId: medio, piezas: 10 },
+        { presentacionId: medioB, piezas: 10 },
+      ]);
+      // 1 L: falta 5 de uno y sobran 3 del otro = neto 2.
+      // 500 ml: faltan 3 y 2 = neto 5, sin compensar.
+      await http()
+        .put('/cortes/vendedor')
+        .set('Cookie', cookieGeneral)
+        .send({
+          vendedor: vendedorT,
+          fecha: hoy,
+          lineas: [
+            { presentacionId: litro, buenas: 5, merma: 0 },
+            { presentacionId: litroB, buenas: 13, merma: 0 },
+            { presentacionId: medio, buenas: 7, merma: 0 },
+            { presentacionId: medioB, buenas: 8, merma: 0 },
+          ],
+        })
+        .expect(200);
+      const res = await precarga(cookieK, vendedorT, hoy).expect(200);
+      const cuerpo = res.body as PrecargaDescuentos;
+      expect(cuerpo).toEqual({
+        corteHecho: true,
+        lineas: [
+          { presentacionId: medio, nombre: `${PRODUCTO} 500 ml`, piezas: 3 },
+          { presentacionId: medioB, nombre: `${otro} 500 ml`, piezas: 2 },
+          { presentacionId: litro, nombre: `${PRODUCTO} 1 L`, piezas: 2 },
+        ],
+      });
+      const suma = cuerpo.lineas.reduce((t, l) => t + l.piezas, 0);
+      expect(suma).toBe((await corte(vendedorT, hoy)).totales.faltante);
     });
 
     it('vendedor de otra sucursal o dado de baja = 404; sin permiso de descuento = 403', async () => {

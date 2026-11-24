@@ -13,6 +13,7 @@ import {
   MENSAJE_FECHA_INVALIDA,
   MENSAJE_PRESENTACION_REPETIDA,
 } from '../produccion/reglas-comunes';
+import { claveTamano } from '../produccion/reglas-corte';
 
 export const TIPOS_PROCESO = [
   'merma',
@@ -218,4 +219,56 @@ export function validarProceso(e: EntradaProceso): ResultadoProceso {
       lineas,
     },
   };
+}
+
+/** Una linea del corte, lo que necesita la precarga de descuentos. */
+export interface FaltanteDePresentacion {
+  presentacionId: string;
+  nombre: string;
+  volumen: string;
+  /** Resultado de piezas del corte; `null` sin corte; < 0 = sobrante. */
+  faltante: number | null;
+}
+
+/**
+ * Precarga de descuentos con la regla del corte (D1, Roberto 2026-11-25): por
+ * tamano (`claveTamano`) se toma el neto con signo de los faltantes; si es <= 0
+ * no se precarga nada de ese tamano; si es N > 0 se reparte entre sus
+ * presentaciones con faltante > 0, de mayor faltante a menor (empate: por
+ * nombre), hasta sumar exactamente N. Asi la suma = `totales.faltante` del
+ * corte. Devuelve las lineas en el orden en que llegaron (el del corte).
+ */
+export function precargaPorTamano(
+  lineas: readonly FaltanteDePresentacion[],
+): { presentacionId: string; nombre: string; piezas: number }[] {
+  const porTamano = new Map<string, FaltanteDePresentacion[]>();
+  for (const l of lineas) {
+    const clave = claveTamano(l.volumen);
+    porTamano.set(clave, [...(porTamano.get(clave) ?? []), l]);
+  }
+  const piezas = new Map<FaltanteDePresentacion, number>();
+  for (const grupo of porTamano.values()) {
+    let restante = grupo.reduce((t, l) => t + (l.faltante ?? 0), 0);
+    if (restante <= 0) continue;
+    const conFaltante = grupo
+      .filter((l) => (l.faltante ?? 0) > 0)
+      .sort(
+        (a, b) =>
+          (b.faltante ?? 0) - (a.faltante ?? 0) ||
+          a.nombre.localeCompare(b.nombre, 'es'),
+      );
+    for (const l of conFaltante) {
+      if (restante <= 0) break;
+      const toma = Math.min(l.faltante ?? 0, restante);
+      piezas.set(l, toma);
+      restante -= toma;
+    }
+  }
+  return lineas
+    .filter((l) => (piezas.get(l) ?? 0) > 0)
+    .map((l) => ({
+      presentacionId: l.presentacionId,
+      nombre: l.nombre,
+      piezas: piezas.get(l) as number,
+    }));
 }

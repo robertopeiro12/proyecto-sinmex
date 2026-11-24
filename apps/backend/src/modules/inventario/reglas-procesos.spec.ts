@@ -1,5 +1,6 @@
 import {
   MAX_LINEAS_PROCESO,
+  precargaPorTamano,
   validarProceso,
   type EntradaProceso,
 } from './reglas-procesos';
@@ -295,5 +296,72 @@ describe('validarProceso', () => {
         }),
       ).ok,
     ).toBe(true);
+  });
+});
+
+describe('precargaPorTamano (D1 del corte: un tamano no compensa a otro)', () => {
+  const l = (
+    presentacionId: string,
+    nombre: string,
+    volumen: string,
+    faltante: number | null,
+  ) => ({ presentacionId, nombre, volumen, faltante });
+  const H1 = l('h1', 'Horchata 1 L', '1 L', 3);
+  const J1 = l('j1', 'Jamaica 1 L', '1 L', -3);
+
+  it('lo que sobra de un sabor tapa lo que falta de otro del mismo tamano', () => {
+    expect(precargaPorTamano([H1, J1])).toEqual([]);
+  });
+
+  it('neto positivo: se precarga solo el neto', () => {
+    expect(
+      precargaPorTamano([
+        l('h1', 'Horchata 1 L', '1 L', 5),
+        l('j1', 'Jamaica 1 L', '1 L', -3),
+      ]),
+    ).toEqual([{ presentacionId: 'h1', nombre: 'Horchata 1 L', piezas: 2 }]);
+  });
+
+  it('el neto se reparte de mayor faltante a menor hasta sumar exacto', () => {
+    expect(
+      precargaPorTamano([
+        l('h1', 'Horchata 1 L', '1 L', 3),
+        l('j1', 'Jamaica 1 L', '1 L', -1),
+        l('l1', 'Limonada 1 L', '1 L', 2),
+      ]),
+    ).toEqual([
+      { presentacionId: 'h1', nombre: 'Horchata 1 L', piezas: 3 },
+      { presentacionId: 'l1', nombre: 'Limonada 1 L', piezas: 1 },
+    ]);
+  });
+
+  it('empate de faltante: primero por nombre', () => {
+    expect(
+      precargaPorTamano([
+        l('t1', 'Tamarindo 1 L', '1 L', 2),
+        l('h1', 'Horchata 1 L', '1 L', 2),
+        l('j1', 'Jamaica 1 L', '1 L', -1),
+      ]),
+    ).toEqual([
+      { presentacionId: 't1', nombre: 'Tamarindo 1 L', piezas: 1 },
+      { presentacionId: 'h1', nombre: 'Horchata 1 L', piezas: 2 },
+    ]);
+  });
+
+  it('dos tamanos son independientes y la clave ignora mayusculas y espacios', () => {
+    expect(
+      precargaPorTamano([
+        l('h5', 'Horchata 500 ml', '500 ml', 4),
+        l('j5', 'Jamaica 500ML', '500ML', -1),
+        l('h1', 'Horchata 1 L', '1 L', -2),
+        l('j1', 'Jamaica 1 L', '1 L', 1),
+      ]),
+    ).toEqual([{ presentacionId: 'h5', nombre: 'Horchata 500 ml', piezas: 3 }]);
+  });
+
+  it('sin corte (faltante null) no precarga nada', () => {
+    expect(precargaPorTamano([l('h1', 'Horchata 1 L', '1 L', null)])).toEqual(
+      [],
+    );
   });
 });

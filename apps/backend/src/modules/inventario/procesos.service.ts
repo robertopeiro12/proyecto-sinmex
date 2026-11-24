@@ -34,6 +34,7 @@ import {
 } from './procesos.repository';
 import {
   TIPOS_PROCESO,
+  precargaPorTamano,
   validarProceso,
   type EntradaProcesoLimpia,
   type MermaDe,
@@ -92,7 +93,10 @@ export interface ProcesosDelDia {
  */
 export interface PrecargaDescuentos {
   corteHecho: boolean;
-  /** Solo las presentaciones con faltante > 0, en el orden del corte. */
+  /**
+   * Lo que el corte dice que falta, por tamano (`precargaPorTamano`): lo que
+   * sobra de un sabor tapa lo que falta de otro del mismo tamano. Orden del corte.
+   */
   lineas: { presentacionId: string; nombre: string; piezas: number }[];
 }
 
@@ -134,7 +138,8 @@ export class ProcesosService {
   /**
    * `GET /procesos/descuentos/precarga`: lee el corte ya calculado
    * (`CortesService.leer`, misma fecha, alcance y 404 de vendedor ajeno o dado
-   * de baja) y no recalcula la regla: los `faltante > 0` por presentacion.
+   * de baja) y no recalcula la teorica; reparte el faltante por tamano con la
+   * regla del corte (`precargaPorTamano`): la suma = `totales.faltante`.
    */
   async precargaDescuentos(
     usuarioId: string,
@@ -145,13 +150,7 @@ export class ProcesosService {
     if (corte.hecho === null) return { corteHecho: false, lineas: [] };
     return {
       corteHecho: true,
-      lineas: corte.lineas
-        .filter((l) => (l.faltante ?? 0) > 0)
-        .map((l) => ({
-          presentacionId: l.presentacionId,
-          nombre: l.nombre,
-          piezas: l.faltante as number,
-        })),
+      lineas: precargaPorTamano(corte.lineas),
     };
   }
 

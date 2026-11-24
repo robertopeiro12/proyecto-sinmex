@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
+import { useConfirmar } from "@/components/ui/confirmar";
 import { Campo, Entrada, Lista } from "@/components/ui/campo";
 import { SelectorSegmentado } from "@/components/ui/selector-segmentado";
 import { mensajeDe } from "@/lib/api";
@@ -119,6 +120,9 @@ export function CapturaProceso({
   const [error, setError] = useState<string | null>(null);
   const [avisoPrecarga, setAvisoPrecarga] = useState<string | null>(null);
   const precargaVigente = useRef(0);
+  // Lo último que precargó Descuentos: si la caja sigue igual, no hay nada escrito a mano.
+  const [precargado, setPrecargado] = useState<RenglonCaja[]>([]);
+  const { confirmar, ventana } = useConfirmar();
 
   const sucio = editando !== null || recibido.length > 0 || entregado.length > 0 || comentario.trim() !== "";
   useEffect(() => {
@@ -130,11 +134,19 @@ export function CapturaProceso({
   async function precargar(vendedor: string, dia: string) {
     const esta = ++precargaVigente.current;
     setAvisoPrecarga(null);
-    if (tipo !== "descuento" || editando || vendedor === "" || dia === "") return;
+    if (tipo !== "descuento" || editando || dia === "") return;
+    if (vendedor === "") {
+      setEntregado([]);
+      setPrecargado([]);
+      return;
+    }
     try {
       const r = await precargaDescuentos(vendedor, dia);
       if (esta !== precargaVigente.current) return;
-      setEntregado(r.lineas.map((l) => renglonDe(l, opciones)));
+      const renglones = r.lineas.map((l) => renglonDe(l, opciones));
+      setEntregado(renglones);
+      setPrecargado(renglones);
+      setError(null);
       if (!r.corteHecho) setAvisoPrecarga("Ese día no tiene corte hecho: no hay faltantes que precargar.");
       else if (r.lineas.length === 0) setAvisoPrecarga("Ese día no le faltó ninguna pieza.");
     } catch (err) {
@@ -143,15 +155,57 @@ export function CapturaProceso({
     }
   }
 
-  function cambiarQuien(q: string) {
+  /**
+   * Descuentos: antes de que la precarga reemplace la caja, pregunta si alguien la
+   * escribió o corrigió a mano (lo que precargó el sistema tal cual no cuenta).
+   */
+  async function soltarCajaDescuento(): Promise<boolean> {
+    if (tipo !== "descuento" || editando) return true;
+    const igual =
+      entregado.length === precargado.length &&
+      entregado.every((r, i) => r.presentacionId === precargado[i].presentacionId && r.piezas === precargado[i].piezas);
+    if (entregado.length === 0 || igual) return true;
+    return confirmar({
+      titulo: "¿Descartar lo que escribiste?",
+      descripcion: "Los productos de la caja se reemplazan por los faltantes del corte del vendedor y día que elegiste.",
+      confirmar: "Descartar",
+      tono: "normal",
+    });
+  }
+
+  async function cambiarQuien(q: string) {
+    if (q === quien) return;
+    if (!(await soltarCajaDescuento())) return;
     onQuien(q);
     void precargar(q, fecha);
   }
 
-  function cambiarFecha(dia: string, modo: ModoFecha) {
+  async function cambiarFecha(dia: string, modo: ModoFecha) {
     if (dia === "" || dia > hoy) return;
+    // "Otro día" sin cambiar la fecha solo muestra el campo: no vuelve a precargar.
+    // Sin vendedor no hay corte que precargar: la caja se queda como está.
+    if (dia === fecha || quien === "") {
+      onFecha(dia, modo);
+      return;
+    }
+    if (!(await soltarCajaDescuento())) return;
     onFecha(dia, modo);
     void precargar(quien, dia);
+  }
+
+  /** Merma de almacén no lleva "Le entregué": se descarta (preguntando si había algo). */
+  async function cambiarMermaDe(m: MermaDe) {
+    if (m === "almacen" && entregado.length > 0) {
+      const si = await confirmar({
+        titulo: "¿Descartar lo que escribiste?",
+        descripcion: "La merma de almacén no lleva «Le entregué»: lo que capturaste ahí se pierde.",
+        confirmar: "Descartar",
+        tono: "normal",
+      });
+      if (!si) return;
+      setEntregado([]);
+    }
+    onMermaDe(m);
   }
 
   const visiblesRecibido = titulos.recibido ? recibido : [];
@@ -222,7 +276,7 @@ export function CapturaProceso({
               etiqueta="Merma de"
               resaltado
               valor={mermaDe}
-              onCambio={onMermaDe}
+              onCambio={(m) => void cambiarMermaDe(m)}
               opciones={[
                 { valor: "cliente", texto: "Este cliente" },
                 { valor: "almacen", texto: "Almacén" },
@@ -237,7 +291,7 @@ export function CapturaProceso({
               etiqueta="Fecha"
               resaltado
               valor={modoFecha}
-              onCambio={(m) => cambiarFecha(m === "hoy" ? hoy : fecha, m)}
+              onCambio={(m) => void cambiarFecha(m === "hoy" ? hoy : fecha, m)}
               opciones={[
                 { valor: "hoy", texto: `Hoy · ${formatearDiaLargo(hoy)}` },
                 { valor: "otro", texto: "Otro día" },
@@ -250,14 +304,14 @@ export function CapturaProceso({
                 required
                 max={hoy}
                 value={fecha}
-                onChange={(e) => cambiarFecha(e.target.value, "otro")}
+                onChange={(e) => void cambiarFecha(e.target.value, "otro")}
                 className="w-40"
               />
             )}
           </div>
         </div>
         <Campo id={`quien-${tipo}`} etiqueta={ETIQUETA_QUIEN[tipo]} className="w-56">
-          <Lista value={quien} onChange={(e) => cambiarQuien(e.target.value)}>
+          <Lista value={quien} onChange={(e) => void cambiarQuien(e.target.value)}>
             {tipo === "descuento" ? <option value="">Elige un vendedor…</option> : <option value={QUIEN_OFICINA}>Oficina</option>}
             {opcionesQuien.map((v) => (
               <option key={v.id} value={v.id}>
@@ -323,6 +377,7 @@ export function CapturaProceso({
           </div>
         </>
       )}
+      {ventana}
     </div>
   );
 }

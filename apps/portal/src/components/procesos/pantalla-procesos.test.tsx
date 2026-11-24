@@ -140,7 +140,7 @@ describe("PantallaProcesos", () => {
     mockAuth(["proceso.consumo", "proceso.merma"]);
     render(<PantallaProcesos sucursal={null} />);
     expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Merma", "Consumos"]);
-    await screen.findByRole("heading", { name: /Mermas de hoy/ });
+    expect(await screen.findByText("Elige un cliente arriba.")).toBeInTheDocument();
   });
 
   it("la tarjeta del cliente muestra sus pastillas", async () => {
@@ -162,6 +162,9 @@ describe("PantallaProcesos", () => {
     const u = userEvent.setup();
     render(<PantallaProcesos sucursal={null} />);
     expect(await screen.findByText("Elige un cliente arriba.")).toBeInTheDocument();
+    // Merma de cliente sin cliente: solo el aviso, sin la lista de toda la sucursal.
+    expect(screen.queryByRole("heading", { name: /Mermas/ })).toBeNull();
+    expect(procesosLib.listarProcesos).not.toHaveBeenCalled();
     await u.click(screen.getByRole("radio", { name: "Almacén" }));
     expect(screen.queryByText("Elige un cliente arriba.")).toBeNull();
     expect(screen.getByRole("button", { name: "Agregar producto a Productos dañados" })).toBeInTheDocument();
@@ -397,5 +400,120 @@ describe("PantallaProcesos", () => {
     await u.selectOptions(await screen.findByLabelText("Vendedor"), "Pedro");
     expect(await screen.findByText("Ese día no tiene corte hecho: no hay faltantes que precargar.")).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /Piezas de/ })).toBeNull();
+  });
+
+  it("Merma: pasar a Almacén descarta lo de Le entregué, preguntando antes", async () => {
+    mockAuth(TODOS);
+    const u = userEvent.setup();
+    render(<PantallaProcesos sucursal={null} />);
+    await elegirCliente(u, "maris", /Mariscos Bucanero/);
+    await agregar(u, "Recibí dañado", "horch", "Horchata 500 ml", "5");
+    await agregar(u, "Le entregué", "jam", "Jamaica 500 ml", "5");
+
+    await u.click(screen.getByRole("radio", { name: "Almacén" }));
+    await u.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(screen.getByRole("radio", { name: "Este cliente" })).toBeChecked();
+    expect(screen.getByRole("textbox", { name: "Piezas de Jamaica 500 ml en Le entregué" })).toHaveValue("5");
+
+    await u.click(screen.getByRole("radio", { name: "Almacén" }));
+    await u.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Descartar" }));
+    expect(await screen.findByRole("radio", { name: "Almacén" })).toBeChecked();
+    expect(screen.getByRole("textbox", { name: "Piezas de Horchata 500 ml en Productos dañados" })).toHaveValue("5");
+    await u.click(screen.getByRole("radio", { name: "Este cliente" }));
+    expect(screen.queryByRole("textbox", { name: /en Le entregué/ })).toBeNull();
+  });
+
+  it("Merma: pasar a Almacén sin nada en Le entregué no pregunta", async () => {
+    mockAuth(TODOS);
+    const u = userEvent.setup();
+    render(<PantallaProcesos sucursal={null} />);
+    await elegirCliente(u, "maris", /Mariscos Bucanero/);
+    await agregar(u, "Recibí dañado", "horch", "Horchata 500 ml", "5");
+    await u.click(screen.getByRole("radio", { name: "Almacén" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(screen.getByRole("radio", { name: "Almacén" })).toBeChecked();
+  });
+
+  it("Descuentos: picar Otro día sin cambiar la fecha no vuelve a precargar ni borra lo corregido", async () => {
+    mockAuth(["proceso.descuento"]);
+    const u = userEvent.setup();
+    vi.mocked(procesosLib.precargaDescuentos).mockResolvedValue({
+      corteHecho: true,
+      lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", piezas: 3 }],
+    });
+    render(<PantallaProcesos sucursal={null} />);
+    await u.selectOptions(await screen.findByLabelText("Vendedor"), "Pedro");
+    const campo = await screen.findByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" });
+    await u.clear(campo);
+    await u.type(campo, "2");
+    await u.click(screen.getByRole("radio", { name: "Otro día" }));
+    expect(screen.getByLabelText("Día")).toHaveValue(HOY);
+    expect(procesosLib.precargaDescuentos).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" })).toHaveValue("2");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("Descuentos: cambiar de vendedor con algo corregido pregunta antes de reemplazarlo", async () => {
+    mockAuth(["proceso.descuento"]);
+    const u = userEvent.setup();
+    vi.mocked(procesosLib.precargaDescuentos).mockImplementation(async (vendedor) => ({
+      corteHecho: true,
+      lineas: [{ presentacionId: vendedor === "v2" ? "p1" : "p3", nombre: vendedor === "v2" ? "Horchata 1 L" : "Jamaica 500 ml", piezas: 3 }],
+    }));
+    render(<PantallaProcesos sucursal={null} />);
+    const vendedor = await screen.findByLabelText("Vendedor");
+    await u.selectOptions(vendedor, "Pedro");
+    const campo = await screen.findByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" });
+    await u.clear(campo);
+    await u.type(campo, "2");
+
+    await u.selectOptions(vendedor, "Ricardo");
+    await u.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Cancelar" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(screen.getByLabelText("Vendedor")).toHaveValue("v2");
+    expect(screen.getByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" })).toHaveValue("2");
+    expect(procesosLib.precargaDescuentos).toHaveBeenCalledTimes(1);
+
+    await u.selectOptions(screen.getByLabelText("Vendedor"), "Ricardo");
+    await u.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Descartar" }));
+    expect(await screen.findByRole("textbox", { name: "Piezas de Jamaica 500 ml en Productos" })).toHaveValue("3");
+    expect(screen.queryByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" })).toBeNull();
+    expect(screen.getByLabelText("Vendedor")).toHaveValue("v1");
+  });
+
+  it("Descuentos: sin corregir nada, cambiar de vendedor no pregunta; volver a Elige un vendedor vacía la caja", async () => {
+    mockAuth(["proceso.descuento"]);
+    const u = userEvent.setup();
+    vi.mocked(procesosLib.precargaDescuentos).mockResolvedValue({
+      corteHecho: true,
+      lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", piezas: 3 }],
+    });
+    render(<PantallaProcesos sucursal={null} />);
+    const vendedor = await screen.findByLabelText("Vendedor");
+    await u.selectOptions(vendedor, "Pedro");
+    await screen.findByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" });
+    await u.selectOptions(vendedor, "Ricardo");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    await waitFor(() => expect(procesosLib.precargaDescuentos).toHaveBeenLastCalledWith("v1", HOY));
+
+    await u.selectOptions(screen.getByLabelText("Vendedor"), "");
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: /Piezas de/ })).toBeNull());
+    expect(screen.getByRole("button", { name: "Guardar descuento" })).toBeDisabled();
+  });
+
+  it("Descuentos: el aviso rojo de una precarga fallida se limpia cuando la siguiente sale bien", async () => {
+    mockAuth(["proceso.descuento"]);
+    const u = userEvent.setup();
+    vi.mocked(procesosLib.precargaDescuentos)
+      .mockRejectedValueOnce(new ErrorApi("x", 404, "No existe ese vendedor."))
+      .mockResolvedValue({ corteHecho: true, lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", piezas: 3 }] });
+    render(<PantallaProcesos sucursal={null} />);
+    const vendedor = await screen.findByLabelText("Vendedor");
+    await u.selectOptions(vendedor, "Pedro");
+    expect(await screen.findByRole("alert")).toHaveTextContent("No existe ese vendedor.");
+    await u.selectOptions(vendedor, "Ricardo");
+    await screen.findByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" });
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
