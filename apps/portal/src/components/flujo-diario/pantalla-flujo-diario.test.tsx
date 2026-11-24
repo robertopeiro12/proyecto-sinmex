@@ -314,7 +314,7 @@ describe("PantallaFlujoDiario", () => {
     const luis = within(tabla).getByRole("button", { name: "Luis" }).closest("tr")!;
     expect(within(luis).getByText("Sin corte")).toHaveAttribute("data-tono", "neutro");
     const pastilla = within(tabla).getByRole("button", { name: "Inventario de Ricardo" });
-    expect(within(pastilla).getByText("Faltan 7")).toHaveAttribute("data-tono", "error");
+    expect(within(pastilla).getByText("Faltan: 7 pz p/Almacen")).toHaveAttribute("data-tono", "error");
     await u.click(pastilla);
     await screen.findByRole("dialog", { name: "Inventario · Ricardo · 09/11/2026" });
     expect((await screen.findAllByRole("tab", { name: "Inventario" }))[0]).toHaveAttribute("aria-selected", "true");
@@ -335,7 +335,7 @@ describe("PantallaFlujoDiario", () => {
     await screen.findByRole("table", { name: "Por vendedor" });
     await u.click(screen.getByRole("tab", { name: "Resultados por día" }));
     const tabla = screen.getByRole("table", { name: "Por día" });
-    const texto = within(tabla).getByText("Faltan 7 · 2 de merma");
+    const texto = within(tabla).getByText("Faltan: 7 pz p/Almacen · 2 pz merma");
     expect(texto.closest("button")).toBeNull();
     expect(within(tabla).queryByText("Pronto")).not.toBeInTheDocument();
   });

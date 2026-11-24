@@ -63,7 +63,7 @@ Los movimientos se toman por `movimiento_inventario.fecha` (la `fecha_operacion`
   a por tamaño por C6.
 - **D2. Estado del corte** (pastilla de la lista y de la pantalla): *Sin corte* / *Corte hecho* / *Faltan …* en rojo
   si cualquiera de los dos totales (piezas o merma) es > 0. La lista del día muestra los dos números
-  ("Faltan 3 · 1 de merma"; con 1, "Falta 1" y "Falta 1 de merma").
+  ("Faltan: 3 pz p/Almacen · 1 pz merma"; sin singular; solo piezas "Faltan: 3 pz p/Almacen", solo merma "Faltan: 1 pz merma"; cliente, 2026-11-24).
 - **D3. Agrupar por tamaño** con `presentacion.volumen` normalizado (minúsculas, sin espacios: "500 ml" = "500ml").
   Título de la sección = el volumen tal cual de la primera presentación. Orden de menor a mayor leyendo el número
   (`L` = ×1000 ml); lo que no se pueda leer va al final, por nombre. Dentro del tamaño, por nombre de producto.

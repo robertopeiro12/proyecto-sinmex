@@ -146,10 +146,10 @@ describe("textoHora", () => {
 
 describe("textoFaltantesDia", () => {
   it("usa la frase de la pastilla del corte", () => {
-    expect(textoFaltantesDia({ piezas: 3, merma: 1 })).toBe("Faltan 3 · 1 de merma");
-    expect(textoFaltantesDia({ piezas: 1, merma: 0 })).toBe("Falta 1");
-    expect(textoFaltantesDia({ piezas: 0, merma: 2 })).toBe("Faltan 2 de merma");
-    expect(textoFaltantesDia({ piezas: 0, merma: 1 })).toBe("Falta 1 de merma");
+    expect(textoFaltantesDia({ piezas: 3, merma: 1 })).toBe("Faltan: 3 pz p/Almacen · 1 pz merma");
+    expect(textoFaltantesDia({ piezas: 1, merma: 0 })).toBe("Faltan: 1 pz p/Almacen");
+    expect(textoFaltantesDia({ piezas: 0, merma: 2 })).toBe("Faltan: 2 pz merma");
+    expect(textoFaltantesDia({ piezas: 0, merma: 1 })).toBe("Faltan: 1 pz merma");
   });
   it("null si no hay nada que mostrar", () => {
     expect(textoFaltantesDia(null)).toBeNull();

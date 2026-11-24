@@ -37,6 +37,7 @@ import {
   type CorteVendedor as Corte,
   type LineaCorte,
   textoHecho,
+  fraseFaltan,
 } from "@/lib/cortes";
 import { formatearDiaLargo } from "@/lib/formato";
 import { listarProductos, type Producto } from "@/lib/productos";
@@ -327,16 +328,14 @@ export function CorteVendedor({
                   {/* Suma por tamaño solo lo que falta (un sobrante no tapa un faltante): no es la suma de los resultados. */}
                   <FilaTotal>
                     <Td>Faltantes del día</Td>
-                    <Td colSpan={2} className={SEPARADOR} />
-                    <Td alinear="derecha" className="whitespace-nowrap">
+                    <Td colSpan={3} alinear="derecha" className={`${SEPARADOR} whitespace-nowrap`}>
                       {(vista.totales.faltante ?? 0) > 0 && (
-                        <span className="text-destructive">{`Faltan ${vista.totales.faltante}`}</span>
+                        <span className="text-destructive">{fraseFaltan(vista.totales.faltante ?? 0, 0)}</span>
                       )}
                     </Td>
-                    <Td colSpan={2} className={SEPARADOR} />
-                    <Td alinear="derecha" className="whitespace-nowrap">
+                    <Td colSpan={3} alinear="derecha" className={`${SEPARADOR} whitespace-nowrap`}>
                       {(vista.totales.faltanteMerma ?? 0) > 0 && (
-                        <span className="text-destructive">{`${vista.totales.faltanteMerma} de merma`}</span>
+                        <span className="text-destructive">{fraseFaltan(0, vista.totales.faltanteMerma ?? 0)}</span>
                       )}
                     </Td>
                   </FilaTotal>

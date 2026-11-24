@@ -42,7 +42,7 @@ Hoy en el portal no existe: en el Dashboard y el Flujo diario la columna "Invent
   número que la merma teórica y su nombre significa otra cosa en la pestaña Inventario. En Inventario se queda, con un ⓘ
   que dice qué suma.
 - **R3.** La columna "Inventario" del Dashboard y del Flujo diario muestra la **pastilla del corte** ("Sin corte",
-  "Corte hecho", "Falta 1 · 1 de merma" en rojo, la misma de Producción → Corte). Al picarla abre la pestaña Inventario
+  "Corte hecho", "Faltan: 1 pz p/Almacen · 1 pz merma" en rojo (cliente, 2026-11-24), la misma de Producción → Corte). Al picarla abre la pestaña Inventario
   del detalle del vendedor.
 
 ## Decisiones mías (se pueden cambiar)
@@ -73,7 +73,7 @@ Hoy en el portal no existe: en el Dashboard y el Flujo diario la columna "Invent
 - **D6. Dashboard y Flujo diario:** la pestaña "Inventario" del detalle del vendedor deja de estar apagada y muestra las
   mismas tres sub-pestañas para ese vendedor y día, pidiendo los datos al endpoint de esta pantalla. Sin el permiso
   `inventario.ver` la pestaña dice "No tienes permiso" (como cualquier pantalla). La columna del Flujo diario *Por día*
-  (renglón = día de toda la sucursal) muestra la suma de los faltantes de ese día ("Faltan N · M de merma") sin abrir
+  (renglón = día de toda la sucursal) muestra la suma de los faltantes de ese día ("Faltan: N pz p/Almacen · M pz merma", cliente 2026-11-24) sin abrir
   nada; vacía si no hay cortes hechos.
 - **D7. Ancho:** la tabla de Inventario tiene 11 columnas; tiene que caber desde 1366 px (≈1012 px de caja) con
   `table-fixed` + `colgroup`, encabezado de dos niveles (*Operación del vendedor* / *Validación por almacén*) y la misma

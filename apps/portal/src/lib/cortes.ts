@@ -137,13 +137,12 @@ export function guardarCorteVendedor(datos: {
 
 // ── Reglas de la pantalla (puras) ──────────────────────────────────────────────
 
-/** "Faltan 3 · 1 de merma" (singular con 1). Una sola frase para la lista, el Dashboard y el Flujo diario. */
+/** "Faltan: 3 pz p/Almacen · 1 pz merma" (cliente, 2026-11-24; sin singular). Una sola frase para la lista, el Dashboard, el Flujo diario y los pies. */
 export function fraseFaltan(piezas: number, merma: number): string {
-  const faltan = (n: number) => (n === 1 ? "Falta" : "Faltan");
-  if (piezas > 0 && merma > 0)
-    return `${faltan(piezas)} ${piezas} · ${merma} de merma`;
-  if (merma > 0) return `${faltan(merma)} ${merma} de merma`;
-  return `${faltan(piezas)} ${piezas}`;
+  const partes: string[] = [];
+  if (piezas > 0) partes.push(`${piezas} pz p/Almacen`);
+  if (merma > 0) partes.push(`${merma} pz merma`);
+  return `Faltan: ${partes.join(" · ")}`;
 }
 
 /** La pastilla de estado de la lista: "Sin corte" gris, "Corte hecho", "Faltan N" rojo. */

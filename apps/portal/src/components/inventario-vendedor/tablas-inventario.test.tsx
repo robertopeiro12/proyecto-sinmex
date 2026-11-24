@@ -215,17 +215,17 @@ describe("TablasInventario", () => {
       ({ faltante, faltanteMerma }) as InventarioVendedor["totales"];
     const { rerender } = render(<TablasInventario datos={datos({ totales: totales(7, 2) })} />);
     const pie = () => within(screen.getByRole("table", { name: /Inventario|Merma/ })).getByText("Faltantes del día").closest("tr")!;
-    expect(within(pie()).getByText("Faltan 7")).toHaveClass("text-destructive");
+    expect(within(pie()).getByText("Faltan: 7 pz p/Almacen")).toHaveClass("text-destructive");
     await userEvent.click(screen.getByRole("tab", { name: "Merma" }));
-    expect(within(pie()).getByText("Faltan 2 de merma")).toHaveClass("text-destructive");
+    expect(within(pie()).getByText("Faltan: 2 pz merma")).toHaveClass("text-destructive");
     rerender(<TablasInventario datos={datos({ totales: totales(null, 0) })} />);
     expect(within(pie()).queryByText(/^Faltan? \d/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Inventario" }));
     expect(within(pie()).queryByText(/^Faltan? \d/)).not.toBeInTheDocument();
     rerender(<TablasInventario datos={datos({ totales: totales(1, 1) })} />);
-    expect(within(pie()).getByText("Falta 1")).toBeInTheDocument();
+    expect(within(pie()).getByText("Faltan: 1 pz p/Almacen")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Merma" }));
-    expect(within(pie()).getByText("Falta 1 de merma")).toBeInTheDocument();
+    expect(within(pie()).getByText("Faltan: 1 pz merma")).toBeInTheDocument();
   });
 
   it("resultado negativo sin rojo; resultadoMerma null vacío", async () => {

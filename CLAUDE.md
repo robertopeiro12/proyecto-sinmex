@@ -783,14 +783,14 @@ usuario con sesion pasa.
     **solo a los vendedores con corte hecho** (teóricas − reales = resultado siempre cuadra) y es `null` = celda vacía si
     ninguno con corte tuvo la presentación; `vendedoresSinCorte` los cuenta (aviso "N vendedores sin corte: no entran en la
     validación por almacén."). Con **un solo vendedor** la teórica sale aunque no tenga corte (`teoricaSinCorte`); reales y
-    resultado, vacíos. Resultado > 0 en rojo; negativo sin rojo. Pie **"Faltantes del día"** (`fraseFaltan`: "Falta/Faltan N"
-    y "… de merma"); con "Todos" es la suma de `totales.faltante`/`faltanteMerma` del corte de **cada** vendedor con corte
+    resultado, vacíos. Resultado > 0 en rojo; negativo sin rojo. Pie **"Faltantes del día"** (`fraseFaltan`: "Faltan: N pz p/Almacen"
+    y "Faltan: N pz merma", cliente 2026-11-24); con "Todos" es la suma de `totales.faltante`/`faltanteMerma` del corte de **cada** vendedor con corte
     hecho (lo mismo que `faltantesDeCortes`; lo que sobra a uno no compensa lo que falta a otro, Roberto 2026-11-24).
     `vendedor` que no es uuid ni `todos` = 400 "Elige un vendedor válido.". Recargas muestra también las pendientes y
     rechazadas, con su estado, pero Inventario solo cuenta las aceptadas. Sin filas: "No hubo recargas ese día." (Recargas) y
     "Sin carga aceptada ni venta ese día." (Inventario y Merma).
   - **Dashboard y Flujo diario**: la columna Inventario trae la **pastilla del corte** (`FilaVendedorDia.corte`: Sin corte /
-    Corte hecho / "Falta N · N de merma") y `ResumenDia.faltantesCorte`; picarla abre el detalle en la pestaña **Inventario**
+    Corte hecho / "Faltan: N pz p/Almacen · N pz merma", cliente 2026-11-24) y `ResumenDia.faltantesCorte`; picarla abre el detalle en la pestaña **Inventario**
     (la misma tabla; sin `inventario.ver` dice "No tienes permiso" y el resto del detalle sigue). En Flujo con varios días,
     cada renglón (vendedor, fecha) trae el estado de **su** corte.
   - **Tipos duplicados** backend ↔ portal en `apps/portal/src/lib/inventario-vendedor.ts` y `lib/flujo-diario.ts`: si cambias
