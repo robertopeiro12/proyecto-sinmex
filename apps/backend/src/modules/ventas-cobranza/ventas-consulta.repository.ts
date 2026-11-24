@@ -65,6 +65,8 @@ export interface CabeceraVenta {
   origen: OrigenVenta;
   /** T-73. */
   firma: FirmaDeVenta;
+  /** Pieza 2: quien atendio en el negocio (lo manda la tablet); `null` si no vino. */
+  atendio: string | null;
   /**
    * T-73: el portal toco la nota despues de grabarse
    * (`actualizado_por_usuario_id is not null`): la firma corresponde a la
@@ -204,6 +206,7 @@ export class VentasConsultaRepository {
       firma_esperada: boolean;
       firma_nombre: string | null;
       firma_subida_en: Date | string | null;
+      atendio_nombre: string | null;
       editada: boolean;
     }>`
       select vn.id, vn.folio, to_char(vn.fecha, 'YYYY-MM-DD') as fecha,
@@ -213,6 +216,7 @@ export class VentasConsultaRepository {
              vn.factura, f.numero as factura_numero, vn.comentarios,
              vn.monto_total, vn.status, vn.origen,
              vn.firma_esperada, vn.firma_nombre, vn.firma_subida_en,
+             vn.atendio_nombre,
              (vn.actualizado_por_usuario_id is not null) as editada
         from venta_nota vn
         join cliente c on c.id = vn.cliente_id
@@ -251,6 +255,7 @@ export class VentasConsultaRepository {
             ? null
             : new Date(f.firma_subida_en).toISOString(),
       },
+      atendio: f.atendio_nombre,
       editada: f.editada,
     };
   }

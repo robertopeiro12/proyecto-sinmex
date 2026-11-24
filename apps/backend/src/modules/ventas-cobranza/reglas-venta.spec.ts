@@ -19,6 +19,15 @@ describe('statusInicial (D4)', () => {
     expect(statusInicial('contado', 0)).toBe('promocion');
     expect(statusInicial('credito', 0)).toBe('promocion');
   });
+
+  it('credito con abono al vender nace abonado (pieza 2)', () => {
+    expect(statusInicial('credito', 32400, 10000)).toBe('abonado');
+  });
+
+  it('sin abono (null o 0) credito sigue pendiente', () => {
+    expect(statusInicial('credito', 32400, null)).toBe('pendiente');
+    expect(statusInicial('credito', 32400, 0)).toBe('pendiente');
+  });
 });
 
 describe('montoTotalCentavos (D14)', () => {

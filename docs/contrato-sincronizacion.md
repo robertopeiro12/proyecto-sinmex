@@ -560,7 +560,9 @@ sin forma, y el servidor los guarda tal cual.
       // enteros ≥ 0; cantidad + cantidad_promocion > 0;
       // precio_centavos siempre presente, > 0 si cantidad > 0 (0 solo en líneas de pura promoción)
     ],
-    "firma": { "nombre": "Doña Lupe" } // T-73, opcional: presente = espera la imagen de la firma
+    "firma": { "nombre": "Doña Lupe" }, // T-73, opcional: presente = espera la imagen de la firma
+    "atendio": "Doña Lupe",          // pieza 2, opcional: quién atendió; ≤ 80, se recorta; null/en blanco = no dijo
+    "abono_centavos": 30000          // pieza 2, opcional: abono al vender, solo a crédito, 0 < abono < total
   }
 }
 ```
@@ -571,7 +573,7 @@ sin forma, y el servidor los guarda tal cual.
   como `null`. El contrato, sin embargo, los exige: la tablet siempre los manda.
 - **No hay monto ni status.** El servidor calcula `monto_total = Σ (cantidad × precio_centavos)`
   (las piezas de promoción no suman) y decide el status: contado → `pagada`, crédito →
-  `pendiente`, monto 0 → `promocion`. `semana` (ISO-8601) y `mes` salen de `fecha_operacion`
+  `pendiente` (o `abonado` si trae `abono_centavos`, ver abajo), monto 0 → `promocion`. `semana` (ISO-8601) y `mes` salen de `fecha_operacion`
   **tal cual llegó**, nunca de `ocurrido_en`.
 - **Vale el precio de la nota firmada.** El servidor guarda el `precio_centavos` que manda la
   tablet y **no lo compara** con su catálogo. Solo comprueba que la presentación se venda
@@ -623,6 +625,32 @@ en toda venta (la firma es obligatoria en la app); una tablet anterior no la man
   → `datos-invalidos` con motivo `firma.nombre: …`. `firma` que no es objeto → `datos-invalidos` (`firma: …`).
 - Editar la venta en el portal no borra la firma ni la vuelve a pedir: el portal avisa que la firma corresponde a la
   versión original.
+
+#### `atendio` y `abono_centavos` (rediseño, pieza 2)
+
+**Opcionales y aditivos** (`CONTRATO_ACTUAL` sigue en 1): una tablet anterior no los manda y la venta entra igual
+que antes. La venta del portal no los lleva.
+
+```jsonc
+"atendio": "Doña Lupe",     // opcional; ausente, null o en blanco = null
+"abono_centavos": 30000      // opcional; ausente o null = sin abono
+```
+
+- `atendio`: el nombre de quien atendió al vendedor en el negocio, distinto de `firma.nombre`. Texto que se recorta,
+  de 1 a 80 caracteres; se guarda en `venta_nota.atendio_nombre` y el portal lo muestra en el detalle. Otro tipo o
+  más de 80 → `datos-invalidos` con motivo `atendio: …`.
+- `abono_centavos`: lo que el cliente pagó al recibir una venta **a crédito**. Entero de centavos, **mayor que 0 y
+  menor que el total** de la venta (igual al total es una venta de contado). Con `contado`, en una venta de $0, o
+  fuera de rango (0, negativo, decimal, ≥ total, no numérico) → `datos-invalidos` con motivo `abono_centavos: …`.
+- Con abono, la venta nace **`abonado`** y el servidor escribe, en la misma transacción, un `cobranza_abono` por el
+  monto del abono igual que el cobro automático del contado: `origen = 'venta_contado'`, sin `cobro`,
+  `metodo_pago = 'efectivo'`, `fecha_pago = fecha_operacion`, `tipo = 'abono'` y `saldo_pendiente` = total − abono.
+  No es un `cobro` aparte porque la tablet no conoce el id de la nota en el servidor.
+- En el siguiente `pull` la nota baja en `notas_pendientes` con `status: 'abonado'`, `saldo_centavos` = total −
+  abono y el abono en `abonos`.
+- **Portal (T-17).** Editar una venta abonada que sigue a crédito **conserva** el abono por su monto y recalcula
+  status y saldo; el total nuevo tiene que ser mayor que el abono (si no, 409). Pasarla a contado lo reemplaza por el
+  cobro de contado del total. Eliminarla da de baja el abono.
 
 ### `tipo: "prospecto"` — el alta de un prospecto (T-40)
 

@@ -652,6 +652,22 @@ export type DatosVenta = {
    * fotos.
    */
   firma?: FirmaVenta | null;
+  /**
+   * Pieza 2 del rediseno. Opcional y aditivo (`CONTRATO_ACTUAL` sigue en 1):
+   * quien atendio al vendedor en el negocio. Se recorta, de 1 a 80; ausente,
+   * `null` o en blanco es `null`. Otro tipo o mas de 80 es `datos-invalidos`
+   * (`atendio: …`). Se guarda en `venta_nota.atendio_nombre`.
+   */
+  atendio?: string | null;
+  /**
+   * Pieza 2 del rediseno. Opcional y aditivo: lo que el cliente pago al recibir
+   * una venta **a credito**, en centavos enteros, `0 < abono < total`. Con
+   * `contado`, en una venta de $0 o fuera de rango es `datos-invalidos`
+   * (`abono_centavos: …`). Con abono la venta nace `abonado` y el servidor
+   * escribe un `cobranza_abono` de origen `venta_contado` (sin `cobro`, efectivo,
+   * `fecha_pago = fecha_operacion`) por ese monto, como el cobro del contado.
+   */
+  abono_centavos?: number | null;
 };
 
 /**

@@ -260,6 +260,8 @@ describe('prepararProyeccion', () => {
           ],
           regalos: [],
           firma: null,
+          atendio: null,
+          abonoCentavos: null,
         },
       },
     });

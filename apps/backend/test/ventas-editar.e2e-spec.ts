@@ -893,6 +893,8 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
         origen: 'portal',
         // T-73: la venta del portal no espera firma y no se ha editado.
         firma: { esperada: false, nombre: null, subidaEn: null },
+        // Pieza 2: el portal no captura quien atendio.
+        atendio: null,
         editada: false,
         saldoCentavos: 0,
         lineas: [

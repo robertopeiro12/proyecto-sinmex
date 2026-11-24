@@ -22,6 +22,7 @@ import {
   planDetalle,
 } from './edicion-venta';
 import { InventarioVentaService } from './inventario-venta.service';
+import { formatearPesos } from './pago-rechazado';
 import { montoTotalCentavos, statusInicial } from './reglas-venta';
 import { VentaRechazada } from './venta-rechazada';
 import {
@@ -145,6 +146,20 @@ export class VentasEdicionService {
           vendedorNuevo !== null && vendedorNuevo !== venta.vendedorId
             ? await this.repo.pctComisionDelCliente(venta.clienteId, trx)
             : null;
+        // Pieza 2: el abono al vender de una venta a credito es dinero que el
+        // cliente ya entrego. Si la venta sigue a credito se conserva por su
+        // monto (status `abonado`, saldo = monto nuevo − abono); si pasa a
+        // contado lo absorbe el cobro de contado por el total. El portal no
+        // manda abono: el total nuevo tiene que seguir siendo mayor que el.
+        const abonoAlVender =
+          nueva.contadoCredito === 'credito'
+            ? await this.repo.abonoAlVender(id, trx)
+            : undefined;
+        if (abonoAlVender && abonoAlVender.montoCentavos >= monto) {
+          throw new ConflictException(
+            `Esta venta tiene un abono al vender de ${formatearPesos(abonoAlVender.montoCentavos)}: el total nuevo tiene que ser mayor que el abono.`,
+          );
+        }
         const metodo =
           dto.metodoPago ??
           (await this.repo.metodoCobroContado(id, trx)) ??
@@ -160,7 +175,11 @@ export class VentasEdicionService {
             factura: nueva.factura,
             comentarios: nueva.comentarios,
             montoTotal: aPesos(monto),
-            status: statusInicial(nueva.contadoCredito, monto),
+            status: statusInicial(
+              nueva.contadoCredito,
+              monto,
+              abonoAlVender?.montoCentavos ?? null,
+            ),
             pctComision: pctComisionTrasEdicion(
               venta,
               vendedorNuevo,
@@ -194,7 +213,8 @@ export class VentasEdicionService {
 
         // §4.2 paso 8: el cobro de contado se reescribe siempre; una
         // promocion ($0) no se cobra. Fecha = la de la venta; cobrador = el
-        // repartidor (null en Oficina).
+        // repartidor (null en Oficina). El abono al vender (pieza 2) tambien
+        // se reescribe, con su monto y el saldo nuevo en `saldo_pendiente`.
         await this.repo.borrarCobroContado(id, trx);
         if (nueva.contadoCredito === 'contado' && monto > 0) {
           await this.cobranzas.insertarAbono(
@@ -207,6 +227,22 @@ export class VentasEdicionService {
               tipo: 'cobranza',
               saldoPendiente: aPesos(0),
               metodoPago: metodo,
+              origen: 'venta_contado',
+            },
+            trx,
+          );
+        }
+        if (abonoAlVender) {
+          await this.cobranzas.insertarAbono(
+            {
+              ventaNotaId: id,
+              vendedorId: vendedorNuevo,
+              fechaPago: venta.fecha,
+              fechaOperacion: venta.fecha,
+              monto: aPesos(abonoAlVender.montoCentavos),
+              tipo: 'abono',
+              saldoPendiente: aPesos(monto - abonoAlVender.montoCentavos),
+              metodoPago: abonoAlVender.metodoPago,
               origen: 'venta_contado',
             },
             trx,
