@@ -10,9 +10,10 @@ import {
   type ResumenDia,
   type Totales,
 } from "@/lib/flujo-diario";
+import { textoFaltantesDia } from "@/lib/inventario-vendedor";
 import { formatearFecha, formatearPesos } from "@/lib/formato";
 import { DetalleDia, ETIQUETA_PESTANA_DIA, type PestanaDetalleDia } from "./detalle-dia";
-import { Barra, BotonNumero, BotonRenglon, BotonVer, formatearPiezas, Pronto } from "./piezas";
+import { Barra, BotonNumero, BotonRenglon, BotonVer, formatearPiezas } from "./piezas";
 import { useDetalleAbierto } from "./use-detalle-abierto";
 import { VentanaDetalle } from "./ventana-detalle";
 
@@ -76,8 +77,10 @@ export function TablaPorDia({
         <Td>
           <VisitasRuta totales={t} onClick={() => verEn("visitas")} />
         </Td>
-        <Td alinear="centro">
-          <Pronto />
+        <Td alinear="centro" className="whitespace-nowrap">
+          {textoFaltantesDia(d.faltantesCorte) ? (
+            <span className="font-semibold text-destructive">{textoFaltantesDia(d.faltantesCorte)}</span>
+          ) : null}
         </Td>
       </Fila>
     );
@@ -106,7 +109,7 @@ export function TablaPorDia({
           />
         )}
       </VentanaDetalle>
-      <Tabla aria-label="Por día" className="min-w-[72rem] table-fixed">
+      <Tabla aria-label="Por día" className="min-w-[78rem] table-fixed">
         <colgroup>
           <col className="w-32" />
           <col className="w-16" />
@@ -118,7 +121,7 @@ export function TablaPorDia({
           <col className="w-20" />
           <col className="w-24" />
           <col />
-          <col className="w-22" />
+          <col className="w-40" />
         </colgroup>
         <thead>
           <tr>

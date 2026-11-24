@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import * as fd from "@/lib/flujo-diario";
 import type { DetalleVendedorDia, FlujoDiario, ResumenVendedorDia, Totales } from "@/lib/flujo-diario";
+import * as invLib from "@/lib/inventario-vendedor";
 import * as sucursalesLib from "@/lib/sucursales";
 import * as vendedoresLib from "@/lib/vendedores";
 import { PantallaFlujoDiario } from "./pantalla-flujo-diario";
@@ -18,6 +19,10 @@ vi.mock("@/lib/flujo-diario", async (importOriginal) => {
     obtenerDetalleDia: vi.fn(),
     guardarNotasEntregadas: vi.fn(),
   };
+});
+vi.mock("@/lib/inventario-vendedor", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/inventario-vendedor")>();
+  return { ...real, leerInventarioVendedor: vi.fn() };
 });
 vi.mock("@/lib/vendedores", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/vendedores")>();
@@ -291,6 +296,48 @@ describe("PantallaFlujoDiario", () => {
     await u.click(screen.getByRole("button", { name: "Cobranza de Ricardo" }));
     const otra = await screen.findByRole("dialog", { name: "Cobranza · Ricardo · 09/11/2026" });
     expect(await within(otra).findByRole("tab", { name: "Cobranza" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("Por vendedor: la pastilla del corte (Faltan N rojo) abre el detalle en Inventario y pide los datos", async () => {
+    mockAuth([PERMISO]);
+    obtenerFlujo.mockResolvedValue({
+      ...DOS_SUCURSALES,
+      porVendedor: [{ ...RICARDO, corte: { estado: "con_faltante", piezasFaltantes: 7, mermaFaltante: 0 } }, LUIS],
+    });
+    vi.mocked(invLib.leerInventarioVendedor).mockResolvedValue({
+      fecha: "2026-11-09", hoy: "2026-11-09", sucursal: { id: "s", codigo: "TJ" }, vendedor: { id: "ricardo", nombre: "Ricardo" },
+      lineas: [], totales: {} as invLib.InventarioVendedor["totales"], recargas: [], vendedoresSinCorte: 0, corte: null,
+    });
+    const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PantallaFlujoDiario sucursal={null} />);
+    const tabla = await screen.findByRole("table", { name: "Por vendedor" });
+    const luis = within(tabla).getByRole("button", { name: "Luis" }).closest("tr")!;
+    expect(within(luis).getByText("Sin corte")).toHaveAttribute("data-tono", "neutro");
+    const pastilla = within(tabla).getByRole("button", { name: "Inventario de Ricardo" });
+    expect(within(pastilla).getByText("Faltan 7")).toHaveAttribute("data-tono", "error");
+    await u.click(pastilla);
+    await screen.findByRole("dialog", { name: "Inventario · Ricardo · 09/11/2026" });
+    expect((await screen.findAllByRole("tab", { name: "Inventario" }))[0]).toHaveAttribute("aria-selected", "true");
+    expect(invLib.leerInventarioVendedor).toHaveBeenCalledWith("2026-11-09", "TJ", "ricardo");
+  });
+
+  it("Por día: Inventario dice los faltantes del día (vacío si null) y no es botón", async () => {
+    mockAuth([PERMISO]);
+    obtenerFlujo.mockResolvedValue({
+      ...DOS_SUCURSALES,
+      porDia: [
+        { fecha: "2026-11-09", sucursalCodigo: "TJ", totales: TOT_TJ, oficinaCentavos: 0, faltantesCorte: { piezas: 7, merma: 2 } },
+        { fecha: "2026-11-09", sucursalCodigo: "MX", totales: TOT_MX, oficinaCentavos: 0, faltantesCorte: null },
+      ],
+    });
+    const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PantallaFlujoDiario sucursal={null} />);
+    await screen.findByRole("table", { name: "Por vendedor" });
+    await u.click(screen.getByRole("tab", { name: "Resultados por día" }));
+    const tabla = screen.getByRole("table", { name: "Por día" });
+    const texto = within(tabla).getByText("Faltan 7 · 2 de merma");
+    expect(texto.closest("button")).toBeNull();
+    expect(within(tabla).queryByText("Pronto")).not.toBeInTheDocument();
   });
 
   it("Por día: picar la fecha pide el detalle de ese día y sucursal", async () => {

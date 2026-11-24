@@ -1,6 +1,11 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
+import { TablasInventario } from "@/components/inventario-vendedor/tablas-inventario";
+import { Aviso } from "@/components/ui/aviso";
+import { EstadoPantalla } from "@/components/ui/estado-pantalla";
+import { ErrorApi, mensajeDe } from "@/lib/api";
+import { leerInventarioVendedor, type InventarioVendedor } from "@/lib/inventario-vendedor";
 import { Etiqueta } from "@/components/ui/etiqueta";
 import { Pestanas } from "@/components/ui/pestanas";
 import { SelectorSegmentado } from "@/components/ui/selector-segmentado";
@@ -50,6 +55,7 @@ const E = ETIQUETA_PESTANA_VENDEDOR;
  */
 export function DetalleVendedor({
   detalle,
+  sucursal,
   modo,
   pestanaInicial = "venta",
   onCambioPestana,
@@ -57,6 +63,8 @@ export function DetalleVendedor({
   onCambiosPendientes,
 }: {
   detalle: DetalleVendedorDia;
+  /** Código de la sucursal del vendedor (la del renglón): el Inventario la necesita. */
+  sucursal: string;
   modo: "flujo" | "dashboard";
   pestanaInicial?: PestanaDetalleVendedor;
   onCambioPestana?: (pestana: PestanaDetalleVendedor) => void;
@@ -82,7 +90,11 @@ export function DetalleVendedor({
     ...(modo === "dashboard"
       ? [{ valor: "corte", etiqueta: E.corte, contenido: <PestanaCorte corte={detalle.corte} /> }]
       : []),
-    { valor: "inventario", etiqueta: `${E.inventario} · pronto`, contenido: null, deshabilitada: true },
+    {
+      valor: "inventario",
+      etiqueta: E.inventario,
+      contenido: <PestanaInventario fecha={detalle.fecha} sucursal={sucursal} vendedorId={detalle.vendedorId} />,
+    },
   ];
   // Solo cuenta al montarse (Pestanas no es controlada): quien quiera mandar a otra pestaña
   // le cambia la `key`. Así recordar la que eligió el usuario no la vuelve a fijar.
@@ -95,6 +107,36 @@ export function DetalleVendedor({
       onCambio={(valor) => onCambioPestana?.(valor as PestanaDetalleVendedor)}
     />
   );
+}
+
+/**
+ * Inventario del vendedor ese día. Se monta (y pide) solo al abrir la pestaña: Pestanas no
+ * monta las otras. Sin `inventario.ver` el servidor contesta 403 y solo esta pestaña lo dice.
+ */
+function PestanaInventario({ fecha, sucursal, vendedorId }: { fecha: string; sucursal: string; vendedorId: string }) {
+  const [datos, setDatos] = useState<InventarioVendedor | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [sinPermiso, setSinPermiso] = useState(false);
+  useEffect(() => {
+    let vigente = true;
+    leerInventarioVendedor(fecha, sucursal, vendedorId).then(
+      (r) => {
+        if (vigente) setDatos(r);
+      },
+      (err: unknown) => {
+        if (!vigente) return;
+        if (err instanceof ErrorApi && err.status === 403) setSinPermiso(true);
+        else setError(mensajeDe(err, "No se pudo cargar el inventario."));
+      },
+    );
+    return () => {
+      vigente = false;
+    };
+  }, [fecha, sucursal, vendedorId]);
+  if (sinPermiso) return <EstadoPantalla tipo="sin-permiso" />;
+  if (error) return <Aviso tono="error">{error}</Aviso>;
+  if (!datos) return <EstadoPantalla tipo="cargando" />;
+  return <TablasInventario datos={datos} />;
 }
 
 type Vista = "producto" | "cliente";
