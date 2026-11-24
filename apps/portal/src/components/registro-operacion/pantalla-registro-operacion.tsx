@@ -6,6 +6,7 @@ import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantall
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { Pestanas } from "@/components/ui/pestanas";
 import { infoDeTipo, TIPOS_OPERACION, type OperacionAlmacen, type TipoOperacion } from "@/lib/operaciones-almacen";
+import { diaAnterior } from "@/lib/fechas";
 import { hoyEnTijuana } from "@/lib/ventas";
 import { CapturaOperacion } from "./captura-operacion";
 import { ListaOperaciones } from "./lista-operaciones";
@@ -17,6 +18,13 @@ interface Captura {
   tipo: TipoOperacion;
   operacion: OperacionAlmacen | null;
   fecha: string;
+}
+
+/** Un envío nuevo solo admite hoy o ayer: con un día más viejo en la pestaña, abre en hoy. */
+function fechaDeNueva(tipo: TipoOperacion, fecha: string): string {
+  const hoy = hoyEnTijuana();
+  if (tipo === "envio" && fecha < diaAnterior(hoy)) return hoy;
+  return fecha;
 }
 
 /**
@@ -75,7 +83,7 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
               sucursal={codigo}
               fecha={fecha}
               onFecha={setFecha}
-              onCapturar={(operacion) => setCaptura({ tipo: t.tipo, operacion, fecha: operacion?.fecha ?? fecha })}
+              onCapturar={(operacion) => setCaptura({ tipo: t.tipo, operacion, fecha: operacion?.fecha ?? fechaDeNueva(t.tipo, fecha) })}
             />
           ),
         }))}

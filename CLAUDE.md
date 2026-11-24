@@ -735,11 +735,18 @@ usuario con sesion pasa.
     al editar si no se cambia.
   - Tipos duplicados backend ↔ portal (`lib/operaciones-almacen.ts`, `lib/motivos-merma.ts`): si cambias uno, cambia el otro.
   - **Nube**: `20261124120000_registro_operacion.sql` se sube a `sinmex dev` después del merge, con el protocolo de push.
-    Copia **una sola vez** `produccion` a entradas (una por fecha y sucursal, solo filas vivas). Pre-flight (cada una debe
+    Copia **una sola vez** `produccion` a entradas (una por fecha y sucursal, solo filas vivas, con la hora de la fila más
+    antigua del grupo). **Backend y portal juntos** (el portal nuevo ya no llama a `/produccion`). Pre-flight (cada una debe
     dar 0): `select count(*) from produccion where deleted_at is null and piezas > 100000;` y
     `select count(*) from (select 1 from produccion where deleted_at is null group by fecha, sucursal_id having count(*) > 200) t;`.
-    Informativa, para el comentario del PR: `select count(*) from (select distinct fecha, sucursal_id from produccion where
-    deleted_at is null) t;` (cuántas entradas crea). Backend antes que el portal.
+    Antes del push, anota para comparar después: los grants vivos de `almacen_general.gestionar`
+    (`select count(*) from perfil_permiso pp join permiso p on p.id = pp.permiso_id where p.clave = 'almacen_general.gestionar'
+    and pp.deleted_at is null;` y lo mismo con `usuario_permiso`), las entradas que va a crear la copia
+    (`select count(*) from (select distinct fecha, sucursal_id from produccion where deleted_at is null) t;`) y la hora del
+    push; todo va al comentario del PR. **Avisa a Mario** que no corra un backend viejo contra `sinmex dev` durante el push
+    (escribiría en `produccion` y la copia es única). Post-flight: `select count(*) from produccion where greatest(created_at,
+    updated_at, coalesce(deleted_at, created_at)) > '<hora del push>';` debe dar 0 (lo que se escriba en `produccion` después
+    se pierde) y los grants vivos de `operacion.entrada` deben ser al menos los conteos de antes.
 - **Corte de mercancía (pieza 3).** *Producción → Corte* (`/produccion/corte`) absorbe al Retorno: por vendedor y día, el
   almacenista cuenta lo que regresó (**buenas** y **merma**) y el portal le muestra cuánto **faltó**. La vieja
   `/produccion/retorno` redirige a Corte (conserva `?sucursal`) y los endpoints `/retornos` **se quitaron** (404). Spec:

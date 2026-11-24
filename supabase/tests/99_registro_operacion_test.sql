@@ -1,5 +1,5 @@
 begin;
-select plan(32);
+select plan(36);
 
 -- Registro de Operacion, parte 1: lo que la BASE garantiza aunque alguien escriba
 -- por debajo del servicio. Prefijo `zz-pgtap-regop`.
@@ -29,13 +29,13 @@ select is(
   1, 'existe motivo_merma.gestionar en General');
 
 -- Motivos: nombre unico entre vivos.
-select throws_ok($$insert into motivo_merma (nombre) values ('  caducado POR fecha ')$$,
+select throws_ok($$insert into motivo_merma (nombre, aplica_almacen) values ('  caducado POR fecha ', true)$$,
   '23505', null, 'el nombre del motivo es unico entre vivos sin importar mayusculas ni espacios');
-select throws_ok($$insert into motivo_merma (nombre) values ('   ')$$,
+select throws_ok($$insert into motivo_merma (nombre, aplica_almacen) values ('   ', true)$$,
   '23514', null, 'el nombre del motivo no puede quedar vacio');
-insert into motivo_merma (nombre) values ('zz-pgtap-regop Motivo');
+insert into motivo_merma (nombre, aplica_almacen) values ('zz-pgtap-regop Motivo', true);
 update motivo_merma set deleted_at = now() where nombre = 'zz-pgtap-regop Motivo';
-select lives_ok($$insert into motivo_merma (nombre) values ('zz-pgtap-regop Motivo')$$,
+select lives_ok($$insert into motivo_merma (nombre, aplica_almacen) values ('zz-pgtap-regop Motivo', true)$$,
   'dar de baja un motivo libera su nombre');
 
 -- Fixtures.
@@ -127,13 +127,14 @@ insert into produccion (fecha, sucursal_id, presentacion_id, piezas, capturo_usu
   select '2099-01-01', mx, p1, 40, ub from _r;
 
 with g as (
-  select distinct on (fecha, sucursal_id) fecha, sucursal_id, capturo_usuario_id
+  select distinct on (fecha, sucursal_id) fecha, sucursal_id, capturo_usuario_id,
+         min(created_at) over (partition by fecha, sucursal_id) as desde
     from produccion
    where deleted_at is null and fecha = '2099-01-01'
    order by fecha, sucursal_id, created_at, id
 ), nuevas as (
-  insert into operacion_almacen (sucursal_id, tipo, fecha, origen, capturo_usuario_id)
-  select sucursal_id, 'entrada', fecha, 'produccion', capturo_usuario_id from g
+  insert into operacion_almacen (sucursal_id, tipo, fecha, origen, capturo_usuario_id, created_at, updated_at)
+  select sucursal_id, 'entrada', fecha, 'produccion', capturo_usuario_id, desde, desde from g
   returning id, fecha, sucursal_id
 )
 insert into operacion_almacen_linea (operacion_id, presentacion_id, piezas)
@@ -154,6 +155,24 @@ select is(
   (select capturo_usuario_id from operacion_almacen
     where fecha = '2099-01-01' and sucursal_id = (select tj from _r)),
   'capturo = quien capturo la fila mas antigua del grupo');
+
+select is(
+  (select created_at from operacion_almacen
+    where fecha = '2099-01-01' and sucursal_id = (select tj from _r)),
+  (select min(created_at) from produccion
+    where fecha = '2099-01-01' and sucursal_id = (select tj from _r) and deleted_at is null),
+  'la entrada copiada lleva la hora de la fila mas antigua del grupo');
+select is(
+  (select updated_at = created_at from operacion_almacen
+    where fecha = '2099-01-01' and sucursal_id = (select tj from _r)),
+  true, 'y su updated_at es la misma hora');
+
+-- Un motivo de merma tiene que aplicar en al menos un lugar.
+select throws_ok($$insert into motivo_merma (nombre, aplica_almacen, aplica_cliente, aplica_vehiculo)
+  values ('zz-pgtap-regop Sin casillas', false, false, false)$$,
+  '23514', null, 'un motivo sin ninguna casilla se rechaza');
+select lives_ok($$insert into motivo_merma (nombre, aplica_cliente)
+  values ('zz-pgtap-regop Solo cliente', true)$$, 'con una sola casilla basta');
 
 select * from finish();
 rollback;

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorApi } from "@/lib/api";
@@ -339,6 +339,41 @@ describe("PantallaRegistroOperacion", () => {
           lineas: [{ presentacionId: "p1", piezas: 9 }],
         }),
       );
+    });
+
+    it("un envío nuevo abre en hoy si la fecha de la pestaña es anterior a ayer", async () => {
+      mockAuth(TODOS);
+      const u = userEvent.setup();
+      render(<PantallaRegistroOperacion sucursal={null} pestana={null} />);
+      const viejo = diaAnterior(diaAnterior(HOY));
+      fireEvent.change(await screen.findByLabelText("Día"), { target: { value: viejo } });
+      await waitFor(() => expect(ops.listarOperaciones).toHaveBeenLastCalledWith({ fecha: viejo, tipo: "entrada", sucursal: "TJ" }));
+      await u.click(screen.getByRole("tab", { name: "Envíos" }));
+      await u.click(await screen.findByRole("button", { name: "Registrar envío" }));
+      expect(await screen.findByLabelText("Día")).toHaveValue(HOY);
+    });
+
+    it("un envío nuevo conserva ayer como fecha de la pestaña", async () => {
+      mockAuth(TODOS);
+      const u = userEvent.setup();
+      render(<PantallaRegistroOperacion sucursal={null} pestana="envio" />);
+      await u.click(await screen.findByRole("button", { name: "Ayer" }));
+      await u.click(await screen.findByRole("button", { name: "Registrar envío" }));
+      expect(await screen.findByLabelText("Día")).toHaveValue(diaAnterior(HOY));
+    });
+
+    it("si fallan los motivos o las sucursales lo dice", async () => {
+      mockAuth(TODOS);
+      const u = userEvent.setup();
+      vi.mocked(motivosLib.listarMotivosMerma).mockRejectedValue(new ErrorApi("x", 500, "Motivos caídos"));
+      vi.mocked(sucursalesLib.listarSucursales).mockRejectedValue(new ErrorApi("x", 500, "Sucursales caídas"));
+      render(<PantallaRegistroOperacion sucursal={null} pestana="merma" />);
+      await u.click(await screen.findByRole("button", { name: "Registrar merma" }));
+      expect(await screen.findByText("Motivos caídos")).toBeInTheDocument();
+      await u.click(screen.getByRole("button", { name: "← Volver a Merma" }));
+      await u.click(screen.getByRole("tab", { name: "Envíos" }));
+      await u.click(await screen.findByRole("button", { name: "Registrar envío" }));
+      expect(await screen.findByText("Sucursales caídas")).toBeInTheDocument();
     });
 
     it("Volver regresa a la lista sin guardar", async () => {

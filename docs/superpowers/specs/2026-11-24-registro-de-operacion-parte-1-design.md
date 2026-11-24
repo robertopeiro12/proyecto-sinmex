@@ -115,9 +115,20 @@ la merma con motivo en la app (Mario), Procesos (merma/descuentos que captura la
 
 ## Nube
 
-Una migración (tablas nuevas, permisos, semilla de motivos y la copia de `produccion`). Pre-flight:
-`select count(*) from produccion where deleted_at is null` y `select count(distinct (fecha, sucursal_id)) from produccion
-where deleted_at is null` (filas y operaciones que se van a copiar; van al comentario del PR). Backend y portal juntos.
+Una migración (tablas nuevas, permisos, semilla de motivos y la copia de `produccion`). **Backend y portal juntos**
+(el portal nuevo ya no llama a `/produccion`, que el backend retiró). Protocolo de push de `CLAUDE.md` más:
+
+- **Antes del push**, además del pre-flight de la migración (cada una da 0: filas de `produccion` con `piezas > 100000` y
+  fechas/sucursales con más de 200 filas), contar los grants vivos de `almacen_general.gestionar`
+  (`select count(*) from perfil_permiso pp join permiso p on p.id = pp.permiso_id where p.clave = 'almacen_general.gestionar'
+  and pp.deleted_at is null;` y lo mismo con `usuario_permiso`), para compararlos después con `operacion.entrada`. Anotar
+  también cuántas entradas va a crear la copia (`select count(*) from (select distinct fecha, sucursal_id from produccion
+  where deleted_at is null) t;`) y la hora del push.
+- **Avisar a Mario** que no corra un backend viejo contra `sinmex dev` durante el push: escribiría en `produccion` y la
+  copia es **única**.
+- **Después del push (post-flight)**: `select count(*) from produccion where greatest(created_at, updated_at,
+  coalesce(deleted_at, created_at)) > '<hora del push>';` debe dar 0 (lo que se escriba en `produccion` después se pierde),
+  y los grants vivos de `operacion.entrada` (perfiles y usuarios) deben ser al menos los conteos de antes.
 
 ## Pruebas
 

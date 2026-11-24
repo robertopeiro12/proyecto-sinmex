@@ -63,6 +63,17 @@ function agruparPorTamano(renglones: Renglon[]): { tamano: string; renglones: Re
     .map((g) => ({ ...g, renglones: g.renglones.sort((a, b) => a.producto.localeCompare(b.producto, "es")) }));
 }
 
+/**
+ * Día con que abre la captura: el de la operación que se corrige; en una nueva, el de la
+ * pestaña si cabe en la regla del tipo (nunca futuro; el envío, solo hoy o ayer), si no, hoy.
+ */
+function fechaInicial(tipo: TipoOperacion, fecha: string, operacion: OperacionAlmacen | null, hoy: string, ayer: string): string {
+  if (operacion) return fecha > hoy ? hoy : fecha;
+  if (fecha > hoy) return hoy;
+  if (tipo === "envio" && fecha < ayer) return hoy;
+  return fecha;
+}
+
 const ENTERO = /^\d+$/;
 const piezasValidas = (texto: string) => ENTERO.test(texto) && Number(texto) >= 1 && Number(texto) <= MAX_PIEZAS;
 
@@ -95,7 +106,7 @@ export function CapturaOperacion({
   const [productos, setProductos] = useState<Producto[] | null>(null);
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
   const [motivos, setMotivos] = useState<MotivoMerma[]>([]);
-  const [dia, setDia] = useState(fecha > hoy ? hoy : fecha);
+  const [dia, setDia] = useState(fechaInicial(tipo, fecha, operacion, hoy, ayer));
   const [origen, setOrigen] = useState<OrigenEntrada>(operacion?.origen ?? "produccion");
   const [destino, setDestino] = useState(operacion?.destino?.codigo ?? "");
   const [motivoId, setMotivoId] = useState(operacion?.motivo?.id ?? "");
@@ -120,13 +131,13 @@ export function CapturaOperacion({
     if (tipo === "envio") {
       listarSucursales().then(
         (s) => vigente && setSucursales(s),
-        () => {},
+        (err: unknown) => vigente && setError(mensajeDe(err, "No se pudieron cargar las sucursales.")),
       );
     }
     if (tipo === "merma") {
       listarMotivosMerma("almacen").then(
         (m) => vigente && setMotivos(m),
-        () => {},
+        (err: unknown) => vigente && setError(mensajeDe(err, "No se pudieron cargar los motivos de merma.")),
       );
     }
     return () => {
@@ -145,7 +156,7 @@ export function CapturaOperacion({
     (tipo === "envio" && destino === "") ||
     (tipo === "merma" && motivoId === "") ||
     (tipo === "descuento" && trabajadorLimpio === "");
-  const puedeGuardar = !guardando && lineas.length > 0 && !hayInvalidas && !faltaDato && dia !== "";
+  const puedeGuardar = !guardando && lineas.length > 0 && !hayInvalidas && !faltaDato && dia !== "" && dia <= hoy && (tipo !== "envio" || dia >= ayer);
 
   async function guardar() {
     setGuardando(true);

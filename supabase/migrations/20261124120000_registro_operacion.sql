@@ -24,6 +24,7 @@ create table motivo_merma (
   aplica_almacen   boolean not null default false,
   aplica_cliente   boolean not null default false,
   aplica_vehiculo  boolean not null default false,
+  constraint ck_motivo_merma_aplica check (aplica_almacen or aplica_cliente or aplica_vehiculo),
   deleted_at       timestamptz,
   creado_en        timestamptz not null default now(),
   actualizado_en   timestamptz not null default now()
@@ -121,13 +122,14 @@ on conflict (usuario_id, permiso_id) do nothing;
 -- D12: copia unica de `produccion` (solo filas vivas): una entrada por
 -- (fecha, sucursal), capturada por quien capturo la fila mas antigua del grupo.
 with g as (
-  select distinct on (fecha, sucursal_id) fecha, sucursal_id, capturo_usuario_id
+  select distinct on (fecha, sucursal_id) fecha, sucursal_id, capturo_usuario_id,
+         min(created_at) over (partition by fecha, sucursal_id) as desde
     from produccion
    where deleted_at is null
    order by fecha, sucursal_id, created_at, id
 ), nuevas as (
-  insert into operacion_almacen (sucursal_id, tipo, fecha, origen, capturo_usuario_id)
-  select sucursal_id, 'entrada', fecha, 'produccion', capturo_usuario_id from g
+  insert into operacion_almacen (sucursal_id, tipo, fecha, origen, capturo_usuario_id, created_at, updated_at)
+  select sucursal_id, 'entrada', fecha, 'produccion', capturo_usuario_id, desde, desde from g
   returning id, fecha, sucursal_id
 )
 insert into operacion_almacen_linea (operacion_id, presentacion_id, piezas)
