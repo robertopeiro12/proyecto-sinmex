@@ -126,20 +126,20 @@ insert into produccion (fecha, sucursal_id, presentacion_id, piezas, capturo_usu
 insert into produccion (fecha, sucursal_id, presentacion_id, piezas, capturo_usuario_id)
   select '2099-01-01', mx, p1, 40, ub from _r;
 
-create temporary table _copia_produccion on commit drop as
-select gen_random_uuid() as id, g.fecha, g.sucursal_id, g.capturo_usuario_id
-  from (
-    select distinct on (fecha, sucursal_id) fecha, sucursal_id, capturo_usuario_id
-      from produccion
-     where deleted_at is null and fecha = '2099-01-01'
-     order by fecha, sucursal_id, created_at, id
-  ) g;
-insert into operacion_almacen (id, sucursal_id, tipo, fecha, origen, capturo_usuario_id)
-select id, sucursal_id, 'entrada', fecha, 'produccion', capturo_usuario_id from _copia_produccion;
+with g as (
+  select distinct on (fecha, sucursal_id) fecha, sucursal_id, capturo_usuario_id
+    from produccion
+   where deleted_at is null and fecha = '2099-01-01'
+   order by fecha, sucursal_id, created_at, id
+), nuevas as (
+  insert into operacion_almacen (sucursal_id, tipo, fecha, origen, capturo_usuario_id)
+  select sucursal_id, 'entrada', fecha, 'produccion', capturo_usuario_id from g
+  returning id, fecha, sucursal_id
+)
 insert into operacion_almacen_linea (operacion_id, presentacion_id, piezas)
-select c.id, p.presentacion_id, p.piezas
-  from produccion p
-  join _copia_produccion c on c.fecha = p.fecha and c.sucursal_id = p.sucursal_id
+select n.id, p.presentacion_id, p.piezas
+  from nuevas n
+  join produccion p on p.fecha = n.fecha and p.sucursal_id = n.sucursal_id
  where p.deleted_at is null and p.fecha = '2099-01-01';
 
 select is(

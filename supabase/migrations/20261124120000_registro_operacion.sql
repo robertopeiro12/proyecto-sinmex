@@ -75,7 +75,7 @@ create table operacion_almacen (
     or (tipo <> 'descuento' and trabajador is null))
 );
 
-create index idx_operacion_almacen_sucursal_fecha on operacion_almacen (sucursal_id, fecha) where deleted_at is null;
+create index idx_operacion_almacen_sucursal_fecha on operacion_almacen (sucursal_id, fecha, tipo) where deleted_at is null;
 -- Los envios se leen tambien desde la sucursal destino.
 create index idx_operacion_almacen_destino_fecha on operacion_almacen (sucursal_destino_id, fecha)
   where deleted_at is null and sucursal_destino_id is not null;
@@ -120,22 +120,18 @@ on conflict (usuario_id, permiso_id) do nothing;
 
 -- D12: copia unica de `produccion` (solo filas vivas): una entrada por
 -- (fecha, sucursal), capturada por quien capturo la fila mas antigua del grupo.
-create temporary table _copia_produccion on commit drop as
-select gen_random_uuid() as id, g.fecha, g.sucursal_id, g.capturo_usuario_id
-  from (
-    select distinct on (fecha, sucursal_id)
-           fecha, sucursal_id, capturo_usuario_id
-      from produccion
-     where deleted_at is null
-     order by fecha, sucursal_id, created_at, id
-  ) g;
-
-insert into operacion_almacen (id, sucursal_id, tipo, fecha, origen, capturo_usuario_id)
-select id, sucursal_id, 'entrada', fecha, 'produccion', capturo_usuario_id
-  from _copia_produccion;
-
+with g as (
+  select distinct on (fecha, sucursal_id) fecha, sucursal_id, capturo_usuario_id
+    from produccion
+   where deleted_at is null
+   order by fecha, sucursal_id, created_at, id
+), nuevas as (
+  insert into operacion_almacen (sucursal_id, tipo, fecha, origen, capturo_usuario_id)
+  select sucursal_id, 'entrada', fecha, 'produccion', capturo_usuario_id from g
+  returning id, fecha, sucursal_id
+)
 insert into operacion_almacen_linea (operacion_id, presentacion_id, piezas)
-select c.id, p.presentacion_id, p.piezas
-  from produccion p
-  join _copia_produccion c on c.fecha = p.fecha and c.sucursal_id = p.sucursal_id
+select n.id, p.presentacion_id, p.piezas
+  from nuevas n
+  join produccion p on p.fecha = n.fecha and p.sucursal_id = n.sucursal_id
  where p.deleted_at is null;
