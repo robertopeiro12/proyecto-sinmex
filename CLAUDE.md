@@ -231,10 +231,9 @@ usuario con sesion pasa.
   (`ck_venta_nota_origen_actores`). Toda venta de la tablet sigue llevando vendedor.
 - **Con `sucursal.control_inventario` prendida, el portal no le vende a un vendedor más de lo que trae cargado** (cliente,
   2026-11-12; la misma casilla y la misma regla que la app de T-27). Aplica a `POST /ventas` y a `PATCH /ventas/:id` solo
-  si la venta tiene vendedor (Oficina nunca se revisa): existencia = cargas **aceptadas** − vendidas − regaladas de ese
-  vendedor en la **fecha de la venta**, la misma cuenta que "debería regresar" del corte (`movimientosDelDia` de
-  `produccion/cortes.repository.ts` + `existenciasPorPresentacion` de `reglas-corte.ts`; ahí se restarán merma y consumo
-  cuando existan). Si no alcanza → **409** "No le alcanza el producto a …: Horchata 1 L, faltan 3; …" antes del folio (no
+  si la venta tiene vendedor (Oficina nunca se revisa): existencia = las piezas teóricas por regresar del corte (cargadas aceptadas − vendidas − regaladas − merma entregada − merma de
+  almacén − consumo) de ese vendedor en la **fecha de la venta**, la misma cuenta del corte (`movimientosDelDia` de
+  `produccion/cortes.repository.ts` + `existenciasPorPresentacion` de `reglas-corte.ts`; la merma **recibida** no suma a lo vendible). Si no alcanza → **409** "No le alcanza el producto a …: Horchata 1 L, faltan 3; …" antes del folio (no
   lo quema). Al editar se suman de vuelta las líneas de la propia venta si sigue con el mismo vendedor, y una presentación
   que no sube nunca se rechaza. Una carga **pendiente** no bloquea en el portal (la app sí). Reglas puras en
   `ventas-cobranza/inventario-venta.ts`, candado en `inventario-venta.service.ts`. **Orden de candados: `vendedor`
@@ -735,13 +734,25 @@ usuario con sesion pasa.
     `GET`/`PUT /cortes/vendedor` (vendedor ajeno o dado de baja = 404). Fecha futura = 400 con `hoyEnTijuana`, también en los
     GET. El `PUT` reemplaza el día del vendedor y **siempre** marca el corte hecho, aunque no haya piezas (un vendedor que
     vendió todo); 0/0 en un renglón lo da de baja.
-  - **La regla.** `debería regresar = cargadas aceptadas − vendidas − regaladas`, **en vivo** (nunca se congela), sin
-    recortar: negativo = "Vendió más de lo cargado". Cargadas = solo cargas **aceptadas** (una recarga pendiente o rechazada
-    no cuenta); vendidas = `cantidad` y regaladas = `cantidad_promocion` de líneas **vivas** de ventas **vivas** del vendedor
-    con esa `fecha`, de **cualquier status** (una venta eliminada, T-17, no cuenta). `faltante = debería − buenas` por
-    renglón y **solo existe si el corte está hecho** (o el renglón se tocó en la captura; sin corte, `null`, nunca 0). El total
-    "Faltan N" = suma de los faltantes **> 0** (lo que sobra en una presentación no compensa lo que falta en otra); es el
-    mismo número que `piezasFaltantes` de la lista. La **merma retornada no resta** del faltante, solo se registra.
+  - **La regla (por tamaño, 2026-11-18; spec `2026-11-18-corte-por-tamano-y-merma-design.md`).** La pantalla agrupa por
+    **tamaño** (`presentacion.volumen`, clave en minúsculas sin espacios; orden por mililitros, `L` = ×1000, lo ilegible al
+    final; `claveTamano`/`compararTamano` duplicadas en `lib/cortes.ts`) con un renglón de Total por tamaño. Dos bloques:
+    **producto terminado** y **merma**, cada uno teórica · real · resultado (resultado = teórica − real; **> 0 falta**, en
+    rojo; negativo se muestra y no bloquea).
+    - **Teórica (C3)** = cargadas aceptadas − vendidas − regaladas − merma entregada al cliente − merma de almacén − consumo
+      − cambios entregados + cambios recibidos, **en vivo** y sin recortar (negativo = "Salió más de lo cargado").
+      **Merma teórica (C4)** = merma recibida del cliente + merma de almacén. Los movimientos salen de `movimiento_inventario`
+      vivo (`merma_cliente` entregado/recibido, `merma_trayecto` = de almacén, `consumo`) por `fecha` y vendedor. **Cambios
+      físicos = 0 siempre** (no existen hasta T-33; los campos ya están para que solo se llene la consulta).
+    - Cargadas = solo cargas **aceptadas**; vendidas/regaladas = `cantidad`/`cantidad_promocion` de líneas **vivas** de
+      ventas **vivas** del vendedor con esa `fecha`, de cualquier status. Un vendedor con solo merma o consumo ese día también
+      sale en la lista.
+    - **D1: un tamaño no compensa a otro.** Dentro de un tamaño sí (lo que sobra de un sabor tapa lo que falta de otro); el
+      total del día = suma por tamaño de `max(0, suma con signo de sus resultados)`, en cada bloque. "Faltan N" y "N de
+      merma" (`faltante`, `faltanteMerma`; la lista trae `piezasFaltantes` y `mermaFaltante`). Los resultados **solo existen
+      si el corte está hecho** (o el renglón se tocó en la captura; sin corte, `null`, nunca 0). Los campos vacíos no se
+      llenan con la teórica: es un conteo.
+    - **Una sola cuenta:** `reglas-corte.ts` es la única fuente de la teórica; la venta del portal la usa.
   - **D13 (lo no obvio).** Se serializa bloqueando la fila de `vendedor` (`for no key update`), como cargas y retorno; el `23505`
     queda como 409 de red de seguridad. Una presentación **desactivada o dada de baja** con movimiento ese día sigue saliendo
     y aceptándose; sin movimiento ni fila viva = 400. `hecho.en`/`hecho.por` son del **primer** guardado (o del relleno), las
@@ -749,11 +760,11 @@ usuario con sesion pasa.
     (`AAAA-MM-DD hh:mm`, formateado en SQL): el portal lo pinta tal cual, no lo reinterpreta con el reloj del navegador.
     Los tipos están duplicados en `apps/portal/src/lib/cortes.ts` y `cortes.service.ts`/`reglas-corte.ts`: si cambias uno,
     cambia el otro en el mismo commit. No se tocó la tablet ni el contrato de sincronización.
-  - **Fuera de alcance.** El **dinero** que entrega el vendedor (R-5) sigue **pendiente de decidir**: el viejo no lo captura
-    en ningún lado salvo la pestaña "Dinero" del Dashboard. Merma recibida de clientes, cambios y consumo dependen de T-33 y
-    no entran aquí; T-24 (inventario) leerá este corte.
+  - **Fuera de alcance.** El **dinero** que entrega el vendedor (R-5) sigue **pendiente de decidir**. Un faltante **no** se
+    registra solo como descuento (lo hará Administración a mano en Procesos → Descuentos, pieza futura). Cambios físicos
+    (T-33), Info de inventario por vendedor y los inventarios de producto terminado son otros pasos; T-24 leerá este corte.
   - **Con la casilla de inventario prendida, el portal tampoco vende más de lo cargado** (ver el bloque de la venta del
-    portal, T-17): el aviso "Vendió más de lo cargado" queda como red de seguridad (ventas de la tablet sin red, o de
+    portal, T-17): el aviso "Salió más de lo cargado" queda como red de seguridad (ventas de la tablet sin red, o de
     cuando la casilla estaba apagada).
   - **Nube**: `20261112120000_corte_mercancia.sql` se sube a `sinmex dev` después del merge, con el protocolo de push.
     Pre-flight: `select count(*) from retorno where piezas <= 0` debe dar 0 (el check nuevo admite 0 solo con merma > 0, y

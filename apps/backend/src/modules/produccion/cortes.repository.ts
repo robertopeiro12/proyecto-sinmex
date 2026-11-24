@@ -67,9 +67,11 @@ function cargasAceptadasDelDia(fecha: string, db: Kysely<DB>) {
 /**
  * Por vendedor y presentacion, lo cargado (cargas aceptadas), lo vendido y
  * regalado (lineas vivas de ventas vivas con esa `fecha`, de cualquier status;
- * las de mostrador no tienen vendedor y no cuentan) y lo contado (filas vivas
- * de `retorno`). Solo salen las presentaciones con algun movimiento, aunque
- * esten desactivadas o dadas de baja. Vendidas se leen en vivo: editar o
+ * las de mostrador no tienen vendedor y no cuentan), la merma y el consumo de
+ * la tablet (`movimiento_inventario` vivo de esa `fecha`: merma del cliente
+ * entregada/recibida, merma del trayecto y consumo) y lo contado (filas vivas
+ * de `retorno`). Los cambios fisicos valen 0 hasta T-33. Solo salen las
+ * presentaciones con algun movimiento, aunque esten desactivadas o dadas de baja. Vendidas se leen en vivo: editar o
  * eliminar una venta (T-17) cambia el teorico.
  *
  * `filtro`: un vendedor, o una sucursal por codigo (`null` = todas). Siempre
@@ -94,11 +96,13 @@ export async function movimientosDelDia(
   const r = await sql<MovimientoVendedor>`
     with mov as (
       select cg.vendedor_id, cg.presentacion_id,
-             cg.piezas as cargadas, 0 as vendidas, 0 as regaladas, 0 as buenas, 0 as merma
+             cg.piezas as cargadas, 0 as vendidas, 0 as regaladas, 0 as buenas, 0 as merma,
+             0 as merma_entregada, 0 as merma_recibida, 0 as merma_almacen, 0 as consumo
         from (${cargasAceptadasDelDia(fecha, db)}) cg
       union all
       select vn.vendedor_id, d.presentacion_id,
-             0, d.cantidad, d.cantidad_promocion, 0, 0
+             0, d.cantidad, d.cantidad_promocion, 0, 0,
+             0, 0, 0, 0
         from venta_nota vn
         join venta_nota_detalle d on d.venta_nota_id = vn.id
        where vn.fecha = ${fecha}::date
@@ -107,17 +111,37 @@ export async function movimientosDelDia(
          and d.deleted_at is null
       union all
       select rt.vendedor_id, rt.presentacion_id,
-             0, 0, 0, rt.piezas, rt.piezas_merma
+             0, 0, 0, rt.piezas, rt.piezas_merma,
+             0, 0, 0, 0
         from retorno rt
        where rt.fecha = ${fecha}::date
          and rt.deleted_at is null
+      union all
+      select mi.vendedor_id, l.presentacion_id,
+             0, 0, 0, 0, 0,
+             case when mi.tipo = 'merma_cliente' and l.sentido = 'entregado' then l.piezas else 0 end,
+             case when mi.tipo = 'merma_cliente' and l.sentido = 'recibido' then l.piezas else 0 end,
+             case when mi.tipo = 'merma_trayecto' then l.piezas else 0 end,
+             case when mi.tipo = 'consumo' then l.piezas else 0 end
+        from movimiento_inventario mi
+        join movimiento_inventario_linea l on l.movimiento_id = mi.id
+       where mi.fecha = ${fecha}::date
+         and mi.deleted_at is null
     )
     select m.vendedor_id as "vendedorId",
            m.presentacion_id as "presentacionId",
            p.nombre || ' ' || pr.volumen as nombre,
+           p.nombre as producto,
+           pr.volumen as volumen,
            sum(m.cargadas)::int as cargadas,
            sum(m.vendidas)::int as vendidas,
            sum(m.regaladas)::int as regaladas,
+           sum(m.merma_entregada)::int as "mermaEntregada",
+           sum(m.merma_recibida)::int as "mermaRecibida",
+           sum(m.merma_almacen)::int as "mermaAlmacen",
+           sum(m.consumo)::int as consumo,
+           0 as "cambiosEntregados",
+           0 as "cambiosRecibidos",
            sum(m.buenas)::int as buenas,
            sum(m.merma)::int as merma
       from mov m

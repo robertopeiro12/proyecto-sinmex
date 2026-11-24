@@ -161,9 +161,9 @@ function Cortes({ sucursal }: { sucursal: string | null }) {
           <Tabla aria-label="Vendedores del día" className="table-fixed">
             <colgroup>
               <col />
-              <col className="w-36" />
-              <col className="w-36" />
-              <col className="w-36" />
+              <col className="w-32" />
+              <col className="w-56" />
+              <col className="w-32" />
             </colgroup>
             <thead>
               <tr>

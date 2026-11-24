@@ -1,5 +1,6 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { sql } from 'kysely';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -94,6 +95,43 @@ describe('Venta del portal contra el inventario del vendedor (e2e)', () => {
         lineas.map((l) => ({
           carga_id: id,
           presentacion_id: l.presentacionId,
+          piezas: l.piezas,
+        })),
+      )
+      .execute();
+  };
+
+  /** Un movimiento de la tablet escrito directo en la tabla. */
+  const crearMovimiento = async (opciones: {
+    vendedorId: string;
+    fecha: string;
+    tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo';
+    lineas: {
+      presentacionId: string;
+      sentido: 'recibido' | 'entregado';
+      piezas: number;
+    }[];
+  }) => {
+    const id = randomUUID();
+    await db
+      .insertInto('movimiento_inventario')
+      .values({
+        id,
+        sucursal_id: sucursalId,
+        vendedor_id: opciones.vendedorId,
+        cliente_id: opciones.tipo === 'merma_cliente' ? clienteId : null,
+        tipo: opciones.tipo,
+        fecha: sql<Date>`${opciones.fecha}::date`,
+        registrado_en: sql<Date>`now()`,
+      })
+      .execute();
+    await db
+      .insertInto('movimiento_inventario_linea')
+      .values(
+        opciones.lineas.map((l) => ({
+          movimiento_id: id,
+          presentacion_id: l.presentacionId,
+          sentido: l.sentido,
           piezas: l.piezas,
         })),
       )
@@ -300,6 +338,21 @@ describe('Venta del portal contra el inventario del vendedor (e2e)', () => {
       .deleteFrom('folio_oficina_contador')
       .where('sucursal_id', '=', sucursalId)
       .execute();
+    await db
+      .deleteFrom('movimiento_inventario_linea')
+      .where(
+        'movimiento_id',
+        'in',
+        db
+          .selectFrom('movimiento_inventario')
+          .select('id')
+          .where('sucursal_id', '=', sucursalId),
+      )
+      .execute();
+    await db
+      .deleteFrom('movimiento_inventario')
+      .where('sucursal_id', '=', sucursalId)
+      .execute();
     const cargas = db
       .selectFrom('carga')
       .select('id')
@@ -397,6 +450,38 @@ describe('Venta del portal contra el inventario del vendedor (e2e)', () => {
       expect((res.body as { message: string }).message).toContain(
         `${nombreLitro()}, falta 1`,
       );
+    });
+
+    it('la merma de trayecto y el consumo restan lo vendible; la merma recibida no suma', async () => {
+      const fecha = '2024-05-11';
+      const ana = await crearVendedor('Inv Merma');
+      await crearCarga(ana, fecha, 'aceptada', [
+        { presentacionId: litro, piezas: 10 },
+      ]);
+      await crearMovimiento({
+        vendedorId: ana,
+        fecha,
+        tipo: 'merma_trayecto',
+        lineas: [{ presentacionId: litro, sentido: 'entregado', piezas: 2 }],
+      });
+      await crearMovimiento({
+        vendedorId: ana,
+        fecha,
+        tipo: 'consumo',
+        lineas: [{ presentacionId: litro, sentido: 'entregado', piezas: 1 }],
+      });
+      // Solo recibida: no sube lo vendible.
+      await crearMovimiento({
+        vendedorId: ana,
+        fecha,
+        tipo: 'merma_cliente',
+        lineas: [{ presentacionId: litro, sentido: 'recibido', piezas: 5 }],
+      });
+      const res = await registrar(fecha, ana, [linea(litro, 8)]).expect(409);
+      expect((res.body as { message: string }).message).toContain(
+        `${nombreLitro()}, falta 1`,
+      );
+      await registrar(fecha, ana, [linea(litro, 7)]).expect(201);
     });
 
     it('dos ventas a la vez que juntas no alcanzan: una pasa y la otra 409, sin 500', async () => {
