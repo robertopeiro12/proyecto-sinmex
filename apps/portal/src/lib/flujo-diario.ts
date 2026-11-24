@@ -1,5 +1,6 @@
 import { apiFetch, apiFetchSinCuerpo } from "./api";
 import { diaAnterior } from "./fechas";
+import type { EstadoCorte } from "./cortes";
 import { formatearPesos, plural } from "./formato";
 import type { CondicionVenta } from "./rutas";
 
@@ -44,6 +45,15 @@ export interface FilaVendedorDia {
    * revisar o nada se ha revisado (la columna sale vacia). Ver `contarNotasNoEntregadas`.
    */
   notasNoEntregadas: number | null;
+  /** Estado del corte de mercancia de ese vendedor y dia. */
+  corte: EstadoCorteFila;
+}
+
+/** Copia de `EstadoCorteFila` (produccion/cortes.service.ts). */
+export interface EstadoCorteFila {
+  estado: EstadoCorte;
+  piezasFaltantes: number | null;
+  mermaFaltante: number | null;
 }
 
 export interface ResumenVendedorDia extends FilaVendedorDia {
@@ -76,6 +86,8 @@ export interface ResumenDia {
   sucursalCodigo: string;
   totales: Totales;
   oficinaCentavos: number;
+  /** Suma de los faltantes de los cortes hechos de ese dia y sucursal; `null` si ninguno esta hecho. */
+  faltantesCorte: { piezas: number; merma: number } | null;
 }
 
 export interface BloqueSucursal {

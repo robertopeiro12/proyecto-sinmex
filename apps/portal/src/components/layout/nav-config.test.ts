@@ -22,7 +22,7 @@ describe("navSections", () => {
       "Ruta Semanal",
     ]);
     expect(navSections[1].items.slice(0, 3).map((i) => i.label)).toEqual(["Clientes", "Vendedores", "Vehículos"]);
-    expect(navSections[2].items.slice(0, 3).map((i) => i.label)).toEqual(["Peticiones", "Recarga", "Corte"]);
+    expect(navSections[2].items.slice(0, 4).map((i) => i.label)).toEqual(["Peticiones", "Recarga", "Corte", "Inventario por vendedor"]);
   });
 
   it("Corte ya es pantalla y Retorno salió del menú (es parte del Corte)", () => {

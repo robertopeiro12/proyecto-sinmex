@@ -15,7 +15,7 @@ import {
   BotonVer,
   CeldaNotasVentas,
   formatearPiezas,
-  Pronto,
+  PastillaCorte,
 } from "@/components/flujo-diario/piezas";
 import { useCerrarConPendientes, useDetalleAbierto } from "@/components/flujo-diario/use-detalle-abierto";
 import { VentanaDetalle } from "@/components/flujo-diario/ventana-detalle";
@@ -93,7 +93,7 @@ export function TablaDashboard({
           {etiquetaVehiculo(f.vehiculo, f.vehiculoAsignado)}
         </Td>
         <Td alinear="centro">
-          <Pronto />
+          <PastillaCorte corte={f.corte} etiqueta={`Inventario de ${f.vendedor}`} onClick={() => verEn("inventario")} />
         </Td>
         <Td alinear="centro">
           <BotonVer etiqueta={`Mermas/Cambios/Promociones de ${f.vendedor}`} onClick={() => verEn("mermas")} />
@@ -168,6 +168,7 @@ export function TablaDashboard({
         {(detalle) => (
           <DetalleVendedor
             key={visto?.vez}
+            sucursal={filaAbierta ? filaAbierta.sucursalCodigo : ""}
             detalle={detalle}
             modo="dashboard"
             pestanaInicial={visto?.pestana}
@@ -177,12 +178,12 @@ export function TablaDashboard({
           />
         )}
       </VentanaDetalle>
-      <Tabla aria-label="Vendedores de hoy" className="min-w-[76rem] table-fixed">
+      <Tabla aria-label="Vendedores de hoy" className="min-w-[82rem] table-fixed">
         <colgroup>
           <col />
           <col className="w-36" />
           <col className="w-24" />
-          <col className="w-20" />
+          <col className="w-36" />
           <col className="w-20" />
           <col className="w-22" />
           <col className="w-28" />

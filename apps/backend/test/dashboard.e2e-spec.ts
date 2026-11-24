@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { sql } from 'kysely';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
@@ -41,6 +42,8 @@ describe('Dashboard (e2e)', () => {
   let clienteId: string;
   let ana: string;
   let ajeno: string;
+  let bruno: string;
+  let productoId: string;
 
   const iniciarSesion = async (login: string): Promise<string> => {
     const res = await request(app.getHttpServer())
@@ -208,11 +211,97 @@ describe('Dashboard (e2e)', () => {
     // Ana: venta de hoy y una de mañana (la de mañana no cuenta hoy).
     await venta(hoyEnTijuana(), ana, '130.00');
     await venta('2099-01-01', ana, '999.00');
+    // Bruno: corte hecho hoy con faltante (cargo 10, regreso 7 buenas).
+    bruno = await vendedor('Bruno', idDb);
+    await venta(hoyEnTijuana(), bruno, '10.00');
+    productoId = (
+      await db
+        .insertInto('producto')
+        .values({ nombre: `Prod db ${SUFIJO}`, activo: true })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+    const presentacionId = (
+      await db
+        .insertInto('presentacion')
+        .values({ producto_id: productoId, volumen: '1 L' })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+    const { id: cargaId } = await db
+      .insertInto('carga')
+      .values({
+        vendedor_id: bruno,
+        sucursal_id: idDb,
+        fecha: sql<Date>`${hoyEnTijuana()}::date`,
+        numero: 1,
+        estado: 'aceptada',
+        respondida_en: sql<Date>`now()`,
+        capturo_usuario_id: generalId,
+      })
+      .returning('id')
+      .executeTakeFirstOrThrow();
+    await db
+      .insertInto('carga_detalle')
+      .values({
+        carga_id: cargaId,
+        presentacion_id: presentacionId,
+        piezas: 10,
+      })
+      .execute();
+    await db
+      .insertInto('retorno')
+      .values({
+        fecha: sql<Date>`${hoyEnTijuana()}::date`,
+        vendedor_id: bruno,
+        sucursal_id: idDb,
+        presentacion_id: presentacionId,
+        piezas: 7,
+        capturo_usuario_id: generalId,
+      })
+      .execute();
+    await db
+      .insertInto('corte_mercancia')
+      .values({
+        fecha: sql<Date>`${hoyEnTijuana()}::date`,
+        vendedor_id: bruno,
+        sucursal_id: idDb,
+        hecho_por_usuario_id: generalId,
+      })
+      .execute();
     // Ana tambien tiene un dia viejo que no debe salir.
     await venta('2018-05-01', ana, '77.00');
   });
 
   afterAll(async () => {
+    await db
+      .deleteFrom('corte_mercancia')
+      .where('vendedor_id', 'in', vendedorIds)
+      .execute();
+    await db
+      .deleteFrom('retorno')
+      .where('vendedor_id', 'in', vendedorIds)
+      .execute();
+    await db
+      .deleteFrom('carga_detalle')
+      .where(
+        'carga_id',
+        'in',
+        db
+          .selectFrom('carga')
+          .select('id')
+          .where('vendedor_id', 'in', vendedorIds),
+      )
+      .execute();
+    await db
+      .deleteFrom('carga')
+      .where('vendedor_id', 'in', vendedorIds)
+      .execute();
+    await db
+      .deleteFrom('presentacion')
+      .where('producto_id', '=', productoId)
+      .execute();
+    await db.deleteFrom('producto').where('id', '=', productoId).execute();
     await db
       .deleteFrom('ruta')
       .where('vendedor_id', 'in', vendedorIds)
@@ -259,14 +348,29 @@ describe('Dashboard (e2e)', () => {
     const r = (await pedir(cookieGeneral, '', { sucursal: CODIGO }).expect(200))
       .body as Dashboard;
     expect(r.fecha).toBe(hoyEnTijuana());
-    expect(r.vendedores).toHaveLength(1);
-    expect(r.vendedores[0]).toMatchObject({
+    expect(r.vendedores).toHaveLength(2);
+    expect(r.vendedores.find((v) => v.vendedorId === ana)).toMatchObject({
       vendedorId: ana,
       montoCentavos: 13000,
       cobranzaCentavos: 13000,
       estatus: 'en_ruta',
     });
-    expect(r.total).toMatchObject({ rutas: 1, enRuta: 1, terminaron: 0 });
+    expect(r.total).toMatchObject({ rutas: 2, enRuta: 2, terminaron: 0 });
+  });
+
+  it('cada renglon trae el estado de su corte: Bruno con faltante, Ana sin corte', async () => {
+    const r = (await pedir(cookieGeneral, '', { sucursal: CODIGO }).expect(200))
+      .body as Dashboard;
+    expect(r.vendedores.find((v) => v.vendedorId === bruno)?.corte).toEqual({
+      estado: 'con_faltante',
+      piezasFaltantes: 3,
+      mermaFaltante: 0,
+    });
+    expect(r.vendedores.find((v) => v.vendedorId === ana)?.corte).toEqual({
+      estado: 'sin_corte',
+      piezasFaltantes: null,
+      mermaFaltante: null,
+    });
   });
 
   it('el cliente no manda fecha: se ignora', async () => {
@@ -282,7 +386,9 @@ describe('Dashboard (e2e)', () => {
   it('atado a otra sucursal: pedir ZW es 403; sin parametro ve la suya', async () => {
     await pedir(cookieOtra, '', { sucursal: CODIGO }).expect(403);
     const r = (await pedir(cookieDb, '').expect(200)).body as Dashboard;
-    expect(r.vendedores.map((v) => v.vendedorId)).toEqual([ana]);
+    expect(r.vendedores.map((v) => v.vendedorId).sort()).toEqual(
+      [ana, bruno].sort(),
+    );
   });
 
   it('detalle del vendedor de hoy; uno ajeno es 404', async () => {
@@ -387,7 +493,9 @@ describe('Dashboard (e2e)', () => {
     const sinVenta = (
       await pedir(cookieGeneral, '', { sucursal: CODIGO }).expect(200)
     ).body as Dashboard;
-    expect(sinVenta.vendedores.map((v) => v.vendedorId)).toEqual([ana]);
+    expect(sinVenta.vendedores.map((v) => v.vendedorId).sort()).toEqual(
+      [ana, bruno].sort(),
+    );
 
     // El Flujo diario (historia) si los muestra.
     const flujo = await request(app.getHttpServer())

@@ -91,15 +91,19 @@ export class DashboardService {
   ): Promise<Dashboard> {
     const hoy = hoyEnTijuana(ahora);
     const alcance = await this.flujo.alcanceDe(usuarioId, q.sucursal);
+    const codigoSucursal = alcance.tipo === 'una' ? alcance.codigo : null;
     const filas = await this.repo.filas({
       desde: hoy,
       hasta: hoy,
-      codigoSucursal: alcance.tipo === 'una' ? alcance.codigo : null,
+      codigoSucursal,
       vendedorId: null,
       // Hoy no se lista a quien esta inactivo o dado de baja solo por su ruta.
       soloVigentesEnRuta: true,
     });
-    return armarDashboard(hoy, filas);
+    return armarDashboard(
+      hoy,
+      await this.flujo.conCorte(filas, codigoSucursal),
+    );
   }
 
   /**

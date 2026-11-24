@@ -5,6 +5,8 @@ import { CargasService } from './cargas.service';
 import { CortesController } from './cortes.controller';
 import { CortesRepository } from './cortes.repository';
 import { CortesService } from './cortes.service';
+import { InventarioVendedorController } from './inventario-vendedor.controller';
+import { InventarioVendedorService } from './inventario-vendedor.service';
 import { ProduccionController } from './produccion.controller';
 import { ProduccionRepository } from './produccion.repository';
 import { ProduccionService } from './produccion.service';
@@ -20,15 +22,21 @@ import { ProduccionService } from './produccion.service';
 // portal: absorbe a Retorno (`/retornos` se quito). Lee cargas y ventas para
 // calcular lo que deberia regresar; no las toca.
 @Module({
-  controllers: [CargasController, CortesController, ProduccionController],
+  controllers: [
+    CargasController,
+    CortesController,
+    InventarioVendedorController,
+    ProduccionController,
+  ],
   providers: [
     CargasService,
     CargasRepository,
     CortesService,
     CortesRepository,
+    InventarioVendedorService,
     ProduccionService,
     ProduccionRepository,
   ],
-  exports: [CargasService],
+  exports: [CargasService, CortesService],
 })
 export class ProduccionModule {}

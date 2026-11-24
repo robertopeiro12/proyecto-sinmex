@@ -137,6 +137,14 @@ export function guardarCorteVendedor(datos: {
 
 // ── Reglas de la pantalla (puras) ──────────────────────────────────────────────
 
+/** "Faltan: 3 pz p/Almacen · 1 pz merma" (cliente, 2026-11-24; sin singular). Una sola frase para la lista, el Dashboard, el Flujo diario y los pies. */
+export function fraseFaltan(piezas: number, merma: number): string {
+  const partes: string[] = [];
+  if (piezas > 0) partes.push(`${piezas} pz p/Almacen`);
+  if (merma > 0) partes.push(`${merma} pz merma`);
+  return `Faltan: ${partes.join(" · ")}`;
+}
+
 /** La pastilla de estado de la lista: "Sin corte" gris, "Corte hecho", "Faltan N" rojo. */
 export function etiquetaEstadoCorte(
   fila: Pick<FilaCorte, "estado" | "piezasFaltantes" | "mermaFaltante">,
@@ -144,17 +152,10 @@ export function etiquetaEstadoCorte(
   if (fila.estado === "sin_corte")
     return { texto: "Sin corte", tono: "neutro" };
   if (fila.estado === "con_faltante") {
-    const piezas = fila.piezasFaltantes ?? 0;
-    const merma = fila.mermaFaltante ?? 0;
-    const faltan = (n: number) => (n === 1 ? "Falta" : "Faltan");
-    if (piezas > 0 && merma > 0)
-      return {
-        texto: `${faltan(piezas)} ${piezas} · ${merma} de merma`,
-        tono: "error",
-      };
-    if (merma > 0)
-      return { texto: `${faltan(merma)} ${merma} de merma`, tono: "error" };
-    return { texto: `${faltan(piezas)} ${piezas}`, tono: "error" };
+    return {
+      texto: fraseFaltan(fila.piezasFaltantes ?? 0, fila.mermaFaltante ?? 0),
+      tono: "error",
+    };
   }
   return { texto: "Corte hecho", tono: "exito" };
 }

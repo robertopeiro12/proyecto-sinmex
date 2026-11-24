@@ -4,6 +4,19 @@
  * por dia y por sucursal y se suma. El portal copia estas formas en su `lib/`.
  */
 
+import type { EstadoCorteFila } from '../produccion/cortes.service';
+
+export type { EstadoCorteFila };
+
+export const SIN_CORTE: EstadoCorteFila = {
+  estado: 'sin_corte',
+  piezasFaltantes: null,
+  mermaFaltante: null,
+};
+
+/** Lo que arma el repositorio; el estado del corte lo agrega el servicio. */
+export type FilaVendedorDiaBase = Omit<FilaVendedorDia, 'corte'>;
+
 export interface FilaVendedorDia {
   /** `AAAA-MM-DD`. */
   fecha: string;
@@ -38,6 +51,8 @@ export interface FilaVendedorDia {
    * revisar o nada se ha revisado (la columna sale vacia). Ver `contarNotasNoEntregadas`.
    */
   notasNoEntregadas: number | null;
+  /** Estado del corte de mercancia de ese vendedor y dia. */
+  corte: EstadoCorteFila;
 }
 
 /**
@@ -87,6 +102,8 @@ export interface ResumenDia {
   sucursalCodigo: string;
   totales: Totales;
   oficinaCentavos: number;
+  /** Suma de los faltantes de los cortes hechos de ese dia y sucursal; `null` si ninguno esta hecho. */
+  faltantesCorte: { piezas: number; merma: number } | null;
 }
 
 export interface BloqueSucursal {
@@ -109,7 +126,13 @@ export interface FlujoDiario {
   totalPorDia: Totales;
 }
 
-export function resumir(f: FilaVendedorDia): ResumenVendedorDia {
+export function resumir<T extends FilaVendedorDiaBase>(
+  f: T,
+): T & {
+  cobranzaCentavos: number;
+  tesoreriaCentavos: number;
+  estatus: 'en_ruta' | 'terminado';
+} {
   const cobranzaCentavos =
     f.contadoCentavos + f.anterioresCentavos + f.aFavorCentavos;
   return {
@@ -148,6 +171,18 @@ export function sumar(
 }
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Suma de los faltantes de los cortes hechos; `null` si ninguno esta hecho (no 0). */
+export function faltantesDeCortes(
+  resumenes: { corte: EstadoCorteFila }[],
+): { piezas: number; merma: number } | null {
+  const hechos = resumenes.filter((r) => r.corte.estado !== 'sin_corte');
+  if (hechos.length === 0) return null;
+  return {
+    piezas: hechos.reduce((s, r) => s + (r.corte.piezasFaltantes ?? 0), 0),
+    merma: hechos.reduce((s, r) => s + (r.corte.mermaFaltante ?? 0), 0),
+  };
+}
 
 export function armarFlujoDiario(
   desde: string,
@@ -188,6 +223,7 @@ export function armarFlujoDiario(
         sucursalCodigo,
         totales: sumar(gruposPorLlave.get(k) ?? [], oficinaCentavos),
         oficinaCentavos,
+        faltantesCorte: faltantesDeCortes(gruposPorLlave.get(k) ?? []),
       };
     })
     .sort(

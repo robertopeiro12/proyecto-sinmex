@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import * as fd from "@/lib/flujo-diario";
 import type { Dashboard, DetalleVendedorDia, ResumenVendedorDia, Totales } from "@/lib/flujo-diario";
+import * as invLib from "@/lib/inventario-vendedor";
 import * as sucursalesLib from "@/lib/sucursales";
 import { PantallaDashboard } from "./pantalla-dashboard";
 
@@ -11,6 +12,10 @@ vi.mock("@/components/auth/auth-provider");
 vi.mock("@/lib/flujo-diario", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/flujo-diario")>();
   return { ...real, obtenerDashboard: vi.fn(), obtenerDetalleDashboard: vi.fn(), guardarNotasEntregadas: vi.fn() };
+});
+vi.mock("@/lib/inventario-vendedor", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/inventario-vendedor")>();
+  return { ...real, leerInventarioVendedor: vi.fn() };
 });
 vi.mock("@/lib/sucursales", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/sucursales")>();
@@ -33,7 +38,7 @@ function fila(p: Partial<ResumenVendedorDia>): ResumenVendedorDia {
     clientesEnRuta: 16, atendidosEnRuta: 6, piezas: 402, montoCentavos: 400000,
     contadoCentavos: 134000, anterioresCentavos: 0, aFavorCentavos: 0, gastoCentavos: 0,
     jornadaCerrada: false, vehiculo: null, rutaNombre: null, vehiculoAsignado: null, cobranzaCentavos: 134000, tesoreriaCentavos: 134000,
-    notasNoEntregadas: null, estatus: "en_ruta", ...p,
+    notasNoEntregadas: null, corte: { estado: "sin_corte", piezasFaltantes: null, mermaFaltante: null }, estatus: "en_ruta", ...p,
   };
 }
 
@@ -280,7 +285,8 @@ describe("PantallaDashboard", () => {
     expect(within(ricardo).getByText("BK-4537A")).toBeInTheDocument();
     expect(within(ricardo).getByText("RUTA 5 (BLV 2000) · 16 clientes")).toBeInTheDocument();
     expect(within(ricardo).getByText("6 / 16")).toBeInTheDocument();
-    expect(within(ricardo).getByText("Pronto")).toBeInTheDocument();
+    expect(within(ricardo).queryByText("Pronto")).not.toBeInTheDocument();
+    expect(within(ricardo).getByText("Sin corte")).toHaveAttribute("data-tono", "neutro");
     expect(celdas[9]).toHaveTextContent("—");
     // Sin vehículo en su jornada: "—".
     expect(within(rblas).getAllByRole("cell")[2]).toHaveTextContent("—");
@@ -289,6 +295,21 @@ describe("PantallaDashboard", () => {
     await screen.findByRole("dialog", { name: "Corte · RBlas · 09/11/2026" });
     expect(await screen.findByRole("tab", { name: "Corte" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("table", { name: "Corte" })).toBeInTheDocument();
+  });
+
+  it("la pastilla del corte abre el detalle en la pestaña Inventario y pide sus datos", async () => {
+    mockAuth([PERMISO]);
+    vi.mocked(invLib.leerInventarioVendedor).mockResolvedValue({
+      fecha: "2026-11-09", hoy: "2026-11-09", sucursal: { id: "s", codigo: "TJ" }, vendedor: { id: "v", nombre: "Ricardo" },
+      lineas: [], totales: {} as invLib.InventarioVendedor["totales"], recargas: [], vendedoresSinCorte: 0, corte: null,
+    });
+    const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PantallaDashboard sucursal="TJ" />);
+    const tabla = await screen.findByRole("table", { name: "Vendedores de hoy" });
+    await u.click(within(tabla).getByRole("button", { name: "Inventario de Ricardo" }));
+    await screen.findByRole("dialog", { name: /Inventario · Ricardo/ });
+    expect((await screen.findAllByRole("tab", { name: "Inventario" }))[0]).toHaveAttribute("aria-selected", "true");
+    expect(invLib.leerInventarioVendedor).toHaveBeenCalledWith("2026-11-09", "TJ", expect.any(String));
   });
 
   it("picar la Ruta x / y abre la pestaña Ruta (las visitas), como el viejo", async () => {

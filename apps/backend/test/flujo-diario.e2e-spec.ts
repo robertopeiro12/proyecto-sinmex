@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { sql } from 'kysely';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
@@ -759,6 +760,29 @@ describe('Flujo diario (e2e)', () => {
   });
 
   afterAll(async () => {
+    await db
+      .deleteFrom('corte_mercancia')
+      .where('vendedor_id', 'in', vendedorIds)
+      .execute();
+    await db
+      .deleteFrom('retorno')
+      .where('vendedor_id', 'in', vendedorIds)
+      .execute();
+    await db
+      .deleteFrom('carga_detalle')
+      .where(
+        'carga_id',
+        'in',
+        db
+          .selectFrom('carga')
+          .select('id')
+          .where('vendedor_id', 'in', vendedorIds),
+      )
+      .execute();
+    await db
+      .deleteFrom('carga')
+      .where('vendedor_id', 'in', vendedorIds)
+      .execute();
     const porVendedor = <T extends 'gasto' | 'visita' | 'jornada' | 'ruta'>(
       t: T,
     ) =>
@@ -883,6 +907,94 @@ describe('Flujo diario (e2e)', () => {
         hasta: HASTA,
         sucursal: 'TJ',
       }).expect(403);
+    });
+  });
+
+  describe('estado del corte', () => {
+    it('cada (vendedor, fecha) trae el estado de su propio corte y porDia suma los faltantes', async () => {
+      // Ana, 2018-05-07: carga aceptada de 10 y regresa 6 buenas -> corte hecho
+      // con faltante. Su otro dia y los demas vendedores no tienen corte.
+      const dia = '2018-05-07';
+      const { id: cargaId } = await db
+        .insertInto('carga')
+        .values({
+          vendedor_id: ana,
+          sucursal_id: idFd,
+          fecha: sql<Date>`${dia}::date`,
+          numero: 77,
+          estado: 'aceptada',
+          respondida_en: sql<Date>`now()`,
+          capturo_usuario_id: generalId,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      await db
+        .insertInto('carga_detalle')
+        .values({
+          carga_id: cargaId,
+          presentacion_id: presentacionMediaId,
+          piezas: 10,
+        })
+        .execute();
+      await db
+        .insertInto('retorno')
+        .values({
+          fecha: sql<Date>`${dia}::date`,
+          vendedor_id: ana,
+          sucursal_id: idFd,
+          presentacion_id: presentacionMediaId,
+          piezas: 6,
+          capturo_usuario_id: generalId,
+        })
+        .execute();
+      await db
+        .insertInto('corte_mercancia')
+        .values({
+          fecha: sql<Date>`${dia}::date`,
+          vendedor_id: ana,
+          sucursal_id: idFd,
+          hecho_por_usuario_id: generalId,
+        })
+        .execute();
+
+      // Ana tambien trabaja otro dia (solo con ruta, sin corte).
+      const { cliente_id: clienteRuta } = await db
+        .selectFrom('ruta')
+        .select('cliente_id')
+        .where('vendedor_id', '=', ana)
+        .executeTakeFirstOrThrow();
+      await sembrarRuta(ana, '2018-05-10', [clienteRuta]);
+
+      const r = await deFd();
+      expect(renglon(r, ana, dia)?.corte).toEqual({
+        estado: 'con_faltante',
+        piezasFaltantes: 4,
+        mermaFaltante: 0,
+      });
+      expect(renglon(r, beto, dia)?.corte).toEqual({
+        estado: 'sin_corte',
+        piezasFaltantes: null,
+        mermaFaltante: null,
+      });
+      // Otro dia de Ana (con renglon) no hereda el corte de este.
+      const otroDia = r.porVendedor.find(
+        (x) => x.vendedorId === ana && x.fecha !== dia,
+      );
+      expect(otroDia).toBeDefined();
+      expect(otroDia?.corte.estado).toBe('sin_corte');
+      const delDia = r.porDia.find((d) => d.fecha === dia);
+      expect(delDia?.faltantesCorte).toEqual({ piezas: 4, merma: 0 });
+      // Un dia sin ningun corte hecho: null.
+      expect(
+        r.porDia
+          .filter((d) => d.fecha !== dia)
+          .every((d) => d.faltantesCorte === null),
+      ).toBe(true);
+      await db
+        .deleteFrom('ruta')
+        .where('vendedor_id', '=', ana)
+        .where('fecha', '=', sql<Date>`'2018-05-10'::date`)
+        .execute();
     });
   });
 
