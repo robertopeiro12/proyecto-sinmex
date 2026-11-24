@@ -61,6 +61,7 @@ const VENTA: VentaDetalle = {
   motivoNoEditable: null,
   puedeMarcarPerdida: true,
   firma: { esperada: false, nombre: null, subidaEn: null },
+  atendio: null,
   editada: false,
 };
 

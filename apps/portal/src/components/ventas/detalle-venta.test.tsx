@@ -71,6 +71,7 @@ const VENTA: VentaDetalle = {
   puedeMarcarPerdida: true,
   // T-73: la venta de prueba es del portal: no espera firma.
   firma: { esperada: false, nombre: null, subidaEn: null },
+  atendio: null,
   editada: false,
 };
 
@@ -319,6 +320,19 @@ describe("DetalleVenta", () => {
         "Petición enviada: borrar el pago de $100.00 de Abarrotes Lupita.",
       );
     });
+  });
+});
+
+describe("DetalleVenta · quién atendió (pieza 2)", () => {
+  it("muestra Atendió y el nombre cuando viene", () => {
+    renderizar({ ...VENTA, atendio: "María de Jesús Ramos" });
+    expect(screen.getByText("Atendió")).toBeInTheDocument();
+    expect(screen.getByText("María de Jesús Ramos")).toBeInTheDocument();
+  });
+
+  it("no muestra Atendió cuando es null", () => {
+    renderizar({ ...VENTA, atendio: null });
+    expect(screen.queryByText("Atendió")).not.toBeInTheDocument();
   });
 });
 

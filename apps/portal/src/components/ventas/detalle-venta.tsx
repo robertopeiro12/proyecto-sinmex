@@ -120,6 +120,7 @@ export function DetalleVenta({
         <Dato etiqueta="Fecha" valor={<Fecha valor={venta.fecha} />} />
         <Dato etiqueta="Cliente" valor={`${venta.cliente} · ${venta.sucursalCodigo}`} />
         <Dato etiqueta="Repartidor" valor={venta.repartidor ?? "Oficina"} />
+        {venta.atendio && <Dato etiqueta="Atendió" valor={venta.atendio} />}
         <Dato etiqueta="# de nota" valor={venta.numNota ?? "Sin nota"} />
         <Dato etiqueta="Contado o crédito" valor={venta.contadoCredito === "contado" ? "Contado" : "Crédito"} />
         <Dato

@@ -206,6 +206,8 @@ export interface VentaDetalle {
   puedeMarcarPerdida: boolean;
   /** T-73. */
   firma: FirmaDeVenta;
+  /** Pieza 2: quién atendió en el negocio (lo manda la tablet); `null` si no vino. */
+  atendio: string | null;
   /** T-73: el portal tocó la nota después de grabarse. */
   editada: boolean;
 }
