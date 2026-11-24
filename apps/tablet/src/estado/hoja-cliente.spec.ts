@@ -61,7 +61,20 @@ test('abono parcial a una que debe liquidar: Vender sigue apagado aunque ya no e
     candado: null,
   });
   expect(a.vender).toEqual({ habilitado: false, nota: 'Cobra primero' });
-  expect(a.cobrar).toEqual({ visible: true, principal: false, nota: '1 nota pendiente' });
+  // La nota que bloquea sigue mandando: Cobrar destacado con su saldo.
+  expect(a.cobrar).toEqual({ visible: true, principal: true, nota: '1 nota asignada · $500.00' });
+});
+
+test('la asignada que bloquea no está en notas pendientes: Cobrar sale igual', () => {
+  const a = accionesCliente({
+    asignadas: [asignada({ saldoCentavos: 30000, condicion: 'liquidar', tocadaHoy: true })],
+    notasConSaldo: 0,
+    esProspecto: false,
+    operacionesHabilitadas: true,
+    candado: null,
+  });
+  expect(a.vender).toEqual({ habilitado: false, nota: 'Cobra primero' });
+  expect(a.cobrar).toEqual({ visible: true, principal: true, nota: '1 nota asignada · $300.00' });
 });
 
 test('condición ya cumplida hoy: Vender se enciende y Cobrar deja de ser principal', () => {

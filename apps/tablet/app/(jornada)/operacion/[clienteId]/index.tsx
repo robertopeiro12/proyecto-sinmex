@@ -9,7 +9,7 @@ import { firmaPorSubir } from '@/estado/firma';
 import { accionesCliente } from '@/estado/hoja-cliente';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
 import { pastillaMovimiento, resumenMovimiento } from '@/estado/movimiento';
-import { etiquetaCondicionPendiente, venderDesdeFicha } from '@/estado/notas-asignadas';
+import { etiquetaCondicionPendiente, notaParaCobrar, venderDesdeFicha } from '@/estado/notas-asignadas';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import { estadoSubida, pastillaAlta, urlMapa, urlTelefono } from '@/estado/ruta-del-dia';
@@ -262,12 +262,12 @@ export default function FichaCliente() {
       : candado.tipo === 'empezar'
         ? 'Empieza tu ruta para atender clientes'
         : TEXTO_CANDADO[candado.tipo].titulo;
+  // La primera por atender o, si no hay, la que aun detiene la venta (abono
+  // parcial a una que debe liquidar); sin ninguna, cobranza sin preseleccion.
+  const notaCobrar = notaParaCobrar(hoy.asignadas);
   const destinoCobrar: Href =
-    acciones.cobrar?.principal && asignadasPorAtender[0]
-      ? {
-          pathname: '/(jornada)/operacion/[clienteId]/cobranza',
-          params: { clienteId, notaId: asignadasPorAtender[0].ventaNotaId },
-        }
+    notaCobrar !== null
+      ? { pathname: '/(jornada)/operacion/[clienteId]/cobranza', params: { clienteId, notaId: notaCobrar } }
       : { pathname: '/(jornada)/operacion/[clienteId]/cobranza', params };
   const botonCobrar = acciones.cobrar?.visible ? (
     <BotonAccion

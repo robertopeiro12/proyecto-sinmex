@@ -1,4 +1,9 @@
-import { motivoBloqueoVenta, porAtender, type NotaAsignadaDeHoy } from '@/datos/notas-asignadas-reglas';
+import {
+  cumpleCondicion,
+  motivoBloqueoVenta,
+  porAtender,
+  type NotaAsignadaDeHoy,
+} from '@/datos/notas-asignadas-reglas';
 import type { CandadoClientes } from '@/datos/inventario-reglas';
 import { pesos } from '@/ui/pesos';
 
@@ -32,7 +37,9 @@ const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno
  *   vieja (`venderDesdeFicha(...).bloqueo` no bloqueaba con notas por atender);
  *   el destino sigue saliendo de `venderDesdeFicha(...).destino`.
  * - **Cobrar** sale con cualquier nota con saldo (asignada o no), nunca al
- *   prospecto.
+ *   prospecto. Va destacado con una asignada por atender **o** con una que
+ *   detiene la venta (p. ej. un abono parcial a una que debe liquidar): nunca se
+ *   deja "Cobra primero" sin Cobrar, aunque esa nota no este en las pendientes.
  */
 export function accionesCliente({
   asignadas,
@@ -51,12 +58,21 @@ export function accionesCliente({
   const bloqueoVenta = motivoBloqueoVenta([...asignadas]);
   const pendientes = porAtender([...asignadas]);
 
+  // Las asignadas que dice el boton: las por atender; si no hay, las que
+  // detienen la venta (con saldo).
+  const destacadas =
+    pendientes.length > 0
+      ? pendientes
+      : bloqueoVenta !== null
+        ? asignadas.filter((n) => n.saldoCentavos > 0 && !cumpleCondicion(n))
+        : [];
+
   let cobrar: AccionesCliente['cobrar'] = null;
-  if (!esProspecto && (notasConSaldo > 0 || pendientes.length > 0)) {
-    const principal = pendientes.length > 0;
+  if (!esProspecto && (notasConSaldo > 0 || destacadas.length > 0)) {
+    const principal = destacadas.length > 0;
     const nota = principal
-      ? `${plural(pendientes.length, 'nota asignada', 'notas asignadas')} · ${pesos(
-          pendientes.reduce((s, n) => s + n.saldoCentavos, 0),
+      ? `${plural(destacadas.length, 'nota asignada', 'notas asignadas')} · ${pesos(
+          destacadas.reduce((s, n) => s + n.saldoCentavos, 0),
         )}`
       : plural(notasConSaldo, 'nota pendiente', 'notas pendientes');
     cobrar = { visible: true, principal, nota };
