@@ -130,21 +130,19 @@ function normalizar(texto: string): string {
 /**
  * "Agregar a mi ruta" (rediseno pieza 1, maqueta 20): todos los clientes activos
  * de la sucursal (`tipo = 'cliente'`, D7) en orden alfabetico, filtrados por
- * nombre sin acentos, cada uno con `enRuta` (ya vivo en la ruta de hoy). Sin tope
- * por omision (la pantalla virtualiza); `limite` solo si alguien lo pide.
+ * nombre sin acentos, cada uno con `enRuta` (ya vivo en la ruta de hoy). Sin tope:
+ * la pantalla virtualiza.
  */
 export function clientesParaAgregar<T extends Pick<Cliente, 'id' | 'nombre' | 'tipo' | 'activo'>>(
   clientes: readonly T[],
   enRuta: ReadonlySet<string>,
   busqueda: string,
-  limite?: number,
 ): (T & { enRuta: boolean })[] {
   const q = normalizar(busqueda);
   return clientes
     .filter((c) => c.tipo === 'cliente' && c.activo === 1)
     .filter((c) => q === '' || normalizar(c.nombre).includes(q))
     .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }))
-    .slice(0, limite)
     .map((c) => ({ ...c, enRuta: enRuta.has(c.id) }));
 }
 
@@ -177,22 +175,32 @@ export interface EntradaMenu {
   icono: NombreIcono;
   destino: string | null;
   deshabilitada: boolean;
-  /** Frase corta bajo el titulo (hoy: lo que falta para abrir Corte). */
+  /** Frase corta bajo el titulo (lo que falta para abrir Corte, o "Empieza tu ruta"). */
   nota: string | null;
 }
+
+/** La nota de las entradas apagadas antes de empezar la ruta de hoy. */
+export const NOTA_SIN_JORNADA = 'Empieza tu ruta';
 
 /**
  * Las entradas del menu, en el orden del spec §5 (maqueta 3). Con el dia
  * cerrado se deshabilita solo lo que captura (gastos, merma); lo que consulta
  * se sigue viendo, y Corte se abre (ya se hizo). Corte lleva candado mientras
  * falten clientes por visitar.
+ *
+ * Sin jornada de hoy (`sinJornada`) solo quedan Ruta y Cerrar sesion: la guardia
+ * de `(jornada)/_layout.tsx` regresaria a la Ruta cualquier otra pantalla, asi
+ * que las demas se apagan con la nota "Empieza tu ruta" en vez de parecer
+ * activas y no hacer nada.
  */
 export function entradasMenu({
   porVisitar,
   diaCerrado,
+  sinJornada,
 }: {
   porVisitar: number;
   diaCerrado: boolean;
+  sinJornada: boolean;
 }): EntradaMenu[] {
   const corteConCandado = !diaCerrado && porVisitar > 0;
   const entrada = (
@@ -201,7 +209,13 @@ export function entradasMenu({
     icono: NombreIcono,
     destino: string | null,
     extra: Partial<Pick<EntradaMenu, 'deshabilitada' | 'nota'>> = {},
-  ): EntradaMenu => ({ clave, titulo, icono, destino, deshabilitada: false, nota: null, ...extra });
+  ): EntradaMenu => {
+    const e: EntradaMenu = { clave, titulo, icono, destino, deshabilitada: false, nota: null, ...extra };
+    if (sinJornada && clave !== 'ruta' && clave !== 'salir') {
+      return { ...e, deshabilitada: true, nota: NOTA_SIN_JORNADA };
+    }
+    return e;
+  };
   return [
     entrada('ruta', 'Ruta', 'ubicacion', '/(jornada)'),
     entrada('inventario', 'Inventario', 'inventario', '/(jornada)/inventario'),
@@ -217,6 +231,35 @@ export function entradasMenu({
     entrada('impresora', 'Seleccionar impresora', 'impresora', '/(jornada)/impresora'),
     entrada('salir', 'Cerrar sesión', 'salir', null),
   ];
+}
+
+/** Lo que hace el menu al elegir una entrada (sin React, para probarlo). */
+export type AccionMenu =
+  | { tipo: 'nada' }
+  | { tipo: 'salir' }
+  | { tipo: 'dismissTo' | 'push' | 'replace'; destino: string };
+
+/**
+ * Como navega el menu para no apilar pantallas (revision final de la pieza 1,
+ * I2): la Ruta es siempre la base del `Stack` y encima hay a lo mas una
+ * pantalla del menu.
+ *
+ * - Ir a la Ruta: `dismissTo('/(jornada)')` (cierra lo que este encima).
+ * - Desde la Ruta a otra entrada: `push` (atras regresa a la Ruta).
+ * - Desde otra pantalla del menu: `replace` (cambia una por otra).
+ * - La entrada de la pantalla donde ya se esta: nada (un `replace` sobre si
+ *   misma la volveria a montar y borraria un formulario a medias).
+ * - Cerrar sesion: `salir` (lo confirma la pantalla).
+ */
+export function accionMenu(
+  actual: ClaveMenu,
+  objetivo: Pick<EntradaMenu, 'clave' | 'destino'>,
+): AccionMenu {
+  if (objetivo.destino === null) return { tipo: 'salir' };
+  if (objetivo.clave === actual) return { tipo: 'nada' };
+  if (objetivo.clave === 'ruta') return { tipo: 'dismissTo', destino: objetivo.destino };
+  if (actual === 'ruta') return { tipo: 'push', destino: objetivo.destino };
+  return { tipo: 'replace', destino: objetivo.destino };
 }
 
 /** Subconjunto de `Estado` de `@/ui/pantalla` (un .tsx con React Native no corre en Jest/Node). */
@@ -344,4 +387,54 @@ export function pastillaAlta(
 /** Id de la ficha a la que enlaza una fila de "Prospectos de hoy", o `null` (T-75, D6). */
 export function enlaceAFicha(prospectoId: string, existeCliente: (id: string) => boolean): string | null {
   return existeCliente(prospectoId) ? prospectoId : null;
+}
+
+/** Una fila de la lista de Prospectos: la captura local, el espejo del catalogo o los dos. */
+export interface FilaListaProspecto {
+  id: string;
+  nombre: string;
+  domicilio: string | null;
+  /** Lo que capturo ESTA tablet (lleva su pastilla de subida), o `null` si solo esta en el catalogo. */
+  local: Prospecto | null;
+  /** Id de la ficha a la que abre la fila, o `null` si no hay ficha (`enlaceAFicha`). */
+  ficha: string | null;
+}
+
+/**
+ * La lista de la pantalla Prospectos (revision final de la pieza 1, I1).
+ *
+ * - `capturadosHoy`: lo que este vendedor capturo hoy en esta tablet, en orden
+ *   de captura, como siempre (con o sin ficha: un alta rechazada o anterior a
+ *   T-75 se sigue viendo con su motivo).
+ * - `otros`: los demas prospectos vivos de la sucursal (`listarProspectos`), en
+ *   el orden del catalogo. Asi se abre la hoja, y se le vende la bienvenida, al
+ *   prospecto que se capturo otro dia o en otra tablet; ya no habia otra puerta
+ *   desde que se quito "Todos los clientes" (spec del rediseño §16-bis). Si esta
+ *   tablet tiene su captura (`localDe`), la fila lleva tambien su pastilla.
+ */
+export function listaProspectos(
+  capturadosHoy: readonly Prospecto[],
+  catalogo: readonly Pick<Cliente, 'id' | 'nombre' | 'domicilio'>[],
+  localDe: (id: string) => Prospecto | null,
+  existeCliente: (id: string) => boolean,
+): { capturadosHoy: FilaListaProspecto[]; otros: FilaListaProspecto[] } {
+  const deHoy = new Set(capturadosHoy.map((p) => p.id));
+  return {
+    capturadosHoy: capturadosHoy.map((p) => ({
+      id: p.id,
+      nombre: p.nombre,
+      domicilio: p.domicilio,
+      local: p,
+      ficha: enlaceAFicha(p.id, existeCliente),
+    })),
+    otros: catalogo
+      .filter((c) => !deHoy.has(c.id))
+      .map((c) => ({
+        id: c.id,
+        nombre: c.nombre,
+        domicilio: c.domicilio,
+        local: localDe(c.id),
+        ficha: c.id,
+      })),
+  };
 }

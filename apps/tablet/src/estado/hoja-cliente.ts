@@ -34,8 +34,8 @@ const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno
  * - **Vender** se apaga con "Cobra primero" mientras una asignada traiga una
  *   condicion sin cumplir (`motivoBloqueoVenta`), aunque siga por atender: se
  *   enciende al grabar el cobro que la cumple. Es un cambio respecto de la ficha
- *   vieja (`venderDesdeFicha(...).bloqueo` no bloqueaba con notas por atender);
- *   el destino sigue saliendo de `venderDesdeFicha(...).destino`.
+ *   vieja, que no bloqueaba con notas por atender; el destino sigue saliendo de
+ *   `venderDesdeFicha(...).destino`.
  * - **Cobrar** sale con cualquier nota con saldo (asignada o no), nunca al
  *   prospecto. Va destacado con una asignada por atender **o** con una que
  *   detiene la venta (p. ej. un abono parcial a una que debe liquidar): nunca se

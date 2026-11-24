@@ -48,10 +48,10 @@ export default function AgregarARuta() {
   const candidatos = useMemo<(Cliente & { enRuta: boolean })[]>(() => {
     void versionCatalogos;
     void refrescos;
-    if (!sucursalId) return [];
+    if (!sucursalId || !vendedor) return [];
     const enRuta = new Set(
       datos.rutas
-        .delDia()
+        .delDia(vendedor.id)
         .filter((f) => f.activo === 1)
         .map((f) => f.cliente_id),
     );
@@ -60,7 +60,7 @@ export default function AgregarARuta() {
       enRuta,
       busqueda,
     );
-  }, [datos, sucursalId, busqueda, versionCatalogos, refrescos]);
+  }, [datos, sucursalId, vendedor, busqueda, versionCatalogos, refrescos]);
 
   function agregar(cliente: Cliente) {
     setError(null);
@@ -83,7 +83,6 @@ export default function AgregarARuta() {
 
   const cabecera = (
     <View style={{ gap: espacio.md }}>
-      <Text style={estilos.titulo}>Agregar a mi ruta</Text>
       <Text style={estilos.subtitulo}>
         Clientes de tu sucursal. Los que agregues quedan al final de la ruta de
         hoy.

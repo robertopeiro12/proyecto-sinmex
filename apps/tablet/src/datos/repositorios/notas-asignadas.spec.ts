@@ -1,3 +1,4 @@
+import { porAtender } from '../notas-asignadas-reglas';
 import { depsDePrueba, insertarVentaDePrueba, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
 import type { NotaAsignada } from '../tipos';
 import { crearRepositorioCatalogos } from './catalogos';
@@ -92,7 +93,7 @@ describe('repositorio de notas asignadas', () => {
     const { notas } = montar([asignacion({ activo: 0, condicion_venta: 'liquidar' })]);
     expect(notas.deHoyDelCliente('cli-1')).toEqual([]);
     expect(notas.bloqueoDeVenta('cli-1')).toBeNull();
-    expect(notas.conteoDeHoyPorCliente().get('cli-1') ?? 0).toBe(0);
+    expect(porAtender(notas.deHoyDelCliente('cli-1'))).toHaveLength(0);
   });
 
   it('una asignacion sin nota_pendiente viva no aparece', () => {
@@ -111,7 +112,7 @@ describe('repositorio de notas asignadas', () => {
     cobranzas.registrar(cobro({ fechaPago: AYER }));
     expect(notas.deHoyDelCliente('cli-1')[0]?.tocadaHoy).toBe(true);
     expect(notas.bloqueoDeVenta('cli-1')).toBeNull();
-    expect(notas.conteoDeHoyPorCliente().get('cli-1') ?? 0).toBe(0);
+    expect(porAtender(notas.deHoyDelCliente('cli-1'))).toHaveLength(0);
   });
 
   it('un cobro de ayer no cuenta como tocada hoy', () => {
@@ -141,7 +142,7 @@ describe('repositorio de notas asignadas', () => {
     // Sigue en la lista (con saldo 0) para que cumpleCondicion la vea; porAtender la saca.
     expect(notas.deHoyDelCliente('cli-1')[0]).toMatchObject({ saldoCentavos: 0, tocadaHoy: false });
     expect(notas.bloqueoDeVenta('cli-1')).toBeNull();
-    expect(notas.conteoDeHoyPorCliente().get('cli-1') ?? 0).toBe(0);
+    expect(porAtender(notas.deHoyDelCliente('cli-1'))).toHaveLength(0);
   });
 
   it('Review Focus 4: tras un pull que reescribe el saldo viejo, el cobro local de hoy sigue cumpliendo abonar', () => {
@@ -159,7 +160,7 @@ describe('repositorio de notas asignadas', () => {
     // Con una sola nota marcada, el reparto va primero a ella: nota-2 (10000) queda en 0.
     cobranzas.registrar(cobro({ ventaNotaId: 'nota-2', montoCentavos: 10000 }));
     expect(notas.bloqueoDeVenta('cli-1')).toBeNull();
-    expect(notas.conteoDeHoyPorCliente().get('cli-1') ?? 0).toBe(0);
+    expect(porAtender(notas.deHoyDelCliente('cli-1'))).toHaveLength(0);
   });
 
   it('Review Focus 4 (liquidar): un pull que reescribe el saldo viejo con activo 1 no vuelve a bloquear', () => {
@@ -174,7 +175,7 @@ describe('repositorio de notas asignadas', () => {
     const [n] = notas.deHoyDelCliente('cli-1');
     expect(n).toMatchObject({ saldoCentavos: 10000, tocadaHoy: true, liquidadaHoy: true });
     expect(notas.bloqueoDeVenta('cli-1')).toBeNull();
-    expect(notas.conteoDeHoyPorCliente().get('cli-1') ?? 0).toBe(0);
+    expect(porAtender(notas.deHoyDelCliente('cli-1'))).toHaveLength(0);
   });
 
   it('liquidar gana sobre abonar y un abono no la cumple', () => {
@@ -187,14 +188,14 @@ describe('repositorio de notas asignadas', () => {
     expect(notas.bloqueoDeVenta('cli-1')).toBe(LIQUIDAR);
   });
 
-  it('conteoDeHoyPorCliente cuenta las asignadas por atender; el comentario no la saca', () => {
+  it('porAtender cuenta las asignadas por atender; el comentario no la saca', () => {
     const { notas } = montar([
       asignacion({ id: 'asg-1', venta_nota_id: 'nota-1' }),
       asignacion({ id: 'asg-2', venta_nota_id: 'nota-2', condicion_venta: 'ninguna' }),
     ]);
-    expect(notas.conteoDeHoyPorCliente()).toEqual(new Map([['cli-1', 2]]));
+    expect(porAtender(notas.deHoyDelCliente('cli-1'))).toHaveLength(2);
     notas.registrarNoCobrada({ vendedorId: 'ven-1', clienteId: 'cli-1', ventaNotaId: 'nota-1', comentario: 'No estaba' });
-    expect(notas.conteoDeHoyPorCliente()).toEqual(new Map([['cli-1', 2]]));
+    expect(porAtender(notas.deHoyDelCliente('cli-1'))).toHaveLength(2);
     expect(notas.deHoyDelCliente('cli-1')[0]?.comentadaHoy).toBe(true);
     expect(notas.bloqueoDeVenta('cli-1')).toBe(ABONAR);
   });

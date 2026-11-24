@@ -453,7 +453,7 @@ describe('guardarSnapshot con la ruta del dia (T-37)', () => {
       rutas: [fila],
     });
 
-    expect(rutas.delDia('2026-08-07').map((f) => f.id)).toEqual(['srv-1']);
+    expect(rutas.delDia('ven-1', '2026-08-07').map((f) => f.id)).toEqual(['srv-1']);
   });
 
   it('el snapshot entero entra aunque una ruta apunte a un cliente desconocido (Review Focus 1)', () => {

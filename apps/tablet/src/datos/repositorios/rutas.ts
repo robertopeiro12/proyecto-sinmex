@@ -214,9 +214,9 @@ export function crearRepositorioRutas(
      * mas `saldo_centavos > 0`.
      *
      * @param vendedorId el vendedor con sesion: sus ventas a credito de hoy
-     *   cuentan en `notas_que_trae`. Sin el, solo cuentan las asignadas.
+     *   cuentan en `notas_que_trae` (las de otro vendedor no).
      */
-    delDia(fecha: FechaISO = reloj.hoy(), vendedorId: string | null = null): FilaRutaDelDia[] {
+    delDia(vendedorId: string, fecha: FechaISO = reloj.hoy()): FilaRutaDelDia[] {
       type FilaCruda = Omit<
         FilaRutaDelDia,
         'visitado' | 'visita_sin_venta' | 'notas_que_trae' | 'con_merma'
@@ -282,7 +282,7 @@ export function crearRepositorioRutas(
       );
       // Atendido (venta o cobro) gana a la visita (D8): no es visita sin venta.
       // Un comentario de "Continuar sin cobrar" cuenta como visita (decision 17).
-      const queTrae = notasAsignadas.queTraePorCliente(vendedorId ?? '');
+      const queTrae = notasAsignadas.queTraePorCliente(vendedorId);
       return filas.map(({ atendido, con_visita, con_comentario, con_merma, ...f }) => {
         const visita = con_visita === 1 || con_comentario === 1;
         return {

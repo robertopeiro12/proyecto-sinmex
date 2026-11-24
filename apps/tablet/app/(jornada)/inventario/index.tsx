@@ -41,7 +41,7 @@ export default function Inventario() {
   const porRegresar = filasPorRegresar(vista.filas);
 
   return (
-    <MarcoMenu titulo="Inventario">
+    <MarcoMenu clave="inventario" titulo="Inventario">
       <Pantalla
         subtitulo="Lo que traes hoy: tus cargas aceptadas menos lo que vendiste, regalaste, repusiste, se mermó y consumiste."
       >

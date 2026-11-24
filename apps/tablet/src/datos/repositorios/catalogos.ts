@@ -447,7 +447,7 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
       );
     },
 
-    /** Prospectos activos de una sucursal (T-75, D6): la pestana "Prospectos". */
+    /** Prospectos activos de una sucursal (T-75, D6): la lista de la pantalla Prospectos (`listaProspectos`). */
     listarProspectos(sucursalId: string): Cliente[] {
       return bd.getAllSync<Cliente>(
         `select * from cliente

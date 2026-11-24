@@ -39,7 +39,7 @@ export type Tono = 'primaria' | 'confirmar' | 'neutra' | 'peligro';
  * hombres en ruta, mirando la pantalla al sol y de reojo. Por eso dos botones
  * que hacen cosas opuestas tienen que diferir en **tres ejes a la vez**:
  *
- * 1. **Icono** distinto (`+` contra `−`), en su propia caja con borde.
+ * 1. **Icono** distinto (`+` contra `−`), dibujado a la izquierda de la etiqueta.
  * 2. **Forma** distinta (relleno contra contorno).
  * 3. **Color** distinto (verde contra rojo).
  *

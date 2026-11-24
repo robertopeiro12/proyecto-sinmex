@@ -83,7 +83,7 @@ function venderA(ventas: ReturnType<typeof montar>['ventas']) {
 }
 
 const clientesDelDia = (rutas: ReturnType<typeof montar>['rutas'], fecha = HOY) =>
-  rutas.delDia(fecha).map((f) => f.cliente_id);
+  rutas.delDia('ven-1', fecha).map((f) => f.cliente_id);
 
 describe('aplicarSnapshot: la regla de fusion al refrescar (D15)', () => {
   it('una fila nueva viva aparece en su orden del servidor', () => {
@@ -117,7 +117,7 @@ describe('aplicarSnapshot: la regla de fusion al refrescar (D15)', () => {
 
     rutas.aplicarSnapshot([delServidor({ activo: 0 })]);
 
-    expect(rutas.delDia()).toMatchObject([{ id: 'srv-1', activo: 0, visitado: false }]);
+    expect(rutas.delDia('ven-1')).toMatchObject([{ id: 'srv-1', activo: 0, visitado: false }]);
   });
 
   it('una baja de un cliente CON actividad hoy se queda, visitada (fuera de ruta)', () => {
@@ -127,7 +127,7 @@ describe('aplicarSnapshot: la regla de fusion al refrescar (D15)', () => {
 
     rutas.aplicarSnapshot([delServidor({ activo: 0 })]);
 
-    expect(rutas.delDia()).toMatchObject([{ id: 'srv-1', activo: 0, visitado: true }]);
+    expect(rutas.delDia('ven-1')).toMatchObject([{ id: 'srv-1', activo: 0, visitado: true }]);
   });
 
   it('una fila viva del servidor funde el alta local del mismo cliente: queda la del servidor', () => {
@@ -139,7 +139,7 @@ describe('aplicarSnapshot: la regla de fusion al refrescar (D15)', () => {
     ]);
 
     expect(rutas.porId(alta.id)).toBeNull();
-    expect(rutas.delDia()).toMatchObject([
+    expect(rutas.delDia('ven-1')).toMatchObject([
       { id: 'srv-9', cliente_id: 'cli-3', orden: 4, sync_estado: 'sincronizada' },
     ]);
     // Ya no hay nada que subir: si la operacion seguia pendiente, el servidor
@@ -155,7 +155,7 @@ describe('aplicarSnapshot: la regla de fusion al refrescar (D15)', () => {
     rutas.aplicarSnapshot([delServidor({ id: 'srv-2', orden: 2 })]);
 
     expect(rutas.porId('srv-1')).toBeNull();
-    expect(rutas.delDia().map((f) => [f.id, f.activo])).toEqual([['srv-2', 1]]);
+    expect(rutas.delDia('ven-1').map((f) => [f.id, f.activo])).toEqual([['srv-2', 1]]);
   });
 
   it('una baja vieja que llega en el mismo lote DESPUES de la viva nueva no se escribe', () => {
@@ -170,7 +170,7 @@ describe('aplicarSnapshot: la regla de fusion al refrescar (D15)', () => {
 
     expect(escritas).toBe(1);
     expect(rutas.porId('srv-1')).toBeNull();
-    expect(rutas.delDia().map((f) => [f.id, f.activo])).toEqual([['srv-2', 1]]);
+    expect(rutas.delDia('ven-1').map((f) => [f.id, f.activo])).toEqual([['srv-2', 1]]);
   });
 
   it('una fila cuyo cliente no esta en la tablet se omite y las demas entran (Review Focus 1)', () => {
@@ -182,7 +182,7 @@ describe('aplicarSnapshot: la regla de fusion al refrescar (D15)', () => {
     ]);
 
     expect(escritas).toBe(1);
-    expect(rutas.delDia().map((f) => f.id)).toEqual(['srv-1']);
+    expect(rutas.delDia('ven-1').map((f) => f.id)).toEqual(['srv-1']);
   });
 
   it('un pull nunca toca ruta_orden_local (ya no se escribe, pero la tabla sigue)', () => {
@@ -211,7 +211,7 @@ describe('delDia', () => {
       `insert into ruta_orden_local (fecha, cliente_id, posicion) values ('${HOY}', 'cli-3', 0)`,
     );
 
-    expect(rutas.delDia().map((f) => f.cliente_id)).toEqual(['cli-1', 'cli-3']);
+    expect(rutas.delDia('ven-1').map((f) => f.cliente_id)).toEqual(['cli-1', 'cli-3']);
   });
 
   it('con el mismo orden, desempata por nombre', () => {
@@ -230,19 +230,19 @@ describe('delDia', () => {
       delServidor({ id: 'srv-m', cliente_id: 'cli-3', fecha: MANANA }),
     ]);
 
-    expect(rutas.delDia()).toMatchObject([
+    expect(rutas.delDia('ven-1')).toMatchObject([
       { id: 'srv-4', nombre: 'Cliente cli-4', domicilio: 'Av. Siempre Viva 742' },
     ]);
-    expect(rutas.delDia(MANANA).map((f) => f.id)).toEqual(['srv-m']);
+    expect(rutas.delDia('ven-1', MANANA).map((f) => f.id)).toEqual(['srv-m']);
   });
 
   it('visitado sale de una venta de hoy y de un cobro de hoy', () => {
     const { rutas, ventas } = montar();
     rutas.aplicarSnapshot([delServidor()]);
-    expect(rutas.delDia()[0]!.visitado).toBe(false);
+    expect(rutas.delDia('ven-1')[0]!.visitado).toBe(false);
 
     venderA(ventas);
-    expect(rutas.delDia()[0]!.visitado).toBe(true);
+    expect(rutas.delDia('ven-1')[0]!.visitado).toBe(true);
 
     const otra = montar();
     otra.rutas.aplicarSnapshot([delServidor()]);
@@ -254,7 +254,7 @@ describe('delDia', () => {
       metodoPago: 'efectivo',
       fechaPago: HOY,
     });
-    expect(otra.rutas.delDia()[0]!.visitado).toBe(true);
+    expect(otra.rutas.delDia('ven-1')[0]!.visitado).toBe(true);
   });
 
   it('una venta de AYER no marca visitado hoy (Review Focus 3)', () => {
@@ -267,13 +267,13 @@ describe('delDia', () => {
          'contado', 'N/A', null, 2800, '2026-08-06T20:00:00.000Z')`,
     );
 
-    expect(rutas.delDia()[0]!.visitado).toBe(false);
+    expect(rutas.delDia('ven-1')[0]!.visitado).toBe(false);
   });
 
   it('la burbuja cuenta las notas con saldo y baja al cobrar sin red', () => {
     const { rutas, cobranzas } = montar();
     rutas.aplicarSnapshot([delServidor()]);
-    expect(rutas.delDia()[0]!.notas_pendientes).toBe(2);
+    expect(rutas.delDia('ven-1')[0]!.notas_pendientes).toBe(2);
 
     // Liquidar la nota-2 (saldo 10000) la saca de las pendientes en la tablet.
     cobranzas.registrar({
@@ -285,7 +285,7 @@ describe('delDia', () => {
       fechaPago: HOY,
     });
 
-    expect(rutas.delDia()[0]).toMatchObject({ notas_pendientes: 1, visitado: true });
+    expect(rutas.delDia('ven-1')[0]).toMatchObject({ notas_pendientes: 1, visitado: true });
   });
 });
 
@@ -323,7 +323,7 @@ describe('agregar', () => {
     expect(() => rutas.agregar('cli-5', CTX)).toThrow(ErrorRuta);
     expect(() => rutas.agregar('cli-6', CTX)).toThrow(ErrorRuta);
     expect(() => rutas.agregar('no-existe', CTX)).toThrow(ErrorRuta);
-    expect(rutas.delDia()).toEqual([]);
+    expect(rutas.delDia('ven-1')).toEqual([]);
   });
 
   it('rechaza un cliente que ya esta vivo en la ruta de ese dia', () => {
@@ -339,7 +339,7 @@ describe('agregar', () => {
 
     expect(() => rutas.agregar('cli-3', CTX)).toThrow(ErrorJornada);
     expect(() => rutas.agregar('cli-3', CTX)).toThrow(MENSAJE_DIA_CERRADO);
-    expect(rutas.delDia()).toEqual([]);
+    expect(rutas.delDia('ven-1')).toEqual([]);
   });
 
   it('avisa a las pantallas que la ruta cambio', () => {
@@ -446,7 +446,7 @@ describe('delDia con visitas (T-39, D8)', () => {
     visitarA(visitas, 'mot-tenia');
     visitarA(visitas, 'mot-cerrado');
 
-    expect(rutas.delDia()[0]).toMatchObject({
+    expect(rutas.delDia('ven-1')[0]).toMatchObject({
       visitado: true,
       visita_sin_venta: true,
       ultima_visita_motivo: 'Cerrado',
@@ -461,7 +461,7 @@ describe('delDia con visitas (T-39, D8)', () => {
     rutas.aplicarSnapshot([delServidor()]);
     visitarA(visitas);
     venderA(ventas);
-    expect(rutas.delDia()[0]).toMatchObject({ visitado: true, visita_sin_venta: false });
+    expect(rutas.delDia('ven-1')[0]).toMatchObject({ visitado: true, visita_sin_venta: false });
   });
 
   it('el estado de las visitas es el mas grave: error > pendiente > listo, con el motivo del error', () => {
@@ -471,10 +471,10 @@ describe('delDia con visitas (T-39, D8)', () => {
     const b = visitarA(visitas);
     visitas.marcarSincronizada(a.id);
     visitas.marcarSincronizada(b.id);
-    expect(rutas.delDia()[0]!.visitas_estado).toBe('listo');
+    expect(rutas.delDia('ven-1')[0]!.visitas_estado).toBe('listo');
 
     visitas.marcarError(b.id, 'motivo-visita-inexistente: El motivo no existe.');
-    expect(rutas.delDia()[0]).toMatchObject({
+    expect(rutas.delDia('ven-1')[0]).toMatchObject({
       visitas_estado: 'error',
       visita_error: 'motivo-visita-inexistente: El motivo no existe.',
     });
@@ -483,7 +483,7 @@ describe('delDia con visitas (T-39, D8)', () => {
   it('sin visitas: todo en null y false', () => {
     const { rutas } = montar();
     rutas.aplicarSnapshot([delServidor()]);
-    expect(rutas.delDia()[0]).toMatchObject({
+    expect(rutas.delDia('ven-1')[0]).toMatchObject({
       visita_sin_venta: false,
       ultima_visita_motivo: null,
       ultima_visita_en: null,
@@ -495,7 +495,7 @@ describe('delDia con visitas (T-39, D8)', () => {
     const { rutas, visitas } = montar();
     rutas.aplicarSnapshot([delServidor({ activo: 0 })]);
     visitarA(visitas);
-    expect(rutas.delDia()).toMatchObject([{ activo: 0, visitado: true }]);
+    expect(rutas.delDia('ven-1')).toMatchObject([{ activo: 0, visitado: true }]);
   });
 });
 
@@ -549,10 +549,10 @@ describe('delDia con notas asignadas, recado y comentario (notas-asignadas-table
   it('notas_que_trae cuenta las asignadas de hoy con saldo', () => {
     const { rutas, catalogos } = montar();
     rutas.aplicarSnapshot([delServidor()]);
-    expect(rutas.delDia(HOY, 'ven-1')[0]!.notas_que_trae).toBe(0);
+    expect(rutas.delDia('ven-1', HOY)[0]!.notas_que_trae).toBe(0);
 
     asignar(catalogos, ['nota-1', 'nota-2']);
-    expect(rutas.delDia(HOY, 'ven-1')[0]!.notas_que_trae).toBe(2);
+    expect(rutas.delDia('ven-1', HOY)[0]!.notas_que_trae).toBe(2);
   });
 
   it('notas_que_trae es la cuenta de notasAsignadas.queTraePorCliente: un abono no la saca, liquidar si', () => {
@@ -569,20 +569,20 @@ describe('delDia con notas asignadas, recado y comentario (notas-asignadas-table
         fechaPago: HOY,
       });
     cobrar(5000);
-    expect(rutas.delDia(HOY, 'ven-1')[0]!.notas_que_trae).toBe(2);
+    expect(rutas.delDia('ven-1', HOY)[0]!.notas_que_trae).toBe(2);
     cobrar(10000);
-    expect(rutas.delDia(HOY, 'ven-1')[0]!.notas_que_trae).toBe(1);
-    expect(rutas.delDia(HOY, 'ven-1')[0]!.notas_que_trae).toBe(
+    expect(rutas.delDia('ven-1', HOY)[0]!.notas_que_trae).toBe(1);
+    expect(rutas.delDia('ven-1', HOY)[0]!.notas_que_trae).toBe(
       notasAsignadas.queTraePorCliente('ven-1').get('cli-1') ?? 0,
     );
   });
 
-  it('notas_que_trae suma la venta a credito de hoy del vendedor; sin vendedor no la cuenta', () => {
+  it('notas_que_trae suma la venta a credito de hoy del vendedor; la de otro vendedor no', () => {
     const { rutas, deps } = montar();
     rutas.aplicarSnapshot([delServidor()]);
     insertarVentaDePrueba(deps, { id: 'v-1', folio: 'F1', montoCentavos: 124000, contadoCredito: 'credito' });
-    expect(rutas.delDia(HOY, 'ven-1')[0]!.notas_que_trae).toBe(1);
-    expect(rutas.delDia()[0]!.notas_que_trae).toBe(0);
+    expect(rutas.delDia('ven-1', HOY)[0]!.notas_que_trae).toBe(1);
+    expect(rutas.delDia('otro-vendedor')[0]!.notas_que_trae).toBe(0);
   });
 
   it('el recado de la ruta baja a la fila (y es null sin recado)', () => {
@@ -591,7 +591,7 @@ describe('delDia con notas asignadas, recado y comentario (notas-asignadas-table
       delServidor({ id: 'srv-1', cliente_id: 'cli-1', recado: 'Lleva cambio' }),
       delServidor({ id: 'srv-3', cliente_id: 'cli-3', orden: 2 }),
     ]);
-    const filas = rutas.delDia();
+    const filas = rutas.delDia('ven-1');
     expect(filas.find((f) => f.cliente_id === 'cli-1')!.recado).toBe('Lleva cambio');
     expect(filas.find((f) => f.cliente_id === 'cli-3')!.recado).toBeNull();
   });
@@ -606,22 +606,22 @@ describe('delDia con notas asignadas, recado y comentario (notas-asignadas-table
       ventaNotaId: 'nota-1',
       comentario: 'No estaba el dueño',
     });
-    expect(rutas.delDia()[0]).toMatchObject({ visitado: true, visita_sin_venta: true });
+    expect(rutas.delDia('ven-1')[0]).toMatchObject({ visitado: true, visita_sin_venta: true });
   });
 
   it('con solo comentario, ultimo_comentario_en trae la hora del ultimo; sin comentario es null', () => {
     const { rutas, catalogos, deps } = montar();
     rutas.aplicarSnapshot([delServidor()]);
     asignar(catalogos);
-    expect(rutas.delDia()[0]!.ultimo_comentario_en).toBeNull();
+    expect(rutas.delDia('ven-1')[0]!.ultimo_comentario_en).toBeNull();
     crearRepositorioNotasAsignadas(deps).registrarNoCobrada({
       vendedorId: 'ven-1',
       clienteId: 'cli-1',
       ventaNotaId: 'nota-1',
       comentario: 'No estaba el dueño',
     });
-    expect(rutas.delDia()[0]!.ultimo_comentario_en).toBe(MOMENTO);
-    expect(rutas.delDia()[0]!.ultima_visita_en).toBeNull();
+    expect(rutas.delDia('ven-1')[0]!.ultimo_comentario_en).toBe(MOMENTO);
+    expect(rutas.delDia('ven-1')[0]!.ultima_visita_en).toBeNull();
   });
 
   it('con comentario y venta, atendido gana: no es visita_sin_venta', () => {
@@ -635,7 +635,7 @@ describe('delDia con notas asignadas, recado y comentario (notas-asignadas-table
       comentario: 'Pide esperar',
     });
     venderA(ventas);
-    expect(rutas.delDia()[0]).toMatchObject({ visitado: true, visita_sin_venta: false });
+    expect(rutas.delDia('ven-1')[0]).toMatchObject({ visitado: true, visita_sin_venta: false });
   });
 });
 
@@ -644,7 +644,7 @@ describe('delDia: lo hecho hoy (rediseño, spec §6)', () => {
     const { rutas, jornadas, movimientos } = montar();
     rutas.aplicarSnapshot([delServidor()]);
     jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
-    expect(rutas.delDia()[0]).toMatchObject({ visitado: false, con_merma: false });
+    expect(rutas.delDia('ven-1')[0]).toMatchObject({ visitado: false, con_merma: false });
 
     movimientos.registrar({
       vendedorId: 'ven-1',
@@ -654,7 +654,7 @@ describe('delDia: lo hecho hoy (rediseño, spec §6)', () => {
       lineas: [{ presentacionId: 'pre-1', sentido: 'recibido', piezas: 2 }],
     });
 
-    expect(rutas.delDia()[0]).toMatchObject({ visitado: true, con_merma: true, visita_sin_venta: false });
+    expect(rutas.delDia('ven-1')[0]).toMatchObject({ visitado: true, con_merma: true, visita_sin_venta: false });
   });
 
   it('suma venta de contado, a crédito y cobro de hoy', () => {
@@ -663,7 +663,7 @@ describe('delDia: lo hecho hoy (rediseño, spec §6)', () => {
       notas: [{ ...snapshotDePrueba().notas![0]!, saldo_centavos: 100000 }],
     });
     rutas.aplicarSnapshot([delServidor()]);
-    expect(rutas.delDia()[0]).toMatchObject({
+    expect(rutas.delDia('ven-1')[0]).toMatchObject({
       venta_contado_centavos: 0,
       venta_credito_centavos: 0,
       cobro_centavos: 0,
@@ -682,7 +682,7 @@ describe('delDia: lo hecho hoy (rediseño, spec §6)', () => {
       fechaPago: HOY,
     });
 
-    expect(rutas.delDia()[0]).toMatchObject({
+    expect(rutas.delDia('ven-1')[0]).toMatchObject({
       visitado: true,
       venta_contado_centavos: 50000,
       venta_credito_centavos: 124000,

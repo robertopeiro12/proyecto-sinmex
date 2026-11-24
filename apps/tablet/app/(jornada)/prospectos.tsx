@@ -14,7 +14,11 @@ import {
   type UbicacionAlta,
 } from '@/estado/alta-prospecto';
 import { useJawa } from '@/estado/proveedor-jawa';
-import { enlaceAFicha, primeraLineaDomicilio } from '@/estado/ruta-del-dia';
+import {
+  listaProspectos,
+  primeraLineaDomicilio,
+  type FilaListaProspecto,
+} from '@/estado/ruta-del-dia';
 import { useSesion } from '@/estado/proveedor-sesion';
 import { OBJETIVO_BYTES, type FotoComprimida } from '@/fotos/comprimir';
 import { capturarFoto } from '@/fotos/expo';
@@ -108,12 +112,22 @@ export default function Prospectos() {
   // que algo mas vuelva a montar la pantalla, aunque el push haya terminado
   // con ella montada (M-3, PR #90; mismo patron que
   // `operacion/[clienteId]/index.tsx`).
-  const prospectosDeHoy = useMemo<Prospecto[]>(() => {
+  //
+  // Revision final de la pieza 1 (I1): ademas de lo capturado hoy, todos los
+  // prospectos vivos de la sucursal, para abrir la hoja (y venderle la
+  // bienvenida) al que se capturo otro dia o en otra tablet. La regla vive en
+  // `listaProspectos`, con prueba.
+  const lista = useMemo(() => {
     void refrescos;
     void versionCatalogos;
     void ultimaSincronizacion;
-    return vendedor ? datos.prospectos.delDia(vendedor.id) : [];
-  }, [datos, vendedor, refrescos, versionCatalogos, ultimaSincronizacion]);
+    return listaProspectos(
+      vendedor ? datos.prospectos.delDia(vendedor.id) : [],
+      sucursalId ? datos.catalogos.listarProspectos(sucursalId) : [],
+      (id) => datos.prospectos.porId(id),
+      (id) => datos.catalogos.obtenerCliente(id) !== null,
+    );
+  }, [datos, vendedor, sucursalId, refrescos, versionCatalogos, ultimaSincronizacion]);
 
   // Toda la regla del alta vive en `validarAltaProspecto` (T-72): los tres
   // obligatorios que dicto el cliente y la direccion cuando no hay GPS. La foto
@@ -254,7 +268,7 @@ export default function Prospectos() {
   }
 
   return (
-    <MarcoMenu titulo="Prospectos">
+    <MarcoMenu clave="prospectos" titulo="Prospectos">
       <Pantalla subtitulo="Registra un negocio nuevo. El alta de clientes la hace la oficina; aquí solo prospectos.">
         <Boton
           etiqueta={formularioAbierto ? 'Cancelar' : 'Nuevo prospecto'}
@@ -287,16 +301,16 @@ export default function Prospectos() {
           </Tarjeta>
         ) : null}
 
-        <Text style={estilos.seccion}>Capturados {prospectosDeHoy.length}</Text>
+        <Text style={estilos.seccion}>Capturados hoy {lista.capturadosHoy.length}</Text>
 
-        {prospectosDeHoy.length === 0 ? (
+        {lista.capturadosHoy.length === 0 ? (
           <Tarjeta etiqueta="Sin registros">
             <Text style={estilos.textoSuave}>
               Todavía no has registrado prospectos hoy.
             </Text>
           </Tarjeta>
         ) : (
-          prospectosDeHoy.map((p) => <FilaProspecto key={p.id} prospecto={p} />)
+          lista.capturadosHoy.map((f) => <FilaProspecto key={f.id} fila={f} />)
         )}
 
         {formularioAbierto ? (
@@ -505,6 +519,19 @@ export default function Prospectos() {
             ) : null}
           </>
         ) : null}
+
+        {/* Al final, despues del formulario: la sucursal puede tener muchos y
+            "Nuevo prospecto" no debe quedar debajo de todos. */}
+        {lista.otros.length > 0 ? (
+          <>
+            <Text style={estilos.seccion}>
+              Otros prospectos de la sucursal {lista.otros.length}
+            </Text>
+            {lista.otros.map((f) => (
+              <FilaProspecto key={f.id} fila={f} />
+            ))}
+          </>
+        ) : null}
       </Pantalla>
     </MarcoMenu>
   );
@@ -536,13 +563,19 @@ const ESTADO_SYNC = {
   error: { estado: 'error' as const, texto: 'Rechazado' },
 };
 
-function FilaProspecto({ prospecto }: { prospecto: Prospecto }) {
+/**
+ * Una fila de la lista. Con `fila.local` (lo capturo esta tablet) lleva la
+ * pastilla de subida, la de la foto y sus motivos; sin el (otro dia en otra
+ * tablet, o ya solo en el catalogo) es nombre, domicilio y el enlace a su hoja.
+ */
+function FilaProspecto({ fila }: { fila: FilaListaProspecto }) {
   const { datos } = useJawa();
   const { estilos } = useTema();
-  const pastilla = ESTADO_SYNC[prospecto.sync_estado];
-  const foto = estadoFoto(prospecto);
+  const prospecto = fila.local;
+  const pastilla = prospecto ? ESTADO_SYNC[prospecto.sync_estado] : null;
+  const foto = prospecto ? estadoFoto(prospecto) : null;
   const tipo =
-    prospecto.tipo_negocio_id === null
+    prospecto === null || prospecto.tipo_negocio_id === null
       ? null
       : // `obtenerTipoNegocio` y no `listarTiposNegocio`: hay que poder nombrar un
         // giro que el portal dio de baja despues de capturarse.
@@ -550,40 +583,43 @@ function FilaProspecto({ prospecto }: { prospecto: Prospecto }) {
 
   // Un prospecto anterior a T-75 no tiene espejo en `cliente`: sin ficha a donde
   // ir, la fila queda como siempre en vez de llevar a una pantalla vacia.
-  const destino = enlaceAFicha(
-    prospecto.id,
-    (id) => datos.catalogos.obtenerCliente(id) !== null,
-  );
+  const destino = fila.ficha;
 
   const tarjeta = (
     <Tarjeta
-      estado={pastilla.estado}
-      etiqueta={tipo?.nombre ?? 'Sin tipo de negocio'}
+      estado={pastilla?.estado ?? 'neutro'}
+      etiqueta={
+        prospecto === null
+          ? 'Prospecto'
+          : (tipo?.nombre ?? 'Sin tipo de negocio')
+      }
     >
-      <Text style={estilos.textoTarjeta}>{prospecto.nombre}</Text>
+      <Text style={estilos.textoTarjeta}>{fila.nombre}</Text>
       <Text style={estilos.textoSuave}>
-        {primeraLineaDomicilio(prospecto.domicilio)}
+        {primeraLineaDomicilio(fila.domicilio)}
       </Text>
-      <View
-        style={{ flexDirection: 'row', gap: espacio.xs, marginTop: espacio.xs }}
-      >
-        <Pastilla texto={pastilla.texto} estado={pastilla.estado} />
-        {prospecto.lat === null ? (
-          <Pastilla texto="sin ubicación" estado="neutro" />
-        ) : null}
-        {/* La foto tiene su PROPIA pastilla, separada de la del prospecto. Es lo
-            mismo que el diseno pide del modelo de datos: el estado de la foto no
-            es el estado del prospecto, y mezclarlos en pantalla haria creer que
-            un alta no entro cuando lo que no entro fue una foto opcional. */}
-        {foto ? <Pastilla texto={foto.texto} estado={foto.estado} /> : null}
-      </View>
-      {prospecto.sync_error ? (
+      {prospecto && pastilla ? (
+        <View
+          style={{ flexDirection: 'row', gap: espacio.xs, marginTop: espacio.xs }}
+        >
+          <Pastilla texto={pastilla.texto} estado={pastilla.estado} />
+          {prospecto.lat === null ? (
+            <Pastilla texto="sin ubicación" estado="neutro" />
+          ) : null}
+          {/* La foto tiene su PROPIA pastilla, separada de la del prospecto. Es lo
+              mismo que el diseno pide del modelo de datos: el estado de la foto no
+              es el estado del prospecto, y mezclarlos en pantalla haria creer que
+              un alta no entro cuando lo que no entro fue una foto opcional. */}
+          {foto ? <Pastilla texto={foto.texto} estado={foto.estado} /> : null}
+        </View>
+      ) : null}
+      {prospecto?.sync_error ? (
         <Text style={estilos.textoSuave}>{prospecto.sync_error}</Text>
       ) : null}
       {/* El motivo del fallo de la foto se muestra solo mientras siga importando:
           si ya subio, un error viejo en pantalla se lee como un fallo que no
           existe. */}
-      {prospecto.foto_error && prospecto.foto_subida_en === null ? (
+      {prospecto?.foto_error && prospecto.foto_subida_en === null ? (
         <Text style={estilos.textoSuave}>Foto: {prospecto.foto_error}</Text>
       ) : null}
       {destino !== null ? (
@@ -598,7 +634,7 @@ function FilaProspecto({ prospecto }: { prospecto: Prospecto }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${prospecto.nombre}, abrir ficha`}
+      accessibilityLabel={`${fila.nombre}, abrir ficha`}
       onPress={() =>
         router.push({
           pathname: '/(jornada)/operacion/[clienteId]',

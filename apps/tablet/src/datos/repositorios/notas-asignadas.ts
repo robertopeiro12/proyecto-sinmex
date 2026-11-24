@@ -5,7 +5,6 @@ import {
   errorDeComentario,
   LARGO_MAX_COMENTARIO_NO_COBRADA,
   motivoBloqueoVenta,
-  porAtender,
   type NotaAsignadaDeHoy,
 } from '../notas-asignadas-reglas';
 import type { CondicionVenta, FechaISO, NotaNoCobrada } from '../tipos';
@@ -169,15 +168,6 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
     /** Las asignadas de hoy del cliente, saldo 0 incluido. Orden: fecha y folio de la nota. */
     deHoyDelCliente(clienteId: string): NotaAsignadaDeHoy[] {
       return deHoy(clienteId);
-    },
-
-    /** Cuantas asignadas por atender tiene cada cliente hoy (la ruta). Sin entrada = 0. */
-    conteoDeHoyPorCliente(): Map<string, number> {
-      const conteo = new Map<string, number>();
-      for (const n of porAtender(deHoy(null))) {
-        conteo.set(n.clienteId, (conteo.get(n.clienteId) ?? 0) + 1);
-      }
-      return conteo;
     },
 
     /**

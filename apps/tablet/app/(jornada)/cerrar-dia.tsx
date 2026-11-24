@@ -109,7 +109,7 @@ export default function CerrarDia() {
 
   if (jornada?.estado === 'cerrada') {
     return (
-      <MarcoMenu titulo="Corte">
+      <MarcoMenu clave="corte" titulo="Corte">
         <Pantalla
           subtitulo={
             <Text style={estilos.subtitulo}>
@@ -147,7 +147,7 @@ export default function CerrarDia() {
   }
 
   return (
-    <MarcoMenu titulo="Corte">
+    <MarcoMenu clave="corte" titulo="Corte">
       <Pantalla
         formulario
         subtitulo={

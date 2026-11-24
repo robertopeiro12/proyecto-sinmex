@@ -1,4 +1,7 @@
+import type { Prospecto } from '@/datos/tipos';
+
 import {
+  accionMenu,
   agruparRutaEnCurso,
   anchoMenuLateral,
   atendidosFueraDeRuta,
@@ -7,6 +10,8 @@ import {
   pastillaAlta,
   entradasMenu,
   clientesParaAgregar,
+  listaProspectos,
+  NOTA_SIN_JORNADA,
   motivoDeRechazo,
   primeraLineaDomicilio,
   resumenVisitado,
@@ -162,12 +167,11 @@ describe('clientesParaAgregar ("Agregar a mi ruta")', () => {
         .map((x) => x.id)
         .sort(),
     ).toEqual(['0', '59']);
-    expect(clientesParaAgregar(muchos, new Set(), '', 10)).toHaveLength(10);
   });
 });
 
 describe('menu hamburguesa (spec §5, maqueta 3)', () => {
-  const abierto = { porVisitar: 0, diaCerrado: false };
+  const abierto = { porVisitar: 0, diaCerrado: false, sinJornada: false };
 
   test('entradas del menú en el orden del spec', () => {
     expect(entradasMenu(abierto).map((e) => e.titulo)).toEqual([
@@ -187,20 +191,58 @@ describe('menu hamburguesa (spec §5, maqueta 3)', () => {
 
   test('Corte con candado y "faltan N clientes" mientras haya por visitar', () => {
     const corte = (n: number) =>
-      entradasMenu({ porVisitar: n, diaCerrado: false }).find((e) => e.clave === 'corte')!;
+      entradasMenu({ porVisitar: n, diaCerrado: false, sinJornada: false }).find((e) => e.clave === 'corte')!;
     expect(corte(4)).toMatchObject({ deshabilitada: true, nota: 'faltan 4 clientes' });
     expect(corte(1)).toMatchObject({ deshabilitada: true, nota: 'falta 1 cliente' });
     expect(corte(0)).toMatchObject({ deshabilitada: false, nota: null });
   });
 
   test('con el día cerrado, Corte se abre (ya se hizo) y lo que captura se apaga', () => {
-    const e = entradasMenu({ porVisitar: 3, diaCerrado: true });
+    const e = entradasMenu({ porVisitar: 3, diaCerrado: true, sinJornada: false });
     expect(e.find((x) => x.clave === 'corte')!.deshabilitada).toBe(false);
     expect(e.filter((x) => x.deshabilitada).map((x) => x.clave).sort()).toEqual(['gastos', 'merma']);
   });
 
   test('ninguna entrada abre una pantalla "Próximamente" por sección', () => {
     expect(entradasMenu(abierto).some((e) => e.destino?.startsWith('/(jornada)/pendiente/'))).toBe(false);
+  });
+
+  test('sin jornada de hoy solo quedan Ruta y Cerrar sesión; lo demás dice "Empieza tu ruta"', () => {
+    const e = entradasMenu({ porVisitar: 3, diaCerrado: false, sinJornada: true });
+    expect(e.filter((x) => !x.deshabilitada).map((x) => x.clave)).toEqual(['ruta', 'salir']);
+    expect(e.filter((x) => !x.deshabilitada).every((x) => x.nota === null)).toBe(true);
+    const apagadas = e.filter((x) => x.deshabilitada);
+    expect(apagadas).toHaveLength(8);
+    // La nota de Corte ("faltan N") cede a la de empezar la ruta.
+    expect(apagadas.every((x) => x.nota === NOTA_SIN_JORNADA)).toBe(true);
+    expect(NOTA_SIN_JORNADA).toBe('Empieza tu ruta');
+  });
+});
+
+describe('accionMenu (revisión final pieza 1, I2: el menú no apila pantallas)', () => {
+  const entradas = entradasMenu({ porVisitar: 0, diaCerrado: false, sinJornada: false });
+  const de = (clave: string) => entradas.find((e) => e.clave === clave)!;
+
+  test('a la Ruta: dismissTo desde cualquier pantalla del menú', () => {
+    expect(accionMenu('gastos', de('ruta'))).toEqual({ tipo: 'dismissTo', destino: '/(jornada)' });
+    expect(accionMenu('corte', de('ruta'))).toEqual({ tipo: 'dismissTo', destino: '/(jornada)' });
+  });
+
+  test('desde la Ruta las demás entradas hacen push', () => {
+    expect(accionMenu('ruta', de('gastos'))).toEqual({ tipo: 'push', destino: '/(jornada)/gastos' });
+    expect(accionMenu('ruta', de('prospectos'))).toEqual({ tipo: 'push', destino: '/(jornada)/prospectos' });
+  });
+
+  test('desde otra pantalla del menú, replace (encima de la Ruta hay a lo más una)', () => {
+    expect(accionMenu('gastos', de('inventario'))).toEqual({ tipo: 'replace', destino: '/(jornada)/inventario' });
+    expect(accionMenu('prospectos', de('corte'))).toEqual({ tipo: 'replace', destino: '/(jornada)/cerrar-dia' });
+  });
+
+  test('la entrada de la pantalla actual no hace nada; Cerrar sesión sale', () => {
+    expect(accionMenu('ruta', de('ruta'))).toEqual({ tipo: 'nada' });
+    expect(accionMenu('gastos', de('gastos'))).toEqual({ tipo: 'nada' });
+    expect(accionMenu('ruta', de('salir'))).toEqual({ tipo: 'salir' });
+    expect(accionMenu('gastos', de('salir'))).toEqual({ tipo: 'salir' });
   });
 });
 
@@ -341,6 +383,40 @@ describe('enlaceAFicha (T-75, D6; Review Focus 2)', () => {
   it('solo si existe el cliente local con ese id (prospectos de antes de T-75 no enlazan)', () => {
     expect(enlaceAFicha('p1', (id) => id === 'p1')).toBe('p1');
     expect(enlaceAFicha('viejo', () => false)).toBeNull();
+  });
+});
+
+describe('listaProspectos (revisión final pieza 1, I1)', () => {
+  const p = (id: string, nombre: string): Prospecto =>
+    ({ id, nombre, domicilio: null, sync_estado: 'pendiente' }) as Prospecto;
+  const cli = (id: string, nombre: string) => ({ id, nombre, domicilio: `Calle ${id}` });
+
+  it('lo capturado hoy va primero, con su pastilla, y no se repite abajo', () => {
+    const hoy = [p('h1', 'Tienda de hoy')];
+    const r = listaProspectos(hoy, [cli('h1', 'Tienda de hoy'), cli('a', 'Abarrotes')], () => null, () => true);
+    expect(r.capturadosHoy.map((f) => [f.id, f.local?.id, f.ficha])).toEqual([['h1', 'h1', 'h1']]);
+    expect(r.otros.map((f) => f.id)).toEqual(['a']);
+  });
+
+  it('el prospecto de otro día o de otra tablet se lista y abre su ficha', () => {
+    const ayer = p('ayer', 'Capturado ayer aquí');
+    const r = listaProspectos(
+      [],
+      [cli('ayer', 'Capturado ayer aquí'), cli('otra', 'De otra tablet')],
+      (id) => (id === 'ayer' ? ayer : null),
+      () => true,
+    );
+    expect(r.otros.map((f) => [f.id, f.ficha, f.local])).toEqual([
+      ['ayer', 'ayer', ayer],
+      ['otra', 'otra', null],
+    ]);
+    expect(r.otros[1]!.domicilio).toBe('Calle otra');
+  });
+
+  it('una captura de hoy sin espejo en el catálogo se ve, pero no abre ficha', () => {
+    const r = listaProspectos([p('rechazado', 'Rechazado')], [], () => null, () => false);
+    expect(r.capturadosHoy).toMatchObject([{ id: 'rechazado', ficha: null }]);
+    expect(r.otros).toEqual([]);
   });
 });
 

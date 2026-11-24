@@ -43,7 +43,6 @@ export function MenuLateral({
   onCerrar,
   entradas,
   onElegir,
-  encabezado,
   pie,
   children,
 }: {
@@ -51,8 +50,6 @@ export function MenuLateral({
   onCerrar: () => void;
   entradas: readonly EntradaMenu[];
   onElegir: (entrada: EntradaMenu) => void;
-  /** Arriba del menu: quien esta en sesion y lo que falta por subir. */
-  encabezado?: ReactNode;
   /** Al fondo del menu, separado (hoy: el pie con vendedor, vehiculo y sucursal). */
   pie?: ReactNode;
   /** La pantalla que se desliza. */
@@ -117,18 +114,6 @@ export function MenuLateral({
           accessibilityViewIsModal
         >
           <ScrollView contentContainerStyle={{ paddingHorizontal: espacio.md, gap: espacio.xs }}>
-            {encabezado ? (
-              <View
-                style={{
-                  paddingBottom: espacio.md,
-                  marginBottom: espacio.sm,
-                  borderBottomWidth: grosor.hairline,
-                  borderBottomColor: colores.borde,
-                }}
-              >
-                {encabezado}
-              </View>
-            ) : null}
             {entradas.map((entrada) => (
               <Pressable
                 key={entrada.clave}

@@ -5,6 +5,7 @@ import { ErrorGasto, ErrorJornada } from '@/datos';
 import type { CampoEgreso } from '@/datos/tipos';
 import {
   camposParaGasto,
+  faltantesVisiblesGasto,
   pastillaGasto,
   puedeGuardarGasto,
   validarGasto,
@@ -71,13 +72,19 @@ export default function Gastos() {
       : datos.catalogos.obtenerCampoEgreso(campoId);
   }, [datos, campoId, versionCatalogos]);
 
-  const validacion = validarGasto({
+  const entrada = {
     campo,
     monto,
     comentario: '',
     fotoUri: null,
     diaCerrado: !menu.operacionesHabilitadas,
-  });
+  };
+  const validacion = validarGasto(entrada);
+  // Lo que falta, bajo el boton, en cuanto empieza a capturar (revision final
+  // de la pieza 1). El dia cerrado ya lo dice `avisoDiaCerrado`.
+  const faltantes = menu.operacionesHabilitadas
+    ? faltantesVisiblesGasto(entrada, validacion)
+    : [];
 
   function guardar() {
     setError(null);
@@ -114,7 +121,7 @@ export default function Gastos() {
   }
 
   return (
-    <MarcoMenu titulo="Gastos">
+    <MarcoMenu clave="gastos" titulo="Gastos">
       <Pantalla subtitulo="Lo que pagaste hoy con la cobranza del día">
         {sinCatalogo ? (
           // Sin campos con "Se usa en la app" (nunca ha sincronizado, o la oficina
@@ -170,12 +177,16 @@ export default function Gastos() {
               hayCampos: campos.length > 0,
               diaAbierto: menu.operacionesHabilitadas,
               guardado,
-              tomandoFoto: false,
             })
           }
           onPress={guardar}
           estilo={{ marginTop: espacio.md }}
         />
+        {faltantes.map((f) => (
+          <Text key={f} style={estilos.textoSuave}>
+            {f}
+          </Text>
+        ))}
 
         <Text style={estilos.seccion}>Gastos de hoy</Text>
         <Tarjeta etiqueta="Gastos de hoy">

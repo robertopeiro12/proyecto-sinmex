@@ -7,7 +7,7 @@ import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import { textoHaceCuanto, textoSinSincronizar } from '@/estado/pie-menu';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
-import { entradasMenu } from '@/estado/ruta-del-dia';
+import { accionMenu, entradasMenu, type ClaveMenu } from '@/estado/ruta-del-dia';
 import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 
 import { BotonIcono } from './boton-icono';
@@ -39,12 +39,18 @@ export function confirmarSalida(salir: () => Promise<void> | void) {
  *
  * El `Stack` oculta su cabecera para estas pantallas (`_layout.tsx`): esta se
  * desliza junto con el contenido al abrir el menu.
+ *
+ * `clave` es la entrada del menu de la pantalla: con ella `accionMenu` decide
+ * si elegir otra entrada hace `push`, `replace` o `dismissTo` a la Ruta, para
+ * que el menu no apile pantallas.
  */
 export function MarcoMenu({
+  clave,
   titulo,
   derecha,
   children,
 }: {
+  clave: ClaveMenu;
   titulo: string;
   derecha?: ReactNode;
   children: ReactNode;
@@ -56,6 +62,8 @@ export function MarcoMenu({
   const [abierto, setAbierto] = useState(false);
 
   const diaCerrado = !estadoMenuJornada(jornada).operacionesHabilitadas;
+  // `jornada` es la de HOY (la misma que mira la guardia de `(jornada)/_layout.tsx`).
+  const sinJornada = jornada === null;
 
   // Se relee al abrir el menu y cuando el pull o una sincronizacion mueven datos.
   const pie = useMemo(() => {
@@ -94,14 +102,26 @@ export function MarcoMenu({
       // jornada no sube. La regla ya esta en `entradasMenu` y probada; la pieza 6
       // la conecta junto con el Corte nuevo
       // (`agruparRutaEnCurso(...).porVisitar.length`).
-      entradas={entradasMenu({ porVisitar: 0, diaCerrado })}
+      entradas={entradasMenu({ porVisitar: 0, diaCerrado, sinJornada })}
       onElegir={(entrada) => {
         setAbierto(false);
-        if (entrada.destino === null) {
-          confirmarSalida(salir);
-          return;
+        const accion = accionMenu(clave, entrada);
+        switch (accion.tipo) {
+          case 'salir':
+            confirmarSalida(salir);
+            return;
+          case 'nada':
+            return;
+          case 'dismissTo':
+            router.dismissTo(accion.destino as Href);
+            return;
+          case 'push':
+            router.push(accion.destino as Href);
+            return;
+          case 'replace':
+            router.replace(accion.destino as Href);
+            return;
         }
-        router.navigate(entrada.destino as Href);
       }}
       pie={
         <View

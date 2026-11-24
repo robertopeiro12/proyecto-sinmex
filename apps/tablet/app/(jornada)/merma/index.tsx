@@ -52,7 +52,7 @@ export default function MermaYConsumo() {
   const estado = estadoSubida(vista.movimientos.map((m) => m.sync_estado)) ?? 'neutro';
 
   return (
-    <MarcoMenu titulo="Merma / Cambios">
+    <MarcoMenu clave="merma" titulo="Merma / Cambios">
       <Pantalla subtitulo="Lo que sale de la camioneta sin venderse">
         <View style={estilos.rejilla}>
           <BotonMenu

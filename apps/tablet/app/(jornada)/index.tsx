@@ -72,7 +72,7 @@ export default function RutaDelDia() {
     void vueltas;
     void versionCatalogos;
     void ultimaSincronizacion;
-    return datos.rutas.delDia(undefined, vendedorId);
+    return vendedorId ? datos.rutas.delDia(vendedorId) : [];
   }, [datos, vendedorId, vueltas, versionCatalogos, ultimaSincronizacion]);
   const { porVisitar, visitados, fueraDeRuta } = useMemo(() => agruparRutaEnCurso(filas), [filas]);
   // El numero de cada cliente es su lugar fijo en la ruta viva (maqueta 6): no
@@ -199,7 +199,7 @@ export default function RutaDelDia() {
   );
 
   return (
-    <MarcoMenu titulo="Ruta del día" derecha={derecha}>
+    <MarcoMenu clave="ruta" titulo="Ruta del día" derecha={derecha}>
         <ScrollView
           style={estilos.pantalla}
           contentContainerStyle={estilos.contenido}
