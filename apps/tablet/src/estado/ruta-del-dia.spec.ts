@@ -156,56 +156,41 @@ describe('filtrarParaAgregar ("Agregar a mi ruta")', () => {
   });
 });
 
-describe('menu hamburguesa (D9, D16)', () => {
-  it('las entradas del spec, en su orden, con destino', () => {
-    expect(entradasMenu(false).map((e) => [e.titulo, e.destino])).toEqual([
-      ['Todos los clientes', '/(jornada)/operacion'],
-      ['Prospectos capturados', '/(jornada)/prospectos'],
-      ['Gastos', '/(jornada)/gastos'],
-      ['Inventario', '/(jornada)/inventario'],
-      ['Merma y consumo', '/(jornada)/merma'],
-      ['Ruta y GPS', '/(jornada)/ruta'],
-      ['Cerrar el día', '/(jornada)/cerrar-dia'],
+describe('menu hamburguesa (spec §5, maqueta 3)', () => {
+  const abierto = { porVisitar: 0, diaCerrado: false };
+
+  test('entradas del menú en el orden del spec', () => {
+    expect(entradasMenu(abierto).map((e) => e.titulo)).toEqual([
+      'Ruta', 'Inventario', 'Sugerido de carga', 'Ventas / Cobranza', 'Merma / Cambios',
+      'Gastos', 'Corte', 'Prospectos', 'Seleccionar impresora', 'Cerrar sesión',
     ]);
-    expect(entradasMenu(false).every((e) => !e.deshabilitada)).toBe(true);
   });
 
-  it('con el dia cerrado se deshabilita solo lo que captura', () => {
-    const deshabilitadas = entradasMenu(true)
-      .filter((e) => e.deshabilitada)
-      .map((e) => e.clave);
-    expect(deshabilitadas).toEqual(['gastos', 'merma']);
+  test('destinos; Cerrar sesión no tiene (lo maneja la pantalla)', () => {
+    expect(entradasMenu(abierto).map((e) => e.destino)).toEqual([
+      '/(jornada)', '/(jornada)/inventario', '/(jornada)/sugerido-de-carga', '/(jornada)/registros',
+      '/(jornada)/merma', '/(jornada)/gastos', '/(jornada)/cerrar-dia', '/(jornada)/prospectos',
+      '/(jornada)/impresora', null,
+    ]);
+    expect(entradasMenu(abierto).every((e) => !e.deshabilitada && e.nota === null)).toBe(true);
   });
 
-  it('ninguna entrada abre una pantalla "Próximamente" por seccion', () => {
-    expect(entradasMenu(false).some((e) => e.destino.startsWith('/(jornada)/pendiente/'))).toBe(false);
-    expect(entradasMenu(false).some((e) => e.descripcion.startsWith('Pendiente: T-27'))).toBe(false);
+  test('Corte con candado y "faltan N clientes" mientras haya por visitar', () => {
+    const corte = (n: number) =>
+      entradasMenu({ porVisitar: n, diaCerrado: false }).find((e) => e.clave === 'corte')!;
+    expect(corte(4)).toMatchObject({ deshabilitada: true, nota: 'faltan 4 clientes' });
+    expect(corte(1)).toMatchObject({ deshabilitada: true, nota: 'falta 1 cliente' });
+    expect(corte(0)).toMatchObject({ deshabilitada: false, nota: null });
   });
 
-  it('Gastos abre su pantalla (T-30/T-31)', () => {
-    const gastos = entradasMenu(false).find((e) => e.clave === 'gastos');
-    expect(gastos).toMatchObject({ titulo: 'Gastos', destino: '/(jornada)/gastos', deshabilitada: false });
-    expect(gastos?.descripcion).not.toMatch(/Pendiente/);
+  test('con el día cerrado, Corte se abre (ya se hizo) y lo que captura se apaga', () => {
+    const e = entradasMenu({ porVisitar: 3, diaCerrado: true });
+    expect(e.find((x) => x.clave === 'corte')!.deshabilitada).toBe(false);
+    expect(e.filter((x) => x.deshabilitada).map((x) => x.clave).sort()).toEqual(['gastos', 'merma']);
   });
 
-  it('Inventario abre su pantalla (T-27) y se consulta con el dia cerrado', () => {
-    const inventario = entradasMenu(true).find((e) => e.clave === 'inventario');
-    expect(inventario).toMatchObject({
-      titulo: 'Inventario',
-      destino: '/(jornada)/inventario',
-      deshabilitada: false,
-    });
-    expect(inventario?.descripcion).not.toMatch(/Pendiente/);
-  });
-
-  it('Merma y consumo abre su pantalla (T-27 pieza 2)', () => {
-    expect(entradasMenu(false).find((e) => e.clave === 'merma')).toEqual({
-      clave: 'merma',
-      titulo: 'Merma y consumo',
-      descripcion: 'Merma del trayecto y consumo propio',
-      destino: '/(jornada)/merma',
-      deshabilitada: false,
-    });
+  test('ninguna entrada abre una pantalla "Próximamente" por sección', () => {
+    expect(entradasMenu(abierto).some((e) => e.destino?.startsWith('/(jornada)/pendiente/'))).toBe(false);
   });
 });
 

@@ -10,6 +10,7 @@ import { useSesion } from '@/estado/proveedor-sesion';
 import { Boton } from '@/ui/boton';
 import { Cifra, pesos } from '@/ui/cifra';
 import { formatearHora } from '@/ui/momento';
+import { MarcoMenu } from '@/ui/marco-menu';
 import { Pantalla, Pastilla, Tarjeta } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
 import { espacio } from '@/ui/tokens';
@@ -50,52 +51,54 @@ export default function Gastos() {
   const sinCatalogo = campos.length === 0;
 
   return (
-    <Pantalla titulo="Gastos" subtitulo="Lo que pagaste hoy con la cobranza del día">
-      <Tarjeta etiqueta="Gastos de hoy">
-        {hoy.gastos.length === 0 ? (
-          <Text style={estilos.textoSuave}>Todavía no registras gastos hoy.</Text>
-        ) : (
-          hoy.gastos.map((g) => {
-            const p = pastillaGasto(g);
-            return (
-              <View key={g.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
-                <Text style={estilos.textoTarjeta}>
-                  {g.campo_nombre} · <Cifra valor={pesos(g.monto_centavos)} /> ·{' '}
-                  <Cifra valor={formatearHora(g.registrado_en)} />
-                </Text>
-                {g.comentario ? <Text style={estilos.textoSuave}>{g.comentario}</Text> : null}
-                <Pastilla texto={p.texto} estado={p.estado} />
-                {p.detalle ? <Text style={estilos.error}>{p.detalle}</Text> : null}
-              </View>
-            );
-          })
-        )}
-      </Tarjeta>
-
-      <Tarjeta estado={hoy.total > 0 ? 'accion' : 'neutro'} etiqueta="Total del día">
-        <Cifra valor={pesos(hoy.total)} tamano="destacado" />
-      </Tarjeta>
-
-      {sinCatalogo ? (
-        // Sin campos con "Se usa en la app" (nunca ha sincronizado, o la oficina
-        // no marco ninguno): lo dice y no deja registrar.
-        <Tarjeta estado="pendiente" etiqueta="Sin catálogo de gastos">
-          <Text style={estilos.textoTarjeta}>
-            Los campos de gasto bajan del portal con la sincronización. Sincroniza para poder registrar un gasto.
-          </Text>
+    <MarcoMenu titulo="Gastos">
+      <Pantalla subtitulo="Lo que pagaste hoy con la cobranza del día">
+        <Tarjeta etiqueta="Gastos de hoy">
+          {hoy.gastos.length === 0 ? (
+            <Text style={estilos.textoSuave}>Todavía no registras gastos hoy.</Text>
+          ) : (
+            hoy.gastos.map((g) => {
+              const p = pastillaGasto(g);
+              return (
+                <View key={g.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
+                  <Text style={estilos.textoTarjeta}>
+                    {g.campo_nombre} · <Cifra valor={pesos(g.monto_centavos)} /> ·{' '}
+                    <Cifra valor={formatearHora(g.registrado_en)} />
+                  </Text>
+                  {g.comentario ? <Text style={estilos.textoSuave}>{g.comentario}</Text> : null}
+                  <Pastilla texto={p.texto} estado={p.estado} />
+                  {p.detalle ? <Text style={estilos.error}>{p.detalle}</Text> : null}
+                </View>
+              );
+            })
+          )}
         </Tarjeta>
-      ) : null}
-      {menu.avisoDiaCerrado ? <Text style={estilos.error}>{menu.avisoDiaCerrado}</Text> : null}
 
-      <Boton
-        etiqueta="Registrar gasto"
-        icono="mas"
-        deshabilitado={
-          !puedeRegistrarGasto({ camposDisponibles: campos.length, diaCerrado: !menu.operacionesHabilitadas })
-        }
-        onPress={() => router.push('/(jornada)/gastos/registrar')}
-        estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
-      />
-    </Pantalla>
+        <Tarjeta estado={hoy.total > 0 ? 'accion' : 'neutro'} etiqueta="Total del día">
+          <Cifra valor={pesos(hoy.total)} tamano="destacado" />
+        </Tarjeta>
+
+        {sinCatalogo ? (
+          // Sin campos con "Se usa en la app" (nunca ha sincronizado, o la oficina
+          // no marco ninguno): lo dice y no deja registrar.
+          <Tarjeta estado="pendiente" etiqueta="Sin catálogo de gastos">
+            <Text style={estilos.textoTarjeta}>
+              Los campos de gasto bajan del portal con la sincronización. Sincroniza para poder registrar un gasto.
+            </Text>
+          </Tarjeta>
+        ) : null}
+        {menu.avisoDiaCerrado ? <Text style={estilos.error}>{menu.avisoDiaCerrado}</Text> : null}
+
+        <Boton
+          etiqueta="Registrar gasto"
+          icono="mas"
+          deshabilitado={
+            !puedeRegistrarGasto({ camposDisponibles: campos.length, diaCerrado: !menu.operacionesHabilitadas })
+          }
+          onPress={() => router.push('/(jornada)/gastos/registrar')}
+          estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
+        />
+      </Pantalla>
+    </MarcoMenu>
   );
 }

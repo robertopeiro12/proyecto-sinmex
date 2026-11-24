@@ -17,6 +17,7 @@ import { estadoSubida } from '@/estado/ruta-del-dia';
 import { BotonMenu } from '@/ui/boton-menu';
 import { Cifra } from '@/ui/cifra';
 import { formatearHora } from '@/ui/momento';
+import { MarcoMenu } from '@/ui/marco-menu';
 import { Pantalla, Pastilla, Tarjeta } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
 import { espacio } from '@/ui/tokens';
@@ -51,51 +52,53 @@ export default function MermaYConsumo() {
   const estado = estadoSubida(vista.movimientos.map((m) => m.sync_estado)) ?? 'neutro';
 
   return (
-    <Pantalla titulo="Merma y consumo" subtitulo="Lo que sale de la camioneta sin venderse">
-      <View style={estilos.rejilla}>
-        <BotonMenu
-          titulo="Merma del trayecto"
-          descripcion="Producto que se te rompió o se echó a perder hoy"
-          destino={{ pathname: '/(jornada)/merma/registrar', params: { tipo: 'merma_trayecto' } }}
-          deshabilitado={!menu.operacionesHabilitadas}
-          destacada
-        />
-        {ofreceConsumo(vista.limite) ? (
+    <MarcoMenu titulo="Merma / Cambios">
+      <Pantalla subtitulo="Lo que sale de la camioneta sin venderse">
+        <View style={estilos.rejilla}>
           <BotonMenu
-            titulo="Consumo propio"
-            descripcion={restante > 0 ? textoConsumoRestante(restante) : MENSAJE_CONSUMO_AGOTADO}
-            destino={{ pathname: '/(jornada)/merma/registrar', params: { tipo: 'consumo' } }}
-            deshabilitado={!menu.operacionesHabilitadas || restante === 0}
+            titulo="Merma del trayecto"
+            descripcion="Producto que se te rompió o se echó a perder hoy"
+            destino={{ pathname: '/(jornada)/merma/registrar', params: { tipo: 'merma_trayecto' } }}
+            deshabilitado={!menu.operacionesHabilitadas}
+            destacada
           />
-        ) : null}
-      </View>
-      <Text style={[estilos.textoSuave, { marginTop: espacio.sm }]}>
-        La merma de un cliente se registra en su ficha.
-      </Text>
-      {menu.avisoDiaCerrado ? <Text style={estilos.error}>{menu.avisoDiaCerrado}</Text> : null}
+          {ofreceConsumo(vista.limite) ? (
+            <BotonMenu
+              titulo="Consumo propio"
+              descripcion={restante > 0 ? textoConsumoRestante(restante) : MENSAJE_CONSUMO_AGOTADO}
+              destino={{ pathname: '/(jornada)/merma/registrar', params: { tipo: 'consumo' } }}
+              deshabilitado={!menu.operacionesHabilitadas || restante === 0}
+            />
+          ) : null}
+        </View>
+        <Text style={[estilos.textoSuave, { marginTop: espacio.sm }]}>
+          La merma de un cliente se registra en su ficha.
+        </Text>
+        {menu.avisoDiaCerrado ? <Text style={estilos.error}>{menu.avisoDiaCerrado}</Text> : null}
 
-      <Tarjeta estado={estado} etiqueta="Movimientos de hoy">
-        {vista.movimientos.length === 0 ? (
-          <Text style={estilos.textoSuave}>Todavía no registras merma ni consumo hoy.</Text>
-        ) : (
-          vista.movimientos.map((m) => {
-            const p = pastillaMovimiento(m);
-            const cliente = m.cliente_id ? datos.catalogos.obtenerCliente(m.cliente_id) : null;
-            return (
-              <View key={m.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
-                <Text style={estilos.textoTarjeta}>
-                  {TITULO_MOVIMIENTO[m.tipo]}
-                  {cliente ? ` · ${cliente.nombre}` : ''} · <Cifra valor={formatearHora(m.registrado_en)} />
-                </Text>
-                <Text style={estilos.textoSuave}>{resumenMovimiento(m)}</Text>
-                {m.comentario ? <Text style={estilos.textoSuave}>{m.comentario}</Text> : null}
-                <Pastilla texto={p.texto} estado={p.estado} />
-                {p.detalle ? <Text style={estilos.error}>{p.detalle}</Text> : null}
-              </View>
-            );
-          })
-        )}
-      </Tarjeta>
-    </Pantalla>
+        <Tarjeta estado={estado} etiqueta="Movimientos de hoy">
+          {vista.movimientos.length === 0 ? (
+            <Text style={estilos.textoSuave}>Todavía no registras merma ni consumo hoy.</Text>
+          ) : (
+            vista.movimientos.map((m) => {
+              const p = pastillaMovimiento(m);
+              const cliente = m.cliente_id ? datos.catalogos.obtenerCliente(m.cliente_id) : null;
+              return (
+                <View key={m.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
+                  <Text style={estilos.textoTarjeta}>
+                    {TITULO_MOVIMIENTO[m.tipo]}
+                    {cliente ? ` · ${cliente.nombre}` : ''} · <Cifra valor={formatearHora(m.registrado_en)} />
+                  </Text>
+                  <Text style={estilos.textoSuave}>{resumenMovimiento(m)}</Text>
+                  {m.comentario ? <Text style={estilos.textoSuave}>{m.comentario}</Text> : null}
+                  <Pastilla texto={p.texto} estado={p.estado} />
+                  {p.detalle ? <Text style={estilos.error}>{p.detalle}</Text> : null}
+                </View>
+              );
+            })
+          )}
+        </Tarjeta>
+      </Pantalla>
+    </MarcoMenu>
   );
 }

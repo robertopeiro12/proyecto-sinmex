@@ -1,5 +1,6 @@
 import type { FilaRutaDelDia } from '@/datos/repositorios/rutas';
 import type { Cliente, Prospecto, SyncEstado, Venta, Visita } from '@/datos/tipos';
+import type { NombreIcono } from '@/ui/iconos';
 import { formatearHora, formatearMomento } from '@/ui/momento';
 
 /**
@@ -158,75 +159,64 @@ export function anchoMenuLateral(anchoPantalla: number): number {
   return Math.round(Math.min(ANCHO_MAXIMO_MENU, Math.max(0, anchoPantalla) * 0.82));
 }
 
-/** Una entrada del menu hamburguesa (D9). `destino` es una ruta de expo-router. */
+export type ClaveMenu =
+  | 'ruta'
+  | 'inventario'
+  | 'sugerido'
+  | 'registros'
+  | 'merma'
+  | 'gastos'
+  | 'corte'
+  | 'prospectos'
+  | 'impresora'
+  | 'salir';
+
+/** Una entrada del menu lateral. `destino` es una ruta de expo-router; `null` solo en `salir`. */
 export interface EntradaMenu {
-  clave: string;
+  clave: ClaveMenu;
   titulo: string;
-  descripcion: string;
-  destino: string;
+  icono: NombreIcono;
+  destino: string | null;
   deshabilitada: boolean;
+  /** Frase corta bajo el titulo (hoy: lo que falta para abrir Corte). */
+  nota: string | null;
 }
 
 /**
- * Las entradas del menu, en el orden del spec (D16). Con el dia cerrado se
- * deshabilita solo lo que captura (gastos, merma y consumo); lo que consulta se
- * sigue viendo. T-30/T-31 dio a Gastos su pantalla, T-27 a Inventario y la
- * pieza 2 a Merma y consumo. Ruta y GPS es la pantalla pendiente de T-41 que ya
- * existe.
+ * Las entradas del menu, en el orden del spec §5 (maqueta 3). Con el dia
+ * cerrado se deshabilita solo lo que captura (gastos, merma); lo que consulta
+ * se sigue viendo, y Corte se abre (ya se hizo). Corte lleva candado mientras
+ * falten clientes por visitar.
  */
-export function entradasMenu(diaCerrado: boolean): EntradaMenu[] {
+export function entradasMenu({
+  porVisitar,
+  diaCerrado,
+}: {
+  porVisitar: number;
+  diaCerrado: boolean;
+}): EntradaMenu[] {
+  const corteConCandado = !diaCerrado && porVisitar > 0;
+  const entrada = (
+    clave: ClaveMenu,
+    titulo: string,
+    icono: NombreIcono,
+    destino: string | null,
+    extra: Partial<Pick<EntradaMenu, 'deshabilitada' | 'nota'>> = {},
+  ): EntradaMenu => ({ clave, titulo, icono, destino, deshabilitada: false, nota: null, ...extra });
   return [
-    {
-      clave: 'clientes',
-      titulo: 'Todos los clientes',
-      descripcion: 'El catálogo completo de la sucursal',
-      destino: '/(jornada)/operacion',
-      deshabilitada: false,
-    },
-    {
-      clave: 'prospectos',
-      titulo: 'Prospectos capturados',
-      descripcion: 'Los prospectos de hoy y su sincronización',
-      destino: '/(jornada)/prospectos',
-      deshabilitada: false,
-    },
-    {
-      clave: 'gastos',
-      titulo: 'Gastos',
-      descripcion: 'Lo que pagaste hoy con la cobranza',
-      destino: '/(jornada)/gastos',
-      deshabilitada: diaCerrado,
-    },
-    {
-      clave: 'inventario',
-      titulo: 'Inventario',
-      descripcion: 'Tu carga, tus recargas y lo que te queda',
-      destino: '/(jornada)/inventario',
-      // T-27: es consulta (y aceptar la carga de la manana); se ve con el dia cerrado.
-      deshabilitada: false,
-    },
-    {
-      clave: 'merma',
-      titulo: 'Merma y consumo',
-      descripcion: 'Merma del trayecto y consumo propio',
-      destino: '/(jornada)/merma',
-      // Captura (como Gastos): con el dia cerrado no se registra.
-      deshabilitada: diaCerrado,
-    },
-    {
-      clave: 'ruta-gps',
-      titulo: 'Ruta y GPS',
-      descripcion: 'Pendiente: T-41',
-      destino: '/(jornada)/ruta',
-      deshabilitada: false,
-    },
-    {
-      clave: 'cerrar-dia',
-      titulo: 'Cerrar el día',
-      descripcion: 'Kilometraje final',
-      destino: '/(jornada)/cerrar-dia',
-      deshabilitada: false,
-    },
+    entrada('ruta', 'Ruta', 'ubicacion', '/(jornada)'),
+    entrada('inventario', 'Inventario', 'inventario', '/(jornada)/inventario'),
+    entrada('sugerido', 'Sugerido de carga', 'sugerido', '/(jornada)/sugerido-de-carga'),
+    entrada('registros', 'Ventas / Cobranza', 'registros', '/(jornada)/registros'),
+    entrada('merma', 'Merma / Cambios', 'merma', '/(jornada)/merma', { deshabilitada: diaCerrado }),
+    entrada('gastos', 'Gastos', 'gasto', '/(jornada)/gastos', { deshabilitada: diaCerrado }),
+    entrada('corte', 'Corte', 'corte', '/(jornada)/cerrar-dia', {
+      deshabilitada: corteConCandado,
+      nota: corteConCandado ? (porVisitar === 1 ? 'falta 1 cliente' : `faltan ${porVisitar} clientes`) : null,
+    }),
+    entrada('prospectos', 'Prospectos', 'prospecto', '/(jornada)/prospectos'),
+    entrada('impresora', 'Seleccionar impresora', 'impresora', '/(jornada)/impresora'),
+    entrada('salir', 'Cerrar sesión', 'salir', null),
   ];
 }
 

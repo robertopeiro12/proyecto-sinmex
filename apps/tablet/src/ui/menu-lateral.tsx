@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { anchoMenuLateral, type EntradaMenu } from '@/estado/ruta-del-dia';
 
+import { Icono } from './icono';
 import { useTema } from './tema';
 import { colores, espacio, fuente, grosor, radio, tipo } from './tokens';
 
@@ -52,7 +53,7 @@ export function MenuLateral({
   onElegir: (entrada: EntradaMenu) => void;
   /** Arriba del menu: quien esta en sesion y lo que falta por subir. */
   encabezado?: ReactNode;
-  /** Al fondo del menu, separado (hoy: "Cerrar sesión"). */
+  /** Al fondo del menu, separado (hoy: el pie con vendedor, vehiculo y sucursal). */
   pie?: ReactNode;
   /** La pantalla que se desliza. */
   children: ReactNode;
@@ -134,28 +135,38 @@ export function MenuLateral({
                 disabled={entrada.deshabilitada}
                 onPress={() => onElegir(entrada)}
                 accessibilityRole="link"
-                accessibilityLabel={`${entrada.titulo}. ${entrada.descripcion}`}
+                accessibilityLabel={entrada.nota ? `${entrada.titulo}. ${entrada.nota}` : entrada.titulo}
                 accessibilityState={{ disabled: entrada.deshabilitada }}
                 style={({ pressed }) => [
                   {
                     minHeight: 56,
-                    justifyContent: 'center',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: espacio.sm,
                     paddingVertical: espacio.sm,
                     paddingHorizontal: espacio.sm,
                     borderRadius: radio.chico,
                   },
                   pressed && !entrada.deshabilitada && { backgroundColor: colores.primarioTenue },
-                  entrada.deshabilitada && { opacity: 0.35 },
+                  entrada.deshabilitada && { opacity: 0.45 },
                 ]}
               >
-                <Text
-                  style={{ fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.destacado), color: colores.tinta }}
-                >
-                  {entrada.titulo}
-                </Text>
-                <Text style={{ fontFamily: fuente.cuerpo, fontSize: t(tipo.menor), color: colores.tintaSuave }}>
-                  {entrada.descripcion}
-                </Text>
+                <Icono nombre={entrada.icono} tamano={24} color={colores.tinta} />
+                <View style={{ flex: 1 }}>
+                  <Text
+                    style={{ fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.destacado), color: colores.tinta }}
+                  >
+                    {entrada.titulo}
+                  </Text>
+                  {entrada.nota ? (
+                    <Text style={{ fontFamily: fuente.cuerpo, fontSize: t(tipo.menor), color: colores.tintaSuave }}>
+                      {entrada.nota}
+                    </Text>
+                  ) : null}
+                </View>
+                {entrada.deshabilitada && entrada.nota ? (
+                  <Icono nombre="candado" tamano={20} color={colores.tintaSuave} />
+                ) : null}
               </Pressable>
             ))}
             {pie ? <View style={{ marginTop: espacio.lg }}>{pie}</View> : null}

@@ -8,6 +8,7 @@ import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
 import { Cifra } from '@/ui/cifra';
+import { MarcoMenu } from '@/ui/marco-menu';
 import { Pantalla, Pastilla, Tarjeta } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
 import { espacio } from '@/ui/tokens';
@@ -108,76 +109,78 @@ export default function CerrarDia() {
 
   if (jornada?.estado === 'cerrada') {
     return (
-      <Pantalla
-        titulo="Día cerrado"
-        subtitulo={
-          <Text style={estilos.subtitulo}>
-            Kilometraje <Cifra valor={jornada.km_inicial} tono="suave" /> →{' '}
-            <Cifra valor={jornada.km_final ?? 0} tono="suave" /> (
-            <Cifra valor={(jornada.km_final ?? 0) - jornada.km_inicial} tono="suave" /> km
-            recorridos).
-          </Text>
-        }
-      >
-        <Tarjeta estado="pendiente" etiqueta="Próximamente">
-          <Text style={estilos.textoTarjeta}>El corte del día se implementa en T-33</Text>
-          <Text style={estilos.textoSuave}>
-            Incluirá ventas por presentación, cobranza, gastos, tesorería (= cobranza − gastos),
-            comisión del día, efectividad de ruta e impresión desde la tablet.
-          </Text>
-        </Tarjeta>
-
-        <Tarjeta
-          estado={pendientes > 0 ? 'pendiente' : 'listo'}
-          etiqueta="Sincronización"
+      <MarcoMenu titulo="Corte">
+        <Pantalla
+          subtitulo={
+            <Text style={estilos.subtitulo}>
+              Kilometraje <Cifra valor={jornada.km_inicial} tono="suave" /> →{' '}
+              <Cifra valor={jornada.km_final ?? 0} tono="suave" /> (
+              <Cifra valor={(jornada.km_final ?? 0) - jornada.km_inicial} tono="suave" /> km
+              recorridos).
+            </Text>
+          }
         >
-          <Pastilla
-            numero={pendientes}
-            texto={pendientes === 1 ? 'registro esperando WiFi' : 'registros esperando WiFi'}
+          <Tarjeta estado="pendiente" etiqueta="Próximamente">
+            <Text style={estilos.textoTarjeta}>El corte del día se implementa en T-33</Text>
+            <Text style={estilos.textoSuave}>
+              Incluirá ventas por presentación, cobranza, gastos, tesorería (= cobranza − gastos),
+              comisión del día, efectividad de ruta e impresión desde la tablet.
+            </Text>
+          </Tarjeta>
+
+          <Tarjeta
             estado={pendientes > 0 ? 'pendiente' : 'listo'}
-          />
-          <Text style={estilos.textoSuave}>
-            Suben solos al volver al WiFi del negocio, o con «Sincronizar ahora» desde la jornada.
-          </Text>
-        </Tarjeta>
-      </Pantalla>
+            etiqueta="Sincronización"
+          >
+            <Pastilla
+              numero={pendientes}
+              texto={pendientes === 1 ? 'registro esperando WiFi' : 'registros esperando WiFi'}
+              estado={pendientes > 0 ? 'pendiente' : 'listo'}
+            />
+            <Text style={estilos.textoSuave}>
+              Suben solos al volver al WiFi del negocio, o con «Sincronizar ahora» desde la jornada.
+            </Text>
+          </Tarjeta>
+        </Pantalla>
+      </MarcoMenu>
     );
   }
 
   return (
-    <Pantalla
-      formulario
-      titulo="Cerrar el día"
-      subtitulo={
-        <Text style={estilos.subtitulo}>
-          Captura el kilometraje final antes de enviar el corte. Abriste el día con{' '}
-          <Cifra valor={jornada?.km_inicial ?? 0} tono="suave" /> km.
-        </Text>
-      }
-    >
-      <Campo
-        etiqueta="Kilometraje final"
-        cifra
-        // Ver la nota gemela en `abrir-dia.tsx`: el odometro puede traer decimal.
-        keyboardType="numeric"
-        inputMode="decimal"
-        value={km}
-        // Ver la nota gemela en `abrir-dia.tsx`: el error se borra al corregir.
-        onChangeText={(texto) => {
-          setKm(texto);
-          setError(null);
-        }}
-        placeholder={`Mayor o igual a ${jornada?.km_inicial ?? 0}`}
-      />
+    <MarcoMenu titulo="Corte">
+      <Pantalla
+        formulario
+        subtitulo={
+          <Text style={estilos.subtitulo}>
+            Captura el kilometraje final antes de enviar el corte. Abriste el día con{' '}
+            <Cifra valor={jornada?.km_inicial ?? 0} tono="suave" /> km.
+          </Text>
+        }
+      >
+        <Campo
+          etiqueta="Kilometraje final"
+          cifra
+          // Ver la nota gemela en `abrir-dia.tsx`: el odometro puede traer decimal.
+          keyboardType="numeric"
+          inputMode="decimal"
+          value={km}
+          // Ver la nota gemela en `abrir-dia.tsx`: el error se borra al corregir.
+          onChangeText={(texto) => {
+            setKm(texto);
+            setError(null);
+          }}
+          placeholder={`Mayor o igual a ${jornada?.km_inicial ?? 0}`}
+        />
 
-      {error ? <Text style={estilos.error}>{error}</Text> : null}
+        {error ? <Text style={estilos.error}>{error}</Text> : null}
 
-      <Boton
-        etiqueta="Cerrar el día"
-        onPress={confirmarCierre}
-        deshabilitado={!puedeCerrar}
-        estilo={{ marginTop: espacio.lg }}
-      />
-    </Pantalla>
+        <Boton
+          etiqueta="Cerrar el día"
+          onPress={confirmarCierre}
+          deshabilitado={!puedeCerrar}
+          estilo={{ marginTop: espacio.lg }}
+        />
+      </Pantalla>
+    </MarcoMenu>
   );
 }

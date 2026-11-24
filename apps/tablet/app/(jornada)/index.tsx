@@ -1,7 +1,6 @@
-import { router, useFocusEffect, type Href } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ErrorRuta } from '@/datos';
 import { MOTIVO_CARGA_PENDIENTE, totalPiezas } from '@/estado/inventario';
@@ -12,7 +11,6 @@ import {
   agruparRuta,
   atendidosFueraDeRuta,
   sinRutaAsignada,
-  entradasMenu,
   textoAvisoSinRuta,
 } from '@/estado/ruta-del-dia';
 import type { MotivoAbandono } from '@/sincronizacion/motor';
@@ -21,11 +19,11 @@ import { Boton } from '@/ui/boton';
 import { FilaAtendidoFueraDeRuta, FilaFueraDeRuta, FilaVisitadoSinVenta, ListaRuta } from '@/ui/lista-ruta';
 import { BotonIcono } from '@/ui/boton-icono';
 import { Cifra } from '@/ui/cifra';
-import { MenuLateral } from '@/ui/menu-lateral';
+import { MarcoMenu } from '@/ui/marco-menu';
 import { formatearMomento } from '@/ui/momento';
-import { Pastilla, Tarjeta } from '@/ui/pantalla';
+import { Tarjeta } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
-import { colores, espacio, fuente, grosor, tipo } from '@/ui/tokens';
+import { espacio } from '@/ui/tokens';
 
 /**
  * Lo que se le dice al vendedor cuando la sincronizacion no sale.
@@ -51,11 +49,9 @@ const MENSAJE: Record<MotivoAbandono, string> = {
  */
 export default function RutaDelDia() {
   const { jornada, datos, vendedor, versionCatalogos } = useJawa();
-  const { salir, sincronizar, ultimaSincronizacion } = useSesion();
-  const { estilos, t } = useTema();
-  const insets = useSafeAreaInsets();
+  const { sincronizar, ultimaSincronizacion } = useSesion();
+  const { estilos } = useTema();
   const [sincronizando, setSincronizando] = useState(false);
-  const [menuAbierto, setMenuAbierto] = useState(false);
   const [arrastrando, setArrastrando] = useState(false);
 
   // Se relee al volver a esta pantalla (`useFocusEffect`): vender o cobrar en
@@ -162,108 +158,26 @@ export default function RutaDelDia() {
     [datos],
   );
 
-  /**
-   * Cerrar sesion borra el material que permite entrar sin red (ver
-   * `gestor.salir()`). En ruta eso deja al vendedor fuera hasta volver al WiFi
-   * del negocio, asi que se confirma antes. Vive al pie del menu (T-37).
-   */
-  function confirmarSalida() {
-    Alert.alert(
-      'Cerrar sesión',
-      'Se borrará tu sesión de esta tablet. Para volver a entrar necesitarás conectarte al WiFi del negocio. Lo capturado hoy NO se borra.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Cerrar sesión', style: 'destructive', onPress: () => void salir() },
-      ],
-    );
-  }
-
-  const abrirMenu = useCallback(() => setMenuAbierto(true), []);
-  const cerrarMenu = useCallback(() => setMenuAbierto(false), []);
+  const derecha = (
+    <>
+      <BotonIcono
+        icono="mas"
+        etiqueta="Registrar prospecto"
+        deshabilitado={soloLectura}
+        onPress={() => router.push('/(jornada)/prospectos')}
+      />
+      <BotonIcono
+        icono="sincronizar"
+        etiqueta="Refrescar"
+        ocupado={sincronizando}
+        numero={pendientes}
+        onPress={() => void refrescar()}
+      />
+    </>
+  );
 
   return (
-    <MenuLateral
-      abierto={menuAbierto}
-      onCerrar={cerrarMenu}
-      entradas={entradasMenu(soloLectura)}
-      onElegir={(entrada) => {
-        setMenuAbierto(false);
-        router.push(entrada.destino as Href);
-      }}
-      encabezado={
-        <View style={{ gap: espacio.xs }}>
-          <Text style={estilos.textoTarjeta}>{vendedor?.nombre ?? 'Vendedor'}</Text>
-          <Text style={estilos.textoSuave}>Jornada del {jornada?.fecha}</Text>
-          {/* Lo que falta por subir tambien vive aqui, con su palabra: en la
-              cabecera solo queda la burbuja del boton de refrescar. */}
-          <View style={{ marginTop: espacio.sm }}>
-            <Pastilla
-              numero={pendientes}
-              texto="por subir"
-              estado={pendientes > 0 ? 'pendiente' : 'listo'}
-            />
-          </View>
-        </View>
-      }
-      pie={
-        <Boton
-          etiqueta="Cerrar sesión"
-          tono="peligro"
-          icono="cerrar"
-          onPress={() => {
-            setMenuAbierto(false);
-            confirmarSalida();
-          }}
-        />
-      }
-    >
-      <View style={{ flex: 1, backgroundColor: colores.papel }}>
-        {/* Cabecera propia (la del Stack se oculta para esta pantalla, ver el
-            layout): tiene que deslizarse junto con la ruta al abrir el menu. */}
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: espacio.sm,
-            paddingTop: insets.top + espacio.sm,
-            paddingBottom: espacio.sm,
-            paddingHorizontal: espacio.md,
-            backgroundColor: colores.superficie,
-            borderBottomWidth: grosor.hairline,
-            borderBottomColor: colores.borde,
-          }}
-        >
-          <BotonIcono icono="menu" etiqueta="Abrir el menú" onPress={abrirMenu} />
-          {/* Mismo ancho que el segundo boton de la derecha: el titulo queda centrado. */}
-          <View style={{ width: 48 }} />
-          <Text
-            accessibilityRole="header"
-            numberOfLines={1}
-            style={{
-              flex: 1,
-              textAlign: 'center',
-              fontFamily: fuente.tituloMedio,
-              fontSize: t(tipo.subtitulo),
-              color: colores.tinta,
-            }}
-          >
-            Ruta del día
-          </Text>
-          <BotonIcono
-            icono="mas"
-            etiqueta="Registrar prospecto"
-            deshabilitado={soloLectura}
-            onPress={() => router.push('/(jornada)/prospectos')}
-          />
-          <BotonIcono
-            icono="sincronizar"
-            etiqueta="Refrescar"
-            ocupado={sincronizando}
-            numero={pendientes}
-            onPress={() => void refrescar()}
-          />
-        </View>
-
+    <MarcoMenu titulo="Ruta del día" derecha={derecha}>
         <ScrollView
           style={estilos.pantalla}
           contentContainerStyle={estilos.contenido}
@@ -379,7 +293,6 @@ export default function RutaDelDia() {
             </View>
           ) : null}
         </ScrollView>
-      </View>
-    </MenuLateral>
+    </MarcoMenu>
   );
 }

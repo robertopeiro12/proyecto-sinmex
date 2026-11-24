@@ -39,7 +39,6 @@ export default function LayoutJornada() {
     <Stack screenOptions={cabecera}>
       {/* La ruta dibuja su propia cabecera: se desliza con el menu lateral (2026-10-18). */}
       <Stack.Screen name="index" options={{ title: 'Ruta del día', headerShown: false }} />
-      <Stack.Screen name="operacion/index" options={{ title: 'Todos los clientes' }} />
       <Stack.Screen name="operacion/[clienteId]/index" options={{ title: 'Cliente' }} />
       <Stack.Screen name="operacion/[clienteId]/venta" options={{ title: 'Venta' }} />
       <Stack.Screen name="operacion/[clienteId]/cobranza" options={{ title: 'Cobranza / abono' }} />
@@ -48,16 +47,19 @@ export default function LayoutJornada() {
         options={{ title: 'Visita sin venta' }}
       />
       <Stack.Screen name="operacion/[clienteId]/merma" options={{ title: 'Merma' }} />
-      <Stack.Screen name="prospectos" options={{ title: 'Prospectos' }} />
-      <Stack.Screen name="gastos/index" options={{ title: 'Gastos' }} />
+      <Stack.Screen name="prospectos" options={{ title: 'Prospectos', headerShown: false }} />
+      <Stack.Screen name="gastos/index" options={{ title: 'Gastos', headerShown: false }} />
       <Stack.Screen name="gastos/registrar" options={{ title: 'Registrar gasto' }} />
-      <Stack.Screen name="merma/index" options={{ title: 'Merma y consumo' }} />
+      <Stack.Screen name="merma/index" options={{ title: 'Merma y consumo', headerShown: false }} />
       <Stack.Screen name="merma/registrar" options={{ title: 'Merma y consumo' }} />
-      <Stack.Screen name="inventario/index" options={{ title: 'Inventario' }} />
+      <Stack.Screen name="inventario/index" options={{ title: 'Inventario', headerShown: false }} />
       <Stack.Screen name="inventario/[cargaId]" options={{ title: 'Carga' }} />
+      {/* Pantallas del menu: dibujan su cabecera con `MarcoMenu` (se desliza con el menu). */}
+      <Stack.Screen name="registros" options={{ title: 'Ventas / Cobranza', headerShown: false }} />
+      <Stack.Screen name="impresora" options={{ title: 'Seleccionar impresora', headerShown: false }} />
+      <Stack.Screen name="sugerido-de-carga" options={{ title: 'Sugerido de carga', headerShown: false }} />
       <Stack.Screen name="agregar-a-ruta" options={{ title: 'Agregar a mi ruta' }} />
-      <Stack.Screen name="ruta" options={{ title: 'Ruta y GPS' }} />
-      <Stack.Screen name="cerrar-dia" options={{ title: 'Cerrar el día' }} />
+      <Stack.Screen name="cerrar-dia" options={{ title: 'Cerrar el día', headerShown: false }} />
     </Stack>
   );
 }
