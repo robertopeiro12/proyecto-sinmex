@@ -161,7 +161,7 @@ export default function RegistrarMovimiento() {
 
       <Boton
         etiqueta={tipo === 'consumo' ? 'Registrar consumo' : 'Registrar merma del trayecto'}
-        glifo="✓"
+        icono="palomita"
         deshabilitado={!validacion.listo || grabado || presentaciones.length === 0}
         onPress={registrar}
         estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}

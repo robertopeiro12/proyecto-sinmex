@@ -374,7 +374,7 @@ export default function PantallaVenta() {
             <Boton
               etiqueta={`Cobrar notas pendientes (${notas.length})`}
               tono="neutra"
-              glifo="$"
+              icono="cobrar"
               onPress={() =>
                 router.replace({
                   pathname: '/(jornada)/operacion/[clienteId]/cobranza',
@@ -382,12 +382,12 @@ export default function PantallaVenta() {
                 })
               }
             />
-            <Boton etiqueta="Volver al cliente" glifo="←" onPress={() => router.back()} />
+            <Boton etiqueta="Volver al cliente" icono="atras" onPress={() => router.back()} />
           </View>
         ) : (
           <Boton
             etiqueta="Volver al cliente"
-            glifo="←"
+            icono="atras"
             onPress={() => router.back()}
             estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
           />
@@ -507,13 +507,13 @@ export default function PantallaVenta() {
           <Boton
             etiqueta="Corregir"
             tono="neutra"
-            glifo="←"
+            icono="atras"
             onPress={volverACaptura}
             deshabilitado={grabando}
           />
           <Boton
             etiqueta="Grabar venta"
-            glifo="✓"
+            icono="palomita"
             onPress={() => void grabar()}
             ocupado={grabando}
             deshabilitado={
@@ -541,7 +541,7 @@ export default function PantallaVenta() {
         </Tarjeta>
         <Boton
           etiqueta="Ir a Inventario"
-          glifo="→"
+          icono="adelante"
           onPress={() => router.push('/(jornada)/inventario')}
           estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
         />
@@ -561,7 +561,7 @@ export default function PantallaVenta() {
         </Tarjeta>
         <Boton
           etiqueta="Ir a cobrar"
-          glifo="→"
+          icono="adelante"
           onPress={() =>
             router.push({
               pathname: '/(jornada)/operacion/[clienteId]/cobranza',
@@ -777,7 +777,7 @@ export default function PantallaVenta() {
       {/* Unica accion primaria de la captura. */}
       <Boton
         etiqueta="Revisar"
-        glifo="→"
+        icono="adelante"
         onPress={revisar}
         deshabilitado={presentaciones.length === 0}
         estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}

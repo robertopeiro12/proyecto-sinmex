@@ -55,7 +55,7 @@ export default function DetalleCarga() {
   if (!carga) {
     return (
       <Pantalla titulo="Carga no encontrada" subtitulo="No está en esta tablet.">
-        <Boton etiqueta="Volver al inventario" glifo="←" tono="neutra" onPress={() => router.back()} />
+        <Boton etiqueta="Volver al inventario" icono="atras" tono="neutra" onPress={() => router.back()} />
       </Pantalla>
     );
   }
@@ -162,7 +162,7 @@ export default function DetalleCarga() {
             <Boton
               etiqueta="Volver"
               tono="neutra"
-              glifo="←"
+              icono="atras"
               deshabilitado={enviando !== null}
               onPress={() => {
                 setRechazando(false);
@@ -172,7 +172,7 @@ export default function DetalleCarga() {
             <Boton
               etiqueta="Enviar rechazo"
               tono="peligro"
-              glifo="×"
+              icono="cerrar"
               ocupado={enviando === 'rechazar'}
               onPress={() => void responder('rechazar', carga)}
             />
@@ -187,7 +187,7 @@ export default function DetalleCarga() {
           <Boton
             etiqueta="Rechazar"
             tono="peligro"
-            glifo="×"
+            icono="cerrar"
             deshabilitado={enviando !== null}
             onPress={() => {
               setRechazando(true);
@@ -197,7 +197,7 @@ export default function DetalleCarga() {
           <Boton
             etiqueta="Aceptar"
             tono="confirmar"
-            glifo="✓"
+            icono="palomita"
             ocupado={enviando === 'aceptar'}
             onPress={() => void responder('aceptar', carga)}
           />
@@ -208,7 +208,7 @@ export default function DetalleCarga() {
         <Boton
           etiqueta="Volver al inventario"
           tono="neutra"
-          glifo="←"
+          icono="atras"
           onPress={() => router.back()}
           estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
         />

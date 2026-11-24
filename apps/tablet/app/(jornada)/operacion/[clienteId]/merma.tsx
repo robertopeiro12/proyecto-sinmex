@@ -169,7 +169,7 @@ export default function MermaDelCliente() {
 
       <Boton
         etiqueta="Registrar merma"
-        glifo="✓"
+        icono="palomita"
         deshabilitado={!validacion.listo || grabado || presentaciones.length === 0}
         onPress={registrar}
         estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}

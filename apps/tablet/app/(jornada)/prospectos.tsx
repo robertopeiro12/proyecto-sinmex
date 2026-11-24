@@ -333,7 +333,7 @@ export default function Prospectos() {
         <Boton
           etiqueta={ubicacion.estado === 'ok' ? 'Volver a ubicar' : 'Usar mi ubicación'}
           tono="neutra"
-          glifo="⌖"
+          icono="ubicacion"
           onPress={ubicar}
           ocupado={ubicacion.estado === 'buscando'}
           estilo={{ marginTop: espacio.sm }}
@@ -374,7 +374,7 @@ export default function Prospectos() {
         <Boton
           etiqueta={foto ? 'Volver a tomar la foto' : 'Tomar foto'}
           tono="neutra"
-          glifo="⬤"
+          icono="foto"
           onPress={tomarFoto}
           ocupado={tomandoFoto}
           estilo={{ marginTop: espacio.sm }}

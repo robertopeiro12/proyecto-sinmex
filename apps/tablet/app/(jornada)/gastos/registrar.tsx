@@ -163,7 +163,7 @@ export default function RegistrarGasto() {
             <Boton
               etiqueta={foto ? 'Volver a tomar' : 'Tomar foto del ticket'}
               tono="neutra"
-              glifo="◉"
+              icono="foto"
               onPress={() => void tomarFoto()}
               ocupado={tomandoFoto}
               estilo={{ marginTop: espacio.sm }}
@@ -192,7 +192,7 @@ export default function RegistrarGasto() {
 
       <Boton
         etiqueta="Guardar"
-        glifo="✓"
+        icono="palomita"
         deshabilitado={
           !puedeGuardarGasto({
             gastoValido: validacion.gasto !== null,

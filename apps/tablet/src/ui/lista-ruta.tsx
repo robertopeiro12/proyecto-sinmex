@@ -14,6 +14,7 @@ import {
 } from '@/estado/ruta-del-dia';
 import { textoEstadoVisitas } from '@/estado/visita';
 
+import { Icono } from './icono';
 import { Pastilla, type Estado } from './pantalla';
 import { useTema } from './tema';
 import { colores, espacio, fuente, grosor, radio, tipo } from './tokens';
@@ -312,13 +313,15 @@ function FilaRuta({
       </Text>
 
       <View style={{ flex: 1, gap: espacio.xs }}>
-        <Text
-          numberOfLines={1}
-          style={{ fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.destacado), color: colores.tinta }}
-        >
-          {fila.visitado ? '✓ ' : ''}
-          {fila.nombre}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: espacio.xs }}>
+          {fila.visitado ? <Icono nombre="palomita" tamano={t(tipo.destacado)} color={colores.tinta} /> : null}
+          <Text
+            numberOfLines={1}
+            style={{ flexShrink: 1, fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.destacado), color: colores.tinta }}
+          >
+            {fila.nombre}
+          </Text>
+        </View>
         {fila.recado ? (
           <Text
             numberOfLines={1}
@@ -419,9 +422,7 @@ export function FilaFueraDeRuta({
         pressed && { opacity: 0.6 },
       ]}
     >
-      <Text style={{ fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.destacado), color: colores.exito }}>
-        ✓
-      </Text>
+      <Icono nombre="palomita" tamano={t(tipo.destacado)} color={colores.exito} />
       <View style={{ flex: 1, gap: espacio.xs }}>
         <Text
           numberOfLines={1}

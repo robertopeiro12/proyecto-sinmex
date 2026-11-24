@@ -209,7 +209,7 @@ export default function RutaDelDia() {
         <Boton
           etiqueta="Cerrar sesión"
           tono="peligro"
-          glifo="×"
+          icono="cerrar"
           onPress={() => {
             setMenuAbierto(false);
             confirmarSalida();
@@ -233,7 +233,7 @@ export default function RutaDelDia() {
             borderBottomColor: colores.borde,
           }}
         >
-          <BotonIcono glifo="☰" etiqueta="Abrir el menú" onPress={abrirMenu} />
+          <BotonIcono icono="menu" etiqueta="Abrir el menú" onPress={abrirMenu} />
           {/* Mismo ancho que el segundo boton de la derecha: el titulo queda centrado. */}
           <View style={{ width: 48 }} />
           <Text
@@ -250,13 +250,13 @@ export default function RutaDelDia() {
             Ruta del día
           </Text>
           <BotonIcono
-            glifo="+"
+            icono="mas"
             etiqueta="Registrar prospecto"
             deshabilitado={soloLectura}
             onPress={() => router.push('/(jornada)/prospectos')}
           />
           <BotonIcono
-            glifo="↻"
+            icono="sincronizar"
             etiqueta="Refrescar"
             ocupado={sincronizando}
             numero={pendientes}
@@ -288,7 +288,7 @@ export default function RutaDelDia() {
               </Text>
               <Boton
                 etiqueta="Ver la carga"
-                glifo="→"
+                icono="adelante"
                 ancho="ajustado"
                 onPress={() =>
                   router.push({
@@ -314,7 +314,7 @@ export default function RutaDelDia() {
               <View style={estilos.filaAcciones}>
                 <Boton
                   etiqueta={sincronizando ? 'Sincronizando…' : 'Sincronizar'}
-                  glifo="↻"
+                  icono="sincronizar"
                   tono="neutra"
                   ancho="ajustado"
                   ocupado={sincronizando}
@@ -322,7 +322,7 @@ export default function RutaDelDia() {
                 />
                 <Boton
                   etiqueta="Agregar a mi ruta"
-                  glifo="+"
+                  icono="mas"
                   ancho="ajustado"
                   deshabilitado={soloLectura}
                   onPress={() => router.push('/(jornada)/agregar-a-ruta')}
@@ -343,7 +343,7 @@ export default function RutaDelDia() {
                   la ruta: es donde el vendedor la busca cuando ya recorrio la lista. */}
               <Boton
                 etiqueta="Agregar a mi ruta"
-                glifo="+"
+                icono="mas"
                 deshabilitado={soloLectura}
                 onPress={() => router.push('/(jornada)/agregar-a-ruta')}
                 estilo={{ marginTop: espacio.sm }}

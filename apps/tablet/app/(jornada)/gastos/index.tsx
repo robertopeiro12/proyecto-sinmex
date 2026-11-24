@@ -89,7 +89,7 @@ export default function Gastos() {
 
       <Boton
         etiqueta="Registrar gasto"
-        glifo="+"
+        icono="mas"
         deshabilitado={
           !puedeRegistrarGasto({ camposDisponibles: campos.length, diaCerrado: !menu.operacionesHabilitadas })
         }

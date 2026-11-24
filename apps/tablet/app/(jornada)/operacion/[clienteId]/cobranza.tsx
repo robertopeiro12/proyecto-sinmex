@@ -322,7 +322,7 @@ export default function PantallaCobranza() {
         {/* Unica accion de este paso. */}
         <Boton
           etiqueta="Volver al cliente"
-          glifo="←"
+          icono="atras"
           onPress={() => router.back()}
           estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
         />
@@ -380,8 +380,8 @@ export default function PantallaCobranza() {
           ✓; Corregir es contorno neutro con ←. Grabar es la unica primaria.
         */}
         <View style={estilos.filaAcciones}>
-          <Boton etiqueta="Corregir" tono="neutra" glifo="←" onPress={corregir} />
-          <Boton etiqueta="Grabar cobro" glifo="✓" onPress={grabar} ocupado={grabando} />
+          <Boton etiqueta="Corregir" tono="neutra" icono="atras" onPress={corregir} />
+          <Boton etiqueta="Grabar cobro" icono="palomita" onPress={grabar} ocupado={grabando} />
         </View>
       </Pantalla>
     );
@@ -474,7 +474,7 @@ export default function PantallaCobranza() {
             <Boton
               etiqueta="Liquidar"
               tono="neutra"
-              glifo="="
+              icono="cobrar"
               ancho="ajustado"
               onPress={liquidar}
             />
@@ -514,7 +514,7 @@ export default function PantallaCobranza() {
       {/* Unica accion primaria de la captura. */}
       <Boton
         etiqueta="Revisar"
-        glifo="→"
+        icono="adelante"
         onPress={revisar}
         deshabilitado={notas.length === 0}
         estilo={{ marginTop: espacio.lg, marginBottom: espacio.lg }}

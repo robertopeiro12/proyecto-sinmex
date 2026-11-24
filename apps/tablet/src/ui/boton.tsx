@@ -1,5 +1,7 @@
-import { ActivityIndicator, Pressable, Text, View, type ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, Text, type ViewStyle } from 'react-native';
 
+import { Icono } from './icono';
+import type { NombreIcono } from './iconos';
 import { useTema } from './tema';
 import { colores, espacio, fuente, grosor, radio, tipo } from './tokens';
 
@@ -26,7 +28,7 @@ export type Tono = 'primaria' | 'confirmar' | 'neutra' | 'peligro';
  * accion que no tiene vuelta atras. En contorno pesa menos, pide un instante
  * mas de atencion, y sigue siendo inconfundible.
  *
- * ## El `glifo` no es adorno — es la correccion de un fallo reportado
+ * ## El `icono` no es adorno — es la correccion de un fallo reportado
  *
  * > [!danger] El cliente ya reporto este error en produccion
  * > "Los vendedores se equivocan mucho entre los botones de **aceptar** y
@@ -37,7 +39,7 @@ export type Tono = 'primaria' | 'confirmar' | 'neutra' | 'peligro';
  * hombres en ruta, mirando la pantalla al sol y de reojo. Por eso dos botones
  * que hacen cosas opuestas tienen que diferir en **tres ejes a la vez**:
  *
- * 1. **Glifo** distinto (`+` contra `−`), en su propia caja con borde.
+ * 1. **Icono** distinto (`+` contra `−`), en su propia caja con borde.
  * 2. **Forma** distinta (relleno contra contorno).
  * 3. **Color** distinto (verde contra rojo).
  *
@@ -45,15 +47,15 @@ export type Tono = 'primaria' | 'confirmar' | 'neutra' | 'peligro';
  * Esa es la prueba, y es la regla para T-27 (inventario) cuando se construya.
  *
  * ```tsx
- * <Boton tono="confirmar" glifo="+" etiqueta="Aceptar producto" onPress={…} />
- * <Boton tono="peligro"   glifo="−" etiqueta="Devolver producto" onPress={…} />
+ * <Boton tono="confirmar" icono="mas" etiqueta="Aceptar producto" onPress={…} />
+ * <Boton tono="peligro"   icono="menos" etiqueta="Devolver producto" onPress={…} />
  * ```
  */
 export function Boton({
   etiqueta,
   onPress,
   tono = 'primaria',
-  glifo,
+  icono,
   ocupado = false,
   deshabilitado = false,
   ancho = 'completo',
@@ -62,8 +64,8 @@ export function Boton({
   etiqueta: string;
   onPress: () => void;
   tono?: Tono;
-  /** Simbolo corto (`+`, `−`, `✓`, `↻`). Obligatorio cuando hay un opuesto. */
-  glifo?: string;
+  /** Icono SVG junto a la etiqueta. Obligatorio cuando hay un opuesto. */
+  icono?: NombreIcono;
   /** Muestra un indicador y bloquea el toque. */
   ocupado?: boolean;
   deshabilitado?: boolean;
@@ -137,30 +139,7 @@ export function Boton({
         <ActivityIndicator color={p.texto} />
       ) : (
         <>
-          {glifo ? (
-            <View
-              style={{
-                minWidth: t(tipo.destacado) + espacio.sm,
-                paddingHorizontal: espacio.xs,
-                paddingVertical: 1,
-                borderRadius: radio.chico - 2,
-                borderWidth: grosor.hairline,
-                borderColor: p.texto,
-              }}
-            >
-              <Text
-                style={{
-                  fontFamily: fuente.cifraFuerte,
-                  fontSize: t(tipo.destacado),
-                  lineHeight: t(tipo.destacado) * 1.2,
-                  textAlign: 'center',
-                  color: p.texto,
-                }}
-              >
-                {glifo}
-              </Text>
-            </View>
-          ) : null}
+          {icono ? <Icono nombre={icono} tamano={t(tipo.destacado)} color={p.texto} /> : null}
           <Text
             style={{
               fontFamily: fuente.cuerpoFuerte,

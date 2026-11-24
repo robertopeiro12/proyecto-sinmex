@@ -75,7 +75,7 @@ export default function Inventario() {
               <Boton
                 etiqueta={c.estado === 'pendiente' ? 'Revisar y aceptar' : 'Ver la carga'}
                 tono={c.estado === 'pendiente' ? 'primaria' : 'neutra'}
-                glifo="→"
+                icono="adelante"
                 ancho="ajustado"
                 onPress={() =>
                   router.push({ pathname: '/(jornada)/inventario/[cargaId]', params: { cargaId: c.id } })
