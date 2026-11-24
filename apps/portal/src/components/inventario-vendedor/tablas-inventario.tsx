@@ -14,6 +14,7 @@ import {
   Td,
   Th,
 } from "@/components/ui/tabla";
+import { fraseFaltan } from "@/lib/cortes";
 import {
   gruposPorTamano,
   mermaRegistrada,
@@ -28,7 +29,8 @@ const TITULO_BLOQUE =
   "text-xs font-semibold uppercase tracking-wide text-foreground";
 // Alto de la primera fila del encabezado (32,5 px medidos a 1366 y 1920): la segunda se pega debajo.
 const TOP2 = "top-[32.5px]";
-const VACIO = "No hubo carga ni venta ese día.";
+const VACIO_INVENTARIO = "Sin carga aceptada ni venta ese día.";
+const VACIO_RECARGAS = "No hubo recargas ese día.";
 
 /**
  * Las tres sub-pestañas (Inventario · Recargas · Merma) de unos datos dados. No lee la URL
@@ -50,7 +52,7 @@ export function TablasInventario({ datos }: { datos: InventarioVendedor }) {
                 <Aviso tono="advertencia">
                   {`${datos.vendedoresSinCorte} ${
                     datos.vendedoresSinCorte === 1 ? "vendedor sin corte" : "vendedores sin corte"
-                  }: sus piezas reales y resultados no se suman.`}
+                  }: no entran en la validación por almacén.`}
                 </Aviso>
               )}
               <TablaInventario datos={datos} />
@@ -141,7 +143,7 @@ function TablaInventario({ datos }: { datos: InventarioVendedor }) {
           </tr>
         </thead>
         <tbody>
-          {grupos.length === 0 && <FilaVacia columnas={11}>{VACIO}</FilaVacia>}
+          {grupos.length === 0 && <FilaVacia columnas={11}>{VACIO_INVENTARIO}</FilaVacia>}
           {grupos.map((g) => (
             <Fragment key={g.tamano}>
               <FilaGrupo columnas={11}>{g.tamano}</FilaGrupo>
@@ -190,7 +192,7 @@ function TablaInventario({ datos }: { datos: InventarioVendedor }) {
               <Td colSpan={9} className={SEPARADOR} />
               <Td alinear="derecha" className="whitespace-nowrap">
                 {(datos.totales.faltante ?? 0) > 0 && (
-                  <span className="text-destructive">{`Faltan ${datos.totales.faltante}`}</span>
+                  <span className="text-destructive">{fraseFaltan(datos.totales.faltante ?? 0, 0)}</span>
                 )}
               </Td>
             </FilaTotal>
@@ -247,7 +249,7 @@ function TablaMerma({ datos }: { datos: InventarioVendedor }) {
           </tr>
         </thead>
         <tbody>
-          {grupos.length === 0 && <FilaVacia columnas={6}>{VACIO}</FilaVacia>}
+          {grupos.length === 0 && <FilaVacia columnas={6}>{VACIO_INVENTARIO}</FilaVacia>}
           {grupos.map((g) => (
             <Fragment key={g.tamano}>
               <FilaGrupo columnas={6}>{g.tamano}</FilaGrupo>
@@ -286,7 +288,7 @@ function TablaMerma({ datos }: { datos: InventarioVendedor }) {
               <Td colSpan={4} className={SEPARADOR} />
               <Td alinear="derecha" className="whitespace-nowrap">
                 {(datos.totales.faltanteMerma ?? 0) > 0 && (
-                  <span className="text-destructive">{`${datos.totales.faltanteMerma} de merma`}</span>
+                  <span className="text-destructive">{fraseFaltan(0, datos.totales.faltanteMerma ?? 0)}</span>
                 )}
               </Td>
             </FilaTotal>
@@ -323,7 +325,7 @@ function TablaRecargas({ datos }: { datos: InventarioVendedor }) {
         </thead>
         <tbody>
           {datos.recargas.length === 0 && (
-            <FilaVacia columnas={columnas}>{VACIO}</FilaVacia>
+            <FilaVacia columnas={columnas}>{VACIO_RECARGAS}</FilaVacia>
           )}
           {datos.recargas.map((r) => (
             <Fila key={`${r.cargaId}-${r.presentacionId}`} className="align-middle">

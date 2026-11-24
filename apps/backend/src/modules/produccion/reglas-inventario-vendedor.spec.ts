@@ -24,13 +24,13 @@ const mov = (
   ...parcial,
 });
 
-const corte = (m: Partial<MovimientoPresentacion>, hecho: boolean) => ({
-  lineas: armarCorte([mov(m)], hecho).lineas,
-  hecho,
-});
+const corte = (m: Partial<MovimientoPresentacion>, hecho: boolean) => {
+  const c = armarCorte([mov(m)], hecho);
+  return { lineas: c.lineas, totales: c.totales, hecho };
+};
 
 describe('sumarVendedores', () => {
-  it('suma los resultados de dos vendedores con corte (2 y -1 = 1)', () => {
+  it('suma los resultados por linea con signo; el total de faltantes no compensa (2 y -1)', () => {
     // deberia 10, buenas 8 -> faltante 2; deberia 5, buenas 6 -> -1.
     const r = sumarVendedores([
       corte({ cargadas: 10, buenas: 8 }, true),
@@ -41,18 +41,20 @@ describe('sumarVendedores', () => {
     expect(r.lineas[0].deberiaRegresar).toBe(15);
     expect(r.lineas[0].buenas).toBe(14);
     expect(r.lineas[0].faltante).toBe(1);
-    expect(r.totales.faltante).toBe(1);
+    // Lo que le sobra a uno no compensa lo que le falta al otro.
+    expect(r.totales.faltante).toBe(2);
     expect(r.vendedoresSinCorte).toBe(0);
   });
 
-  it('un vendedor sin corte suma sus cargadas pero no sus resultados', () => {
+  it('un vendedor sin corte suma su operacion pero no entra a la validacion', () => {
     const r = sumarVendedores([
       corte({ cargadas: 10, buenas: 8, merma: 1, mermaRecibida: 2 }, true),
       corte({ cargadas: 7, mermaRecibida: 4 }, false),
     ]);
     expect(r.lineas[0].cargadas).toBe(17);
-    expect(r.lineas[0].deberiaRegresar).toBe(17);
-    expect(r.lineas[0].mermaTeorica).toBe(6);
+    // teoricas y reales solo del que tiene corte: cuadran con el resultado.
+    expect(r.lineas[0].deberiaRegresar).toBe(10);
+    expect(r.lineas[0].mermaTeorica).toBe(2);
     expect(r.lineas[0].buenas).toBe(8);
     expect(r.lineas[0].faltante).toBe(2);
     expect(r.lineas[0].resultadoMerma).toBe(1);
@@ -67,6 +69,8 @@ describe('sumarVendedores', () => {
       corte({ cargadas: 5 }, false),
     ]);
     expect(r.lineas[0].cargadas).toBe(15);
+    expect(r.lineas[0].deberiaRegresar).toBeNull();
+    expect(r.lineas[0].mermaTeorica).toBeNull();
     expect(r.lineas[0].buenas).toBeNull();
     expect(r.lineas[0].merma).toBeNull();
     expect(r.lineas[0].faltante).toBeNull();
@@ -76,21 +80,29 @@ describe('sumarVendedores', () => {
     expect(r.vendedoresSinCorte).toBe(2);
   });
 
+  it('con teoricaSinCorte (un solo vendedor) la teorica sale aunque no haya corte', () => {
+    const r = sumarVendedores(
+      [corte({ cargadas: 10, mermaRecibida: 3 }, false)],
+      {
+        teoricaSinCorte: true,
+      },
+    );
+    expect(r.lineas[0].deberiaRegresar).toBe(10);
+    expect(r.lineas[0].mermaTeorica).toBe(3);
+    expect(r.lineas[0].buenas).toBeNull();
+    expect(r.lineas[0].faltante).toBeNull();
+  });
+
   it('ordena por tamano y suma por presentacion distinta', () => {
     const litro = corte({ cargadas: 1 }, false);
-    const medio = {
-      hecho: false,
-      lineas: armarCorte(
-        [
-          mov({
-            presentacionId: '3f2504e0-4f89-41d3-9a0c-0305e82c3302',
-            volumen: '500 ml',
-            cargadas: 2,
-          }),
-        ],
-        false,
-      ).lineas,
-    };
+    const medio = corte(
+      {
+        presentacionId: '3f2504e0-4f89-41d3-9a0c-0305e82c3302',
+        volumen: '500 ml',
+        cargadas: 2,
+      },
+      false,
+    );
     const r = sumarVendedores([litro, medio]);
     expect(r.lineas.map((l) => l.volumen)).toEqual(['500 ml', '1 L']);
   });

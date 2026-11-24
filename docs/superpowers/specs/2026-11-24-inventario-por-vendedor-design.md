@@ -54,13 +54,17 @@ Hoy en el portal no existe: en el Dashboard y el Flujo diario la columna "Invent
   del día en el menú. Permiso **`inventario.ver`** ("Información de inventario", ya existe en la tabla `permiso`; sin
   migración).
 - **D3. "Todos los vendedores"** = la suma, por presentación, de todos los vendedores de la sucursal con movimiento ese
-  día; los resultados del total se suman con signo por presentación y el "Faltan N" del día con la regla del corte (por
-  tamaño, solo positivos). Con "Todas" las sucursales se pide elegir una (como Corte con un usuario sin sucursal):
-  la suma entre sucursales no tiene sentido para el almacenista.
+  día. *Operación del vendedor* (cargadas, ventas, promoción, merma, consumo, cambios) suma a **todos**; la *Validación
+  por almacén* (teóricas, reales y resultado) suma **solo a los vendedores con corte hecho**, para que teóricas − reales =
+  resultado siempre cuadre (decisión de Roberto, 2026-11-24). Con **un solo vendedor** la teórica sale aunque no tenga
+  corte, como en Producción → Corte. El pie "Faltantes del día" con "Todos" = suma de los faltantes (piezas y merma) del
+  corte de **cada** vendedor con corte hecho (como `faltantesDeCortes` del Flujo diario): lo que sobra a uno no compensa lo
+  que falta a otro (decisión de Roberto, 2026-11-24); `null` si ninguno tiene corte. Con "Todas" las sucursales se pide
+  elegir una (como Corte con un usuario sin sucursal): la suma entre sucursales no tiene sentido para el almacenista.
 - **D4. Resultados con corte sin hacer:** "Piezas reales retornadas", "Merma real validada" y los dos Resultado salen
   **vacíos** (no 0) si el corte de ese vendedor no está hecho, igual que en el corte. Con "Todos", un vendedor sin corte
-  aporta vacío: el total del resultado solo suma los vendedores con corte hecho y la tabla avisa "N vendedores sin
-  corte".
+  no aporta a la validación por almacén (ni teóricas, ni reales, ni resultado): esas celdas son `null` si ninguno con corte
+  tuvo la presentación, y la tabla avisa "N vendedores sin corte: no entran en la validación por almacén.".
 - **D5. Recargas:** una fila por línea de carga (presentación) de ese día, **todas** las cargas vivas (pendientes,
   aceptadas y rechazadas, con su estado; solo las aceptadas cuentan en Inventario). "Usuario recarga/respuesta" = quien la
   capturó; "Hora de recarga" = hora de captura (Tijuana, `hh:mm a. m./p. m.`); "Estado" = Pendiente / Aceptada /

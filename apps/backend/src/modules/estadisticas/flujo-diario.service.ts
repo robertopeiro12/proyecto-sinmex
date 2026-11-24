@@ -50,14 +50,12 @@ export class FlujoDiarioService {
   ): Promise<FilaVendedorDia[]> {
     const fechas = [...new Set(filas.map((f) => f.fecha))];
     const estados = new Map<string, FilaVendedorDia['corte']>();
-    for (const fecha of fechas) {
-      for (const [k, v] of await this.cortes.estadosDelRango(
-        fecha,
-        fecha,
-        codigoSucursal,
-      ))
-        estados.set(k, v);
-    }
+    const porFecha = await Promise.all(
+      fechas.map((fecha) =>
+        this.cortes.estadosDelRango(fecha, fecha, codigoSucursal),
+      ),
+    );
+    for (const mapa of porFecha) for (const [k, v] of mapa) estados.set(k, v);
     return filas.map((f) => ({
       ...f,
       corte: estados.get(`${f.vendedorId}|${f.fecha}`) ?? SIN_CORTE,

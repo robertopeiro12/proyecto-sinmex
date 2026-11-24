@@ -62,7 +62,7 @@ describe("PantallaInventarioVendedor", () => {
     await waitFor(() =>
       expect(lib.leerInventarioVendedor).toHaveBeenCalledWith(HOY, "TJ", "todos"),
     );
-    expect(await screen.findByText("No hubo carga ni venta ese día.")).toBeInTheDocument();
+    expect(await screen.findByText("Sin carga aceptada ni venta ese día.")).toBeInTheDocument();
     expect(screen.getByText("Lo que cargó, vendió y regresó cada vendedor, por tamaño.")).toBeInTheDocument();
     const lista = await screen.findByRole("combobox", { name: "Vendedor" });
     const opciones = Array.from(lista.querySelectorAll("option")).map((o) => o.textContent);
@@ -71,7 +71,7 @@ describe("PantallaInventarioVendedor", () => {
 
   it("Ayer y elegir un vendedor vuelven a consultar", async () => {
     render(<PantallaInventarioVendedor sucursal={null} />);
-    await screen.findByText("No hubo carga ni venta ese día.");
+    await screen.findByText("Sin carga aceptada ni venta ese día.");
     await userEvent.click(screen.getByRole("button", { name: "Ayer" }));
     await waitFor(() =>
       expect(lib.leerInventarioVendedor).toHaveBeenLastCalledWith(diaAnterior(HOY), "TJ", "todos"),

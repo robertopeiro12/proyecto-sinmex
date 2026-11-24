@@ -957,6 +957,14 @@ describe('Flujo diario (e2e)', () => {
         })
         .execute();
 
+      // Ana tambien trabaja otro dia (solo con ruta, sin corte).
+      const { cliente_id: clienteRuta } = await db
+        .selectFrom('ruta')
+        .select('cliente_id')
+        .where('vendedor_id', '=', ana)
+        .executeTakeFirstOrThrow();
+      await sembrarRuta(ana, '2018-05-10', [clienteRuta]);
+
       const r = await deFd();
       expect(renglon(r, ana, dia)?.corte).toEqual({
         estado: 'con_faltante',
@@ -972,7 +980,8 @@ describe('Flujo diario (e2e)', () => {
       const otroDia = r.porVendedor.find(
         (x) => x.vendedorId === ana && x.fecha !== dia,
       );
-      if (otroDia) expect(otroDia.corte.estado).toBe('sin_corte');
+      expect(otroDia).toBeDefined();
+      expect(otroDia?.corte.estado).toBe('sin_corte');
       const delDia = r.porDia.find((d) => d.fecha === dia);
       expect(delDia?.faltantesCorte).toEqual({ piezas: 4, merma: 0 });
       // Un dia sin ningun corte hecho: null.
@@ -981,6 +990,11 @@ describe('Flujo diario (e2e)', () => {
           .filter((d) => d.fecha !== dia)
           .every((d) => d.faltantesCorte === null),
       ).toBe(true);
+      await db
+        .deleteFrom('ruta')
+        .where('vendedor_id', '=', ana)
+        .where('fecha', '=', sql<Date>`'2018-05-10'::date`)
+        .execute();
     });
   });
 

@@ -593,12 +593,14 @@ describe('Inventario por vendedor (e2e)', () => {
       expect(r.lineas).toHaveLength(1);
       expect(linea(r, litro)).toMatchObject({
         cargadas: 22,
-        deberiaRegresar: 22,
+        // La validacion por almacen solo cuenta a A y B (con corte).
+        deberiaRegresar: 15,
         buenas: 14,
         faltante: 1,
       });
       expect(r.totales.cargadas).toBe(22);
-      expect(r.totales.faltante).toBe(1);
+      // Pie: lo que le sobra a B no compensa lo que le falta a A.
+      expect(r.totales.faltante).toBe(2);
     });
 
     it('si ninguno tiene corte, los resultados salen vacios (no 0)', async () => {
@@ -620,6 +622,8 @@ describe('Inventario por vendedor (e2e)', () => {
       ).body as InventarioVendedor;
       expect(linea(r, litro)).toMatchObject({
         cargadas: 3,
+        deberiaRegresar: null,
+        mermaTeorica: null,
         buenas: null,
         faltante: null,
         resultadoMerma: null,
@@ -759,6 +763,15 @@ describe('Inventario por vendedor (e2e)', () => {
         sucursal: 'TJ',
         vendedor: v,
       }).expect(404);
+    });
+
+    it('un vendedor que no es uuid ni "todos" es 400, no 500', async () => {
+      const res = await consultar(cookieGeneral, {
+        fecha: hoy,
+        sucursal: 'TJ',
+        vendedor: 'no-es-uuid',
+      }).expect(400);
+      expect(JSON.stringify(res.body)).toContain('Elige un vendedor válido.');
     });
 
     it('fecha futura es 400 con hoyEnTijuana; fecha inválida también', async () => {

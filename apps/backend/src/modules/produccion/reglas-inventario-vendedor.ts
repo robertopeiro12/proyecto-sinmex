@@ -6,18 +6,23 @@
  */
 import {
   compararTamano,
-  faltanteDelDia,
   type LineaCorte,
   type TotalesCorte,
 } from './reglas-corte';
 
 /**
- * Una presentacion de la suma. `buenas`, `merma`, `faltante` y `resultadoMerma`
- * son `null` si ningun vendedor con corte hecho tuvo esa presentacion (D4).
+ * Una presentacion de la suma. La validacion por almacen (`deberiaRegresar`,
+ * `buenas`, `faltante`, `mermaTeorica`, `merma`, `resultadoMerma`) es `null` si
+ * ningun vendedor con corte hecho tuvo esa presentacion (D3, D4).
  */
-export type LineaSumada = Omit<LineaCorte, 'buenas' | 'merma'> & {
+export type LineaSumada = Omit<
+  LineaCorte,
+  'buenas' | 'merma' | 'deberiaRegresar' | 'mermaTeorica'
+> & {
   buenas: number | null;
   merma: number | null;
+  deberiaRegresar: number | null;
+  mermaTeorica: number | null;
 };
 
 const CONCEPTOS = [
@@ -30,21 +35,34 @@ const CONCEPTOS = [
   'consumo',
   'cambiosEntregados',
   'cambiosRecibidos',
-  'deberiaRegresar',
-  'mermaTeorica',
 ] as const;
 
-/** Los campos que solo cuentan vendedores con el corte hecho. */
-const RESULTADOS = ['buenas', 'merma', 'faltante', 'resultadoMerma'] as const;
+/** La validacion por almacen: solo cuentan vendedores con el corte hecho. */
+const RESULTADOS = [
+  'deberiaRegresar',
+  'mermaTeorica',
+  'buenas',
+  'merma',
+  'faltante',
+  'resultadoMerma',
+] as const;
 
 /**
  * Suma por `presentacionId` los cortes de varios vendedores. Los conceptos del
- * vendedor se suman siempre; lo contado y los resultados, solo de quien tiene
- * el corte hecho (un vendedor sin corte no es 0: no aporta). Orden de
- * `armarCorte`.
+ * vendedor se suman siempre; la validacion por almacen (teoricas, lo contado y
+ * los resultados), solo de quien tiene el corte hecho (un vendedor sin corte no
+ * es 0: no aporta), para que teoricas − reales = resultado cuadre. Con
+ * `teoricaSinCorte` (un solo vendedor) las teoricas salen aunque no haya corte.
+ * Los faltantes del total son la suma de los de cada corte hecho: lo que sobra
+ * a uno no compensa lo que falta a otro (igual que `faltantesDeCortes`).
  */
 export function sumarVendedores(
-  cortes: readonly { lineas: readonly LineaCorte[]; hecho: boolean }[],
+  cortes: readonly {
+    lineas: readonly LineaCorte[];
+    totales: Pick<TotalesCorte, 'faltante' | 'faltanteMerma'>;
+    hecho: boolean;
+  }[],
+  opciones: { teoricaSinCorte?: boolean } = {},
 ): {
   lineas: LineaSumada[];
   totales: TotalesCorte;
@@ -69,8 +87,8 @@ export function sumarVendedores(
           consumo: 0,
           cambiosEntregados: 0,
           cambiosRecibidos: 0,
-          deberiaRegresar: 0,
-          mermaTeorica: 0,
+          deberiaRegresar: null,
+          mermaTeorica: null,
           buenas: null,
           merma: null,
           faltante: null,
@@ -79,6 +97,10 @@ export function sumarVendedores(
         porPresentacion.set(l.presentacionId, suma);
       }
       for (const c of CONCEPTOS) suma[c] += l[c];
+      if (!corte.hecho && opciones.teoricaSinCorte) {
+        suma.deberiaRegresar = (suma.deberiaRegresar ?? 0) + l.deberiaRegresar;
+        suma.mermaTeorica = (suma.mermaTeorica ?? 0) + l.mermaTeorica;
+      }
       if (!corte.hecho) continue;
       for (const c of RESULTADOS) {
         const valor = l[c];
@@ -96,8 +118,12 @@ export function sumarVendedores(
   const hayCorte = cortes.some((c) => c.hecho);
   const total = (campo: (typeof CONCEPTOS)[number]) =>
     lineas.reduce((t, l) => t + l[campo], 0);
-  const totalCorte = (campo: 'buenas' | 'merma') =>
-    lineas.reduce((t, l) => t + (l[campo] ?? 0), 0);
+  const totalCorte = (
+    campo: 'deberiaRegresar' | 'mermaTeorica' | 'buenas' | 'merma',
+  ) => lineas.reduce((t, l) => t + (l[campo] ?? 0), 0);
+  const conCorte = cortes.filter((c) => c.hecho);
+  const sumaFaltantes = (campo: 'faltante' | 'faltanteMerma') =>
+    hayCorte ? conCorte.reduce((t, c) => t + (c.totales[campo] ?? 0), 0) : null;
   const totales: TotalesCorte = {
     cargadas: total('cargadas'),
     vendidas: total('vendidas'),
@@ -108,20 +134,12 @@ export function sumarVendedores(
     consumo: total('consumo'),
     cambiosEntregados: total('cambiosEntregados'),
     cambiosRecibidos: total('cambiosRecibidos'),
-    deberiaRegresar: total('deberiaRegresar'),
-    mermaTeorica: total('mermaTeorica'),
+    deberiaRegresar: totalCorte('deberiaRegresar'),
+    mermaTeorica: totalCorte('mermaTeorica'),
     buenas: totalCorte('buenas'),
     merma: totalCorte('merma'),
-    faltante: hayCorte
-      ? faltanteDelDia(
-          lineas.map((l) => ({ volumen: l.volumen, valor: l.faltante })),
-        )
-      : null,
-    faltanteMerma: hayCorte
-      ? faltanteDelDia(
-          lineas.map((l) => ({ volumen: l.volumen, valor: l.resultadoMerma })),
-        )
-      : null,
+    faltante: sumaFaltantes('faltante'),
+    faltanteMerma: sumaFaltantes('faltanteMerma'),
   };
   return {
     lineas,

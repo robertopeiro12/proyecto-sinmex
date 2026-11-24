@@ -1,3 +1,4 @@
+import { isUUID } from 'class-validator';
 import {
   BadRequestException,
   Injectable,
@@ -18,7 +19,6 @@ import type { ConsultaInventarioVendedorDto } from './dto/inventario-vendedor.dt
 import {
   armarCorte,
   type EstadoCorte,
-  type LineaCorte,
   type TotalesCorte,
 } from './reglas-corte';
 import {
@@ -33,13 +33,16 @@ import {
 
 export const MOTIVO_ELIGE_SUCURSAL = 'Elige una sucursal.';
 export const MOTIVO_SUCURSAL_INEXISTENTE = 'No existe esa sucursal.';
+export const MOTIVO_VENDEDOR_INVALIDO = 'Elige un vendedor válido.';
 
 /** Una recarga (linea de carga) del dia, como la recibe el portal. */
 export type RecargaInventario = RecargaDelDia;
 
 /**
- * Una presentacion de la pantalla (los campos del corte). `buenas`, `merma`,
- * `faltante` y `resultadoMerma` son `null` si el corte no esta hecho (D4).
+ * Una presentacion de la pantalla (los campos del corte). La validacion por
+ * almacen es `null` si el corte no esta hecho (D4); con "todos", si ningun
+ * vendedor con corte tuvo esa presentacion (D3). Con un solo vendedor la
+ * teorica (`deberiaRegresar`, `mermaTeorica`) sale aunque no haya corte.
  */
 export type LineaInventario = Pick<
   LineaSumada,
@@ -137,13 +140,16 @@ export class InventarioVendedorService {
       normalizarSucursalPedida(q.sucursal),
     );
 
-    if (q.vendedor.toLowerCase() === 'todos') {
+    const pedido = q.vendedor.toLowerCase();
+    if (pedido !== 'todos' && !isUUID(pedido))
+      throw new BadRequestException(MOTIVO_VENDEDOR_INVALIDO);
+    if (pedido === 'todos') {
       if (alcance.tipo !== 'una')
         throw new BadRequestException(MOTIVO_ELIGE_SUCURSAL);
       return this.todos(q.fecha, hoy, alcance.codigo);
     }
 
-    const vendedor = await this.repo.vendedor(q.vendedor.toLowerCase());
+    const vendedor = await this.repo.vendedor(pedido);
     if (
       !vendedor ||
       (alcance.tipo === 'una' && alcance.codigo !== vendedor.sucursalCodigo)
@@ -159,7 +165,10 @@ export class InventarioVendedorService {
     const hecho = encabezado !== undefined;
     const corte = armarCorte(movimientos, hecho);
     // Un vendedor sin corte tiene los resultados vacios, no en 0 (D4).
-    const suma = sumarVendedores([{ lineas: corte.lineas, hecho }]);
+    const suma = sumarVendedores(
+      [{ lineas: corte.lineas, totales: corte.totales, hecho }],
+      { teoricaSinCorte: true },
+    );
     return {
       fecha: q.fecha,
       hoy,
@@ -197,15 +206,11 @@ export class InventarioVendedorService {
     const vendedores = await this.repo.vendedoresDelDia(fecha, codigo, [
       ...porVendedor.keys(),
     ]);
-    const cortes: { lineas: LineaCorte[]; hecho: boolean }[] = vendedores.map(
-      (v) => {
-        const hecho = v.hechoEn !== null;
-        return {
-          lineas: armarCorte(porVendedor.get(v.id) ?? [], hecho).lineas,
-          hecho,
-        };
-      },
-    );
+    const cortes = vendedores.map((v) => {
+      const hecho = v.hechoEn !== null;
+      const c = armarCorte(porVendedor.get(v.id) ?? [], hecho);
+      return { lineas: c.lineas, totales: c.totales, hecho };
+    });
     const suma = sumarVendedores(cortes);
     return {
       fecha,

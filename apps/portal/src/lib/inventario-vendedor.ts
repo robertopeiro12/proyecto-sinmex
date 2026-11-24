@@ -27,8 +27,10 @@ export interface RecargaInventario {
 }
 
 /**
- * Una presentacion de la pantalla (los campos del corte). `buenas`, `merma`, `faltante`
- * y `resultadoMerma` son `null` si el corte no esta hecho.
+ * Una presentacion de la pantalla (los campos del corte). La validacion por almacen
+ * (`deberiaRegresar`, `buenas`, `faltante`, `mermaTeorica`, `merma`, `resultadoMerma`) es
+ * `null` si el corte no esta hecho; con "Todos", si ningun vendedor con corte tuvo esa
+ * presentacion. Con un solo vendedor la teorica sale aunque no haya corte.
  */
 export interface LineaInventario {
   presentacionId: string;
@@ -45,11 +47,11 @@ export interface LineaInventario {
   cambiosEntregados: number;
   cambiosRecibidos: number;
   /** Piezas teoricas por regresar, sin recortar. */
-  deberiaRegresar: number;
+  deberiaRegresar: number | null;
   buenas: number | null;
   faltante: number | null;
   merma: number | null;
-  mermaTeorica: number;
+  mermaTeorica: number | null;
   resultadoMerma: number | null;
 }
 
@@ -94,9 +96,9 @@ export interface TotalesGrupoInventario {
   consumo: number;
   cambiosEntregados: number;
   cambiosRecibidos: number;
-  deberiaRegresar: number;
-  mermaTeorica: number;
-  /** Los cuatro siguientes: suma con signo de lo que no es `null`; `null` si ninguna linea lo tiene. */
+  /** Los seis siguientes: suma con signo de lo que no es `null`; `null` si ninguna linea lo tiene. */
+  deberiaRegresar: number | null;
+  mermaTeorica: number | null;
   buenas: number | null;
   merma: number | null;
   faltante: number | null;
@@ -148,8 +150,8 @@ export function gruposPorTamano(
           consumo: suma((l) => l.consumo),
           cambiosEntregados: suma((l) => l.cambiosEntregados),
           cambiosRecibidos: suma((l) => l.cambiosRecibidos),
-          deberiaRegresar: suma((l) => l.deberiaRegresar),
-          mermaTeorica: suma((l) => l.mermaTeorica),
+          deberiaRegresar: sumaOpcional(ls, (l) => l.deberiaRegresar),
+          mermaTeorica: sumaOpcional(ls, (l) => l.mermaTeorica),
           buenas: sumaOpcional(ls, (l) => l.buenas),
           merma: sumaOpcional(ls, (l) => l.merma),
           faltante: sumaOpcional(ls, (l) => l.faltante),

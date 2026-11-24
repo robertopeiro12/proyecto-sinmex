@@ -94,6 +94,15 @@ describe("gruposPorTamano", () => {
     expect(sin.totales.resultadoMerma).toBeNull();
   });
 
+  it("las teoricas null no suman y quedan null si ninguna linea las tiene", () => {
+    const [g] = gruposPorTamano([
+      linea("1", "A", "1 L", { deberiaRegresar: 4, mermaTeorica: null }),
+      linea("2", "B", "1 L", { deberiaRegresar: null, mermaTeorica: null }),
+    ]);
+    expect(g.totales.deberiaRegresar).toBe(4);
+    expect(g.totales.mermaTeorica).toBeNull();
+  });
+
   it("sin lineas no hay grupos", () => {
     expect(gruposPorTamano([])).toEqual([]);
   });

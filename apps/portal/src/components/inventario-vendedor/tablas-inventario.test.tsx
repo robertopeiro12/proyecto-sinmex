@@ -101,8 +101,8 @@ describe("TablasInventario", () => {
     const fila = screen.getByRole("cell", { name: "Horchata" }).closest("tr")!;
     const celdas = within(fila).getAllByRole("cell");
     expect(celdas).toHaveLength(11);
-    expect(celdas[9]).toHaveTextContent("");
-    expect(celdas[10]).toHaveTextContent("");
+    expect(celdas[9].textContent).toBe("");
+    expect(celdas[10].textContent).toBe("");
     rerender(<TablasInventario datos={datos()} />);
     const fila2 = screen.getByRole("cell", { name: "Horchata" }).closest("tr")!;
     const c2 = within(fila2).getAllByRole("cell");
@@ -116,7 +116,7 @@ describe("TablasInventario", () => {
     );
     expect(
       screen.getByText(
-        "2 vendedores sin corte: sus piezas reales y resultados no se suman.",
+        "2 vendedores sin corte: no entran en la validación por almacén.",
       ),
     ).toBeInTheDocument();
   });
@@ -128,7 +128,39 @@ describe("TablasInventario", () => {
 
   it("vacío: mensaje en lugar de renglones", () => {
     render(<TablasInventario datos={datos({ lineas: [], recargas: [] })} />);
-    expect(screen.getByText("No hubo carga ni venta ese día.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Sin carga aceptada ni venta ese día."),
+    ).toBeInTheDocument();
+  });
+
+  it("vacío propio de cada pestaña", async () => {
+    render(<TablasInventario datos={datos({ lineas: [], recargas: [] })} />);
+    await userEvent.click(screen.getByRole("tab", { name: "Recargas" }));
+    expect(screen.getByText("No hubo recargas ese día.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Merma" }));
+    expect(
+      screen.getByText("Sin carga aceptada ni venta ese día."),
+    ).toBeInTheDocument();
+  });
+
+  it("teóricas null (Todos sin corte) salen vacías", async () => {
+    render(
+      <TablasInventario
+        datos={datos({
+          vendedor: null,
+          lineas: [linea({ deberiaRegresar: null, mermaTeorica: null, buenas: null, faltante: null, merma: null, resultadoMerma: null })],
+        })}
+      />,
+    );
+    const celdas = within(
+      screen.getByRole("cell", { name: "Horchata" }).closest("tr")!,
+    ).getAllByRole("cell");
+    expect(celdas[8].textContent).toBe("");
+    await userEvent.click(screen.getByRole("tab", { name: "Merma" }));
+    const c = within(
+      screen.getByRole("cell", { name: "Horchata" }).closest("tr")!,
+    ).getAllByRole("cell");
+    expect(c[3].textContent).toBe("");
   });
 
   it("Merma: encabezados y resultado", async () => {
@@ -185,11 +217,15 @@ describe("TablasInventario", () => {
     const pie = () => within(screen.getByRole("table", { name: /Inventario|Merma/ })).getByText("Faltantes del día").closest("tr")!;
     expect(within(pie()).getByText("Faltan 7")).toHaveClass("text-destructive");
     await userEvent.click(screen.getByRole("tab", { name: "Merma" }));
-    expect(within(pie()).getByText("2 de merma")).toHaveClass("text-destructive");
+    expect(within(pie()).getByText("Faltan 2 de merma")).toHaveClass("text-destructive");
     rerender(<TablasInventario datos={datos({ totales: totales(null, 0) })} />);
-    expect(within(pie()).queryByText(/^Faltan \d|\d de merma$/)).not.toBeInTheDocument();
+    expect(within(pie()).queryByText(/^Faltan? \d/)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("tab", { name: "Inventario" }));
-    expect(within(pie()).queryByText(/^Faltan \d|\d de merma$/)).not.toBeInTheDocument();
+    expect(within(pie()).queryByText(/^Faltan? \d/)).not.toBeInTheDocument();
+    rerender(<TablasInventario datos={datos({ totales: totales(1, 1) })} />);
+    expect(within(pie()).getByText("Falta 1")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("tab", { name: "Merma" }));
+    expect(within(pie()).getByText("Falta 1 de merma")).toBeInTheDocument();
   });
 
   it("resultado negativo sin rojo; resultadoMerma null vacío", async () => {
@@ -204,13 +240,13 @@ describe("TablasInventario", () => {
     await userEvent.click(screen.getByRole("tab", { name: "Merma" }));
     const f2 = screen.getByRole("cell", { name: "Horchata" }).closest("tr")!;
     const c = within(f2).getAllByRole("cell");
-    expect(c[5]).toHaveTextContent("");
+    expect(c[5].textContent).toBe("");
   });
 
   it("aviso en singular", () => {
     render(<TablasInventario datos={datos({ vendedor: null, vendedoresSinCorte: 1 })} />);
     expect(
-      screen.getByText("1 vendedor sin corte: sus piezas reales y resultados no se suman."),
+      screen.getByText("1 vendedor sin corte: no entran en la validación por almacén."),
     ).toBeInTheDocument();
   });
 });

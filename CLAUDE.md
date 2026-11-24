@@ -778,11 +778,17 @@ usuario con sesion pasa.
   - `GET /inventario-vendedor?fecha&sucursal&vendedor` (`modules/produccion/`), permiso **`inventario.ver`** (ya existía).
     Alcance como el corte: sucursal ajena 403, vendedor ajeno o dado de baja 404, fecha futura 400 con `hoyEnTijuana`.
     Una sola cuenta: teórica, merma teórica, resultados, faltantes y tamaños salen de `reglas-corte.ts` (portal: `lib/cortes.ts`).
-  - **"Todos los vendedores"** = suma por presentación de los vendedores de la sucursal; el resultado y las piezas reales
-    **solo suman vendedores con corte hecho** y `vendedoresSinCorte` los cuenta (aviso amarillo; nunca se tratan como 0).
-    **Sin corte, reales y resultado van `null` = celda vacía**, no 0. Resultado > 0 en rojo; negativo sin rojo. Pie
-    **"Faltantes del día"** (`Faltan N` / `N de merma`). Recargas muestra también las pendientes y rechazadas, con su estado,
-    pero Inventario solo cuenta las aceptadas. Vendedor sin movimiento = tabla vacía con mensaje, no error.
+  - **"Todos los vendedores"** = suma por presentación de los vendedores de la sucursal. *Operación del vendedor* suma a
+    todos; la *Validación por almacén* (`deberiaRegresar`, `buenas`, `faltante`, `mermaTeorica`, `merma`, `resultadoMerma`)
+    **solo a los vendedores con corte hecho** (teóricas − reales = resultado siempre cuadra) y es `null` = celda vacía si
+    ninguno con corte tuvo la presentación; `vendedoresSinCorte` los cuenta (aviso "N vendedores sin corte: no entran en la
+    validación por almacén."). Con **un solo vendedor** la teórica sale aunque no tenga corte (`teoricaSinCorte`); reales y
+    resultado, vacíos. Resultado > 0 en rojo; negativo sin rojo. Pie **"Faltantes del día"** (`fraseFaltan`: "Falta/Faltan N"
+    y "… de merma"); con "Todos" es la suma de `totales.faltante`/`faltanteMerma` del corte de **cada** vendedor con corte
+    hecho (lo mismo que `faltantesDeCortes`; lo que sobra a uno no compensa lo que falta a otro, Roberto 2026-11-24).
+    `vendedor` que no es uuid ni `todos` = 400 "Elige un vendedor válido.". Recargas muestra también las pendientes y
+    rechazadas, con su estado, pero Inventario solo cuenta las aceptadas. Sin filas: "No hubo recargas ese día." (Recargas) y
+    "Sin carga aceptada ni venta ese día." (Inventario y Merma).
   - **Dashboard y Flujo diario**: la columna Inventario trae la **pastilla del corte** (`FilaVendedorDia.corte`: Sin corte /
     Corte hecho / "Falta N · N de merma") y `ResumenDia.faltantesCorte`; picarla abre el detalle en la pestaña **Inventario**
     (la misma tabla; sin `inventario.ver` dice "No tienes permiso" y el resto del detalle sigue). En Flujo con varios días,
