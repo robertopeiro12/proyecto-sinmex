@@ -36,6 +36,10 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
   const { usuario, puede, cargando } = useAuth();
   const [captura, setCaptura] = useState<Captura | null>(null);
   const [actual, setActual] = useState<string | null>(pestana);
+  // La pestaña con la que se monta la lista. Solo cambia al volver de una captura: si
+  // siguiera a `actual`, las Pestanas (no controladas) recibirían otro valor inicial ya
+  // montadas y base-ui avisa del cambio.
+  const [inicialLista, setInicialLista] = useState<string | null>(pestana);
   // Cambia al guardar o dar de baja: las listas se vuelven a pedir.
   const [version, setVersion] = useState(0);
   const [fecha, setFecha] = useState(hoyEnTijuana());
@@ -55,8 +59,12 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
         sucursal={captura.operacion?.sucursal.codigo ?? codigo}
         operacion={captura.operacion}
         fecha={captura.fecha}
-        onVolver={() => setCaptura(null)}
+        onVolver={() => {
+          setInicialLista(actual);
+          setCaptura(null);
+        }}
         onGuardado={() => {
+          setInicialLista(actual);
           setCaptura(null);
           setVersion((v) => v + 1);
         }}
@@ -64,7 +72,7 @@ export function PantallaRegistroOperacion({ sucursal, pestana }: { sucursal: str
     );
   }
 
-  const inicial = tipos.some((t) => t.tipo === (actual ?? pestana)) ? ((actual ?? pestana) as string) : tipos[0].tipo;
+  const inicial = tipos.some((t) => t.tipo === inicialLista) ? (inicialLista as string) : tipos[0].tipo;
 
   return (
     <Pantalla key="lista">

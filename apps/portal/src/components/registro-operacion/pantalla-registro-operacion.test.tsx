@@ -114,6 +114,20 @@ describe("PantallaRegistroOperacion", () => {
     await waitFor(() => expect(ops.listarOperaciones).toHaveBeenCalledWith({ fecha: HOY, tipo: "merma", sucursal: "TJ" }));
   });
 
+  it("cambiar de pestaña no cambia el valor inicial de las Pestanas ya montadas (sin aviso de base-ui)", async () => {
+    mockAuth(TODOS);
+    const avisos = vi.spyOn(console, "error").mockImplementation(() => {});
+    const avisosWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    render(<PantallaRegistroOperacion sucursal={null} pestana={null} />);
+    await userEvent.click(screen.getByRole("tab", { name: "Merma" }));
+    await userEvent.click(screen.getByRole("tab", { name: "Consumo" }));
+    expect(screen.getByRole("tab", { name: "Consumo" })).toHaveAttribute("aria-selected", "true");
+    const textos = [...avisos.mock.calls, ...avisosWarn.mock.calls].map((c) => String(c[0]));
+    expect(textos.some((t) => t.includes("changing the default value"))).toBe(false);
+    avisos.mockRestore();
+    avisosWarn.mockRestore();
+  });
+
   it("con todas las sucursales pide elegir una", () => {
     mockAuth(TODOS, null);
     render(<PantallaRegistroOperacion sucursal={null} pestana={null} />);
