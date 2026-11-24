@@ -412,7 +412,22 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
       });
     },
 
-    /** Vehiculos activos de una sucursal, para la pantalla de abrir el dia. */
+    /**
+     * El vehiculo que la oficina le asigno hoy al vendedor (`ruta_dia.vehiculo_id`
+     * de la ruta viva de `reloj.hoy()`), o `null`. El pull solo baja las
+     * `ruta_dia` del propio vendedor, asi que no hace falta filtrar por el.
+     */
+    vehiculoAsignadoHoy(): string | null {
+      const fila = bd.getFirstSync<{ vehiculo_id: string | null }>(
+        `select vehiculo_id from ruta_dia
+          where fecha = $fecha and activo = 1 and vehiculo_id is not null
+          limit 1`,
+        { $fecha: reloj.hoy() },
+      );
+      return fila?.vehiculo_id ?? null;
+    },
+
+    /** Vehiculos activos de una sucursal, para la tarjeta de empezar ruta. */
     listarVehiculos(sucursalId: string): Vehiculo[] {
       return bd.getAllSync<Vehiculo>(
         `select * from vehiculo

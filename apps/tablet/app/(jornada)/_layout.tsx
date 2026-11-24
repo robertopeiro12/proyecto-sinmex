@@ -1,4 +1,4 @@
-import { Redirect, Stack } from 'expo-router';
+import { Redirect, Stack, useSegments } from 'expo-router';
 
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
@@ -6,6 +6,11 @@ import { useCabecera } from '@/ui/tema';
 
 /**
  * Guardia del kilometraje inicial.
+ *
+ * Rediseño, pieza 1: ya no hay pantalla aparte para abrir el dia. Sin jornada
+ * solo pasa la Ruta (`index`), que pinta la tarjeta "Empezar ruta" con los
+ * clientes atenuados; cualquier otra pantalla del grupo regresa a la Ruta. Es la
+ * unica barrera: `exigirJornadaAbierta` de la capa de datos NO lanza sin jornada.
  *
  * > [!danger] Regla bloqueante de [[App Tablet]]
  * > "No se le permite hacer ninguna operacion hasta registrar el kilometraje
@@ -29,9 +34,13 @@ export default function LayoutJornada() {
   const { jornada } = useJawa();
   // Antes de los guardias: los hooks se llaman siempre, en el mismo orden.
   const cabecera = useCabecera();
+  // `["(jornada)"]` en la Ruta; `["(jornada)", "gastos"]` etc. en las demas.
+  // Se descarta un `index` por si alguna version lo reporta.
+  const segmentos = useSegments();
+  const enLaRuta = segmentos.slice(1).filter((s) => s !== 'index').length === 0;
 
   if (!vendedor) return <Redirect href="/login" />;
-  if (!jornada) return <Redirect href="/abrir-dia" />;
+  if (!jornada && !enLaRuta) return <Redirect href="/(jornada)" />;
 
   // Los `name` son rutas del sistema de archivos y no llevan acento; los
   // `title` son lo que lee el vendedor y si lo llevan.

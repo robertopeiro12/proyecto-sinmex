@@ -21,7 +21,7 @@ import { colores, espacio, fuente, grosor, radio, tipo } from "./tokens";
  * margenes distintos entre pantallas contiguas.
  *
  * `formulario` centra la columna y esquiva el teclado — lo que necesitan
- * `login` y `abrir-dia`, donde el teclado tapaba el boton en telefono.
+ * `login` y la vieja `abrir-dia`, donde el teclado tapaba el boton en telefono.
  */
 export function Pantalla({
   titulo,

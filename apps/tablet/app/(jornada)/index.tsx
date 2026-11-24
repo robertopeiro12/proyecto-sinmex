@@ -22,6 +22,7 @@ import { Cifra } from '@/ui/cifra';
 import { MarcoMenu } from '@/ui/marco-menu';
 import { formatearMomento } from '@/ui/momento';
 import { Tarjeta } from '@/ui/pantalla';
+import { TarjetaEmpezarRuta } from '@/ui/tarjeta-empezar-ruta';
 import { useTema } from '@/ui/tema';
 import { espacio } from '@/ui/tokens';
 
@@ -97,9 +98,21 @@ export default function RutaDelDia() {
     return contarPendientesDeSubir(datos);
   }, [datos, vueltas, versionCatalogos, ultimaSincronizacion]);
 
+  // Rediseño, pieza 1: sin jornada de hoy hay que empezar ruta; con el control
+  // de inventario prendido, los clientes siguen cerrados hasta aceptar una carga.
+  // Mientras haya candado las filas se ven atenuadas y no se abren.
+  const candado = useMemo(() => {
+    void vueltas;
+    void versionCatalogos;
+    void ultimaSincronizacion;
+    return vendedor ? datos.cargas.candadoDeHoy(vendedor.id, jornada) : null;
+  }, [datos, vendedor, jornada, vueltas, versionCatalogos, ultimaSincronizacion]);
+  const sinEmpezar = candado?.tipo === 'empezar';
+
   // T-27 (D9): sin notificaciones push, la pantalla principal avisa de la carga
   // por aceptar mientras exista una pendiente de hoy, con o sin control (el aviso
-  // no bloquea nada por si mismo).
+  // no bloquea nada por si mismo). Con candado lo sustituye el aviso de la
+  // tarjeta de arriba: aqui solo queda la recarga pendiente a media ruta.
   const cargaPorAceptar = useMemo(() => {
     void vueltas;
     void versionCatalogos;
@@ -136,9 +149,16 @@ export default function RutaDelDia() {
     }
   }
 
-  const abrirCliente = useCallback((clienteId: string) => {
-    router.push({ pathname: '/(jornada)/operacion/[clienteId]', params: { clienteId } });
-  }, []);
+  const bloqueada = candado !== null;
+  const abrirCliente = useCallback(
+    (clienteId: string) => {
+      if (bloqueada) return;
+      router.push({ pathname: '/(jornada)/operacion/[clienteId]', params: { clienteId } });
+    },
+    [bloqueada],
+  );
+  // Atenua todo lo que lista clientes mientras haya candado.
+  const atenuado = bloqueada ? { opacity: 0.45 } : null;
 
   const reordenar = useCallback(
     (clienteIds: string[]) => {
@@ -163,7 +183,7 @@ export default function RutaDelDia() {
       <BotonIcono
         icono="mas"
         etiqueta="Registrar prospecto"
-        deshabilitado={soloLectura}
+        deshabilitado={soloLectura || sinEmpezar}
         onPress={() => router.push('/(jornada)/prospectos')}
       />
       <BotonIcono
@@ -185,7 +205,7 @@ export default function RutaDelDia() {
           keyboardShouldPersistTaps="handled"
         >
           <Text style={estilos.subtitulo}>
-            Jornada del {jornada?.fecha} · Catálogos bajados:{' '}
+            {jornada ? `Jornada del ${jornada.fecha} · ` : ''}Catálogos bajados:{' '}
             {formatearMomento(datos.catalogos.frescuraCatalogos())}
           </Text>
 
@@ -193,7 +213,9 @@ export default function RutaDelDia() {
             <Text style={estilos.error}>{MENSAJE[ultimaSincronizacion.motivo ?? 'sin-red']}</Text>
           ) : null}
 
-          {cargaPorAceptar ? (
+          {candado ? <TarjetaEmpezarRuta candado={candado} /> : null}
+
+          {!candado && cargaPorAceptar ? (
             <Tarjeta estado="accion" etiqueta="Carga por aceptar">
               <Text style={estilos.textoTarjeta}>{MOTIVO_CARGA_PENDIENTE}</Text>
               <Text style={estilos.textoSuave}>
@@ -238,27 +260,29 @@ export default function RutaDelDia() {
                   etiqueta="Agregar a mi ruta"
                   icono="mas"
                   ancho="ajustado"
-                  deshabilitado={soloLectura}
+                  deshabilitado={soloLectura || sinEmpezar}
                   onPress={() => router.push('/(jornada)/agregar-a-ruta')}
                 />
               </View>
             </Tarjeta>
           ) : (
             <>
-              <ListaRuta
-                filas={enRuta}
-                soloLectura={soloLectura}
-                onTocar={abrirCliente}
-                onReordenar={reordenar}
-                onQuitar={quitar}
-                onArrastrando={setArrastrando}
-              />
+              <View style={atenuado}>
+                <ListaRuta
+                  filas={enRuta}
+                  soloLectura={soloLectura || bloqueada}
+                  onTocar={abrirCliente}
+                  onReordenar={reordenar}
+                  onQuitar={quitar}
+                  onArrastrando={setArrastrando}
+                />
+              </View>
               {/* La accion principal de la pantalla, a lo ancho y al final de
                   la ruta: es donde el vendedor la busca cuando ya recorrio la lista. */}
               <Boton
                 etiqueta="Agregar a mi ruta"
                 icono="mas"
-                deshabilitado={soloLectura}
+                deshabilitado={soloLectura || sinEmpezar}
                 onPress={() => router.push('/(jornada)/agregar-a-ruta')}
                 estilo={{ marginTop: espacio.sm }}
               />
@@ -267,7 +291,7 @@ export default function RutaDelDia() {
 
           {/* T-39 (D8): despues de la lista y antes de "Fuera de ruta". */}
           {visitadosSinVenta.length > 0 ? (
-            <View style={{ gap: espacio.sm, marginTop: espacio.lg }}>
+            <View style={[{ gap: espacio.sm, marginTop: espacio.lg }, atenuado]}>
               <Text style={estilos.seccion}>Visitados sin venta</Text>
               {visitadosSinVenta.map((fila) => (
                 <FilaVisitadoSinVenta key={fila.id} fila={fila} onTocar={abrirCliente} />
@@ -276,7 +300,7 @@ export default function RutaDelDia() {
           ) : null}
 
           {fueraDeRuta.length > 0 ? (
-            <View style={{ gap: espacio.sm, marginTop: espacio.lg }}>
+            <View style={[{ gap: espacio.sm, marginTop: espacio.lg }, atenuado]}>
               <Text style={estilos.seccion}>Fuera de ruta</Text>
               {fueraDeRuta.map((fila) => (
                 <FilaFueraDeRuta key={fila.id} fila={fila} onTocar={abrirCliente} />
@@ -285,7 +309,7 @@ export default function RutaDelDia() {
           ) : null}
 
           {atendidos.length > 0 ? (
-            <View style={{ gap: espacio.sm, marginTop: espacio.lg }}>
+            <View style={[{ gap: espacio.sm, marginTop: espacio.lg }, atenuado]}>
               <Text style={estilos.seccion}>Atendidos fuera de ruta</Text>
               {atendidos.map((a) => (
                 <FilaAtendidoFueraDeRuta key={a.cliente_id} fila={a} onTocar={abrirCliente} />

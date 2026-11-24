@@ -210,3 +210,31 @@ describe('vendedor.control_inventario (D7)', () => {
     expect(cargas.controlInventario('ven-9')).toBe(false);
   });
 });
+
+describe('candadoDeHoy (rediseño, pieza 1)', () => {
+  const jornadaDeHoy = { fecha: HOY };
+
+  it('sin jornada de hoy: empezar', () => {
+    const { cargas } = montar();
+    expect(cargas.candadoDeHoy('ven-1', null)).toEqual({ tipo: 'empezar' });
+    expect(cargas.candadoDeHoy('ven-1', { fecha: '2026-08-06' })).toEqual({ tipo: 'empezar' });
+  });
+
+  it('con control: la carga pendiente cierra los clientes y aceptarla los abre', () => {
+    const { deps, cargas } = montar();
+    deps.bd.runSync("update vendedor set control_inventario = 1 where id = 'ven-1'");
+    expect(cargas.candadoDeHoy('ven-1', jornadaDeHoy)).toEqual({ tipo: 'sin-carga' });
+
+    aplicarSnapshotCargas(deps.bd, [fila()], MOMENTO);
+    expect(cargas.candadoDeHoy('ven-1', jornadaDeHoy)).toEqual({ tipo: 'carga-pendiente', cargaId: 'carga-1' });
+
+    cargas.aplicarRespuesta(fila({ estado: 'aceptada' }));
+    expect(cargas.candadoDeHoy('ven-1', jornadaDeHoy)).toBeNull();
+  });
+
+  it('sin control: clientes abiertos con la carga pendiente', () => {
+    const { deps, cargas } = montar();
+    aplicarSnapshotCargas(deps.bd, [fila()], MOMENTO);
+    expect(cargas.candadoDeHoy('ven-1', jornadaDeHoy)).toBeNull();
+  });
+});

@@ -1,14 +1,16 @@
 import type { BaseDatos } from '../base-datos';
 import {
   bloqueoDeVenta,
+  candadoDeClientes,
   cargaPendiente,
+  type CandadoClientes,
   existencias,
   type CargaInventario,
   type Existencia,
   type LineaMovimientoInventario,
   type LineaVentaInventario,
 } from '../inventario-reglas';
-import type { Booleano, Carga, CargaDetalle, EstadoCarga, FechaISO, MomentoISO } from '../tipos';
+import type { Booleano, Carga, CargaDetalle, EstadoCarga, FechaISO, Jornada, MomentoISO } from '../tipos';
 import type { RepositorioCatalogos } from './catalogos';
 import type { DepsRepositorio } from './deps';
 import { enTransaccion } from './deps';
@@ -261,6 +263,21 @@ export function crearRepositorioCargas(
     /** La que hay que aceptar primero: el aviso de la pantalla principal (con o sin control). */
     pendienteDeHoy(vendedorId: string): CargaConLineas | null {
       return cargaPendiente(delDia(vendedorId), reloj.hoy());
+    },
+
+    /**
+     * El candado de los clientes de la Ruta (rediseño, pieza 1): `empezar` sin
+     * jornada de hoy; con control, el aviso de inventario hasta aceptar una carga.
+     */
+    candadoDeHoy(vendedorId: string, jornada: Pick<Jornada, 'fecha'> | null): CandadoClientes {
+      const hoy = reloj.hoy();
+      const inventario = leerInventarioDelDia(bd, vendedorId, hoy);
+      return candadoDeClientes({
+        jornada,
+        hoy,
+        controlInventario: inventario.controlInventario,
+        cargas: inventario.cargas,
+      });
     },
 
     controlInventario(vendedorId: string): boolean {

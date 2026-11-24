@@ -169,6 +169,52 @@ export function bloqueoDeVenta({
 }
 
 /**
+ * El candado de los clientes de la Ruta (rediseño, spec §4 y §16-bis). `null` =
+ * clientes abiertos.
+ *
+ * - `empezar`: no hay jornada de HOY (la de ayer abierta no cuenta).
+ * - `sin-carga` / `carga-pendiente` / `rechazada`: con el control de inventario
+ *   prendido, el vendedor aun no tiene inventario aceptado hoy.
+ */
+export type CandadoClientes =
+  | { tipo: 'empezar' }
+  | { tipo: 'sin-carga' }
+  | { tipo: 'carga-pendiente'; cargaId: string }
+  | { tipo: 'rechazada' }
+  | null;
+
+/**
+ * Sin jornada de hoy → `empezar`. Control apagado → `null`. Con control, solo
+ * cuentan las cargas vivas de hoy: alguna `aceptada` → `null` (una recarga
+ * pendiente a media ruta NO vuelve a cerrar: la venta la bloquea
+ * `bloqueoDeVenta`); si no, la primera `pendiente` → `carga-pendiente`; si no,
+ * alguna `rechazada` → `rechazada`; sin ninguna → `sin-carga`.
+ *
+ * La primera pendiente es la primera en el orden recibido (`leerInventarioDelDia`
+ * las da por numero).
+ */
+export function candadoDeClientes({
+  jornada,
+  hoy,
+  controlInventario,
+  cargas,
+}: {
+  jornada: { fecha: FechaISO } | null;
+  hoy: FechaISO;
+  controlInventario: boolean;
+  cargas: readonly Pick<CargaInventario, 'id' | 'fecha' | 'estado' | 'activo'>[];
+}): CandadoClientes {
+  if (jornada?.fecha !== hoy) return { tipo: 'empezar' };
+  if (!controlInventario) return null;
+  const deHoy = cargas.filter((c) => c.activo === 1 && c.fecha === hoy);
+  if (deHoy.some((c) => c.estado === 'aceptada')) return null;
+  const pendiente = deHoy.find((c) => c.estado === 'pendiente');
+  if (pendiente) return { tipo: 'carga-pendiente', cargaId: pendiente.id };
+  if (deHoy.some((c) => c.estado === 'rechazada')) return { tipo: 'rechazada' };
+  return { tipo: 'sin-carga' };
+}
+
+/**
  * D4: lo que le falta a una venta para no dejar ninguna presentacion en
  * negativo, contando piezas vendidas (`lineas`) MAS regaladas (`regalos`).
  * Una existencia negativa cuenta como 0. Vacio si el control esta apagado.

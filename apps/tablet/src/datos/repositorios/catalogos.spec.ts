@@ -614,3 +614,26 @@ describe('guardarSnapshot con ruta del dia y notas asignadas', () => {
     expect(deps.bd.getAllSync('select id from nota_asignada')).toHaveLength(1);
   });
 });
+
+describe('vehiculoAsignadoHoy (rediseño, pieza 1)', () => {
+  // `depsDePrueba()` vive el 2026-08-07.
+  const HOY = '2026-08-07';
+  const rutaDia = { id: 'rd1', fecha: HOY, nombre_ruta: 'Lunes 1', vehiculo_id: 'veh-1', activo: 1 as const };
+
+  it('da el vehiculo de la ruta_dia viva de hoy', () => {
+    const { catalogos } = conCatalogos();
+    catalogos.guardarSnapshot({ rutasDia: [rutaDia] });
+    expect(catalogos.vehiculoAsignadoHoy()).toBe('veh-1');
+  });
+
+  it('dada de baja, de ayer, sin vehiculo o sin ruta: null', () => {
+    const { catalogos } = conCatalogos();
+    expect(catalogos.vehiculoAsignadoHoy()).toBeNull();
+    catalogos.guardarSnapshot({ rutasDia: [{ ...rutaDia, activo: 0 }] });
+    expect(catalogos.vehiculoAsignadoHoy()).toBeNull();
+    catalogos.guardarSnapshot({ rutasDia: [{ ...rutaDia, id: 'rd0', fecha: '2026-08-06' }] });
+    expect(catalogos.vehiculoAsignadoHoy()).toBeNull();
+    catalogos.guardarSnapshot({ rutasDia: [{ ...rutaDia, id: 'rd2', vehiculo_id: null }] });
+    expect(catalogos.vehiculoAsignadoHoy()).toBeNull();
+  });
+});

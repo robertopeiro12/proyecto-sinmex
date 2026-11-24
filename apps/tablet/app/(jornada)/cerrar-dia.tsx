@@ -160,11 +160,11 @@ export default function CerrarDia() {
         <Campo
           etiqueta="Kilometraje final"
           cifra
-          // Ver la nota gemela en `abrir-dia.tsx`: el odometro puede traer decimal.
+          // Ver la nota gemela en `src/ui/tarjeta-empezar-ruta.tsx`: el odometro puede traer decimal.
           keyboardType="numeric"
           inputMode="decimal"
           value={km}
-          // Ver la nota gemela en `abrir-dia.tsx`: el error se borra al corregir.
+          // Ver la nota gemela en `src/ui/tarjeta-empezar-ruta.tsx`: el error se borra al corregir.
           onChangeText={(texto) => {
             setKm(texto);
             setError(null);

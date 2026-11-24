@@ -93,7 +93,7 @@ export default function Prospectos() {
    * El tipo seleccionado se **deriva** en vez de vivir solo en el estado: si el
    * portal da de baja el giro que el vendedor habia elegido, la seleccion cae
    * sola en vez de apuntar a una fila que ya no se lista (misma razon que el
-   * vehiculo en `abrir-dia.tsx`). Aqui **no** cae al primero: el tipo de negocio
+   * vehiculo en `src/ui/tarjeta-empezar-ruta.tsx`). Aqui **no** cae al primero: el tipo de negocio
    * es opcional y elegirlo por el seria inventarse el giro del negocio.
    */
   const tipoNegocioId = tiposNegocio.find((t) => t.id === tipoElegido)?.id ?? null;

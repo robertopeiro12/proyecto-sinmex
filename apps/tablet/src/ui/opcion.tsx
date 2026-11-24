@@ -8,7 +8,7 @@ import { colores, grosor } from './tokens';
  *
  * No es un `<Boton>`: elegir no hace nada todavia, solo marca. La seleccion se
  * distingue por tres canales a la vez (borde, fondo y la palabra
- * "Seleccionado"), igual que el vehiculo en `abrir-dia.tsx`.
+ * "Seleccionado"), igual que el vehiculo en `tarjeta-empezar-ruta.tsx`.
  *
  * Nacio dentro de `venta.tsx` (T-16); T-20 la necesito en la cobranza y la
  * movio aqui para que las dos pantallas marquen igual.

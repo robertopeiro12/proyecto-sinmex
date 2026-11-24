@@ -23,7 +23,8 @@ export const MENSAJE_DIA_CERRADO =
  * Lee lo mismo que `deHoy()`: vendedor y `reloj.hoy()` (fecha local).
  *
  * Sin jornada **no** lanza: el spec pide el candado con el dia cerrado, y sin
- * jornada el guardia de `(jornada)/_layout.tsx` ya no deja entrar a capturar.
+ * jornada el guardia de `(jornada)/_layout.tsx` solo deja pasar la Ruta (con
+ * los clientes cerrados), asi que no se llega a capturar.
  *
  * @throws {ErrorJornada} si la jornada de hoy existe y esta cerrada.
  */
