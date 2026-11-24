@@ -219,30 +219,30 @@ export function CorteVendedor({
                   </Th>
                 </tr>
                 <tr>
-                  <Th alinear="derecha" className="top-[37px] whitespace-normal">
+                  <Th alinear="derecha" className="top-[34px] whitespace-normal">
                     Piezas teóricas por regresar
                     <Ayuda
                       tema="Piezas teóricas por regresar"
                       texto="Cargadas − vendidas − promoción − merma entregada al cliente − merma de almacén − consumo − cambios entregados + cambios recibidos."
                     />
                   </Th>
-                  <Th alinear="derecha" className="top-[37px] whitespace-normal">
+                  <Th alinear="derecha" className="top-[34px] whitespace-normal">
                     Piezas reales retornadas
                   </Th>
-                  <Th alinear="derecha" className="top-[37px]">
+                  <Th alinear="derecha" className="top-[34px]">
                     Resultado
                   </Th>
-                  <Th alinear="derecha" className="top-[37px] whitespace-normal">
+                  <Th alinear="derecha" className="top-[34px] whitespace-normal">
                     Merma teórica por regresar
                     <Ayuda
                       tema="Merma teórica por regresar"
                       texto="Merma recibida del cliente + merma de almacén."
                     />
                   </Th>
-                  <Th alinear="derecha" className="top-[37px] whitespace-normal">
+                  <Th alinear="derecha" className="top-[34px] whitespace-normal">
                     Merma real validada
                   </Th>
-                  <Th alinear="derecha" className="top-[37px]">
+                  <Th alinear="derecha" className="top-[34px]">
                     Resultado
                   </Th>
                 </tr>
