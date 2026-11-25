@@ -1,5 +1,5 @@
 begin;
-select plan(17);
+select plan(18);
 
 -- Inventario de PT: lo que la BASE garantiza aunque alguien escriba por debajo del servicio.
 -- Prefijo `zz-pgtap-ipt`.
@@ -10,6 +10,10 @@ select is(
   (select count(*)::int from permiso
     where grupo = 'Produccion/Almacen' and clave in ('inventario_pt.ver', 'inventario_pt.ajustar')),
   2, 'existen inventario_pt.ver e inventario_pt.ajustar en Produccion/Almacen');
+
+select is(
+  (select grupo from permiso where clave = 'inventario_pt_recargas.ver' and deleted_at is null),
+  'Produccion/Almacen', 'existe inventario_pt_recargas.ver en Produccion/Almacen');
 
 insert into usuario (login, nombre, password_hash, perfil_id, sucursal_id)
   select 'zz-pgtap-ipt-a', 'Usuario A', 'x', p.id, null from perfil p order by p.nombre limit 1;
