@@ -229,6 +229,43 @@ export function FilaFueraDeRuta({
 }
 
 /**
+ * Un cliente de la ruta de hoy que la oficina dio de baja y que no tuvo
+ * actividad (pieza 6, I-1): atenuado, sin tocar (ninguna operacion se le puede
+ * hacer) y fuera de "Por visitar", para que no deje Corte con candado.
+ */
+export function FilaDadoDeBaja({ fila }: { fila: FilaRutaDelDia }) {
+  const { t } = useTema();
+  return (
+    <View
+      accessible
+      accessibilityLabel={`${fila.nombre}, dado de baja por la oficina`}
+      style={{
+        padding: espacio.md,
+        gap: espacio.xs,
+        borderRadius: radio.medio,
+        borderWidth: grosor.hairline,
+        borderColor: colores.borde,
+        backgroundColor: colores.superficieHundida,
+        opacity: 0.6,
+      }}
+    >
+      <Text
+        numberOfLines={1}
+        style={{ fontFamily: fuente.cuerpoFuerte, fontSize: t(tipo.destacado), color: colores.tintaSuave }}
+      >
+        {fila.nombre}
+      </Text>
+      <Text
+        numberOfLines={1}
+        style={{ fontFamily: fuente.cuerpo, fontSize: t(tipo.cuerpo), color: colores.tintaSuave }}
+      >
+        Dado de baja por la oficina · no cuenta para el corte
+      </Text>
+    </View>
+  );
+}
+
+/**
  * Cuantas notas por cobrar trae el vendedor de ese cliente (spec §4): icono de
  * nota y el numero. Quien la pinta ya comprobo que es mayor a cero.
  */

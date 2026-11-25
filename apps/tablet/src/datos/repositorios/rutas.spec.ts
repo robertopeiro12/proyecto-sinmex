@@ -1,3 +1,5 @@
+import { agruparRutaEnCurso } from '@/estado/ruta-del-dia';
+
 import { depsDePrueba, ATENDIO_DE_PRUEBA, insertarVentaDePrueba, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
 import { crearRepositorioCatalogos } from './catalogos';
 import { crearRepositorioCobranzas } from './cobranzas';
@@ -234,6 +236,23 @@ describe('delDia', () => {
       { id: 'srv-4', nombre: 'Cliente cli-4', domicilio: 'Av. Siempre Viva 742' },
     ]);
     expect(rutas.delDia('ven-1', MANANA).map((f) => f.id)).toEqual(['srv-m']);
+  });
+
+  it('pieza 6 I-1: trae cliente_activo; un cliente dado de baja no queda por visitar', () => {
+    const { rutas } = montar();
+    rutas.aplicarSnapshot([
+      delServidor({ id: 'srv-1', cliente_id: 'cli-1', orden: 1 }),
+      delServidor({ id: 'srv-5', cliente_id: 'cli-5', orden: 2 }),
+    ]);
+
+    const filas = rutas.delDia('ven-1');
+    expect(filas.map((f) => [f.cliente_id, f.cliente_activo])).toEqual([
+      ['cli-1', 1],
+      ['cli-5', 0],
+    ]);
+    const g = agruparRutaEnCurso(filas);
+    expect(g.porVisitar.map((f) => f.cliente_id)).toEqual(['cli-1']);
+    expect(g.dadosDeBaja.map((f) => f.cliente_id)).toEqual(['cli-5']);
   });
 
   it('visitado sale de una venta de hoy y de un cobro de hoy', () => {

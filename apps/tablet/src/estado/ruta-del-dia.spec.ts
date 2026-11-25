@@ -46,6 +46,22 @@ describe('agruparRutaEnCurso (spec §6, maqueta 6)', () => {
     expect(g.visitados.map((f) => f.cliente_id)).toEqual(['c', 'b']);
   });
 
+  it('pieza 6 I-1: un cliente dado de baja sin actividad va a "Dados de baja", no a "Por visitar"', () => {
+    const g = agruparRutaEnCurso([
+      { ...fila('a', 1, true), cliente_activo: 1 as const },
+      { ...fila('b', 1, false), cliente_activo: 0 as const },
+      { ...fila('c', 1, true), cliente_activo: 0 as const },
+    ]);
+    expect(g.porVisitar).toEqual([]);
+    expect(g.dadosDeBaja.map((f) => f.cliente_id)).toEqual(['b']);
+    // Con algo hecho hoy sigue en Visitados.
+    expect(g.visitados.map((f) => f.cliente_id)).toEqual(['a', 'c']);
+    // Corte se abre con el resto visitado (antes: candado para siempre).
+    const corte = entradasMenu({ porVisitar: g.porVisitar.length, candado: null, diaCerrado: false, sinJornada: false })
+      .find((e) => e.clave === 'corte');
+    expect(corte).toMatchObject({ deshabilitada: false, nota: null });
+  });
+
   it('si el cliente quitado volvio a la ruta, no se pinta dos veces', () => {
     const g = agruparRutaEnCurso([fila('a', 1, true), fila('a', 0, true)]);
     expect(g.visitados).toHaveLength(1);
@@ -293,6 +309,9 @@ describe('sinRutaAsignada (T-39)', () => {
     // Todos visitados: hay ruta, aunque "Por visitar" quede vacia (Review Focus 3).
     expect(sinRutaAsignada({ porVisitar: [], visitados: [fila('a', 1, true, true)], fueraDeRuta: [] })).toBe(false);
     expect(sinRutaAsignada({ porVisitar: [], visitados: [], fueraDeRuta: [fila('b', 0, true)] })).toBe(false);
+    expect(
+      sinRutaAsignada({ porVisitar: [], visitados: [], fueraDeRuta: [], dadosDeBaja: [fila('c', 1, false)] }),
+    ).toBe(false);
   });
 });
 

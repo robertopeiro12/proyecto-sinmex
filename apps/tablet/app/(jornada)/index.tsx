@@ -16,7 +16,7 @@ import {
 import type { MotivoAbandono } from '@/sincronizacion/motor';
 import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 import { Boton } from '@/ui/boton';
-import { FilaAtendidoFueraDeRuta, FilaFueraDeRuta, ListaRuta } from '@/ui/lista-ruta';
+import { FilaAtendidoFueraDeRuta, FilaDadoDeBaja, FilaFueraDeRuta, ListaRuta } from '@/ui/lista-ruta';
 import { BotonIcono } from '@/ui/boton-icono';
 import { Cifra } from '@/ui/cifra';
 import { MarcoMenu } from '@/ui/marco-menu';
@@ -74,7 +74,7 @@ export default function RutaDelDia() {
     void ultimaSincronizacion;
     return vendedorId ? datos.rutas.delDia(vendedorId) : [];
   }, [datos, vendedorId, vueltas, versionCatalogos, ultimaSincronizacion]);
-  const { porVisitar, visitados, fueraDeRuta } = useMemo(() => agruparRutaEnCurso(filas), [filas]);
+  const { porVisitar, visitados, fueraDeRuta, dadosDeBaja } = useMemo(() => agruparRutaEnCurso(filas), [filas]);
   // El numero de cada cliente es su lugar fijo en la ruta viva (maqueta 6): no
   // cambia cuando pasa a Visitados.
   const numeroDe = useMemo(() => {
@@ -132,7 +132,7 @@ export default function RutaDelDia() {
   // T-38 (D6 capa 2): con el dia cerrado, la lista queda en solo lectura.
   const menu = estadoMenuJornada(jornada);
   const soloLectura = !menu.operacionesHabilitadas;
-  const sinRuta = sinRutaAsignada({ porVisitar, visitados, fueraDeRuta });
+  const sinRuta = sinRutaAsignada({ porVisitar, visitados, fueraDeRuta, dadosDeBaja });
 
   /**
    * "Refrescar" es el "Sincronizar ahora" de siempre (D6): pull, push, fotos y
@@ -309,6 +309,15 @@ export default function RutaDelDia() {
               <Text style={estilos.seccion}>Fuera de ruta</Text>
               {fueraDeRuta.map((fila) => (
                 <FilaFueraDeRuta key={fila.id} fila={fila} onTocar={abrirCliente} />
+              ))}
+            </View>
+          ) : null}
+
+          {dadosDeBaja.length > 0 ? (
+            <View style={{ gap: espacio.sm, marginTop: espacio.lg }}>
+              <Text style={estilos.seccion}>Dados de baja</Text>
+              {dadosDeBaja.map((fila) => (
+                <FilaDadoDeBaja key={fila.id} fila={fila} />
               ))}
             </View>
           ) : null}

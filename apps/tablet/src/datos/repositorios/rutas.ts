@@ -43,6 +43,11 @@ export interface FilaRutaDelDia {
   sync_error: string | null;
   nombre: string;
   domicilio: string | null;
+  /**
+   * `cliente.activo` del catalogo de la tablet. Una fila viva de un cliente dado
+   * de baja no cuenta como "Por visitar" (`agruparRutaEnCurso`, pieza 6 I-1).
+   */
+  cliente_activo: Booleano;
   /** Notas con saldo del cliente (todas, no solo las que trae). Baja al cobrar sin red. */
   notas_pendientes: number;
   /**
@@ -234,7 +239,7 @@ export function crearRepositorioRutas(
       const filas = bd.getAllSync<FilaCruda>(
         `select r.id, r.cliente_id, r.fecha, r.orden, r.origen, r.activo, r.recado,
                 r.sync_estado, r.sync_error,
-                c.nombre, c.domicilio,
+                c.nombre, c.domicilio, c.activo as cliente_activo,
                 (select count(*) from nota_pendiente n
                   where n.cliente_id = r.cliente_id
                     and n.activo = 1 and n.saldo_centavos > 0) as notas_pendientes,

@@ -13,8 +13,12 @@ import { corteDisponible } from './corte';
  * aqui (mismo criterio que `menu-jornada.ts`, T-38).
  */
 
-/** Lo minimo que `agruparRutaEnCurso` necesita de una fila. */
-export type FilaAgrupable = Pick<FilaRutaDelDia, 'cliente_id' | 'activo' | 'visitado'>;
+/**
+ * Lo minimo que `agruparRutaEnCurso` necesita de una fila. `cliente_activo` es
+ * opcional: sin el, el cliente cuenta como activo.
+ */
+export type FilaAgrupable = Pick<FilaRutaDelDia, 'cliente_id' | 'activo' | 'visitado'> &
+  Partial<Pick<FilaRutaDelDia, 'cliente_activo'>>;
 
 /**
  * Reparte las filas del dia (ya en el orden del portal, `rutas.delDia`) entre
@@ -26,28 +30,42 @@ export type FilaAgrupable = Pick<FilaRutaDelDia, 'cliente_id' | 'activo' | 'visi
  * - Quitada por la oficina **con** actividad hoy → "Fuera de ruta".
  * - Quitada **sin** actividad → desaparece.
  * - Si el cliente quitado volvio a la ruta (otra fila viva), no se pinta dos veces.
+ * - Viva sin nada hecho hoy pero con el cliente **dado de baja** en el catalogo
+ *   de la tablet (`cliente_activo = 0`) → "Dados de baja", no "Por visitar":
+ *   ninguna operacion se le puede hacer (todas exigen cliente activo), asi que
+ *   contarlo dejaria el candado de Corte puesto para siempre (revision final de
+ *   la pieza 6, I-1). Con algo hecho hoy sigue en "Visitados".
+ *   (Un cliente que ya no esta en el catalogo ni llega: `rutas.delDia` hace join.)
  */
 export function agruparRutaEnCurso<T extends FilaAgrupable>(
   filas: readonly T[],
-): { porVisitar: T[]; visitados: T[]; fueraDeRuta: T[] } {
+): { porVisitar: T[]; visitados: T[]; fueraDeRuta: T[]; dadosDeBaja: T[] } {
   const vivos = new Set(filas.filter((f) => f.activo === 1).map((f) => f.cliente_id));
+  const deBaja = (f: T) => f.cliente_activo === 0;
   return {
-    porVisitar: filas.filter((f) => f.activo === 1 && !f.visitado),
+    porVisitar: filas.filter((f) => f.activo === 1 && !f.visitado && !deBaja(f)),
     visitados: filas.filter((f) => f.activo === 1 && f.visitado),
     fueraDeRuta: filas.filter((f) => f.activo === 0 && f.visitado && !vivos.has(f.cliente_id)),
+    dadosDeBaja: filas.filter((f) => f.activo === 1 && !f.visitado && deBaja(f)),
   };
 }
 
 /**
- * ¿La oficina no asigno ruta hoy? Solo si las TRES secciones estan vacias: con
+ * ¿La oficina no asigno ruta hoy? Solo si todas las secciones estan vacias: con
  * todos los clientes visitados "Por visitar" queda vacia, pero si hay ruta.
  */
 export function sinRutaAsignada(grupos: {
   porVisitar: readonly unknown[];
   visitados: readonly unknown[];
   fueraDeRuta: readonly unknown[];
+  dadosDeBaja?: readonly unknown[];
 }): boolean {
-  return grupos.porVisitar.length === 0 && grupos.visitados.length === 0 && grupos.fueraDeRuta.length === 0;
+  return (
+    grupos.porVisitar.length === 0 &&
+    grupos.visitados.length === 0 &&
+    grupos.fueraDeRuta.length === 0 &&
+    (grupos.dadosDeBaja?.length ?? 0) === 0
+  );
 }
 
 /**
