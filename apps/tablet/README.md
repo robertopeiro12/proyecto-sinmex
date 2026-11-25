@@ -39,7 +39,6 @@ apps/tablet/
 │       ├── merma/             # Merma / Cambios: vehículo y consumo propio (T-27 pieza 2, rediseño pieza 4)
 │       ├── prospectos.tsx     # capturados hoy, nuevo prospecto y los de la sucursal
 │       ├── registros/         # Ventas / Cobranza: index.tsx (lista de hoy) y [tipo]/[id].tsx (detalle) (pieza 5, spec §11)
-│       ├── sugerido-de-carga.tsx # provisional (pieza 7)
 │       ├── impresora.tsx      # provisional (pieza 8)
 │       └── corte.tsx          # entrada Corte del menu: corte del vendedor y km final (pieza 6)
 ├── src/

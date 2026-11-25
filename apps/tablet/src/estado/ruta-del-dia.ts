@@ -188,7 +188,6 @@ export function anchoMenuLateral(anchoPantalla: number): number {
 export type ClaveMenu =
   | 'ruta'
   | 'inventario'
-  | 'sugerido'
   | 'registros'
   | 'merma'
   | 'gastos'
@@ -254,7 +253,6 @@ export function entradasMenu({
   return [
     entrada('ruta', 'Ruta', 'ubicacion', '/(jornada)'),
     entrada('inventario', 'Inventario', 'inventario', '/(jornada)/inventario'),
-    entrada('sugerido', 'Sugerido de carga', 'sugerido', '/(jornada)/sugerido-de-carga'),
     entrada('registros', 'Ventas / Cobranza', 'registros', '/(jornada)/registros'),
     entrada('merma', 'Merma / Cambios', 'merma', '/(jornada)/merma'),
     entrada('gastos', 'Gastos', 'gasto', '/(jornada)/gastos', { deshabilitada: diaCerrado }),

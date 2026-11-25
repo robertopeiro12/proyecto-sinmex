@@ -81,7 +81,6 @@ export default function LayoutJornada() {
       {/* Rediseño pieza 5 (maqueta 18): el detalle de un movimiento, con "atrás"; su título lo pone la pantalla. */}
       <Stack.Screen name="registros/[tipo]/[id]" options={{ title: 'Movimiento' }} />
       <Stack.Screen name="impresora" options={{ title: 'Seleccionar impresora', headerShown: false }} />
-      <Stack.Screen name="sugerido-de-carga" options={{ title: 'Sugerido de carga', headerShown: false }} />
       <Stack.Screen name="agregar-a-ruta" options={{ title: 'Agregar a mi ruta' }} />
       {/* Rediseño pieza 6 (maquetas 22–24): el corte cierra el día; con el día cerrado, lo enviado. */}
       <Stack.Screen name="corte" options={{ title: 'Corte', headerShown: false }} />

@@ -27,7 +27,6 @@ export type NombreIcono =
   | 'corte'
   | 'prospecto'
   | 'impresora'
-  | 'sugerido'
   | 'salir'
   | 'foto'
   | 'registros'
@@ -60,7 +59,6 @@ export const TRAZOS: Record<NombreIcono, readonly string[]> = {
   corte: ['M9 3h6a2 2 0 0 1 2 2v1H7V5a2 2 0 0 1 2-2z', 'M7 5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1', 'M8 13l3 3 5-6'],
   prospecto: ['M2 21c0-3.9 3.1-7 7-7s7 3.1 7 7', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M20 20l-4-4'],
   impresora: ['M7 8V3h10v5', 'M7 17H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2', 'M7 14h10v7H7z'],
-  sugerido: ['M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.5 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z'],
   salir: ['M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4', 'M16 8l4 4-4 4M20 12H9'],
   foto: ['M4 8h3l2-3h6l2 3h3v12H4z', 'M12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z'],
   registros: ['M8 6h13M8 12h13M8 18h13', 'M3.5 6h.01M3.5 12h.01M3.5 18h.01'],

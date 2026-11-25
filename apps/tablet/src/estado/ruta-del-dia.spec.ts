@@ -210,14 +210,14 @@ describe('menu hamburguesa (spec §5, maqueta 3)', () => {
 
   test('entradas del menú en el orden del spec', () => {
     expect(entradasMenu(abierto).map((e) => e.titulo)).toEqual([
-      'Ruta', 'Inventario', 'Sugerido de carga', 'Ventas / Cobranza', 'Merma / Cambios',
+      'Ruta', 'Inventario', 'Ventas / Cobranza', 'Merma / Cambios',
       'Gastos', 'Corte', 'Prospectos', 'Seleccionar impresora', 'Cerrar sesión',
     ]);
   });
 
   test('destinos; Cerrar sesión no tiene (lo maneja la pantalla)', () => {
     expect(entradasMenu(abierto).map((e) => e.destino)).toEqual([
-      '/(jornada)', '/(jornada)/inventario', '/(jornada)/sugerido-de-carga', '/(jornada)/registros',
+      '/(jornada)', '/(jornada)/inventario', '/(jornada)/registros',
       '/(jornada)/merma', '/(jornada)/gastos', '/(jornada)/corte', '/(jornada)/prospectos',
       '/(jornada)/impresora', null,
     ]);
@@ -267,7 +267,7 @@ describe('menu hamburguesa (spec §5, maqueta 3)', () => {
     expect(e.filter((x) => !x.deshabilitada).map((x) => x.clave)).toEqual(['ruta', 'salir']);
     expect(e.filter((x) => !x.deshabilitada).every((x) => x.nota === null)).toBe(true);
     const apagadas = e.filter((x) => x.deshabilitada);
-    expect(apagadas).toHaveLength(8);
+    expect(apagadas).toHaveLength(7);
     // La nota de Corte ("faltan N") cede a la de empezar la ruta.
     expect(apagadas.every((x) => x.nota === NOTA_SIN_JORNADA)).toBe(true);
     expect(NOTA_SIN_JORNADA).toBe('Empieza tu ruta');

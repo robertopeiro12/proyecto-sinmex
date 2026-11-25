@@ -75,7 +75,7 @@ que hoy no existen (sección 13).
 
 ## 5. Menú lateral (M3)
 
-Opciones, en este orden: **Ruta, Inventario, Sugerido de carga, Ventas / Cobranza, Merma / Cambios, Gastos, Corte,
+Opciones, en este orden: **Ruta, Inventario, Ventas / Cobranza, Merma / Cambios, Gastos, Corte,
 Prospectos, Seleccionar impresora, Cerrar sesión.**
 
 - **Corte** sale con candado y "faltan N clientes" mientras haya clientes por visitar.
@@ -84,8 +84,6 @@ Prospectos, Seleccionar impresora, Cerrar sesión.**
 - Al final: **vendedor, vehículo** (cuando ya lo eligió) **y sucursal**.
 - Salen del menú las entradas actuales "Todos los clientes", "Prospectos capturados", "Merma y consumo", "Ruta y GPS"
   y "Cerrar el día"; lo que hacían queda repartido en las opciones nuevas.
-- **Sugerido de carga: pendiente de definir** (sección 14). Hasta entonces la opción abre la pantalla "pendiente" que
-  ya existe (`pantalla-pendiente.tsx`).
 
 ## 6. Ruta en curso y acciones del cliente (M6, M7)
 
@@ -312,12 +310,10 @@ Son varias piezas que se pueden planear y entregar por separado; cada una con su
 6. **Corte** en la tablet.
 7. **Impresión**: prueba con impresora real, las tres notas, reimpresión, Seleccionar impresora. Hasta que exista, los
    botones dicen "Grabar" y no "Grabar e imprimir".
-8. **Sugerido de carga**, cuando se defina.
 
 ## 16. Pendiente de definir con Mario
 
-- **Sugerido de carga de inventario**: se pidió la opción en el menú "como está en la memoria Obsidian", pero no hay
-  nada con ese nombre ni parecido en la bóveda, las fuentes del cliente, el código o las specs. Falta saber qué hace.
+- Sugerido de carga: fuera del rediseño; quedó como propuesta a futuro (decisión de Mario, 2026-11-25).
 
 ## 16-bis. Aclaraciones tras la revisión del documento
 
