@@ -4,6 +4,7 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { NotasRutaRepository } from '../rutas/notas-ruta.repository';
 import { hoyEnTijuana } from '../sincronizacion/operaciones';
 import {
   normalizarSucursalPedida,
@@ -49,6 +50,7 @@ export class VentasConsultaService {
   constructor(
     private readonly repo: VentasConsultaRepository,
     private readonly portal: VentasPortalRepository,
+    private readonly notasRuta: NotasRutaRepository,
   ) {}
 
   async buscar(
@@ -74,13 +76,29 @@ export class VentasConsultaService {
       normalizarSucursalPedida(consulta.sucursal),
     );
 
+    const filtro = consulta.filtro ?? 'todas';
+    const clienteId = consulta.clienteId?.toLowerCase() ?? null;
+    if (filtro !== 'todas' && !clienteId)
+      throw new BadRequestException('Elige un cliente.');
+    // "Nota con saldo" es una sola regla (la de la ruta): se pregunta a ella
+    // por los ids y esta consulta solo les pone el alcance de sucursal.
+    const ids =
+      filtro === 'con_saldo' && clienteId
+        ? (await this.notasRuta.notasConSaldo([clienteId], hoy)).map(
+            (n) => n.ventaNotaId,
+          )
+        : null;
+
     const filas = await this.repo.buscar(
       {
         desde,
         hasta,
         sucursalCodigo: alcance.tipo === 'todas' ? null : alcance.codigo,
-        clienteId: consulta.clienteId?.toLowerCase() ?? null,
+        clienteId,
         numNota: consulta.numNota || null,
+        folio: consulta.folio || null,
+        soloPorFacturar: filtro === 'por_facturar',
+        ids,
       },
       TOPE_BUSQUEDA_VENTAS + 1,
     );
