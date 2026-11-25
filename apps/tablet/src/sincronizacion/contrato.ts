@@ -356,7 +356,8 @@ export interface NotaPendientePull extends FilaSincronizable {
  * El detalle de una nota pendiente para el ticket (rediseño pieza 7). Copia
  * del backend: lineas y promociones vivas, `etiqueta` "Producto volumen",
  * `precio_centavos` unitario, `vendedor_nombre` null en venta de mostrador,
- * `creada_en` ISO-8601 en UTC.
+ * `creada_en` ISO-8601 en UTC, o solo la fecha `YYYY-MM-DD` en una nota de la
+ * oficina (sin hora de venta en una tablet): el ticket imprime solo el dia.
  */
 export interface DetalleNotaPull {
   lineas: {

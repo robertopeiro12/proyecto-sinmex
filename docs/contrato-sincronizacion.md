@@ -419,7 +419,9 @@ que no se vendió en ella** (la vendió otro vendedor u otra tablet, o la regist
 - **`vendedor_nombre`** (`null` en una venta de mostrador), **`atendio`** (`venta_nota.atendio_nombre`,
   `null` si no lo trae), **`sucursal_nombre`** (la sucursal de la venta) y **`creada_en`**
   (la hora de la venta en la tablet: el `ocurrido_en` más antiguo de `sync_operacion` para esa nota y su
-  vendedor, o `venta_nota.created_at` si no hay; ISO-8601 en UTC. Es la misma hora que muestra la oficina).
+  vendedor, ISO-8601 en UTC. Si no hay —una nota registrada en la oficina— viaja **solo la fecha** de la
+  nota, `venta_nota.fecha` como `YYYY-MM-DD` sin hora: la hora de captura en el portal no es la de la nota,
+  y el ticket imprime solo el día, `25 oct 2026`).
 - Una nota sin líneas trae listas vacías, nunca `null`. El servidor siempre lo manda; viaja con la nota,
   así que en el pull incremental llega cuando la nota cambia (una edición en el portal mueve su
   `updated_at`).

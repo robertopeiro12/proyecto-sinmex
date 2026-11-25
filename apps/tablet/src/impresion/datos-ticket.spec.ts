@@ -158,7 +158,7 @@ describe('ticketDeNota', () => {
     expect(d).toMatchObject({
       folio: 'TJ260801AP01',
       sucursal: 'Tijuana',
-      momento: '2026-08-01T00:00:00',
+      momento: '2026-08-01',
       atendio: null,
       vendedor: VENDEDOR_DESCONOCIDO,
       renglones: [],

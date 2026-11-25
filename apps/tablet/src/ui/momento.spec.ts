@@ -69,4 +69,8 @@ describe('formatearFechaHora (pieza 7, la nota impresa)', () => {
   it('una cadena que no es fecha sale tal cual', () => {
     expect(formatearFechaHora('basura')).toBe('basura');
   });
+
+  it('una fecha sin hora (nota de la oficina) sale solo con el dia, sin correrse a ayer', () => {
+    expect(formatearFechaHora('2026-10-25')).toBe('25 oct 2026');
+  });
 });

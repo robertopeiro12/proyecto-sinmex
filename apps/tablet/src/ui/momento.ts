@@ -54,8 +54,13 @@ export function formatearFechaCorta(fecha: string): string {
  * Un momento ISO como lo pone la nota impresa (pieza 7): `18 nov 2026 · 11:58`,
  * fecha corta y hora en la zona LOCAL de la tablet (Tijuana), con la misma regla
  * que `formatearMomento`. Lo que no sea fecha sale tal cual.
+ *
+ * Una fecha sin hora (`2026-10-25`: una nota de la oficina, que no tiene hora de
+ * venta) sale **solo con el dia**, `25 oct 2026`; `new Date` la leeria como
+ * medianoche UTC, el dia anterior en Tijuana (recorrido final, D2).
  */
 export function formatearFechaHora(iso: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return formatearFechaCorta(iso);
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   const dos = (n: number) => `${n}`.padStart(2, '0');

@@ -21,6 +21,7 @@ import type {
   VehiculoPull,
   VendedorPull,
 } from './contrato';
+import { creadaEnDelDetalle } from './creada-en';
 import { aCentavos, aNumero } from './dinero';
 import type { OperacionNormalizada } from './operaciones';
 
@@ -477,7 +478,7 @@ export class SincronizacionRepository {
       vendedor_nombre: string | null;
       atendio: string | null;
       sucursal_nombre: string | null;
-      creada_en: Date;
+      ocurrido_en: Date | null;
     }>`
       select vn.id, vn.folio, vn.num_nota,
              to_char(vn.fecha, 'YYYY-MM-DD') as fecha,
@@ -493,9 +494,11 @@ export class SincronizacionRepository {
              ven.nombre as vendedor_nombre,
              vn.atendio_nombre as atendio,
              suc.nombre as sucursal_nombre,
-             -- La hora de la venta en la tablet, no la de llegada al servidor:
-             -- igual que la oficina (estadisticas/detalle.repository.ts).
-             coalesce(op.ocurrido_en, vn.created_at) as creada_en
+             -- La hora de la venta en la tablet, no la de llegada al servidor
+             -- (como la oficina, estadisticas/detalle.repository.ts). Sin
+             -- operacion de sync (nota de oficina) no hay hora real: el ticket
+             -- lleva solo vn.fecha, la fecha de la nota (recorrido final, D2).
+             op.ocurrido_en
         from venta_nota vn
         join cliente c on c.id = vn.cliente_id
         left join vendedor ven on ven.id = vn.vendedor_id
@@ -608,7 +611,7 @@ export class SincronizacionRepository {
           vendedor_nombre: f.vendedor_nombre,
           atendio: f.atendio,
           sucursal_nombre: f.sucursal_nombre ?? '',
-          creada_en: new Date(f.creada_en).toISOString(),
+          creada_en: creadaEnDelDetalle(f.ocurrido_en, f.fecha),
         },
       };
     });

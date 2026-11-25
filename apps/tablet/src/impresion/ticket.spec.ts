@@ -109,6 +109,10 @@ describe('armarTicket a 32 columnas (maquetas 25-27)', () => {
     ]);
   });
 
+  it('nota de la oficina (momento sin hora): la Fecha es solo el dia de la nota', () => {
+    expect(armarTicket(nota({ momento: '2026-10-25' }), 32)).toContain('Fecha                25 oct 2026');
+  });
+
   it('26 · Venta con abono: lista de abonos, SALDO PENDIENTE, ABONADO y firma', () => {
     const d = nota({ abonos: [{ fecha: '2026-11-18', montoCentavos: 30000 }], saldoCentavos: 50400 });
     expect(armarTicket(d, 32)).toEqual([

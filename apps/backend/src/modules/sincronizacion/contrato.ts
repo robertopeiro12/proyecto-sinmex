@@ -1012,8 +1012,10 @@ export interface NotaPendientePull extends FilaSincronizable {
  * - `vendedor_nombre` es `null` en una venta de mostrador; `atendio` es `null`
  *   si la venta no lo trae.
  * - `creada_en` = la hora de la venta en la tablet: el `ocurrido_en` mas
- *   antiguo de `sync_operacion` para la nota y su vendedor, o
- *   `venta_nota.created_at` si no hay (igual que la oficina). ISO-8601 en UTC.
+ *   antiguo de `sync_operacion` para la nota y su vendedor, ISO-8601 en UTC.
+ *   Si no hay (una nota de la oficina), **solo la fecha** de la nota
+ *   (`venta_nota.fecha`, `YYYY-MM-DD`, sin hora): la hora de captura en el
+ *   portal no es la de la nota. El ticket imprime entonces solo el dia.
  */
 export interface DetalleNotaPull {
   lineas: {

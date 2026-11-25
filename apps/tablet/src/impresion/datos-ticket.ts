@@ -158,9 +158,9 @@ export function ticketDeNota(
       ? deLaVentaLocal(bd, local)
       : {
           sucursal: nombre(bd, 'sucursal', cliente?.sucursal_id ?? null) ?? '',
-          // Solo hay dia: medianoche **local** (sin `Z`); con `Z` saldria el dia
-          // anterior en Tijuana. La hora impresa no es real.
-          momento: `${n.fecha}T00:00:00`,
+          // Solo hay dia: va sin hora y el ticket imprime solo la fecha
+          // (`formatearFechaHora`), como una nota de la oficina.
+          momento: n.fecha,
           atendio: null,
           vendedor: VENDEDOR_DESCONOCIDO,
           renglones: [],

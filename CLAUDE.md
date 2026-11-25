@@ -472,7 +472,8 @@ usuario con sesion pasa.
     **reinicia el cursor del pull** para bajar el detalle de todas las notas. **Backend antes que la APK**: un servidor
     viejo no manda `detalle` y la reimpresión de una nota no local sale **sin renglones**. **Backend antes que la APK: el
     cursor se reinicia una sola vez; si la APK llega primero, las notas no traen detalle hasta que cambien.**
-    `detalle.creada_en` es la hora de la venta en la tablet (`ocurrido_en` de `sync_operacion`, como la oficina).
+    `detalle.creada_en` es la hora de la venta en la tablet (`ocurrido_en` de `sync_operacion`, como la oficina); en
+    una nota de la oficina (sin operación) es solo la fecha `YYYY-MM-DD` y el ticket imprime solo el día.
   - **Antes de instalar el APK con la migración 024, sincronizar la tablet**; el pull completo no baja notas
     cerradas/borradas entre el último pull y la actualización (mismo patrón que 019/022).
   - **Preguntas abiertas para Mario**: modelo de la impresora térmica real (no se ha probado con papel); si la nota

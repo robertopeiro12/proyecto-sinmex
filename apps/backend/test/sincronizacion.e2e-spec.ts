@@ -1263,6 +1263,10 @@ describe('Sincronizacion pull/push (e2e)', () => {
         expect(vieja?.detalle?.lineas).toEqual([]);
         expect(vieja?.detalle?.promociones).toEqual([]);
         expect(vieja?.detalle?.atendio).toBeNull();
+        // Sin operacion de sync (nota de la oficina) no hay hora de venta: viaja
+        // solo la fecha de la nota, no la hora de captura (recorrido final, D2).
+        expect(vieja?.detalle?.creada_en).toBe('2026-08-01');
+        expect(vieja?.detalle?.creada_en).toBe(vieja?.fecha);
       } finally {
         await db
           .deleteFrom('sync_operacion')
