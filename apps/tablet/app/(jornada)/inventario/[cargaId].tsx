@@ -1,34 +1,51 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Alert, Text, View } from 'react-native';
 
 import {
+  aceptadasDe,
+  alternarRenglon,
   crearRespondedorCarga,
   cuerpoRespuesta,
-  LARGO_MAX_MOTIVO_RECHAZO,
   MENSAJE_CARGA_ELIMINADA,
+  palabraPiezas,
   pastillaCarga,
+  piezasDeCarga,
   puedeResponder,
-  totalPiezas,
-  validarRespuesta,
+  renglonAceptado,
+  seleccionarTodos,
+  textoAceptar,
+  todosSeleccionados,
   type AccionCarga,
   type RespondedorCarga,
 } from '@/estado/inventario';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import { Boton } from '@/ui/boton';
-import { Campo } from '@/ui/campo';
+import { Palomita, Renglon } from '@/ui/checklist';
 import { Cifra } from '@/ui/cifra';
+import { Icono } from '@/ui/icono';
 import { Pantalla, Pastilla, Tarjeta } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
-import { espacio } from '@/ui/tokens';
+import { colores, espacio } from '@/ui/tokens';
 
 /**
- * Una carga (T-27, D2/D6): sus lineas y, si esta pendiente, Aceptar o Rechazar
- * (con motivo). La respuesta viaja con red y con la version que se pinta: si el
- * almacen la cambio, el servidor contesta 409 y aqui se ve la nueva. Sin red no
- * se acepta.
+ * Una carga (T-27; rediseño pieza 3, maqueta 4). Pendiente: un checklist de
+ * renglones ("Seleccionar todos" o uno por uno), "Aceptar N de M" y "Rechazar
+ * todo" (con confirmacion; manda la lista vacia). Sin motivo en ningun caso.
+ * La respuesta viaja con red y con la version que se pinta: si el almacen la
+ * cambio, el servidor contesta 409 y aqui se ve la nueva (y la seleccion se
+ * vacia para volver a revisarla). Ya respondida, se ve que renglones entraron.
  */
+/**
+ * Al Inventario, no "atras" (recorrido final, D5): desde el aviso de la Ruta,
+ * `back` caia en la Ruta. `dismissTo` cierra hasta el Inventario si esta abajo;
+ * si no, lo pone en lugar de esta pantalla.
+ */
+function volverAlInventario() {
+  router.dismissTo('/(jornada)/inventario');
+}
+
 export default function DetalleCarga() {
   const { cargaId } = useLocalSearchParams<{ cargaId: string }>();
   const { datos, versionCatalogos } = useJawa();
@@ -48,29 +65,32 @@ export default function DetalleCarga() {
   if (respondedorRef.current === null) respondedorRef.current = crearRespondedorCarga();
   const respondedor = respondedorRef.current;
   const [enviando, setEnviando] = useState<AccionCarga | null>(null);
-  const [rechazando, setRechazando] = useState(false);
-  const [motivo, setMotivo] = useState('');
+  // La seleccion es de UNA version: si el almacen cambia la carga (409 o pull),
+  // se vacia sola y el vendedor vuelve a palomear lo que ve.
+  const [seleccion, setSeleccion] = useState<{ version: number; ids: ReadonlySet<string> }>({
+    version: -1,
+    ids: new Set(),
+  });
   const [aviso, setAviso] = useState<{ texto: string; error: boolean } | null>(null);
 
   if (!carga) {
     return (
       <Pantalla titulo="Carga no encontrada" subtitulo="No está en esta tablet.">
-        <Boton etiqueta="Volver al inventario" glifo="←" tono="neutra" onPress={() => router.back()} />
+        <Boton etiqueta="Volver al inventario" icono="atras" tono="neutra" onPress={volverAlInventario} />
       </Pantalla>
     );
   }
 
   const respondible = puedeResponder(carga, hoy);
-  const pastilla = pastillaCarga(carga.estado);
+  const pastilla = pastillaCarga(carga);
+  const ids = carga.lineas.map((l) => l.presentacion_id);
+  const palomeados = seleccion.version === carga.version ? seleccion.ids : new Set<string>();
+  const aceptadas = aceptadasDe(carga.lineas, palomeados);
+  const cambiarSeleccion = (nuevos: ReadonlySet<string>) => setSeleccion({ version: carga.version, ids: nuevos });
 
-  async function responder(accion: AccionCarga, actual: NonNullable<typeof carga>) {
-    const problemas = validarRespuesta(accion, motivo);
-    if (problemas.length > 0) {
-      setAviso({ texto: problemas.join(' '), error: true });
-      return;
-    }
+  async function responder(accion: AccionCarga, actual: NonNullable<typeof carga>, lista: readonly string[]) {
     // La version de la carga QUE SE VE (Review Focus 2).
-    const cuerpo = cuerpoRespuesta(accion, motivo, actual.version);
+    const cuerpo = cuerpoRespuesta(actual.version, lista);
     // Si el candado ya lo tiene un primer toque, este conserva su estado (no se pisa ni queda colgado).
     setEnviando((previo) => previo ?? accion);
     setAviso(null);
@@ -97,18 +117,31 @@ export default function DetalleCarga() {
     if (resultado === null) return;
     setEnviando(null);
     if (resultado.estado === 'respondida') {
-      setRechazando(false);
-      setMotivo('');
+      const { carga: respondida } = resultado;
+      const entraron = respondida.lineas.filter((l) => l.aceptada !== false).length;
       setAviso({
         texto:
-          resultado.carga.estado === 'aceptada'
-            ? 'Carga aceptada. Ya cuenta en tu inventario.'
-            : 'Carga rechazada. El almacén la corregirá y te la volverá a mandar.',
+          respondida.estado !== 'aceptada'
+            ? 'Rechazaste la carga. No entra nada a tu inventario.'
+            : entraron === respondida.lineas.length
+              ? 'Carga aceptada. Ya cuenta en tu inventario.'
+              : `Aceptaste ${entraron} de ${respondida.lineas.length} productos. Solo esos cuentan en tu inventario.`,
         error: false,
       });
       return;
     }
     setAviso({ texto: resultado.mensaje, error: true });
+  }
+
+  function confirmarRechazo(actual: NonNullable<typeof carga>) {
+    Alert.alert(
+      '¿Rechazar toda la carga?',
+      'No entra nada a tu inventario. Si el almacén te la vuelve a mandar, llegará como recarga.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Rechazar todo', style: 'destructive', onPress: () => void responder('rechazar', actual, []) },
+      ],
+    );
   }
 
   return (
@@ -123,22 +156,75 @@ export default function DetalleCarga() {
         />
       </View>
 
-      <Tarjeta etiqueta="Productos">
-        {carga.lineas.map((l) => (
-          <View
-            key={l.presentacion_id}
-            style={{ flexDirection: 'row', justifyContent: 'space-between', gap: espacio.sm, marginBottom: espacio.xs }}
+      {respondible ? (
+        <>
+          <Renglon
+            onPress={() => cambiarSeleccion(seleccionarTodos(palomeados, ids))}
+            borde={colores.bordeFuerte}
+            etiqueta="Seleccionar todos"
+            estadoA11y={todosSeleccionados(palomeados, ids)}
           >
-            <Text style={[estilos.textoTarjeta, { flexShrink: 1 }]}>{l.etiqueta}</Text>
-            <Cifra valor={l.piezas} />
-          </View>
-        ))}
-      </Tarjeta>
-
-      <Tarjeta estado="accion" etiqueta="Total">
-        <Cifra valor={totalPiezas(carga.lineas)} tamano="destacado" />
-        <Text style={estilos.textoSuave}>piezas</Text>
-      </Tarjeta>
+            <Palomita encendida={todosSeleccionados(palomeados, ids)} />
+            <View style={{ flex: 1 }}>
+              <Text style={estilos.textoTarjeta}>Seleccionar todos</Text>
+              <Text style={estilos.textoSuave}>
+                Carga n.º {carga.numero} · {ids.length === 1 ? '1 producto' : `${ids.length} productos`}
+              </Text>
+            </View>
+          </Renglon>
+          {carga.lineas.map((l) => {
+            const palomeado = palomeados.has(l.presentacion_id);
+            return (
+              <Renglon
+                key={l.presentacion_id}
+                onPress={() => cambiarSeleccion(alternarRenglon(palomeados, l.presentacion_id))}
+                borde={palomeado ? colores.exito : colores.borde}
+                etiqueta={`${l.etiqueta}, ${l.piezas} ${palabraPiezas(l.piezas)}`}
+                estadoA11y={palomeado}
+              >
+                <Palomita encendida={palomeado} />
+                <Text style={[estilos.textoTarjeta, { flex: 1 }]}>{l.etiqueta}</Text>
+                <Cifra valor={l.piezas} />
+              </Renglon>
+            );
+          })}
+        </>
+      ) : (
+        <Tarjeta etiqueta="Productos">
+          {carga.lineas.map((l) => {
+            // Pendiente (de ayer, o eliminada) no marca nada: aun nadie la respondio.
+            const marcar = carga.estado !== 'pendiente';
+            const entro = renglonAceptado(carga.estado, l);
+            return (
+              <View
+                key={l.presentacion_id}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: espacio.sm,
+                  marginBottom: espacio.xs,
+                }}
+              >
+                {marcar ? (
+                  <View style={{ width: 20, alignItems: 'center' }}>
+                    {entro ? <Icono nombre="palomita" tamano={18} color={colores.exito} /> : null}
+                  </View>
+                ) : null}
+                <View style={{ flex: 1 }}>
+                  <Text style={[estilos.textoTarjeta, marcar && !entro && { color: colores.tintaSuave }]}>
+                    {l.etiqueta}
+                  </Text>
+                  {marcar && !entro ? <Text style={estilos.textoSuave}>No aceptado</Text> : null}
+                </View>
+                <Cifra valor={l.piezas} tono={marcar && !entro ? 'suave' : undefined} />
+              </View>
+            );
+          })}
+          <Text style={[estilos.textoSuave, { marginTop: espacio.xs }]}>
+            Total <Cifra valor={piezasDeCarga(carga)} tono="suave" /> {palabraPiezas(piezasDeCarga(carga))}
+          </Text>
+        </Tarjeta>
+      )}
 
       {carga.estado === 'rechazada' && carga.motivo_rechazo ? (
         <Text style={estilos.error}>La rechazaste: {carga.motivo_rechazo}</Text>
@@ -146,73 +232,41 @@ export default function DetalleCarga() {
       {carga.activo === 0 ? (
         <Text style={estilos.error}>El almacén eliminó esta carga: ya no cuenta en tu inventario.</Text>
       ) : null}
-      {aviso && !(carga.activo === 0 && aviso.texto === MENSAJE_CARGA_ELIMINADA) ? <Text style={aviso.error ? estilos.error : estilos.textoTarjeta}>{aviso.texto}</Text> : null}
-
-      {respondible && rechazando ? (
-        <Tarjeta estado="error" etiqueta="Rechazar la carga">
-          <Campo
-            etiqueta="¿Por qué la rechazas?"
-            value={motivo}
-            onChangeText={setMotivo}
-            maxLength={LARGO_MAX_MOTIVO_RECHAZO}
-            multiline
-            editable={enviando === null}
-          />
-          <View style={estilos.filaAcciones}>
-            <Boton
-              etiqueta="Volver"
-              tono="neutra"
-              glifo="←"
-              deshabilitado={enviando !== null}
-              onPress={() => {
-                setRechazando(false);
-                setAviso(null);
-              }}
-            />
-            <Boton
-              etiqueta="Enviar rechazo"
-              tono="peligro"
-              glifo="×"
-              ocupado={enviando === 'rechazar'}
-              onPress={() => void responder('rechazar', carga)}
-            />
-          </View>
-        </Tarjeta>
+      {aviso && !(carga.activo === 0 && aviso.texto === MENSAJE_CARGA_ELIMINADA) ? (
+        <Text style={aviso.error ? estilos.error : estilos.textoTarjeta}>{aviso.texto}</Text>
       ) : null}
 
-      {respondible && !rechazando ? (
-        // Opuestas en tres ejes (sistema de diseño): Aceptar es confirmar con ✓;
-        // Rechazar es peligro con ×.
+      {respondible ? (
+        // Opuestas en tres ejes (sistema de diseño): Aceptar es confirmar con
+        // palomita; Rechazar todo es peligro con tache y pide confirmacion.
         <View style={[estilos.filaAcciones, { marginTop: espacio.lg, marginBottom: espacio.xl }]}>
           <Boton
-            etiqueta="Rechazar"
+            etiqueta="Rechazar todo"
             tono="peligro"
-            glifo="×"
+            icono="cerrar"
+            ocupado={enviando === 'rechazar'}
             deshabilitado={enviando !== null}
-            onPress={() => {
-              setRechazando(true);
-              setAviso(null);
-            }}
+            onPress={() => confirmarRechazo(carga)}
           />
           <Boton
-            etiqueta="Aceptar"
+            etiqueta={textoAceptar(aceptadas.length, ids.length)}
             tono="confirmar"
-            glifo="✓"
+            icono="palomita"
             ocupado={enviando === 'aceptar'}
-            onPress={() => void responder('aceptar', carga)}
+            // Sin palomeados no se acepta: la lista vacia solo sale de "Rechazar todo".
+            deshabilitado={aceptadas.length === 0 || enviando !== null}
+            onPress={() => void responder('aceptar', carga, aceptadas)}
           />
         </View>
-      ) : null}
-
-      {!respondible ? (
+      ) : (
         <Boton
           etiqueta="Volver al inventario"
           tono="neutra"
-          glifo="←"
-          onPress={() => router.back()}
+          icono="atras"
+          onPress={volverAlInventario}
           estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
         />
-      ) : null}
+      )}
     </Pantalla>
   );
 }

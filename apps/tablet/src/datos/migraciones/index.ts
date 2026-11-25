@@ -17,6 +17,11 @@ import { firmaVenta } from './016-firma-venta';
 import { cargas } from './017-cargas';
 import { movimientos } from './018-movimientos';
 import { notasAsignadas } from './019-notas-asignadas';
+import { ventaAtendioAbono } from './020-venta-atendio-abono';
+import { cargaRenglon } from './021-carga-renglon';
+import { cambiosMotivoMerma } from './022-cambios-motivo-merma';
+import { corte } from './023-corte';
+import { notaDetalle } from './024-nota-detalle';
 import type { Migracion } from './motor';
 
 /**
@@ -48,6 +53,11 @@ export const migraciones: readonly Migracion[] = [
   cargas,
   movimientos,
   notasAsignadas,
+  ventaAtendioAbono,
+  cargaRenglon,
+  cambiosMotivoMerma,
+  corte,
+  notaDetalle,
 ];
 
 export { ejecutarMigraciones, versionEsquema } from './motor';

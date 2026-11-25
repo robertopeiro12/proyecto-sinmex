@@ -41,7 +41,7 @@ const LOGIN_TIJUANA = `e2e-cor-tj-${SUFIJO}`;
 const LOGIN_SIN_PERMISO = `e2e-cor-sin-${SUFIJO}`;
 const PRODUCTO = `ZZ-cor-${SUFIJO}`;
 
-const DIAS_DE_LA_CORRIDA = 15;
+const DIAS_DE_LA_CORRIDA = 16;
 const DIA_BASE = Date.now() % 2900;
 function diaDeLaCorrida(desplazamiento: number): string {
   return new Date(
@@ -192,7 +192,12 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
     sucursalId: string;
     fecha: string;
     estado: 'pendiente' | 'aceptada' | 'rechazada';
-    lineas: { presentacionId: string; piezas: number }[];
+    lineas: {
+      presentacionId: string;
+      piezas: number;
+      /** Respuesta por renglon (pieza 3); sin ella, `null` como una carga de antes. */
+      aceptada?: boolean | null;
+    }[];
   }): Promise<void> => {
     numeroCarga++;
     const { id } = await db
@@ -217,6 +222,7 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
           carga_id: id,
           presentacion_id: l.presentacionId,
           piezas: l.piezas,
+          aceptada: l.aceptada ?? null,
         })),
       )
       .execute();
@@ -276,7 +282,7 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
     vendedorId: string;
     sucursalId: string;
     fecha: string;
-    tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo';
+    tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo' | 'cambio';
     clienteId?: string;
     borrado?: boolean;
     lineas: {
@@ -293,7 +299,7 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
         sucursal_id: opciones.sucursalId,
         vendedor_id: opciones.vendedorId,
         cliente_id:
-          opciones.tipo === 'merma_cliente'
+          opciones.tipo === 'merma_cliente' || opciones.tipo === 'cambio'
             ? (opciones.clienteId ?? clienteTj)
             : null,
         tipo: opciones.tipo,
@@ -835,6 +841,42 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
       expect(typeof res.hecho?.en).toBe('string');
     });
 
+    it('carga aceptada 2 de 3: solo cuentan los renglones aceptados; una aceptada vieja (renglones null) cuenta completa', async () => {
+      const dia = diaDeLaCorrida(3);
+      const v = await crearVendedor('Cor renglones', tjId);
+      await crearCarga({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'aceptada',
+        lineas: [
+          { presentacionId: litro, piezas: 10, aceptada: true },
+          { presentacionId: medio, piezas: 7, aceptada: false },
+          { presentacionId: otra, piezas: 3, aceptada: true },
+        ],
+      });
+      // Respondida antes de la pieza 3: renglones null, cuenta completa.
+      await crearCarga({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'aceptada',
+        lineas: [
+          { presentacionId: litro, piezas: 5 },
+          { presentacionId: otra, piezas: 1 },
+        ],
+      });
+
+      const corte = (
+        await leer(cookieGeneral, { fecha: dia, vendedor: v }).expect(200)
+      ).body as CorteVendedor;
+      expect(linea(corte, litro)?.cargadas).toBe(15);
+      expect(linea(corte, otra)?.cargadas).toBe(4);
+      // El renglon no aceptado no trae nada mas: medio no sale.
+      expect(linea(corte, medio)).toBeUndefined();
+      expect(corte.totales.cargadas).toBe(19);
+    });
+
     it('guardar todo en 0 deja el corte hecho, sin filas de retorno', async () => {
       const dia = diaDeLaCorrida(4);
       const v = await crearVendedor('Cor ceros', tjId);
@@ -1081,6 +1123,55 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
         piezasFaltantes: 1,
         mermaFaltante: 1,
         estado: 'con_faltante',
+      });
+    });
+
+    it('un cambio suma lo recibido y resta lo entregado de la teorica, sin tocar la merma teorica', async () => {
+      const dia = diaDeLaCorrida(15);
+      const v = await crearVendedor('Cor cambio', tjId);
+      await crearCarga({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'aceptada',
+        lineas: [
+          { presentacionId: medio, piezas: 10 },
+          { presentacionId: litro, piezas: 10 },
+        ],
+      });
+      await crearMovimiento({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        tipo: 'cambio',
+        lineas: [
+          { presentacionId: medio, sentido: 'recibido', piezas: 3 },
+          { presentacionId: litro, sentido: 'entregado', piezas: 2 },
+        ],
+      });
+
+      const corte = (
+        await leer(cookieGeneral, { fecha: dia, vendedor: v }).expect(200)
+      ).body as CorteVendedor;
+      expect(linea(corte, medio)).toMatchObject({
+        mermaEntregada: 0,
+        mermaRecibida: 0,
+        cambiosRecibidos: 3,
+        cambiosEntregados: 0,
+        deberiaRegresar: 13,
+        mermaTeorica: 0,
+      });
+      expect(linea(corte, litro)).toMatchObject({
+        mermaEntregada: 0,
+        mermaRecibida: 0,
+        cambiosRecibidos: 0,
+        cambiosEntregados: 2,
+        deberiaRegresar: 8,
+        mermaTeorica: 0,
+      });
+      expect(corte.totales).toMatchObject({
+        deberiaRegresar: 21,
+        mermaTeorica: 0,
       });
     });
 

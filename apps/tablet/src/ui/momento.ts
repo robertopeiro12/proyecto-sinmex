@@ -32,3 +32,38 @@ export function formatearHora(iso: string | null): string {
   const dos = (n: number) => `${n}`.padStart(2, '0');
   return `${dos(d.getHours())}:${dos(d.getMinutes())}`;
 }
+
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+/**
+ * Una fecha de calendario `AAAA-MM-DD` (la de una nota o un abono) como la lee el
+ * vendedor: `3 nov 2026`. Se lee del texto, sin `Date`: una fecha sin hora no
+ * tiene zona y `new Date('2026-11-03')` es medianoche UTC (el 2 en Tijuana).
+ * Lo que no tenga esa forma sale tal cual.
+ */
+export function formatearFechaCorta(fecha: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha);
+  if (!m) return fecha;
+  const mes = MESES_CORTOS[Number(m[2]) - 1];
+  const dia = Number(m[3]);
+  if (mes === undefined || dia < 1 || dia > 31) return fecha;
+  return `${dia} ${mes} ${m[1]}`;
+}
+
+/**
+ * Un momento ISO como lo pone la nota impresa (pieza 7): `18 nov 2026 · 11:58`,
+ * fecha corta y hora en la zona LOCAL de la tablet (Tijuana), con la misma regla
+ * que `formatearMomento`. Lo que no sea fecha sale tal cual.
+ *
+ * Una fecha sin hora (`2026-10-25`: una nota de la oficina, que no tiene hora de
+ * venta) sale **solo con el dia**, `25 oct 2026`; `new Date` la leeria como
+ * medianoche UTC, el dia anterior en Tijuana (recorrido final, D2).
+ */
+export function formatearFechaHora(iso: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return formatearFechaCorta(iso);
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const dos = (n: number) => `${n}`.padStart(2, '0');
+  const fecha = `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
+  return `${formatearFechaCorta(fecha)} · ${dos(d.getHours())}:${dos(d.getMinutes())}`;
+}

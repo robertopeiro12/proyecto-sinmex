@@ -5,8 +5,10 @@
  * Specs: docs/superpowers/specs/2026-11-12-corte-de-mercancia-design.md (D7–D9, D13)
  * y 2026-11-18-corte-por-tamano-y-merma-design.md (C3–C6, D1, D3, D8, D9).
  *
- * La teorica ya resta merma entregada, merma de almacen y consumo, y suma o
- * resta los cambios fisicos (hoy solo los captura Operacion -> Procesos).
+ * La teorica resta merma entregada, merma de almacen, consumo y cambios
+ * entregados, y suma los cambios recibidos: el cambio fisico con el cliente lo
+ * captura la tablet (rediseño pieza 4, `movimiento_inventario` tipo `cambio`) y
+ * la oficina (Operacion -> Procesos). La merma teorica no cuenta los cambios.
  */
 import {
   esFechaReal,
@@ -29,7 +31,10 @@ export interface MovimientoPresentacion {
   producto: string;
   /** Tamano tal cual esta en la presentacion ("500 ml"). */
   volumen: string;
-  /** Piezas de cargas aceptadas. */
+  /**
+   * Piezas de los renglones aceptados de cargas aceptadas (pieza 3: un renglon
+   * con `aceptada = false` no cuenta; `null` en una aceptada vieja, si).
+   */
   cargadas: number;
   /** `cantidad` de lineas vivas de ventas vivas. */
   vendidas: number;
@@ -42,7 +47,7 @@ export interface MovimientoPresentacion {
   /** Merma del trayecto (almacen). */
   mermaAlmacen: number;
   consumo: number;
-  /** Cambios fisicos: piezas entregadas y recibidas (Operacion -> Procesos). */
+  /** Cambios fisicos: piezas entregadas y recibidas (tablet, tipo `cambio`, y Operacion -> Procesos). */
   cambiosEntregados: number;
   cambiosRecibidos: number;
   /** Lo contado por el almacen (0 si no hay fila). */

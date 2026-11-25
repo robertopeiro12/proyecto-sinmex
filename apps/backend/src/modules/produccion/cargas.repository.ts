@@ -7,6 +7,7 @@ import type {
   EstadoCarga,
   FilaCarga,
   LineaCarga,
+  LineaCargaLeida,
   PresentacionRejilla,
   RespuestaCarga,
   SucursalRejilla,
@@ -307,7 +308,11 @@ export class CargasRepository {
     return fila !== undefined;
   }
 
-  /** Escribe la respuesta del vendedor (D2): estado, motivo y `respondida_en = now()`. */
+  /**
+   * Escribe la respuesta del vendedor (D2; pieza 3): estado, motivo,
+   * `respondida_en = now()` y, en la misma transaccion, `aceptada` en cada
+   * renglon (los que no vienen en la lista quedan en `false`).
+   */
   async escribirRespuesta(
     cargaId: string,
     respuesta: RespuestaCarga,
@@ -321,6 +326,14 @@ export class CargasRepository {
         respondida_en: sql<Date>`now()`,
       })
       .where('id', '=', cargaId)
+      .execute();
+    // `= any(array)` y no `in (...)`: la lista vacia (rechazar) es valida.
+    await trx
+      .updateTable('carga_detalle')
+      .set({
+        aceptada: sql<boolean>`presentacion_id = any(${[...respuesta.aceptadas]}::uuid[])`,
+      })
+      .where('carga_id', '=', cargaId)
       .execute();
   }
 
@@ -370,17 +383,21 @@ export class CargasRepository {
 
     const lineas = await conexion
       .selectFrom('carga_detalle')
-      .select(['carga_id', 'presentacion_id', 'piezas'])
+      .select(['carga_id', 'presentacion_id', 'piezas', 'aceptada'])
       .where(
         'carga_id',
         'in',
         filas.map((f) => f.id),
       )
       .execute();
-    const porCarga = new Map<string, LineaCarga[]>();
+    const porCarga = new Map<string, LineaCargaLeida[]>();
     for (const l of lineas) {
       const lista = porCarga.get(l.carga_id) ?? [];
-      lista.push({ presentacionId: l.presentacion_id, piezas: l.piezas });
+      lista.push({
+        presentacionId: l.presentacion_id,
+        piezas: l.piezas,
+        aceptada: l.aceptada,
+      });
       porCarga.set(l.carga_id, lista);
     }
 

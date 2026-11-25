@@ -48,21 +48,13 @@ export function crearGuardiaComentario(): GuardiaRegistro {
 }
 
 /**
- * El boton "Vender" de la ficha: a donde lleva y, si no deja vender, por que.
- * Con notas por atender no se deshabilita: la pantalla de la nota es la que
- * ofrece cobrar o comentar. Sin por atender y con la condicion sin cumplir
- * (p. ej. un abono parcial a una que debe liquidar), queda deshabilitado con
- * el motivo.
+ * A donde lleva el boton "Vender" de la hoja: con notas por atender, primero a
+ * la pantalla de la nota (que ofrece cobrar o comentar); si no, a la venta. Si
+ * el boton se enciende lo decide `accionesCliente` (`src/estado/hoja-cliente.ts`),
+ * que lo apaga con la condicion sin cumplir (`motivoBloqueoVenta`).
  */
-export function venderDesdeFicha(notas: NotaAsignadaDeHoy[]): {
-  destino: DestinoVender;
-  bloqueo: string | null;
-} {
-  const pendientes = porAtender(notas);
-  return {
-    destino: destinoAlVender(pendientes, false),
-    bloqueo: pendientes.length > 0 ? null : motivoBloqueoVenta(notas),
-  };
+export function venderDesdeFicha(notas: NotaAsignadaDeHoy[]): { destino: DestinoVender } {
+  return { destino: destinoAlVender(porAtender(notas), false) };
 }
 
 /**

@@ -84,7 +84,7 @@ describe('fuenteJornadas', () => {
    * El km del dia = final - inicial es lo que alimenta el reporte, y lo deriva
    * **el servidor** con estos dos extremos: la tablet no manda el resultado.
    * Se comprueba aqui que los dos extremos llegan y que la resta da lo que la
-   * pantalla de cierre le muestra al vendedor (`cerrar-dia.tsx`), para que el
+   * pantalla de cierre le muestra al vendedor (`corte.tsx`), para que el
    * reporte del portal no pueda decir otra cifra que la que el vendedor vio.
    */
   it('manda los dos extremos, no el km del dia ya restado', () => {

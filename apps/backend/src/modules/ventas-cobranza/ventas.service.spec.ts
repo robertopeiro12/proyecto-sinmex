@@ -53,6 +53,8 @@ const venta = (extra: Partial<VentaNormalizada> = {}): VentaNormalizada => ({
   ],
   regalos: [],
   firma: null,
+  atendio: null,
+  abonoCentavos: null,
   ...extra,
 });
 
@@ -142,6 +144,7 @@ describe('VentasService.registrarVenta', () => {
         capturoUsuarioId: null,
         firmaEsperada: false,
         firmaNombre: null,
+        atendioNombre: null,
       },
       trx,
     );
@@ -535,6 +538,59 @@ describe('VentasService.registrarVenta con firma (T-73)', () => {
         firmaEsperada: false,
         firmaNombre: null,
       }),
+      trx,
+    );
+  });
+});
+
+describe('VentasService.registrarVenta con quien atendio y abono (pieza 2)', () => {
+  it('guarda atendio_nombre', async () => {
+    const { servicio, repo } = montar();
+    await servicio.registrarVenta(
+      venta({ atendio: 'Doña Lupe' }),
+      contexto(),
+      trx,
+    );
+    expect(repo.insertarVenta).toHaveBeenCalledWith(
+      expect.objectContaining({ atendioNombre: 'Doña Lupe' }),
+      trx,
+    );
+  });
+
+  it('sin atendio guarda null', async () => {
+    const { servicio, repo } = montar();
+    await servicio.registrarVenta(venta(), contexto(), trx);
+    expect(repo.insertarVenta).toHaveBeenCalledWith(
+      expect.objectContaining({ atendioNombre: null }),
+      trx,
+    );
+  });
+
+  it('credito con abono nace abonado y deja un abono venta_contado por el monto', async () => {
+    const { servicio, repo, cobranzas } = montar();
+    const r = await servicio.registrarVenta(
+      venta({ abonoCentavos: 10000 }),
+      contexto(),
+      trx,
+    );
+    expect(r.status).toBe('abonado');
+    expect(repo.insertarVenta).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'abonado', montoTotal: '324.00' }),
+      trx,
+    );
+    expect(cobranzas.insertarAbono).toHaveBeenCalledTimes(1);
+    expect(cobranzas.insertarAbono).toHaveBeenCalledWith(
+      {
+        ventaNotaId: 'venta-1',
+        vendedorId: 'vendedor-1',
+        fechaPago: '2026-09-14',
+        fechaOperacion: '2026-09-14',
+        monto: '100.00',
+        tipo: 'abono',
+        saldoPendiente: '224.00',
+        metodoPago: 'efectivo',
+        origen: 'venta_contado',
+      },
       trx,
     );
   });

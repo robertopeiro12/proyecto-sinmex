@@ -88,29 +88,23 @@ describe('crearGuardiaComentario', () => {
 });
 
 describe('venderDesdeFicha', () => {
-  it('sin asignadas: a la venta, sin bloqueo', () => {
-    expect(venderDesdeFicha([])).toEqual({ destino: { tipo: 'venta' }, bloqueo: null });
+  it('sin asignadas: a la venta', () => {
+    expect(venderDesdeFicha([])).toEqual({ destino: { tipo: 'venta' } });
   });
-  it('con una por atender: primero las notas y Vender sigue habilitado (la pantalla de la nota decide)', () => {
+  it('con una por atender: primero las notas (la pantalla de la nota decide)', () => {
     expect(venderDesdeFicha([nota({ condicion: 'liquidar' })])).toEqual({
       destino: { tipo: 'notas', siguiente: 'venta' },
-      bloqueo: null,
     });
   });
-  it('comentada sin cumplir la condicion: sigue por atender, no se deshabilita', () => {
-    expect(venderDesdeFicha([nota({ condicion: 'abonar', comentadaHoy: true })]).bloqueo).toBeNull();
+  it('comentada sin cumplir la condicion: sigue por atender', () => {
+    expect(venderDesdeFicha([nota({ condicion: 'abonar', comentadaHoy: true })]).destino).toEqual({
+      tipo: 'notas',
+      siguiente: 'venta',
+    });
   });
-  it('sin por atender pero con la condicion sin cumplir: Vender deshabilitado con el motivo', () => {
-    // Abono parcial de hoy a una nota que debe liquidar: ya no se pide, pero bloquea.
+  it('sin por atender (abono parcial a una que debe liquidar): a la venta; el apagado es de accionesCliente', () => {
     const abonada = nota({ condicion: 'liquidar', tocadaHoy: true, saldoCentavos: 5000 });
-    expect(venderDesdeFicha([abonada])).toEqual({
-      destino: { tipo: 'venta' },
-      bloqueo: 'Tiene una nota asignada que debe liquidar antes de venderle',
-    });
-  });
-  it('cumplida: a la venta sin bloqueo', () => {
-    const abonada = nota({ condicion: 'abonar', tocadaHoy: true, saldoCentavos: 5000 });
-    expect(venderDesdeFicha([abonada])).toEqual({ destino: { tipo: 'venta' }, bloqueo: null });
+    expect(venderDesdeFicha([abonada])).toEqual({ destino: { tipo: 'venta' } });
   });
 });
 

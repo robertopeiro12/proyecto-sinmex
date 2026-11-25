@@ -174,21 +174,23 @@ export class CargasService {
   }
 
   /**
-   * `POST /sync/cargas/:id/respuesta` (D2, D6): aceptar o rechazar la carga
-   * completa, con red y en el momento.
+   * `POST /sync/cargas/:id/respuesta` (D2, D6; pieza 3 por renglon): la lista de
+   * presentaciones aceptadas (o la forma vieja aceptar/rechazar), con red y en
+   * el momento.
    *
-   * La forma se valida primero (400). Despues, en una transaccion con la carga
-   * bloqueada: de otro vendedor, inexistente o eliminada → 404 (no confirma que
-   * exista); la misma respuesta otra vez → 200 sin reescribir (idempotente);
-   * otra version o ya respondida → 409 con la carga actual; si no, se escribe.
+   * Los tipos del cuerpo los valida el DTO (400). Despues, en una transaccion
+   * con la carga bloqueada: de otro vendedor, inexistente o eliminada → 404 (no
+   * confirma que exista); otra version → 409 con la carga actual ANTES de mirar
+   * la lista (una lista de la version vieja puede traer un renglon que ya no
+   * esta: la tablet necesita la carga nueva, no un 400); la forma contra los
+   * renglones de la carga → 400; la misma respuesta otra vez → 200 sin
+   * reescribir (idempotente); ya respondida con otra → 409; si no, se escribe.
    */
   async responder(
     vendedorId: string,
     cargaId: string,
     dto: RespuestaCargaDto,
   ): Promise<CargaPull> {
-    const forma = normalizarRespuesta(dto.accion, dto.motivo);
-    if (!forma.ok) throw new BadRequestException(forma.mensaje);
     if (!(await this.repo.vendedorActivo(vendedorId))) {
       throw new UnauthorizedException('Sesion invalida.');
     }
@@ -198,13 +200,19 @@ export class CargasService {
       if (!carga || carga.vendedorId !== vendedorId) {
         throw new NotFoundException(MOTIVO_CARGA_INEXISTENTE);
       }
-      const decision = decidirRespuesta(carga, forma.respuesta, dto.version);
-      if (decision === 'conflicto') {
-        throw new ConflictException({
+      const conflicto = () =>
+        new ConflictException({
           message: MOTIVO_RESPUESTA_CONFLICTO,
           carga: aCargaPull(carga),
         });
-      }
+      if (carga.version !== dto.version) throw conflicto();
+      const forma = normalizarRespuesta(
+        dto,
+        carga.lineas.map((l) => l.presentacionId),
+      );
+      if (!forma.ok) throw new BadRequestException(forma.mensaje);
+      const decision = decidirRespuesta(carga, forma.respuesta, dto.version);
+      if (decision === 'conflicto') throw conflicto();
       if (decision === 'escribir') {
         await this.repo.escribirRespuesta(carga.id, forma.respuesta, trx);
       }

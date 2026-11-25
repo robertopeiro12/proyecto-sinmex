@@ -73,7 +73,12 @@ describe('Venta del portal contra el inventario del vendedor (e2e)', () => {
     vendedorId: string,
     fecha: string,
     estado: 'pendiente' | 'aceptada',
-    lineas: { presentacionId: string; piezas: number }[],
+    lineas: {
+      presentacionId: string;
+      piezas: number;
+      /** Respuesta por renglon (pieza 3); sin ella, `null` como una carga de antes. */
+      aceptada?: boolean | null;
+    }[],
   ) => {
     numeroCarga++;
     const { id } = await db
@@ -96,6 +101,7 @@ describe('Venta del portal contra el inventario del vendedor (e2e)', () => {
           carga_id: id,
           presentacion_id: l.presentacionId,
           piezas: l.piezas,
+          aceptada: l.aceptada ?? null,
         })),
       )
       .execute();
@@ -105,7 +111,7 @@ describe('Venta del portal contra el inventario del vendedor (e2e)', () => {
   const crearMovimiento = async (opciones: {
     vendedorId: string;
     fecha: string;
-    tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo';
+    tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo' | 'cambio';
     lineas: {
       presentacionId: string;
       sentido: 'recibido' | 'entregado';
@@ -119,7 +125,10 @@ describe('Venta del portal contra el inventario del vendedor (e2e)', () => {
         id,
         sucursal_id: sucursalId,
         vendedor_id: opciones.vendedorId,
-        cliente_id: opciones.tipo === 'merma_cliente' ? clienteId : null,
+        cliente_id:
+          opciones.tipo === 'merma_cliente' || opciones.tipo === 'cambio'
+            ? clienteId
+            : null,
         tipo: opciones.tipo,
         fecha: sql<Date>`${opciones.fecha}::date`,
         registrado_en: sql<Date>`now()`,
@@ -452,6 +461,24 @@ describe('Venta del portal contra el inventario del vendedor (e2e)', () => {
       );
     });
 
+    it('una carga aceptada en parte: el renglon no aceptado no se vende; una aceptada vieja (renglones null) cuenta completa', async () => {
+      const fecha = '2024-05-12';
+      const ana = await crearVendedor('Inv Parcial');
+      await crearCarga(ana, fecha, 'aceptada', [
+        { presentacionId: litro, piezas: 3, aceptada: true },
+        { presentacionId: medio, piezas: 10, aceptada: false },
+      ]);
+      // Aceptada antes de la pieza 3: sus renglones (null) cuentan.
+      await crearCarga(ana, fecha, 'aceptada', [
+        { presentacionId: litro, piezas: 2 },
+      ]);
+      const res = await registrar(fecha, ana, [linea(medio, 1)]).expect(409);
+      expect((res.body as { message: string }).message).toContain(
+        `${nombreMedio()}, falta 1`,
+      );
+      await registrar(fecha, ana, [linea(litro, 5)]).expect(201);
+    });
+
     it('la merma de trayecto y el consumo restan lo vendible; la merma recibida no suma', async () => {
       const fecha = '2024-05-11';
       const ana = await crearVendedor('Inv Merma');
@@ -482,6 +509,35 @@ describe('Venta del portal contra el inventario del vendedor (e2e)', () => {
         `${nombreLitro()}, falta 1`,
       );
       await registrar(fecha, ana, [linea(litro, 7)]).expect(201);
+    });
+
+    it('un cambio: lo recibido se puede vender y lo entregado ya no', async () => {
+      const fecha = '2024-05-13';
+      const ana = await crearVendedor('Inv Cambio');
+      await crearCarga(ana, fecha, 'aceptada', [
+        { presentacionId: litro, piezas: 5 },
+      ]);
+      // Recibe 3 de medio (no traia) y entrega 2 de litro.
+      await crearMovimiento({
+        vendedorId: ana,
+        fecha,
+        tipo: 'cambio',
+        lineas: [
+          { presentacionId: medio, sentido: 'recibido', piezas: 3 },
+          { presentacionId: litro, sentido: 'entregado', piezas: 2 },
+        ],
+      });
+      const res = await registrar(fecha, ana, [
+        linea(litro, 4),
+        linea(medio, 4),
+      ]).expect(409);
+      expect((res.body as { message: string }).message).toBe(
+        `No le alcanza el producto a ${nombreVendedor('Inv Cambio')}: ` +
+          `${nombreLitro()}, falta 1; ${nombreMedio()}, falta 1.`,
+      );
+      await registrar(fecha, ana, [linea(medio, 3), linea(litro, 3)]).expect(
+        201,
+      );
     });
 
     it('dos ventas a la vez que juntas no alcanzan: una pasa y la otra 409, sin 500', async () => {

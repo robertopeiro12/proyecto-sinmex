@@ -8,7 +8,8 @@ import type { FuenteOperaciones } from './motor';
  *
  * - **`clave`** es el `id` de la fila: no cambia, y en el servidor es el id del
  *   movimiento.
- * - **`cliente_id`** solo en la merma del cliente (pasa por el alcance del lote);
+ * - **`cliente_id`** solo en la merma del cliente y el cambio (rediseño pieza 4;
+ *   pasa por el alcance del lote);
  *   el servidor rechaza un consumo o una merma del trayecto que lo traiga. Sin
  *   folio.
  * - `fecha_operacion` es el dia de trabajo de la tablet (`movimiento.fecha`).
@@ -25,6 +26,10 @@ export function fuenteMovimientos(movimientos: RepositorioMovimientos): FuenteOp
         const datos: DatosMovimiento = {
           tipo: m.tipo,
           comentario: m.comentario,
+          // Rediseño pieza 4: solo si lo tiene (las mermas nuevas). El cambio, el
+          // consumo y las mermas de antes de la 022 viajan sin la llave, como una
+          // tablet vieja: el servidor acepta su ausencia.
+          ...(m.motivo_merma_id === null ? {} : { motivo_merma_id: m.motivo_merma_id }),
           registrado_en: m.registrado_en,
           lineas: m.lineas.map((l) => ({
             presentacion_id: l.presentacion_id,

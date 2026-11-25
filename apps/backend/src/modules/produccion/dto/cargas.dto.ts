@@ -75,19 +75,34 @@ export class VersionCargaDto {
 }
 
 /**
- * `POST /sync/cargas/:id/respuesta` (Tarea 3). `motivo` se declara aunque
- * `aceptar` no lo lleve: con `whitelist` un campo no declarado se borraria sin
- * aviso, y "aceptar con motivo" debe ser 400 (spec).
+ * `POST /sync/cargas/:id/respuesta`. Forma nueva (pieza 3): `aceptadas`, los ids
+ * de las presentaciones aceptadas (vacia = rechazar). Forma vieja (tablets sin
+ * actualizar): `accion` + `motivo`. Que venga una y solo una, que los ids sean
+ * de la carga y el motivo lo revisa `normalizarRespuesta`, con la carga en la
+ * mano. `motivo` se declara aunque la lista no lo lleve: con `whitelist` un
+ * campo no declarado se borraria sin aviso y "aceptar con motivo" debe ser 400.
  */
 export class RespuestaCargaDto {
   @IsInt({ message: VERSION })
   @Min(1, { message: VERSION })
   version!: number;
 
+  @IsOptional()
+  @IsArray({ message: 'Los productos aceptados deben ser una lista.' })
+  @ArrayMaxSize(MAX_LINEAS_CARGA, {
+    message: `Una carga lleva hasta ${MAX_LINEAS_CARGA} productos.`,
+  })
+  @IsUUID(undefined, {
+    each: true,
+    message: 'Uno de los productos aceptados no es válido.',
+  })
+  aceptadas?: string[];
+
+  @IsOptional()
   @IsIn(['aceptar', 'rechazar'], {
     message: 'La acción debe ser aceptar o rechazar.',
   })
-  accion!: 'aceptar' | 'rechazar';
+  accion?: 'aceptar' | 'rechazar';
 
   @IsOptional()
   @IsString({ message: 'El motivo debe ser texto.' })

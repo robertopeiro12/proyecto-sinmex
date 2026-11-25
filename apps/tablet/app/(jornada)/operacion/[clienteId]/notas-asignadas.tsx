@@ -142,7 +142,7 @@ export default function PantallaNotasAsignadas() {
         </Tarjeta>
         <Boton
           etiqueta={siguiente === 'venta' ? 'Seguir' : 'Volver al cliente'}
-          glifo={siguiente === 'venta' ? '→' : '←'}
+          icono={siguiente === 'venta' ? 'adelante' : 'atras'}
           onPress={seguir}
           estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
         />
@@ -204,7 +204,7 @@ export default function PantallaNotasAsignadas() {
           {error ? <Text style={estilos.error}>{error}</Text> : null}
           <Boton
             etiqueta="Guardar"
-            glifo="✓"
+            icono="palomita"
             deshabilitado={errorComentario !== null || !menu.operacionesHabilitadas || guardado}
             onPress={guardar}
             estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}

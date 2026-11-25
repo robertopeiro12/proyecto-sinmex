@@ -141,7 +141,7 @@ export default function VisitaSinVenta() {
     try {
       datos.visitas.registrar({ vendedorId: vendedor.id, clienteId, ...validacion.visita });
       avisar('Visita registrada');
-      // D7.7: regresa a la ruta del dia, donde el cliente ya sale en "Visitados sin venta".
+      // D7.7: regresa a la ruta del dia, donde el cliente ya sale en "Visitados".
       router.dismissTo('/(jornada)');
     } catch (e) {
       guardando.current = false;
@@ -207,7 +207,7 @@ export default function VisitaSinVenta() {
             <Boton
               etiqueta={foto ? 'Volver a tomar' : 'Tomar foto'}
               tono="neutra"
-              glifo="◉"
+              icono="foto"
               onPress={() => void tomarFoto()}
               ocupado={tomandoFoto}
               estilo={{ marginTop: espacio.sm }}
@@ -236,7 +236,7 @@ export default function VisitaSinVenta() {
               <Boton
                 etiqueta="Volver a intentar"
                 tono="neutra"
-                glifo="⌖"
+                icono="ubicacion"
                 ancho="ajustado"
                 onPress={reintentarUbicacion}
                 estilo={{ marginTop: espacio.sm }}
@@ -264,7 +264,7 @@ export default function VisitaSinVenta() {
 
       <Boton
         etiqueta="Guardar visita"
-        glifo="✓"
+        icono="palomita"
         deshabilitado={validacion.visita === null || !menu.operacionesHabilitadas || guardada}
         onPress={guardar}
         estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}

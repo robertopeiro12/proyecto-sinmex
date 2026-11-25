@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { CortesVendedorRepository } from './cortes-vendedor.repository';
+import { CortesVendedorService } from './cortes-vendedor.service';
 import { JornadasRepository } from './jornadas.repository';
 import { JornadasService } from './jornadas.service';
 import { MotivosVisitaController } from './motivos-visita.controller';
@@ -35,6 +37,7 @@ import { VisitasService } from './visitas.service';
 // T-39: el catalogo de motivos de visita vive aqui porque la visita es de Rutas (ADR-0009).
 // `NotasNoCobradasService` se exporta para que sincronizacion/ proyecte el "no cobre".
 // T-39: `VisitasService` se exporta para que sincronizacion/ proyecte la visita.
+// Rediseño pieza 6: `CortesVendedorService`, para que proyecte el corte del vendedor.
 @Module({
   controllers: [
     VehiculosController,
@@ -63,6 +66,8 @@ import { VisitasService } from './visitas.service';
     VisitasRepository,
     NotasNoCobradasService,
     NotasNoCobradasRepository,
+    CortesVendedorService,
+    CortesVendedorRepository,
   ],
   // Operacion -> Procesos: `NotasRutaRepository` es la unica regla de "nota con
   // saldo"; el resumen del cliente (`inventario/`) la reutiliza.
@@ -72,6 +77,7 @@ import { VisitasService } from './visitas.service';
     RutasDiariasService,
     VisitasService,
     NotasNoCobradasService,
+    CortesVendedorService,
   ],
 })
 export class RutasModule {}

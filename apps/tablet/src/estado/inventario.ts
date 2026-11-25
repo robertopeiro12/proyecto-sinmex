@@ -1,4 +1,4 @@
-import { faltantesDeVenta, textoFaltante, type Existencia } from '@/datos/inventario-reglas';
+import { faltantesDeVenta, renglonAceptado, textoFaltante, type Existencia } from '@/datos/inventario-reglas';
 import type { Booleano, EstadoCarga, FechaISO } from '@/datos/tipos';
 import type { ResultadoApiCarga } from '@/sincronizacion/api-carga';
 import type { CargaPull, CuerpoRespuestaCarga } from '@/sincronizacion/contrato';
@@ -17,6 +17,7 @@ export {
   faltantesDeMovimiento,
   faltantesDeVenta,
   MOTIVO_CARGA_PENDIENTE,
+  renglonAceptado,
   textoFaltante,
 } from '@/datos/inventario-reglas';
 export type {
@@ -28,9 +29,6 @@ export type {
   PiezasDePresentacion,
 } from '@/datos/inventario-reglas';
 
-/** El mismo 300 del servidor (`reglas-carga.ts`) y del check de `carga.motivo_rechazo`. */
-export const LARGO_MAX_MOTIVO_RECHAZO = 300;
-
 export const MENSAJE_SIN_RED_CARGA = 'Conéctate al WiFi para aceptar la carga.';
 export const MENSAJE_CARGA_CAMBIO = 'La carga cambió en el almacén; revísala de nuevo.';
 export const MENSAJE_CARGA_ELIMINADA = 'El almacén eliminó esta carga.';
@@ -40,30 +38,14 @@ export const NOTA_CONTROL_APAGADO = 'El control de inventario de tu sucursal est
 
 export type AccionCarga = 'aceptar' | 'rechazar';
 
-/** Errores de forma de la respuesta (D2: rechazar lleva motivo). */
-export function validarRespuesta(accion: AccionCarga, motivo: string): string[] {
-  if (accion === 'aceptar') return [];
-  const texto = motivo.trim();
-  if (texto === '') return ['Escribe por qué rechazas la carga.'];
-  if (texto.length > LARGO_MAX_MOTIVO_RECHAZO) {
-    return [`El motivo lleva hasta ${LARGO_MAX_MOTIVO_RECHAZO} caracteres.`];
-  }
-  return [];
-}
-
 /**
- * El cuerpo del endpoint. `version` es la de la carga QUE SE PINTO: si el
- * portal la cambio, el servidor contesta 409 y el vendedor nunca acepta lo que
- * no vio (Review Focus 2).
+ * El cuerpo del endpoint (pieza 3): los `presentacion_id` palomeados; la lista
+ * vacia es "Rechazar todo". Sin motivo. `version` es la de la carga QUE SE
+ * PINTO: si el portal la cambio, el servidor contesta 409 y el vendedor nunca
+ * acepta lo que no vio (Review Focus 2).
  */
-export function cuerpoRespuesta(
-  accion: AccionCarga,
-  motivo: string,
-  version: number,
-): CuerpoRespuestaCarga {
-  return accion === 'aceptar'
-    ? { version, accion }
-    : { version, accion, motivo: motivo.trim() };
+export function cuerpoRespuesta(version: number, aceptadas: readonly string[]): CuerpoRespuestaCarga {
+  return { version, aceptadas: [...aceptadas] };
 }
 
 /** Aceptar/Rechazar solo en una carga pendiente, viva y de hoy. */
@@ -74,18 +56,137 @@ export function puedeResponder(
   return carga.estado === 'pendiente' && carga.activo === 1 && carga.fecha === hoy;
 }
 
+/** Lo que los textos de una carga leen de ella (una `CargaConLineas` sirve tal cual). */
+export interface CargaParaTexto {
+  estado: EstadoCarga;
+  lineas: readonly { aceptada?: 0 | 1 | null }[];
+}
+
+/**
+ * "Aceptada", "Aceptada 3 de 5" (pieza 3: se acepto una parte), "Rechazada" o
+ * "Por aceptar". Cuenta renglones, no piezas. Una aceptada sin ningun renglon
+ * aceptado dice "Rechazada", como el candado de la Ruta.
+ */
+export function textoEstadoCarga(carga: CargaParaTexto): string {
+  if (carga.estado === 'pendiente') return 'Por aceptar';
+  if (carga.estado === 'rechazada') return 'Rechazada';
+  const total = carga.lineas.length;
+  const aceptados = carga.lineas.filter((l) => renglonAceptado(carga.estado, l)).length;
+  if (total > 0 && aceptados === 0) return 'Rechazada';
+  return aceptados === total ? 'Aceptada' : `Aceptada ${aceptados} de ${total}`;
+}
+
 /** Subconjunto de `Estado` de `@/ui/pantalla` (un .tsx no corre en Jest). */
-export function pastillaCarga(estado: EstadoCarga): {
+export function pastillaCarga(carga: CargaParaTexto): {
   texto: string;
   estado: 'pendiente' | 'listo' | 'error';
 } {
-  if (estado === 'aceptada') return { texto: 'Aceptada', estado: 'listo' };
-  if (estado === 'rechazada') return { texto: 'Rechazada', estado: 'error' };
-  return { texto: 'Por aceptar', estado: 'pendiente' };
+  const texto = textoEstadoCarga(carga);
+  if (texto === 'Por aceptar') return { texto, estado: 'pendiente' };
+  if (texto === 'Rechazada') return { texto, estado: 'error' };
+  return { texto, estado: 'listo' };
+}
+
+/** El checklist (maqueta 4): prende o apaga un renglon. No toca el conjunto que recibe. */
+export function alternarRenglon(seleccion: ReadonlySet<string>, presentacionId: string): Set<string> {
+  const nueva = new Set(seleccion);
+  if (nueva.has(presentacionId)) nueva.delete(presentacionId);
+  else nueva.add(presentacionId);
+  return nueva;
+}
+
+/** ¿Estan palomeados todos? (con la carga vacia, no). */
+export function todosSeleccionados(seleccion: ReadonlySet<string>, ids: readonly string[]): boolean {
+  return ids.length > 0 && ids.every((id) => seleccion.has(id));
+}
+
+/** "Seleccionar todos": si falta alguno, palomea todos; si ya estan todos, los quita. */
+export function seleccionarTodos(seleccion: ReadonlySet<string>, ids: readonly string[]): Set<string> {
+  return todosSeleccionados(seleccion, ids) ? new Set() : new Set(ids);
+}
+
+/**
+ * Lo que se manda: los palomeados en el orden de la carga, y solo los que
+ * siguen en ella (tras un 409 la carga pudo cambiar de renglones: un id que ya
+ * no esta seria un 400).
+ */
+export function aceptadasDe(
+  lineas: readonly { presentacion_id: string }[],
+  seleccion: ReadonlySet<string>,
+): string[] {
+  return lineas.map((l) => l.presentacion_id).filter((id) => seleccion.has(id));
+}
+
+/** El boton del checklist: "Aceptar 6 de 8". */
+export function textoAceptar(palomeados: number, total: number): string {
+  return `Aceptar ${palomeados} de ${total}`;
+}
+
+/** El aviso de arriba del resumen (maqueta 5). */
+export function tituloAvisoCarga(carga: { numero: number }): string {
+  return carga.numero > 1 ? 'Recarga esperando' : 'Carga por aceptar';
+}
+
+/** Lo que de un cambio recibe y entrega el vendedor, por presentacion. */
+interface FilaConCambios {
+  cargado: number;
+  existencia: number;
+  cambiosRecibidos?: number;
+  cambiosEntregados?: number;
+}
+
+/** Cambios netos del resumen: lo que recibio de los clientes menos lo que entrego. */
+export function cambiosNetos(fila: Pick<FilaConCambios, 'cambiosRecibidos' | 'cambiosEntregados'>): number {
+  return (fila.cambiosRecibidos ?? 0) - (fila.cambiosEntregados ?? 0);
+}
+
+/** "+3", "−2" o "0" (con el signo menos tipografico): la columna Cambios. */
+export function textoCambios(neto: number): string {
+  if (neto > 0) return `+${neto}`;
+  if (neto < 0) return `−${-neto}`;
+  return '0';
+}
+
+/**
+ * "Salió" del resumen: vendido + regalado + mermas + consumo, sin los cambios:
+ * cargado − existencia + cambios netos. Asi Cargado − Salió + Cambios =
+ * Existencia aunque un cambio reciba mas de lo que entrega (rediseño pieza 4).
+ * Nunca negativo.
+ */
+export function salio(fila: FilaConCambios): number {
+  return Math.max(0, fila.cargado - fila.existencia + cambiosNetos(fila));
 }
 
 export function totalPiezas(lineas: readonly { piezas: number }[]): number {
   return lineas.reduce((total, l) => total + l.piezas, 0);
+}
+
+/** "pieza" con 1, "piezas" con cualquier otro numero (recorrido final, N2). */
+export function palabraPiezas(n: number): string {
+  return n === 1 ? 'pieza' : 'piezas';
+}
+
+/**
+ * La etiqueta de una presentacion para una columna angosta (recorrido final,
+ * D3): pega el volumen a su unidad con un espacio duro ("1\u00A0L",
+ * "500\u00A0ml"), asi el renglon se parte entre producto y volumen y nunca deja
+ * la unidad sola abajo ("Horchata 1 / L").
+ */
+export function etiquetaSinCortarVolumen(etiqueta: string): string {
+  return etiqueta.replace(/(\d) (\S+)$/, '$1\u00A0$2');
+}
+
+/**
+ * Las piezas que se muestran de una carga (recorrido final, D6): ya aceptada,
+ * solo los renglones que entraron (`renglonAceptado`); pendiente o rechazada,
+ * todo lo que mando el almacen.
+ */
+export function piezasDeCarga(carga: {
+  estado: EstadoCarga;
+  lineas: readonly { piezas: number; aceptada?: 0 | 1 | null }[];
+}): number {
+  if (carga.estado !== 'aceptada') return totalPiezas(carga.lineas);
+  return totalPiezas(carga.lineas.filter((l) => renglonAceptado(carga.estado, l)));
 }
 
 /**
@@ -97,7 +198,7 @@ export function textoTeQuedan(
   enEstaVenta: number,
 ): { texto: string; falta: boolean } {
   const quedan = existencia - enEstaVenta;
-  if (quedan >= 0) return { texto: `Te quedan ${quedan}`, falta: false };
+  if (quedan >= 0) return { texto: `Te ${quedan === 1 ? 'queda' : 'quedan'} ${quedan}`, falta: false };
   const faltan = -quedan;
   return { texto: faltan === 1 ? 'Falta 1 pieza' : `Faltan ${faltan} piezas`, falta: true };
 }

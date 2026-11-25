@@ -65,6 +65,8 @@ describe('armarVentaPortal: lineas con el precio del servidor (T-17, §4.2)', ()
         // D9 (T-74): el portal no lleva trazabilidad de promociones.
         regalos: [],
         firma: null,
+        atendio: null,
+        abonoCentavos: null,
       },
     });
   });

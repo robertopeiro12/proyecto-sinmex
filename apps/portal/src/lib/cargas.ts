@@ -11,6 +11,11 @@ export interface LineaCarga {
   piezas: number;
 }
 
+/** Un renglon de la rejilla: `aceptada` es null mientras la carga esta pendiente. */
+export interface LineaCargaRejilla extends LineaCarga {
+  aceptada: boolean | null;
+}
+
 export interface PresentacionRejilla {
   id: string;
   productoNombre: string;
@@ -26,7 +31,10 @@ export interface CargaRejilla {
   motivoRechazo: string | null;
   version: number;
   respondidaEn: string | null;
-  lineas: LineaCarga[];
+  renglones: number;
+  /** `null` mientras esta pendiente. */
+  renglonesAceptados: number | null;
+  lineas: LineaCargaRejilla[];
 }
 
 export interface VendedorRejilla {
@@ -50,6 +58,20 @@ export const ETIQUETA_ESTADO: Record<EstadoCarga, string> = {
   aceptada: "Aceptada",
   rechazada: "Rechazada",
 };
+
+/** "Aceptada" (todos), "Aceptada N de M" (algunos), "Rechazada" (ninguno) o "Pendiente". */
+export function textoEstadoCarga(c: {
+  estado: EstadoCarga;
+  renglones: number;
+  renglonesAceptados: number | null;
+}): string {
+  if (c.estado === "pendiente") return ETIQUETA_ESTADO.pendiente;
+  const aceptados = c.renglonesAceptados;
+  if (aceptados == null || !c.renglones) return ETIQUETA_ESTADO[c.estado];
+  if (aceptados === 0) return ETIQUETA_ESTADO.rechazada;
+  if (aceptados < c.renglones) return `Aceptada ${aceptados} de ${c.renglones}`;
+  return ETIQUETA_ESTADO.aceptada;
+}
 
 export function obtenerRejilla(fecha: string, sucursalId: string): Promise<Rejilla> {
   const params = new URLSearchParams({ fecha, sucursal: sucursalId });

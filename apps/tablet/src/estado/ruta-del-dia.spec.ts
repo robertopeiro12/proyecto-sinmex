@@ -1,22 +1,24 @@
+import type { Prospecto } from '@/datos/tipos';
+
 import {
-  agruparRuta,
+  accionMenu,
+  agruparRutaEnCurso,
   anchoMenuLateral,
   atendidosFueraDeRuta,
   enlaceAFicha,
   estadoSubida,
   pastillaAlta,
   entradasMenu,
-  filtrarParaAgregar,
-  indiceDestino,
-  moverElemento,
+  clientesParaAgregar,
+  listaProspectos,
+  NOTA_SIN_JORNADA,
   motivoDeRechazo,
   primeraLineaDomicilio,
+  resumenVisitado,
   sinRutaAsignada,
   textoAgregado,
   textoAvisoSinRuta,
-  textoBurbuja,
-  textoMarcaAsignadas,
-  textoUltimaVisita,
+  textoNotasQueTrae,
   urlMapa,
   urlTelefono,
 } from './ruta-del-dia';
@@ -28,27 +30,80 @@ const fila = (cliente_id: string, activo: 0 | 1, visitado: boolean, visita_sin_v
   visita_sin_venta,
 });
 
-describe('agruparRuta (D5, D16)', () => {
-  it('las vivas van a la ruta, visitadas o no, en el orden que llegan', () => {
-    const r = agruparRuta([fila('a', 1, true), fila('b', 1, false)]);
-    expect(r.enRuta.map((f) => f.cliente_id)).toEqual(['a', 'b']);
-    expect(r.fueraDeRuta).toEqual([]);
+describe('agruparRutaEnCurso (spec §6, maqueta 6)', () => {
+  it('por visitar, visitados (con o sin venta) y fuera de ruta', () => {
+    const g = agruparRutaEnCurso([
+      fila('a', 1, false), fila('b', 1, true), fila('c', 1, true, true), fila('d', 0, true), fila('e', 0, false),
+    ]);
+    expect(g.porVisitar.map((f) => f.cliente_id)).toEqual(['a']);
+    expect(g.visitados.map((f) => f.cliente_id)).toEqual(['b', 'c']);
+    expect(g.fueraDeRuta.map((f) => f.cliente_id)).toEqual(['d']);
   });
 
-  it('una baja SIN actividad hoy desaparece', () => {
-    expect(agruparRuta([fila('a', 0, false)])).toEqual({ enRuta: [], visitadosSinVenta: [], fueraDeRuta: [] });
+  it('respeta el orden en que llegan', () => {
+    const g = agruparRutaEnCurso([fila('c', 1, true), fila('a', 1, false), fila('b', 1, true), fila('d', 1, false)]);
+    expect(g.porVisitar.map((f) => f.cliente_id)).toEqual(['a', 'd']);
+    expect(g.visitados.map((f) => f.cliente_id)).toEqual(['c', 'b']);
   });
 
-  it('una baja CON actividad hoy va a "Fuera de ruta"', () => {
-    const r = agruparRuta([fila('a', 1, false), fila('b', 0, true)]);
-    expect(r.enRuta.map((f) => f.cliente_id)).toEqual(['a']);
-    expect(r.fueraDeRuta.map((f) => f.cliente_id)).toEqual(['b']);
+  it('pieza 6 I-1: un cliente dado de baja sin actividad va a "Dados de baja", no a "Por visitar"', () => {
+    const g = agruparRutaEnCurso([
+      { ...fila('a', 1, true), cliente_activo: 1 as const },
+      { ...fila('b', 1, false), cliente_activo: 0 as const },
+      { ...fila('c', 1, true), cliente_activo: 0 as const },
+    ]);
+    expect(g.porVisitar).toEqual([]);
+    expect(g.dadosDeBaja.map((f) => f.cliente_id)).toEqual(['b']);
+    // Con algo hecho hoy sigue en Visitados.
+    expect(g.visitados.map((f) => f.cliente_id)).toEqual(['a', 'c']);
+    // Corte se abre con el resto visitado (antes: candado para siempre).
+    const corte = entradasMenu({ porVisitar: g.porVisitar.length, candado: null, diaCerrado: false, sinJornada: false })
+      .find((e) => e.clave === 'corte');
+    expect(corte).toMatchObject({ deshabilitada: false, nota: null });
   });
 
   it('si el cliente quitado volvio a la ruta, no se pinta dos veces', () => {
-    const r = agruparRuta([fila('a', 1, true), fila('a', 0, true)]);
-    expect(r.enRuta).toHaveLength(1);
-    expect(r.fueraDeRuta).toEqual([]);
+    const g = agruparRutaEnCurso([fila('a', 1, true), fila('a', 0, true)]);
+    expect(g.visitados).toHaveLength(1);
+    expect(g.fueraDeRuta).toEqual([]);
+  });
+});
+
+describe('resumenVisitado (spec §6)', () => {
+  test('resumen de lo hecho', () => {
+    const base = { venta_contado_centavos: 0, venta_credito_centavos: 0, venta_abono_centavos: 0, cobro_centavos: 0, con_merma: false, con_cambio: false, ultima_visita_motivo: null, visita_sin_venta: false };
+    expect(resumenVisitado({ ...base, cobro_centavos: 85000, venta_credito_centavos: 124000 })).toBe('Cobro $850.00 · Venta a crédito $1,240.00');
+    expect(resumenVisitado({ ...base, venta_contado_centavos: 50000, con_merma: true })).toBe('Venta $500.00 · Merma');
+    expect(resumenVisitado({ ...base, visita_sin_venta: true, ultima_visita_motivo: 'Cerrado' })).toBe('Visita sin venta · cerrado');
+    expect(resumenVisitado({ ...base, visita_sin_venta: true })).toBe('Visita sin venta');
+    expect(resumenVisitado({ ...base, con_merma: true })).toBe('Merma');
+  });
+
+  test('venta a crédito con abono al vender dice cuánto abonó (pieza 2)', () => {
+    const base = { venta_contado_centavos: 0, venta_credito_centavos: 0, venta_abono_centavos: 0, cobro_centavos: 0, con_merma: false, con_cambio: false, ultima_visita_motivo: null, visita_sin_venta: false };
+    expect(resumenVisitado({ ...base, venta_credito_centavos: 72000, venta_abono_centavos: 30000 })).toBe(
+      'Venta a crédito $720.00 · Abonó $300.00',
+    );
+    expect(resumenVisitado({ ...base, venta_credito_centavos: 72000 })).toBe('Venta a crédito $720.00');
+    expect(
+      resumenVisitado({ ...base, venta_credito_centavos: 72000, venta_abono_centavos: 30000, con_merma: true }),
+    ).toBe('Venta a crédito $720.00 · Abonó $300.00 · Merma');
+  });
+
+  test('todo junto, en su orden; con algo hecho la visita no se menciona', () => {
+    const base = { venta_contado_centavos: 0, venta_credito_centavos: 0, venta_abono_centavos: 0, cobro_centavos: 0, con_merma: false, con_cambio: false, ultima_visita_motivo: null, visita_sin_venta: false };
+    expect(
+      resumenVisitado({ ...base, cobro_centavos: 100, venta_contado_centavos: 200, venta_credito_centavos: 300, con_merma: true }),
+    ).toBe('Cobro $1.00 · Venta $2.00 · Venta a crédito $3.00 · Merma');
+    expect(resumenVisitado({ ...base, con_merma: true, visita_sin_venta: true, ultima_visita_motivo: 'Cerrado' })).toBe('Merma');
+    // Rediseño pieza 4: el cambio va despues de la merma.
+    expect(resumenVisitado({ ...base, con_cambio: true })).toBe('Cambio');
+    expect(resumenVisitado({ ...base, venta_contado_centavos: 200, con_merma: true, con_cambio: true })).toBe(
+      'Venta $2.00 · Merma · Cambio',
+    );
+    expect(resumenVisitado({ ...base, con_cambio: true, visita_sin_venta: true, ultima_visita_motivo: 'Cerrado' })).toBe(
+      'Cambio',
+    );
   });
 });
 
@@ -69,10 +124,10 @@ describe('textos', () => {
     expect(primeraLineaDomicilio('   ')).toBe('sin domicilio');
   });
 
-  it('el aviso al agregar y la etiqueta de la burbuja', () => {
+  it('el aviso al agregar y lo que se lee del contador de notas', () => {
     expect(textoAgregado('Abarrotes La Esquina')).toBe('Abarrotes La Esquina agregado al final');
-    expect(textoBurbuja(1)).toBe('1 nota pendiente');
-    expect(textoBurbuja(3)).toBe('3 notas pendientes');
+    expect(textoNotasQueTrae(1)).toBe('Trae 1 nota por cobrar');
+    expect(textoNotasQueTrae(3)).toBe('Trae 3 notas por cobrar');
   });
 });
 
@@ -104,108 +159,145 @@ describe('urlMapa y urlTelefono (ficha del cliente)', () => {
   });
 });
 
-describe('reordenar con el dedo (D10)', () => {
-  it('moverElemento saca y vuelve a meter, sin mutar la lista', () => {
-    const lista = ['a', 'b', 'c', 'd'];
-    expect(moverElemento(lista, 0, 2)).toEqual(['b', 'c', 'a', 'd']);
-    expect(moverElemento(lista, 3, 0)).toEqual(['d', 'a', 'b', 'c']);
-    expect(moverElemento(lista, 1, 1)).toEqual(lista);
-    expect(lista).toEqual(['a', 'b', 'c', 'd']);
-  });
-
-  it('moverElemento fuera de rango devuelve una copia igual', () => {
-    expect(moverElemento(['a', 'b'], 5, 0)).toEqual(['a', 'b']);
-    expect(moverElemento(['a', 'b'], 0, -1)).toEqual(['a', 'b']);
-  });
-
-  it('indiceDestino redondea el desplazamiento a filas y no se sale de la lista', () => {
-    expect(indiceDestino(1, 0, 96, 5)).toBe(1);
-    expect(indiceDestino(1, 50, 96, 5)).toBe(2);
-    expect(indiceDestino(1, 40, 96, 5)).toBe(1);
-    expect(indiceDestino(1, -100, 96, 5)).toBe(0);
-    expect(indiceDestino(1, 1000, 96, 5)).toBe(4);
-    expect(indiceDestino(0, 300, 0, 5)).toBe(0);
-  });
-});
-
-describe('filtrarParaAgregar ("Agregar a mi ruta")', () => {
-  const c = (id: string, nombre: string, extra: { tipo?: 'cliente' | 'prospecto'; activo?: 0 | 1 } = {}) => ({
+describe('clientesParaAgregar ("Agregar a mi ruta")', () => {
+  const c = (id: string, nombre: string, tipo: 'cliente' | 'prospecto' = 'cliente', activo: 0 | 1 = 1) => ({
     id,
     nombre,
-    tipo: extra.tipo ?? ('cliente' as const),
-    activo: extra.activo ?? (1 as const),
+    tipo,
+    activo,
   });
 
-  it('ofrece clientes activos que no estan en la ruta de hoy, buscando sin acentos ni mayusculas', () => {
-    const clientes = [
-      c('1', 'Abarrotes Doña Lupe'),
-      c('2', 'Tienda La Esquina'),
-      c('3', 'Abarrotes El Güero'),
-      c('4', 'Abarrotes Prospecto', { tipo: 'prospecto' }),
-      c('5', 'Abarrotes de baja', { activo: 0 }),
-    ];
-    expect(filtrarParaAgregar(clientes, new Set(['3']), 'abarrotes dona').map((x) => x.id)).toEqual([
-      '1',
+  it('agregar a ruta muestra a todos con su marca "En ruta"', () => {
+    const r = clientesParaAgregar(
+      [
+        c('1', 'Mini Súper Otay'),
+        c('2', 'Abarrotes La Esperanza'),
+        c('3', 'Prospecto X', 'prospecto'),
+        c('4', 'Baja', 'cliente', 0),
+      ],
+      new Set(['1']),
+      '',
+    );
+    expect(r.map((x) => [x.nombre, x.enRuta])).toEqual([
+      ['Abarrotes La Esperanza', false],
+      ['Mini Súper Otay', true],
     ]);
-    expect(filtrarParaAgregar(clientes, new Set(['3']), '').map((x) => x.id)).toEqual(['1', '2']);
   });
 
-  it('corta en el limite', () => {
-    const muchos = Array.from({ length: 80 }, (_, i) => c(String(i), `Cliente ${i}`));
-    expect(filtrarParaAgregar(muchos, new Set(), '')).toHaveLength(50);
+  it('busca sin acentos', () => {
+    expect(clientesParaAgregar([c('1', 'Mini Súper Otay')], new Set(), 'super').length).toBe(1);
+    expect(clientesParaAgregar([c('1', 'Abarrotes Doña Lupe')], new Set(), 'DONA').length).toBe(1);
+  });
+
+  it('no recorta: 60 clientes sin busqueda salen todos, alfabeticos y con su marca', () => {
+    const muchos = Array.from({ length: 60 }, (_, i) => c(String(i), `Cliente ${String(59 - i).padStart(2, '0')}`));
+    const r = clientesParaAgregar(muchos, new Set(['0', '59']), '');
+    expect(r).toHaveLength(60);
+    expect(r.map((x) => x.nombre)).toEqual(
+      Array.from({ length: 60 }, (_, i) => `Cliente ${String(i).padStart(2, '0')}`),
+    );
+    expect(
+      r
+        .filter((x) => x.enRuta)
+        .map((x) => x.id)
+        .sort(),
+    ).toEqual(['0', '59']);
   });
 });
 
-describe('menu hamburguesa (D9, D16)', () => {
-  it('las entradas del spec, en su orden, con destino', () => {
-    expect(entradasMenu(false).map((e) => [e.titulo, e.destino])).toEqual([
-      ['Todos los clientes', '/(jornada)/operacion'],
-      ['Prospectos capturados', '/(jornada)/prospectos'],
-      ['Gastos', '/(jornada)/gastos'],
-      ['Inventario', '/(jornada)/inventario'],
-      ['Merma y consumo', '/(jornada)/merma'],
-      ['Ruta y GPS', '/(jornada)/ruta'],
-      ['Cerrar el día', '/(jornada)/cerrar-dia'],
+describe('menu hamburguesa (spec §5, maqueta 3)', () => {
+  const abierto = { porVisitar: 0, candado: null, diaCerrado: false, sinJornada: false };
+
+  test('entradas del menú en el orden del spec', () => {
+    expect(entradasMenu(abierto).map((e) => e.titulo)).toEqual([
+      'Ruta', 'Inventario', 'Ventas / Cobranza', 'Merma / Cambios',
+      'Gastos', 'Corte', 'Prospectos', 'Seleccionar impresora', 'Cerrar sesión',
     ]);
-    expect(entradasMenu(false).every((e) => !e.deshabilitada)).toBe(true);
   });
 
-  it('con el dia cerrado se deshabilita solo lo que captura', () => {
-    const deshabilitadas = entradasMenu(true)
-      .filter((e) => e.deshabilitada)
-      .map((e) => e.clave);
-    expect(deshabilitadas).toEqual(['gastos', 'merma']);
+  test('destinos; Cerrar sesión no tiene (lo maneja la pantalla)', () => {
+    expect(entradasMenu(abierto).map((e) => e.destino)).toEqual([
+      '/(jornada)', '/(jornada)/inventario', '/(jornada)/registros',
+      '/(jornada)/merma', '/(jornada)/gastos', '/(jornada)/corte', '/(jornada)/prospectos',
+      '/(jornada)/impresora', null,
+    ]);
+    expect(entradasMenu(abierto).every((e) => !e.deshabilitada && e.nota === null)).toBe(true);
   });
 
-  it('ninguna entrada abre una pantalla "Próximamente" por seccion', () => {
-    expect(entradasMenu(false).some((e) => e.destino.startsWith('/(jornada)/pendiente/'))).toBe(false);
-    expect(entradasMenu(false).some((e) => e.descripcion.startsWith('Pendiente: T-27'))).toBe(false);
+  test('Corte con candado y "faltan N clientes" mientras haya por visitar', () => {
+    const corte = (n: number) =>
+      entradasMenu({ porVisitar: n, candado: null, diaCerrado: false, sinJornada: false }).find((e) => e.clave === 'corte')!;
+    expect(corte(4)).toMatchObject({ deshabilitada: true, nota: 'faltan 4 clientes' });
+    expect(corte(1)).toMatchObject({ deshabilitada: true, nota: 'falta 1 cliente' });
+    expect(corte(0)).toMatchObject({ deshabilitada: false, nota: null });
   });
 
-  it('Gastos abre su pantalla (T-30/T-31)', () => {
-    const gastos = entradasMenu(false).find((e) => e.clave === 'gastos');
-    expect(gastos).toMatchObject({ titulo: 'Gastos', destino: '/(jornada)/gastos', deshabilitada: false });
-    expect(gastos?.descripcion).not.toMatch(/Pendiente/);
+  test('con candado de inventario (sin carga aceptada) Corte queda abierto aunque falten clientes', () => {
+    const corte = entradasMenu({ porVisitar: 3, candado: { tipo: 'sin-carga' }, diaCerrado: false, sinJornada: false })
+      .find((e) => e.clave === 'corte')!;
+    expect(corte).toMatchObject({ deshabilitada: false, nota: null });
   });
 
-  it('Inventario abre su pantalla (T-27) y se consulta con el dia cerrado', () => {
-    const inventario = entradasMenu(true).find((e) => e.clave === 'inventario');
-    expect(inventario).toMatchObject({
-      titulo: 'Inventario',
-      destino: '/(jornada)/inventario',
-      deshabilitada: false,
-    });
-    expect(inventario?.descripcion).not.toMatch(/Pendiente/);
+  test('con el día cerrado, Corte se abre (ya se hizo) y solo Gastos se apaga', () => {
+    const e = entradasMenu({ porVisitar: 3, candado: null, diaCerrado: true, sinJornada: false });
+    expect(e.find((x) => x.clave === 'corte')!.deshabilitada).toBe(false);
+    expect(e.filter((x) => x.deshabilitada).map((x) => x.clave)).toEqual(['gastos']);
   });
 
-  it('Merma y consumo abre su pantalla (T-27 pieza 2)', () => {
-    expect(entradasMenu(false).find((e) => e.clave === 'merma')).toEqual({
-      clave: 'merma',
-      titulo: 'Merma y consumo',
-      descripcion: 'Merma del trayecto y consumo propio',
-      destino: '/(jornada)/merma',
-      deshabilitada: false,
-    });
+  test('con el día cerrado, Merma / Cambios sigue abierta como consulta (sin nota)', () => {
+    const merma = entradasMenu({ porVisitar: 0, candado: null, diaCerrado: true, sinJornada: false }).find(
+      (x) => x.clave === 'merma',
+    )!;
+    expect(merma).toMatchObject({ deshabilitada: false, nota: null, destino: '/(jornada)/merma' });
+  });
+
+  test('sin jornada de hoy, Merma / Cambios sí se apaga ("Empieza tu ruta")', () => {
+    const merma = entradasMenu({ porVisitar: 0, candado: { tipo: 'empezar' }, diaCerrado: false, sinJornada: true }).find(
+      (x) => x.clave === 'merma',
+    )!;
+    expect(merma).toMatchObject({ deshabilitada: true, nota: NOTA_SIN_JORNADA });
+  });
+
+  test('ninguna entrada abre una pantalla "Próximamente" por sección', () => {
+    expect(entradasMenu(abierto).some((e) => e.destino?.startsWith('/(jornada)/pendiente/'))).toBe(false);
+  });
+
+  test('sin jornada de hoy solo quedan Ruta y Cerrar sesión; lo demás dice "Empieza tu ruta"', () => {
+    const e = entradasMenu({ porVisitar: 3, candado: { tipo: 'empezar' }, diaCerrado: false, sinJornada: true });
+    expect(e.filter((x) => !x.deshabilitada).map((x) => x.clave)).toEqual(['ruta', 'salir']);
+    expect(e.filter((x) => !x.deshabilitada).every((x) => x.nota === null)).toBe(true);
+    const apagadas = e.filter((x) => x.deshabilitada);
+    expect(apagadas).toHaveLength(7);
+    // La nota de Corte ("faltan N") cede a la de empezar la ruta.
+    expect(apagadas.every((x) => x.nota === NOTA_SIN_JORNADA)).toBe(true);
+    expect(NOTA_SIN_JORNADA).toBe('Empieza tu ruta');
+  });
+});
+
+describe('accionMenu (revisión final pieza 1, I2: el menú no apila pantallas)', () => {
+  const entradas = entradasMenu({ porVisitar: 0, candado: null, diaCerrado: false, sinJornada: false });
+  const de = (clave: string) => entradas.find((e) => e.clave === clave)!;
+
+  test('a la Ruta: dismissTo desde cualquier pantalla del menú', () => {
+    expect(accionMenu('gastos', de('ruta'))).toEqual({ tipo: 'dismissTo', destino: '/(jornada)' });
+    expect(accionMenu('corte', de('ruta'))).toEqual({ tipo: 'dismissTo', destino: '/(jornada)' });
+  });
+
+  test('desde la Ruta las demás entradas hacen push', () => {
+    expect(accionMenu('ruta', de('gastos'))).toEqual({ tipo: 'push', destino: '/(jornada)/gastos' });
+    expect(accionMenu('ruta', de('prospectos'))).toEqual({ tipo: 'push', destino: '/(jornada)/prospectos' });
+  });
+
+  test('desde otra pantalla del menú, replace (encima de la Ruta hay a lo más una)', () => {
+    expect(accionMenu('gastos', de('inventario'))).toEqual({ tipo: 'replace', destino: '/(jornada)/inventario' });
+    expect(accionMenu('prospectos', de('corte'))).toEqual({ tipo: 'replace', destino: '/(jornada)/corte' });
+  });
+
+  test('la entrada de la pantalla actual no hace nada; Cerrar sesión sale', () => {
+    expect(accionMenu('ruta', de('ruta'))).toEqual({ tipo: 'nada' });
+    expect(accionMenu('gastos', de('gastos'))).toEqual({ tipo: 'nada' });
+    expect(accionMenu('ruta', de('salir'))).toEqual({ tipo: 'salir' });
+    expect(accionMenu('gastos', de('salir'))).toEqual({ tipo: 'salir' });
   });
 });
 
@@ -218,46 +310,26 @@ describe('estadoSubida (T-75)', () => {
     expect(estadoSubida(['pendiente', 'error', 'sincronizado'])).toBe('error');
   });
 
-  it('T-39: la viva visitada sin venta sale de la lista y va a "Visitados sin venta", en su orden', () => {
-    const r = agruparRuta([fila('a', 1, true, true), fila('b', 1, false), fila('c', 1, true, true)]);
-    expect(r.enRuta.map((f) => f.cliente_id)).toEqual(['b']);
-    expect(r.visitadosSinVenta.map((f) => f.cliente_id)).toEqual(['a', 'c']);
-  });
-
-  it('T-39: visitada CON venta sigue en la ruta con su palomita (Review Focus 3)', () => {
-    const r = agruparRuta([fila('a', 1, true, false)]);
-    expect(r.enRuta.map((f) => f.cliente_id)).toEqual(['a']);
-    expect(r.visitadosSinVenta).toEqual([]);
-  });
-
   it('T-39: una baja que solo fue visitada va a "Fuera de ruta"', () => {
-    const r = agruparRuta([fila('a', 0, true, true)]);
+    const r = agruparRutaEnCurso([fila('a', 0, true, true)]);
     expect(r.fueraDeRuta.map((f) => f.cliente_id)).toEqual(['a']);
-    expect(r.visitadosSinVenta).toEqual([]);
+    expect(r.visitados).toEqual([]);
   });
 });
 
 describe('sinRutaAsignada (T-39)', () => {
   it('solo sin ninguna fila en las tres secciones', () => {
-    expect(sinRutaAsignada({ enRuta: [], visitadosSinVenta: [], fueraDeRuta: [] })).toBe(true);
-    // Todos visitados sin venta: hay ruta, aunque la lista quede vacia (Review Focus 3).
-    expect(sinRutaAsignada({ enRuta: [], visitadosSinVenta: [fila('a', 1, true, true)], fueraDeRuta: [] })).toBe(false);
-    expect(sinRutaAsignada({ enRuta: [], visitadosSinVenta: [], fueraDeRuta: [fila('b', 0, true)] })).toBe(false);
+    expect(sinRutaAsignada({ porVisitar: [], visitados: [], fueraDeRuta: [] })).toBe(true);
+    // Todos visitados: hay ruta, aunque "Por visitar" quede vacia (Review Focus 3).
+    expect(sinRutaAsignada({ porVisitar: [], visitados: [fila('a', 1, true, true)], fueraDeRuta: [] })).toBe(false);
+    expect(sinRutaAsignada({ porVisitar: [], visitados: [], fueraDeRuta: [fila('b', 0, true)] })).toBe(false);
+    expect(
+      sinRutaAsignada({ porVisitar: [], visitados: [], fueraDeRuta: [], dadosDeBaja: [fila('c', 1, false)] }),
+    ).toBe(false);
   });
 });
 
-describe('textoUltimaVisita y motivoDeRechazo (T-39)', () => {
-  it('motivo y hora local', () => {
-    expect(textoUltimaVisita('Cerrado', new Date(2026, 9, 17, 10, 42).toISOString())).toBe('Cerrado · 10:42');
-    expect(textoUltimaVisita(null, null)).toBe('Visita · --:--');
-  });
-
-  it('sin visita pero con comentario de nota no cobrada: "No cobró · HH:MM"', () => {
-    const en = new Date(2026, 9, 17, 11, 5).toISOString();
-    expect(textoUltimaVisita(null, null, en)).toBe('No cobró · 11:05');
-    expect(textoUltimaVisita('Cerrado', en, new Date(2026, 9, 17, 12, 0).toISOString())).toBe('Cerrado · 11:05');
-  });
-
+describe('motivoDeRechazo (T-39)', () => {
   it('el motivo sin el codigo tecnico', () => {
     expect(motivoDeRechazo('visita-id-ocupado: El id de esta visita ya está ocupado.')).toBe(
       'El id de esta visita ya está ocupado.',
@@ -372,6 +444,40 @@ describe('enlaceAFicha (T-75, D6; Review Focus 2)', () => {
   });
 });
 
+describe('listaProspectos (revisión final pieza 1, I1)', () => {
+  const p = (id: string, nombre: string): Prospecto =>
+    ({ id, nombre, domicilio: null, sync_estado: 'pendiente' }) as Prospecto;
+  const cli = (id: string, nombre: string) => ({ id, nombre, domicilio: `Calle ${id}` });
+
+  it('lo capturado hoy va primero, con su pastilla, y no se repite abajo', () => {
+    const hoy = [p('h1', 'Tienda de hoy')];
+    const r = listaProspectos(hoy, [cli('h1', 'Tienda de hoy'), cli('a', 'Abarrotes')], () => null, () => true);
+    expect(r.capturadosHoy.map((f) => [f.id, f.local?.id, f.ficha])).toEqual([['h1', 'h1', 'h1']]);
+    expect(r.otros.map((f) => f.id)).toEqual(['a']);
+  });
+
+  it('el prospecto de otro día o de otra tablet se lista y abre su ficha', () => {
+    const ayer = p('ayer', 'Capturado ayer aquí');
+    const r = listaProspectos(
+      [],
+      [cli('ayer', 'Capturado ayer aquí'), cli('otra', 'De otra tablet')],
+      (id) => (id === 'ayer' ? ayer : null),
+      () => true,
+    );
+    expect(r.otros.map((f) => [f.id, f.ficha, f.local])).toEqual([
+      ['ayer', 'ayer', ayer],
+      ['otra', 'otra', null],
+    ]);
+    expect(r.otros[1]!.domicilio).toBe('Calle otra');
+  });
+
+  it('una captura de hoy sin espejo en el catálogo se ve, pero no abre ficha', () => {
+    const r = listaProspectos([p('rechazado', 'Rechazado')], [], () => null, () => false);
+    expect(r.capturadosHoy).toMatchObject([{ id: 'rechazado', ficha: null }]);
+    expect(r.otros).toEqual([]);
+  });
+});
+
 describe('anchoMenuLateral (menu lateral, 2026-10-18)', () => {
   it('en el celular toma el 82% y deja una franja de la ruta para cerrar', () => {
     expect(anchoMenuLateral(360)).toBe(295);
@@ -386,13 +492,3 @@ describe('anchoMenuLateral (menu lateral, 2026-10-18)', () => {
   });
 });
 
-describe('textoMarcaAsignadas', () => {
-  it('una nota, en singular', () => {
-    expect(textoMarcaAsignadas(1)).toBe('Nota asignada');
-  });
-
-  it('varias, con la cuenta', () => {
-    expect(textoMarcaAsignadas(2)).toBe('Notas asignadas · 2');
-    expect(textoMarcaAsignadas(5)).toBe('Notas asignadas · 5');
-  });
-});

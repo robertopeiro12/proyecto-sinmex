@@ -220,6 +220,20 @@ export function crearRepositorioCobranzas(
     },
 
     /**
+     * Cobros del vendedor en un dia, de todos sus clientes, en el orden en que
+     * se grabaron: el registro "Ventas / Cobranza" (rediseño pieza 5). Solo lo
+     * cobrado en esta tablet; los cobros de la oficina no estan en `cobranza`.
+     */
+    delDiaDelVendedor(vendedorId: string, fecha: FechaISO = reloj.hoy()): Cobranza[] {
+      return bd.getAllSync<Cobranza>(
+        `select * from cobranza
+          where vendedor_id = $vendedor_id and fecha = $fecha
+          order by grabada_en, rowid`,
+        { $vendedor_id: vendedorId, $fecha: fecha },
+      );
+    },
+
+    /**
      * Cobros que faltan por subir, incluidos los rechazados (patron D19 de
      * T-16): un `nota-no-encontrada` sobre una venta que aun no subio se
      * recupera solo cuando la venta entra. Reenviar es seguro: la clave no cambia.

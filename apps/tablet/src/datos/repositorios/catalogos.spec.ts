@@ -173,6 +173,32 @@ describe('repositorio de catalogos', () => {
       expect(catalogos.notasPendientesDe('cli-1').map((n) => n.id)).toEqual(['nota-2']);
     });
 
+    it('folioDeNota (pieza 5) lee el folio aunque la nota ya no este activa', () => {
+      const { catalogos } = conCatalogos();
+      expect(catalogos.folioDeNota('nota-1')).toBe('TJ260801AP01');
+
+      catalogos.guardarSnapshot({
+        notas: [{ ...snapshotDePrueba().notas![0]!, activo: 0 }],
+      });
+      expect(catalogos.folioDeNota('nota-1')).toBe('TJ260801AP01');
+      expect(catalogos.folioDeNota('no-existe')).toBeNull();
+    });
+
+    it('guarda el detalle_json de la nota y una nota sin detalle lo deja en null (rediseño pieza 7)', () => {
+      const { catalogos } = conCatalogos();
+      expect(catalogos.notasPendientesDe('cli-1').map((n) => n.detalle_json)).toEqual([null, null]);
+
+      const detalle = JSON.stringify({ lineas: [], promociones: [], creada_en: '2026-08-01T15:00:00.000Z' });
+      catalogos.guardarSnapshot({
+        notas: [{ ...snapshotDePrueba().notas![0]!, detalle_json: detalle }],
+      });
+      expect(catalogos.notasPendientesDe('cli-1').map((n) => n.detalle_json)).toEqual([detalle, null]);
+
+      // Un pull de un servidor que no lo manda lo vuelve null: lo que guarda es lo que llego.
+      catalogos.guardarSnapshot({ notas: [snapshotDePrueba().notas![0]!] });
+      expect(catalogos.notasPendientesDe('cli-1')[0]!.detalle_json).toBeNull();
+    });
+
     it('un cliente sin notas devuelve lista vacia, no null', () => {
       const { catalogos } = conCatalogos();
       expect(catalogos.notasPendientesDe('cli-2')).toEqual([]);
@@ -453,7 +479,7 @@ describe('guardarSnapshot con la ruta del dia (T-37)', () => {
       rutas: [fila],
     });
 
-    expect(rutas.delDia('2026-08-07').map((f) => f.id)).toEqual(['srv-1']);
+    expect(rutas.delDia('ven-1', '2026-08-07').map((f) => f.id)).toEqual(['srv-1']);
   });
 
   it('el snapshot entero entra aunque una ruta apunte a un cliente desconocido (Review Focus 1)', () => {
@@ -498,6 +524,31 @@ describe('motivos de visita (T-39)', () => {
       motivosVisita: [{ id: 'mot-cerrado', nombre: 'Cerrado', exige_foto: 1, exige_atendio: 0, activo: 0 }],
     });
     expect(catalogos.listarMotivosVisita().map((m) => m.id)).not.toContain('mot-cerrado');
+  });
+});
+
+describe('motivos de merma (rediseño pieza 4)', () => {
+  it('lista los activos de cada bandera, por nombre; los de almacen no salen', () => {
+    const { catalogos } = conCatalogos();
+    expect(catalogos.listarMotivosMerma('cliente').map((m) => m.nombre)).toEqual(['Caducado', 'Reventado']);
+    expect(catalogos.listarMotivosMerma('vehiculo').map((m) => m.nombre)).toEqual([
+      'Golpe en el camino',
+      'Reventado',
+    ]);
+  });
+
+  it('obtenerMotivoMerma encuentra tambien uno dado de baja', () => {
+    const { catalogos } = conCatalogos();
+    expect(catalogos.obtenerMotivoMerma('mm-baja')).toMatchObject({ nombre: 'Derramado', activo: 0 });
+    expect(catalogos.obtenerMotivoMerma('no-existe')).toBeNull();
+  });
+
+  it('la baja llega como bandera: el pull siguiente lo deja de ofrecer', () => {
+    const { catalogos } = conCatalogos();
+    catalogos.guardarSnapshot({
+      motivosMerma: [{ id: 'mm-caducado', nombre: 'Caducado', aplica_cliente: 1, aplica_vehiculo: 0, activo: 0 }],
+    });
+    expect(catalogos.listarMotivosMerma('cliente').map((m) => m.id)).toEqual(['mm-reventado']);
   });
 });
 
@@ -612,5 +663,28 @@ describe('guardarSnapshot con ruta del dia y notas asignadas', () => {
 
     expect(deps.bd.getAllSync('select id from ruta_dia')).toHaveLength(1);
     expect(deps.bd.getAllSync('select id from nota_asignada')).toHaveLength(1);
+  });
+});
+
+describe('vehiculoAsignadoHoy (rediseño, pieza 1)', () => {
+  // `depsDePrueba()` vive el 2026-08-07.
+  const HOY = '2026-08-07';
+  const rutaDia = { id: 'rd1', fecha: HOY, nombre_ruta: 'Lunes 1', vehiculo_id: 'veh-1', activo: 1 as const };
+
+  it('da el vehiculo de la ruta_dia viva de hoy', () => {
+    const { catalogos } = conCatalogos();
+    catalogos.guardarSnapshot({ rutasDia: [rutaDia] });
+    expect(catalogos.vehiculoAsignadoHoy()).toBe('veh-1');
+  });
+
+  it('dada de baja, de ayer, sin vehiculo o sin ruta: null', () => {
+    const { catalogos } = conCatalogos();
+    expect(catalogos.vehiculoAsignadoHoy()).toBeNull();
+    catalogos.guardarSnapshot({ rutasDia: [{ ...rutaDia, activo: 0 }] });
+    expect(catalogos.vehiculoAsignadoHoy()).toBeNull();
+    catalogos.guardarSnapshot({ rutasDia: [{ ...rutaDia, id: 'rd0', fecha: '2026-08-06' }] });
+    expect(catalogos.vehiculoAsignadoHoy()).toBeNull();
+    catalogos.guardarSnapshot({ rutasDia: [{ ...rutaDia, id: 'rd2', vehiculo_id: null }] });
+    expect(catalogos.vehiculoAsignadoHoy()).toBeNull();
   });
 });

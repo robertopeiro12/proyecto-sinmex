@@ -39,8 +39,8 @@ export class MovimientosService {
   constructor(private readonly repo: MovimientosRepository) {}
 
   /**
-   * @throws {MovimientoRechazado} `presentacion-inexistente` o
-   * `movimiento-id-ocupado`. No escribe nada antes de lanzar (y si lanzara
+   * @throws {MovimientoRechazado} `presentacion-inexistente`,
+   * `motivo-merma-inexistente` o `movimiento-id-ocupado`. No escribe nada antes de lanzar (y si lanzara
    * despues, el rollback de la operacion se lleva todo).
    */
   async registrarMovimiento(
@@ -59,6 +59,17 @@ export class MovimientosService {
       });
     }
 
+    if (
+      movimiento.motivoMermaId !== null &&
+      !(await this.repo.motivoMermaExiste(movimiento.motivoMermaId, trx))
+    ) {
+      // Sin esto la llave foranea saldria como 500 para todo el lote.
+      throw new MovimientoRechazado({
+        razon: 'motivo-merma-inexistente',
+        motivo: `motivo_merma_id: el motivo de merma ${movimiento.motivoMermaId} no existe en el catálogo.`,
+      });
+    }
+
     const id = await this.repo.insertar(
       {
         id: contexto.id,
@@ -68,6 +79,7 @@ export class MovimientosService {
         tipo: movimiento.tipo,
         fecha: contexto.fechaOperacion,
         comentario: movimiento.comentario,
+        motivoMermaId: movimiento.motivoMermaId,
         registradoEn: movimiento.registradoEn,
       },
       trx,

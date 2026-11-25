@@ -1,5 +1,5 @@
 begin;
-select plan(23);
+select plan(29);
 
 -- T-27 pieza 2: lo que la BASE garantiza de los movimientos de inventario (merma
 -- del cliente, merma del trayecto, consumo) aunque alguien escriba por debajo del
@@ -69,11 +69,45 @@ select lives_ok(
            date '2026-10-23', now() from _t27m$$,
   'el consumo entra sin cliente');
 
+-- Rediseno pieza 4: el cambio fisico es un tipo mas, de un cliente.
+select lives_ok(
+  $$insert into movimiento_inventario (id, sucursal_id, vendedor_id, cliente_id, tipo, fecha, registrado_en)
+    select 'c0ffee00-0000-4000-8000-000000002705', sucursal, vendedor, cliente, 'cambio',
+           date '2026-10-23', now() from _t27m$$,
+  'un cambio entra con su cliente (pieza 4)');
+
 select throws_ok(
   $$insert into movimiento_inventario (id, sucursal_id, vendedor_id, tipo, fecha, registrado_en)
-    select 'c0ffee00-0000-4000-8000-000000002705', sucursal, vendedor, 'cambio',
+    select 'c0ffee00-0000-4000-8000-000000002709', sucursal, vendedor, 'cambio',
            date '2026-10-23', now() from _t27m$$,
-  '23514', null, 'el tipo es uno de los tres (los cambios fisicos quedaron fuera)');
+  '23514', null, 'un cambio sin cliente no entra (ck_movimiento_cliente)');
+
+select throws_ok(
+  $$insert into movimiento_inventario (id, sucursal_id, vendedor_id, tipo, fecha, registrado_en)
+    select 'c0ffee00-0000-4000-8000-000000002710', sucursal, vendedor, 'devolucion',
+           date '2026-10-23', now() from _t27m$$,
+  '23514', null, 'el tipo es uno de los cuatro');
+
+select has_column('movimiento_inventario', 'motivo_merma_id',
+  'el movimiento guarda el motivo de la merma (pieza 4)');
+
+select lives_ok(
+  $$insert into movimiento_inventario (id, sucursal_id, vendedor_id, cliente_id, tipo, fecha, registrado_en, motivo_merma_id)
+    select 'c0ffee00-0000-4000-8000-000000002711', sucursal, vendedor, cliente, 'merma_cliente',
+           date '2026-10-23', now(), (select id from motivo_merma order by nombre limit 1) from _t27m$$,
+  'una merma del cliente lleva su motivo');
+
+select throws_ok(
+  $$insert into movimiento_inventario (id, sucursal_id, vendedor_id, tipo, fecha, registrado_en, motivo_merma_id)
+    select 'c0ffee00-0000-4000-8000-000000002712', sucursal, vendedor, 'consumo',
+           date '2026-10-23', now(), (select id from motivo_merma order by nombre limit 1) from _t27m$$,
+  '23514', null, 'el consumo no lleva motivo de merma (ck_movimiento_motivo)');
+
+select throws_ok(
+  $$insert into movimiento_inventario (id, sucursal_id, vendedor_id, cliente_id, tipo, fecha, registrado_en, motivo_merma_id)
+    select 'c0ffee00-0000-4000-8000-000000002713', sucursal, vendedor, cliente, 'cambio',
+           date '2026-10-23', now(), (select id from motivo_merma order by nombre limit 1) from _t27m$$,
+  '23514', null, 'el cambio no lleva motivo de merma (ck_movimiento_motivo)');
 
 select throws_ok(
   $$insert into movimiento_inventario (id, sucursal_id, vendedor_id, tipo, fecha, registrado_en, comentario)

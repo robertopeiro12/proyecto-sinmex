@@ -315,7 +315,48 @@ usuario con sesion pasa.
   - Solo jornadas **cerradas** hasta T-43. Las que llegaron antes de T-38 siguen en el buzón sin proyectar (sin
     backfill). El reporte de Kilometraje del portal es T-50 (ver el bloque Reportes y Excel, más abajo).
   - En la tablet, con la jornada de hoy cerrada **no se registra** venta, cobranza ni prospecto
-    (`exigirJornadaAbierta`); no hay reabrir.
+    (`exigirJornadaAbierta`); no hay reabrir. Desde el rediseño (pieza 1, `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md`) ya no hay pantalla
+    `abrir-dia`: sin jornada de hoy la Ruta pinta la tarjeta "Empezar ruta" (vehículo + km inicial) y el menú apaga todo
+    menos Ruta y Cerrar sesión ("Empieza tu ruta"); la guardia de `(jornada)/_layout.tsx` regresa a la Ruta cualquier
+    otra pantalla. El día se cierra desde la pantalla **Corte** (`app/(jornada)/corte.tsx`; `cerrar-dia.tsx` ya no existe, rediseño
+    pieza 6, spec §13): `jornadas.cerrarConCorte` guarda el corte y cierra la jornada en **una** transacción atómica.
+    **Candado del Corte**: no se entra con clientes por visitar, salvo que el candado de inventario (sin carga aceptada)
+    impida abrir clientes, caso en que el Corte sigue disponible para no dejar el día sin cerrar (`corteDisponible`);
+    con el día cerrado queda disponible como resumen de solo lectura.
+- **Corte del vendedor (rediseño pieza 6, spec §13 `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md`).**
+  Al cerrar el día la tablet sube la operación **`corte`** (`DatosCorte`, forma en `docs/contrato-sincronizacion.md`).
+  - **Servidor**: `rutas/cortes-vendedor.service.ts` (`registrarCorte`) guarda en la tabla nueva `corte_vendedor`
+    (migración `20261129120000`; uno vivo por vendedor y día). Rechazos: `datos-invalidos` (forma, validada antes de la
+    transacción) y `corte-duplicado` (otra clave el mismo día; misma clave es `duplicada`).
+  - **Nube / pre-flight**: tabla nueva y vacía, nada que contar. **Backend antes que la app**: un servidor viejo
+    responde `tipo-desconocido` y la tablet reintenta en la siguiente sincronización.
+  - **Es informativo**: no cambia saldos, existencias ni el corte de mercancía de la oficina (`corte_mercancia`).
+  - **Tablet** (`src/estado/corte.ts`, funciones puras): tres apartados que se cierran por separado (Efectivo, Notas,
+    Inventario) y el botón Corte solo se enciende con los tres cerrados.
+    - **Efectivo esperado** = ventas de contado + abonos al vender (solo ventas a crédito) + cobros en **efectivo** −
+      gastos. Cobros por transferencia o cheque se muestran aparte; puede salir negativo.
+    - **Notas**: las asignadas de hoy (liquidadas salen con saldo $0.00) más las nuevas que trae el vendedor.
+    - **Inventario**: un renglón por presentación con las buenas por regresar (`filasPorRegresar`) y **un** total de
+      merma, que viaja dentro de `inventario` (`inventario.merma`).
+    - **Huellas** (`huellaApartado`): al cerrar un apartado se guarda lo que decía el sistema; si después cambia (venta,
+      cobro, gasto, merma) el apartado se **reabre** para que lo revise.
+  - **Tablet, local**: migración 023 (tabla de cortes, `crearRepositorioCortes`); fuente de push `fuente-cortes.ts`.
+  - **Candado de Corte**: falta(n) N cliente(s) por visitar. Una fila viva cuyo cliente está **dado de baja** en el
+    catálogo de la tablet (`cliente_activo = 0` en `rutas.delDia`) no cuenta: va a "Dados de baja" en la Ruta, sin
+    tocar (ninguna operación acepta un cliente inactivo; si contara, el día no se podría cerrar).
+  - **Día del corte**: la pantalla lee todo con `jornada.fecha` (no el reloj) y el corte enviado por `jornada.id`
+    (`cortes.deJornada`). El candado de inventario (`candadoDeHoy`) sí es del reloj.
+  - **"Debes traer" ≠ Flujo diario de la oficina** (`flujo-diario.repository.ts`). Son cifras distintas a propósito;
+    **no se concilian**:
+    - **Abono al vender**: la tablet lo pone en "Abonos y cobros"; la oficina, dentro de `contado` (`cobranza_abono`
+      con origen `venta_contado`).
+    - **Forma de pago**: la tablet espera solo **efectivo** (transferencia y cheque aparte); la oficina suma todas las
+      formas en `anteriores` + `a_favor`.
+    - **Día del cobro**: la tablet usa `cobranza.fecha` (captura); la oficina, `fecha_pago`.
+    - **Rechazado o sin subir**: la tablet lo cuenta (filas locales, cualquier `sync_estado`); la oficina no, hasta
+      que se aplica (y lo borrado sale).
+    - La "Cobranza" del resumen (todas las formas, sin abono al vender) sí equivale a `anteriores + a_favor` de la
+      oficina, pero por `fecha` y no por `fecha_pago`.
 - **Ruta semanal y Ruta diaria (T-37 + 2026-11-10).** La oficina tiene rutas fijas por día (*Operación → Ruta Semanal*), le
   asigna una a cada vendedor cada mañana (*Ruta Diaria*), la ajusta, le pone vehículo y le asigna notas por cobrar; el
   vendedor la complementa desde la tablet con la operación **`ruta-alta`** (no `ruta`, que sigue guardada sin proyectar; la
@@ -370,8 +411,9 @@ usuario con sesion pasa.
     `apps/tablet/.../contrato.ts`): `rutas` del vendedor del token desde `current_date - 1` en adelante (reloj de
     Postgres, UTC), sin tope, baja con `activo: 0`; **`origen: 'semanal'` baja como `oficina`** (el SQLite de la tablet
     tiene un check de dos valores y uno nuevo tumbaría todos los pulls); `RutaPull.recado`; colecciones **`rutas_dia`**
-    (`fecha`, `nombre_ruta`, `vehiculo_id`) y **`notas_asignadas`** (`venta_nota_id`, `fecha`). El orden que arrastra
-    el vendedor **no sube** (vive en `ruta_orden_local`). **Eliminar una venta (T-17) da de baja sus `nota_asignada`
+    (`fecha`, `nombre_ruta`, `vehiculo_id`) y **`notas_asignadas`** (`venta_nota_id`, `fecha`). Desde el rediseño de la app
+    (pieza 1, `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md` §4) **el vendedor ya no reordena**: la ruta sale en el orden del portal; la columna local
+    `ruta_orden_local` sigue en la base pero nadie la escribe ni la lee, y nunca subió. **Eliminar una venta (T-17) da de baja sus `nota_asignada`
     vivas** en la misma transacción (`ventas-edicion.repository.ts`, `eliminarVenta`, tras el `for update of vn` y sin
     bloquear `vendedor`), así que la baja viaja en el pull incremental como `activo: 0`.
   - **Dashboard y Flujo diario**: "Ruta asignada" muestra `nombre_ruta` ("Sin ruta · N clientes"); vehículo de la
@@ -397,14 +439,72 @@ usuario con sesion pasa.
     `nota_pendiente`), `nota_no_cobrada` y `cobranza.reparto_json` (líneas `{venta_nota_id, monto_centavos,
     saldo_despues_centavos}`); borra el cursor del pull, así que la primera sincronización tras instalar es completa, sin
     `pm clear`. Reglas puras en `src/datos/notas-asignadas-reglas.ts`; repositorio `repositorios/notas-asignadas.ts`
-    (`deHoyDelCliente`, `bloqueoDeVenta`, `conteoDeHoyPorCliente`, `registrarNoCobradas` atómico); estado de pantallas en
+    (`deHoyDelCliente`, `bloqueoDeVenta`, `queTraePorCliente`, `registrarNoCobradas` atómico); estado de pantallas en
     `src/estado/notas-asignadas.ts`. "Cobro de hoy" = `cobranza.fecha` + `reparto_json` (tocadaHoy / liquidadaHoy), nunca
     `fecha_pago` ni `abonos_json` (el pull los pisa y trae cobros de la oficina; el pull va antes del push). La nota sale al
     abrir la ficha y al picar Vender (`operacion/[clienteId]/notas-asignadas.tsx`): Cobrar o Continuar sin cobrar
     (comentario obligatorio, una fila por nota e intento); vuelve a salir al reabrir hasta que un cobro de hoy la toque.
     Vender se bloquea según la condición, también dentro de `ventas.registrar()` antes del folio; el servidor no rechaza la
-    venta. Push `nota-no-cobrada` después de cobranzas; la ruta marca "Nota asignada" (1) / "Notas asignadas · N" (más), muestra el recado ("Mensaje de la
-    oficina") y el comentario cuenta como visita. `ALTO_FILA` de la ruta subió a 112.
+    venta. Push `nota-no-cobrada` después de cobranzas; la ruta muestra el recado ("Mensaje de la oficina") y el comentario
+    cuenta como visita. Desde el rediseño (pieza 1, §4 y §6 del spec) la fila de la ruta dice "Trae N notas por cobrar"
+    (`rutas.delDia(vendedorId).notas_que_trae` = `queTraePorCliente`: asignadas con saldo no liquidadas hoy más las
+    ventas a crédito de hoy del vendedor) y la hoja del cliente apaga Vender con "Cobra primero" mientras una asignada
+    traiga la condición sin cumplir (`accionesCliente`, `src/estado/hoja-cliente.ts`).
+    **Pieza 5 (Ventas / Cobranza, §11 de `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md`).**
+    `queTraeDelVendedor` es la regla única (la lista de notas que trae el vendedor) y `queTraePorCliente` es su conteo.
+    La pantalla `registros/index.tsx` lista ventas y cobros de hoy (`cobranzas.delDiaDelVendedor`); el detalle es
+    `registros/[tipo]/[id].tsx` (un `sync_error` se muestra con `motivoDeRechazo`). `catalogos.folioDeNota` ignora `activo`
+    (una nota dada de baja sigue mostrando su folio).
+
+- **Impresión de notas (rediseño pieza 7, spec §12 `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md`).**
+  La tablet imprime **directo por Bluetooth** a la térmica portátil de 58 mm ESC/POS que eligió Mario (clase PT-210 /
+  MTP-II); `expo-print` se conserva para el emulador y otras impresoras. Ambos son módulos **nativos**: hace falta
+  `expo prebuild` y una **APK nueva**. Código en `apps/tablet/src/impresion/`.
+  - **Bluetooth**: `escpos.ts` codifica el ticket (`ESC @`, CP850 con `ESC t 2`, `FS .` para apagar el modo
+    chino/Kanji de los clones, 4 LF de avance, **sin corte**). Módulo Expo local
+    `apps/tablet/modules/impresora-bluetooth` (Kotlin, SPP, conexión con límite de 10 s, escribe en pedazos de 512 B
+    con 20 ms entre ellos, **solo dispositivos ya emparejados**). `BLUETOOTH_CONNECT` se pide **solo después de que el nativo responde `sin-permiso`**. El
+    emparejado se hace en Android Ajustes > Bluetooth (PIN 0000 / 1234). "Seleccionar impresora" lista las emparejadas
+    más la opción "Diálogo de Android" (`expo-print`). **Cada tablet elige una vez**; con una impresora elegida no hay respaldo
+    silencioso a otra. Errores (`errores-impresora.ts`): sin Bluetooth, "Prende el Bluetooth.", "Da permiso de Bluetooth a la
+    app.", "No se pudo conectar con X. ¿Está prendida?", "Se cortó la conexión con X al mandar la nota…". Los tickets
+    de un cobro salen en **un solo envío**. Tras una venta, un cobro o "Reimprimir", el aviso dice el motivo
+    (`avisoNoImpreso`: "No se pudo imprimir: <motivo> Puedes reimprimir…") con un botón a "Seleccionar impresora"; el
+    mensaje crudo del diálogo de Android no se muestra ahí. **Sin impresora guardada**: con el módulo en el APK falla
+    con "Elige la impresora en Seleccionar impresora."; sin el módulo (APK viejo) usa el diálogo (`controladorAUsar`).
+  - **Compilar**: `JAVA_HOME` = JBR de Android Studio y `ANDROID_HOME` definidos.
+  - **Prueba con la impresora física (Mario)** — pendiente:
+    1. Emparejarla en Android Ajustes > Bluetooth (PIN 0000 o 1234).
+    2. Elegirla en "Seleccionar impresora".
+    3. "Imprimir prueba": acentos, ñ y "·" deben salir bien. Si salen caracteres raros, imprimir el autotest de la
+       impresora (FEED al prenderla), revisar su tabla de páginas de códigos y ajustar el índice de `ESC t` en `escpos.ts`.
+    4. Una venta (la nota sale sola al grabar).
+    5. Un cobro que toque varias notas: que la última no salga cortada.
+    6. Si da "No se pudo conectar", anotar el modelo exacto (lo primero a probar: conexión RFCOMM insegura o por canal 1).
+  - **Papel**: preferencia 58 o 80 mm en "Seleccionar impresora" (`impresora.tsx`), guardada en SecureStore
+    (`preferencia.ts`, clave `jawa.impresion.papel`); sin dato o dato ilegible, 58.
+  - **Ticket**: `armarTicket(datos, 32 | 48)` es **puro** (32 columnas en 58 mm, 48 en 80 mm). El nombre del producto se
+    **parte en renglones, nunca se corta**. `datos-ticket.ts` arma `DatosTicket` desde lo guardado; `html.ts` lo vuelve HTML.
+  - **Cuándo imprime**: "Grabar e imprimir" en Vender y en Cobrar; el cobro **reimprime cada nota de su reparto** (con
+    "Reimpresión" / "Cobró" en el ticket); "Reimprimir" en el detalle de Ventas / Cobranza (`registros/[tipo]/[id].tsx`).
+    Varias notas salen en **un solo trabajo de impresión** (`imprimirTickets` → `ticketsAHtml`, salto de página entre
+    notas): en Android `printAsync` vuelve al abrir el diálogo y dos trabajos seguidos no están garantizados.
+  - **Imprimir nunca deshace lo grabado**: si falla o se cancela solo avisa; la nota ya está guardada y se reimprime después.
+  - **Pull**: `NotaPendientePull.detalle` (aditivo, ver `docs/contrato-sincronizacion.md`) trae líneas, promociones y
+    nombres para reimprimir una nota que no se vendió en esa tablet; la migración local **024** (`nota_pendiente.detalle_json`)
+    **reinicia el cursor del pull** para bajar el detalle de todas las notas. **Backend antes que la APK**: un servidor
+    viejo no manda `detalle` y la reimpresión de una nota no local sale **sin renglones**. **Backend antes que la APK: el
+    cursor se reinicia una sola vez; si la APK llega primero, las notas no traen detalle hasta que cambien.**
+    `detalle.creada_en` es la hora de la venta en la tablet (`ocurrido_en` de `sync_operacion`, como la oficina); en
+    una nota de la oficina (sin operación) es solo la fecha `YYYY-MM-DD` y el ticket imprime solo el día.
+  - **Antes de instalar el APK con la migración 024, sincronizar la tablet**; el pull completo no baja notas
+    cerradas/borradas entre el último pull y la actualización (mismo patrón que 019/022).
+  - **LIQUIDADA** (Mario, 2026-11-25; spec §12): **nunca** lleva espacio para firma. Pagada completa al vender (contado,
+    sin abonos) imprime "Pagó $total" y saldo $0.00 (maqueta 25). Liquidada **con abonos** (abono al vender y cobros, o
+    la reimpresión del cobro que la liquida) lista **cada abono con su fecha**, como la ABONADO, con SALDO PENDIENTE
+    $0.00 (`armarTicket` decide por `abonos.length`). `ticketDeNota` lee los abonos de la nota aunque esté inactiva y
+    los deja vacíos si la venta de esta tablet con ese folio es de contado (el servidor guarda un abono `venta_contado`
+    por el total; una de contado solo baja si la oficina la editó o la borró).
 
 - **Promociones (T-74).** Regla de regalo por compra, configurada en el portal (*Catálogo → Promociones*, `/catalogo/promociones`; antes en Operación, la dirección vieja redirige; permiso
   `promocion.gestionar`; backend en `cartera-clientes/promociones.*`, `/promociones`) y **aplicada solo por la
@@ -461,11 +561,14 @@ usuario con sesion pasa.
     arrastra a su venta (queda en `error`): con `tipo-negocio-inexistente` ambas entran solas cuando la oficina reactive el
     tipo de negocio; con otro rechazo hay que avisar a la oficina (la tablet no puede descartar ni corregir un alta) y el
     vendedor no debe volver a capturar al prospecto.
-  - **El prospecto no entra a la ruta** (D5, D7): se atiende desde su ficha (sin Cobrar), desde "Abrir su ficha" en
-    Prospectos o la pestaña **Prospectos** de "Todos los clientes", y la sección **"Atendidos fuera de ruta"** de la
-    jornada lo muestra con el estado de subida de sus ventas (puros en `src/estado/ruta-del-dia.ts`:
-    `atendidosFueraDeRuta`, `pastillaAlta`, `enlaceAFicha`, `estadoSubida`). Los prospectos capturados antes de T-75
-    no tienen espejo local: salen en "Prospectos de hoy" sin enlace. La foto se liga por id (`fotoLocalDe`, con respaldo
+  - **El prospecto no entra a la ruta** (D5, D7): se atiende desde su hoja (sin Cobrar), desde "Abrir su ficha" o la lista de
+    la pantalla Prospectos, y la sección **"Atendidos fuera de ruta"** de la jornada lo muestra con el estado de subida
+    de sus ventas (puros en `src/estado/ruta-del-dia.ts`: `atendidosFueraDeRuta`, `pastillaAlta`, `enlaceAFicha`,
+    `estadoSubida`). "Todos los clientes" ya no existe (rediseño, pieza 1, `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md` §5 y §16-bis): la pantalla
+    Prospectos lista lo capturado hoy en esta tablet y, debajo, **todos los prospectos vivos de la sucursal**
+    (`catalogos.listarProspectos`, regla en `listaProspectos`), para abrir la hoja del capturado otro día o en otra
+    tablet; la pastilla de subida solo sale en lo capturado en esta tablet. Los prospectos capturados antes de T-75
+    no tienen espejo local: salen en "Capturados hoy" sin enlace. La foto se liga por id (`fotoLocalDe`, con respaldo
     por nombre + teléfono). e2e: `apps/backend/test/prospecto-venta.e2e-spec.ts`.
 
 - **Tesorería (T-28 / T-29).** *Finanzas → Tesorería* (`/finanzas/tesoreria`), backend en `modules/tesoreria/`
@@ -525,7 +628,7 @@ usuario con sesion pasa.
     forma (ubicación obligatoria) y `rutas/visitas.service.ts` proyecta. Rechazos nuevos:
     `motivo-visita-inexistente` (uno **dado de baja sí entra**) y `visita-id-ocupado` (motivo neutro). **El servidor
     no revisa "exige foto/nombre"**: lo exige la tablet (`src/estado/visita.ts`, `validarVisita`).
-  - **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → gastos → rutas` (`fuentesDelPush`, con
+  - **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → gastos → movimientos → cortes → rutas` (`fuentesDelPush`, con
     prueba). El alcance se comprueba **una vez por lote**: una visita a un prospecto cuya alta viaja en el mismo
     lote cae `cliente-fuera-de-alcance`; la tablet sube alta y visita en lotes consecutivos de una sincronización.
   - **GPS**: una coordenada inválida (fuera de rango o no finita) es "sin GPS" (se pide la dirección y se guarda con
@@ -540,7 +643,8 @@ usuario con sesion pasa.
   - **Tablet** (migración local 013): `motivo_visita`, `visita` (la foto usa `foto_local`/`foto_subida_en`/
     `foto_error`/`foto_descartada`, como la del prospecto; **no** hay `foto_estado`) y
     `cliente.foto_subida_en`/`foto_cache_subida_en`. El cliente de la ruta visitado sin venta pasa a
-    **"Visitados sin venta"**; si después compra, regresa a la ruta con su palomita (atendido gana a visitado). La
+    **"Visitados"** con su palomita, igual que el que compró (rediseño, pieza 1, `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md` §4: ya no hay una sección
+    "Visitados sin venta"; la fila lo resume). La
     lógica vive en `src/estado/ruta-del-dia.ts` y `src/estado/visita.ts`, con pruebas. Sin pantalla de visitas en el
     portal (T-55 y reportes leen la tabla `visita`).
   - **Nube**: la migración `20261018120000_visita_sin_venta.sql` debe subirse a `sinmex dev` después del merge,
@@ -610,11 +714,14 @@ usuario con sesion pasa.
     `GET /gastos/:id/foto` (permiso `gasto.ver`; otra sucursal = 404).
   - **Portal** *Finanzas → Gastos* (`/finanzas/gastos`): `GET /gastos?desde&hasta&sucursal&vendedor&campo` (permiso
     `gasto.ver`, grupo Finanzas; alcance de sucursal; máximo 366 días), con total. Diseñada para 1366 px (`table-fixed` + `colgroup`, 736 px fijos y Comentario flexible); medir en navegador.
-  - **Tablet** (migración local 015): `campo_egreso` y `gasto` (foto con el esquema derivado de la visita). Pantallas
-    `app/(jornada)/gastos/index.tsx` (lista del día, entrada Gastos del menú) y `registrar.tsx`; la lista se refresca
-    con `versionCatalogos`/`ultimaSincronizacion` (no al enfocar). Los topes compartidos viven en
-    `src/datos/reglas-gasto.ts` y la lógica pura en `src/estado/gasto.ts` (`montoACentavos` exacto, `validarGasto`,
-    `camposParaGasto`, `faltantesVisiblesGasto`, `puedeRegistrarGasto`), con pruebas. Un gasto grabado no se edita ni
+  - **Tablet** (migración local 015): `campo_egreso` y `gasto` (foto con el esquema derivado de la visita). Pantalla
+    `app/(jornada)/gastos/index.tsx` (entrada Gastos del menú): desde el rediseño (pieza 1, `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md`) es **una
+    sola pantalla** con Motivo + Cantidad + "Guardar gasto" arriba y "Gastos de hoy" con su total abajo; ya no hay
+    `registrar.tsx`, ni observaciones, ni foto del ticket en la app (manda `comentario: ''` y `fotoUri: null`; el
+    contrato y el servidor no cambian). La lista se refresca con `versionCatalogos`/`ultimaSincronizacion` (no al
+    enfocar). Los topes compartidos viven en `src/datos/reglas-gasto.ts` y la lógica pura en `src/estado/gasto.ts`
+    (`montoACentavos` exacto, `validarGasto`, `camposParaGasto`, `faltantesVisiblesGasto`, `puedeGuardarGasto`), con
+    pruebas. Un gasto grabado no se edita ni
     se borra en la app. La ficha ya no tiene ese botón: su "Merma" es de T-27 pieza 2.
   - **Nube**: la migración `20261020120000_gastos_ruta.sql` se sube a `sinmex dev` después del merge, con el protocolo
     de push (pre-flight: tablas nuevas, inserts de permisos y semilla; no hay nada que contar). Esta rama lleva el
@@ -622,7 +729,19 @@ usuario con sesion pasa.
 - **Firma del cliente en la nota (T-73).** El cliente firma con el dedo en la tablet **toda** venta (contado y crédito,
   sin poder omitirla) antes de grabarla; la firma complementa la nota de papel. Spec:
   `docs/superpowers/specs/2026-10-21-t-73-firma-del-cliente-design.md`.
-  - **Tablet**: la revisión de la venta lleva el recuadro (`src/ui/recuadro-firma.tsx`, `react-native-svg` +
+  - **Desde el rediseño (pieza 2, spec `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md` §9) la tablet
+    ya NO captura la firma dibujada**: se quitaron `recuadro-firma.tsx`, `firma-expo.ts`, `puedeGrabarVenta` y `crearGrabadorVenta` (queda `firmaPorSubir`); el cliente
+    firma a mano la nota impresa. Lo de abajo describe el contrato y la tablet de T-73 (016); una venta vieja con imagen
+    pendiente **sigue subiendo** su firma por la cola de fotos. En su lugar, la venta lleva **`atendio`** (quien atendió
+    al vendedor; **obligatorio en la app**, opcional y aditivo en el contrato; `venta_nota.atendio_nombre`, migración
+    `20261126130000_venta_atendio.sql`) y **`abono_centavos`** opcional (venta **a crédito** con abono al vender,
+    `0 < abono < total`): nace `abonado` y el servidor escribe un abono `venta_contado` en efectivo, `fecha_pago =
+    fecha_operacion` y `cobro_id` **null** (por eso editar la venta en el portal no se bloquea, T-17: la edición lo
+    conserva y da **409** si el nuevo total es ≤ el abono; borrarla lo borra). Tesorería y comisiones lo leen como
+    cualquier abono `venta_contado` (T-21). Migración local de la tablet **020** (`atendio`, `abono_centavos`; la venta
+    local conserva las columnas de firma). El portal muestra "Atendió" en el detalle. Cobrar no firma ni pide quien
+    atiende, y conserva los chips Efectivo / Transferencia / Cheque con la fecha de pago de hoy.
+  - **Tablet (T-73, histórico)**: la revisión de la venta lleva el recuadro (`src/ui/recuadro-firma.tsx`, `react-native-svg` +
     `PanResponder`, papel **blanco** como `<Rect>` dentro del `Svg` para que el PNG no salga transparente) y el nombre
     opcional (≤ 80). "Grabar venta" no se habilita sin firma; "Corregir" la borra. Toda decisión vive en
     `src/estado/firma.ts` (`puedeGrabarVenta`, `crearGrabadorVenta` con la guardia de doble toque), con pruebas.
@@ -646,8 +765,16 @@ usuario con sesion pasa.
     de firmarse. Editar en el portal **no** vuelve a pedir la firma.
   - **Nube**: `20261021120000_venta_firma.sql` se sube a `sinmex dev` después del merge y **antes** del backend (y el
     backend antes de la app), con el protocolo de push (pre-flight: columnas nuevas con default; nada que contar).
+  - **Nube (pieza 2)**: `20261126130000_venta_atendio.sql` se sube a `sinmex dev` después del merge, con el protocolo de push.
+    Pre-flight: columna nula y check que toda fila cumple en null; nada que contar. **Backend antes que la app**
+    (migración → backend + portal juntos → APK): un backend anterior ignora `abono_centavos` (y `atendio`) **sin
+    avisar**; la venta "Abonar" entraría `pendiente` por el total, la tablet la daría por sincronizada y el abono que
+    el vendedor recibió no existiría en el servidor.
+  - **Nube (pieza 3)**: **backend antes que la APK**: un APK nuevo contra un backend anterior recibe 400 en cada
+    aceptación (el cuerpo trae los renglones aceptados). Y una vez que exista una aceptación parcial, **no se revierte el
+    backend por debajo de la pieza 3**: la consulta vieja del corte contaría los renglones rechazados.
 - **Carga y recarga del vendedor (T-27 pieza 1 / T-26).** Producción registra en el portal la carga de la mañana y cada
-  recarga; la carga baja a la tablet, el vendedor la **acepta o la rechaza** con red y, con el control de inventario de
+  recarga; la carga baja a la tablet, el vendedor la **acepta o la rechaza, renglón por renglón** (rediseño pieza 3, spec `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md` §7), con red y, con el control de inventario de
   su sucursal prendido, no vende con una carga pendiente ni deja una presentación en negativo. Spec:
   `docs/superpowers/specs/2026-10-22-t-27-carga-y-recarga-design.md`. La pieza 2 (merma y consumo) está abajo; la 3 (corte de
   inventario) es otro PR.
@@ -659,8 +786,17 @@ usuario con sesion pasa.
     regresa a pendiente y sube la versión; una **aceptada no se toca** (D5). El número se calcula con la fila del
     vendedor bloqueada (`for no key update`); otra sucursal = 404.
   - **App**: `POST /sync/cargas/:id/respuesta` (`@SoloApp`, `sincronizacion/cargas-app.controller.ts` →
-    `CargasService.responder`): `{ version, accion, motivo? }`; la misma respuesta otra vez es 200 sin reescribir; otra
-    versión o ya respondida = 409 con la carga; de otro vendedor, inexistente o eliminada = 404. No renueva la sesión.
+    `CargasService.responder`): cuerpo nuevo `{ version, aceptadas: [presentacion_id…] }` (todas o una parte = `aceptada`;
+    lista vacía = `rechazada`, sin motivo); el cuerpo viejo `{ version, accion, motivo? }` se sigue aceptando (tablets sin
+    actualizar). La misma respuesta otra vez es 200 sin reescribir; otra versión o ya respondida = 409 con la carga; de otro
+    vendedor, inexistente o eliminada = 404; un cuerpo mal formado = 400, que se evalúa **después** del 404 y del 409. La
+    **aceptación parcial es definitiva**: lo no aceptado llega, si hace falta, en una recarga nueva. No renueva la sesión.
+  - **Por renglón** (migración `20261127120000_carga_renglon_aceptado.sql`): `carga_detalle.aceptada boolean` nullable
+    (`null` = pendiente o respondida antes de la pieza 3); `carga.estado` conserva sus tres valores (`aceptada` si al menos
+    un renglón, `rechazada` si ninguno). Los lectores (corte, inventario del vendedor, venta del portal, rejilla) cuentan
+    `coalesce(aceptada, true)` en una carga `aceptada`: una aceptada vieja es "todo", una rechazada vieja "nada". El
+    portal etiqueta "Aceptada N de M" cuando fue parcial. `ck_carga_motivo` se relajó (el motivo ya no es obligatorio al
+    rechazar; solo una rechazada puede llevarlo).
   - **Contrato** (aditivo, `CONTRATO_ACTUAL` sigue en 1): colección `cargas` en el pull (las del vendedor desde
     `current_date - 1`, baja con `activo: 0`) y `VendedorPull.control_inventario`. Cambiar la casilla toca
     `vendedor.updated_at` de esa sucursal (`SucursalesRepository.actualizar`).
@@ -692,10 +828,12 @@ usuario con sesion pasa.
     curso (`src/sincronizacion/una-a-la-vez.ts`) para no renovar dos veces el refresh token a la vez, y
     `ventas.registrar()` publica un cambio de catálogo tras grabar para que Inventario relea. **`ventas.registrar()` recalcula bloqueo y
     faltantes dentro de su transacción, antes del folio** (vale la existencia del momento de grabar). Pantallas:
-    Inventario (menú), detalle con Aceptar/Rechazar, aviso "Tienes una carga por aceptar" en la ruta, y la venta con
+    Inventario (menú), detalle con la carga como checklist (migración local **021**, `carga_detalle.aceptada`), aviso "Tienes una carga por aceptar" en la ruta, y la venta con
     bloqueo, "Te quedan N" y faltantes congelados en la revisión.
   - **Nube**: `20261022120000_carga_vendedor.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
-    (pre-flight: tablas nuevas y una columna con default; nada que contar). Backend antes que la app. **No prender la
+    (pre-flight: tablas nuevas y una columna con default; nada que contar). La pieza 3 suma
+    `20261127120000_carga_renglon_aceptado.sql` (columna nullable y `ck_carga_motivo` relajado: pre-flight, nada que contar).
+    **Backend antes que la app** (la tablet nueva manda `aceptadas`). **No prender la
     casilla de una sucursal hasta que sus tablets tengan la versión nueva** y producción esté capturando cargas.
 - **Merma y consumo en la tablet (T-27 pieza 2).** La tablet registra lo que sale o entra a la camioneta sin ser venta:
   **merma del cliente** (en la ficha, también de un prospecto, "Merma": "Recibí dañado" —al menos una pieza— y "Le
@@ -712,7 +850,7 @@ usuario con sesion pasa.
     revisa el límite de consumo ni la existencia** (lo exige la tablet).
   - **Contrato** (aditivo, `CONTRATO_ACTUAL` sigue en 1): tipo `movimiento` (el tipo `merma` queda reservado, sin
     proyección), `VendedorPull.consumo_diario_max`. Cambiar el límite en el portal toca `vendedor.updated_at` de la
-    sucursal (como `control_inventario`). Orden del push: `… → gastos → movimientos → rutas`.
+    sucursal (como `control_inventario`). Orden del push: `… → gastos → movimientos → cortes → rutas`.
   - **Portal**: *Catálogo › Sucursales*: "Consumo propio máximo por día" (0–99) en la edición
     (`components/sucursales/consumo-diario.ts`).
   - **Tablet** (migración local 018): `movimiento`, `movimiento_linea`, `vendedor.consumo_diario_max` (el login sin red
@@ -724,6 +862,32 @@ usuario con sesion pasa.
     los movimientos. Pantallas: ficha → "Merma" y "Movimientos de hoy"; menú → "Merma y consumo" (+ `merma/registrar`;
     con límite de consumo 0 el botón no aparece); Inventario con Merma entregada, Merma del trayecto, Consumo y "Por
     regresar a la planta". La pantalla "Próximamente" (`pendiente/[seccion]`) ya no existe.
+  - **Rediseño pieza 4: cambios y motivo de merma** (spec `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md` §11;
+    issue #162 T-81; plan `docs/superpowers/plans/2026-11-25-rediseno-pieza-4-merma-y-cambios.md`).
+    - **Tipo `cambio`** (`movimiento_inventario.tipo`, mismo sobre `movimiento`): cambio físico con un cliente; lo
+      **recibido suma a la existencia** del vendedor y lo **entregado resta**, sin cobrar diferencia. Lleva cliente
+      (**obligatorio**, `ck_movimiento_cliente` = `merma_cliente` o `cambio`) y exige **al menos una línea recibida y al
+      menos una entregada** (`datos-invalidos` si no). `existencias` de la tablet y la teórica del corte lo cuentan.
+    - **`motivo_merma_id`** (migración `20261128120000_movimiento_cambio_motivo.sql`, columna nula + `ck_movimiento_motivo`:
+      solo `merma_cliente` y `merma_trayecto`). **Opcional para el servidor** (una tablet vieja entra con `null`); **obligatorio
+      en la app**, que ofrece los motivos con `aplica_cliente` (merma del cliente) o `aplica_vehiculo` (del trayecto). Un
+      motivo que nunca existió se rechaza con `motivo-merma-inexistente`; uno dado de baja o sin la bandera **sí entra**
+      (se capturó sin red). El servidor no revisa `aplica_*`.
+    - **Pull `motivos_merma`** (colección aditiva, por `actualizado_en`; ver `docs/contrato-sincronizacion.md`). Tablet:
+      **migración 022** (`022-cambios-motivo-merma.ts`) reconstruye `movimiento` (admite `cambio` y `motivo_merma_id`) y
+      **reinicia el cursor del pull** para bajar el catálogo nuevo.
+    - **Pantallas**: ficha → **"Merma y cambios"** (`operacion/[clienteId]/merma.tsx`, dos pestañas: merma y cambio);
+      menú → **"Merma / Cambios"** (`merma/index.tsx`: "Merma del vehículo", "Consumo" —solo si el límite > 0— y los
+      movimientos de hoy con filtros Todo / Merma / Cambios) → `merma/registrar.tsx`.
+      **Con el día cerrado** (Mario, 2026-11-25) Merma / Cambios **sigue en el menú** como consulta (`entradasMenu`
+      solo apaga Gastos): el registro y sus filtros funcionan, pero "Merma del vehículo" y "Consumo" se apagan con
+      `AVISO_MERMA_SOLO_CONSULTA` y `merma/registrar.tsx` rechaza por `MENSAJE_DIA_CERRADO_MOVIMIENTO`.
+    - **Nube**: `20261128120000_movimiento_cambio_motivo.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
+      (pre-flight: nada que contar; los checks solo se ensanchan y la columna es nula). **Backend antes que la app.**
+      Si la APK se instaló antes que el backend, el pull incremental no trae los motivos sembrados (no cambian de
+      `actualizado_en`) y la merma queda sin motivos que elegir; el motor lo cura solo: si al empezar a sincronizar la tabla
+      local `motivo_merma` está vacía, olvida el cursor y el pull sale completo (`debeOlvidarCursor`, `motor.ts`). Remedio
+      manual equivalente: borrar el cursor (`olvidarCursor`) o reinstalar. Con un backend sin motivos cada sync sale completo.
   - **Nube**: `20261025120000_movimiento_inventario.sql` se sube a `sinmex dev` después del merge, con el protocolo de
     push (pre-flight: tablas nuevas y una columna con default; nada que contar). Backend antes que la app.
 - **Registro de Operación (parte 1).** *Producción → Registro de Operación* (`/produccion/registro-operacion`, pestañas
@@ -750,7 +914,7 @@ usuario con sesion pasa.
     usuario atado a X con `operacion.entrada` los ve aunque no alcance la sucursal de origen.
   - **Catálogo `motivo_merma`** global (como `motivo_visita`), con `aplica_almacen`/`aplica_cliente`/`aplica_vehiculo`, baja
     lógica y semilla de 4 motivos; `/motivos-merma`, permiso `motivo_merma.gestionar` (grupo General); portal *Catálogo →
-    Motivos de merma*. Un motivo dado de baja o sin "almacén" no se acepta en una merma nueva, pero una existente lo conserva
+    Motivos de merma*; la tablet también lo baja (pull `motivos_merma`, rediseño pieza 4: ver *Merma y consumo en la tablet*). Un motivo dado de baja o sin "almacén" no se acepta en una merma nueva, pero una existente lo conserva
     al editar si no se cambia.
   - Tipos duplicados backend ↔ portal (`lib/operaciones-almacen.ts`, `lib/motivos-merma.ts`): si cambias uno, cambia el otro.
   - **Nube**: `20261124120000_registro_operacion.sql` se sube a `sinmex dev` después del merge, con el protocolo de push.
@@ -824,8 +988,10 @@ usuario con sesion pasa.
       − cambios entregados + cambios recibidos, **en vivo** y sin recortar (negativo = "Salió más de lo cargado").
       **Merma teórica (C4)** = merma recibida del cliente + merma de almacén. Los movimientos salen de `movimiento_inventario`
       vivo (`merma_cliente` entregado/recibido, `merma_trayecto` = de almacén, `consumo`) por `fecha` y vendedor. **Cambios
-      físicos** salen de Procesos (ver el bloque Procesos (PR A)); la app todavía no los captura (T-33).
-    - Cargadas = solo cargas **aceptadas**; vendidas/regaladas = `cantidad`/`cantidad_promocion` de líneas **vivas** de
+      físicos** salen de `movimiento_inventario` tipo `cambio` (la tablet, rediseño pieza 4) y de Procesos (ver el bloque
+      Procesos (PR A)): lo entregado resta y lo recibido suma a la teórica de producto terminado; la merma teórica (C4) no
+      los cuenta.
+    - Cargadas = solo **renglones aceptados** (`coalesce(carga_detalle.aceptada, true)` en una carga `aceptada`; rediseño pieza 3); vendidas/regaladas = `cantidad`/`cantidad_promocion` de líneas **vivas** de
       ventas **vivas** del vendedor con esa `fecha`, de cualquier status. Un vendedor con solo merma o consumo ese día también
       sale en la lista.
     - **D1: un tamaño no compensa a otro.** Dentro de un tamaño sí (lo que sobra de un sabor tapa lo que falta de otro); el
@@ -866,7 +1032,7 @@ usuario con sesion pasa.
     y "Faltan: N pz merma", cliente 2026-11-24); con "Todos" es la suma de `totales.faltante`/`faltanteMerma` del corte de **cada** vendedor con corte
     hecho (lo mismo que `faltantesDeCortes`; lo que sobra a uno no compensa lo que falta a otro, Roberto 2026-11-24).
     `vendedor` que no es uuid ni `todos` = 400 "Elige un vendedor válido.". Recargas muestra también las pendientes y
-    rechazadas, con su estado, pero Inventario solo cuenta las aceptadas. Sin filas: "No hubo recargas ese día." (Recargas) y
+    rechazadas, con su estado, pero Inventario solo cuenta los renglones aceptados. Sin filas: "No hubo recargas ese día." (Recargas) y
     "Sin carga aceptada ni venta ese día." (Inventario y Merma).
   - **Dashboard y Flujo diario**: la columna Inventario trae la **pastilla del corte** (`FilaVendedorDia.corte`: Sin corte /
     Corte hecho / "Faltan: N pz p/Almacen · N pz merma", cliente 2026-11-24) y `ResumenDia.faltantesCorte`; picarla abre el detalle en la pestaña **Inventario**

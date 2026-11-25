@@ -94,6 +94,22 @@ export interface TipoNegocio {
   sincronizado_en: MomentoISO;
 }
 
+/**
+ * Motivo de merma (rediseño pieza 4). Catalogo global que baja del pull; trae
+ * tambien los de almacen: la tablet ofrece los activos con su bandera.
+ */
+export interface MotivoMerma {
+  id: string;
+  nombre: string;
+  /** `1` = se ofrece en la merma del cliente. */
+  aplica_cliente: Booleano;
+  /** `1` = se ofrece en la merma del vehiculo (`merma_trayecto`). */
+  aplica_vehiculo: Booleano;
+  /** `0` = dado de baja en el portal: ya no se ofrece ni se acepta al grabar. */
+  activo: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
 /** Motivo de una visita sin venta. Catalogo global que baja del pull (T-39). */
 export interface MotivoVisita {
   id: string;
@@ -218,6 +234,11 @@ export interface NotaPendiente {
    * con `leerAbonos`, que tolera un texto corrupto.
    */
   abonos_json: string;
+  /**
+   * Rediseño pieza 7: `NotaPendientePull.detalle` en JSON, tal cual llego en el
+   * pull (migracion 024), para reimprimir. `null` si el servidor no lo mando.
+   */
+  detalle_json: string | null;
   activo: Booleano;
   sincronizado_en: MomentoISO;
 }
@@ -324,8 +345,9 @@ export interface Venta {
   sincronizado_en: MomentoISO | null;
   /**
    * T-73: ruta local del JPG de la firma del cliente
-   * (`documentDirectory/firmas/firma-<id>.jpg`). `null` solo en ventas
-   * anteriores a la migracion 016: desde entonces la firma es obligatoria (D1).
+   * (`documentDirectory/firmas/firma-<id>.jpg`). `null` en ventas anteriores a
+   * la migracion 016 y en las grabadas desde el rediseno pieza 2, que ya no
+   * piden firma: solo las ventas viejas con firma por subir la tienen.
    */
   firma_local: string | null;
   /** Quien firmo; `null` si no lo dijo (D2). */
@@ -336,6 +358,17 @@ export interface Venta {
   firma_error: string | null;
   /** `1` = no recuperable (la venta se elimino en el portal, 413, 415, archivo perdido): no se reintenta. */
   firma_descartada: Booleano;
+  /**
+   * Rediseno pieza 2 (migracion 020): quien atendio al vendedor, recortado,
+   * de 1 a 80. `null` solo en ventas anteriores a la 020.
+   */
+  atendio_nombre: string | null;
+  /**
+   * Rediseno pieza 2 (migracion 020): lo que pago el cliente al recibir una
+   * venta a credito, `0 < abono < monto_total_centavos`. `null` = sin abono
+   * (siempre en contado).
+   */
+  abono_centavos: number | null;
 }
 
 export interface VentaLinea {
@@ -365,7 +398,7 @@ export interface Ruta {
   id: string;
   cliente_id: string;
   fecha: FechaISO;
-  /** El del servidor. Lo que el vendedor arrastra vive en `ruta_orden_local`. */
+  /** El del servidor: el orden de la ruta (el vendedor ya no lo cambia; `ruta_orden_local` quedo sin uso). */
   orden: number;
   origen: OrigenRuta;
   /** `0` = la oficina lo quito de la ruta. La pantalla decide si se ve (D16). */
@@ -617,10 +650,19 @@ export interface CargaDetalle {
   carga_id: string;
   presentacion_id: string;
   piezas: number;
+  /**
+   * Rediseno pieza 3: si el vendedor acepto el renglon. Nulo mientras la carga
+   * esta pendiente y en las respondidas antes de la pieza 3: en una `aceptada`
+   * cuenta como aceptado (`renglonAceptado`).
+   */
+  aceptada: 0 | 1 | null;
 }
 
-/** T-27 pieza 2: los movimientos que no son venta (D1, D3). */
-export type TipoMovimiento = 'merma_cliente' | 'merma_trayecto' | 'consumo';
+/**
+ * T-27 pieza 2: los movimientos que no son venta (D1, D3). El rediseño (pieza 4)
+ * suma el cambio fisico con un cliente: lo recibido regresa al inventario.
+ */
+export type TipoMovimiento = 'merma_cliente' | 'merma_trayecto' | 'consumo' | 'cambio';
 
 /** `recibido` = entra a la camioneta (lo danado que devuelve el cliente); `entregado` = sale. */
 export type SentidoMovimiento = 'recibido' | 'entregado';
@@ -631,10 +673,14 @@ export interface Movimiento {
   /** Dia de trabajo (`reloj.hoy()`), el de `fecha_operacion`. */
   fecha: FechaISO;
   vendedor_id: string;
-  /** Solo en la merma del cliente. */
+  /** Solo en la merma del cliente y el cambio. */
   cliente_id: string | null;
   tipo: TipoMovimiento;
   comentario: string | null;
+  /** Rediseño pieza 4: solo en las mermas; `null` en las de antes de la 022. */
+  motivo_merma_id: string | null;
+  /** Copia del nombre del motivo al grabar. */
+  motivo_nombre: string | null;
   /** Cuando lo guardo el vendedor. Viaja como `ocurrido_en` y `datos.registrado_en`. */
   registrado_en: MomentoISO;
   sync_estado: SyncEstado;

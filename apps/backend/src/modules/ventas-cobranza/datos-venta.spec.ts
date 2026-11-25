@@ -1,4 +1,5 @@
 import {
+  LARGO_MAX_ATENDIO,
   LARGO_MAX_NOMBRE_FIRMA,
   MAX_LINEAS_VENTA,
   normalizarDatosVenta,
@@ -53,6 +54,8 @@ describe('normalizarDatosVenta (D12)', () => {
         ],
         regalos: [],
         firma: null,
+        atendio: null,
+        abonoCentavos: null,
       },
     });
   });
@@ -438,5 +441,91 @@ describe('firma (T-73)', () => {
       expect(r).toMatchObject({ ok: false, campo: 'firma' });
       expect(!r.ok && r.motivo).toMatch(/^firma: /);
     }
+  });
+});
+
+describe('normalizarDatosVenta: quien atendio (pieza 2)', () => {
+  it('ausente o null (tablet anterior) es null', () => {
+    for (const extra of [{}, { atendio: null }]) {
+      const r = normalizarDatosVenta(CLIENTE, datos(extra));
+      expect(r.ok && r.venta.atendio).toBeNull();
+    }
+  });
+
+  it('se recorta; en blanco es null', () => {
+    const r = normalizarDatosVenta(CLIENTE, datos({ atendio: '  Doña Lupe ' }));
+    expect(r.ok && r.venta.atendio).toBe('Doña Lupe');
+    const vacio = normalizarDatosVenta(CLIENTE, datos({ atendio: '   ' }));
+    expect(vacio.ok && vacio.venta.atendio).toBeNull();
+  });
+
+  it(`hasta ${LARGO_MAX_ATENDIO} caracteres entra; uno mas es invalido`, () => {
+    const ok = normalizarDatosVenta(
+      CLIENTE,
+      datos({ atendio: 'x'.repeat(80) }),
+    );
+    expect(ok.ok && ok.venta.atendio).toBe('x'.repeat(80));
+    const largo = normalizarDatosVenta(
+      CLIENTE,
+      datos({ atendio: 'x'.repeat(81) }),
+    );
+    expect(largo).toMatchObject({ ok: false, campo: 'atendio' });
+    expect(!largo.ok && largo.motivo).toMatch(/^atendio: /);
+  });
+
+  it('un valor que no es texto es invalido', () => {
+    for (const atendio of [42, true, { nombre: 'Lupe' }]) {
+      const r = normalizarDatosVenta(CLIENTE, datos({ atendio }));
+      expect(r).toMatchObject({ ok: false, campo: 'atendio' });
+    }
+  });
+});
+
+describe('normalizarDatosVenta: abono al vender (pieza 2)', () => {
+  // datos(): credito, 24 x $13.50 = $324.00 (32400 centavos).
+  it('ausente o null (tablet anterior) es null', () => {
+    for (const extra of [{}, { abono_centavos: null }]) {
+      const r = normalizarDatosVenta(CLIENTE, datos(extra));
+      expect(r.ok && r.venta.abonoCentavos).toBeNull();
+    }
+  });
+
+  it.each([1, 10000, 32399])('%i centavos a credito es valido', (abono) => {
+    const r = normalizarDatosVenta(CLIENTE, datos({ abono_centavos: abono }));
+    expect(r.ok && r.venta.abonoCentavos).toBe(abono);
+  });
+
+  it.each([
+    ['0', 0],
+    ['negativo', -100],
+    ['decimal', 100.5],
+    ['igual al total', 32400],
+    ['mayor al total', 40000],
+    ['texto', '100'],
+  ])('%s es datos invalidos en abono_centavos', (_, abono) => {
+    const r = normalizarDatosVenta(CLIENTE, datos({ abono_centavos: abono }));
+    expect(r).toMatchObject({ ok: false, campo: 'abono_centavos' });
+    expect(!r.ok && r.motivo).toMatch(/^abono_centavos: /);
+  });
+
+  it('con contado es invalido', () => {
+    const r = normalizarDatosVenta(
+      CLIENTE,
+      datos({ contado_credito: 'contado', abono_centavos: 100 }),
+    );
+    expect(r).toMatchObject({ ok: false, campo: 'abono_centavos' });
+  });
+
+  it('en una venta de $0 (solo promocion) cualquier abono es invalido', () => {
+    const r = normalizarDatosVenta(
+      CLIENTE,
+      datos({
+        lineas: [
+          linea({ cantidad: 0, cantidad_promocion: 2, precio_centavos: 0 }),
+        ],
+        abono_centavos: 1,
+      }),
+    );
+    expect(r).toMatchObject({ ok: false, campo: 'abono_centavos' });
   });
 });

@@ -117,7 +117,11 @@ export class VentasService {
     if (rechazo) throw new VentaRechazada(rechazo);
 
     const monto = montoTotalCentavos(venta.lineas);
-    const status = statusInicial(venta.contadoCredito, monto);
+    const status = statusInicial(
+      venta.contadoCredito,
+      monto,
+      venta.abonoCentavos,
+    );
     const id = await this.repo.insertarVenta(
       {
         folio: contexto.folio,
@@ -143,6 +147,7 @@ export class VentasService {
         // manda (`normalizarDatosVenta` sin `firma` → null).
         firmaEsperada: venta.firma !== null,
         firmaNombre: venta.firma?.nombre ?? null,
+        atendioNombre: venta.atendio,
       },
       trx,
     );
@@ -196,6 +201,29 @@ export class VentasService {
           tipo: 'cobranza',
           saldoPendiente: aPesos(0),
           metodoPago: contexto.metodoPagoContado,
+          origen: 'venta_contado',
+        },
+        trx,
+      );
+    }
+
+    // Pieza 2: el abono al vender de una venta a credito va por el MISMO camino
+    // que el cobro de contado (`venta_contado`, sin `cobro`): la tablet no
+    // conoce el id de la nota para mandarlo como cobranza aparte, y un `cobro`
+    // bloquearia editar la venta en el portal. `tipo = 'abono'` lo distingue
+    // del contado (`cobranza`); la edicion del portal lo conserva por eso.
+    // `normalizarDatosVenta` ya garantizo credito y 0 < abono < monto.
+    if (venta.abonoCentavos !== null && venta.abonoCentavos > 0) {
+      await this.cobranzas.insertarAbono(
+        {
+          ventaNotaId: id,
+          vendedorId: contexto.vendedorId,
+          fechaPago: contexto.fechaOperacion,
+          fechaOperacion: contexto.fechaOperacion,
+          monto: aPesos(venta.abonoCentavos),
+          tipo: 'abono',
+          saldoPendiente: aPesos(monto - venta.abonoCentavos),
+          metodoPago: 'efectivo',
           origen: 'venta_contado',
         },
         trx,

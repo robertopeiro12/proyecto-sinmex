@@ -7,6 +7,7 @@ import type {
   ClientePrecio,
   FechaISO,
   MomentoISO,
+  MotivoMerma,
   MotivoVisita,
   NotaAsignada,
   NotaPendiente,
@@ -58,10 +59,14 @@ export interface SnapshotCatalogos {
   tiposNegocio?: Omit<TipoNegocio, 'sincronizado_en'>[];
   /** T-39. Coleccion nueva del pull: el catalogo de la pantalla de visita. Baja como bandera. */
   motivosVisita?: Omit<MotivoVisita, 'sincronizado_en'>[];
+  /** Rediseño pieza 4. Coleccion nueva del pull: los motivos de merma. Baja como bandera. */
+  motivosMerma?: Omit<MotivoMerma, 'sincronizado_en'>[];
   /** T-30/T-31. Coleccion nueva del pull: el catalogo de la pantalla Gastos. Baja como bandera. */
   camposEgreso?: Omit<CampoEgreso, 'sincronizado_en'>[];
   precios?: Omit<ClientePrecio, 'sincronizado_en'>[];
-  notas?: Omit<NotaPendiente, 'sincronizado_en'>[];
+  /** `detalle_json` (rediseño pieza 7) es opcional: ausente, el upsert escribe `null`. */
+  notas?: (Omit<NotaPendiente, 'sincronizado_en' | 'detalle_json'> &
+    Partial<Pick<NotaPendiente, 'detalle_json'>>)[];
   /**
    * T-37. La ruta diaria del vendedor. Se aplica con su propia regla de fusion
    * (`aplicarSnapshotRutas`), no con el upsert generico.
@@ -108,6 +113,7 @@ const COLUMNAS = {
   producto: ['id', 'nombre', 'activo'],
   tipo_negocio: ['id', 'nombre', 'activo'],
   motivo_visita: ['id', 'nombre', 'exige_foto', 'exige_atendio', 'activo'],
+  motivo_merma: ['id', 'nombre', 'aplica_cliente', 'aplica_vehiculo', 'activo'],
   campo_egreso: ['id', 'nombre', 'tipo', 'se_usa_en_app', 'activo'],
   presentacion: ['id', 'producto_id', 'volumen', 'activo'],
   cliente: [
@@ -157,6 +163,8 @@ const COLUMNAS = {
     'activo',
     // T-20: los abonos previos, en JSON.
     'abonos_json',
+    // Rediseño pieza 7: el detalle para reimprimir, en JSON tal cual llego.
+    'detalle_json',
   ],
   ruta_dia: ['id', 'fecha', 'nombre_ruta', 'vehiculo_id', 'activo'],
   nota_asignada: ['id', 'venta_nota_id', 'fecha', 'condicion_venta', 'activo'],
@@ -308,6 +316,9 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
           upsert(bd, 'tipo_negocio', COLUMNAS.tipo_negocio, snapshot.tiposNegocio, ahora) +
           // T-39: sin llaves foraneas hacia nadie; catalogo de empresa como tipo_negocio.
           upsert(bd, 'motivo_visita', COLUMNAS.motivo_visita, snapshot.motivosVisita, ahora) +
+          // Rediseño pieza 4: catalogo de empresa como motivo_visita; nada del
+          // snapshot lo referencia (solo `movimiento`, que escribe la tablet).
+          upsert(bd, 'motivo_merma', COLUMNAS.motivo_merma, snapshot.motivosMerma, ahora) +
           // T-30/T-31: sin llaves foraneas hacia nadie; catalogo de empresa como motivo_visita.
           upsert(bd, 'campo_egreso', COLUMNAS.campo_egreso, snapshot.camposEgreso, ahora) +
           upsert(bd, 'presentacion', COLUMNAS.presentacion, snapshot.presentaciones, ahora) +
@@ -383,6 +394,28 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
     },
 
     /**
+     * Motivos de merma **activos** que aplican a la merma del cliente o a la del
+     * vehiculo, por nombre (rediseño pieza 4). Los que solo son de almacen no
+     * salen.
+     */
+    listarMotivosMerma(aplica: 'cliente' | 'vehiculo'): MotivoMerma[] {
+      const columna = aplica === 'cliente' ? 'aplica_cliente' : 'aplica_vehiculo';
+      return bd.getAllSync<MotivoMerma>(
+        `select * from motivo_merma where activo = 1 and ${columna} = 1 order by nombre`,
+      );
+    },
+
+    /** Cuantos motivos de merma hay guardados (activos o no); 0 = el catalogo nunca bajo. */
+    contarMotivosMerma(): number {
+      return bd.getFirstSync<{ n: number }>('select count(*) as n from motivo_merma')?.n ?? 0;
+    },
+
+    /** Un motivo de merma por id, activo o no (`movimientos.registrar` decide si sirve). */
+    obtenerMotivoMerma(id: string): MotivoMerma | null {
+      return bd.getFirstSync<MotivoMerma>('select * from motivo_merma where id = $id', { $id: id });
+    },
+
+    /**
      * Campos de egreso **activos**, por nombre (T-30/T-31). Trae tambien los que
      * no tienen "Se usa en la app": filtrar es de `camposParaGasto`
      * (`src/estado/gasto.ts`), que es la regla con prueba.
@@ -412,7 +445,22 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
       });
     },
 
-    /** Vehiculos activos de una sucursal, para la pantalla de abrir el dia. */
+    /**
+     * El vehiculo que la oficina le asigno hoy al vendedor (`ruta_dia.vehiculo_id`
+     * de la ruta viva de `reloj.hoy()`), o `null`. El pull solo baja las
+     * `ruta_dia` del propio vendedor, asi que no hace falta filtrar por el.
+     */
+    vehiculoAsignadoHoy(): string | null {
+      const fila = bd.getFirstSync<{ vehiculo_id: string | null }>(
+        `select vehiculo_id from ruta_dia
+          where fecha = $fecha and activo = 1 and vehiculo_id is not null
+          limit 1`,
+        { $fecha: reloj.hoy() },
+      );
+      return fila?.vehiculo_id ?? null;
+    },
+
+    /** Vehiculos activos de una sucursal, para la tarjeta de empezar ruta. */
     listarVehiculos(sucursalId: string): Vehiculo[] {
       return bd.getAllSync<Vehiculo>(
         `select * from vehiculo
@@ -432,7 +480,7 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
       );
     },
 
-    /** Prospectos activos de una sucursal (T-75, D6): la pestana "Prospectos". */
+    /** Prospectos activos de una sucursal (T-75, D6): la lista de la pantalla Prospectos (`listaProspectos`). */
     listarProspectos(sucursalId: string): Cliente[] {
       return bd.getAllSync<Cliente>(
         `select * from cliente
@@ -454,6 +502,18 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
          where cliente_id = $cliente_id and activo = 1
          order by fecha`,
         { $cliente_id: clienteId },
+      );
+    },
+
+    /**
+     * El folio de una `nota_pendiente`, **este o no activa** (rediseño pieza 5):
+     * un cobro que liquida la nota la retira (`activo = 0`) y el registro del
+     * dia tiene que seguir diciendo "Cobro nota <folio>". `null` si no esta.
+     */
+    folioDeNota(ventaNotaId: string): string | null {
+      return (
+        bd.getFirstSync<{ folio: string }>('select folio from nota_pendiente where id = $id', { $id: ventaNotaId })
+          ?.folio ?? null
       );
     },
 

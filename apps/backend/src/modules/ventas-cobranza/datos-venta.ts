@@ -56,10 +56,18 @@ export interface VentaNormalizada {
   /** T-74 (D13). Vacio si la tablet no mando regalos. */
   regalos: RegaloNormalizado[];
   /**
-   * T-73. `null` = la venta no espera firma (tablet anterior a T-73 o venta del
-   * portal). Presente = la imagen llegara por el canal de fotos.
+   * T-73. `null` = la venta no espera firma (tablet anterior a T-73, venta nueva
+   * desde la pieza 2 del rediseno o venta del portal). Presente = la imagen
+   * llegara por el canal de fotos.
    */
   firma: FirmaNormalizada | null;
+  /** Pieza 2: quien atendio en el negocio. Recortado, 1..80; `null` si no vino. */
+  atendio: string | null;
+  /**
+   * Pieza 2: lo que pago el cliente al recibir una venta a credito, en
+   * centavos (`0 < abono < monto`). `null` = sin abono (tablet anterior).
+   */
+  abonoCentavos: number | null;
 }
 
 export type ResultadoDatosVenta =
@@ -80,6 +88,9 @@ export const LARGO_MAX_TEXTO_PROMOCION = 200;
 
 /** Mismo tope que el check de `venta_nota.firma_nombre` y que `reglas-firma.ts` de la tablet. */
 export const LARGO_MAX_NOMBRE_FIRMA = 80;
+
+/** Mismo tope que el check `ck_venta_nota_atendio_nombre`. */
+export const LARGO_MAX_ATENDIO = 80;
 
 /** `integer` de Postgres: lo que cabe en `cantidad` y `cantidad_promocion`. */
 const MAX_ENTERO_POSTGRES = 2_147_483_647;
@@ -367,11 +378,50 @@ export function normalizarDatosVenta(
     firma = { nombre };
   }
 
-  if (montoTotalCentavos(lineas) > MAX_CENTAVOS) {
+  // Pieza 2: opcional y aditivo. Ausente o null = tablet anterior.
+  let atendio: string | null = null;
+  const atendioCrudo = datos.atendio;
+  if (atendioCrudo !== undefined && atendioCrudo !== null) {
+    if (typeof atendioCrudo !== 'string') {
+      return invalido('atendio', 'debe ser texto o null.');
+    }
+    const recortado = atendioCrudo.trim();
+    if (recortado.length > LARGO_MAX_ATENDIO) {
+      return invalido(
+        'atendio',
+        `no puede pasar de ${LARGO_MAX_ATENDIO} caracteres.`,
+      );
+    }
+    atendio = recortado === '' ? null : recortado;
+  }
+
+  const monto = montoTotalCentavos(lineas);
+  if (monto > MAX_CENTAVOS) {
     return invalido(
       'lineas',
       'el monto total no cabe en la base (numeric(12,2)).',
     );
+  }
+
+  // Pieza 2: el abono al vender. Solo a credito y estrictamente entre 0 y el
+  // total: igual al total es "liquidar", y eso es una venta de contado.
+  let abonoCentavos: number | null = null;
+  const abonoCrudo = datos.abono_centavos;
+  if (abonoCrudo !== undefined && abonoCrudo !== null) {
+    if (contadoCredito !== 'credito') {
+      return invalido(
+        'abono_centavos',
+        'solo una venta a credito lleva abono; la de contado ya se cobro completa.',
+      );
+    }
+    const abono = enteroEnRango(abonoCrudo, MAX_CENTAVOS);
+    if (abono === null || abono < 1 || abono >= monto) {
+      return invalido(
+        'abono_centavos',
+        'debe ser un entero de centavos mayor que 0 y menor que el total de la venta.',
+      );
+    }
+    abonoCentavos = abono;
   }
 
   return {
@@ -385,6 +435,8 @@ export function normalizarDatosVenta(
       lineas,
       regalos,
       firma,
+      atendio,
+      abonoCentavos,
     },
   };
 }

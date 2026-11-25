@@ -1,4 +1,4 @@
-import { depsDePrueba, FIRMA_DE_PRUEBA, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
+import { depsDePrueba, ATENDIO_DE_PRUEBA, MOMENTO, snapshotDePrueba } from '../pruebas-apoyo';
 import type { Booleano, EstadoCarga } from '../tipos';
 import { aplicarSnapshotCargas, crearRepositorioCargas, type FilaCargaPull } from './cargas';
 import { crearRepositorioCatalogos } from './catalogos';
@@ -93,6 +93,61 @@ describe('aplicarSnapshotCargas (mezcla del pull)', () => {
     expect(cargas.porId('carga-1')?.activo).toBe(0);
   });
 
+  it('pieza 3: guarda aceptada por renglon (true 1, false 0, null o ausente nulo)', () => {
+    const { deps, cargas } = montar();
+    aplicarSnapshotCargas(
+      deps.bd,
+      [
+        fila({
+          estado: 'aceptada',
+          lineas: [
+            { presentacion_id: 'pre-1', piezas: 24, aceptada: true },
+            { presentacion_id: 'pre-2', piezas: 12, aceptada: false },
+          ],
+        }),
+        fila({ id: 'c-vieja', numero: 2, estado: 'aceptada', lineas: [{ presentacion_id: 'pre-1', piezas: 5 }] }),
+        fila({ id: 'c-nula', numero: 3, lineas: [{ presentacion_id: 'pre-1', piezas: 5, aceptada: null }] }),
+      ],
+      MOMENTO,
+    );
+    expect(cargas.porId('carga-1')?.lineas.map((l) => [l.presentacion_id, l.aceptada])).toEqual([
+      ['pre-1', 1],
+      ['pre-2', 0],
+    ]);
+    expect(cargas.porId('c-vieja')?.lineas[0]?.aceptada).toBeNull();
+    expect(cargas.porId('c-nula')?.lineas[0]?.aceptada).toBeNull();
+  });
+
+  it('pieza 3: un pull viejo (misma version, pendiente) no pisa la respuesta ni sus renglones', () => {
+    const { deps, cargas } = montar();
+    cargas.aplicarRespuesta(
+      fila({
+        estado: 'aceptada',
+        lineas: [
+          { presentacion_id: 'pre-1', piezas: 24, aceptada: true },
+          { presentacion_id: 'pre-2', piezas: 12, aceptada: false },
+        ],
+      }),
+    );
+    expect(
+      aplicarSnapshotCargas(
+        deps.bd,
+        [
+          fila({
+            lineas: [
+              { presentacion_id: 'pre-1', piezas: 24, aceptada: null },
+              { presentacion_id: 'pre-2', piezas: 12, aceptada: null },
+            ],
+          }),
+        ],
+        MOMENTO,
+      ),
+    ).toBe(0);
+    const carga = cargas.porId('carga-1');
+    expect(carga?.estado).toBe('aceptada');
+    expect(carga?.lineas.map((l) => l.aceptada)).toEqual([1, 0]);
+  });
+
   it('catalogos.guardarSnapshot aplica las cargas del pull y avisa del cambio', () => {
     const { catalogos, cargas } = montar();
     const antes = catalogos.version();
@@ -130,6 +185,16 @@ describe('el inventario del dia', () => {
     expect(cargas.filasInventario('ven-1')).toEqual([]);
   });
 
+  it('pieza 6 m-1: filasInventario lee el dia que se le pide (el de la jornada)', () => {
+    const { deps, cargas } = montar();
+    aplicarSnapshotCargas(deps.bd, [fila({ id: 'c-ayer', fecha: '2026-08-06', estado: 'aceptada' })], MOMENTO);
+    expect(cargas.filasInventario('ven-1')).toEqual([]);
+    expect(cargas.filasInventario('ven-1', '2026-08-06').map((f) => [f.presentacionId, f.cargado])).toEqual([
+      ['pre-1', 24],
+      ['pre-2', 12],
+    ]);
+  });
+
   it('filasInventario: cargado − vendido − regalado por presentacion, con su nombre', () => {
     const { deps, cargas, ventas } = montar();
     aplicarSnapshotCargas(deps.bd, [fila({ estado: 'aceptada' })], MOMENTO);
@@ -142,18 +207,37 @@ describe('el inventario del dia', () => {
       comentarios: null,
       lineas: [{ presentacionId: 'pre-1', cantidad: 10, cantidadPromocion: 1 }],
       regalos: [{ promocionId: 'promo-general', presentacionId: 'pre-1', cantidad: 1, texto: 'Por cada 10 Jamaica, 1 Jamaica gratis' }],
-      firma: FIRMA_DE_PRUEBA,
+      atendio: ATENDIO_DE_PRUEBA,
     });
     expect(cargas.filasInventario('ven-1')).toEqual([
       {
         presentacionId: 'pre-1', etiqueta: 'Jamaica 1 L', cargado: 24, vendido: 10, regalado: 1,
-        mermaEntregada: 0, mermaTrayecto: 0, consumo: 0, mermaRecibida: 0, existencia: 13, mermaPorRegresar: 0,
+        mermaEntregada: 0, mermaTrayecto: 0, consumo: 0, mermaRecibida: 0, cambiosRecibidos: 0, cambiosEntregados: 0, existencia: 13, mermaPorRegresar: 0,
       },
       {
         presentacionId: 'pre-2', etiqueta: 'Jamaica 500 ml', cargado: 12, vendido: 0, regalado: 0,
-        mermaEntregada: 0, mermaTrayecto: 0, consumo: 0, mermaRecibida: 0, existencia: 12, mermaPorRegresar: 0,
+        mermaEntregada: 0, mermaTrayecto: 0, consumo: 0, mermaRecibida: 0, cambiosRecibidos: 0, cambiosEntregados: 0, existencia: 12, mermaPorRegresar: 0,
       },
     ]);
+  });
+
+  it('pieza 3: el renglon no aceptado no suma al inventario ni a la venta', () => {
+    const { deps, cargas } = montar();
+    aplicarSnapshotCargas(
+      deps.bd,
+      [
+        fila({
+          estado: 'aceptada',
+          lineas: [
+            { presentacion_id: 'pre-1', piezas: 24, aceptada: true },
+            { presentacion_id: 'pre-2', piezas: 12, aceptada: false },
+          ],
+        }),
+      ],
+      MOMENTO,
+    );
+    expect(cargas.filasInventario('ven-1').map((f) => [f.presentacionId, f.cargado])).toEqual([['pre-1', 24]]);
+    expect(cargas.paraVenta('ven-1').existencias.has('pre-2')).toBe(false);
   });
 
   it('paraVenta: control, bloqueo y existencias del momento', () => {
@@ -208,5 +292,59 @@ describe('vendedor.control_inventario (D7)', () => {
       vendedores: [{ id: 'ven-9', login: 'nuevo', nombre: 'Nuevo', sucursal_id: 'suc-tj', activo: 1, folio_segmento: null }],
     });
     expect(cargas.controlInventario('ven-9')).toBe(false);
+  });
+});
+
+describe('candadoDeHoy (rediseño, pieza 1)', () => {
+  const jornadaDeHoy = { fecha: HOY };
+
+  it('sin jornada de hoy: empezar', () => {
+    const { cargas } = montar();
+    expect(cargas.candadoDeHoy('ven-1', null)).toEqual({ tipo: 'empezar' });
+    expect(cargas.candadoDeHoy('ven-1', { fecha: '2026-08-06' })).toEqual({ tipo: 'empezar' });
+  });
+
+  it('con control: la carga pendiente cierra los clientes y aceptarla los abre', () => {
+    const { deps, cargas } = montar();
+    deps.bd.runSync("update vendedor set control_inventario = 1 where id = 'ven-1'");
+    expect(cargas.candadoDeHoy('ven-1', jornadaDeHoy)).toEqual({ tipo: 'sin-carga' });
+
+    aplicarSnapshotCargas(deps.bd, [fila()], MOMENTO);
+    expect(cargas.candadoDeHoy('ven-1', jornadaDeHoy)).toEqual({ tipo: 'carga-pendiente', cargaId: 'carga-1' });
+
+    cargas.aplicarRespuesta(fila({ estado: 'aceptada' }));
+    expect(cargas.candadoDeHoy('ven-1', jornadaDeHoy)).toBeNull();
+  });
+
+  it('pieza 3: rechazar todo deja los clientes cerrados; aceptar uno los abre', () => {
+    const { deps, cargas } = montar();
+    deps.bd.runSync("update vendedor set control_inventario = 1 where id = 'ven-1'");
+    cargas.aplicarRespuesta(
+      fila({
+        estado: 'rechazada',
+        motivo_rechazo: null,
+        lineas: [
+          { presentacion_id: 'pre-1', piezas: 24, aceptada: false },
+          { presentacion_id: 'pre-2', piezas: 12, aceptada: false },
+        ],
+      }),
+    );
+    expect(cargas.candadoDeHoy('ven-1', jornadaDeHoy)).toEqual({ tipo: 'rechazada' });
+
+    cargas.aplicarRespuesta(
+      fila({
+        id: 'c-2',
+        numero: 2,
+        estado: 'aceptada',
+        lineas: [{ presentacion_id: 'pre-1', piezas: 24, aceptada: true }],
+      }),
+    );
+    expect(cargas.candadoDeHoy('ven-1', jornadaDeHoy)).toBeNull();
+  });
+
+  it('sin control: clientes abiertos con la carga pendiente', () => {
+    const { deps, cargas } = montar();
+    aplicarSnapshotCargas(deps.bd, [fila()], MOMENTO);
+    expect(cargas.candadoDeHoy('ven-1', jornadaDeHoy)).toBeNull();
   });
 });

@@ -32,7 +32,25 @@ const consumo = {
   lineas: [{ presentacion_id: LITRO, sentido: 'entregado', piezas: 1 }],
 };
 
+/** Rediseño pieza 4: recibe 3 litros, entrega 1 litro. */
+const cambio = {
+  tipo: 'cambio',
+  registrado_en: '2026-10-23T18:40:00.000Z',
+  lineas: [
+    { presentacion_id: LITRO, sentido: 'recibido', piezas: 3 },
+    { presentacion_id: LITRO, sentido: 'entregado', piezas: 1 },
+  ],
+};
+
 describe('prepararMovimiento (T-27 pieza 2)', () => {
+  it('un cambio sale con el cliente del sobre (pieza 4)', () => {
+    expect(prepararMovimiento(op({ datos: cambio }))).toMatchObject({
+      ok: true,
+      clienteId: CLIENTE,
+      movimiento: { tipo: 'cambio', motivoMermaId: null },
+    });
+  });
+
   it('una merma del cliente sale con el cliente del sobre', () => {
     expect(prepararMovimiento(op())).toEqual({
       ok: true,
@@ -40,6 +58,7 @@ describe('prepararMovimiento (T-27 pieza 2)', () => {
       movimiento: {
         tipo: 'merma_cliente',
         comentario: null,
+        motivoMermaId: null,
         registradoEn: '2026-10-23T18:40:00.000Z',
         lineas: [{ presentacionId: LITRO, sentido: 'recibido', piezas: 3 }],
       },
@@ -61,7 +80,8 @@ describe('prepararMovimiento (T-27 pieza 2)', () => {
     [{ clave: 'movimiento-123' }, /^clave: .*uuid/],
     [{ clienteId: null }, /^cliente_id: /],
     [{ datos: consumo }, /^cliente_id: /],
-    [{ datos: { ...consumo, tipo: 'cambio' } }, /^tipo: /],
+    [{ datos: { ...consumo, tipo: 'devolucion' } }, /^tipo: /],
+    [{ clienteId: null, datos: cambio }, /^cliente_id: .*cambio/],
   ])(
     '%j es datos-invalidos con un motivo que nombra el campo',
     (extra, motivo) => {
@@ -78,6 +98,7 @@ describe('prepararMovimiento (T-27 pieza 2)', () => {
     expect(CODIGO_POR_RAZON_MOVIMIENTO).toEqual({
       'presentacion-inexistente': 'datos-invalidos',
       'movimiento-id-ocupado': 'movimiento-id-ocupado',
+      'motivo-merma-inexistente': 'motivo-merma-inexistente',
     });
   });
 });

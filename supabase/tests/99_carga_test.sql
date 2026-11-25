@@ -1,5 +1,5 @@
 begin;
-select plan(24);
+select plan(28);
 
 -- T-27 pieza 1: lo que la BASE garantiza de la carga del vendedor aunque alguien
 -- escriba por debajo del servicio. Prefijo `zz-pgtap-t27`. Todo se va con el rollback.
@@ -60,10 +60,21 @@ select throws_ok(
     select sucursal, vendedor, date '2026-10-22', 0, usuario from _t27$$,
   '23514', null, 'el numero empieza en 1');
 
-select throws_ok(
+-- Rediseño pieza 3: el vendedor rechaza sin escribir (lista de aceptados vacía).
+select lives_ok(
   $$insert into carga (sucursal_id, vendedor_id, fecha, numero, capturo_usuario_id, estado, respondida_en)
-    select sucursal, vendedor, date '2026-10-22', 9, usuario, 'rechazada', now() from _t27$$,
-  '23514', null, 'una rechazada exige motivo (ck_carga_motivo)');
+    select sucursal, vendedor, date '2026-10-22', 8, usuario, 'rechazada', now() from _t27$$,
+  'una rechazada ya no exige motivo (ck_carga_motivo, pieza 3)');
+
+select throws_ok(
+  $$insert into carga (sucursal_id, vendedor_id, fecha, numero, capturo_usuario_id, estado, motivo_rechazo, respondida_en)
+    select sucursal, vendedor, date '2026-10-22', 9, usuario, 'aceptada', 'Faltan cajas', now() from _t27$$,
+  '23514', null, 'una aceptada (total o parcial) no lleva motivo (ck_carga_motivo)');
+
+select lives_ok(
+  $$insert into carga (sucursal_id, vendedor_id, fecha, numero, capturo_usuario_id, estado, motivo_rechazo, respondida_en)
+    select sucursal, vendedor, date '2026-10-22', 7, usuario, 'rechazada', 'Faltan cajas', now() from _t27$$,
+  'una rechazada con motivo (tablet vieja) sigue entrando');
 
 select throws_ok(
   $$insert into carga (sucursal_id, vendedor_id, fecha, numero, capturo_usuario_id, motivo_rechazo)
@@ -111,6 +122,12 @@ select lives_ok(
   $$insert into carga_detalle (carga_id, presentacion_id, piezas)
     select (select id from _t27c), litro, 24 from _t27$$,
   'una linea con piezas entra');
+
+select has_column('carga_detalle', 'aceptada',
+  'cada renglon dice si el vendedor lo acepto (pieza 3)');
+select is(
+  (select aceptada from carga_detalle where carga_id = (select id from _t27c)),
+  null::boolean, 'un renglon nace sin respuesta (null): tambien las cargas de antes');
 
 select throws_ok(
   $$insert into carga_detalle (carga_id, presentacion_id, piezas)

@@ -27,7 +27,7 @@ import type {
 import { fuenteFotosProspectos, type FuenteFotos } from './fuente-fotos';
 import { fuenteJornadas } from './fuente-jornadas';
 import { fuenteProspectos } from './fuente-prospectos';
-import { aSnapshot, crearMotorSincronizacion, type FuenteOperaciones } from './motor';
+import { aSnapshot, crearMotorSincronizacion, debeOlvidarCursor, type FuenteOperaciones } from './motor';
 
 /** Respuesta de push que acepta todo lo que le manden. */
 function pushOk(operaciones: OperacionSaliente[]): RespuestaPush {
@@ -220,6 +220,36 @@ describe('aSnapshot (T-20)', () => {
   });
 });
 
+describe('aSnapshot (rediseño pieza 7)', () => {
+  it('guarda el detalle de la nota como JSON tal cual y null si el servidor no lo manda', () => {
+    const detalle = {
+      lineas: [
+        {
+          presentacion_id: 'pre-1',
+          etiqueta: 'Jamaica 1 L',
+          cantidad: 24,
+          cantidad_promocion: 2,
+          precio_centavos: 1010,
+        },
+      ],
+      promociones: [
+        { presentacion_id: 'pre-1', etiqueta: 'Jamaica 1 L', cantidad: 2, texto: 'Por cada 12, 1 gratis' },
+      ],
+      vendedor_nombre: 'Abraham Perez',
+      atendio: 'Dona Lupe',
+      sucursal_nombre: 'Tijuana',
+      creada_en: '2026-08-05T18:30:00.000Z',
+    };
+    const respuesta = respuestaPullDePrueba();
+    respuesta.notas_pendientes[0] = { ...respuesta.notas_pendientes[0]!, detalle };
+
+    const notas = aSnapshot(respuesta).notas ?? [];
+    expect(notas.map((n) => n.detalle_json)).toEqual([JSON.stringify(detalle), null]);
+    // `detalle` no viaja como columna: solo su texto.
+    expect(notas[0]).not.toHaveProperty('detalle');
+  });
+});
+
 describe('aSnapshot (T-37)', () => {
   it('pasa la ruta del pull al snapshot y tolera un servidor que todavia no la manda', () => {
     const fila = {
@@ -281,7 +311,7 @@ describe('aSnapshot (T-27)', () => {
       version: 1,
       respondida_en: null,
       activo: 1 as const,
-      lineas: [{ presentacion_id: 'pre-1', piezas: 24 }],
+      lineas: [{ presentacion_id: 'pre-1', piezas: 24, aceptada: null }],
     };
     expect(aSnapshot(respuestaPullDePrueba({ cargas: [carga] })).cargas).toEqual([carga]);
     expect(aSnapshot(respuestaPullDePrueba()).cargas).toBeUndefined();
@@ -363,14 +393,26 @@ describe('motor de sincronizacion', () => {
     });
 
     it('la primera vez pide sin cursor; la segunda, con el que devolvio el servidor', async () => {
-      const { motor, escenario, sync } = montar({});
+      const { motor, escenario, sync, catalogos } = montar({});
 
       await motor.sincronizar();
       expect(escenario.pulls[0]!.desde).toBeNull();
       expect(sync.leerCursor()).toBe('2026-08-07T14:59:55.000Z');
 
+      // Con motivos de merma ya bajados el pull sigue siendo incremental.
+      catalogos.guardarSnapshot({
+        motivosMerma: [{ id: 'mm1', nombre: 'Caducado', aplica_cliente: 1, aplica_vehiculo: 1, activo: 1 }],
+      } as Parameters<typeof catalogos.guardarSnapshot>[0]);
       await motor.sincronizar();
       expect(escenario.pulls[1]!.desde).toBe('2026-08-07T14:59:55.000Z');
+    });
+
+    it('sin motivos de merma locales (APK antes que el backend) el pull sale completo', async () => {
+      const { motor, escenario } = montar({});
+
+      await motor.sincronizar();
+      await motor.sincronizar();
+      expect(escenario.pulls[1]!.desde).toBeNull();
     });
 
     it('el cursor NO se guarda si aplicar el snapshot falla', async () => {
@@ -1233,6 +1275,21 @@ describe('aSnapshot (T-39)', () => {
   });
 });
 
+describe('aSnapshot (rediseño pieza 4)', () => {
+  it('los motivos de merma bajan con sus banderas booleanas como 0/1, tambien los de almacen', () => {
+    const respuesta = respuestaPullDePrueba();
+    respuesta.catalogos.motivos_merma = [
+      { id: 'mm1', nombre: 'Caducado', aplica_cliente: true, aplica_vehiculo: false, activo: 1 },
+      { id: 'mm2', nombre: 'Mal sellado', aplica_cliente: false, aplica_vehiculo: false, activo: 0 },
+    ];
+    expect(aSnapshot(respuesta).motivosMerma).toEqual([
+      { id: 'mm1', nombre: 'Caducado', aplica_cliente: 1, aplica_vehiculo: 0, activo: 1 },
+      { id: 'mm2', nombre: 'Mal sellado', aplica_cliente: 0, aplica_vehiculo: 0, activo: 0 },
+    ]);
+    expect(aSnapshot(respuestaPullDePrueba()).motivosMerma).toBeUndefined();
+  });
+});
+
 describe('aSnapshot (T-30/T-31)', () => {
   it('los campos de egreso bajan con la casilla booleana como 0/1 de SQLite', () => {
     const respuesta = respuestaPullDePrueba();
@@ -1302,5 +1359,13 @@ describe('aSnapshot (notas asignadas)', () => {
     const vacio = aSnapshot(respuestaPullDePrueba());
     expect(vacio.rutasDia).toBeUndefined();
     expect(vacio.notasAsignadas).toBeUndefined();
+  });
+});
+
+describe('debeOlvidarCursor (rediseño pieza 4)', () => {
+  it('con cursor y sin motivos de merma el pull tiene que ser completo', () => {
+    expect(debeOlvidarCursor({ hayCursor: true, motivosMerma: 0 })).toBe(true);
+    expect(debeOlvidarCursor({ hayCursor: true, motivosMerma: 3 })).toBe(false);
+    expect(debeOlvidarCursor({ hayCursor: false, motivosMerma: 0 })).toBe(false);
   });
 });

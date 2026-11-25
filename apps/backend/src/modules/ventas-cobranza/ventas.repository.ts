@@ -32,6 +32,8 @@ export interface NuevaVentaNota {
   firmaEsperada: boolean;
   /** T-73: quien firmo; `null` si no lo dijo o si no hay firma. */
   firmaNombre: string | null;
+  /** Pieza 2: quien atendio en el negocio; `null` si no lo dijo. */
+  atendioNombre: string | null;
 }
 
 export interface NuevoDetalleVenta {
@@ -109,6 +111,7 @@ export class VentasRepository {
         capturo_usuario_id: venta.capturoUsuarioId,
         firma_esperada: venta.firmaEsperada,
         firma_nombre: venta.firmaNombre,
+        atendio_nombre: venta.atendioNombre,
       })
       .returning('id')
       .executeTakeFirstOrThrow();

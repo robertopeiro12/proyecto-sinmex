@@ -6,7 +6,6 @@ import {
   montoACentavos,
   pastillaGasto,
   puedeGuardarGasto,
-  puedeRegistrarGasto,
   TEXTO_METODO_GASTO,
   validarGasto,
   type EntradaGasto,
@@ -86,6 +85,12 @@ describe('validarGasto (D9)', () => {
     expect(r.gasto).toEqual({ campoEgresoId: 'ce-hielo', montoCentavos: 8000, comentario: null, fotoUri: null });
   });
 
+  it('un gasto con solo motivo y cantidad es válido', () => {
+    const r = validarGasto(entrada({ monto: '500.00', comentario: '', fotoUri: null }));
+    expect(r.faltantes).toEqual([]);
+    expect(r.gasto).toEqual({ campoEgresoId: 'ce-hielo', montoCentavos: 50000, comentario: null, fotoUri: null });
+  });
+
   it('recorta las observaciones y pasa la foto tal cual', () => {
     const r = validarGasto(entrada({ comentario: ' Bolsa de 5 kg ', fotoUri: 'file:///t.jpg' }));
     expect(r.gasto).toEqual({
@@ -99,16 +104,16 @@ describe('validarGasto (D9)', () => {
   it('sin campo no se guarda', () => {
     const r = validarGasto(entrada({ campo: null }));
     expect(r.gasto).toBeNull();
-    expect(r.faltantes).toEqual(['Elige el campo del gasto.']);
+    expect(r.faltantes).toEqual(['Elige el motivo del gasto.']);
   });
 
   it('sin monto lo pide; un monto invalido dice por que', () => {
-    expect(validarGasto(entrada({ monto: '  ' })).faltantes).toEqual(['Escribe el monto en pesos.']);
+    expect(validarGasto(entrada({ monto: '  ' })).faltantes).toEqual(['Escribe la cantidad en pesos.']);
     for (const malo of ['0', '12.345', '-5', 'abc']) {
       const r = validarGasto(entrada({ monto: malo }));
       expect(r.gasto).toBeNull();
       expect(r.montoCentavos).toBeNull();
-      expect(r.faltantes).toEqual(['El monto tiene que ser mayor que $0, con dos decimales a lo más.']);
+      expect(r.faltantes).toEqual(['La cantidad tiene que ser mayor que $0, con dos decimales a lo más.']);
     }
   });
 
@@ -127,8 +132,8 @@ describe('validarGasto (D9)', () => {
 
   it('junta todo lo que falta, en el orden de la pantalla', () => {
     expect(validarGasto(entrada({ campo: null, monto: '', comentario: 'x'.repeat(201) })).faltantes).toEqual([
-      'Elige el campo del gasto.',
-      'Escribe el monto en pesos.',
+      'Elige el motivo del gasto.',
+      'Escribe la cantidad en pesos.',
       'Las observaciones no pueden pasar de 200 caracteres.',
     ]);
   });
@@ -171,7 +176,7 @@ describe('faltantesVisiblesGasto (D9)', () => {
     expect(faltantesVisiblesGasto(vacia, validarGasto(vacia))).toEqual([]);
   });
 
-  it('en cuanto empieza a capturar (campo, monto u observaciones) lista lo que falta', () => {
+  it('en cuanto empieza a capturar (motivo, cantidad u observaciones) lista lo que falta', () => {
     for (const e of [
       entrada({ monto: '' }),
       entrada({ campo: null, monto: '12.345' }),
@@ -188,26 +193,11 @@ describe('faltantesVisiblesGasto (D9)', () => {
   });
 });
 
-describe('puedeRegistrarGasto (D9)', () => {
-  it('con catalogo y el dia abierto deja abrir el formulario', () => {
-    expect(puedeRegistrarGasto({ camposDisponibles: 3, diaCerrado: false })).toBe(true);
-  });
-
-  it('sin catalogo o con el dia cerrado no (como la entrada del menu)', () => {
-    expect(puedeRegistrarGasto({ camposDisponibles: 0, diaCerrado: false })).toBe(false);
-    expect(puedeRegistrarGasto({ camposDisponibles: 3, diaCerrado: true })).toBe(false);
-  });
-});
-
 describe('puedeGuardarGasto', () => {
-  const base = { gastoValido: true, hayCampos: true, diaAbierto: true, guardado: false, tomandoFoto: false };
+  const base = { gastoValido: true, hayCampos: true, diaAbierto: true, guardado: false };
 
   it('con todo en orden se puede guardar', () => {
     expect(puedeGuardarGasto(base)).toBe(true);
-  });
-
-  it('mientras se toma o comprime la foto no (guardaria sin ticket)', () => {
-    expect(puedeGuardarGasto({ ...base, tomandoFoto: true })).toBe(false);
   });
 
   it('gasto invalido, sin catalogo, dia cerrado o ya guardado tampoco', () => {

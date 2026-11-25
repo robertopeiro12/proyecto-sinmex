@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment } from "react";
+import { cn } from "@/lib/utils";
 import { Ayuda } from "@/components/ui/ayuda";
 import { Aviso } from "@/components/ui/aviso";
 import { Pestanas } from "@/components/ui/pestanas";
@@ -117,14 +118,14 @@ function TablaInventario({ datos }: { datos: InventarioVendedor }) {
               Cambio físico entregado
               <Ayuda
                 tema="Cambio físico entregado"
-                texto="Los cambios físicos se registrarán desde la app; por ahora valen 0."
+                texto="Piezas que el vendedor le dio al cliente en un cambio físico desde la app. Restan de las piezas teóricas por regresar."
               />
             </Th>
             <Th alinear="derecha" className={`${TOP2} whitespace-normal`}>
               Cambio físico recibido
               <Ayuda
                 tema="Cambio físico recibido"
-                texto="Los cambios físicos se registrarán desde la app; por ahora valen 0."
+                texto="Piezas que el vendedor recibió del cliente en un cambio físico desde la app. Suman a las piezas teóricas por regresar; no son merma."
               />
             </Th>
             <Th alinear="derecha" className={`${TOP2} whitespace-normal`}>
@@ -328,14 +329,22 @@ function TablaRecargas({ datos }: { datos: InventarioVendedor }) {
             <FilaVacia columnas={columnas}>{VACIO_RECARGAS}</FilaVacia>
           )}
           {datos.recargas.map((r) => (
-            <Fila key={`${r.cargaId}-${r.presentacionId}`} className="align-middle">
+            <Fila
+              key={`${r.cargaId}-${r.presentacionId}`}
+              className={cn(
+                "align-middle",
+                r.estado === "aceptada" && r.aceptada === false && "bg-destructive-soft/40",
+              )}
+            >
               {conVendedor && <Td className="truncate">{r.vendedor}</Td>}
               <Td className="truncate">{r.nombre}</Td>
               <Td className="truncate">{r.capturo}</Td>
               <Td alinear="derecha">{r.piezas}</Td>
               <Td>{textoHora(r.hora)}</Td>
               <Td>
-                {textoEstadoRecarga(r)}
+                {r.estado === "aceptada" && r.aceptada === false
+                  ? "No aceptado"
+                  : textoEstadoRecarga(r)}
                 {r.estado === "rechazada" && r.motivoRechazo && (
                   <span className="block text-xs text-destructive">
                     {`Motivo: ${r.motivoRechazo}`}

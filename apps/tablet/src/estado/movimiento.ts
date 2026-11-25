@@ -1,4 +1,5 @@
 import {
+  llevaCliente,
   MAX_PIEZAS_MOVIMIENTO,
   motivoDeConsumo,
   validarMovimiento,
@@ -9,6 +10,7 @@ import type { Movimiento, SentidoMovimiento, TipoMovimiento } from '@/datos/tipo
 import { leerCantidad } from '@/datos/ventas-reglas';
 
 import { motivoDeRechazo, type EstadoPastilla } from './ruta-del-dia';
+import { compararEtiquetas } from './venta-pasos';
 
 /**
  * Lo que deciden las pantallas de merma y consumo (T-27 pieza 2), sin React: la
@@ -31,10 +33,19 @@ export type { EntradaMovimiento, LineaMovimiento } from '@/datos/movimientos-reg
 
 export const MENSAJE_DIA_CERRADO_MOVIMIENTO = 'El día ya está cerrado: no se pueden registrar movimientos.';
 
+/**
+ * Merma / Cambios con el día cerrado (Mario, 2026-11-25): la pantalla sigue
+ * abierta para consultar el registro, pero sin captura; esta es la razón que
+ * va bajo los botones apagados.
+ */
+export const AVISO_MERMA_SOLO_CONSULTA = 'Día cerrado: solo consulta. Ya no se registra merma, cambio ni consumo.';
+
 export const TITULO_MOVIMIENTO: Record<TipoMovimiento, string> = {
   merma_cliente: 'Merma del cliente',
-  merma_trayecto: 'Merma del trayecto',
+  // Rediseño pieza 4 (maqueta 16): la merma del trayecto se llama "Merma del vehículo".
+  merma_trayecto: 'Merma del vehículo',
   consumo: 'Consumo propio',
+  cambio: 'Cambio',
 };
 
 /** Lo capturado por presentacion, tal cual (el texto de cada campo). */
@@ -62,6 +73,8 @@ export function piezasCapturadas(
 export interface EntradaCapturaMovimiento {
   tipo: TipoMovimiento;
   clienteId: string | null;
+  /** Rediseño pieza 4: el motivo elegido (las dos mermas lo exigen). */
+  motivoMermaId?: string | null;
   captura: CapturaMovimiento;
   comentario: string;
   /** La jornada de hoy ya esta cerrada (`estadoMenuJornada`). */
@@ -102,7 +115,9 @@ export function validarCapturaMovimiento(e: EntradaCapturaMovimiento): Validacio
 
   const faltantes: string[] = [];
   if (ilegible) faltantes.push(`Las piezas son números enteros de 1 a ${MAX_PIEZAS_MOVIMIENTO}.`);
-  faltantes.push(...validarMovimiento({ tipo: e.tipo, clienteId: e.clienteId, lineas, comentario }));
+  faltantes.push(
+    ...validarMovimiento({ tipo: e.tipo, clienteId: e.clienteId, motivoMermaId: e.motivoMermaId, lineas, comentario }),
+  );
   if (e.tipo === 'consumo' && e.consumo && lineas.length > 0) {
     const motivo = motivoDeConsumo({
       limite: e.consumo.limite,
@@ -149,18 +164,198 @@ export function pastillaMovimiento(
   }
 }
 
-/** "Recibí dañado: Jamaica 1 L ×3 · Le entregué: Jamaica 500 ml ×2", o las piezas que salieron. */
+/**
+ * "Me entregó dañado: Jamaica 1 L ×3 · Le entregué: Jamaica 500 ml ×2" (merma del
+ * cliente), "Fresa por Mango" (cambio: lo que regreso el cliente
+ * "por" lo que se llevo, sin repetir), o las piezas que salieron.
+ */
 export function resumenMovimiento(m: { tipo: TipoMovimiento; lineas: readonly LineaMovimientoConEtiqueta[] }): string {
   const lista = (sentido: SentidoMovimiento) =>
     m.lineas
       .filter((l) => l.sentido === sentido)
       .map((l) => `${l.etiqueta} ×${l.piezas}`)
       .join(', ');
+  if (m.tipo === 'cambio') {
+    // Maqueta 15: "Fresa por Mango", sin volumen. El volumen solo vuelve cuando
+    // dos presentaciones distintas de un mismo producto andan en el cambio.
+    const sinVolumen = (etiqueta: string) => etiqueta.replace(/\s+\d+(?:[.,]\d+)?\s*[A-Za-zµ]+$/, '');
+    const etiquetas = [...new Set(m.lineas.map((l) => l.etiqueta))];
+    const repetidos = new Set<string>();
+    const vistos = new Set<string>();
+    for (const e of etiquetas) {
+      const n = sinVolumen(e);
+      if (vistos.has(n)) repetidos.add(n);
+      vistos.add(n);
+    }
+    const nombres = (sentido: SentidoMovimiento) =>
+      [
+        ...new Set(
+          m.lineas
+            .filter((l) => l.sentido === sentido)
+            .map((l) => (repetidos.has(sinVolumen(l.etiqueta)) ? l.etiqueta : sinVolumen(l.etiqueta))),
+        ),
+      ].join(', ');
+    return `${nombres('recibido')} por ${nombres('entregado')}`;
+  }
   if (m.tipo !== 'merma_cliente') return lista('entregado');
-  const partes = [`Recibí dañado: ${lista('recibido')}`];
+  const partes = [`Me entregó dañado: ${lista('recibido')}`];
   const entregado = lista('entregado');
   if (entregado !== '') partes.push(`Le entregué: ${entregado}`);
   return partes.join(' · ');
+}
+
+/* ------------------------------------------------------------------ */
+/* Rediseño pieza 4: Merma y cambios (maquetas 14, 15 y 16)            */
+/* ------------------------------------------------------------------ */
+
+/** La etiqueta de tipo de cada renglon del registro (maqueta 15). */
+export const ETIQUETA_TIPO_MOVIMIENTO: Record<TipoMovimiento, string> = {
+  merma_cliente: 'Merma',
+  merma_trayecto: 'Merma',
+  consumo: 'Consumo',
+  cambio: 'Cambio',
+};
+
+export type FiltroMovimientos = 'todo' | 'merma' | 'cambios';
+
+export const FILTROS_MOVIMIENTOS: readonly { clave: FiltroMovimientos; etiqueta: string }[] = [
+  { clave: 'todo', etiqueta: 'Todo' },
+  { clave: 'merma', etiqueta: 'Merma' },
+  { clave: 'cambios', etiqueta: 'Cambios' },
+];
+
+/**
+ * Los filtros de abajo del registro. "Merma" son las dos mermas (cliente y
+ * vehiculo); "Cambios", los cambios. El consumo propio solo sale en "Todo": no
+ * es merma ni cambio. Conserva el orden de entrada.
+ */
+export function filtrarMovimientos<M extends { tipo: TipoMovimiento }>(
+  movimientos: readonly M[],
+  filtro: FiltroMovimientos,
+): M[] {
+  switch (filtro) {
+    case 'todo':
+      return [...movimientos];
+    case 'merma':
+      return movimientos.filter((m) => m.tipo === 'merma_cliente' || m.tipo === 'merma_trayecto');
+    case 'cambios':
+      return movimientos.filter((m) => m.tipo === 'cambio');
+  }
+}
+
+/**
+ * Las piezas de UN movimiento en el registro: con un cliente (merma o cambio),
+ * lo que el cliente entrego (el mismo numero de la pestaña "Merma · N" /
+ * "Cambios · N"); sin cliente (merma del vehiculo, consumo), lo que salio.
+ */
+export function piezasDelMovimiento(m: {
+  tipo: TipoMovimiento;
+  lineas: readonly { sentido: SentidoMovimiento; piezas: number }[];
+}): number {
+  const sentido: SentidoMovimiento = llevaCliente(m.tipo) ? 'recibido' : 'entregado';
+  return m.lineas.filter((l) => l.sentido === sentido).reduce((total, l) => total + l.piezas, 0);
+}
+
+/** "Hoy · N movimientos · X pzas": la suma de `piezasDelMovimiento`. */
+export function totalPiezasDelDia(
+  movimientos: readonly { tipo: TipoMovimiento; lineas: readonly { sentido: SentidoMovimiento; piezas: number }[] }[],
+): number {
+  return movimientos.reduce((total, m) => total + piezasDelMovimiento(m), 0);
+}
+
+/** "1 movimiento" / "4 movimientos". */
+export function textoMovimientos(n: number): string {
+  return `${n} ${n === 1 ? 'movimiento' : 'movimientos'}`;
+}
+
+/** "1 pza" / "15 pzas". */
+export function textoPzas(n: number): string {
+  return `${n} ${n === 1 ? 'pza' : 'pzas'}`;
+}
+
+/** Quien en el renglon del registro: el cliente, o "Vehículo" sin cliente. */
+export function lugarMovimiento(nombreCliente: string | null | undefined): string {
+  return nombreCliente ?? 'Vehículo';
+}
+
+/** Junto a la etiqueta de tipo: el motivo de la merma, o el resumen (cambio, consumo, merma sin motivo). */
+export function detalleMovimiento(m: {
+  tipo: TipoMovimiento;
+  motivo_nombre: string | null;
+  lineas: readonly LineaMovimientoConEtiqueta[];
+}): string {
+  return m.motivo_nombre ?? resumenMovimiento(m);
+}
+
+/** Las dos pestañas de "Merma y cambios" del cliente; cada una graba su propio movimiento. */
+export type PestanaMovimiento = 'merma' | 'cambios';
+
+export const TIPO_DE_PESTANA: Record<PestanaMovimiento, 'merma_cliente' | 'cambio'> = {
+  merma: 'merma_cliente',
+  cambios: 'cambio',
+};
+
+/** Lo capturado en un lado de la captura (para "Merma · N", "Cambios · N" y "N PIEZAS"). */
+export function piezasDelSentido(captura: CapturaMovimiento, sentido: SentidoMovimiento): number {
+  return Object.keys(captura).reduce((total, id) => total + piezasCapturadas(captura, id, sentido), 0);
+}
+
+/** "Merma · 5" / "Cambios · 0": las piezas que entrego el cliente en esa pestaña. */
+export function textoPestana(pestana: PestanaMovimiento, captura: CapturaMovimiento): string {
+  return `${pestana === 'merma' ? 'Merma' : 'Cambios'} · ${piezasDelSentido(captura, 'recibido')}`;
+}
+
+export interface RenglonMovimiento {
+  presentacionId: string;
+  etiqueta: string;
+  /** La existencia con el control de inventario prendido; `null` = sin control. */
+  quedan: number | null;
+}
+
+/**
+ * Las filas del selector "Agregar producto" y de la merma del vehiculo, en el
+ * orden de la lista de venta (producto y volumen). `quedan` solo con el control
+ * prendido (lo que sale de la camioneta dice "te quedan N").
+ */
+export function renglonesMovimiento({
+  presentaciones,
+  existencias,
+  controlInventario,
+}: {
+  presentaciones: readonly { presentacionId: string; etiqueta: string }[];
+  existencias: ReadonlyMap<string, { existencia: number }>;
+  controlInventario: boolean;
+}): RenglonMovimiento[] {
+  return presentaciones
+    .map((p) => ({
+      presentacionId: p.presentacionId,
+      etiqueta: p.etiqueta,
+      quedan: controlInventario ? (existencias.get(p.presentacionId)?.existencia ?? 0) : null,
+    }))
+    .sort((a, b) => compararEtiquetas(a.etiqueta, b.etiqueta));
+}
+
+/** Los renglones ya capturados de un lado (lo que se ve bajo su encabezado), en el orden de `renglones`. */
+export function renglonesCapturados(
+  renglones: readonly RenglonMovimiento[],
+  captura: CapturaMovimiento,
+  sentido: SentidoMovimiento,
+): RenglonMovimiento[] {
+  return renglones.filter((r) => piezasCapturadas(captura, r.presentacionId, sentido) > 0);
+}
+
+/**
+ * El tope del teclado: lo que entrega el cliente llega a `MAX_PIEZAS_MOVIMIENTO`;
+ * lo que sale de la camioneta, a lo que queda (con el control prendido).
+ */
+export function topeTeclado(sentido: SentidoMovimiento, quedan: number | null): number {
+  if (sentido === 'recibido' || quedan === null) return MAX_PIEZAS_MOVIMIENTO;
+  return Math.max(0, Math.min(quedan, MAX_PIEZAS_MOVIMIENTO));
+}
+
+/** "4 PIEZAS" de la barra de abajo. */
+export function textoPiezasBarra(n: number): string {
+  return `${n} ${n === 1 ? 'PIEZA' : 'PIEZAS'}`;
 }
 
 export interface GuardiaRegistro {

@@ -45,10 +45,13 @@ export type FiltroMovimientos =
   { vendedorId: string } | { sucursalCodigo: string | null };
 
 /**
- * Las lineas de las cargas **aceptadas** y vivas de ese dia (pendientes,
- * rechazadas y dadas de baja no cuentan). `carga_detalle` no tiene baja
- * logica: editar una carga reemplaza sus lineas. La misma suma que usaba
- * Retorno como referencia.
+ * Las lineas **aceptadas** de las cargas aceptadas y vivas de ese dia
+ * (pendientes, rechazadas y dadas de baja no cuentan). Desde la pieza 3 el
+ * vendedor acepta por renglon: una carga `aceptada` tiene al menos un renglon
+ * aceptado y los que trae `aceptada = false` no cuentan; `null` (una carga
+ * aceptada antes de la pieza 3) cuenta como aceptado (`renglonAceptado` de
+ * reglas-carga.ts). `carga_detalle` no tiene baja logica: editar una carga
+ * reemplaza sus lineas.
  */
 function cargasAceptadasDelDia(fecha: string, db: Kysely<DB>) {
   return db
@@ -61,6 +64,7 @@ function cargasAceptadasDelDia(fecha: string, db: Kysely<DB>) {
     ])
     .where(sql<boolean>`c.fecha = ${fecha}::date`)
     .where('c.estado', '=', 'aceptada')
+    .where(sql<boolean>`coalesce(cd.aceptada, true)`)
     .where('c.deleted_at', 'is', null);
 }
 
@@ -69,7 +73,8 @@ function cargasAceptadasDelDia(fecha: string, db: Kysely<DB>) {
  * regalado (lineas vivas de ventas vivas con esa `fecha`, de cualquier status;
  * las de mostrador no tienen vendedor y no cuentan), la merma y el consumo de
  * la tablet (`movimiento_inventario` vivo de esa `fecha`: merma del cliente
- * entregada/recibida, merma del trayecto y consumo), los procesos de la oficina
+ * entregada/recibida, merma del trayecto, consumo y cambio fisico
+ * entregado/recibido de la tablet), los procesos de la oficina
  * con vendedor (`proceso_oficina` vivo: merma de cliente y de almacen, cambios,
  * consumo y promocion; el descuento no cuenta) y lo contado (filas vivas de
  * `retorno`). Solo salen las
@@ -128,7 +133,8 @@ export async function movimientosDelDia(
              case when mi.tipo = 'merma_cliente' and l.sentido = 'recibido' then l.piezas else 0 end,
              case when mi.tipo = 'merma_trayecto' then l.piezas else 0 end,
              case when mi.tipo = 'consumo' then l.piezas else 0 end,
-             0, 0
+             case when mi.tipo = 'cambio' and l.sentido = 'entregado' then l.piezas else 0 end,
+             case when mi.tipo = 'cambio' and l.sentido = 'recibido' then l.piezas else 0 end
         from movimiento_inventario mi
         join movimiento_inventario_linea l on l.movimiento_id = mi.id
        where mi.fecha = ${fecha}::date
@@ -199,6 +205,16 @@ export interface RecargaDelDia {
   hora: string;
   estado: 'pendiente' | 'aceptada' | 'rechazada';
   motivoRechazo: string | null;
+  /**
+   * ¿Este renglon se acepto? `null` mientras la carga esta pendiente; en una
+   * carga respondida antes de la pieza 3 (renglon sin respuesta), lo que diga la
+   * carga (`renglonAceptado`).
+   */
+  aceptada: boolean | null;
+  /** Renglones aceptados de la carga; `null` mientras esta pendiente. */
+  renglonesAceptados: number | null;
+  /** Renglones de la carga ("Aceptada 2 de 3"). */
+  renglones: number;
 }
 
 /**
@@ -475,7 +491,8 @@ export class CortesRepository {
 
   /**
    * Una fila por linea de carga viva de ese dia (pendiente, aceptada o
-   * rechazada) de un vendedor o de toda una sucursal; vendedores vivos. Orden:
+   * rechazada) de un vendedor o de toda una sucursal; vendedores vivos, con si
+   * el renglon se acepto y cuantos de la carga ("Aceptada 2 de 3"). Orden:
    * hora, vendedor, producto.
    */
   async recargas(
@@ -499,7 +516,14 @@ export class CortesRepository {
              u.nombre as capturo,
              to_char(c.created_at at time zone 'America/Tijuana', 'HH24:MI') as hora,
              c.estado as estado,
-             c.motivo_rechazo as "motivoRechazo"
+             c.motivo_rechazo as "motivoRechazo",
+             case when c.estado = 'pendiente' then null
+                  else coalesce(cd.aceptada, c.estado = 'aceptada') end as aceptada,
+             case when c.estado = 'pendiente' then null
+                  else (count(*) filter (
+                          where coalesce(cd.aceptada, c.estado = 'aceptada')
+                        ) over (partition by c.id))::int end as "renglonesAceptados",
+             (count(*) over (partition by c.id))::int as renglones
         from carga c
         join carga_detalle cd on cd.carga_id = c.id
         join vendedor v on v.id = c.vendedor_id

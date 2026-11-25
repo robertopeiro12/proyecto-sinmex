@@ -17,7 +17,7 @@ export type PreparacionMovimiento =
   | {
       ok: true;
       movimiento: MovimientoNormalizado;
-      /** El del sobre: solo en la merma del cliente (ya paso por el alcance del lote). */
+      /** El del sobre: solo en la merma del cliente y el cambio (ya paso por el alcance del lote). */
       clienteId: string | null;
     }
   | ({ ok: false } & Rechazo);
@@ -49,14 +49,17 @@ export function prepararMovimiento(
   const r = normalizarDatosMovimiento(op.datos);
   if (!r.ok) return { ok: false, codigo: 'datos-invalidos', motivo: r.motivo };
 
-  // Solo la merma del cliente es de un cliente (`ck_movimiento_cliente`).
-  const esDelCliente = r.movimiento.tipo === 'merma_cliente';
+  // Solo la merma del cliente y el cambio son de un cliente (`ck_movimiento_cliente`).
+  const esDelCliente =
+    r.movimiento.tipo === 'merma_cliente' || r.movimiento.tipo === 'cambio';
   if (esDelCliente && op.clienteId === null) {
     return {
       ok: false,
       codigo: 'datos-invalidos',
       motivo:
-        'cliente_id: una merma del cliente va en el sobre con el cliente que devolvió el producto.',
+        r.movimiento.tipo === 'cambio'
+          ? 'cliente_id: un cambio va en el sobre con el cliente con el que se hizo.'
+          : 'cliente_id: una merma del cliente va en el sobre con el cliente que devolvió el producto.',
     };
   }
   if (!esDelCliente && op.clienteId !== null) {
@@ -82,4 +85,5 @@ export const CODIGO_POR_RAZON_MOVIMIENTO: Record<
 > = {
   'presentacion-inexistente': 'datos-invalidos',
   'movimiento-id-ocupado': 'movimiento-id-ocupado',
+  'motivo-merma-inexistente': 'motivo-merma-inexistente',
 };

@@ -27,6 +27,15 @@ export interface LineaCarga {
   piezas: number;
 }
 
+/**
+ * Un renglon leido de la base (pieza 3): `aceptada` es la respuesta del
+ * vendedor a ese renglon; `null` mientras la carga esta pendiente y en las
+ * cargas respondidas antes de la pieza 3 (ver `renglonAceptado`).
+ */
+export interface LineaCargaLeida extends LineaCarga {
+  aceptada: boolean | null;
+}
+
 /** Una carga leida de la base, ya con sus lineas. */
 export interface FilaCarga {
   id: string;
@@ -40,7 +49,7 @@ export interface FilaCarga {
   version: number;
   respondidaEn: Date | null;
   eliminada: boolean;
-  lineas: LineaCarga[];
+  lineas: LineaCargaLeida[];
 }
 
 export interface PresentacionRejilla {
@@ -60,6 +69,11 @@ export interface SucursalRejilla {
   nombre: string;
 }
 
+export interface LineaCargaRejilla extends LineaCarga {
+  /** `null` = pendiente; si no, lo que el vendedor contesto a ese renglon. */
+  aceptada: boolean | null;
+}
+
 export interface CargaRejilla {
   id: string;
   numero: number;
@@ -67,7 +81,11 @@ export interface CargaRejilla {
   motivoRechazo: string | null;
   version: number;
   respondidaEn: string | null;
-  lineas: LineaCarga[];
+  /** Renglones que trae la carga. */
+  renglones: number;
+  /** `null` mientras esta pendiente. */
+  renglonesAceptados: number | null;
+  lineas: LineaCargaRejilla[];
 }
 
 export interface VendedorRejilla {
@@ -183,6 +201,12 @@ export function ordenarPresentaciones(
 }
 
 export function aCargaRejilla(f: FilaCarga): CargaRejilla {
+  const pendiente = f.estado === 'pendiente';
+  const lineas = f.lineas.map((l) => ({
+    presentacionId: l.presentacionId,
+    piezas: l.piezas,
+    aceptada: pendiente ? null : renglonAceptado(f.estado, l),
+  }));
   return {
     id: f.id,
     numero: f.numero,
@@ -190,7 +214,11 @@ export function aCargaRejilla(f: FilaCarga): CargaRejilla {
     motivoRechazo: f.motivoRechazo,
     version: f.version,
     respondidaEn: f.respondidaEn === null ? null : f.respondidaEn.toISOString(),
-    lineas: f.lineas,
+    renglones: lineas.length,
+    renglonesAceptados: pendiente
+      ? null
+      : lineas.filter((l) => l.aceptada).length,
+    lineas,
   };
 }
 
@@ -236,26 +264,97 @@ export function armarRejilla(entrada: {
 export const MOTIVO_RESPUESTA_CONFLICTO =
   'La carga cambió en el almacén o ya tiene otra respuesta; sincroniza y revísala de nuevo.';
 
-/** Lo que el vendedor contesta, ya validado (D2: completa, con motivo si rechaza). */
-export type RespuestaCarga =
-  | { estado: 'aceptada'; motivo: null }
-  | { estado: 'rechazada'; motivo: string };
+/**
+ * Lo que el vendedor contesta, ya validado (pieza 3: por renglon). Con al menos
+ * un renglon aceptado la carga queda `aceptada`; con ninguno, `rechazada`. El
+ * motivo solo viene de la forma vieja (`rechazar`); la lista nunca lo lleva.
+ */
+export interface RespuestaCarga {
+  estado: 'aceptada' | 'rechazada';
+  /** Ids (minusculas) de las presentaciones aceptadas. */
+  aceptadas: ReadonlySet<string>;
+  motivo: string | null;
+}
 
 /**
- * La forma de la respuesta. `aceptar` no lleva motivo (400 si viene con texto;
- * `null` cuenta como ausente); `rechazar` exige 1..300 caracteres recortados.
+ * El cuerpo de `POST /sync/cargas/:id/respuesta` sin la version: la forma
+ * nueva (`aceptadas`) o la vieja (`accion` + `motivo`, tablets sin actualizar).
+ * El DTO ya valido los tipos; aqui van las reglas entre campos.
+ */
+export interface CuerpoRespuesta {
+  aceptadas?: readonly string[] | null;
+  accion?: 'aceptar' | 'rechazar' | null;
+  motivo?: string | null;
+}
+
+/**
+ * La forma de la respuesta contra las presentaciones de la carga:
+ *
+ * - `aceptadas`: cada id debe ser de la carga y una sola vez (Review Focus 3);
+ *   vacia rechaza sin motivo. No lleva `motivo` ni `accion`.
+ * - Forma vieja (Review Focus 2): `aceptar` = todos los renglones, sin motivo
+ *   (`null` cuenta como ausente); `rechazar` = ninguno, con 1..300 caracteres
+ *   recortados.
  */
 export function normalizarRespuesta(
-  accion: 'aceptar' | 'rechazar',
-  motivo: string | null | undefined,
+  cuerpo: CuerpoRespuesta,
+  presentacionesDeLaCarga: readonly string[],
 ): { ok: true; respuesta: RespuestaCarga } | { ok: false; mensaje: string } {
-  if (accion === 'aceptar') {
-    if (motivo !== undefined && motivo !== null) {
+  const deLaCarga = new Set(
+    presentacionesDeLaCarga.map((id) => id.toLowerCase()),
+  );
+  const tieneLista =
+    cuerpo.aceptadas !== undefined && cuerpo.aceptadas !== null;
+  const tieneAccion = cuerpo.accion !== undefined && cuerpo.accion !== null;
+  const tieneMotivo = cuerpo.motivo !== undefined && cuerpo.motivo !== null;
+
+  if (tieneLista && tieneAccion) {
+    return {
+      ok: false,
+      mensaje: 'Manda la lista de aceptados o la acción, no las dos.',
+    };
+  }
+  if (tieneLista) {
+    if (tieneMotivo) {
+      return { ok: false, mensaje: 'La lista de aceptados no lleva motivo.' };
+    }
+    const aceptadas = new Set<string>();
+    for (const crudo of cuerpo.aceptadas!) {
+      const id = crudo.toLowerCase();
+      if (!deLaCarga.has(id)) {
+        return {
+          ok: false,
+          mensaje: 'Uno de los productos aceptados no viene en esta carga.',
+        };
+      }
+      if (aceptadas.has(id)) {
+        return { ok: false, mensaje: 'Un producto aceptado viene repetido.' };
+      }
+      aceptadas.add(id);
+    }
+    return {
+      ok: true,
+      respuesta: {
+        estado: aceptadas.size > 0 ? 'aceptada' : 'rechazada',
+        aceptadas,
+        motivo: null,
+      },
+    };
+  }
+  if (!tieneAccion) {
+    return { ok: false, mensaje: 'Falta la lista de productos aceptados.' };
+  }
+
+  if (cuerpo.accion === 'aceptar') {
+    if (tieneMotivo) {
       return { ok: false, mensaje: 'Aceptar una carga no lleva motivo.' };
     }
-    return { ok: true, respuesta: { estado: 'aceptada', motivo: null } };
+    return {
+      ok: true,
+      respuesta: { estado: 'aceptada', aceptadas: deLaCarga, motivo: null },
+    };
   }
-  const texto = typeof motivo === 'string' ? motivo.trim() : '';
+  const texto = typeof cuerpo.motivo === 'string' ? cuerpo.motivo.trim() : '';
   if (texto.length < 1 || texto.length > LARGO_MAX_MOTIVO_RECHAZO) {
     return {
       ok: false,
@@ -263,7 +362,22 @@ export function normalizarRespuesta(
         'Para rechazar la carga escribe el motivo (hasta 300 caracteres).',
     };
   }
-  return { ok: true, respuesta: { estado: 'rechazada', motivo: texto } };
+  return {
+    ok: true,
+    respuesta: { estado: 'rechazada', aceptadas: new Set(), motivo: texto },
+  };
+}
+
+/**
+ * ¿El renglon cuenta como aceptado? Con respuesta por renglon, lo que diga; en
+ * una carga respondida antes de la pieza 3 (`null`), lo que diga la carga: una
+ * aceptada vieja es "todo aceptado" (Review Focus 1), una rechazada, "nada".
+ */
+export function renglonAceptado(
+  estado: EstadoCarga,
+  linea: Pick<LineaCargaLeida, 'aceptada'>,
+): boolean {
+  return linea.aceptada ?? estado === 'aceptada';
 }
 
 export type DecisionRespuesta = 'escribir' | 'repetida' | 'conflicto';
@@ -272,27 +386,30 @@ export type DecisionRespuesta = 'escribir' | 'repetida' | 'conflicto';
  * Que hacer con una respuesta sobre la carga YA bloqueada (`for update`):
  *
  * - `repetida`: ya tiene esa misma respuesta en esa version (reintento de red o
- *   doble toque, Review Focus 3): 200 sin reescribir.
- * - `conflicto`: otra version (el portal la edito, Review Focus 2) o ya no esta
- *   pendiente con otra respuesta: 409 con la carga actual.
+ *   doble toque): mismo estado, mismo motivo y el mismo conjunto de renglones
+ *   aceptados. 200 sin reescribir.
+ * - `conflicto`: otra version (el portal la edito) o ya no esta pendiente con
+ *   otra respuesta: 409 con la carga actual.
  * - `escribir`: pendiente y con la version que vio el vendedor.
  */
 export function decidirRespuesta(
-  carga: Pick<FilaCarga, 'estado' | 'version' | 'motivoRechazo'>,
+  carga: Pick<FilaCarga, 'estado' | 'version' | 'motivoRechazo' | 'lineas'>,
   respuesta: RespuestaCarga,
   version: number,
 ): DecisionRespuesta {
-  if (
-    carga.version === version &&
-    carga.estado === respuesta.estado &&
-    (respuesta.estado === 'aceptada' ||
-      carga.motivoRechazo === respuesta.motivo)
-  ) {
-    return 'repetida';
-  }
-  if (carga.version !== version || carga.estado !== 'pendiente')
-    return 'conflicto';
-  return 'escribir';
+  if (carga.version !== version) return 'conflicto';
+  if (carga.estado === 'pendiente') return 'escribir';
+  const yaAceptadas = carga.lineas
+    .filter((l) => renglonAceptado(carga.estado, l))
+    .map((l) => l.presentacionId.toLowerCase());
+  const mismoConjunto =
+    yaAceptadas.length === respuesta.aceptadas.size &&
+    yaAceptadas.every((id) => respuesta.aceptadas.has(id));
+  return carga.estado === respuesta.estado &&
+    carga.motivoRechazo === respuesta.motivo &&
+    mismoConjunto
+    ? 'repetida'
+    : 'conflicto';
 }
 
 /** Una fila de la coleccion `cargas` del pull (y la respuesta del endpoint de la app). */
@@ -311,6 +428,7 @@ export function aCargaPull(f: FilaCarga): CargaPull {
     lineas: f.lineas.map((l) => ({
       presentacion_id: l.presentacionId,
       piezas: l.piezas,
+      aceptada: l.aceptada,
     })),
   };
 }

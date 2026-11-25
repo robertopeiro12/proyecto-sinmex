@@ -1121,6 +1121,169 @@ describe('Sincronizacion pull/push (e2e)', () => {
       ]);
     });
 
+    it('una nota pendiente trae su detalle para reimprimirla (rediseño pieza 7)', async () => {
+      // Una nota a credito vendida en OTRA tablet: dos lineas vivas, una que
+      // la oficina borro en el portal y una promocion. La tablet que la cobra
+      // no tiene la venta; reimprime con lo que baja aqui.
+      const creada = new Date('2026-08-05T18:30:00.000Z');
+      const nota = await db
+        .insertInto('venta_nota')
+        .values({
+          folio: `E2D${SUFIJO}`.slice(0, 20),
+          fecha: '2026-08-05',
+          cliente_id: clienteId,
+          vendedor_id: vendedorId,
+          monto_total: '268.70',
+          num_nota: siguienteNota(),
+          contado_credito: 'credito',
+          semana: 32,
+          mes: 8,
+          status: 'pendiente',
+          sucursal_id: sucursalId,
+          atendio_nombre: 'Dona Lupe',
+          created_at: creada,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+
+      try {
+        await db
+          .insertInto('venta_nota_detalle')
+          .values([
+            {
+              venta_nota_id: nota.id,
+              presentacion_id: presentacionId,
+              cantidad: 24,
+              cantidad_promocion: 2,
+              // 10.10 delata una conversion con coma flotante.
+              precio: '10.10',
+            },
+            {
+              venta_nota_id: nota.id,
+              presentacion_id: presentacionSinPrecioId,
+              cantidad: 3,
+              cantidad_promocion: 0,
+              precio: '8.80',
+            },
+            {
+              venta_nota_id: nota.id,
+              presentacion_id: presentacionSinPrecioId,
+              cantidad: 99,
+              cantidad_promocion: 0,
+              precio: '1.00',
+              deleted_at: new Date(),
+            },
+          ])
+          .execute();
+        await db
+          .insertInto('venta_nota_promocion')
+          .values({
+            venta_nota_id: nota.id,
+            presentacion_id: presentacionId,
+            cantidad: 2,
+            promocion_texto: 'Por cada 12, 1 gratis',
+          })
+          .execute();
+        // La venta se hizo sin red a las 16:10 y llego al servidor a las 18:30
+        // (created_at). La fecha del ticket es la de la venta, como en la
+        // oficina: el ocurrido_en mas antiguo de sync_operacion.
+        const vendida = new Date('2026-08-05T16:10:00.000Z');
+        await db
+          .insertInto('sync_operacion')
+          .values([
+            {
+              tipo: 'venta',
+              entidad_tabla: 'venta_nota',
+              entidad_id: nota.id,
+              vendedor_id: vendedorId,
+              sucursal_id: sucursalId,
+              contrato: 1,
+              clave_idempotencia: `e2e-p7-hora-1-${SUFIJO}`,
+              datos: '{}',
+              fecha_operacion: '2026-08-05',
+              ocurrido_en: new Date('2026-08-05T17:00:00.000Z'),
+            },
+            {
+              tipo: 'venta',
+              entidad_tabla: 'venta_nota',
+              entidad_id: nota.id,
+              vendedor_id: vendedorId,
+              sucursal_id: sucursalId,
+              contrato: 1,
+              clave_idempotencia: `e2e-p7-hora-0-${SUFIJO}`,
+              datos: '{}',
+              fecha_operacion: '2026-08-05',
+              ocurrido_en: vendida,
+            },
+          ])
+          .execute();
+
+        const cuerpo = (await pull().expect(200)).body as RespuestaPull;
+        const bajada = cuerpo.notas_pendientes.find((n) => n.id === nota.id);
+        const sucursal = await db
+          .selectFrom('sucursal')
+          .select('nombre')
+          .where('id', '=', sucursalId)
+          .executeTakeFirstOrThrow();
+
+        expect(bajada?.detalle).toEqual({
+          lineas: [
+            {
+              presentacion_id: presentacionId,
+              etiqueta: `Jamaica ${SUFIJO} 1 L`,
+              cantidad: 24,
+              cantidad_promocion: 2,
+              precio_centavos: 1010,
+            },
+            {
+              presentacion_id: presentacionSinPrecioId,
+              etiqueta: `Jamaica ${SUFIJO} 500 ml`,
+              cantidad: 3,
+              cantidad_promocion: 0,
+              precio_centavos: 880,
+            },
+          ],
+          promociones: [
+            {
+              presentacion_id: presentacionId,
+              etiqueta: `Jamaica ${SUFIJO} 1 L`,
+              cantidad: 2,
+              texto: 'Por cada 12, 1 gratis',
+            },
+          ],
+          vendedor_nombre: 'Vendedor sync',
+          atendio: 'Dona Lupe',
+          sucursal_nombre: sucursal.nombre,
+          creada_en: vendida.toISOString(),
+        });
+        expect(vendida.getTime()).toBeLessThan(creada.getTime());
+
+        // Una nota sin lineas ni promociones trae listas vacias, no null.
+        const vieja = cuerpo.notas_pendientes.find((n) => n.id === notaId);
+        expect(vieja?.detalle?.lineas).toEqual([]);
+        expect(vieja?.detalle?.promociones).toEqual([]);
+        expect(vieja?.detalle?.atendio).toBeNull();
+        // Sin operacion de sync (nota de la oficina) no hay hora de venta: viaja
+        // solo la fecha de la nota, no la hora de captura (recorrido final, D2).
+        expect(vieja?.detalle?.creada_en).toBe('2026-08-01');
+        expect(vieja?.detalle?.creada_en).toBe(vieja?.fecha);
+      } finally {
+        await db
+          .deleteFrom('sync_operacion')
+          .where('entidad_id', '=', nota.id)
+          .execute();
+        await db
+          .deleteFrom('venta_nota_promocion')
+          .where('venta_nota_id', '=', nota.id)
+          .execute();
+        await db
+          .deleteFrom('venta_nota_detalle')
+          .where('venta_nota_id', '=', nota.id)
+          .execute();
+        await db.deleteFrom('venta_nota').where('id', '=', nota.id).execute();
+      }
+    });
+
     it('NO baja clientes de otra sucursal', async () => {
       const res = await pull().expect(200);
       const cuerpo = res.body as RespuestaPull;
@@ -1282,6 +1445,81 @@ describe('Sincronizacion pull/push (e2e)', () => {
             .set({ activo: true })
             .where('id', '=', vehiculoId)
             .execute();
+        }
+      });
+    });
+
+    describe('motivos de merma (rediseño pieza 4)', () => {
+      it('bajan los vivos con sus banderas y los dados de baja como activo 0; incremental por actualizado_en', async () => {
+        const nombre = (n: string) => `ZZ-sync-${SUFIJO} ${n}`;
+        const ids: string[] = [];
+        const alta = async (
+          n: string,
+          banderas: {
+            aplica_almacen?: boolean;
+            aplica_cliente?: boolean;
+            aplica_vehiculo?: boolean;
+          },
+          borrado = false,
+        ) => {
+          const { id } = await db
+            .insertInto('motivo_merma')
+            .values({
+              nombre: nombre(n),
+              ...banderas,
+              deleted_at: borrado ? new Date() : null,
+            })
+            .returning('id')
+            .executeTakeFirstOrThrow();
+          ids.push(id);
+          return id;
+        };
+        try {
+          const delCliente = await alta('Roto', { aplica_cliente: true });
+          const delVehiculo = await alta('Derramado', {
+            aplica_vehiculo: true,
+          });
+          const deBaja = await alta('Viejo', { aplica_cliente: true }, true);
+
+          const completo = (await pull().expect(200)).body as RespuestaPull;
+          const porId = new Map(
+            completo.catalogos.motivos_merma.map((m) => [m.id, m]),
+          );
+          expect(porId.get(delCliente)).toEqual({
+            id: delCliente,
+            nombre: nombre('Roto'),
+            aplica_cliente: true,
+            aplica_vehiculo: false,
+            activo: 1,
+          });
+          expect(porId.get(delVehiculo)).toMatchObject({
+            aplica_cliente: false,
+            aplica_vehiculo: true,
+            activo: 1,
+          });
+          expect(porId.get(deBaja)).toMatchObject({ activo: 0 });
+
+          // Incremental: solo baja lo que se movio, y la baja como activo 0.
+          const corte = completo.servidor_en;
+          const vacio = (await pull({ desde: corte }).expect(200))
+            .body as RespuestaPull;
+          expect(
+            vacio.catalogos.motivos_merma.some((m) => ids.includes(m.id)),
+          ).toBe(false);
+
+          // El trigger `set_actualizado_en` mueve la columna por la que corta.
+          await db
+            .updateTable('motivo_merma')
+            .set({ deleted_at: new Date() })
+            .where('id', '=', delCliente)
+            .execute();
+          const despues = (await pull({ desde: corte }).expect(200))
+            .body as RespuestaPull;
+          expect(
+            despues.catalogos.motivos_merma.filter((m) => ids.includes(m.id)),
+          ).toEqual([expect.objectContaining({ id: delCliente, activo: 0 })]);
+        } finally {
+          await db.deleteFrom('motivo_merma').where('id', 'in', ids).execute();
         }
       });
     });

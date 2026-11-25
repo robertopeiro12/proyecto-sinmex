@@ -1,37 +1,56 @@
-import { useMemo } from 'react';
-import { Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { useMemo, useState } from 'react';
+import { ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { estadoMenuJornada } from '@/estado/menu-jornada';
 import {
+  AVISO_MERMA_SOLO_CONSULTA,
   consumoRestante,
+  detalleMovimiento,
+  ETIQUETA_TIPO_MOVIMIENTO,
+  filtrarMovimientos,
+  FILTROS_MOVIMIENTOS,
+  lugarMovimiento,
   MENSAJE_CONSUMO_AGOTADO,
   ofreceConsumo,
   pastillaMovimiento,
-  resumenMovimiento,
+  piezasDelMovimiento,
   textoConsumoRestante,
-  TITULO_MOVIMIENTO,
+  textoMovimientos,
+  textoPzas,
+  totalPiezasDelDia,
+  type FiltroMovimientos,
 } from '@/estado/movimiento';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
-import { estadoSubida } from '@/estado/ruta-del-dia';
-import { BotonMenu } from '@/ui/boton-menu';
+import { Boton } from '@/ui/boton';
+import { Chip } from '@/ui/chip';
 import { Cifra } from '@/ui/cifra';
+import { MarcoMenu } from '@/ui/marco-menu';
 import { formatearHora } from '@/ui/momento';
-import { Pantalla, Pastilla, Tarjeta } from '@/ui/pantalla';
+import { Pastilla } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
-import { espacio } from '@/ui/tokens';
+import { colores, espacio, fuente, grosor, radio, tipo } from '@/ui/tokens';
 
 /**
- * Merma y consumo (T-27 pieza 2, D3, entrada del menu): "Merma del trayecto" y
- * "Consumo propio" (con el limite de su sucursal; con 0 no se ofrece, D4), y
- * debajo los movimientos de hoy —tambien la merma de los clientes— con su
- * subida. Un movimiento grabado no se edita ni se borra (D6).
+ * Merma / Cambios (rediseño pieza 4, maqueta 15; spec §11): arriba "Merma del
+ * vehículo" (principal) y "Consumo" (secundario, solo si la sucursal tiene
+ * consumo, D4); "Hoy · N movimientos · X pzas"; el registro del dia, lo mas
+ * nuevo arriba (hora, cliente o "Vehículo", tipo, motivo o resumen y piezas, con
+ * su subida); abajo los filtros Todo / Merma / Cambios. La merma y los cambios
+ * de un cliente se registran en su hoja. Un movimiento grabado no se edita ni
+ * se borra (D6). Con el día cerrado la pantalla sigue abierta desde el menú como
+ * consulta (Mario, 2026-11-25): los filtros funcionan y los botones de captura
+ * se apagan con `AVISO_MERMA_SOLO_CONSULTA`.
  */
-export default function MermaYConsumo() {
+export default function MermaYCambios() {
   const { datos, vendedor, jornada, versionCatalogos } = useJawa();
   const { ultimaSincronizacion } = useSesion();
-  const { estilos } = useTema();
+  const { estilos, t } = useTema();
+  const insets = useSafeAreaInsets();
   const menu = estadoMenuJornada(jornada);
+  const [filtro, setFiltro] = useState<FiltroMovimientos>('todo');
 
   // Se relee UNA vez por cambio (como Gastos): `movimientos.registrar` mueve
   // `versionCatalogos` mientras esta pantalla sigue montada debajo de la
@@ -41,61 +60,146 @@ export default function MermaYConsumo() {
     void ultimaSincronizacion;
     if (!vendedor) return { movimientos: [], limite: 0, consumoDeHoy: 0 };
     return {
-      movimientos: datos.movimientos.delDia(vendedor.id),
+      // Lo mas nuevo arriba (maqueta 17: "la misma forma").
+      movimientos: datos.movimientos.delDia(vendedor.id).reverse(),
       limite: datos.movimientos.consumoDiarioMax(vendedor.id),
       consumoDeHoy: datos.movimientos.consumoDeHoy(vendedor.id),
     };
   }, [datos, vendedor, versionCatalogos, ultimaSincronizacion]);
 
   const restante = consumoRestante({ limite: vista.limite, consumoDeHoy: vista.consumoDeHoy });
-  const estado = estadoSubida(vista.movimientos.map((m) => m.sync_estado)) ?? 'neutro';
+  const filas = filtrarMovimientos(vista.movimientos, filtro);
+  const deshabilitado = !menu.operacionesHabilitadas;
 
   return (
-    <Pantalla titulo="Merma y consumo" subtitulo="Lo que sale de la camioneta sin venderse">
-      <View style={estilos.rejilla}>
-        <BotonMenu
-          titulo="Merma del trayecto"
-          descripcion="Producto que se te rompió o se echó a perder hoy"
-          destino={{ pathname: '/(jornada)/merma/registrar', params: { tipo: 'merma_trayecto' } }}
-          deshabilitado={!menu.operacionesHabilitadas}
-          destacada
-        />
-        {ofreceConsumo(vista.limite) ? (
-          <BotonMenu
-            titulo="Consumo propio"
-            descripcion={restante > 0 ? textoConsumoRestante(restante) : MENSAJE_CONSUMO_AGOTADO}
-            destino={{ pathname: '/(jornada)/merma/registrar', params: { tipo: 'consumo' } }}
-            deshabilitado={!menu.operacionesHabilitadas || restante === 0}
-          />
-        ) : null}
-      </View>
-      <Text style={[estilos.textoSuave, { marginTop: espacio.sm }]}>
-        La merma de un cliente se registra en su ficha.
-      </Text>
-      {menu.avisoDiaCerrado ? <Text style={estilos.error}>{menu.avisoDiaCerrado}</Text> : null}
-
-      <Tarjeta estado={estado} etiqueta="Movimientos de hoy">
-        {vista.movimientos.length === 0 ? (
-          <Text style={estilos.textoSuave}>Todavía no registras merma ni consumo hoy.</Text>
-        ) : (
-          vista.movimientos.map((m) => {
-            const p = pastillaMovimiento(m);
-            const cliente = m.cliente_id ? datos.catalogos.obtenerCliente(m.cliente_id) : null;
-            return (
-              <View key={m.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
-                <Text style={estilos.textoTarjeta}>
-                  {TITULO_MOVIMIENTO[m.tipo]}
-                  {cliente ? ` · ${cliente.nombre}` : ''} · <Cifra valor={formatearHora(m.registrado_en)} />
-                </Text>
-                <Text style={estilos.textoSuave}>{resumenMovimiento(m)}</Text>
-                {m.comentario ? <Text style={estilos.textoSuave}>{m.comentario}</Text> : null}
-                <Pastilla texto={p.texto} estado={p.estado} />
-                {p.detalle ? <Text style={estilos.error}>{p.detalle}</Text> : null}
+    <MarcoMenu clave="merma" titulo="Merma / Cambios">
+      <View style={{ flex: 1, backgroundColor: colores.papel }}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={[estilos.contenido, { paddingBottom: espacio.lg }]}>
+          <View style={{ gap: espacio.sm, marginBottom: espacio.md }}>
+            <View style={{ flexDirection: 'row', gap: espacio.sm }}>
+              {/* Consumo mide su texto y Merma del vehículo toma el resto: con `flex` 2:1, en celular "Consumo" se partía (D3). */}
+              <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>
+                <Boton
+                  etiqueta="Merma del vehículo"
+                  icono="camion"
+                  deshabilitado={deshabilitado}
+                  onPress={() =>
+                    router.push({ pathname: '/(jornada)/merma/registrar', params: { tipo: 'merma_trayecto' } })
+                  }
+                />
               </View>
-            );
-          })
-        )}
-      </Tarjeta>
-    </Pantalla>
+              {ofreceConsumo(vista.limite) ? (
+                <View style={{ flexShrink: 0 }}>
+                  <Boton
+                    etiqueta="Consumo"
+                    icono="vaso"
+                    tono="neutra"
+                    deshabilitado={deshabilitado || restante === 0}
+                    onPress={() => router.push({ pathname: '/(jornada)/merma/registrar', params: { tipo: 'consumo' } })}
+                  />
+                </View>
+              ) : null}
+            </View>
+            {ofreceConsumo(vista.limite) ? (
+              <Text style={estilos.textoSuave}>
+                {restante > 0 ? textoConsumoRestante(restante) : MENSAJE_CONSUMO_AGOTADO}
+              </Text>
+            ) : null}
+            {deshabilitado ? <Text style={estilos.error}>{AVISO_MERMA_SOLO_CONSULTA}</Text> : null}
+          </View>
+
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: espacio.md,
+              marginBottom: espacio.md,
+              borderRadius: radio.medio,
+              borderWidth: grosor.fuerte,
+              borderColor: colores.borde,
+              backgroundColor: colores.superficie,
+            }}
+          >
+            <Text style={estilos.textoTarjeta}>Hoy · {textoMovimientos(vista.movimientos.length)}</Text>
+            <Cifra valor={textoPzas(totalPiezasDelDia(vista.movimientos))} tamano="destacado" />
+          </View>
+
+          {filas.length === 0 ? (
+            <Text style={estilos.textoSuave}>
+              {filtro === 'cambios'
+                ? 'Todavía no registras cambios hoy.'
+                : filtro === 'merma'
+                  ? 'Todavía no registras merma hoy.'
+                  : 'Todavía no registras merma, cambios ni consumo hoy. La merma y los cambios de un cliente se registran en su hoja.'}
+            </Text>
+          ) : (
+            filas.map((m) => {
+              const p = pastillaMovimiento(m);
+              const cliente = m.cliente_id ? datos.catalogos.obtenerCliente(m.cliente_id) : null;
+              const esCambio = m.tipo === 'cambio';
+              return (
+                <View
+                  key={m.id}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: espacio.md,
+                    paddingVertical: espacio.sm,
+                    borderBottomWidth: grosor.hairline,
+                    borderBottomColor: colores.borde,
+                  }}
+                >
+                  <Cifra valor={formatearHora(m.registrado_en)} tono="suave" />
+                  <View style={{ flex: 1, gap: espacio.xs }}>
+                    <Text style={estilos.textoTarjeta}>{lugarMovimiento(cliente?.nombre)}</Text>
+                    <Text style={estilos.textoSuave}>
+                      <Text
+                        style={{
+                          fontFamily: fuente.cuerpoFuerte,
+                          fontSize: t(tipo.menor),
+                          color: esCambio ? colores.exito : colores.peligro,
+                        }}
+                      >
+                        {ETIQUETA_TIPO_MOVIMIENTO[m.tipo]}
+                      </Text>
+                      {'  '}
+                      {detalleMovimiento(m)}
+                    </Text>
+                    {m.comentario ? <Text style={estilos.textoSuave}>{m.comentario}</Text> : null}
+                    {p.estado === 'listo' ? null : <Pastilla texto={p.texto} estado={p.estado} />}
+                    {p.detalle ? <Text style={estilos.error}>{p.detalle}</Text> : null}
+                  </View>
+                  <Cifra valor={textoPzas(piezasDelMovimiento(m))} />
+                </View>
+              );
+            })
+          )}
+        </ScrollView>
+
+        <View
+          style={{
+            flexDirection: 'row',
+            gap: espacio.sm,
+            paddingHorizontal: espacio.md,
+            paddingTop: espacio.sm,
+            paddingBottom: espacio.sm + insets.bottom,
+            backgroundColor: colores.superficie,
+            borderTopWidth: grosor.fuerte,
+            borderTopColor: colores.bordeFuerte,
+          }}
+        >
+          {FILTROS_MOVIMIENTOS.map((f) => (
+            <Chip
+              key={f.clave}
+              etiqueta={f.etiqueta}
+              elegida={filtro === f.clave}
+              onPress={() => setFiltro(f.clave)}
+              ancho
+            />
+          ))}
+        </View>
+      </View>
+    </MarcoMenu>
   );
 }

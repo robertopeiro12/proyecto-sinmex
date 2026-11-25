@@ -1,6 +1,11 @@
+import type { CandadoClientes } from '@/datos/inventario-reglas';
 import type { FilaRutaDelDia } from '@/datos/repositorios/rutas';
 import type { Cliente, Prospecto, SyncEstado, Venta, Visita } from '@/datos/tipos';
-import { formatearHora, formatearMomento } from '@/ui/momento';
+import type { NombreIcono } from '@/ui/iconos';
+import { formatearMomento } from '@/ui/momento';
+import { pesos } from '@/ui/pesos';
+
+import { corteDisponible } from './corte';
 
 /**
  * Lo que la pantalla principal decide (T-37, D16), sin React: la tablet no tiene
@@ -8,54 +13,98 @@ import { formatearHora, formatearMomento } from '@/ui/momento';
  * aqui (mismo criterio que `menu-jornada.ts`, T-38).
  */
 
-/** Lo minimo que `agruparRuta` necesita de una fila. */
-export type FilaAgrupable = Pick<FilaRutaDelDia, 'cliente_id' | 'activo' | 'visitado' | 'visita_sin_venta'>;
+/**
+ * Lo minimo que `agruparRutaEnCurso` necesita de una fila. `cliente_activo` es
+ * opcional: sin el, el cliente cuenta como activo.
+ */
+export type FilaAgrupable = Pick<FilaRutaDelDia, 'cliente_id' | 'activo' | 'visitado'> &
+  Partial<Pick<FilaRutaDelDia, 'cliente_activo'>>;
 
 /**
- * Reparte las filas del dia (ya ordenadas por `rutas.delDia`) entre la ruta,
- * "Visitados sin venta" y "Fuera de ruta" (D5, D16; T-39 D8):
+ * Reparte las filas del dia (ya en el orden del portal, `rutas.delDia`) entre
+ * "Por visitar", "Visitados" y "Fuera de ruta" (rediseño §6; D16):
  *
- * - Viva sin visita-sin-venta → en la ruta, visitada o no (la palomita no la saca).
- * - Viva con visita y SIN venta ni cobro → "Visitados sin venta". Si despues
- *   compra, `visita_sin_venta` pasa a `false` y regresa a la ruta con su palomita.
- * - Quitada por la oficina **con** actividad hoy (venta, cobro o visita) → "Fuera de ruta".
+ * - Viva sin nada hecho hoy → "Por visitar".
+ * - Viva con algo hecho hoy (venta, cobro, visita, comentario de no cobro,
+ *   merma o cambio), con o sin venta → "Visitados". Se puede volver a abrir.
+ * - Quitada por la oficina **con** actividad hoy → "Fuera de ruta".
  * - Quitada **sin** actividad → desaparece.
  * - Si el cliente quitado volvio a la ruta (otra fila viva), no se pinta dos veces.
+ * - Viva sin nada hecho hoy pero con el cliente **dado de baja** en el catalogo
+ *   de la tablet (`cliente_activo = 0`) → "Dados de baja", no "Por visitar":
+ *   ninguna operacion se le puede hacer (todas exigen cliente activo), asi que
+ *   contarlo dejaria el candado de Corte puesto para siempre (revision final de
+ *   la pieza 6, I-1). Con algo hecho hoy sigue en "Visitados".
+ *   (Un cliente que ya no esta en el catalogo ni llega: `rutas.delDia` hace join.)
  */
-export function agruparRuta<T extends FilaAgrupable>(
+export function agruparRutaEnCurso<T extends FilaAgrupable>(
   filas: readonly T[],
-): { enRuta: T[]; visitadosSinVenta: T[]; fueraDeRuta: T[] } {
+): { porVisitar: T[]; visitados: T[]; fueraDeRuta: T[]; dadosDeBaja: T[] } {
   const vivos = new Set(filas.filter((f) => f.activo === 1).map((f) => f.cliente_id));
+  const deBaja = (f: T) => f.cliente_activo === 0;
   return {
-    enRuta: filas.filter((f) => f.activo === 1 && !f.visita_sin_venta),
-    visitadosSinVenta: filas.filter((f) => f.activo === 1 && f.visita_sin_venta),
+    porVisitar: filas.filter((f) => f.activo === 1 && !f.visitado && !deBaja(f)),
+    visitados: filas.filter((f) => f.activo === 1 && f.visitado),
     fueraDeRuta: filas.filter((f) => f.activo === 0 && f.visitado && !vivos.has(f.cliente_id)),
+    dadosDeBaja: filas.filter((f) => f.activo === 1 && !f.visitado && deBaja(f)),
   };
 }
 
 /**
- * ¿La oficina no asigno ruta hoy? Solo si las TRES secciones estan vacias: con
- * todos los clientes visitados sin venta la lista queda vacia, pero si hay ruta.
+ * ¿La oficina no asigno ruta hoy? Solo si todas las secciones estan vacias: con
+ * todos los clientes visitados "Por visitar" queda vacia, pero si hay ruta.
  */
 export function sinRutaAsignada(grupos: {
-  enRuta: readonly unknown[];
-  visitadosSinVenta: readonly unknown[];
+  porVisitar: readonly unknown[];
+  visitados: readonly unknown[];
   fueraDeRuta: readonly unknown[];
+  dadosDeBaja?: readonly unknown[];
 }): boolean {
-  return grupos.enRuta.length === 0 && grupos.visitadosSinVenta.length === 0 && grupos.fueraDeRuta.length === 0;
+  return (
+    grupos.porVisitar.length === 0 &&
+    grupos.visitados.length === 0 &&
+    grupos.fueraDeRuta.length === 0 &&
+    (grupos.dadosDeBaja?.length ?? 0) === 0
+  );
 }
 
 /**
- * La linea de la fila de "Visitados sin venta": "Cerrado · 10:42". Sin visita
- * pero con comentario de "Continuar sin cobrar": "No cobró · 10:42".
+ * La linea bajo el nombre en "Visitados" (rediseño §6, maqueta 6): lo que se
+ * hizo hoy con el cliente, en este orden y unido con " · ": "Cobro $850.00",
+ * "Venta $1,240.00" (contado), "Venta a crédito $1,240.00" (con abono al
+ * vender: "Venta a crédito $720.00 · Abonó $300.00"), "Merma", "Cambio"
+ * (rediseño pieza 4). Sin
+ * ninguna de esas y con visita: "Visita sin venta · <motivo en minusculas>"
+ * ("Visita sin venta" a secas sin motivo, p. ej. solo el comentario de no
+ * cobro). Dinero con centavos, como en toda la app (`pesos`).
  */
-export function textoUltimaVisita(
-  motivo: string | null,
-  en: string | null,
-  comentarioEn: string | null = null,
+export function resumenVisitado(
+  f: Pick<
+    FilaRutaDelDia,
+    | 'venta_contado_centavos'
+    | 'venta_credito_centavos'
+    | 'venta_abono_centavos'
+    | 'cobro_centavos'
+    | 'con_merma'
+    | 'con_cambio'
+    | 'ultima_visita_motivo'
+    | 'visita_sin_venta'
+  >,
 ): string {
-  if (motivo === null && en === null && comentarioEn !== null) return `No cobró · ${formatearHora(comentarioEn)}`;
-  return `${motivo ?? 'Visita'} · ${formatearHora(en)}`;
+  const partes: string[] = [];
+  if (f.cobro_centavos > 0) partes.push(`Cobro ${pesos(f.cobro_centavos)}`);
+  if (f.venta_contado_centavos > 0) partes.push(`Venta ${pesos(f.venta_contado_centavos)}`);
+  if (f.venta_credito_centavos > 0) {
+    partes.push(`Venta a crédito ${pesos(f.venta_credito_centavos)}`);
+    if (f.venta_abono_centavos > 0) partes.push(`Abonó ${pesos(f.venta_abono_centavos)}`);
+  }
+  if (f.con_merma) partes.push('Merma');
+  if (f.con_cambio) partes.push('Cambio');
+  if (partes.length === 0 && f.visita_sin_venta) {
+    const motivo = f.ultima_visita_motivo?.trim();
+    return motivo ? `Visita sin venta · ${motivo.toLowerCase()}` : 'Visita sin venta';
+  }
+  return partes.join(' · ');
 }
 
 /** El aviso de la lista vacia (D3), con la hora de la ultima sincronizacion. */
@@ -97,33 +146,9 @@ export function textoAgregado(nombre: string): string {
   return `${nombre} agregado al final`;
 }
 
-/** Lo que lee el lector de pantalla en la burbuja. */
-export function textoBurbuja(notas: number): string {
-  return notas === 1 ? '1 nota pendiente' : `${notas} notas pendientes`;
-}
-
-/** La marca de la fila de la ruta con notas asignadas por la oficina. */
-export function textoMarcaAsignadas(n: number): string {
-  return n === 1 ? 'Nota asignada' : `Notas asignadas · ${n}`;
-}
-
-/** Saca el elemento `desde` y lo mete en `hasta`. Fuera de rango, una copia igual. */
-export function moverElemento<T>(lista: readonly T[], desde: number, hasta: number): T[] {
-  const copia = [...lista];
-  if (desde < 0 || desde >= copia.length || hasta < 0 || hasta >= copia.length) return copia;
-  const [movido] = copia.splice(desde, 1);
-  copia.splice(hasta, 0, movido as T);
-  return copia;
-}
-
-/**
- * A que posicion cae una fila arrastrada `dy` puntos, con filas de alto fijo
- * (D10). Redondea al renglon mas cercano y nunca se sale de la lista.
- */
-export function indiceDestino(desde: number, dy: number, altoFila: number, total: number): number {
-  if (total <= 0 || altoFila <= 0) return desde;
-  const destino = desde + Math.round(dy / altoFila);
-  return Math.min(total - 1, Math.max(0, destino));
+/** Lo que lee el lector de pantalla en el contador de notas de la fila. */
+export function textoNotasQueTrae(notas: number): string {
+  return notas === 1 ? 'Trae 1 nota por cobrar' : `Trae ${notas} notas por cobrar`;
 }
 
 /** Sin acentos y en minusculas: "Doña" se encuentra escribiendo "dona". */
@@ -132,20 +157,22 @@ function normalizar(texto: string): string {
 }
 
 /**
- * Los clientes que se pueden agregar a la ruta de hoy: activos, `tipo =
- * 'cliente'` (D7) y que no estan ya vivos en la ruta, filtrados por nombre.
+ * "Agregar a mi ruta" (rediseno pieza 1, maqueta 20): todos los clientes activos
+ * de la sucursal (`tipo = 'cliente'`, D7) en orden alfabetico, filtrados por
+ * nombre sin acentos, cada uno con `enRuta` (ya vivo en la ruta de hoy). Sin tope:
+ * la pantalla virtualiza.
  */
-export function filtrarParaAgregar<T extends Pick<Cliente, 'id' | 'nombre' | 'tipo' | 'activo'>>(
+export function clientesParaAgregar<T extends Pick<Cliente, 'id' | 'nombre' | 'tipo' | 'activo'>>(
   clientes: readonly T[],
   enRuta: ReadonlySet<string>,
   busqueda: string,
-  limite = 50,
-): T[] {
+): (T & { enRuta: boolean })[] {
   const q = normalizar(busqueda);
   return clientes
-    .filter((c) => c.tipo === 'cliente' && c.activo === 1 && !enRuta.has(c.id))
+    .filter((c) => c.tipo === 'cliente' && c.activo === 1)
     .filter((c) => q === '' || normalizar(c.nombre).includes(q))
-    .slice(0, limite);
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }))
+    .map((c) => ({ ...c, enRuta: enRuta.has(c.id) }));
 }
 
 /**
@@ -158,76 +185,114 @@ export function anchoMenuLateral(anchoPantalla: number): number {
   return Math.round(Math.min(ANCHO_MAXIMO_MENU, Math.max(0, anchoPantalla) * 0.82));
 }
 
-/** Una entrada del menu hamburguesa (D9). `destino` es una ruta de expo-router. */
+export type ClaveMenu =
+  | 'ruta'
+  | 'inventario'
+  | 'registros'
+  | 'merma'
+  | 'gastos'
+  | 'corte'
+  | 'prospectos'
+  | 'impresora'
+  | 'salir';
+
+/** Una entrada del menu lateral. `destino` es una ruta de expo-router; `null` solo en `salir`. */
 export interface EntradaMenu {
-  clave: string;
+  clave: ClaveMenu;
   titulo: string;
-  descripcion: string;
-  destino: string;
+  icono: NombreIcono;
+  destino: string | null;
   deshabilitada: boolean;
+  /** Frase corta bajo el titulo (lo que falta para abrir Corte, o "Empieza tu ruta"). */
+  nota: string | null;
 }
 
+/** La nota de las entradas apagadas antes de empezar la ruta de hoy. */
+export const NOTA_SIN_JORNADA = 'Empieza tu ruta';
+
 /**
- * Las entradas del menu, en el orden del spec (D16). Con el dia cerrado se
- * deshabilita solo lo que captura (gastos, merma y consumo); lo que consulta se
- * sigue viendo. T-30/T-31 dio a Gastos su pantalla, T-27 a Inventario y la
- * pieza 2 a Merma y consumo. Ruta y GPS es la pantalla pendiente de T-41 que ya
- * existe.
+ * Las entradas del menu, en el orden del spec §5 (maqueta 3). Con el dia
+ * cerrado se deshabilita solo Gastos (solo captura); lo que consulta se sigue
+ * viendo: Merma / Cambios abre su registro de solo lectura (Mario, 2026-11-25:
+ * la pantalla apaga la captura) y Corte se abre (ya se hizo). Corte lleva candado mientras
+ * falten clientes por visitar (`corteDisponible`, pieza 6), salvo con el
+ * candado de inventario (`candado` no nulo): ahi los clientes no se abren y el
+ * dia quedaria sin poder cerrarse.
+ *
+ * Sin jornada de hoy (`sinJornada`) solo quedan Ruta y Cerrar sesion: la guardia
+ * de `(jornada)/_layout.tsx` regresaria a la Ruta cualquier otra pantalla, asi
+ * que las demas se apagan con la nota "Empieza tu ruta" en vez de parecer
+ * activas y no hacer nada.
  */
-export function entradasMenu(diaCerrado: boolean): EntradaMenu[] {
+export function entradasMenu({
+  porVisitar,
+  candado,
+  diaCerrado,
+  sinJornada,
+}: {
+  porVisitar: number;
+  /** `cargas.candadoDeHoy`: `null` = los clientes se pueden abrir. */
+  candado: CandadoClientes;
+  diaCerrado: boolean;
+  sinJornada: boolean;
+}): EntradaMenu[] {
+  const corteConCandado = !corteDisponible({ porVisitar, candado, diaCerrado });
+  const entrada = (
+    clave: ClaveMenu,
+    titulo: string,
+    icono: NombreIcono,
+    destino: string | null,
+    extra: Partial<Pick<EntradaMenu, 'deshabilitada' | 'nota'>> = {},
+  ): EntradaMenu => {
+    const e: EntradaMenu = { clave, titulo, icono, destino, deshabilitada: false, nota: null, ...extra };
+    if (sinJornada && clave !== 'ruta' && clave !== 'salir') {
+      return { ...e, deshabilitada: true, nota: NOTA_SIN_JORNADA };
+    }
+    return e;
+  };
   return [
-    {
-      clave: 'clientes',
-      titulo: 'Todos los clientes',
-      descripcion: 'El catálogo completo de la sucursal',
-      destino: '/(jornada)/operacion',
-      deshabilitada: false,
-    },
-    {
-      clave: 'prospectos',
-      titulo: 'Prospectos capturados',
-      descripcion: 'Los prospectos de hoy y su sincronización',
-      destino: '/(jornada)/prospectos',
-      deshabilitada: false,
-    },
-    {
-      clave: 'gastos',
-      titulo: 'Gastos',
-      descripcion: 'Lo que pagaste hoy con la cobranza',
-      destino: '/(jornada)/gastos',
-      deshabilitada: diaCerrado,
-    },
-    {
-      clave: 'inventario',
-      titulo: 'Inventario',
-      descripcion: 'Tu carga, tus recargas y lo que te queda',
-      destino: '/(jornada)/inventario',
-      // T-27: es consulta (y aceptar la carga de la manana); se ve con el dia cerrado.
-      deshabilitada: false,
-    },
-    {
-      clave: 'merma',
-      titulo: 'Merma y consumo',
-      descripcion: 'Merma del trayecto y consumo propio',
-      destino: '/(jornada)/merma',
-      // Captura (como Gastos): con el dia cerrado no se registra.
-      deshabilitada: diaCerrado,
-    },
-    {
-      clave: 'ruta-gps',
-      titulo: 'Ruta y GPS',
-      descripcion: 'Pendiente: T-41',
-      destino: '/(jornada)/ruta',
-      deshabilitada: false,
-    },
-    {
-      clave: 'cerrar-dia',
-      titulo: 'Cerrar el día',
-      descripcion: 'Kilometraje final',
-      destino: '/(jornada)/cerrar-dia',
-      deshabilitada: false,
-    },
+    entrada('ruta', 'Ruta', 'ubicacion', '/(jornada)'),
+    entrada('inventario', 'Inventario', 'inventario', '/(jornada)/inventario'),
+    entrada('registros', 'Ventas / Cobranza', 'registros', '/(jornada)/registros'),
+    entrada('merma', 'Merma / Cambios', 'merma', '/(jornada)/merma'),
+    entrada('gastos', 'Gastos', 'gasto', '/(jornada)/gastos', { deshabilitada: diaCerrado }),
+    entrada('corte', 'Corte', 'corte', '/(jornada)/corte', {
+      deshabilitada: corteConCandado,
+      nota: corteConCandado ? (porVisitar === 1 ? 'falta 1 cliente' : `faltan ${porVisitar} clientes`) : null,
+    }),
+    entrada('prospectos', 'Prospectos', 'prospecto', '/(jornada)/prospectos'),
+    entrada('impresora', 'Seleccionar impresora', 'impresora', '/(jornada)/impresora'),
+    entrada('salir', 'Cerrar sesión', 'salir', null),
   ];
+}
+
+/** Lo que hace el menu al elegir una entrada (sin React, para probarlo). */
+export type AccionMenu =
+  | { tipo: 'nada' }
+  | { tipo: 'salir' }
+  | { tipo: 'dismissTo' | 'push' | 'replace'; destino: string };
+
+/**
+ * Como navega el menu para no apilar pantallas (revision final de la pieza 1,
+ * I2): la Ruta es siempre la base del `Stack` y encima hay a lo mas una
+ * pantalla del menu.
+ *
+ * - Ir a la Ruta: `dismissTo('/(jornada)')` (cierra lo que este encima).
+ * - Desde la Ruta a otra entrada: `push` (atras regresa a la Ruta).
+ * - Desde otra pantalla del menu: `replace` (cambia una por otra).
+ * - La entrada de la pantalla donde ya se esta: nada (un `replace` sobre si
+ *   misma la volveria a montar y borraria un formulario a medias).
+ * - Cerrar sesion: `salir` (lo confirma la pantalla).
+ */
+export function accionMenu(
+  actual: ClaveMenu,
+  objetivo: Pick<EntradaMenu, 'clave' | 'destino'>,
+): AccionMenu {
+  if (objetivo.destino === null) return { tipo: 'salir' };
+  if (objetivo.clave === actual) return { tipo: 'nada' };
+  if (objetivo.clave === 'ruta') return { tipo: 'dismissTo', destino: objetivo.destino };
+  if (actual === 'ruta') return { tipo: 'push', destino: objetivo.destino };
+  return { tipo: 'replace', destino: objetivo.destino };
 }
 
 /** Subconjunto de `Estado` de `@/ui/pantalla` (un .tsx con React Native no corre en Jest/Node). */
@@ -255,7 +320,7 @@ export interface AtendidoFueraDeRuta {
 /**
  * Clientes y prospectos con venta **o visita** del dia en esta tablet que la
  * ruta NO pinta (T-75, D7; T-39 D8): ni vivos ni quitados-con-actividad (esos ya
- * salen en "Fuera de ruta" o "Visitados sin venta"). Uno por cliente, con el
+ * salen en "Visitados" o "Fuera de ruta"). Uno por cliente, con el
  * estado mas grave de sus ventas y visitas; `soloVisita` si no tiene venta.
  */
 export function atendidosFueraDeRuta(
@@ -355,4 +420,54 @@ export function pastillaAlta(
 /** Id de la ficha a la que enlaza una fila de "Prospectos de hoy", o `null` (T-75, D6). */
 export function enlaceAFicha(prospectoId: string, existeCliente: (id: string) => boolean): string | null {
   return existeCliente(prospectoId) ? prospectoId : null;
+}
+
+/** Una fila de la lista de Prospectos: la captura local, el espejo del catalogo o los dos. */
+export interface FilaListaProspecto {
+  id: string;
+  nombre: string;
+  domicilio: string | null;
+  /** Lo que capturo ESTA tablet (lleva su pastilla de subida), o `null` si solo esta en el catalogo. */
+  local: Prospecto | null;
+  /** Id de la ficha a la que abre la fila, o `null` si no hay ficha (`enlaceAFicha`). */
+  ficha: string | null;
+}
+
+/**
+ * La lista de la pantalla Prospectos (revision final de la pieza 1, I1).
+ *
+ * - `capturadosHoy`: lo que este vendedor capturo hoy en esta tablet, en orden
+ *   de captura, como siempre (con o sin ficha: un alta rechazada o anterior a
+ *   T-75 se sigue viendo con su motivo).
+ * - `otros`: los demas prospectos vivos de la sucursal (`listarProspectos`), en
+ *   el orden del catalogo. Asi se abre la hoja, y se le vende la bienvenida, al
+ *   prospecto que se capturo otro dia o en otra tablet; ya no habia otra puerta
+ *   desde que se quito "Todos los clientes" (spec del rediseño §16-bis). Si esta
+ *   tablet tiene su captura (`localDe`), la fila lleva tambien su pastilla.
+ */
+export function listaProspectos(
+  capturadosHoy: readonly Prospecto[],
+  catalogo: readonly Pick<Cliente, 'id' | 'nombre' | 'domicilio'>[],
+  localDe: (id: string) => Prospecto | null,
+  existeCliente: (id: string) => boolean,
+): { capturadosHoy: FilaListaProspecto[]; otros: FilaListaProspecto[] } {
+  const deHoy = new Set(capturadosHoy.map((p) => p.id));
+  return {
+    capturadosHoy: capturadosHoy.map((p) => ({
+      id: p.id,
+      nombre: p.nombre,
+      domicilio: p.domicilio,
+      local: p,
+      ficha: enlaceAFicha(p.id, existeCliente),
+    })),
+    otros: catalogo
+      .filter((c) => !deHoy.has(c.id))
+      .map((c) => ({
+        id: c.id,
+        nombre: c.nombre,
+        domicilio: c.domicilio,
+        local: localDe(c.id),
+        ficha: c.id,
+      })),
+  };
 }

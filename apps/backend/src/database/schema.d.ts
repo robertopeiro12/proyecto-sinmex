@@ -52,6 +52,7 @@ export interface Carga {
 }
 
 export interface CargaDetalle {
+  aceptada: boolean | null;
   carga_id: string;
   id: Generated<string>;
   piezas: number;
@@ -138,6 +139,20 @@ export interface CorteMercancia {
   hecho_en: Generated<Timestamp>;
   hecho_por_usuario_id: string;
   id: Generated<string>;
+  sucursal_id: string;
+  updated_at: Generated<Timestamp>;
+  vendedor_id: string;
+}
+
+export interface CorteVendedor {
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  efectivo: Json;
+  enviado_en: Timestamp;
+  fecha: Timestamp;
+  id: string;
+  inventario: Json;
+  notas: Json;
   sucursal_id: string;
   updated_at: Generated<Timestamp>;
   vendedor_id: string;
@@ -232,6 +247,7 @@ export interface MovimientoInventario {
   deleted_at: Timestamp | null;
   fecha: Timestamp;
   id: string;
+  motivo_merma_id: string | null;
   registrado_en: Timestamp;
   sucursal_id: string;
   tipo: string;
@@ -666,6 +682,7 @@ export interface Vendedor {
 
 export interface VentaNota {
   actualizado_por_usuario_id: string | null;
+  atendio_nombre: string | null;
   capturo_usuario_id: string | null;
   cliente_id: string;
   comentarios: string | null;
@@ -749,6 +766,7 @@ export interface DB {
   cobranza_abono: CobranzaAbono;
   cobro: Cobro;
   corte_mercancia: CorteMercancia;
+  corte_vendedor: CorteVendedor;
   factura: Factura;
   folio_oficina_contador: FolioOficinaContador;
   gasto: Gasto;
