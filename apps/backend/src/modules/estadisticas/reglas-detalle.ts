@@ -82,11 +82,12 @@ export interface DetalleVendedorDia {
   notasNoEntregadas: NotaNoEntregada[];
   visitas: VisitaDetalle[];
   promociones: { cliente: string; producto: string; cantidad: number }[];
+
   /**
    * Mermas y cambios que registro la tablet ese dia: un renglon por linea,
    * cada uno con el motivo y el comentario del movimiento. En una merma de
    * cliente, `recibido` es la merma y `entregado` la reposicion. Orden:
-   * registro, luego producto.
+   * registro, producto, recibido antes que entregado.
    */
   movimientos: MovimientoDetalle[];
   /** `null` sin jornada cerrada. */
@@ -291,6 +292,9 @@ export function mililitros(etiqueta: string): number | null {
 }
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+/** Desempate de lineas de un mismo movimiento: recibido antes que entregado, luego tipo. */
+const cmpSentido = (a: MovimientoFila, b: MovimientoFila) =>
+  cmp(b.sentido, a.sentido) || cmp(a.tipo, b.tipo);
 /** Por volumen numerico; lo que no se entiende, al final y por texto. */
 export function cmpVolumen(a: string, b: string): number {
   const x = mililitros(a);
@@ -580,7 +584,9 @@ export function armarDetalleVendedor(
     movimientos: [...filas.movimientos]
       .sort(
         (a, b) =>
-          cmp(a.registradoEn, b.registradoEn) || cmp(a.producto, b.producto),
+          cmp(a.registradoEn, b.registradoEn) ||
+          cmp(a.producto, b.producto) ||
+          cmpSentido(a, b),
       )
       .map((m) => ({
         tipo: m.tipo,
@@ -725,7 +731,8 @@ export function armarDetalleDia(
         (a, b) =>
           cmp(a.vendedor, b.vendedor) ||
           cmp(a.registradoEn, b.registradoEn) ||
-          cmp(a.producto, b.producto),
+          cmp(a.producto, b.producto) ||
+          cmpSentido(a, b),
       )
       .map((m) => ({
         vendedor: m.vendedor,

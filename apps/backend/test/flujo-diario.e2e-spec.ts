@@ -654,7 +654,8 @@ describe('Flujo diario (e2e)', () => {
         .executeTakeFirstOrThrow()
     ).id;
     const sembrarMovimiento = async (o: {
-      tipo: 'merma_cliente' | 'merma_trayecto' | 'cambio';
+      tipo: 'merma_cliente' | 'merma_trayecto' | 'cambio' | 'consumo';
+      vendedor?: string;
       fecha: string;
       hora: string;
       motivo?: boolean;
@@ -668,8 +669,9 @@ describe('Flujo diario (e2e)', () => {
         .values({
           id,
           sucursal_id: idFd,
-          vendedor_id: eva,
-          cliente_id: o.tipo === 'merma_trayecto' ? null : c1,
+          vendedor_id: o.vendedor ?? eva,
+          cliente_id:
+            o.tipo === 'merma_trayecto' || o.tipo === 'consumo' ? null : c1,
           tipo: o.tipo,
           fecha: sql<Date>`${o.fecha}::date`,
           comentario: o.comentario ?? null,
@@ -722,6 +724,20 @@ describe('Flujo diario (e2e)', () => {
       motivo: true,
       borrado: true,
       lineas: [{ sentido: 'recibido', piezas: 9 }],
+    });
+    // Fuera de la lista: consumo del mismo dia y merma de otro vendedor.
+    await sembrarMovimiento({
+      tipo: 'consumo',
+      fecha: '2018-05-14',
+      hora: '21:00:00',
+      lineas: [{ sentido: 'recibido', piezas: 6 }],
+    });
+    await sembrarMovimiento({
+      tipo: 'merma_trayecto',
+      vendedor: ana,
+      fecha: '2018-05-14',
+      hora: '22:00:00',
+      lineas: [{ sentido: 'recibido', piezas: 7 }],
     });
     await sembrarMovimiento({
       tipo: 'merma_cliente',
@@ -1547,7 +1563,15 @@ describe('Flujo diario (e2e)', () => {
         { producto: `Horchata fd ${SUFIJO} 1 L`, cantidad: 2 },
       ]);
       // Solo las mermas: lo recibido de la de cliente y la del vehiculo.
+      // Ana (otro vendedor de la sucursal) va primero; el consumo de Eva no sale.
       expect(d.mermas).toEqual([
+        {
+          vendedor: `Ana ${SUFIJO}`,
+          cliente: null,
+          producto: `Horchata fd ${SUFIJO} 1 L`,
+          cantidad: 7,
+          motivo: null,
+        },
         {
           vendedor: `Eva ${SUFIJO}`,
           cliente: `Cliente 1 ${SUFIJO}`,

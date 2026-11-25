@@ -781,4 +781,33 @@ describe('movimientos de la tablet en el detalle', () => {
         .mermas,
     ).toEqual([]);
   });
+
+  it('misma hora y producto: recibido antes que entregado sin importar el orden de las filas', () => {
+    const entregado = mov({ sentido: 'entregado', piezas: 2 });
+    const recibido = mov({ sentido: 'recibido', piezas: 3 });
+    const d = armarDetalleVendedor(base, {
+      ...vacio,
+      movimientos: [entregado, recibido],
+    });
+    expect(d.movimientos.map((m) => m.sentido)).toEqual([
+      'recibido',
+      'entregado',
+    ]);
+    const dia = armarDetalleDia(
+      { fecha: base.fecha, sucursalCodigo: 'TJ' },
+      { ...vacio, movimientos: [entregado, recibido] },
+    );
+    expect(dia.mermas.map((m) => m.cantidad)).toEqual([3]);
+  });
+
+  it('misma hora, producto y sentido: desempata por tipo', () => {
+    const d = armarDetalleVendedor(base, {
+      ...vacio,
+      movimientos: [mov({ tipo: 'merma_trayecto' }), mov({ tipo: 'cambio' })],
+    });
+    expect(d.movimientos.map((m) => m.tipo)).toEqual([
+      'cambio',
+      'merma_trayecto',
+    ]);
+  });
 });
