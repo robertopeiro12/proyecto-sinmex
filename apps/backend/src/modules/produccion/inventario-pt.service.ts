@@ -11,6 +11,7 @@ import {
 } from '../sucursales/alcance-sucursal';
 import { CortesRepository } from './cortes.repository';
 import type {
+  BorrarAjustePtDto,
   ConsultaAjustesPtDto,
   ConsultaDescuentosPtDto,
   ConsultaHistorialPtDto,
@@ -35,8 +36,11 @@ import {
   largoDelRango,
   ordenarPorPresentacion,
   porProducto,
+  diasEntre,
   serie,
   SIN_MOVIMIENTOS,
+  sumarSucursales,
+  tieneDatos,
   sumarMovimientos,
   sumarRenglones,
   validarAjustes,
@@ -55,6 +59,8 @@ export const MOTIVO_PRODUCTO_NO_EXISTE = 'No existe ese producto.';
 export const MENSAJE_RANGO_INVERTIDO =
   'La fecha inicial no puede ser posterior a la final.';
 export const MENSAJE_RANGO_LARGO = `El historial no puede pasar de ${MAX_DIAS_HISTORIAL} días.`;
+export const MOTIVO_AJUSTE_INEXISTENTE =
+  'No hay un ajuste de esa presentación ese día.';
 export const MENSAJE_COMENTARIO_AJUSTE =
   'El comentario no puede pasar de 300 caracteres.';
 
@@ -130,10 +136,12 @@ export class InventarioPtService {
     const hoy = await this.exigirFecha(q.fecha);
     const ambito = await this.ambito(usuarioId, q.sucursal);
     const series = await this.calcular(ambito, null, q.fecha, q.fecha);
-    const renglones = series.map(({ presentacion, dias }) => ({
-      ...identidad(presentacion),
-      ...sinFecha(dias[0]),
-    }));
+    const renglones = series
+      .filter(({ visible }) => visible[0])
+      .map(({ presentacion, dias }) => ({
+        ...identidad(presentacion),
+        ...sinFecha(dias[0]),
+      }));
     return {
       fecha: q.fecha,
       hoyEnTijuana: hoy,
@@ -160,15 +168,29 @@ export class InventarioPtService {
     const ambito = await this.ambito(usuarioId, q.sucursal);
     const series = await this.calcular(ambito, objetivo, q.desde, q.hasta);
     if (series.length === 0) return { dias: [] };
-    const dias = series[0].dias.map((_, i) => {
-      const renglones: RenglonPt[] = series.map(({ presentacion, dias }) => ({
-        ...identidad(presentacion),
-        ...sinFecha(dias[i]),
-      }));
+    const producto = series[0].presentacion;
+    const dias = series[0].dias.map((dia, i) => {
+      const renglones: RenglonPt[] = series
+        .filter(({ visible }) => q.presentacion || visible[i])
+        .map(({ presentacion, dias }) => ({
+          ...identidad(presentacion),
+          ...sinFecha(dias[i]),
+        }));
       const fila: RenglonPt = q.presentacion
         ? renglones[0]
-        : { ...sumarRenglones(renglones), presentacionId: null, volumen: '' };
-      return { fecha: series[0].dias[i].fecha, ...fila };
+        : renglones.length > 0
+          ? { ...sumarRenglones(renglones), presentacionId: null, volumen: '' }
+          : {
+              ...identidad(producto),
+              ...SIN_MOVIMIENTOS,
+              presentacionId: null,
+              volumen: '',
+              inicial: null,
+              final: null,
+              mermaAcumulada: null,
+              ajustado: false,
+            };
+      return { fecha: dia.fecha, ...fila };
     });
     return { dias };
   }
@@ -197,19 +219,22 @@ export class InventarioPtService {
     const hoy = await this.exigirFecha(q.fecha);
     const ambito = await this.ambito(usuarioId, q.sucursal, true);
     const series = await this.calcular(ambito, null, q.fecha, q.fecha);
-    const renglones = series.map(({ presentacion, dias }) => {
-      const d = dias[0];
-      return {
-        ...identidad(presentacion),
-        inventarioInicial: d.inicial,
-        // La merma acumulada de arranque: la del dia sin lo que se movio ese dia.
-        mermaAcumuladaInicial:
-          d.mermaAcumulada === null
-            ? null
-            : d.mermaAcumulada - d.merma + d.retiroMerma,
-        ajustado: d.ajustado,
-      };
-    });
+    // Solo las vivas: una dada de baja no se puede ajustar.
+    const renglones = series
+      .filter(({ presentacion }) => presentacion.viva)
+      .map(({ presentacion, dias }) => {
+        const d = dias[0];
+        return {
+          ...identidad(presentacion),
+          inventarioInicial: d.inicial,
+          // La merma acumulada de arranque: la del dia sin lo que se movio ese dia.
+          mermaAcumuladaInicial:
+            d.mermaAcumulada === null
+              ? null
+              : d.mermaAcumulada - d.merma + d.retiroMerma,
+          ajustado: d.ajustado,
+        };
+      });
     return {
       fecha: q.fecha,
       hoyEnTijuana: hoy,
@@ -248,6 +273,24 @@ export class InventarioPtService {
   }
 
   /**
+   * `DELETE /inventario-pt/ajustes`: baja logica del ajuste (D3, "se corrige o
+   * se da de baja"); ese dia vuelve a encadenar desde el anterior. Ya dado de
+   * baja o inexistente = 404.
+   */
+  async borrarAjuste(usuarioId: string, q: BorrarAjustePtDto): Promise<void> {
+    if (!esFechaReal(q.fecha))
+      throw new BadRequestException(MENSAJE_FECHA_INVALIDA);
+    const ambito = await this.ambito(usuarioId, q.sucursal, true);
+    const borrado = await this.repo.darDeBajaAjuste(
+      ambito.sucursalIds[0],
+      q.presentacionId.toLowerCase(),
+      q.fecha,
+      usuarioId,
+    );
+    if (!borrado) throw new NotFoundException(MOTIVO_AJUSTE_INEXISTENTE);
+  }
+
+  /**
    * La serie de cada presentacion de `[desde, hasta]`, sumada sobre las
    * sucursales del ambito. Con `objetivo = null`: las presentaciones vivas mas
    * las que tuvieron movimiento en el rango o un ajuste que las encadena.
@@ -257,7 +300,9 @@ export class InventarioPtService {
     objetivo: PresentacionPt[] | null,
     desde: string,
     hasta: string,
-  ): Promise<{ presentacion: PresentacionPt; dias: DiaPt[] }[]> {
+  ): Promise<
+    { presentacion: PresentacionPt; dias: DiaPt[]; visible: boolean[] }[]
+  > {
     const ids = objetivo ? objetivo.map((p) => p.presentacionId) : null;
     const ajustes = await this.repo.ajustes(
       ambito.sucursalIds,
@@ -292,7 +337,8 @@ export class InventarioPtService {
     const conMovimiento = new Set<string>();
     for (const m of movimientos) {
       agregar(m.sucursalId, m.presentacionId, m.fecha, m);
-      if (m.fecha >= desde) conMovimiento.add(m.presentacionId);
+      if (m.fecha >= desde && hayMovimiento(m))
+        conMovimiento.add(m.presentacionId);
     }
     // Merma de los vendedores: la contada si el corte esta hecho; si no, la teorica.
     for (const v of vendedores) {
@@ -321,21 +367,36 @@ export class InventarioPtService {
         ...ajustes.map((a) => a.presentacionId),
       ]));
     if (ambito.sucursalIds.length === 0) return [];
+    const fechas = diasEntre(desde, hasta);
     return presentaciones.map((p) => {
-      const porSucursal = ambito.sucursalIds.map((s) =>
-        serie(
-          ajustesPor.get(clave(s, p.presentacionId)) ?? [],
-          porClave.get(clave(s, p.presentacionId)) ?? new Map(),
-          desde,
-          hasta,
-        ),
-      );
-      const dias = porSucursal[0].map((d, i) =>
+      const porSucursal = ambito.sucursalIds.map((s) => {
+        const aj = ajustesPor.get(clave(s, p.presentacionId)) ?? [];
+        const movs =
+          porClave.get(clave(s, p.presentacionId)) ??
+          new Map<string, MovimientosDia>();
+        return {
+          dias: serie(aj, movs, desde, hasta),
+          conDatos: tieneDatos(aj, movs),
+          aj,
+          movs,
+        };
+      });
+      const dias =
         porSucursal.length === 1
-          ? d
-          : sumarRenglones(porSucursal.map((serieSuc) => serieSuc[i])),
+          ? porSucursal[0].dias
+          : sumarSucursales(porSucursal);
+      // Se muestra ese dia (la misma regla en la vista, el historial y los
+      // descuentos por producto): viva, con movimiento ese dia o con un ajuste
+      // que ya la encadena.
+      const visible = fechas.map(
+        (f) =>
+          p.viva ||
+          porSucursal.some(
+            (x) =>
+              x.aj.some((a) => a.fecha <= f) || hayMovimiento(x.movs.get(f)),
+          ),
       );
-      return { presentacion: p, dias };
+      return { presentacion: p, dias, visible };
     });
   }
 
@@ -356,9 +417,9 @@ export class InventarioPtService {
     );
     if (todas.length === 0)
       throw new NotFoundException(MOTIVO_PRODUCTO_NO_EXISTE);
-    // Las dadas de baja no se suman: con "Por producto" la pantalla suma las vivas.
-    const vivas = todas.filter((p) => p.viva);
-    return vivas.length > 0 ? vivas : todas;
+    // Todas, tambien las dadas de baja: `calcular` decide por dia cuales se
+    // ven (la misma regla de la vista por producto).
+    return todas;
   }
 
   /** Las sucursales del alcance. `soloUna`: `todas` = 400 (ajustes). */
@@ -405,6 +466,16 @@ export class InventarioPtService {
     if (fecha > hoy) throw this.fechaFutura(hoy);
     return hoy;
   }
+}
+
+/** Algun campo distinto de 0. */
+function hayMovimiento(m: MovimientosDia | undefined): boolean {
+  return (
+    m !== undefined &&
+    (Object.keys(SIN_MOVIMIENTOS) as (keyof MovimientosDia)[]).some(
+      (c) => m[c] !== 0,
+    )
+  );
 }
 
 /** Un dia de la serie sin su fecha (la pantalla del dia no la repite por renglon). */

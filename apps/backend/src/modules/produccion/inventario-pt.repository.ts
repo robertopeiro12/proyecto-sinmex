@@ -260,14 +260,21 @@ export class InventarioPtRepository {
 
   /**
    * Lo que el corte sabe de los vendedores en el rango (una sucursal por
-   * codigo, o todas con `null`): la misma consulta del corte, por dia.
+   * codigo, o todas con `null`): la misma consulta del corte, por dia,
+   * incluidos los vendedores dados de baja (su merma pasada sigue contando).
    */
   movimientosVendedores(
     sucursalCodigo: string | null,
     desde: string,
     hasta: string,
   ): Promise<MovimientoVendedorDia[]> {
-    return movimientosDelRango(this.db, desde, hasta, { sucursalCodigo });
+    return movimientosDelRango(
+      this.db,
+      desde,
+      hasta,
+      { sucursalCodigo },
+      { incluirDadosDeBaja: true },
+    );
   }
 
   /** Los cortes vivos del rango, como `vendedorId|AAAA-MM-DD`. */
@@ -360,5 +367,26 @@ export class InventarioPtRepository {
           .execute();
       }
     });
+  }
+
+  /** Baja logica del ajuste vivo; `false` si no habia ninguno. */
+  async darDeBajaAjuste(
+    sucursalId: string,
+    presentacionId: string,
+    fecha: string,
+    usuarioId: string,
+  ): Promise<boolean> {
+    const r = await this.db
+      .updateTable('inventario_pt_ajuste')
+      .set({
+        deleted_at: sql<Date>`now()`,
+        actualizado_por_usuario_id: usuarioId,
+      })
+      .where('sucursal_id', '=', sucursalId)
+      .where('presentacion_id', '=', presentacionId)
+      .where(sql<boolean>`fecha = ${fecha}::date`)
+      .where('deleted_at', 'is', null)
+      .executeTakeFirst();
+    return Number(r.numUpdatedRows) > 0;
   }
 }

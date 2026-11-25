@@ -118,7 +118,14 @@ export async function movimientosDelRango(
   desde: string,
   hasta: string,
   filtro: FiltroMovimientos,
+  opciones: { incluirDadosDeBaja?: boolean } = {},
 ): Promise<MovimientoVendedorDia[]> {
+  // Solo el Inventario de PT incluye a los vendedores dados de baja: darlos de
+  // baja no debe reescribir la historia del inventario. El corte, Inventario
+  // por vendedor y el candado de la venta siguen viendo solo a los vivos.
+  const vendedorVivo = opciones.incluirDadosDeBaja
+    ? sql`true`
+    : sql`v.deleted_at is null`;
   const condicion =
     'vendedorId' in filtro
       ? sql`v.id = ${filtro.vendedorId}`
@@ -207,7 +214,7 @@ export async function movimientosDelRango(
       join sucursal s on s.id = v.sucursal_id
       join presentacion pr on pr.id = m.presentacion_id
       join producto p on p.id = pr.producto_id
-     where v.deleted_at is null
+     where ${vendedorVivo}
        and ${condicion}
      group by m.vendedor_id, m.fecha, v.sucursal_id, m.presentacion_id, p.nombre, pr.volumen
      order by m.fecha, p.nombre, pr.volumen, m.presentacion_id

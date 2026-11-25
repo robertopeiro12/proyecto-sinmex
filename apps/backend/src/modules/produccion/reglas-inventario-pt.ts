@@ -212,6 +212,37 @@ export function sumarRenglones<T extends MovimientosDia & EstadoPt>(
   };
 }
 
+/**
+ * Una sucursal "tiene datos" de una presentacion si tiene un ajuste que la
+ * encadena o algun movimiento distinto de 0 en el rango.
+ */
+export function tieneDatos(
+  ajustes: readonly AjustePt[],
+  movimientos: ReadonlyMap<string, MovimientosDia>,
+): boolean {
+  if (ajustes.length > 0) return true;
+  for (const m of movimientos.values())
+    if (CAMPOS.some((c) => m[c] !== 0)) return true;
+  return false;
+}
+
+/**
+ * Todas (decision del controlador, 2026-11-25): una sucursal sin ajuste y sin
+ * ningun movimiento en esa presentacion aporta 0 (nunca la manejo); una con
+ * movimiento y sin ajuste deja la presentacion en null. Si ninguna tiene
+ * datos, la presentacion queda sin inventario inicial (null, no 0).
+ */
+export function sumarSucursales(
+  series: readonly { dias: DiaPt[]; conDatos: boolean }[],
+): DiaPt[] {
+  const conDatos = series.filter((s) => s.conDatos);
+  const usadas = conDatos.length > 0 ? conDatos : series.slice(0, 1);
+  if (usadas.length === 0) return [];
+  return usadas[0].dias.map((_, i) =>
+    sumarRenglones(usadas.map((s) => s.dias[i])),
+  );
+}
+
 /** Orden de la vista por presentacion: tamano, producto, id. */
 export function compararPresentaciones(
   a: { volumen: string; producto: string; presentacionId: string | null },

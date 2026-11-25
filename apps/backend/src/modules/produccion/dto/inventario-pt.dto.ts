@@ -90,6 +90,19 @@ export class ConsultaAjustesPtDto {
   sucursal?: string;
 }
 
+/** `DELETE /inventario-pt/ajustes`: da de baja el ajuste vivo de una presentacion en un dia. */
+export class BorrarAjustePtDto {
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: MENSAJE_FORMATO_FECHA })
+  fecha!: string;
+
+  @IsOptional()
+  @IsString({ message: MENSAJE_SUCURSAL })
+  sucursal?: string;
+
+  @IsUUID(undefined, { message: MENSAJE_PRESENTACION })
+  presentacionId!: string;
+}
+
 /** Un renglon del ajuste. Negativos los rechaza `validarAjustes` con su mensaje. */
 export class RenglonAjustePtDto {
   @IsUUID(undefined, { message: 'Una de las presentaciones no es válida.' })

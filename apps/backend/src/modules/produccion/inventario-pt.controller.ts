@@ -1,7 +1,16 @@
-import { Body, Controller, Get, HttpCode, Put, Query } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Put,
+  Query,
+} from '@nestjs/common';
 import { RequierePermiso } from '../auth/requiere-permiso.decorator';
 import { UsuarioActual } from '../auth/usuario-actual.decorator';
 import {
+  BorrarAjustePtDto,
   ConsultaAjustesPtDto,
   ConsultaDescuentosPtDto,
   ConsultaHistorialPtDto,
@@ -67,5 +76,15 @@ export class InventarioPtController {
     @Body() dto: GuardarAjustesPtDto,
   ): Promise<void> {
     await this.inventario.guardarAjustes(usuarioId, dto);
+  }
+
+  @Delete('ajustes')
+  @HttpCode(204)
+  @RequierePermiso('inventario_pt.ajustar')
+  async borrarAjuste(
+    @UsuarioActual() usuarioId: string,
+    @Query() q: BorrarAjustePtDto,
+  ): Promise<void> {
+    await this.inventario.borrarAjuste(usuarioId, q);
   }
 }

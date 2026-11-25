@@ -6,6 +6,8 @@ import {
   serie,
   SIN_MOVIMIENTOS,
   sumarRenglones,
+  sumarSucursales,
+  tieneDatos,
   validarAjustes,
   type MovimientosDia,
   type RenglonPt,
@@ -246,6 +248,68 @@ describe('serie (encadenado, D2 y D3)', () => {
       [30, 30, 2],
       [30, 30, 2],
     ]);
+  });
+});
+
+describe('Todas: sumarSucursales y tieneDatos', () => {
+  const D = '2026-11-02';
+  const conAjuste = serie(
+    [{ fecha: '2026-11-01', inventarioInicial: 10, mermaAcumuladaInicial: 1 }],
+    new Map([[D, mov({ ventas: 3 })]]),
+    D,
+    D,
+  );
+  const vacia = serie([], new Map(), D, D);
+  const conMovSinAjuste = serie([], new Map([[D, mov({ entradas: 4 })]]), D, D);
+
+  it('tieneDatos: con ajuste o con algún movimiento distinto de 0', () => {
+    expect(
+      tieneDatos(
+        [{ fecha: D, inventarioInicial: 0, mermaAcumuladaInicial: 0 }],
+        new Map(),
+      ),
+    ).toBe(true);
+    expect(tieneDatos([], new Map([[D, mov({ cambios: -1 })]]))).toBe(true);
+    expect(tieneDatos([], new Map([[D, mov()]]))).toBe(false);
+    expect(tieneDatos([], new Map())).toBe(false);
+  });
+
+  it('una sucursal sin ajuste y sin movimiento aporta 0', () => {
+    const r = sumarSucursales([
+      { dias: conAjuste, conDatos: true },
+      { dias: vacia, conDatos: false },
+    ]);
+    expect(r[0]).toMatchObject({
+      ventas: 3,
+      inicial: 10,
+      final: 7,
+      mermaAcumulada: 1,
+    });
+  });
+
+  it('una sucursal con movimiento y sin ajuste deja null', () => {
+    const r = sumarSucursales([
+      { dias: conAjuste, conDatos: true },
+      { dias: conMovSinAjuste, conDatos: true },
+    ]);
+    expect(r[0]).toMatchObject({
+      ventas: 3,
+      entradas: 4,
+      inicial: null,
+      final: null,
+    });
+  });
+
+  it('ninguna con datos: sin inventario inicial (null, no 0)', () => {
+    const r = sumarSucursales([
+      { dias: vacia, conDatos: false },
+      { dias: vacia, conDatos: false },
+    ]);
+    expect(r[0]).toMatchObject({
+      inicial: null,
+      final: null,
+      mermaAcumulada: null,
+    });
   });
 });
 

@@ -284,6 +284,7 @@ describe('Inventario de PT con Ventas (e2e)', () => {
       sentido: 'recibido' | 'entregado';
       piezas: number;
     }[];
+    borrado?: boolean;
   }): Promise<void> => {
     const id = randomUUID();
     await db
@@ -296,6 +297,7 @@ describe('Inventario de PT con Ventas (e2e)', () => {
         tipo: m.tipo,
         fecha: sql<Date>`${m.fecha}::date`,
         registrado_en: sql<Date>`now()`,
+        deleted_at: m.borrado ? sql<Date>`now()` : null,
       })
       .execute();
     await db
@@ -1100,6 +1102,239 @@ describe('Inventario de PT con Ventas (e2e)', () => {
         .query({ fecha: ayer, sucursal: 'QZ' })
         .set('Cookie', cookieGeneral)
         .expect(404);
+    });
+  });
+
+  describe('arreglos de la revisión', () => {
+    // Otro producto, para no tocar las cuentas de arriba: `otro` (vivo, con
+    // ajuste en d5) y `muerta` (dada de baja, con movimiento solo en d4).
+    let d5: string;
+    let d4: string;
+    let producto2: string;
+    let otro: string;
+    let muerta: string;
+    let vendedorC: string;
+    let vendedorD: string;
+
+    const unRenglon = async (
+      fecha: string,
+      presentacionId: string,
+      sucursal = K,
+    ) => renglon(await leer({ fecha, sucursal }), presentacionId);
+
+    beforeAll(async () => {
+      d5 = restarDias(hoy, 5);
+      d4 = restarDias(hoy, 4);
+      producto2 = (
+        await db
+          .insertInto('producto')
+          .values({ nombre: `${PRODUCTO}-b`, activo: true })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+      productoIds.push(producto2);
+      otro = (
+        await db
+          .insertInto('presentacion')
+          .values({ producto_id: producto2, volumen: '2 L' })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+      muerta = (
+        await db
+          .insertInto('presentacion')
+          .values({
+            producto_id: producto2,
+            volumen: '3 L',
+            deleted_at: sql<Date>`now()`,
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+      vendedorC = await crearVendedor(kId);
+      vendedorD = await crearVendedor(kId);
+
+      await ajustar({
+        fecha: d5,
+        sucursal: K,
+        renglones: [
+          {
+            presentacionId: otro,
+            inventarioInicial: 100,
+            mermaAcumuladaInicial: 0,
+          },
+        ],
+      }).expect(204);
+      // C sin corte: merma teorica 4; su consumo y otra merma borrados no cuentan.
+      await crearMovimiento({
+        tipo: 'merma_trayecto',
+        vendedorId: vendedorC,
+        fecha: d4,
+        lineas: [{ presentacionId: otro, sentido: 'recibido', piezas: 4 }],
+      });
+      await crearMovimiento({
+        tipo: 'merma_trayecto',
+        vendedorId: vendedorC,
+        fecha: d4,
+        lineas: [{ presentacionId: otro, sentido: 'recibido', piezas: 7 }],
+        borrado: true,
+      });
+      await crearMovimiento({
+        tipo: 'consumo',
+        vendedorId: vendedorC,
+        fecha: d4,
+        lineas: [{ presentacionId: otro, sentido: 'entregado', piezas: 2 }],
+        borrado: true,
+      });
+      // D: teorica 5, corte hecho con merma contada 1.
+      await crearMovimiento({
+        tipo: 'merma_cliente',
+        vendedorId: vendedorD,
+        fecha: d4,
+        lineas: [{ presentacionId: otro, sentido: 'recibido', piezas: 5 }],
+      });
+      await http()
+        .put('/cortes/vendedor')
+        .set('Cookie', cookieGeneral)
+        .send({
+          fecha: d4,
+          vendedor: vendedorD,
+          lineas: [{ presentacionId: otro, buenas: 0, merma: 1 }],
+        })
+        .expect(200);
+      // La presentacion dada de baja: una venta y un descuento en d4.
+      await crearVenta({
+        fecha: d4,
+        lineas: [{ presentacionId: muerta, cantidad: 2 }],
+      });
+      await crearOperacion({
+        tipo: 'descuento',
+        fecha: d4,
+        lineas: [{ presentacionId: muerta, piezas: 3 }],
+      });
+    });
+
+    it('lo borrado de la app no cuenta y el corte borrado vuelve a la teórica (RF 4)', async () => {
+      expect(await unRenglon(d4, otro)).toMatchObject({
+        merma: 4 + 1,
+        consumo: 0,
+        inicial: 100,
+        final: 95,
+      });
+      await db
+        .updateTable('corte_mercancia')
+        .set({ deleted_at: sql<Date>`now()` })
+        .where('vendedor_id', '=', vendedorD)
+        .execute();
+      await db
+        .updateTable('retorno')
+        .set({ deleted_at: sql<Date>`now()` })
+        .where('vendedor_id', '=', vendedorD)
+        .execute();
+      expect(await unRenglon(d4, otro)).toMatchObject({
+        merma: 4 + 5,
+        final: 91,
+        mermaAcumulada: 9,
+      });
+    });
+
+    it('dar de baja a un vendedor no reescribe la historia', async () => {
+      await db
+        .updateTable('vendedor')
+        .set({ deleted_at: sql<Date>`now()` })
+        .where('id', '=', vendedorC)
+        .execute();
+      expect(await unRenglon(d4, otro)).toMatchObject({ merma: 9, final: 91 });
+    });
+
+    it('Todas: las sucursales sin ajuste ni movimiento aportan 0 (Final numérico)', async () => {
+      expect(await unRenglon(d4, otro, 'todas')).toMatchObject({
+        merma: 9,
+        inicial: 100,
+        final: 91,
+        mermaAcumulada: 9,
+      });
+    });
+
+    it('vista, historial y descuentos por producto suman las mismas presentaciones', async () => {
+      const vista = async (fecha: string) =>
+        (await leer({ fecha, sucursal: K, vista: 'producto' })).renglones.find(
+          (x) => x.productoId === producto2,
+        );
+      const h = (
+        await http()
+          .get('/inventario-pt/historial')
+          .query({ producto: producto2, desde: d5, hasta: d4, sucursal: K })
+          .set('Cookie', cookieGeneral)
+          .expect(200)
+      ).body as HistorialPt;
+      const v5 = await vista(d5);
+      const v4 = await vista(d4);
+      // d5: solo `otro` (la dada de baja no tuvo movimiento); d4: las dos.
+      expect(v5).toMatchObject({ final: 100, ventas: 0 });
+      expect(v4).toMatchObject({ ventas: 2, descuentos: 3, final: null });
+      expect(h.dias[0]).toEqual({ fecha: d5, ...v5 });
+      expect(h.dias[1]).toEqual({ fecha: d4, ...v4 });
+      const d = (
+        await http()
+          .get('/inventario-pt/descuentos')
+          .query({ producto: producto2, fecha: d4, sucursal: K })
+          .set('Cookie', cookieGeneral)
+          .expect(200)
+      ).body as DescuentosPt;
+      expect(d.detalle.reduce((t, x) => t + x.piezas, 0)).toBe(v4?.descuentos);
+    });
+
+    it('DELETE de un ajuste: deja de contar; otra vez = 404; permisos y alcance', async () => {
+      await ajustar({
+        fecha: d4,
+        sucursal: K,
+        renglones: [
+          {
+            presentacionId: otro,
+            inventarioInicial: 50,
+            mermaAcumuladaInicial: 2,
+          },
+        ],
+      }).expect(204);
+      expect(await unRenglon(d4, otro)).toMatchObject({
+        inicial: 50,
+        ajustado: true,
+      });
+      const borrar = (q: Record<string, string>, cookie = cookieGeneral) =>
+        http().delete('/inventario-pt/ajustes').query(q).set('Cookie', cookie);
+      const q = { fecha: d4, sucursal: K, presentacionId: otro };
+      await borrar(q, cookieKVer).expect(403);
+      await borrar({ ...q, sucursal: L }, cookieKAjustar).expect(403);
+      await borrar({ ...q, sucursal: 'todas' }).expect(400);
+      await borrar(q, cookieKAjustar).expect(204);
+      expect(await unRenglon(d4, otro)).toMatchObject({
+        inicial: 100,
+        final: 91,
+        ajustado: false,
+      });
+      await borrar(q).expect(404);
+      const fila = await db
+        .selectFrom('inventario_pt_ajuste')
+        .select(['deleted_at', 'actualizado_por_usuario_id'])
+        .where('presentacion_id', '=', otro)
+        .where(sql<boolean>`fecha = ${d4}::date`)
+        .executeTakeFirstOrThrow();
+      expect(fila.deleted_at).not.toBeNull();
+      expect(fila.actualizado_por_usuario_id).not.toBeNull();
+      // Se puede volver a ajustar ese dia (el unico es parcial).
+      await ajustar({
+        fecha: d4,
+        sucursal: K,
+        renglones: [
+          {
+            presentacionId: otro,
+            inventarioInicial: 60,
+            mermaAcumuladaInicial: 0,
+          },
+        ],
+      }).expect(204);
+      await borrar(q).expect(204);
     });
   });
 });
