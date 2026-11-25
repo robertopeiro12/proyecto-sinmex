@@ -8,8 +8,8 @@ Contestó las 3 casillas del Word ("Así quedó el Inventario de PT con Recargas
   Inventario por vendedor es real). Solo el día de hoy, nada de otros días.
 - **Fórmula:** `Inventario inicial − Recargas − Envíos + Producción/Compras = Inventario actual`. **Se quitan Merma, Consumo
   y Descuentos** (columnas, "a quién" de descuentos y el parámetro `columna` del detalle).
-- **Inicial** = el Final real del día anterior (PT con Ventas). Se conserva: si hoy hay un ajuste capturado en PT con
-  Ventas, manda ese (es el conteo real de arranque de hoy).
+- **Inicial** = el Final real del día anterior (PT con Ventas); si hoy hay un ajuste capturado en PT con Ventas, manda
+  ese (es el conteo real de arranque de hoy). **Confirmado por el tío el 2026-11-26** ("Así como dices").
 - **Recargas: solo cuando el vendedor acepta** (renglón aceptado de una carga `aceptada`). La pendiente **ya no resta**
   (cambia R1). El "a quién" ya no lleva Estado.
 - **Sin botón "Ajustar inventario"**: el ajuste se hace sobre el inventario real (PT con Ventas). El aviso "Sin inventario
