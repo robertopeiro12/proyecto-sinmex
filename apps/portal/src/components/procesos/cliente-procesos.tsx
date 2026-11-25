@@ -36,7 +36,8 @@ function Promociones({ promociones }: { promociones: string[] }) {
 
 /**
  * Los datos del cliente elegido en UNA línea de texto gris (boceto 2): [Prospecto ·] Contado /
- * Crédito N días · Debe $X en N notas (solo si debe) · Última compra mar 24 nov · N promociones.
+ * Crédito N días · Debe $X en N notas (solo si debe) · A favor $X (solo si tiene) · Última compra
+ * mar 24 nov · N promociones.
  * Lo que no hay (sin deuda, sin compras, sin promociones) no se menciona.
  */
 export function LineaCliente({ resumen }: { resumen: ResumenCliente }) {
@@ -51,6 +52,7 @@ export function LineaCliente({ resumen }: { resumen: ResumenCliente }) {
       </>,
     );
   }
+  if (resumen.saldoFavorCentavos > 0) partes.push(`A favor ${formatearPesos(resumen.saldoFavorCentavos)}`);
   if (resumen.ultimaCompra) partes.push(`Última compra ${formatearDiaCorto(resumen.ultimaCompra)}`);
   if (resumen.promociones.length > 0) partes.push(<Promociones promociones={resumen.promociones} />);
   return (
@@ -72,19 +74,26 @@ export function LineaCliente({ resumen }: { resumen: ResumenCliente }) {
 export function ClienteProcesos({
   clientes,
   cliente,
+  version = 0,
   onElegir,
   onQuitar,
 }: {
   clientes: ClienteResumen[];
   cliente: ClienteResumen | null;
+  /** Al subir, los datos se vuelven a pedir (una venta o un cobro cambian la deuda). */
+  version?: number;
   onElegir: (c: ClienteResumen) => void;
   onQuitar: () => void;
 }) {
   const [resumen, setResumen] = useState<ResumenCliente | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Otro cliente limpia la línea; otra `version` del mismo la deja hasta que llegue la nueva.
   useEffect(() => {
     setResumen(null);
+  }, [cliente]);
+
+  useEffect(() => {
     setError(null);
     if (!cliente) return;
     let vigente = true;
@@ -95,7 +104,7 @@ export function ClienteProcesos({
     return () => {
       vigente = false;
     };
-  }, [cliente]);
+  }, [cliente, version]);
 
   return (
     <div className="flex flex-col gap-2">

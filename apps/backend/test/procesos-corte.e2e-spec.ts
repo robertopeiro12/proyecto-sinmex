@@ -461,6 +461,10 @@ describe('Procesos en el corte, precarga y resumen (e2e)', () => {
       .deleteFrom('cobranza_abono')
       .where('venta_nota_id', 'in', notas)
       .execute();
+    await db
+      .deleteFrom('saldo_favor_movimiento')
+      .where('cliente_id', 'in', clienteIds)
+      .execute();
     await borrarCobrosDe(db, clienteIds);
     await db
       .deleteFrom('venta_nota')
@@ -960,6 +964,24 @@ describe('Procesos en el corte, precarga y resumen (e2e)', () => {
         seRepite: true,
       });
 
+      // Saldo a favor (Procesos PR B): la suma de los movimientos vivos.
+      await db
+        .insertInto('saldo_favor_movimiento')
+        .values({
+          cliente_id: cliente,
+          vendedor_id: null,
+          monto: '15.00',
+          origen: 'excedente_cobro',
+          fecha_operacion: restarDias(hoy, 4),
+          cobro_id: await sembrarCobro(db, {
+            clienteId: cliente,
+            vendedorId: null,
+            monto: '15.00',
+            fecha: restarDias(hoy, 4),
+          }),
+        })
+        .execute();
+
       // Cualquiera de los cinco permisos basta.
       const res = await resumen(cookieKConsumo, cliente).expect(200);
       expect(res.body as ResumenCliente).toEqual({
@@ -971,6 +993,7 @@ describe('Procesos en el corte, precarga y resumen (e2e)', () => {
         deudaCentavos: 13000,
         notasConSaldo: 2,
         ultimaCompra: restarDias(hoy, 2),
+        saldoFavorCentavos: 1500,
         promociones: [
           `Por cada 10 ${PRODUCTO} 1 L, 1 ${PRODUCTO} 1 L gratis`,
           `Al comprar 20 piezas de lo que sea, 2 ${PRODUCTO} 500 ml gratis (una vez)`,
@@ -988,20 +1011,22 @@ describe('Procesos en el corte, precarga y resumen (e2e)', () => {
         deudaCentavos: 0,
         notasConSaldo: 0,
         ultimaCompra: null,
+        saldoFavorCentavos: 0,
       });
       expect((res.body as ResumenCliente).promociones).toContain(
         `Bienvenida al prospecto: 1 ${PRODUCTO} 500 ml gratis en su primera venta`,
       );
     });
 
-    it('otra sucursal, dado de baja o inexistente = 404; sin permisos de procesos = 403', async () => {
+    it('otra sucursal, dado de baja o inexistente = 404; basta la sesion (Procesos PR B: Notas no pide permiso)', async () => {
       await resumen(cookieK, clienteOtra).expect(404);
       await resumen(cookieK, clienteBaja).expect(404);
       await resumen(cookieK, '00000000-0000-4000-8000-000000000000').expect(
         404,
       );
       await resumen(cookieGeneral, clienteOtra).expect(200);
-      await resumen(cookieKSin, cliente).expect(403);
+      await resumen(cookieKSin, cliente).expect(200);
+      await resumen(cookieKSin, clienteOtra).expect(404);
       await resumen(cookieK, 'no-es-uuid').expect(400);
     });
   });

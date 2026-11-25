@@ -15,19 +15,24 @@ import {
   type PlanDeCobro,
 } from "@/lib/cobranzas";
 import { formatearPesos } from "@/lib/ventas";
+import { ErrorApi } from "@/lib/api";
 import { esNotaSinSaldo } from "./registrar-pago";
 import { VistaPreviaCobro } from "./vista-previa-cobro";
 
+const FALLO_SALDO = "No se pudo aplicar el saldo a favor.";
+
 /**
- * §3.4: aplicar el saldo a favor del cliente a las notas marcadas. No entra
- * dinero: sin método ni cobrador. Por default, el menor entre el saldo a favor
- * y lo que deben las marcadas; nunca más que el saldo a favor. Lo que exceda lo
- * que deben lo rechaza el servidor (no se mueve saldo a favor a saldo a favor).
+ * §3.4, la lógica sin la pantalla: aplicar el saldo a favor del cliente a las
+ * notas marcadas. No entra dinero: sin método ni cobrador. Por default, el menor
+ * entre el saldo a favor y lo que deben las marcadas; nunca más que el saldo a
+ * favor. Lo que exceda lo que deben lo rechaza el servidor (no se mueve saldo a
+ * favor a saldo a favor). La comparten *Cobranza* (`AplicarSaldoFavor`) y
+ * *Procesos → Notas* (`RecuadroCobro`, "Usar saldo a favor").
  *
- * El padre lo monta con `key` de la selección y el saldo, para que el monto
- * propuesto se recalcule al cambiar cualquiera de los dos.
+ * Quien la usa monta su componente con `key` de la selección y el saldo, para
+ * que el monto propuesto se recalcule al cambiar cualquiera de los dos.
  */
-export function AplicarSaldoFavor({
+export function useSaldoFavor({
   cliente,
   palomeadas,
   onAplicado,
@@ -43,34 +48,43 @@ export function AplicarSaldoFavor({
   const [montoTexto, setMontoTexto] = useState(() => textoMonto(Math.min(cliente.saldoFavorCentavos, deben)));
   const [vista, setVista] = useState<{ clave: string; plan: PlanDeCobro } | null>(null);
   const [avisoLocal, setAvisoLocal] = useState<string | null>(null);
-  const { enviando, error, enviar } = useEnvioFormulario("No se pudo aplicar el saldo a favor.");
+  const [previsualizando, setPrevisualizando] = useState(false);
+  const [errorVista, setErrorVista] = useState<string | null>(null);
+  const { enviando, error, enviar } = useEnvioFormulario(FALLO_SALDO);
 
   const notaIds = palomeadas.map((n) => n.id);
   const monto = leerMontoCentavos(montoTexto);
   const clave = [palomeadas.map((n) => `${n.id}:${n.saldoCentavos}`).join(","), cliente.saldoFavorCentavos, monto].join("|");
   const plan = vista?.clave === clave ? vista.plan : null;
 
+  function problema(): string | null {
+    if (monto === null) return MENSAJE_MONTO;
+    if (monto > cliente.saldoFavorCentavos)
+      return `No puede ser mayor al saldo a favor (${formatearPesos(cliente.saldoFavorCentavos)}).`;
+    return null;
+  }
+
   async function revisar() {
-    const motivo =
-      monto === null
-        ? MENSAJE_MONTO
-        : monto > cliente.saldoFavorCentavos
-          ? `No puede ser mayor al saldo a favor (${formatearPesos(cliente.saldoFavorCentavos)}).`
-          : null;
+    const motivo = problema();
     setAvisoLocal(motivo);
     if (motivo !== null || monto === null) return;
-    await enviar(
-      async () => {
-        const nuevo = await vistaPreviaCobro({
-          clienteId: cliente.id,
-          notaIds,
-          montoCentavos: monto,
-          modo: "saldo_favor",
-        });
-        setVista({ clave, plan: nuevo });
-      },
-      () => {},
-    );
+    setErrorVista(null);
+    setPrevisualizando(true);
+    try {
+      const nuevo = await vistaPreviaCobro({
+        clienteId: cliente.id,
+        notaIds,
+        montoCentavos: monto,
+        modo: "saldo_favor",
+      });
+      setVista({ clave, plan: nuevo });
+    } catch (err) {
+      setErrorVista(
+        err instanceof ErrorApi ? (err.mensajeApi ?? FALLO_SALDO) : "No se pudo conectar con el servidor. Intenta de nuevo.",
+      );
+    } finally {
+      setPrevisualizando(false);
+    }
   }
 
   async function aplicar() {
@@ -93,6 +107,39 @@ export function AplicarSaldoFavor({
       () => {},
     );
   }
+
+  return {
+    deben,
+    montoTexto,
+    setMontoTexto,
+    clave,
+    plan,
+    problema,
+    avisoLocal,
+    revisar,
+    previsualizando,
+    aplicar,
+    enviando,
+    error: error ?? errorVista,
+  };
+}
+
+/** §3.4 en *Cobranza*: con su botón Vista previa. La lógica vive en `useSaldoFavor`. */
+export function AplicarSaldoFavor({
+  cliente,
+  palomeadas,
+  onAplicado,
+  onDesactualizado,
+}: {
+  cliente: ClientePorCobrar;
+  palomeadas: NotaPorCobrar[];
+  onAplicado: (mensaje: string) => void;
+  /** Recarga el cliente conservando este mensaje (el 409 "ya no tiene saldo"). */
+  onDesactualizado: (mensaje: string) => void;
+}) {
+  const s = useSaldoFavor({ cliente, palomeadas, onAplicado, onDesactualizado });
+  const { deben, montoTexto, setMontoTexto, plan, avisoLocal, revisar, aplicar, error } = s;
+  const enviando = s.enviando || s.previsualizando;
 
   return (
     <section aria-label="Aplicar saldo a favor" className="flex flex-col gap-3 rounded-md border p-4">

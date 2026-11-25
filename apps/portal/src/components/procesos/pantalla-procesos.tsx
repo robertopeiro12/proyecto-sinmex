@@ -17,19 +17,40 @@ import type { OpcionPresentacion } from "./caja-productos";
 import { CapturaProceso, QUIEN_OFICINA } from "./captura-proceso";
 import { ListaProcesos } from "./lista-procesos";
 import { ClienteProcesos } from "./cliente-procesos";
+import { PestanaNotas } from "./pestana-notas";
+import { PestanaVentas } from "./pestana-ventas";
 
 const TITULO = "Procesos";
 const DESCRIPCION = "Lo que la oficina captura de cada cliente: ventas, notas, merma, cambios, consumos y promoción.";
 
+/** Las pestañas de Procesos PR B, antes de los tipos de PR A. `null` = basta la sesión (D5). */
+const PESTANAS_VENTAS: { valor: string; etiqueta: string; permiso: string | null }[] = [
+  { valor: "ventas", etiqueta: "Ventas", permiso: "venta.registrar" },
+  { valor: "notas", etiqueta: "Notas", permiso: null },
+];
+
 /**
- * Operación › Procesos (PR A, D0/D1): el cliente arriba y una pestaña por tipo (solo las
- * que el usuario puede usar); cada pestaña es la captura arriba y la lista del día abajo.
- * Cambiar de cliente o de pestaña limpia la captura: si hay algo escrito, pregunta antes.
- * La página la monta con `key={sucursal}`.
+ * Operación › Procesos (PR A, D0/D1; PR B): el cliente arriba y una pestaña por proceso
+ * (solo las que el usuario puede usar): Ventas y Notas (PR B), luego Merma, Cambios,
+ * Consumos, Promoción y Descuentos, cada una con su captura arriba y la lista del día abajo.
+ * Cambiar de cliente o de pestaña limpia la captura: si hay algo escrito (o un cobro a
+ * medio capturar), pregunta antes. La página la monta con `key={sucursal}`.
  */
-export function PantallaProcesos({ sucursal }: { sucursal: string | null }) {
+export function PantallaProcesos({
+  sucursal,
+  pestanaInicial = null,
+}: {
+  sucursal: string | null;
+  /** La pestaña con que abre (`ventas`, `notas`, `merma`, …); sin ella, la primera. */
+  pestanaInicial?: string | null;
+}) {
   const { usuario, puede, cargando } = useAuth();
-  const [actual, setActual] = useState<string | null>(null);
+  const [actual, setActual] = useState<string | null>(pestanaInicial);
+  // "Ver en Notas" de Ventas: Notas abre buscando ese folio.
+  const [busquedaNotas, setBusquedaNotas] = useState<string | null>(null);
+  // Sube cuando algo cambia la deuda del cliente (venta, cobro, factura): su línea se vuelve a pedir.
+  const [versionCliente, setVersionCliente] = useState(0);
+  const recargarCliente = useCallback(() => setVersionCliente((v) => v + 1), []);
   const [cliente, setCliente] = useState<ClienteResumen | null>(null);
   const [clientes, setClientes] = useState<ClienteResumen[]>([]);
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
@@ -44,12 +65,21 @@ export function PantallaProcesos({ sucursal }: { sucursal: string | null }) {
   const codigo = usuario?.sucursal?.codigo ?? (sucursal && sucursal.toLowerCase() !== "todas" ? sucursal.toUpperCase() : null);
   const tipos = TIPOS_PROCESO.filter((t) => puede(t.permiso));
   const hayTipos = tipos.length > 0;
+  const pestanas = [
+    ...PESTANAS_VENTAS.filter((p) => p.permiso === null || puede(p.permiso)),
+    ...tipos.map((t) => ({ valor: t.tipo as string, etiqueta: t.etiqueta })),
+  ];
 
   useEffect(() => {
-    if (!codigo || !hayTipos) return;
+    if (!codigo) return;
     let vigente = true;
     const fallo = (texto: string) => () => vigente && setErrorCarga(texto);
     listarClientes(codigo, "todos").then((c) => vigente && setClientes(c), fallo("No se pudieron cargar los clientes."));
+    // Vendedores y productos solo los usan las capturas de PR A.
+    if (!hayTipos)
+      return () => {
+        vigente = false;
+      };
     listarVendedores(codigo).then(
       (v) => vigente && setVendedores(v.filter((x) => x.sucursalCodigo === codigo)),
       fallo("No se pudieron cargar los vendedores."),
@@ -82,14 +112,58 @@ export function PantallaProcesos({ sucursal }: { sucursal: string | null }) {
 
   async function cambiarPestana(valor: string) {
     if (!(await soltarCaptura())) return;
+    setBusquedaNotas(null);
     setActual(valor);
   }
 
+  /** Ventas → "Ver en Notas": lo grabado ya no está sucio. */
+  function verEnNotas(folio: string) {
+    sucio.current = false;
+    setBusquedaNotas(folio);
+    setActual("notas");
+  }
+
   if (cargando) return <EstadoPantalla titulo={TITULO} tipo="cargando" />;
-  if (!hayTipos) return <EstadoPantalla titulo={TITULO} tipo="sin-permiso" />;
   if (!codigo) return <EstadoPantalla titulo={TITULO} tipo="elige-sucursal" />;
 
-  const visible = tipos.some((t) => t.tipo === actual) ? (actual as TipoProceso) : tipos[0].tipo;
+  const visible = pestanas.some((p) => p.valor === actual) ? (actual as string) : pestanas[0].valor;
+
+  function contenido(valor: string) {
+    if (visible !== valor || !codigo) return null;
+    if (valor === "ventas")
+      return (
+        <PestanaVentas
+          sucursal={codigo}
+          cliente={cliente}
+          onVerEnNotas={verEnNotas}
+          onSucio={avisarSucio}
+          onRegistrada={recargarCliente}
+        />
+      );
+    if (valor === "notas")
+      return (
+        <PestanaNotas
+          key={`notas|${cliente?.id ?? ""}`}
+          sucursal={codigo}
+          cliente={cliente}
+          busquedaInicial={busquedaNotas}
+          onSucio={avisarSucio}
+          onCambio={recargarCliente}
+        />
+      );
+    return (
+      <PestanaProceso
+        key={`${valor}|${cliente?.id ?? ""}`}
+        tipo={valor as TipoProceso}
+        sucursal={codigo}
+        cliente={cliente}
+        vendedores={vendedores}
+        opciones={opciones}
+        onSucio={avisarSucio}
+        soltarCaptura={soltarCaptura}
+      />
+    );
+  }
 
   return (
     <Pantalla>
@@ -97,6 +171,7 @@ export function PantallaProcesos({ sucursal }: { sucursal: string | null }) {
       <ClienteProcesos
         clientes={clientes}
         cliente={cliente}
+        version={versionCliente}
         onElegir={(c) => void cambiarCliente(c)}
         onQuitar={() => void cambiarCliente(null)}
       />
@@ -105,23 +180,7 @@ export function PantallaProcesos({ sucursal }: { sucursal: string | null }) {
         etiqueta="Tipo de proceso"
         valor={visible}
         onCambio={(v) => void cambiarPestana(v)}
-        pestanas={tipos.map((t) => ({
-          valor: t.tipo,
-          etiqueta: t.etiqueta,
-          contenido:
-            visible !== t.tipo ? null : (
-              <PestanaProceso
-                key={`${t.tipo}|${cliente?.id ?? ""}`}
-                tipo={t.tipo}
-                sucursal={codigo}
-                cliente={cliente}
-                vendedores={vendedores}
-                opciones={opciones}
-                onSucio={avisarSucio}
-                soltarCaptura={soltarCaptura}
-              />
-            ),
-        }))}
+        pestanas={pestanas.map((p) => ({ valor: p.valor, etiqueta: p.etiqueta, contenido: contenido(p.valor) }))}
       />
       {ventana}
     </Pantalla>

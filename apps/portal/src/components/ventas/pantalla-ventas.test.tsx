@@ -53,6 +53,8 @@ const RESULTADO: ResultadoBusquedaVentas = {
       clienteId: "c1",
       cliente: "Abarrotes Lupita",
       repartidor: null,
+      vendedorId: null,
+      factura: { estado: "N/A", numero: null },
       numNota: "1234",
       montoCentavos: 27000,
       status: "pendiente",

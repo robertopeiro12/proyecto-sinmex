@@ -69,6 +69,8 @@ const YA_REGISTRADA: VentaEncontrada = {
   clienteId: "c1",
   cliente: "Abarrotes Lupita",
   repartidor: "Ana Pérez",
+  vendedorId: "v-ana",
+  factura: { estado: "N/A", numero: null },
   numNota: null,
   montoCentavos: 27000,
   status: "pendiente",

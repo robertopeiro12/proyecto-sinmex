@@ -25,16 +25,30 @@ export function esNotaSinSaldo(err: unknown): err is ErrorApi {
   return err instanceof ErrorApi && err.status === 409 && (err.mensajeApi ?? "").includes("ya no tiene saldo");
 }
 
+/** El mensaje de un fallo, igual que `useEnvioFormulario`. */
+function mensajeDeFallo(err: unknown, porDefecto: string): string {
+  return err instanceof ErrorApi
+    ? (err.mensajeApi ?? porDefecto)
+    : "No se pudo conectar con el servidor. Intenta de nuevo.";
+}
+
+const FALLO_COBRO = "No se pudo registrar el cobro.";
+
 /**
- * §3.3: monto, fecha, método y cobrador → vista previa calculada en el servidor
- * → grabar. Cualquier cambio deja vieja la vista previa (y desaparece "Grabar
- * cobro"), y toda recarga del cliente la invalida. Al grabar, el servidor vuelve
- * a repartir con los saldos del momento y las notas bloqueadas: si un cobro de
- * la tablet entró entre la vista previa y el grabado, el excedente puede ir a
- * otro lado que el que se vio. Si una nota ya no tiene saldo (409), se recarga
- * el cliente y el mensaje del servidor queda visible.
+ * §3.3, la lógica del pago sin la pantalla: monto, fecha, método y cobrador →
+ * vista previa calculada en el servidor → grabar. La comparten *Cobranza*
+ * (`RegistrarPago`, con su botón Vista previa) y *Procesos → Notas*
+ * (`RecuadroCobro`, que pide la vista previa sola). Cualquier cambio deja vieja
+ * la vista previa (`plan` vuelve a `null`), y toda recarga del cliente la
+ * invalida. Al grabar, el servidor vuelve a repartir con los saldos del momento y
+ * las notas bloqueadas: si un cobro de la tablet entró entre la vista previa y
+ * el grabado, el excedente puede ir a otro lado que el que se vio. Si una nota ya
+ * no tiene saldo (409), se avisa con `onDesactualizado` para recargar.
+ *
+ * La vista previa no usa `enviando`: pedirla mientras se escribe no debe
+ * deshabilitar (y desenfocar) los campos.
  */
-export function RegistrarPago({
+export function usePago({
   cliente,
   palomeadas,
   onRegistrado,
@@ -57,7 +71,9 @@ export function RegistrarPago({
   const [repartidores, setRepartidores] = useState<Repartidor[]>([]);
   const [vista, setVista] = useState<{ clave: string; plan: PlanDeCobro } | null>(null);
   const [avisoLocal, setAvisoLocal] = useState<string | null>(null);
-  const { enviando, error, enviar } = useEnvioFormulario("No se pudo registrar el cobro.");
+  const [previsualizando, setPrevisualizando] = useState(false);
+  const [errorVista, setErrorVista] = useState<string | null>(null);
+  const { enviando, error, enviar } = useEnvioFormulario(FALLO_COBRO);
 
   useEffect(() => {
     let vigente = true;
@@ -90,13 +106,17 @@ export function RegistrarPago({
     const motivo = problema();
     setAvisoLocal(motivo);
     if (motivo !== null || monto === null) return;
-    await enviar(
-      async () => {
-        const nuevo = await vistaPreviaCobro({ clienteId: cliente.id, notaIds, montoCentavos: monto, modo: "pago" });
-        setVista({ clave, plan: nuevo });
-      },
-      () => {},
-    );
+    setErrorVista(null);
+    setPrevisualizando(true);
+    try {
+      const nuevo = await vistaPreviaCobro({ clienteId: cliente.id, notaIds, montoCentavos: monto, modo: "pago" });
+      // Con la clave de cuando se pidió: una respuesta que llega tarde no vale para lo que hay ahora.
+      setVista({ clave, plan: nuevo });
+    } catch (err) {
+      setErrorVista(mensajeDeFallo(err, FALLO_COBRO));
+    } finally {
+      setPrevisualizando(false);
+    }
   }
 
   async function grabar() {
@@ -127,6 +147,70 @@ export function RegistrarPago({
       () => {},
     );
   }
+
+  return {
+    hoy,
+    masVieja,
+    deben,
+    montoTexto,
+    setMontoTexto,
+    fechaPago,
+    setFechaPago,
+    metodo,
+    setMetodo,
+    cobrador,
+    setCobrador,
+    repartidores,
+    clave,
+    plan,
+    problema,
+    avisoLocal,
+    revisar,
+    previsualizando,
+    grabar,
+    enviando,
+    error: error ?? errorVista,
+  };
+}
+
+/**
+ * §3.3 en *Cobranza*: el formulario del pago con su botón Vista previa y, ya con
+ * la vista previa, "Grabar cobro". La lógica vive en `usePago`.
+ */
+export function RegistrarPago({
+  cliente,
+  palomeadas,
+  onRegistrado,
+  onDesactualizado,
+}: {
+  cliente: ClientePorCobrar;
+  palomeadas: NotaPorCobrar[];
+  onRegistrado: (mensaje: string) => void;
+  /** Recarga el cliente conservando este mensaje (el 409 "ya no tiene saldo"). */
+  onDesactualizado: (mensaje: string) => void;
+}) {
+  const {
+    hoy,
+    masVieja,
+    deben,
+    montoTexto,
+    setMontoTexto,
+    fechaPago,
+    setFechaPago,
+    metodo,
+    setMetodo,
+    cobrador,
+    setCobrador,
+    repartidores,
+    plan,
+    avisoLocal,
+    revisar,
+    previsualizando,
+    grabar,
+    enviando: grabando,
+    error,
+  } = usePago({ cliente, palomeadas, onRegistrado, onDesactualizado });
+  const enviando = grabando || previsualizando;
 
   return (
     <section aria-label="Registrar pago" className="flex flex-col gap-3 rounded-md border p-4">

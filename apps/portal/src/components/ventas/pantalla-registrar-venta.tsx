@@ -48,14 +48,34 @@ const DESCRIPCION = "Captura una venta de la oficina: cliente, productos, condic
  * total de aquí es solo una vista previa. La tabla, las condiciones y las
  * reglas del payload son las mismas que usa "Editar venta" (parte 2).
  */
-export function PantallaRegistrarVenta({ sucursal }: { sucursal: string | null }) {
+export function PantallaRegistrarVenta({
+  sucursal,
+  clienteFijo,
+  onVerEnNotas,
+  onSucio,
+  onRegistrada,
+}: {
+  sucursal: string | null;
+  /**
+   * Procesos → Ventas (spec D1): el cliente es el de arriba, sin buscador ni encabezado
+   * propio. Quien lo usa lo monta con `key` del cliente: cambiar de cliente empieza limpio.
+   */
+  clienteFijo?: ClienteResumen;
+  /** Procesos: el botón "Ver en Notas" del aviso de la venta grabada. */
+  onVerEnNotas?: (folio: string) => void;
+  /** Procesos: hay algo capturado (pregunta antes de perderlo). */
+  onSucio?: (sucio: boolean) => void;
+  /** Procesos: se grabó una venta (la línea del cliente cambia). */
+  onRegistrada?: () => void;
+}) {
+  const incrustada = clienteFijo !== undefined;
   const { puede, cargando: cargandoSesion } = useAuth();
   const puedeRegistrar = puede("venta.registrar");
 
   const [fecha, setFecha] = useState(() => hoyEnTijuana());
   const [clientes, setClientes] = useState<ClienteResumen[]>([]);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
-  const [cliente, setCliente] = useState<ClienteResumen | null>(null);
+  const [cliente, setCliente] = useState<ClienteResumen | null>(clienteFijo ?? null);
   const [repartidores, setRepartidores] = useState<Repartidor[]>([]);
   const [repartidor, setRepartidor] = useState("");
   const [catalogo, setCatalogo] = useState<PresentacionDeCatalogo[]>([]);
@@ -66,8 +86,10 @@ export function PantallaRegistrarVenta({ sucursal }: { sucursal: string | null }
   const [resultado, setResultado] = useState<VentaRegistrada | null>(null);
   const { enviando, error, enviar } = useEnvioFormulario("No se pudo registrar la venta.");
 
-  // Clientes y prospectos del alcance (el backend acota por sucursal).
+  // Clientes y prospectos del alcance (el backend acota por sucursal). En Procesos el
+  // cliente viene de arriba: no hace falta la lista.
   useEffect(() => {
+    if (incrustada) return;
     let vigente = true;
     listarClientes(sucursal, "todos")
       .then((lista) => {
@@ -79,7 +101,7 @@ export function PantallaRegistrarVenta({ sucursal }: { sucursal: string | null }
     return () => {
       vigente = false;
     };
-  }, [sucursal]);
+  }, [sucursal, incrustada]);
 
   // Repartidores: la sucursal sale del DETALLE (la fila de la lista solo trae el código).
   useEffect(() => {
@@ -150,6 +172,14 @@ export function PantallaRegistrarVenta({ sucursal }: { sucursal: string | null }
   const filas = useMemo(() => filasDeCatalogo(catalogo), [catalogo]);
   const totalCentavos = totalDeCaptura(filas, captura);
 
+  const sucio =
+    Object.values(captura).some((c) => c.cantidad.trim() !== "" || c.promocion.trim() !== "") ||
+    condiciones.numNota.trim() !== "" ||
+    condiciones.comentarios.trim() !== "";
+  useEffect(() => {
+    onSucio?.(sucio);
+  }, [sucio, onSucio]);
+
   function elegirCliente(elegido: ClienteResumen) {
     setCliente(elegido);
     setRepartidor("");
@@ -205,13 +235,21 @@ export function PantallaRegistrarVenta({ sucursal }: { sucursal: string | null }
     };
     await enviar(
       async () => {
-        setResultado(await registrarVenta(venta));
+        const registrada = await registrarVenta(venta);
+        setResultado(registrada);
+        if (incrustada) {
+          // Procesos: el aviso queda arriba y el formulario, limpio para la siguiente.
+          setRepartidor("");
+          setCaptura({});
+          setCondiciones(CONDICIONES_INICIALES);
+          onRegistrada?.();
+        }
       },
       () => {},
     );
   }
 
-  if (resultado) {
+  if (resultado && !incrustada) {
     return (
       <Pantalla>
         <EncabezadoPantalla titulo="Registrar venta" descripcion={DESCRIPCION} />
@@ -232,24 +270,23 @@ export function PantallaRegistrarVenta({ sucursal }: { sucursal: string | null }
 
   const mensajeError = errorLocal ?? error;
 
-  return (
-    <Pantalla>
-      <EncabezadoPantalla titulo="Registrar venta" descripcion={DESCRIPCION} />
-      <form onSubmit={alEnviar} className="flex flex-col gap-5">
-        {errorCarga && <Aviso tono="error">{errorCarga}</Aviso>}
+  const formulario = (
+    <form onSubmit={alEnviar} className="flex flex-col gap-5">
+      {errorCarga && <Aviso tono="error">{errorCarga}</Aviso>}
 
-        <div className="flex flex-wrap gap-4">
-          <Campo id="fecha" etiqueta="Fecha">
-            <Entrada
-              type="date"
-              required
-              max={hoyEnTijuana()}
-              disabled={enviando}
-              value={fecha}
-              onChange={(e) => setFecha(e.target.value)}
-            />
-          </Campo>
+      <div className="flex flex-wrap gap-4">
+        <Campo id="fecha" etiqueta="Fecha">
+          <Entrada
+            type="date"
+            required
+            max={hoyEnTijuana()}
+            disabled={enviando}
+            value={fecha}
+            onChange={(e) => setFecha(e.target.value)}
+          />
+        </Campo>
 
+        {!incrustada && (
           <BuscadorCliente
             clientes={clientes}
             cliente={cliente}
@@ -257,64 +294,98 @@ export function PantallaRegistrarVenta({ sucursal }: { sucursal: string | null }
             onQuitar={quitarCliente}
             disabled={enviando}
           />
-
-          <SelectorRepartidor
-            repartidores={repartidores}
-            valor={repartidor}
-            onCambio={setRepartidor}
-            disabled={enviando || !cliente}
-            conOficina
-          />
-        </div>
-
-        {cliente && ventasDelDia.length > 0 && (
-          <Aviso tono="advertencia">
-            <p className="font-semibold">
-              Este cliente ya tiene {ventasDelDia.length}{" "}
-              {ventasDelDia.length === 1 ? "venta" : "ventas"} el {fecha}. Revisa que no sea la misma.
-            </p>
-            <ul className="mt-1 list-disc pl-5">
-              {ventasDelDia.map((v) => (
-                <li key={v.id}>
-                  <span className="font-mono">{v.folio}</span> · {v.repartidor ?? "Oficina"} ·{" "}
-                  {formatearPesos(v.montoCentavos)} · {ETIQUETA_ORIGEN[v.origen]}
-                </li>
-              ))}
-            </ul>
-          </Aviso>
         )}
 
-        {cliente && (
-          <TablaProductosVenta
-            filas={filas}
-            captura={captura}
-            onCambio={(id, campo, valor) => setCaptura((actual) => conCaptura(actual, id, campo, valor))}
-            disabled={enviando}
-          />
-        )}
+        <SelectorRepartidor
+          repartidores={repartidores}
+          valor={repartidor}
+          onCambio={setRepartidor}
+          disabled={enviando || !cliente}
+          conOficina
+        />
+      </div>
 
-        <p className="text-right text-base font-semibold">Total: {formatearPesos(totalCentavos)}</p>
+      {cliente && ventasDelDia.length > 0 && (
+        <Aviso tono="advertencia">
+          <p className="font-semibold">
+            Este cliente ya tiene {ventasDelDia.length}{" "}
+            {ventasDelDia.length === 1 ? "venta" : "ventas"} el {fecha}. Revisa que no sea la misma.
+          </p>
+          <ul className="mt-1 list-disc pl-5">
+            {ventasDelDia.map((v) => (
+              <li key={v.id}>
+                <span className="font-mono">{v.folio}</span> · {v.repartidor ?? "Oficina"} ·{" "}
+                {formatearPesos(v.montoCentavos)} · {ETIQUETA_ORIGEN[v.origen]}
+              </li>
+            ))}
+          </ul>
+        </Aviso>
+      )}
 
-        <CamposCondicionesVenta
-          valores={condiciones}
-          onCambio={(cambio) => setCondiciones((actual) => ({ ...actual, ...cambio }))}
+      {cliente && (
+        <TablaProductosVenta
+          filas={filas}
+          captura={captura}
+          onCambio={(id, campo, valor) => setCaptura((actual) => conCaptura(actual, id, campo, valor))}
           disabled={enviando}
         />
+      )}
 
-        {mensajeError && <Aviso tono="error">{mensajeError}</Aviso>}
+      <p className="text-right text-base font-semibold">Total: {formatearPesos(totalCentavos)}</p>
 
-        {cargandoSesion ? null : puedeRegistrar ? (
-          <div>
-            <Button type="submit" disabled={enviando}>
-              {enviando ? "Grabando…" : "Grabar"}
-            </Button>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            No tienes permiso para registrar ventas.
-          </p>
+      <CamposCondicionesVenta
+        valores={condiciones}
+        onCambio={(cambio) => setCondiciones((actual) => ({ ...actual, ...cambio }))}
+        disabled={enviando}
+      />
+
+      {mensajeError && <Aviso tono="error">{mensajeError}</Aviso>}
+
+      {cargandoSesion ? null : puedeRegistrar ? (
+        <div>
+          <Button type="submit" disabled={enviando}>
+            {enviando ? "Grabando…" : "Grabar"}
+          </Button>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No tienes permiso para registrar ventas.
+        </p>
+      )}
+    </form>
+  );
+
+  if (incrustada) {
+    return (
+      <div className="flex flex-col gap-5">
+        {resultado && (
+          <Aviso tono="exito">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="font-semibold">Venta registrada</p>
+                <p>
+                  Folio <span className="font-mono">{resultado.folio}</span> ·{" "}
+                  {formatearPesos(resultado.montoCentavos)} · {ETIQUETA_STATUS[resultado.status]}. Si hay nota de
+                  papel, anota el folio en ella.
+                </p>
+              </div>
+              {onVerEnNotas && (
+                <Button type="button" variant="outline" onClick={() => onVerEnNotas(resultado.folio)}>
+                  Ver en Notas
+                </Button>
+              )}
+            </div>
+          </Aviso>
         )}
-      </form>
+        {formulario}
+      </div>
+    );
+  }
+
+  return (
+    <Pantalla>
+      <EncabezadoPantalla titulo="Registrar venta" descripcion={DESCRIPCION} />
+      {formulario}
     </Pantalla>
   );
 }

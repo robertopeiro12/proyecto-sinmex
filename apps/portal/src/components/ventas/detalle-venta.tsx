@@ -45,9 +45,12 @@ export function DetalleVenta({
   onEditar,
   onCambiada,
   onEliminada,
+  textoVolver = "Volver",
 }: {
   venta: VentaDetalle;
   onVolver: () => void;
+  /** Procesos → Notas: "← Volver a Notas". */
+  textoVolver?: string;
   onEditar: () => void;
   onCambiada: (actualizada: VentaDetalle) => void;
   onEliminada: () => void;
@@ -111,7 +114,7 @@ export function DetalleVenta({
         descripcion="Lo que se vendió y lo que se ha cobrado. Desde aquí se edita, se elimina o se marca como cuenta perdida."
         acciones={
           <Button variant="outline" onClick={onVolver} disabled={enviando}>
-            Volver
+            {textoVolver}
           </Button>
         }
       />

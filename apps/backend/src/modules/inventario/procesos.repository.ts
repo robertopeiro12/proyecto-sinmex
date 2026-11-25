@@ -21,6 +21,8 @@ export interface ClienteResumen {
   sucursalCodigo: string;
   /** `AAAA-MM-DD` de su venta viva mas reciente; `null` si nunca ha comprado. */
   ultimaCompra: string | null;
+  /** Suma de sus `saldo_favor_movimiento` vivos, como texto `numeric`. */
+  saldoFavor: string;
 }
 
 /** Un proceso tal como sale de la base, sin lineas. */
@@ -258,6 +260,13 @@ export class ProcesosRepository {
            where vn.cliente_id = c.id
              and vn.deleted_at is null
         )`.as('ultimaCompra'),
+        // La misma suma que `CobranzasPortalRepository.saldoFavorCentavos`.
+        sql<string>`(
+          select coalesce(sum(sfm.monto), 0)::text
+            from saldo_favor_movimiento sfm
+           where sfm.cliente_id = c.id
+             and sfm.deleted_at is null
+        )`.as('saldoFavor'),
       ])
       .where('c.id', '=', id)
       .where('c.deleted_at', 'is', null)
