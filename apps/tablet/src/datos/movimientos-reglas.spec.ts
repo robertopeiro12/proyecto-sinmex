@@ -164,8 +164,10 @@ describe('consumo propio (D4)', () => {
 
   it('si no alcanza, dice cuánto queda', () => {
     expect(motivoDeConsumo({ limite: 3, consumoDeHoy: 2, piezas: 2 })).toBe(
-      'Te quedan 1 de consumo hoy; no puedes registrar 2',
+      'Te queda 1 de consumo hoy; no puedes registrar 2',
     );
     expect(textoConsumoRestante(2)).toBe('Te quedan 2 de consumo hoy');
+    expect(textoConsumoRestante(1)).toBe('Te queda 1 de consumo hoy');
+    expect(textoConsumoRestante(0)).toBe('Te quedan 0 de consumo hoy');
   });
 });

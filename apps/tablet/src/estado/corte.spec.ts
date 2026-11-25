@@ -16,6 +16,7 @@ import {
   resumenDelDia,
   textoApartadoCambio,
   textoFaltanPorVisitar,
+  textoMenosGastos,
   textoMontoCaptura,
   textoNotasQueTraes,
   textoResumenVisitados,
@@ -376,6 +377,11 @@ describe('textos y lectura de campos', () => {
     expect(leerPiezas('')).toBeNull();
     expect(leerPiezas('-2')).toBeNull();
     expect(leerPiezas('1,5')).toBeNull();
+  });
+
+  it('textoMenosGastos: con signo menos, salvo en cero (D8)', () => {
+    expect(textoMenosGastos(58500)).toBe('−$585.00');
+    expect(textoMenosGastos(0)).toBe('$0.00');
   });
 
   it('textoMontoCaptura', () => {

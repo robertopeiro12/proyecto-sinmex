@@ -20,6 +20,7 @@ import {
   resumenDelDia,
   textoApartadoCambio,
   textoFaltanPorVisitar,
+  textoMenosGastos,
   textoMontoCaptura,
   textoNotasQueTraes,
   textoResumenVisitados,
@@ -421,7 +422,7 @@ function CapturaDelCorte({
               <Tarjeta>
                 <Kv etiqueta="Ventas de contado" valor={pesos(sistema.efectivo.contadoCentavos)} />
                 <Kv etiqueta="Abonos y cobros" valor={pesos(sistema.efectivo.abonosYCobrosCentavos)} />
-                <Kv etiqueta="Menos gastos" valor={`−${pesos(sistema.efectivo.gastosCentavos)}`} />
+                <Kv etiqueta="Menos gastos" valor={textoMenosGastos(sistema.efectivo.gastosCentavos)} />
                 <Kv etiqueta="Debes traer" valor={pesos(sistema.efectivo.debeTraerCentavos)} grande />
                 {sistema.efectivo.otrosMetodosCentavos > 0 ? (
                   <Text style={estilos.textoSuave}>

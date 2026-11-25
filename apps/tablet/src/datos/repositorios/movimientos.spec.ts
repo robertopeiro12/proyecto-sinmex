@@ -175,7 +175,7 @@ describe('movimientos.registrar (T-27 pieza 2)', () => {
     limite(deps, 3);
     movimientos.registrar(sale('consumo', 2));
     expect(() => movimientos.registrar(sale('consumo', 2, 'pre-2'))).toThrow(
-      'Te quedan 1 de consumo hoy; no puedes registrar 2.',
+      'Te queda 1 de consumo hoy; no puedes registrar 2.',
     );
     expect(movimientos.registrar(sale('consumo', 1, 'pre-2')).tipo).toBe('consumo');
   });

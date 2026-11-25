@@ -9,6 +9,7 @@ import {
   cambiosNetos,
   salio,
   textoCambios,
+  piezasDeCarga,
   tituloAvisoCarga,
   totalPiezas,
 } from '@/estado/inventario';
@@ -151,7 +152,7 @@ export default function Inventario() {
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: espacio.sm }}>
                     <Pastilla texto={p.texto} estado={p.estado} />
                     <Text style={estilos.textoSuave}>
-                      <Cifra valor={totalPiezas(c.lineas)} tono="suave" /> piezas
+                      <Cifra valor={piezasDeCarga(c)} tono="suave" /> piezas
                     </Text>
                   </View>
                   {c.estado === 'rechazada' && c.motivo_rechazo ? (

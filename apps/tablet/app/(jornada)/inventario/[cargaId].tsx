@@ -9,12 +9,12 @@ import {
   cuerpoRespuesta,
   MENSAJE_CARGA_ELIMINADA,
   pastillaCarga,
+  piezasDeCarga,
   puedeResponder,
   renglonAceptado,
   seleccionarTodos,
   textoAceptar,
   todosSeleccionados,
-  totalPiezas,
   type AccionCarga,
   type RespondedorCarga,
 } from '@/estado/inventario';
@@ -36,6 +36,15 @@ import { colores, espacio } from '@/ui/tokens';
  * cambio, el servidor contesta 409 y aqui se ve la nueva (y la seleccion se
  * vacia para volver a revisarla). Ya respondida, se ve que renglones entraron.
  */
+/**
+ * Al Inventario, no "atras" (recorrido final, D5): desde el aviso de la Ruta,
+ * `back` caia en la Ruta. `dismissTo` cierra hasta el Inventario si esta abajo;
+ * si no, lo pone en lugar de esta pantalla.
+ */
+function volverAlInventario() {
+  router.dismissTo('/(jornada)/inventario');
+}
+
 export default function DetalleCarga() {
   const { cargaId } = useLocalSearchParams<{ cargaId: string }>();
   const { datos, versionCatalogos } = useJawa();
@@ -66,7 +75,7 @@ export default function DetalleCarga() {
   if (!carga) {
     return (
       <Pantalla titulo="Carga no encontrada" subtitulo="No está en esta tablet.">
-        <Boton etiqueta="Volver al inventario" icono="atras" tono="neutra" onPress={() => router.back()} />
+        <Boton etiqueta="Volver al inventario" icono="atras" tono="neutra" onPress={volverAlInventario} />
       </Pantalla>
     );
   }
@@ -211,7 +220,7 @@ export default function DetalleCarga() {
             );
           })}
           <Text style={[estilos.textoSuave, { marginTop: espacio.xs }]}>
-            Total <Cifra valor={totalPiezas(carga.lineas)} tono="suave" /> piezas
+            Total <Cifra valor={piezasDeCarga(carga)} tono="suave" /> piezas
           </Text>
         </Tarjeta>
       )}
@@ -253,7 +262,7 @@ export default function DetalleCarga() {
           etiqueta="Volver al inventario"
           tono="neutra"
           icono="atras"
-          onPress={() => router.back()}
+          onPress={volverAlInventario}
           estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
         />
       )}

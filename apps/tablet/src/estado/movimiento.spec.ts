@@ -93,7 +93,7 @@ describe('validarCapturaMovimiento', () => {
       );
     expect(consumo(0, '1').listo).toBe(true);
     expect(consumo(1, '1').faltantes).toEqual(['Ya registraste tu consumo de hoy.']);
-    expect(consumo(0, '2').faltantes).toEqual(['Te quedan 1 de consumo hoy; no puedes registrar 2.']);
+    expect(consumo(0, '2').faltantes).toEqual(['Te queda 1 de consumo hoy; no puedes registrar 2.']);
   });
 
   it('el trayecto sin piezas no queda listo', () => {

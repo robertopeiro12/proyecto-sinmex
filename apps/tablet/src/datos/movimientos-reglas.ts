@@ -107,9 +107,9 @@ export function consumoRestante({ limite, consumoDeHoy }: { limite: number; cons
   return Math.max(0, limite - consumoDeHoy);
 }
 
-/** "Te quedan N de consumo hoy" (spec). */
+/** "Te quedan N de consumo hoy" (spec); con 1, "Te queda 1" (recorrido final, D7). */
 export function textoConsumoRestante(restante: number): string {
-  return `Te quedan ${restante} de consumo hoy`;
+  return `Te ${restante === 1 ? 'queda' : 'quedan'} ${restante} de consumo hoy`;
 }
 
 /**

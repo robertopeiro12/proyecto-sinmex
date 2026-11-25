@@ -25,6 +25,7 @@ import {
   textoTeQuedan,
   tituloAvisoCarga,
   todosSeleccionados,
+  piezasDeCarga,
   totalPiezas,
   type PasosRespuestaCarga,
 } from './inventario';
@@ -101,6 +102,19 @@ describe('textos del inventario', () => {
     expect(totalPiezas([{ piezas: 24 }, { piezas: 12 }])).toBe(36);
   });
 
+  it('piezasDeCarga: aceptada cuenta solo lo que entro (D6); pendiente o rechazada, todo', () => {
+    const lineas = [
+      { piezas: 40, aceptada: 1 as const },
+      { piezas: 30, aceptada: 1 as const },
+      { piezas: 20, aceptada: 1 as const },
+      { piezas: 10, aceptada: 0 as const },
+    ];
+    expect(piezasDeCarga({ estado: 'aceptada', lineas })).toBe(90);
+    expect(piezasDeCarga({ estado: 'aceptada', lineas: [{ piezas: 5, aceptada: null }] })).toBe(5);
+    expect(piezasDeCarga({ estado: 'pendiente', lineas: [{ piezas: 40, aceptada: null }, { piezas: 10 }] })).toBe(50);
+    expect(piezasDeCarga({ estado: 'rechazada', lineas })).toBe(100);
+  });
+
   it('textoEstadoCarga: Aceptada, Aceptada 3 de 5, Rechazada, Por aceptar', () => {
     const l = (aceptada: 0 | 1 | null) => ({ aceptada });
     expect(textoEstadoCarga({ estado: 'aceptada', lineas: [l(1), l(1)] })).toBe('Aceptada');
@@ -114,6 +128,7 @@ describe('textos del inventario', () => {
   it('"Te quedan N" descuenta lo capturado en esta venta; si no alcanza, dice cuanto falta', () => {
     expect(textoTeQuedan(20, 0)).toEqual({ texto: 'Te quedan 20', falta: false });
     expect(textoTeQuedan(20, 20)).toEqual({ texto: 'Te quedan 0', falta: false });
+    expect(textoTeQuedan(20, 19)).toEqual({ texto: 'Te queda 1', falta: false });
     expect(textoTeQuedan(20, 21)).toEqual({ texto: 'Falta 1 pieza', falta: true });
     expect(textoTeQuedan(20, 26)).toEqual({ texto: 'Faltan 6 piezas', falta: true });
   });

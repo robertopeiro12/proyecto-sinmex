@@ -351,7 +351,7 @@ export default function PantallaVenta() {
   if (paso === 'grabada' && grabada) {
     const abono = grabada.abono_centavos;
     return (
-      <Pantalla subtitulo={`${nombreCliente} · escribe este folio en la nota física.`}>
+      <Pantalla subtitulo={nombreCliente}>
         {cabecera}
         <Tarjeta estado="listo" etiqueta="Folio">
           <Cifra valor={grabada.folio} tamano="grande" />

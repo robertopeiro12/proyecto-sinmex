@@ -274,6 +274,11 @@ export function leerPiezas(texto: string): number | null {
   return Number.isSafeInteger(n) ? n : null;
 }
 
+/** "Menos gastos": `−$585.00`; sin gastos, `$0.00` sin signo (recorrido final, D8). */
+export function textoMenosGastos(centavos: number): string {
+  return centavos === 0 ? pesos(0) : `−${pesos(centavos)}`;
+}
+
 /** Centavos guardados al texto del campo "¿Cuánto traes?" (432500 → "4325.00"); `null` → "". */
 export function textoMontoCaptura(centavos: number | null): string {
   if (centavos === null) return '';

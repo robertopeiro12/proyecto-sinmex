@@ -162,6 +162,19 @@ export function totalPiezas(lineas: readonly { piezas: number }[]): number {
 }
 
 /**
+ * Las piezas que se muestran de una carga (recorrido final, D6): ya aceptada,
+ * solo los renglones que entraron (`renglonAceptado`); pendiente o rechazada,
+ * todo lo que mando el almacen.
+ */
+export function piezasDeCarga(carga: {
+  estado: EstadoCarga;
+  lineas: readonly { piezas: number; aceptada?: 0 | 1 | null }[];
+}): number {
+  if (carga.estado !== 'aceptada') return totalPiezas(carga.lineas);
+  return totalPiezas(carga.lineas.filter((l) => renglonAceptado(carga.estado, l)));
+}
+
+/**
  * "Te quedan N" bajo cada presentacion de la venta: la existencia menos lo que
  * ya va en esta captura (vendido + regalado). Si no alcanza, dice cuanto falta.
  */
@@ -170,7 +183,7 @@ export function textoTeQuedan(
   enEstaVenta: number,
 ): { texto: string; falta: boolean } {
   const quedan = existencia - enEstaVenta;
-  if (quedan >= 0) return { texto: `Te quedan ${quedan}`, falta: false };
+  if (quedan >= 0) return { texto: `Te ${quedan === 1 ? 'queda' : 'quedan'} ${quedan}`, falta: false };
   const faltan = -quedan;
   return { texto: faltan === 1 ? 'Falta 1 pieza' : `Faltan ${faltan} piezas`, falta: true };
 }
