@@ -79,7 +79,8 @@ export default function LayoutJornada() {
       <Stack.Screen name="impresora" options={{ title: 'Seleccionar impresora', headerShown: false }} />
       <Stack.Screen name="sugerido-de-carga" options={{ title: 'Sugerido de carga', headerShown: false }} />
       <Stack.Screen name="agregar-a-ruta" options={{ title: 'Agregar a mi ruta' }} />
-      <Stack.Screen name="cerrar-dia" options={{ title: 'Cerrar el día', headerShown: false }} />
+      {/* Rediseño pieza 6 (maquetas 22–24): el corte cierra el día; con el día cerrado, lo enviado. */}
+      <Stack.Screen name="corte" options={{ title: 'Corte', headerShown: false }} />
     </Stack>
   );
 }

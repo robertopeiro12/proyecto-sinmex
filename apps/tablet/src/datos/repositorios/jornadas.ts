@@ -173,8 +173,8 @@ export function crearRepositorioJornadas(deps: DepsRepositorio) {
      * > `Number.isFinite` rechaza. No hay otra ruta de escritura.
      * >
      * > Rediseño pieza 6: el corte del vendedor se envia con `cerrarConCorte`
-     * > (cierre + corte en una transaccion). Este `cerrar` sin corte queda para
-     * > `cerrar-dia.tsx` mientras la pantalla nueva del Corte no lo reemplace.
+     * > (cierre + corte en una transaccion) desde `(jornada)/corte.tsx`. Este
+     * > `cerrar` sin corte ya no lo llama ninguna pantalla; queda para pruebas.
      */
     cerrar(jornadaId: string, kmFinal: number): Jornada {
       return enTransaccion(bd, () => cerrarSinTransaccion(jornadaId, kmFinal));

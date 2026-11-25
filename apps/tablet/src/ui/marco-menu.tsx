@@ -7,7 +7,7 @@ import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import { textoHaceCuanto, textoSinSincronizar } from '@/estado/pie-menu';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
-import { accionMenu, entradasMenu, type ClaveMenu } from '@/estado/ruta-del-dia';
+import { accionMenu, agruparRutaEnCurso, entradasMenu, type ClaveMenu } from '@/estado/ruta-del-dia';
 import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 
 import { BotonIcono } from './boton-icono';
@@ -82,6 +82,20 @@ export function MarcoMenu({
     };
   }, [abierto, datos, jornada, vendedor, versionCatalogos, ultimaSincronizacion]);
 
+  // El candado de Corte (pieza 6): los clientes por visitar de la ruta de hoy y
+  // el candado de inventario. Se relee como el pie (al abrir el menu y cuando
+  // el pull o una sincronizacion mueven datos).
+  const corte = useMemo(() => {
+    void abierto;
+    void versionCatalogos;
+    void ultimaSincronizacion;
+    if (!vendedor) return { porVisitar: 0, candado: null };
+    return {
+      porVisitar: agruparRutaEnCurso(datos.rutas.delDia(vendedor.id)).porVisitar.length,
+      candado: datos.cargas.candadoDeHoy(vendedor.id, jornada),
+    };
+  }, [abierto, datos, jornada, vendedor, versionCatalogos, ultimaSincronizacion]);
+
   const abrir = useCallback(() => setAbierto(true), []);
   const cerrar = useCallback(() => setAbierto(false), []);
 
@@ -95,14 +109,7 @@ export function MarcoMenu({
     <MenuLateral
       abierto={abierto}
       onCerrar={cerrar}
-      // El candado de Corte NO se prende en la pieza 1: aqui va `porVisitar: 0`.
-      // Mientras Corte sea el `cerrar-dia` de hoy, el candado puede dejar el dia
-      // sin cerrar: con control de inventario prendido y sin carga aceptada los
-      // clientes no se abren (ni para Visita), "faltan N" nunca llega a 0 y la
-      // jornada no sube. La regla ya esta en `entradasMenu` y probada; la pieza 6
-      // la conecta junto con el Corte nuevo
-      // (`agruparRutaEnCurso(...).porVisitar.length`).
-      entradas={entradasMenu({ porVisitar: 0, diaCerrado, sinJornada })}
+      entradas={entradasMenu({ ...corte, diaCerrado, sinJornada })}
       onElegir={(entrada) => {
         setAbierto(false);
         const accion = accionMenu(clave, entrada);

@@ -41,7 +41,7 @@ apps/tablet/
 │       ├── registros/         # Ventas / Cobranza: index.tsx (lista de hoy) y [tipo]/[id].tsx (detalle) (pieza 5, spec §11)
 │       ├── sugerido-de-carga.tsx # provisional (pieza 7)
 │       ├── impresora.tsx      # provisional (pieza 8)
-│       └── cerrar-dia.tsx     # entrada Corte del menu: km final (la pieza 6 lo rehace)
+│       └── corte.tsx          # entrada Corte del menu: corte del vendedor y km final (pieza 6)
 ├── src/
 │   ├── datos/                 # capa de datos local (SQLite)
 │   ├── seguridad/             # SHA-256 / PBKDF2 / verificador local (T-06)
@@ -171,7 +171,7 @@ de vendedores es **T-62**).
   ya no hay `abrir-dia.tsx`. Sin jornada de hoy la Ruta pinta la tarjeta "Empezar ruta" (vehículo + km inicial, `src/ui/tarjeta-empezar-ruta.tsx`), la guardia
   de `(jornada)/_layout.tsx` regresa a la Ruta cualquier otra pantalla y el menú apaga todo menos Ruta y Cerrar
   sesión con la nota "Empieza tu ruta" (`entradasMenu({ sinJornada })`).
-- **Cerrar el día no tiene vuelta atrás.** `cerrar-dia.tsx` (entrada **Corte** del menú) pide confirmación; con la
+- **Cerrar el día no tiene vuelta atrás.** `corte.tsx` (entrada **Corte** del menú) pide confirmación; con la
   jornada de hoy `cerrada` el menú apaga Merma y Gastos (`entradasMenu({ diaCerrado })`), la hoja del cliente no deja
   vender ni cobrar, y `ventas`/`cobranzas`/`prospectos.registrar` lanzan `ErrorJornada` (`exigirJornadaAbierta` en
   `src/datos/repositorios/jornadas.ts`). El candado de datos es el que vale: las pantallas se pueden saltar.

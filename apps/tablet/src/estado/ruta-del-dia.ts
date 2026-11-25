@@ -1,8 +1,11 @@
+import type { CandadoClientes } from '@/datos/inventario-reglas';
 import type { FilaRutaDelDia } from '@/datos/repositorios/rutas';
 import type { Cliente, Prospecto, SyncEstado, Venta, Visita } from '@/datos/tipos';
 import type { NombreIcono } from '@/ui/iconos';
 import { formatearMomento } from '@/ui/momento';
 import { pesos } from '@/ui/pesos';
+
+import { corteDisponible } from './corte';
 
 /**
  * Lo que la pantalla principal decide (T-37, D16), sin React: la tablet no tiene
@@ -194,7 +197,9 @@ export const NOTA_SIN_JORNADA = 'Empieza tu ruta';
  * Las entradas del menu, en el orden del spec §5 (maqueta 3). Con el dia
  * cerrado se deshabilita solo lo que captura (gastos, merma); lo que consulta
  * se sigue viendo, y Corte se abre (ya se hizo). Corte lleva candado mientras
- * falten clientes por visitar.
+ * falten clientes por visitar (`corteDisponible`, pieza 6), salvo con el
+ * candado de inventario (`candado` no nulo): ahi los clientes no se abren y el
+ * dia quedaria sin poder cerrarse.
  *
  * Sin jornada de hoy (`sinJornada`) solo quedan Ruta y Cerrar sesion: la guardia
  * de `(jornada)/_layout.tsx` regresaria a la Ruta cualquier otra pantalla, asi
@@ -203,14 +208,17 @@ export const NOTA_SIN_JORNADA = 'Empieza tu ruta';
  */
 export function entradasMenu({
   porVisitar,
+  candado,
   diaCerrado,
   sinJornada,
 }: {
   porVisitar: number;
+  /** `cargas.candadoDeHoy`: `null` = los clientes se pueden abrir. */
+  candado: CandadoClientes;
   diaCerrado: boolean;
   sinJornada: boolean;
 }): EntradaMenu[] {
-  const corteConCandado = !diaCerrado && porVisitar > 0;
+  const corteConCandado = !corteDisponible({ porVisitar, candado, diaCerrado });
   const entrada = (
     clave: ClaveMenu,
     titulo: string,
@@ -231,7 +239,7 @@ export function entradasMenu({
     entrada('registros', 'Ventas / Cobranza', 'registros', '/(jornada)/registros'),
     entrada('merma', 'Merma / Cambios', 'merma', '/(jornada)/merma', { deshabilitada: diaCerrado }),
     entrada('gastos', 'Gastos', 'gasto', '/(jornada)/gastos', { deshabilitada: diaCerrado }),
-    entrada('corte', 'Corte', 'corte', '/(jornada)/cerrar-dia', {
+    entrada('corte', 'Corte', 'corte', '/(jornada)/corte', {
       deshabilitada: corteConCandado,
       nota: corteConCandado ? (porVisitar === 1 ? 'falta 1 cliente' : `faltan ${porVisitar} clientes`) : null,
     }),

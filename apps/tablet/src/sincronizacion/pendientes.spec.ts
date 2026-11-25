@@ -12,10 +12,10 @@ import { crearRepositorioProspectos } from '@/datos/repositorios/prospectos';
 import { crearRepositorioRutas } from '@/datos/repositorios/rutas';
 import { crearRepositorioVentas } from '@/datos/repositorios/ventas';
 
+import { fuenteCortes } from './fuente-cortes';
 import { contarPendientesDeSubir } from './pendientes';
 
-function montar() {
-  const deps = depsDePrueba();
+function montar(deps = depsDePrueba()) {
   const catalogos = crearRepositorioCatalogos(deps);
   catalogos.guardarSnapshot(snapshotDePrueba());
   const folios = crearRepositorioFolios(deps);
@@ -135,5 +135,19 @@ describe('contarPendientesDeSubir', () => {
     fuentes.jornadas.cerrar(jornada.id, 20);
 
     expect(contarPendientesDeSubir(fuentes)).toBe(1);
+  });
+
+  it('cuenta solo los cortes que la fuente del push puede mandar (uno con el JSON roto, ninguno de los dos)', () => {
+    const deps = depsDePrueba();
+    const fuentes = montar(deps);
+    const jornada = fuentes.jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
+    fuentes.jornadas.cerrarConCorte(jornada.id, 20, CORTE_DE_PRUEBA);
+    fuentes.jornadas.marcarSincronizada(jornada.id);
+    expect(contarPendientesDeSubir(fuentes)).toBe(1);
+    expect(fuenteCortes(fuentes.cortes).pendientes()).toHaveLength(1);
+
+    deps.bd.runSync(`update corte set inventario_json = 'no es json'`);
+    expect(fuenteCortes(fuentes.cortes).pendientes()).toHaveLength(0);
+    expect(contarPendientesDeSubir(fuentes)).toBe(0);
   });
 });

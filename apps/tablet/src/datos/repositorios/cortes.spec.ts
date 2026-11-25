@@ -161,6 +161,13 @@ describe('repositorio de cortes', () => {
       expect(cortes.pendientesDeSincronizar().map((c) => c.jornadaId)).toEqual([jornada.id]);
     });
 
+    it('un enviado con el JSON roto no sale a subir (no hay corte que mandar)', () => {
+      const { deps, cortes, jornadas, jornada } = conCortes();
+      jornadas.cerrarConCorte(jornada.id, 150, CORTE_DE_PRUEBA);
+      deps.bd.runSync(`update corte set notas_json = 'no es json'`);
+      expect(cortes.pendientesDeSincronizar()).toEqual([]);
+    });
+
     it('marcarError lo deja en la cola con su motivo; marcarSincronizada lo saca y limpia el motivo', () => {
       const { cortes, jornadas, jornada } = conCortes();
       const { corte } = jornadas.cerrarConCorte(jornada.id, 150, CORTE_DE_PRUEBA);

@@ -35,7 +35,9 @@ function aDatos(corte: Corte & { sistema: NonNullable<Corte['sistema']>; enviado
     notas: sistema.notas.map((n) => ({
       folio: n.folio,
       traida: traidas.has(n.clave),
-      saldo_centavos: n.saldoCentavos,
+      // Un saldo negativo (sobrepago) lo rechaza el servidor para siempre; la
+      // regla ya lo deja en 0 (`notasDelCorte`), esto cubre lo ya guardado.
+      saldo_centavos: Math.max(0, n.saldoCentavos),
     })),
     inventario: [
       ...sistema.inventario.renglones.map((r) => ({
@@ -47,7 +49,7 @@ function aDatos(corte: Corte & { sistema: NonNullable<Corte['sistema']>; enviado
         .filter(([id]) => !delSistema.has(id))
         .map(([id, contado]) => ({ presentacion_id: id, sistema: 0, contado })),
     ],
-    merma: { sistema: sistema.inventario.mermaSistema, contado: captura.mermaContada ?? 0 },
+    merma: { sistema: Math.max(0, sistema.inventario.mermaSistema), contado: captura.mermaContada ?? 0 },
     enviado_en: corte.enviadoEn,
   };
 }
@@ -58,10 +60,8 @@ export function fuenteCortes(cortes: RepositorioCortes): FuenteOperaciones {
 
     pendientes(): OperacionSaliente[] {
       return cortes.pendientesDeSincronizar().flatMap((c) => {
-        // Un corte enviado siempre trae `sistema` y `enviadoEn`; solo faltarian
-        // con un JSON roto en la fila (lectura tolerante de `cortes.ts`). Sin
-        // ellos no hay corte que mandar: se queda pendiente en vez de subir uno
-        // inventado.
+        // `pendientesDeSincronizar` ya deja fuera un corte con el JSON roto
+        // (sin `sistema`); esto solo estrecha el tipo.
         if (c.sistema === null || c.enviadoEn === null) return [];
         const operacion: OperacionSaliente = {
           clave: c.id,

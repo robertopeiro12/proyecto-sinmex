@@ -1,4 +1,5 @@
 import { leerReparto } from '@/datos/cobranzas-reglas';
+import type { CapturaCorte } from '@/datos/repositorios/cortes';
 import type { CandadoClientes } from '@/datos/inventario-reglas';
 import type { NotaAsignadaDeHoy } from '@/datos/notas-asignadas-reglas';
 import type { NotaQueTrae } from '@/datos/repositorios/notas-asignadas';
@@ -160,21 +161,26 @@ export function notasDelCorte({
     if (n.origen === 'asignada' && n.ventaNotaId !== null) traidas.set(n.ventaNotaId, n);
   }
 
+  // Un saldo nunca baja de 0 (un sobrepago en un cobro lo dejaria negativo):
+  // el servidor rechaza un saldo negativo y el corte quedaria en error para siempre.
   const renglon = (
     folio: string,
     clienteId: string,
     estado: EstadoNotaCorte,
-    saldoCentavos: number,
+    saldo: number,
     detalle: string = estado,
-  ): RenglonNotaCorte => ({
-    clave: `nota:${folio}`,
-    folio,
-    cliente: nombres.get(clienteId) ?? '',
-    estado,
-    detalle,
-    montoTexto: pesos(saldoCentavos),
-    saldoCentavos,
-  });
+  ): RenglonNotaCorte => {
+    const saldoCentavos = Math.max(0, saldo);
+    return {
+      clave: `nota:${folio}`,
+      folio,
+      cliente: nombres.get(clienteId) ?? '',
+      estado,
+      detalle,
+      montoTexto: pesos(saldoCentavos),
+      saldoCentavos,
+    };
+  };
 
   const renglones: RenglonNotaCorte[] = asignadas.map((a) => {
     const trae = traidas.get(a.ventaNotaId);
@@ -227,7 +233,7 @@ export function inventarioDelCorte(filas: readonly FilaPorRegresar[]): Inventari
     renglones: filas
       .filter((f) => f.buenas > 0)
       .map((f) => ({ presentacionId: f.presentacionId, etiqueta: f.etiqueta, sistema: f.buenas })),
-    mermaSistema: suma(filas.map((f) => f.merma)),
+    mermaSistema: suma(filas.map((f) => Math.max(0, f.merma))),
   };
 }
 
@@ -253,4 +259,64 @@ export function corteDisponible({
 }): boolean {
   if (diaCerrado) return true;
   return !(porVisitar > 0 && candado === null);
+}
+
+/** El aviso del Corte con clientes por visitar (se llego por un enlace directo). */
+export function textoFaltanPorVisitar(porVisitar: number): string {
+  return porVisitar === 1 ? 'Falta 1 cliente por visitar' : `Faltan ${porVisitar} clientes por visitar`;
+}
+
+/** Piezas contadas: solo digitos (entero >= 0). Vacio, signo, punto o coma = `null`. */
+export function leerPiezas(texto: string): number | null {
+  const limpio = texto.trim();
+  if (!/^\d+$/.test(limpio)) return null;
+  const n = Number(limpio);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
+/** Centavos guardados al texto del campo "¿Cuánto traes?" (432500 → "4325.00"); `null` → "". */
+export function textoMontoCaptura(centavos: number | null): string {
+  if (centavos === null) return '';
+  return `${Math.floor(centavos / 100)}.${String(centavos % 100).padStart(2, '0')}`;
+}
+
+/**
+ * Lo que queda al **cerrar** el apartado Inventario (maqueta 24): un conteo por
+ * cada renglon del sistema y la merma. Un campo que el vendedor no toco
+ * (`piezas` sin llave, `merma` `undefined`) vale lo que dice el sistema: viene
+ * prellenado, y sin guardarlo subiria como 0. Un campo tocado que no es un
+ * entero >= 0 (vacio incluido) no deja cerrar: `null`.
+ */
+export function inventarioCapturado(
+  inventario: InventarioDelCorte,
+  piezas: Readonly<Record<string, string>>,
+  merma: string | undefined,
+): Pick<CapturaCorte, 'inventarioContado'> & { mermaContada: number } | null {
+  const inventarioContado: Record<string, number> = {};
+  for (const r of inventario.renglones) {
+    const texto = piezas[r.presentacionId];
+    const contado = texto === undefined ? r.sistema : leerPiezas(texto);
+    if (contado === null) return null;
+    inventarioContado[r.presentacionId] = contado;
+  }
+  const mermaContada = merma === undefined ? inventario.mermaSistema : leerPiezas(merma);
+  if (mermaContada === null) return null;
+  return { inventarioContado, mermaContada };
+}
+
+/**
+ * La captura que se envia con el corte. El dia sigue abierto despues de cerrar
+ * Inventario: si una venta o una merma posterior agrego un renglon al sistema,
+ * ese renglon sale con lo del sistema (no con 0); igual la merma sin contar.
+ */
+export function capturaParaEnviar(captura: CapturaCorte, inventario: InventarioDelCorte): CapturaCorte {
+  const inventarioContado = { ...captura.inventarioContado };
+  for (const r of inventario.renglones) {
+    if (inventarioContado[r.presentacionId] === undefined) inventarioContado[r.presentacionId] = r.sistema;
+  }
+  return {
+    ...captura,
+    inventarioContado,
+    mermaContada: captura.mermaContada ?? inventario.mermaSistema,
+  };
 }

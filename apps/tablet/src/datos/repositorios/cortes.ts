@@ -372,6 +372,11 @@ export function crearRepositorioCortes(deps: DepsRepositorio) {
     /**
      * Cortes **enviados** que faltan por subir, incluidos los rechazados (se
      * reintentan; la clave no cambia). Un borrador nunca sale.
+     *
+     * Un enviado cuyo JSON ya no se lee (`sistema` nulo, lectura tolerante) no
+     * sale: no hay corte que mandar sin inventarlo. Se filtra **aqui** para que
+     * la fuente del push y `contarPendientesDeSubir` digan lo mismo (si no, el
+     * menu contaria para siempre un registro que nunca sube).
      */
     pendientesDeSincronizar(): Corte[] {
       return bd
@@ -380,7 +385,8 @@ export function crearRepositorioCortes(deps: DepsRepositorio) {
             where enviado_en is not null and sync_estado in ('pendiente', 'error')
             order by fecha, enviado_en, rowid`,
         )
-        .map(aCorte);
+        .map(aCorte)
+        .filter((c) => c.sistema !== null && c.enviadoEn !== null);
     },
 
     marcarSincronizada(id: string): void {

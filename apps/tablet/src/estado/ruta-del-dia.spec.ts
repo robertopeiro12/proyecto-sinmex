@@ -190,7 +190,7 @@ describe('clientesParaAgregar ("Agregar a mi ruta")', () => {
 });
 
 describe('menu hamburguesa (spec §5, maqueta 3)', () => {
-  const abierto = { porVisitar: 0, diaCerrado: false, sinJornada: false };
+  const abierto = { porVisitar: 0, candado: null, diaCerrado: false, sinJornada: false };
 
   test('entradas del menú en el orden del spec', () => {
     expect(entradasMenu(abierto).map((e) => e.titulo)).toEqual([
@@ -202,7 +202,7 @@ describe('menu hamburguesa (spec §5, maqueta 3)', () => {
   test('destinos; Cerrar sesión no tiene (lo maneja la pantalla)', () => {
     expect(entradasMenu(abierto).map((e) => e.destino)).toEqual([
       '/(jornada)', '/(jornada)/inventario', '/(jornada)/sugerido-de-carga', '/(jornada)/registros',
-      '/(jornada)/merma', '/(jornada)/gastos', '/(jornada)/cerrar-dia', '/(jornada)/prospectos',
+      '/(jornada)/merma', '/(jornada)/gastos', '/(jornada)/corte', '/(jornada)/prospectos',
       '/(jornada)/impresora', null,
     ]);
     expect(entradasMenu(abierto).every((e) => !e.deshabilitada && e.nota === null)).toBe(true);
@@ -210,14 +210,20 @@ describe('menu hamburguesa (spec §5, maqueta 3)', () => {
 
   test('Corte con candado y "faltan N clientes" mientras haya por visitar', () => {
     const corte = (n: number) =>
-      entradasMenu({ porVisitar: n, diaCerrado: false, sinJornada: false }).find((e) => e.clave === 'corte')!;
+      entradasMenu({ porVisitar: n, candado: null, diaCerrado: false, sinJornada: false }).find((e) => e.clave === 'corte')!;
     expect(corte(4)).toMatchObject({ deshabilitada: true, nota: 'faltan 4 clientes' });
     expect(corte(1)).toMatchObject({ deshabilitada: true, nota: 'falta 1 cliente' });
     expect(corte(0)).toMatchObject({ deshabilitada: false, nota: null });
   });
 
+  test('con candado de inventario (sin carga aceptada) Corte queda abierto aunque falten clientes', () => {
+    const corte = entradasMenu({ porVisitar: 3, candado: { tipo: 'sin-carga' }, diaCerrado: false, sinJornada: false })
+      .find((e) => e.clave === 'corte')!;
+    expect(corte).toMatchObject({ deshabilitada: false, nota: null });
+  });
+
   test('con el día cerrado, Corte se abre (ya se hizo) y lo que captura se apaga', () => {
-    const e = entradasMenu({ porVisitar: 3, diaCerrado: true, sinJornada: false });
+    const e = entradasMenu({ porVisitar: 3, candado: null, diaCerrado: true, sinJornada: false });
     expect(e.find((x) => x.clave === 'corte')!.deshabilitada).toBe(false);
     expect(e.filter((x) => x.deshabilitada).map((x) => x.clave).sort()).toEqual(['gastos', 'merma']);
   });
@@ -227,7 +233,7 @@ describe('menu hamburguesa (spec §5, maqueta 3)', () => {
   });
 
   test('sin jornada de hoy solo quedan Ruta y Cerrar sesión; lo demás dice "Empieza tu ruta"', () => {
-    const e = entradasMenu({ porVisitar: 3, diaCerrado: false, sinJornada: true });
+    const e = entradasMenu({ porVisitar: 3, candado: { tipo: 'empezar' }, diaCerrado: false, sinJornada: true });
     expect(e.filter((x) => !x.deshabilitada).map((x) => x.clave)).toEqual(['ruta', 'salir']);
     expect(e.filter((x) => !x.deshabilitada).every((x) => x.nota === null)).toBe(true);
     const apagadas = e.filter((x) => x.deshabilitada);
@@ -239,7 +245,7 @@ describe('menu hamburguesa (spec §5, maqueta 3)', () => {
 });
 
 describe('accionMenu (revisión final pieza 1, I2: el menú no apila pantallas)', () => {
-  const entradas = entradasMenu({ porVisitar: 0, diaCerrado: false, sinJornada: false });
+  const entradas = entradasMenu({ porVisitar: 0, candado: null, diaCerrado: false, sinJornada: false });
   const de = (clave: string) => entradas.find((e) => e.clave === clave)!;
 
   test('a la Ruta: dismissTo desde cualquier pantalla del menú', () => {
@@ -254,7 +260,7 @@ describe('accionMenu (revisión final pieza 1, I2: el menú no apila pantallas)'
 
   test('desde otra pantalla del menú, replace (encima de la Ruta hay a lo más una)', () => {
     expect(accionMenu('gastos', de('inventario'))).toEqual({ tipo: 'replace', destino: '/(jornada)/inventario' });
-    expect(accionMenu('prospectos', de('corte'))).toEqual({ tipo: 'replace', destino: '/(jornada)/cerrar-dia' });
+    expect(accionMenu('prospectos', de('corte'))).toEqual({ tipo: 'replace', destino: '/(jornada)/corte' });
   });
 
   test('la entrada de la pantalla actual no hace nada; Cerrar sesión sale', () => {

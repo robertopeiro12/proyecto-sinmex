@@ -1,12 +1,17 @@
 import type { NotaAsignadaDeHoy } from '@/datos/notas-asignadas-reglas';
 import type { NotaQueTrae } from '@/datos/repositorios/notas-asignadas';
 import {
+  capturaParaEnviar,
   corteDisponible,
   efectivoEsperado,
+  inventarioCapturado,
   inventarioDelCorte,
+  leerPiezas,
   notasDelCorte,
   puedeEnviarCorte,
   resumenDelDia,
+  textoFaltanPorVisitar,
+  textoMontoCaptura,
   textoNotasQueTraes,
   textoResumenVisitados,
   type Apartado,
@@ -190,6 +195,20 @@ describe('notasDelCorte (maqueta 23)', () => {
     expect(r).toMatchObject({ estado: 'liquidada', saldoCentavos: 0, cliente: '' });
   });
 
+  it('un sobrepago no deja saldo negativo (el servidor lo rechazaría para siempre)', () => {
+    const [abonada, nueva] = notasDelCorte({
+      asignadas: [asignada({ ventaNotaId: 'n5', folio: 'F5', saldoCentavos: 30000 })],
+      queTrae: [
+        { origen: 'asignada', clienteId: 'cli-esperanza', folio: 'F5', ventaNotaId: 'n5', ventaId: null, saldoCentavos: 30000, fecha: '2026-10-30' },
+        { origen: 'nueva', clienteId: 'cli-chuy', folio: 'F6', ventaNotaId: null, ventaId: 'v6', saldoCentavos: -500, fecha: '2026-11-18' },
+      ],
+      cobros: [{ reparto_json: JSON.stringify([{ venta_nota_id: 'n5', monto_centavos: 31000, saldo_despues_centavos: -1000 }]) }],
+      nombres: NOMBRES,
+    });
+    expect(abonada).toMatchObject({ estado: 'abonó', saldoCentavos: 0, montoTexto: '$0.00' });
+    expect(nueva).toMatchObject({ estado: 'nueva', saldoCentavos: 0, montoTexto: '$0.00' });
+  });
+
   it('textoNotasQueTraes ignora claves que ya no están en la lista', () => {
     expect(textoNotasQueTraes([], new Set(['nota:X']))).toBe('0 de 0');
   });
@@ -217,6 +236,83 @@ describe('inventarioDelCorte (maqueta 24)', () => {
 
   it('sin nada que regresar', () => {
     expect(inventarioDelCorte([])).toEqual({ renglones: [], mermaSistema: 0 });
+  });
+
+  it('una merma negativa no baja el total', () => {
+    expect(inventarioDelCorte([{ presentacionId: 'p1', etiqueta: 'J', buenas: 1, merma: -3 }]).mermaSistema).toBe(0);
+  });
+});
+
+const INVENTARIO = {
+  renglones: [
+    { presentacionId: 'p1', etiqueta: 'Jamaica · 500 ml', sistema: 8 },
+    { presentacionId: 'p2', etiqueta: 'Jamaica · 1 L', sistema: 6 },
+  ],
+  mermaSistema: 5,
+};
+
+describe('inventarioCapturado (cerrar Inventario)', () => {
+  it('lo que no se tocó se guarda con lo del sistema (prellenado), no como 0', () => {
+    expect(inventarioCapturado(INVENTARIO, {}, undefined)).toEqual({
+      inventarioContado: { p1: 8, p2: 6 },
+      mermaContada: 5,
+    });
+  });
+
+  it('lo corregido gana; un renglón que ya no está en el sistema se descarta', () => {
+    expect(inventarioCapturado(INVENTARIO, { p1: '7', viejo: '3' }, '4')).toEqual({
+      inventarioContado: { p1: 7, p2: 6 },
+      mermaContada: 4,
+    });
+  });
+
+  it('un campo vacío o que no es entero no deja cerrar', () => {
+    expect(inventarioCapturado(INVENTARIO, { p1: '' }, undefined)).toBeNull();
+    expect(inventarioCapturado(INVENTARIO, { p2: '1.5' }, undefined)).toBeNull();
+    expect(inventarioCapturado(INVENTARIO, {}, '-1')).toBeNull();
+  });
+});
+
+describe('capturaParaEnviar', () => {
+  const captura = {
+    efectivoTraidoCentavos: 432500,
+    notasTraidas: ['nota:F1'],
+    inventarioContado: { p1: 7, extra: 2 },
+    mermaContada: null,
+    cerrados: ['efectivo' as const, 'notas' as const, 'inventario' as const],
+  };
+
+  it('un renglón que apareció después de cerrar Inventario sale con lo del sistema', () => {
+    expect(capturaParaEnviar(captura, INVENTARIO)).toEqual({
+      ...captura,
+      inventarioContado: { p1: 7, p2: 6, extra: 2 },
+      mermaContada: 5,
+    });
+  });
+
+  it('respeta la merma contada', () => {
+    expect(capturaParaEnviar({ ...captura, mermaContada: 0 }, INVENTARIO).mermaContada).toBe(0);
+  });
+});
+
+describe('textos y lectura de campos', () => {
+  it('textoFaltanPorVisitar', () => {
+    expect(textoFaltanPorVisitar(1)).toBe('Falta 1 cliente por visitar');
+    expect(textoFaltanPorVisitar(3)).toBe('Faltan 3 clientes por visitar');
+  });
+
+  it('leerPiezas: solo enteros >= 0', () => {
+    expect(leerPiezas(' 12 ')).toBe(12);
+    expect(leerPiezas('0')).toBe(0);
+    expect(leerPiezas('')).toBeNull();
+    expect(leerPiezas('-2')).toBeNull();
+    expect(leerPiezas('1,5')).toBeNull();
+  });
+
+  it('textoMontoCaptura', () => {
+    expect(textoMontoCaptura(null)).toBe('');
+    expect(textoMontoCaptura(432500)).toBe('4325.00');
+    expect(textoMontoCaptura(5)).toBe('0.05');
   });
 });
 

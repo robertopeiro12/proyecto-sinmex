@@ -72,6 +72,21 @@ describe('fuente de cortes (rediseño pieza 6)', () => {
     });
   });
 
+  it('un saldo negativo ya guardado sube como 0', () => {
+    const { jornadas, fuente } = montar();
+    const jornada = jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
+    jornadas.cerrarConCorte(jornada.id, 150, {
+      ...CORTE_DE_PRUEBA,
+      sistema: {
+        ...CORTE_DE_PRUEBA.sistema,
+        notas: CORTE_DE_PRUEBA.sistema.notas.map((n) => ({ ...n, saldoCentavos: -500 })),
+      },
+    });
+    expect(fuente.pendientes()[0]?.datos).toMatchObject({
+      notas: [{ folio: 'TJ260807AP01', traida: true, saldo_centavos: 0 }],
+    });
+  });
+
   it('marca sincronizado y error sobre el repositorio de cortes', () => {
     const { jornadas, cortes, fuente } = montar();
     const jornada = jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
