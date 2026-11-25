@@ -328,6 +328,13 @@ Ya no hay `registrar.tsx`.
 
 Spec: `docs/superpowers/specs/2026-10-21-t-73-firma-del-cliente-design.md`.
 
+> **Rediseño (pieza 2, `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md` §9 y §10).** La app ya no
+> captura firma: el cliente firma la nota impresa. **Vender** (`operacion/[clienteId]/venta.tsx`) va en tres pasos
+> (promociones, lista de productos con teclado propio y Cobranza: Liquidar preseleccionado, Abonar, Crédito) y pide
+> **quién atendió** (obligatorio, `venta.atendio`); Abonar graba una venta a crédito con `abono_centavos` (migración 020).
+> **Cobrar** (`cobranza.tsx`) abre con la nota al frente, Liquidar / Abonar y los chips de forma de pago; la fecha de pago
+> es hoy. Lo que sigue describe la captura de T-73 (016-019); la imagen de una venta vieja pendiente aún sube.
+
 - **Revisión de la venta** (`app/(jornada)/operacion/[clienteId]/venta.tsx`): tarjeta "Firma del cliente" con el
   recuadro (`src/ui/recuadro-firma.tsx`), "Borrar firma" y "Nombre de quien firma (opcional)". "Grabar venta" solo se
   habilita con firma (`puedeGrabarVenta`); "Corregir" vuelve a captura y **borra** la firma (el cliente firmó un total).

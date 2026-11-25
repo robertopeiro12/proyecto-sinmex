@@ -175,6 +175,11 @@ La pantalla se llama **Cobranza** (no "Pago").
   construye: grabarlo como venta a crédito más un cobro a esa misma nota en la misma transacción, para reutilizar el
   reparto y la proyección que ya existen.)*
 
+> **Implementado así (pieza 2).** Liquidar viene preseleccionado; el abono al vender se grabó como campo de la venta
+> (`abono_centavos`, abono `venta_contado` en efectivo sin cobro), no como cobro aparte, para que la venta siga editable
+> en el portal (plan de la pieza 2). `num_nota`, `factura` y `comentarios` salieron de la pantalla y viajan con su valor
+> por omisión. `nombre de quien atiende` es `venta.atendio` (`venta_nota.atendio_nombre`).
+
 ## 10. Cobrar una nota pendiente (M13)
 
 - Abre con **la nota asignada al frente**: folio, fecha, total, abonos anteriores con fecha, lo que debe, y su
@@ -188,6 +193,9 @@ La pantalla se llama **Cobranza** (no "Pago").
 
 Esto **sustituye** un punto de la spec `2026-11-13-notas-asignadas-tablet-condicion-venta-design.md`, que decía "sin
 reimpresión de tickets al cobrar". Lo demás de esa spec sigue vigente (tampoco hay firma en pantalla al cobrar).
+
+> **Implementado así (pieza 2).** Cobrar conserva los chips Efectivo / Transferencia / Cheque (efectivo por omisión) y
+> la fecha de pago es hoy; Abonar exige monto > 0 y menor a lo que debe; no pide quien atiende.
 
 ## 11. Merma y cambios, registros, gastos, clientes y prospectos
 

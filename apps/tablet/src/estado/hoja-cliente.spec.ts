@@ -101,7 +101,7 @@ test('día cerrado: nada se puede hacer', () => {
 test('prospecto: sin Cobrar y Vender con su nota', () => {
   const a = accionesCliente({ asignadas: [], notasConSaldo: 0, esProspecto: true, operacionesHabilitadas: true, candado: null });
   expect(a.cobrar).toBeNull();
-  expect(a.vender).toEqual({ habilitado: true, nota: 'Solo regalo de bienvenida' });
+  expect(a.vender).toEqual({ habilitado: true, nota: 'Solo promoción de bienvenida' });
 });
 
 test('sin bloqueo y sin candado: todo encendido', () => {

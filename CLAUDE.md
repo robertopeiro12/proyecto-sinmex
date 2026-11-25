@@ -634,7 +634,19 @@ usuario con sesion pasa.
 - **Firma del cliente en la nota (T-73).** El cliente firma con el dedo en la tablet **toda** venta (contado y crédito,
   sin poder omitirla) antes de grabarla; la firma complementa la nota de papel. Spec:
   `docs/superpowers/specs/2026-10-21-t-73-firma-del-cliente-design.md`.
-  - **Tablet**: la revisión de la venta lleva el recuadro (`src/ui/recuadro-firma.tsx`, `react-native-svg` +
+  - **Desde el rediseño (pieza 2, spec `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md` §9) la tablet
+    ya NO captura la firma dibujada**: se quitaron `recuadro-firma.tsx`, `firma-expo.ts` y `puedeGrabarVenta`; el cliente
+    firma a mano la nota impresa. Lo de abajo describe el contrato y la tablet de T-73 (016); una venta vieja con imagen
+    pendiente **sigue subiendo** su firma por la cola de fotos. En su lugar, la venta lleva **`atendio`** (quien atendió
+    al vendedor; **obligatorio en la app**, opcional y aditivo en el contrato; `venta_nota.atendio_nombre`, migración
+    `20261126120000_venta_atendio.sql`) y **`abono_centavos`** opcional (venta **a crédito** con abono al vender,
+    `0 < abono < total`): nace `abonado` y el servidor escribe un abono `venta_contado` en efectivo, `fecha_pago =
+    fecha_operacion` y `cobro_id` **null** (por eso editar la venta en el portal no se bloquea, T-17: la edición lo
+    conserva y da **409** si el nuevo total es ≤ el abono; borrarla lo borra). Tesorería y comisiones lo leen como
+    cualquier abono `venta_contado` (T-21). Migración local de la tablet **020** (`atendio`, `abono_centavos`; la venta
+    local conserva las columnas de firma). El portal muestra "Atendió" en el detalle. Cobrar no firma ni pide quien
+    atiende, y conserva los chips Efectivo / Transferencia / Cheque con la fecha de pago de hoy.
+  - **Tablet (T-73, histórico)**: la revisión de la venta lleva el recuadro (`src/ui/recuadro-firma.tsx`, `react-native-svg` +
     `PanResponder`, papel **blanco** como `<Rect>` dentro del `Svg` para que el PNG no salga transparente) y el nombre
     opcional (≤ 80). "Grabar venta" no se habilita sin firma; "Corregir" la borra. Toda decisión vive en
     `src/estado/firma.ts` (`puedeGrabarVenta`, `crearGrabadorVenta` con la guardia de doble toque), con pruebas.
@@ -658,6 +670,8 @@ usuario con sesion pasa.
     de firmarse. Editar en el portal **no** vuelve a pedir la firma.
   - **Nube**: `20261021120000_venta_firma.sql` se sube a `sinmex dev` después del merge y **antes** del backend (y el
     backend antes de la app), con el protocolo de push (pre-flight: columnas nuevas con default; nada que contar).
+  - **Nube (pieza 2)**: `20261126120000_venta_atendio.sql` se sube a `sinmex dev` después del merge, con el protocolo de push.
+    Pre-flight: columna nula y check que toda fila cumple en null; nada que contar. **Backend y portal juntos.**
 - **Carga y recarga del vendedor (T-27 pieza 1 / T-26).** Producción registra en el portal la carga de la mañana y cada
   recarga; la carga baja a la tablet, el vendedor la **acepta o la rechaza** con red y, con el control de inventario de
   su sucursal prendido, no vende con una carga pendiente ni deja una presentación en negativo. Spec:

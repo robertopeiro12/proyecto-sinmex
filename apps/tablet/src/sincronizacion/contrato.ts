@@ -647,9 +647,10 @@ export type DatosVenta = {
    */
   regalos?: RegaloVenta[];
   /**
-   * T-73. La tablet la manda en toda venta grabada desde la 016 (la firma es
-   * obligatoria, D1). Presente = el servidor espera la imagen por el canal de
-   * fotos.
+   * T-73. La tablet la mandaba en toda venta grabada de la 016 a la 019. Desde
+   * el rediseno (pieza 2, migracion 020) ya no se captura firma: solo una venta
+   * vieja con imagen pendiente la lleva. Presente = el servidor espera la imagen
+   * por el canal de fotos.
    */
   firma?: FirmaVenta | null;
   /**

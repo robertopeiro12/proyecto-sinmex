@@ -81,7 +81,7 @@ export function accionesCliente({
   return {
     vender: {
       habilitado: activo && bloqueoVenta === null,
-      nota: bloqueoVenta !== null ? 'Cobra primero' : esProspecto ? 'Solo regalo de bienvenida' : null,
+      nota: bloqueoVenta !== null ? 'Cobra primero' : esProspecto ? 'Solo promoción de bienvenida' : null,
     },
     cobrar,
     visita: { habilitado: activo },
