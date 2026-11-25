@@ -596,7 +596,11 @@ describe('delDia con notas asignadas, recado y comentario (notas-asignadas-table
       abonoCentavos: 30000,
     });
     // Antes de que el servidor la proyecte: cuenta por ser credito de hoy.
-    expect(rutas.delDia('ven-1', HOY)[0]).toMatchObject({ notas_que_trae: 1, venta_credito_centavos: 80400 });
+    expect(rutas.delDia('ven-1', HOY)[0]).toMatchObject({
+      notas_que_trae: 1,
+      venta_credito_centavos: 80400,
+      venta_abono_centavos: 30000,
+    });
 
     // Ya proyectada: nace abonada con saldo = total - abono, y sigue contando.
     catalogos.guardarSnapshot({
@@ -612,7 +616,11 @@ describe('delDia con notas asignadas, recado y comentario (notas-asignadas-table
         },
       ],
     });
-    expect(rutas.delDia('ven-1', HOY)[0]).toMatchObject({ notas_que_trae: 1, venta_credito_centavos: 80400 });
+    expect(rutas.delDia('ven-1', HOY)[0]).toMatchObject({
+      notas_que_trae: 1,
+      venta_credito_centavos: 80400,
+      venta_abono_centavos: 30000,
+    });
     expect(notasAsignadas.queTraePorCliente('ven-1').get('cli-1')).toBe(1);
   });
 
@@ -697,6 +705,7 @@ describe('delDia: lo hecho hoy (rediseño, spec §6)', () => {
     expect(rutas.delDia('ven-1')[0]).toMatchObject({
       venta_contado_centavos: 0,
       venta_credito_centavos: 0,
+      venta_abono_centavos: 0,
       cobro_centavos: 0,
     });
 
@@ -717,6 +726,7 @@ describe('delDia: lo hecho hoy (rediseño, spec §6)', () => {
       visitado: true,
       venta_contado_centavos: 50000,
       venta_credito_centavos: 124000,
+      venta_abono_centavos: 0,
       cobro_centavos: 85000,
       con_merma: false,
     });

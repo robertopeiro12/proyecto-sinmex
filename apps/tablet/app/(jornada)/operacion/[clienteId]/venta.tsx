@@ -28,7 +28,9 @@ import {
   checklistPromociones,
   opcionesCobranza,
   pasoAnterior,
+  filasNota,
   presentacionPorOmision,
+  promocionesSinRenglon,
   primerPaso,
   renglonesVenta,
   teclear,
@@ -145,17 +147,19 @@ export default function PantallaVenta() {
   const lista = useRef<ScrollView>(null);
   const posiciones = useRef(new Map<string, number>());
 
-  // La presentacion de omision (la primera del catalogo) viene elegida: asi
-  // ningun regalo queda sin presentacion y "Continuar a vender" no se apaga.
+  // La presentacion de omision viene elegida (con control de inventario, la
+  // primera que el vendedor trae): asi ningun regalo queda sin presentacion y
+  // "Continuar a vender" no se apaga.
   const eleccionesEfectivas = useMemo(() => {
     const m = new Map<string, string>();
     for (const p of promociones) {
       if (p.regalo_tipo !== 'producto' || !p.regalo_producto_id) continue;
-      const elegida = elecciones.get(p.id) ?? presentacionPorOmision(p.regalo_producto_id, catalogoPromos);
+      const elegida =
+        elecciones.get(p.id) ?? presentacionPorOmision(p.regalo_producto_id, catalogoPromos, inventario);
       if (elegida) m.set(p.id, elegida);
     }
     return m;
-  }, [promociones, elecciones, catalogoPromos]);
+  }, [promociones, elecciones, catalogoPromos, inventario]);
 
   const renglones = useMemo(
     () =>
@@ -524,25 +528,12 @@ export default function PantallaVenta() {
     return marco(
       <>
         <Tarjeta etiqueta={`Nota · ${nombreCliente}`}>
-          {resumen.lineas.flatMap((l) => {
-            const etiqueta = etiquetaDe(l);
-            const filas: ReactNode[] = [];
-            if (l.cantidad > 0) {
-              filas.push(
-                <LineaNota key={`${l.presentacionId}-v`} texto={`${l.cantidad} × ${etiqueta}`} importe={l.importeCentavos} />,
-              );
-            }
-            if (l.cantidadPromocion > 0) {
-              filas.push(
-                <LineaNota
-                  key={`${l.presentacionId}-p`}
-                  texto={`${l.cantidadPromocion} × ${etiqueta} (promoción)`}
-                  importe={0}
-                />,
-              );
-            }
-            return filas;
-          })}
+          {filasNota(
+            resumen.lineas.map((l) => ({ ...l, etiqueta: etiquetaDe(l) })),
+            renglones.map((r) => r.presentacionId),
+          ).map((f) => (
+            <LineaNota key={f.clave} texto={f.texto} importe={f.importeCentavos} />
+          ))}
           <View
             style={{
               flexDirection: 'row',
@@ -586,7 +577,10 @@ export default function PantallaVenta() {
               cifra
               keyboardType="decimal-pad"
               value={abonoTexto}
-              onChangeText={setAbonoTexto}
+              onChangeText={(texto) => {
+                setProblemas([]);
+                setAbonoTexto(texto);
+              }}
               placeholder="0.00"
             />
             <Tarjeta estado="pendiente">
@@ -606,7 +600,10 @@ export default function PantallaVenta() {
           <Campo
             etiqueta="Nombre de quien atiende"
             value={atendio}
-            onChangeText={setAtendio}
+            onChangeText={(texto) => {
+              setProblemas([]);
+              setAtendio(texto);
+            }}
             maxLength={LARGO_MAX_ATENDIO}
             autoCapitalize="words"
           />
@@ -630,6 +627,16 @@ export default function PantallaVenta() {
   const bloqueado = bloqueoCarga !== null || motivoNota !== null;
   const notaACobrar = motivoNota ? notaParaCobrar(asignadas) : null;
   const sinPiezas = resumen.piezas + resumen.piezasPromocion === 0;
+  // Piezas de promocion sin renglon (la bienvenida de un prospecto no tiene precios):
+  // se pintan de solo lectura para que el vendedor vea lo que entrega.
+  const soloPromocion = promocionesSinRenglon(
+    lineas.map((l) => ({
+      presentacionId: l.presentacionId,
+      etiqueta: l.etiqueta !== '' ? l.etiqueta : (catalogoPromos.presentaciones.get(l.presentacionId)?.etiqueta ?? ''),
+      cantidadPromocion: l.cantidadPromocion,
+    })),
+    renglones,
+  );
 
   /** Lo que el teclado deja capturar: lo que queda menos lo que ya va de promocion ahi. */
   function tope(presentacionId: string): number | null {
@@ -723,7 +730,26 @@ export default function PantallaVenta() {
         </Tarjeta>
       ) : null}
 
-      {renglones.length === 0 ? (
+      {renglones.length === 0 && soloPromocion.length > 0 ? (
+        <Text style={[estilos.textoSuave, { marginBottom: espacio.sm }]}>Solo lleva la promoción.</Text>
+      ) : null}
+      {soloPromocion.map((f) => (
+        <View
+          key={f.presentacionId}
+          style={{
+            marginBottom: espacio.sm,
+            padding: espacio.sm,
+            borderRadius: radio.medio,
+            borderWidth: grosor.fuerte,
+            borderColor: colores.exito,
+            backgroundColor: colores.superficieHundida,
+          }}
+        >
+          <Text style={estilos.textoTarjeta}>{f.texto}</Text>
+        </View>
+      ))}
+
+      {renglones.length === 0 && soloPromocion.length === 0 ? (
         <Tarjeta estado="pendiente" etiqueta="Sin productos para vender">
           <Text style={estilos.textoTarjeta}>
             {inventario?.controlInventario

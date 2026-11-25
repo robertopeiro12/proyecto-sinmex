@@ -50,7 +50,8 @@ export function sinRutaAsignada(grupos: {
 /**
  * La linea bajo el nombre en "Visitados" (rediseño §6, maqueta 6): lo que se
  * hizo hoy con el cliente, en este orden y unido con " · ": "Cobro $850.00",
- * "Venta $1,240.00" (contado), "Venta a crédito $1,240.00", "Merma". Sin
+ * "Venta $1,240.00" (contado), "Venta a crédito $1,240.00" (con abono al
+ * vender: "Venta a crédito $720.00 · Abonó $300.00"), "Merma". Sin
  * ninguna de esas y con visita: "Visita sin venta · <motivo en minusculas>"
  * ("Visita sin venta" a secas sin motivo, p. ej. solo el comentario de no
  * cobro). Dinero con centavos, como en toda la app (`pesos`).
@@ -60,6 +61,7 @@ export function resumenVisitado(
     FilaRutaDelDia,
     | 'venta_contado_centavos'
     | 'venta_credito_centavos'
+    | 'venta_abono_centavos'
     | 'cobro_centavos'
     | 'con_merma'
     | 'ultima_visita_motivo'
@@ -69,7 +71,10 @@ export function resumenVisitado(
   const partes: string[] = [];
   if (f.cobro_centavos > 0) partes.push(`Cobro ${pesos(f.cobro_centavos)}`);
   if (f.venta_contado_centavos > 0) partes.push(`Venta ${pesos(f.venta_contado_centavos)}`);
-  if (f.venta_credito_centavos > 0) partes.push(`Venta a crédito ${pesos(f.venta_credito_centavos)}`);
+  if (f.venta_credito_centavos > 0) {
+    partes.push(`Venta a crédito ${pesos(f.venta_credito_centavos)}`);
+    if (f.venta_abono_centavos > 0) partes.push(`Abonó ${pesos(f.venta_abono_centavos)}`);
+  }
   if (f.con_merma) partes.push('Merma');
   if (partes.length === 0 && f.visita_sin_venta) {
     const motivo = f.ultima_visita_motivo?.trim();

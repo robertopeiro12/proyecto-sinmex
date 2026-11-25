@@ -5,7 +5,9 @@ import {
   checklistPromociones,
   opcionesCobranza,
   pasoAnterior,
+  filasNota,
   presentacionPorOmision,
+  promocionesSinRenglon,
   primerPaso,
   renglonesVenta,
   teclear,
@@ -52,6 +54,57 @@ describe('presentacionPorOmision', () => {
   it('la primera del producto', () => {
     expect(presentacionPorOmision('y', catalogo)).toBe('p2');
     expect(presentacionPorOmision('z', catalogo)).toBeNull();
+  });
+
+  it('con control de inventario, la primera del producto que el vendedor trae', () => {
+    const inventario = { controlInventario: true, existencias: new Map([['p2', { existencia: 0 }], ['p3', { existencia: 4 }]]) };
+    expect(presentacionPorOmision('y', catalogo, inventario)).toBe('p3');
+  });
+
+  it('con control y ninguna con existencia, la primera del catalogo', () => {
+    const inventario = { controlInventario: true, existencias: new Map([['p2', { existencia: 0 }]]) };
+    expect(presentacionPorOmision('y', catalogo, inventario)).toBe('p2');
+    expect(presentacionPorOmision('z', catalogo, inventario)).toBeNull();
+  });
+
+  it('sin control de inventario, la primera del catalogo aunque no haya existencia', () => {
+    const inventario = { controlInventario: false, existencias: new Map([['p3', { existencia: 4 }]]) };
+    expect(presentacionPorOmision('y', catalogo, inventario)).toBe('p2');
+    expect(presentacionPorOmision('y', catalogo, null)).toBe('p2');
+  });
+});
+
+describe('promocionesSinRenglon', () => {
+  it('pinta de solo lectura las piezas de promocion sin renglon en la lista', () => {
+    const lineas = [
+      { presentacionId: 'h1', etiqueta: 'Horchata 1 L', cantidadPromocion: 1 },
+      { presentacionId: 'j1', etiqueta: 'Jamaica 1 L', cantidadPromocion: 2 },
+      { presentacionId: 'a1', etiqueta: 'Agua 1 L', cantidadPromocion: 0 },
+    ];
+    expect(promocionesSinRenglon(lineas, [])).toEqual([
+      { presentacionId: 'h1', texto: '1 × Horchata 1 L · promoción' },
+      { presentacionId: 'j1', texto: '2 × Jamaica 1 L · promoción' },
+    ]);
+    // La que tiene renglon ya dice "+N de promoción" ahi.
+    expect(promocionesSinRenglon(lineas, [{ presentacionId: 'j1' }])).toEqual([
+      { presentacionId: 'h1', texto: '1 × Horchata 1 L · promoción' },
+    ]);
+  });
+});
+
+describe('filasNota', () => {
+  it('primero lo cobrado en el orden de la lista; despues la promocion', () => {
+    const lineas = [
+      { presentacionId: 'h1', etiqueta: 'Horchata 1 L', cantidad: 0, cantidadPromocion: 1, importeCentavos: 0 },
+      { presentacionId: 'j5', etiqueta: 'Jamaica 500 ml', cantidad: 3, cantidadPromocion: 0, importeCentavos: 3000 },
+      { presentacionId: 'a1', etiqueta: 'Agua 1 L', cantidad: 2, cantidadPromocion: 1, importeCentavos: 1800 },
+    ];
+    expect(filasNota(lineas, ['a1', 'j5'])).toEqual([
+      { clave: 'a1-v', texto: '2 × Agua 1 L', importeCentavos: 1800 },
+      { clave: 'j5-v', texto: '3 × Jamaica 500 ml', importeCentavos: 3000 },
+      { clave: 'a1-p', texto: '1 × Agua 1 L (promoción)', importeCentavos: 0 },
+      { clave: 'h1-p', texto: '1 × Horchata 1 L (promoción)', importeCentavos: 0 },
+    ]);
   });
 });
 

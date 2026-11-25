@@ -45,11 +45,26 @@ export function alternarTodas(
     : new Set();
 }
 
-export function presentacionPorOmision(productoId: string, catalogo: CatalogoPromociones): string | null {
+/**
+ * La presentacion de la pieza de promocion que viene elegida. Con control de
+ * inventario, la primera del producto que el vendedor trae (existencia > 0): la
+ * lista solo pinta lo que trae, y una pieza de promocion sin existencia apagaria
+ * "Ir a cobranza" con un faltante que no se ve en la lista. Sin control, o si no
+ * trae ninguna, la primera del catalogo.
+ */
+export function presentacionPorOmision(
+  productoId: string,
+  catalogo: CatalogoPromociones,
+  inventario?: { controlInventario: boolean; existencias: ReadonlyMap<string, { existencia: number }> } | null,
+): string | null {
+  let primera: string | null = null;
   for (const [id, p] of catalogo.presentaciones) {
-    if (p.productoId === productoId) return id;
+    if (p.productoId !== productoId) continue;
+    if (!inventario?.controlInventario) return id;
+    if ((inventario.existencias.get(id)?.existencia ?? 0) > 0) return id;
+    primera ??= id;
   }
-  return null;
+  return primera;
 }
 
 export interface RenglonVenta {
@@ -122,6 +137,70 @@ export function renglonesVenta({
     }
   }
   return filas.sort((a, b) => compararEtiquetas(a.etiqueta, b.etiqueta));
+}
+
+/** Lo minimo de una linea de captura para pintar sus piezas. */
+export interface PiezasDeLinea {
+  presentacionId: string;
+  etiqueta: string;
+  cantidad: number;
+  cantidadPromocion: number;
+  importeCentavos: number;
+}
+
+/**
+ * Las piezas de promocion que caen en una presentacion SIN renglon en la lista
+ * (sin precio, p. ej. la bienvenida de un prospecto, o sin existencia): la lista
+ * las pinta de solo lectura ("1 × Horchata 1 L · promoción") para que el vendedor
+ * vea lo que entrega. Las que si tienen renglon ya dicen "+N de promoción" ahi.
+ */
+export function promocionesSinRenglon(
+  lineas: readonly Pick<PiezasDeLinea, 'presentacionId' | 'etiqueta' | 'cantidadPromocion'>[],
+  renglones: readonly Pick<RenglonVenta, 'presentacionId'>[],
+): { presentacionId: string; texto: string }[] {
+  const conRenglon = new Set(renglones.map((r) => r.presentacionId));
+  return lineas
+    .filter((l) => l.cantidadPromocion > 0 && !conRenglon.has(l.presentacionId))
+    .map((l) => ({ presentacionId: l.presentacionId, texto: `${l.cantidadPromocion} × ${l.etiqueta} · promoción` }));
+}
+
+export interface FilaNota {
+  clave: string;
+  texto: string;
+  importeCentavos: number;
+}
+
+/**
+ * Las filas de la nota en Cobranza (maqueta 11): primero lo que se cobra, en el
+ * orden de la lista; despues las piezas de promocion, en ese mismo orden. Lo que
+ * no esta en la lista (`orden`) va al final de su grupo, como venga.
+ */
+export function filasNota(lineas: readonly PiezasDeLinea[], orden: readonly string[]): FilaNota[] {
+  const posicion = new Map(orden.map((id, i) => [id, i] as const));
+  const ordenadas = lineas
+    .map((l, i) => ({ l, i }))
+    .sort((a, b) => {
+      const pa = posicion.get(a.l.presentacionId) ?? orden.length + a.i;
+      const pb = posicion.get(b.l.presentacionId) ?? orden.length + b.i;
+      return pa - pb;
+    })
+    .map(({ l }) => l);
+  return [
+    ...ordenadas
+      .filter((l) => l.cantidad > 0)
+      .map((l) => ({
+        clave: `${l.presentacionId}-v`,
+        texto: `${l.cantidad} × ${l.etiqueta}`,
+        importeCentavos: l.importeCentavos,
+      })),
+    ...ordenadas
+      .filter((l) => l.cantidadPromocion > 0)
+      .map((l) => ({
+        clave: `${l.presentacionId}-p`,
+        texto: `${l.cantidadPromocion} × ${l.etiqueta} (promoción)`,
+        importeCentavos: 0,
+      })),
+  ];
 }
 
 export type TeclaNumerica = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';

@@ -64,6 +64,8 @@ export interface FilaRutaDelDia {
   venta_contado_centavos: number;
   /** Suma de las ventas a credito de hoy al cliente. */
   venta_credito_centavos: number;
+  /** Suma de lo abonado al vender en las ventas a credito de hoy (rediseño, pieza 2). */
+  venta_abono_centavos: number;
   /** Suma de los cobros de hoy al cliente. */
   cobro_centavos: number;
   /** Hoy tiene merma del cliente (`movimiento` de tipo `merma_cliente`). */
@@ -250,6 +252,9 @@ export function crearRepositorioRutas(
                 (select coalesce(sum(v.monto_total_centavos), 0) from venta v
                   where v.cliente_id = r.cliente_id and v.fecha = r.fecha
                     and v.contado_credito = 'credito') as venta_credito_centavos,
+                (select coalesce(sum(v.abono_centavos), 0) from venta v
+                  where v.cliente_id = r.cliente_id and v.fecha = r.fecha
+                    and v.contado_credito = 'credito') as venta_abono_centavos,
                 (select coalesce(sum(k.monto_centavos), 0) from cobranza k
                   where k.cliente_id = r.cliente_id and k.fecha = r.fecha) as cobro_centavos,
                 (select w.motivo_nombre from visita w
