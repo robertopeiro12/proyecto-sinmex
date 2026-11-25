@@ -32,7 +32,7 @@ function fila(extra: Partial<FilaCarga> = {}): FilaCarga {
     version: 1,
     respondidaEn: null,
     eliminada: false,
-    lineas: [{ presentacionId: A, piezas: 24 }],
+    lineas: [{ presentacionId: A, piezas: 24, aceptada: null }],
     ...extra,
   };
 }
@@ -200,29 +200,116 @@ describe('armarRejilla (GET /cargas)', () => {
 });
 
 describe('normalizarRespuesta (POST /sync/cargas/:id/respuesta)', () => {
-  it('aceptar no lleva motivo: ausente o null pasa, con texto es 400', () => {
-    expect(normalizarRespuesta('aceptar', undefined)).toEqual({
+  const deLaCarga = [A, B, C];
+
+  it('la lista vacía rechaza la carga, sin motivo', () => {
+    expect(normalizarRespuesta({ aceptadas: [] }, deLaCarga)).toEqual({
       ok: true,
-      respuesta: { estado: 'aceptada', motivo: null },
-    });
-    expect(normalizarRespuesta('aceptar', null)).toEqual({
-      ok: true,
-      respuesta: { estado: 'aceptada', motivo: null },
-    });
-    expect(normalizarRespuesta('aceptar', 'todo bien')).toEqual({
-      ok: false,
-      mensaje: 'Aceptar una carga no lleva motivo.',
+      respuesta: { estado: 'rechazada', aceptadas: new Set(), motivo: null },
     });
   });
 
-  it('rechazar exige motivo de 1 a 300 caracteres, recortado', () => {
-    expect(normalizarRespuesta('rechazar', '  Faltan 2 cajas  ')).toEqual({
+  it('todos los renglones: aceptada con todo el conjunto', () => {
+    expect(normalizarRespuesta({ aceptadas: [C, A, B] }, deLaCarga)).toEqual({
       ok: true,
-      respuesta: { estado: 'rechazada', motivo: 'Faltan 2 cajas' },
+      respuesta: {
+        estado: 'aceptada',
+        aceptadas: new Set([A, B, C]),
+        motivo: null,
+      },
     });
-    expect(normalizarRespuesta('rechazar', 'x'.repeat(300)).ok).toBe(true);
+  });
+
+  it('una parte: aceptada con ese conjunto (ids en minúsculas)', () => {
+    expect(
+      normalizarRespuesta({ aceptadas: [A.toUpperCase(), C] }, deLaCarga),
+    ).toEqual({
+      ok: true,
+      respuesta: {
+        estado: 'aceptada',
+        aceptadas: new Set([A, C]),
+        motivo: null,
+      },
+    });
+  });
+
+  it('Review Focus 3: una presentación ajena a la carga o repetida es 400', () => {
+    const ajena = '3f2504e0-4f89-41d3-9a0c-0305e82c3399';
+    expect(normalizarRespuesta({ aceptadas: [A, ajena] }, deLaCarga)).toEqual({
+      ok: false,
+      mensaje: 'Uno de los productos aceptados no viene en esta carga.',
+    });
+    expect(
+      normalizarRespuesta({ aceptadas: [A, A.toUpperCase()] }, deLaCarga),
+    ).toEqual({
+      ok: false,
+      mensaje: 'Un producto aceptado viene repetido.',
+    });
+  });
+
+  it('la lista no lleva motivo ni acción; sin lista ni acción es 400', () => {
+    expect(
+      normalizarRespuesta({ aceptadas: [A], motivo: 'algo' }, deLaCarga),
+    ).toEqual({ ok: false, mensaje: 'La lista de aceptados no lleva motivo.' });
+    expect(
+      normalizarRespuesta({ aceptadas: [A], accion: 'aceptar' }, deLaCarga),
+    ).toEqual({
+      ok: false,
+      mensaje: 'Manda la lista de aceptados o la acción, no las dos.',
+    });
+    expect(normalizarRespuesta({}, deLaCarga)).toEqual({
+      ok: false,
+      mensaje: 'Falta la lista de productos aceptados.',
+    });
+  });
+
+  it('Review Focus 2, forma vieja: aceptar = todos, sin motivo', () => {
+    const todas = {
+      ok: true,
+      respuesta: {
+        estado: 'aceptada',
+        aceptadas: new Set([A, B, C]),
+        motivo: null,
+      },
+    };
+    expect(normalizarRespuesta({ accion: 'aceptar' }, deLaCarga)).toEqual(
+      todas,
+    );
+    expect(
+      normalizarRespuesta({ accion: 'aceptar', motivo: null }, deLaCarga),
+    ).toEqual(todas);
+    expect(
+      normalizarRespuesta(
+        { accion: 'aceptar', motivo: 'todo bien' },
+        deLaCarga,
+      ),
+    ).toEqual({ ok: false, mensaje: 'Aceptar una carga no lleva motivo.' });
+  });
+
+  it('Review Focus 2, forma vieja: rechazar = ninguno, con motivo de 1 a 300 recortado', () => {
+    expect(
+      normalizarRespuesta(
+        { accion: 'rechazar', motivo: '  Faltan 2 cajas  ' },
+        deLaCarga,
+      ),
+    ).toEqual({
+      ok: true,
+      respuesta: {
+        estado: 'rechazada',
+        aceptadas: new Set(),
+        motivo: 'Faltan 2 cajas',
+      },
+    });
+    expect(
+      normalizarRespuesta(
+        { accion: 'rechazar', motivo: 'x'.repeat(300) },
+        deLaCarga,
+      ).ok,
+    ).toBe(true);
     for (const motivo of [undefined, null, '', '   ', 'x'.repeat(301)]) {
-      expect(normalizarRespuesta('rechazar', motivo)).toEqual({
+      expect(
+        normalizarRespuesta({ accion: 'rechazar', motivo }, deLaCarga),
+      ).toEqual({
         ok: false,
         mensaje:
           'Para rechazar la carga escribe el motivo (hasta 300 caracteres).',
@@ -232,42 +319,82 @@ describe('normalizarRespuesta (POST /sync/cargas/:id/respuesta)', () => {
 });
 
 describe('decidirRespuesta (D6, Review Focus 2 y 3)', () => {
-  const aceptar = { estado: 'aceptada', motivo: null } as const;
-  const rechazar = { estado: 'rechazada', motivo: 'Faltan cajas' } as const;
+  const tres = [
+    { presentacionId: A, piezas: 24, aceptada: null },
+    { presentacionId: B, piezas: 12, aceptada: null },
+    { presentacionId: C, piezas: 6, aceptada: null },
+  ];
+  const respondida = (
+    estado: 'aceptada' | 'rechazada',
+    aceptadas: readonly string[],
+    motivoRechazo: string | null = null,
+  ) =>
+    fila({
+      estado,
+      motivoRechazo,
+      lineas: tres.map((l) => ({
+        ...l,
+        aceptada: aceptadas.includes(l.presentacionId),
+      })),
+    });
+  const aceptar = (...ids: string[]) =>
+    ({ estado: 'aceptada', aceptadas: new Set(ids), motivo: null }) as const;
+  const rechazar = (motivo: string | null) =>
+    ({ estado: 'rechazada', aceptadas: new Set<string>(), motivo }) as const;
 
   it('pendiente con su version: se escribe', () => {
-    expect(decidirRespuesta(fila(), aceptar, 1)).toBe('escribir');
-    expect(decidirRespuesta(fila(), rechazar, 1)).toBe('escribir');
+    const pendiente = fila({ lineas: tres });
+    expect(decidirRespuesta(pendiente, aceptar(A, B, C), 1)).toBe('escribir');
+    expect(decidirRespuesta(pendiente, aceptar(A), 1)).toBe('escribir');
+    expect(decidirRespuesta(pendiente, rechazar(null), 1)).toBe('escribir');
+    expect(decidirRespuesta(pendiente, rechazar('Faltan cajas'), 1)).toBe(
+      'escribir',
+    );
   });
 
   it('la misma respuesta otra vez (reintento de red, doble toque): repetida', () => {
-    expect(decidirRespuesta(fila({ estado: 'aceptada' }), aceptar, 1)).toBe(
-      'repetida',
-    );
+    expect(
+      decidirRespuesta(respondida('aceptada', [A, B]), aceptar(B, A), 1),
+    ).toBe('repetida');
+    expect(
+      decidirRespuesta(respondida('rechazada', []), rechazar(null), 1),
+    ).toBe('repetida');
     expect(
       decidirRespuesta(
-        fila({ estado: 'rechazada', motivoRechazo: 'Faltan cajas' }),
-        rechazar,
+        respondida('rechazada', [], 'Faltan cajas'),
+        rechazar('Faltan cajas'),
         1,
       ),
     ).toBe('repetida');
   });
 
+  it('Review Focus 1: una aceptada de antes (renglones en null) cuenta como todo aceptado', () => {
+    const vieja = fila({ estado: 'aceptada', lineas: tres });
+    expect(decidirRespuesta(vieja, aceptar(A, B, C), 1)).toBe('repetida');
+    expect(decidirRespuesta(vieja, aceptar(A), 1)).toBe('conflicto');
+  });
+
   it('otra version, u otra respuesta ya escrita: conflicto (409)', () => {
-    expect(decidirRespuesta(fila({ version: 2 }), aceptar, 1)).toBe(
-      'conflicto',
-    );
+    expect(
+      decidirRespuesta(fila({ version: 2, lineas: tres }), aceptar(A), 1),
+    ).toBe('conflicto');
+    expect(
+      decidirRespuesta(respondida('aceptada', [A, B]), aceptar(A), 1),
+    ).toBe('conflicto');
+    expect(
+      decidirRespuesta(respondida('aceptada', [A, B]), aceptar(A, B, C), 1),
+    ).toBe('conflicto');
     expect(
       decidirRespuesta(
-        fila({ estado: 'rechazada', motivoRechazo: 'Faltan cajas' }),
-        aceptar,
+        respondida('rechazada', [], 'Faltan cajas'),
+        aceptar(A),
         1,
       ),
     ).toBe('conflicto');
     expect(
       decidirRespuesta(
-        fila({ estado: 'rechazada', motivoRechazo: 'Otra cosa' }),
-        rechazar,
+        respondida('rechazada', [], 'Otra cosa'),
+        rechazar('Faltan cajas'),
         1,
       ),
     ).toBe('conflicto');
@@ -294,8 +421,26 @@ describe('aCargaPull (colección `cargas` del pull)', () => {
       version: 1,
       respondida_en: '2026-10-22T15:00:00.000Z',
       activo: 0,
-      lineas: [{ presentacion_id: A, piezas: 24 }],
+      lineas: [{ presentacion_id: A, piezas: 24, aceptada: null }],
     });
     expect(aCargaPull(fila()).activo).toBe(1);
+  });
+
+  it('cada renglón trae si se aceptó (null mientras está pendiente o en una carga de antes)', () => {
+    expect(
+      aCargaPull(
+        fila({
+          estado: 'aceptada',
+          respondidaEn: new Date('2026-10-22T15:00:00.000Z'),
+          lineas: [
+            { presentacionId: A, piezas: 24, aceptada: true },
+            { presentacionId: B, piezas: 12, aceptada: false },
+          ],
+        }),
+      ).lineas,
+    ).toEqual([
+      { presentacion_id: A, piezas: 24, aceptada: true },
+      { presentacion_id: B, piezas: 12, aceptada: false },
+    ]);
   });
 });

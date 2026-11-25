@@ -37,7 +37,7 @@ const CARGA: CargaPull = {
   version: 1,
   respondida_en: '2026-10-22T15:00:00.000Z',
   activo: 1,
-  lineas: [{ presentacion_id: 'pre-1', piezas: 24 }],
+  lineas: [{ presentacion_id: 'pre-1', piezas: 24, aceptada: null }],
 };
 
 function pasos(respuestas: (ResultadoApiCarga | Error)[]) {

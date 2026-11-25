@@ -1042,6 +1042,12 @@ export interface LineaCargaPull {
   presentacion_id: string;
   /** Piezas enteras, 1..99 999. */
   piezas: number;
+  /**
+   * Pieza 3: si el vendedor acepto este renglon. `null` mientras la carga esta
+   * pendiente y en las cargas respondidas antes de la pieza 3: en una
+   * `aceptada` cuenta como aceptado, en una `rechazada` como no aceptado.
+   */
+  aceptada: boolean | null;
 }
 
 /**
@@ -1063,8 +1069,15 @@ export interface CargaPull extends FilaSincronizable {
   fecha: string;
   /** 1, 2, 3… por vendedor y dia. */
   numero: number;
+  /**
+   * `aceptada` si se acepto al menos un renglon (todos o una parte: ver
+   * `lineas[].aceptada`), `rechazada` si ninguno.
+   */
   estado: EstadoCargaPull;
-  /** Solo en `rechazada` (1..300). */
+  /**
+   * Solo puede venir en `rechazada` (1..300), y solo si se rechazo con la forma
+   * vieja (`accion: 'rechazar'`); la lista vacia rechaza sin motivo.
+   */
   motivo_rechazo: string | null;
   version: number;
   /** Instante ISO de la respuesta, o `null` si sigue pendiente. */
@@ -1074,14 +1087,19 @@ export interface CargaPull extends FilaSincronizable {
 
 /**
  * Cuerpo de `POST /sync/cargas/:id/respuesta` (T-27, D2/D6). Viaja con red, en
- * el momento: no es una operacion del push ni lleva `contrato`. `motivo` solo
- * con `rechazar` (1..300, se recorta); con `aceptar` es 400.
+ * el momento: no es una operacion del push ni lleva `contrato`.
+ *
+ * - Forma nueva (pieza 3): `aceptadas`, los `presentacion_id` de los renglones
+ *   aceptados, cada uno de la carga y una sola vez (si no, 400). Vacia rechaza
+ *   la carga sin motivo; no lleva `accion` ni `motivo`. La aceptacion parcial es
+ *   definitiva: lo no aceptado llega en una recarga nueva.
+ * - Forma vieja (tablets sin actualizar): `accion: 'aceptar'` = todos los
+ *   renglones, sin motivo (400 si trae); `accion: 'rechazar'` = ninguno, con
+ *   `motivo` de 1..300 (se recorta).
  */
-export type CuerpoRespuestaCarga = {
-  version: number;
-  accion: 'aceptar' | 'rechazar';
-  motivo?: string;
-};
+export type CuerpoRespuestaCarga =
+  | { version: number; aceptadas: string[] }
+  | { version: number; accion: 'aceptar' | 'rechazar'; motivo?: string };
 
 export interface RespuestaPull {
   contrato: number;

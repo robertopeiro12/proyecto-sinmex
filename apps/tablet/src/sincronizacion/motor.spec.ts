@@ -281,7 +281,7 @@ describe('aSnapshot (T-27)', () => {
       version: 1,
       respondida_en: null,
       activo: 1 as const,
-      lineas: [{ presentacion_id: 'pre-1', piezas: 24 }],
+      lineas: [{ presentacion_id: 'pre-1', piezas: 24, aceptada: null }],
     };
     expect(aSnapshot(respuestaPullDePrueba({ cargas: [carga] })).cargas).toEqual([carga]);
     expect(aSnapshot(respuestaPullDePrueba()).cargas).toBeUndefined();

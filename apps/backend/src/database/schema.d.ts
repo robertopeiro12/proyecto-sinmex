@@ -52,6 +52,7 @@ export interface Carga {
 }
 
 export interface CargaDetalle {
+  aceptada: boolean | null;
   carga_id: string;
   id: Generated<string>;
   piezas: number;

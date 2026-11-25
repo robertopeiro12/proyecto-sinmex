@@ -454,11 +454,18 @@ hoy; la tablet nueva la trata como opcional.
 - `lineas` viene **completa** cada vez (la tablet reemplaza las suyas). Editar las líneas en el portal sube `version`
   y regresa la carga a `pendiente` (eso mueve `updated_at`, y vuelve a bajar).
 - Una carga **aceptada** no se edita ni se elimina (D5): el inventario de la tablet nunca cambia por debajo.
+- **Por renglón (rediseño pieza 3, aditivo):** cada línea trae `aceptada` (`true`/`false`; `null` mientras la carga
+  está pendiente). `estado` es `aceptada` si se aceptó al menos un renglón (todos o una parte) y `rechazada` si
+  ninguno. Una carga respondida **antes** de la pieza 3 trae sus renglones en `null`: en una `aceptada` cuentan como
+  aceptados (todo), en una `rechazada` como no aceptados. Solo los renglones aceptados suman al inventario.
+- `motivo_rechazo` solo puede venir en una `rechazada`, y solo si se rechazó con la forma vieja (`accion: "rechazar"`);
+  la lista vacía rechaza sin motivo.
 
 ```jsonc
-{ "id": "…", "vendedor_id": "…", "fecha": "2026-10-22", "numero": 2, "estado": "pendiente",
-  "motivo_rechazo": null, "version": 1, "respondida_en": null, "activo": 1,
-  "lineas": [{ "presentacion_id": "…", "piezas": 24 }] }
+{ "id": "…", "vendedor_id": "…", "fecha": "2026-10-22", "numero": 2, "estado": "aceptada",
+  "motivo_rechazo": null, "version": 1, "respondida_en": "2026-10-22T15:00:00.000Z", "activo": 1,
+  "lineas": [{ "presentacion_id": "…", "piezas": 24, "aceptada": true },
+             { "presentacion_id": "…", "piezas": 12, "aceptada": false }] }
 ```
 
 ### `control_inventario` del vendedor (T-27)
@@ -1009,17 +1016,29 @@ Canal aparte del lote, como las fotos: sin `contrato` ni `resultados[]`, solo c�
 `Authorization: Bearer` de siempre; **no renueva la sesión** por su cuenta (un `401` lo resuelve la tablet
 sincronizando y reintentando una vez).
 
+Forma nueva (rediseño pieza 3): la lista de presentaciones aceptadas. Un renglón se acepta o no completo; lo no
+aceptado es **definitivo** y llega, si hace falta, en una recarga nueva.
+
 ```jsonc
-{ "version": 1, "accion": "aceptar" }                              // aceptar: sin motivo
-{ "version": 1, "accion": "rechazar", "motivo": "Faltan 2 cajas" } // 1..300, se recorta
+{ "version": 1, "aceptadas": ["<presentacion_id>", "<presentacion_id>"] } // todas o una parte: aceptada
+{ "version": 1, "aceptadas": [] }                                        // ninguna: rechazada, sin motivo
 ```
 
-- **200** con la carga (`CargaPull`) ya respondida. La **misma** respuesta otra vez (reintento de red, doble toque) es
-  200 sin reescribir nada.
-- **400** si la forma no vale (`aceptar` con motivo, `rechazar` sin motivo o de más de 300).
+Forma vieja (tablets sin actualizar), sigue funcionando:
+
+```jsonc
+{ "version": 1, "accion": "aceptar" }                              // todos los renglones; sin motivo
+{ "version": 1, "accion": "rechazar", "motivo": "Faltan 2 cajas" } // ningún renglón; 1..300, se recorta
+```
+
+- **200** con la carga (`CargaPull`) ya respondida, con `aceptada` en cada renglón. La **misma** respuesta otra vez
+  (reintento de red, doble toque; la misma lista en cualquier orden) es 200 sin reescribir nada.
+- **400** si la forma no vale: una presentación de la lista que no es de la carga o que viene dos veces, la lista con
+  `accion` o con `motivo`, sin lista ni `accion`, `aceptar` con motivo, `rechazar` sin motivo o de más de 300.
 - **404** si la carga es de otro vendedor, no existe o se eliminó (no confirma que exista). La tablet sincroniza.
-- **409** `{ message, carga }` si la `version` ya no coincide (el portal la editó) o ya tiene otra respuesta. La tablet
-  aplica la carga del cuerpo, sincroniza y pide revisarla de nuevo: **nunca acepta lo que no vio**.
+- **409** `{ message, carga }` si la `version` ya no coincide (el portal la editó; se revisa **antes** que la lista,
+  que puede traer un renglón que ya no está) o ya tiene otra respuesta (otra lista, otro estado). La tablet aplica la
+  carga del cuerpo, sincroniza y pide revisarla de nuevo: **nunca acepta lo que no vio**.
 
 Sin red no se puede aceptar (D6): la carga ocurre en la planta, con WiFi y con el almacenista enfrente.
 
