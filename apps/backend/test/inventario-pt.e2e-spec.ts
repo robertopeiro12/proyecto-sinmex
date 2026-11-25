@@ -194,6 +194,7 @@ describe('Inventario de PT con Ventas (e2e)', () => {
       borrada?: boolean;
     }[];
     borrada?: boolean;
+    sucursalId?: string;
   }): Promise<string> => {
     const { id } = await db
       .insertInto('venta_nota')
@@ -207,7 +208,7 @@ describe('Inventario de PT con Ventas (e2e)', () => {
         semana: 10,
         mes: 3,
         status: 'pagada',
-        sucursal_id: kId,
+        sucursal_id: opciones.sucursalId ?? kId,
         origen: 'portal',
         capturo_usuario_id: generalId,
         deleted_at: opciones.borrada ? sql<Date>`now()` : null,
@@ -1335,6 +1336,145 @@ describe('Inventario de PT con Ventas (e2e)', () => {
         ],
       }).expect(204);
       await borrar(q).expect(204);
+    });
+  });
+
+  describe('arreglos de la revisión final', () => {
+    // Un producto aparte; YC y YD son las unicas sucursales que lo mueven, asi
+    // que en Todas las demas aportan 0.
+    let d2: string;
+    let d3: string;
+    let d5: string;
+    let d6: string;
+    let d10: string;
+    let conVentaEnYd: string; // YC ajusta d2; YD la vendio en d5 sin ajuste
+    let soloYc: string; // YC ajusta d2; YD nunca la movio
+    let vieja: string; // otra presentacion con un ajuste mas viejo (d10)
+    let enviada: string; // las dos ajustadas; YC le envia 6 a YD ayer
+
+    const ajuste = (
+      sucursalId: string,
+      presentacionId: string,
+      fecha: string,
+      inicial: number,
+    ) =>
+      db
+        .insertInto('inventario_pt_ajuste')
+        .values({
+          sucursal_id: sucursalId,
+          presentacion_id: presentacionId,
+          fecha: sql<Date>`${fecha}::date`,
+          inventario_inicial: inicial,
+          merma_acumulada_inicial: 0,
+          capturo_usuario_id: generalId,
+        })
+        .execute();
+
+    const historial = async (presentacion: string, desde: string) =>
+      (
+        await http()
+          .get('/inventario-pt/historial')
+          .query({ presentacion, desde, hasta: hoy, sucursal: 'todas' })
+          .set('Cookie', cookieGeneral)
+          .expect(200)
+      ).body as HistorialPt;
+
+    const tabla = async (
+      fecha: string,
+      presentacionId: string,
+      sucursal = 'todas',
+    ) => renglon(await leer({ fecha, sucursal }), presentacionId);
+
+    beforeAll(async () => {
+      d2 = antier;
+      d3 = restarDias(hoy, 3);
+      d5 = restarDias(hoy, 5);
+      d6 = restarDias(hoy, 6);
+      d10 = restarDias(hoy, 10);
+      const { id: producto3 } = await db
+        .insertInto('producto')
+        .values({ nombre: `${PRODUCTO}-c`, activo: true })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+      productoIds.push(producto3);
+      const nueva = async (volumen: string) =>
+        (
+          await db
+            .insertInto('presentacion')
+            .values({ producto_id: producto3, volumen })
+            .returning('id')
+            .executeTakeFirstOrThrow()
+        ).id;
+      conVentaEnYd = await nueva('355 ml');
+      soloYc = await nueva('600 ml');
+      vieja = await nueva('5 L');
+      enviada = await nueva('4 L');
+
+      await ajuste(kId, conVentaEnYd, d2, 30);
+      await crearVenta({
+        fecha: d5,
+        sucursalId: lId,
+        lineas: [{ presentacionId: conVentaEnYd, cantidad: 2 }],
+      });
+      await ajuste(kId, soloYc, d2, 40);
+      // Un ajuste mas viejo de OTRA presentacion: no debe cambiar a las demas.
+      await ajuste(kId, vieja, d10, 7);
+
+      await ajuste(kId, enviada, d2, 100);
+      await ajuste(lId, enviada, d2, 20);
+      await crearOperacion({
+        tipo: 'envio',
+        fecha: ayer,
+        lineas: [{ presentacionId: enviada, piezas: 6 }],
+      });
+    });
+
+    it('Todas: YD la vendió antes sin ajuste → vacío en la tabla y en el historial, el mismo día', async () => {
+      const h = await historial(conVentaEnYd, d6);
+      const porDia = new Map(h.dias.map((d) => [d.fecha, d]));
+      for (const fecha of [d6, d5, d3, d2, hoy]) {
+        const t = await tabla(fecha, conVentaEnYd);
+        const dia = porDia.get(fecha);
+        expect({ fecha, final: t?.final ?? null }).toEqual({
+          fecha,
+          final: dia?.final ?? null,
+        });
+      }
+      expect(await tabla(hoy, conVentaEnYd)).toMatchObject({
+        inicial: null,
+        final: null,
+      });
+      // Antes de que YD la moviera, YD aporta 0 (YC aun sin ajuste: vacio igual).
+      expect(porDia.get(d6)?.final).toBeNull();
+      // YC se ajusto ese dia, pero el total no tiene Inicial: sin "Ajustado".
+      expect(await tabla(d2, conVentaEnYd)).toMatchObject({
+        inicial: null,
+        ajustado: false,
+      });
+    });
+
+    it('Todas: YD nunca la movió → aporta 0, número en la tabla y en el historial', async () => {
+      const h = await historial(soloYc, d6);
+      const ultimo = h.dias[h.dias.length - 1];
+      expect(ultimo).toMatchObject({ fecha: hoy, inicial: 40, final: 40 });
+      expect(await tabla(hoy, soloYc)).toMatchObject({
+        inicial: 40,
+        final: 40,
+      });
+      expect(await tabla(d2, soloYc)).toMatchObject({
+        inicial: 40,
+        ajustado: true,
+      });
+    });
+
+    it('RF 1 con las dos ajustadas: Final de Todas = Final YC + Final YD y el envío no lo mueve', async () => {
+      const k = await tabla(ayer, enviada, K);
+      const l = await tabla(ayer, enviada, L);
+      const t = await tabla(ayer, enviada);
+      expect(k).toMatchObject({ envios: 6, inicial: 100, final: 94 });
+      expect(l).toMatchObject({ entradas: 6, inicial: 20, final: 26 });
+      expect(t).toMatchObject({ inicial: 120, final: 120 });
+      expect(t?.final).toBe((k?.final ?? 0) + (l?.final ?? 0));
     });
   });
 });

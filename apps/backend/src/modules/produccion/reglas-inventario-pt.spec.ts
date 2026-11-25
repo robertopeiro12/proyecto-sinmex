@@ -7,7 +7,6 @@ import {
   SIN_MOVIMIENTOS,
   sumarRenglones,
   sumarSucursales,
-  tieneDatos,
   validarAjustes,
   type MovimientosDia,
   type RenglonPt,
@@ -251,65 +250,74 @@ describe('serie (encadenado, D2 y D3)', () => {
   });
 });
 
-describe('Todas: sumarSucursales y tieneDatos', () => {
-  const D = '2026-11-02';
-  const conAjuste = serie(
-    [{ fecha: '2026-11-01', inventarioInicial: 10, mermaAcumuladaInicial: 1 }],
-    new Map([[D, mov({ ventas: 3 })]]),
-    D,
-    D,
-  );
-  const vacia = serie([], new Map(), D, D);
-  const conMovSinAjuste = serie([], new Map([[D, mov({ entradas: 4 })]]), D, D);
-
-  it('tieneDatos: con ajuste o con algún movimiento distinto de 0', () => {
-    expect(
-      tieneDatos(
-        [{ fecha: D, inventarioInicial: 0, mermaAcumuladaInicial: 0 }],
-        new Map(),
-      ),
-    ).toBe(true);
-    expect(tieneDatos([], new Map([[D, mov({ cambios: -1 })]]))).toBe(true);
-    expect(tieneDatos([], new Map([[D, mov()]]))).toBe(false);
-    expect(tieneDatos([], new Map())).toBe(false);
-  });
+describe('Todas: sumarSucursales (regla por día)', () => {
+  const D1 = '2026-11-01';
+  const D2 = '2026-11-02';
+  const D3 = '2026-11-03';
+  const ajusteTj = [
+    { fecha: D1, inventarioInicial: 10, mermaAcumuladaInicial: 1 },
+  ];
+  const tj = {
+    dias: serie(ajusteTj, new Map([[D2, mov({ ventas: 3 })]]), D1, D3),
+    ajustes: ajusteTj,
+    primerMovimiento: D2,
+  };
+  const vacia = {
+    dias: serie([], new Map(), D1, D3),
+    ajustes: [],
+    primerMovimiento: null,
+  };
 
   it('una sucursal sin ajuste y sin movimiento aporta 0', () => {
-    const r = sumarSucursales([
-      { dias: conAjuste, conDatos: true },
-      { dias: vacia, conDatos: false },
-    ]);
-    expect(r[0]).toMatchObject({
-      ventas: 3,
-      inicial: 10,
-      final: 7,
-      mermaAcumulada: 1,
-    });
+    const r = sumarSucursales([tj, vacia]);
+    expect(r.map((d) => d.final)).toEqual([10, 7, 7]);
+    expect(r[1]).toMatchObject({ ventas: 3, inicial: 10, mermaAcumulada: 1 });
   });
 
-  it('una sucursal con movimiento y sin ajuste deja null', () => {
-    const r = sumarSucursales([
-      { dias: conAjuste, conDatos: true },
-      { dias: conMovSinAjuste, conDatos: true },
-    ]);
-    expect(r[0]).toMatchObject({
-      ventas: 3,
-      entradas: 4,
-      inicial: null,
-      final: null,
-    });
+  it('sin ajuste: aporta 0 hasta el día antes de su primer movimiento y desde ese día deja null', () => {
+    const mx = {
+      dias: serie([], new Map([[D2, mov({ entradas: 4 })]]), D1, D3),
+      ajustes: [],
+      primerMovimiento: D2,
+    };
+    const r = sumarSucursales([tj, mx]);
+    expect(r.map((d) => d.inicial)).toEqual([10, null, null]);
+    expect(r[1]).toMatchObject({ ventas: 3, entradas: 4, final: null });
   });
 
-  it('ninguna con datos: sin inventario inicial (null, no 0)', () => {
-    const r = sumarSucursales([
-      { dias: vacia, conDatos: false },
-      { dias: vacia, conDatos: false },
-    ]);
+  it('un movimiento anterior a la ventana también deja null (no depende de lo cargado)', () => {
+    const mx = { ...vacia, primerMovimiento: '2026-10-20' };
+    const r = sumarSucursales([tj, mx]);
+    expect(r.map((d) => d.final)).toEqual([null, null, null]);
+  });
+
+  it('con un ajuste a media ventana: null antes (si ya se movió), número desde el ajuste', () => {
+    const ajusteMx = [
+      { fecha: D2, inventarioInicial: 5, mermaAcumuladaInicial: 0 },
+    ];
+    const mx = {
+      dias: serie(ajusteMx, new Map(), D1, D3),
+      ajustes: ajusteMx,
+      primerMovimiento: '2026-10-20',
+    };
+    const r = sumarSucursales([tj, mx]);
+    expect(r.map((d) => d.final)).toEqual([null, 12, 12]);
+  });
+
+  it('ninguna con ajuste hasta ese día: sin inventario inicial (null, no 0)', () => {
+    const r = sumarSucursales([vacia, vacia]);
     expect(r[0]).toMatchObject({
       inicial: null,
       final: null,
       mermaAcumulada: null,
+      ajustado: false,
     });
+  });
+
+  it('"Ajustado" solo si el total tiene Inicial', () => {
+    const mx = { ...vacia, primerMovimiento: '2026-10-20' };
+    expect(sumarSucursales([tj, mx])[0].ajustado).toBe(false);
+    expect(sumarSucursales([tj, vacia])[0].ajustado).toBe(true);
   });
 });
 
@@ -359,6 +367,15 @@ describe('sumarRenglones (Todas y por producto)', () => {
     expect(
       sumarRenglones([renglon({}), renglon({ ajustado: true })]).ajustado,
     ).toBe(true);
+  });
+
+  it('"Ajustado" solo si el Inicial no es null', () => {
+    expect(
+      sumarRenglones([
+        renglon({ ajustado: true, inicial: 10 }),
+        renglon({ inicial: null, final: null, mermaAcumulada: null }),
+      ]).ajustado,
+    ).toBe(false);
   });
 });
 

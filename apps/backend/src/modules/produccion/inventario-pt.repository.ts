@@ -259,6 +259,92 @@ export class InventarioPtRepository {
   }
 
   /**
+   * El primer dia con movimiento de cada presentacion en cada sucursal, hasta
+   * `hasta` (sin limite hacia atras), como `sucursalId|presentacionId` ->
+   * `AAAA-MM-DD`. Decide "Todas" por dia (`sumarSucursales`): una sucursal sin
+   * ajuste que ya movio la presentacion deja el total vacio. Las mismas
+   * fuentes que `movimientos` mas la merma de los vendedores (app, Procesos
+   * con vendedor y la merma contada del corte), en la sucursal del vendedor.
+   */
+  async primerosMovimientos(
+    sucursalIds: readonly string[],
+    hasta: string,
+    presentacionIds: readonly string[] | null,
+  ): Promise<Map<string, string>> {
+    if (sucursalIds.length === 0) return new Map();
+    const suc = idsComoArreglo(sucursalIds);
+    const pres = (col: string) =>
+      presentacionIds
+        ? sql`and ${sql.ref(col)} = any(${idsComoArreglo(presentacionIds)})`
+        : sql``;
+    const r = await sql<{ clave: string; fecha: string }>`
+      with mov as (
+        select vn.sucursal_id, d.presentacion_id, min(vn.fecha) as fecha
+          from venta_nota vn
+          join venta_nota_detalle d on d.venta_nota_id = vn.id
+         where vn.deleted_at is null and d.deleted_at is null
+           and (d.cantidad <> 0 or d.cantidad_promocion <> 0)
+           and vn.sucursal_id = any(${suc})
+           and vn.fecha <= ${hasta}::date ${pres('d.presentacion_id')}
+         group by 1, 2
+        union all
+        select oa.sucursal_id, l.presentacion_id, min(oa.fecha)
+          from operacion_almacen oa
+          join operacion_almacen_linea l on l.operacion_id = oa.id
+         where oa.deleted_at is null
+           and (oa.tipo <> 'retiro_merma' or oa.estado = 'autorizado')
+           and oa.sucursal_id = any(${suc})
+           and oa.fecha <= ${hasta}::date ${pres('l.presentacion_id')}
+         group by 1, 2
+        union all
+        select oa.sucursal_destino_id, l.presentacion_id, min(oa.fecha)
+          from operacion_almacen oa
+          join operacion_almacen_linea l on l.operacion_id = oa.id
+         where oa.deleted_at is null and oa.tipo = 'envio'
+           and oa.sucursal_destino_id = any(${suc})
+           and oa.fecha <= ${hasta}::date ${pres('l.presentacion_id')}
+         group by 1, 2
+        union all
+        -- Procesos: todo menos la merma entregada (no mueve el almacen).
+        select po.sucursal_id, l.presentacion_id, min(po.fecha)
+          from proceso_oficina po
+          join proceso_oficina_linea l on l.proceso_id = po.id
+         where po.deleted_at is null
+           and not (po.tipo = 'merma' and l.sentido = 'entregado')
+           and po.sucursal_id = any(${suc})
+           and po.fecha <= ${hasta}::date ${pres('l.presentacion_id')}
+         group by 1, 2
+        union all
+        -- App: consumo y la merma que cuenta (recibida del cliente y del trayecto).
+        select v.sucursal_id, l.presentacion_id, min(mi.fecha)
+          from movimiento_inventario mi
+          join movimiento_inventario_linea l on l.movimiento_id = mi.id
+          join vendedor v on v.id = mi.vendedor_id
+         where mi.deleted_at is null
+           and (mi.tipo in ('consumo', 'merma_trayecto')
+                or (mi.tipo = 'merma_cliente' and l.sentido = 'recibido'))
+           and v.sucursal_id = any(${suc})
+           and mi.fecha <= ${hasta}::date ${pres('l.presentacion_id')}
+         group by 1, 2
+        union all
+        -- Merma contada en el corte.
+        select v.sucursal_id, rt.presentacion_id, min(rt.fecha)
+          from retorno rt
+          join vendedor v on v.id = rt.vendedor_id
+         where rt.deleted_at is null and rt.piezas_merma > 0
+           and v.sucursal_id = any(${suc})
+           and rt.fecha <= ${hasta}::date ${pres('rt.presentacion_id')}
+         group by 1, 2
+      )
+      select sucursal_id || '|' || presentacion_id as clave,
+             to_char(min(fecha), 'YYYY-MM-DD') as fecha
+        from mov
+       group by sucursal_id, presentacion_id
+    `.execute(this.db);
+    return new Map(r.rows.map((f) => [f.clave, f.fecha]));
+  }
+
+  /**
    * Lo que el corte sabe de los vendedores en el rango (una sucursal por
    * codigo, o todas con `null`): la misma consulta del corte, por dia,
    * incluidos los vendedores dados de baja (su merma pasada sigue contando).

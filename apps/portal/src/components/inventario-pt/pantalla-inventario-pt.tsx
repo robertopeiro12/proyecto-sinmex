@@ -165,8 +165,11 @@ function Inventario({ sucursal, puedeAjustar }: { sucursal: string; puedeAjustar
               : sinInicial === 1
                 ? "presentación sin inventario inicial"
                 : "presentaciones sin inventario inicial"
-          }: su Inicial, Final y Merma acumulada quedan vacíos hasta que se capture un ajuste${
-            puedeAjustar ? " con «Ajustar inventario»" : ""
+          }: su Inicial, Final y Merma acumulada quedan vacíos hasta que ${
+            todas
+              ? // Con Todas el botón está deshabilitado y el vacío puede venir de otra sucursal.
+                `cada sucursal capture su ajuste${puedeAjustar ? " (elígela en el menú lateral)" : ""}`
+              : `se capture un ajuste${puedeAjustar ? " con «Ajustar inventario»" : ""}`
           }. Los movimientos del día sí se ven.`}
         </Aviso>
       )}

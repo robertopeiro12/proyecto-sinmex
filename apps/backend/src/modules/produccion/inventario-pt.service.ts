@@ -40,7 +40,6 @@ import {
   serie,
   SIN_MOVIMIENTOS,
   sumarSucursales,
-  tieneDatos,
   sumarMovimientos,
   sumarRenglones,
   validarAjustes,
@@ -315,10 +314,14 @@ export class InventarioPtService {
       (min, a) => (a.fecha < min ? a.fecha : min),
       desde,
     );
-    const [movimientos, vendedores, hechos] = await Promise.all([
+    const [movimientos, vendedores, hechos, primeros] = await Promise.all([
       this.repo.movimientos(ambito.sucursalIds, inicio, hasta, ids),
       this.repo.movimientosVendedores(ambito.codigo, inicio, hasta),
       this.repo.cortesHechos(inicio, hasta),
+      // Solo "Todas" lo necesita: decide por dia, no por la ventana cargada.
+      ambito.sucursalIds.length > 1
+        ? this.repo.primerosMovimientos(ambito.sucursalIds, hasta, ids)
+        : Promise.resolve(new Map<string, string>()),
     ]);
 
     const enAmbito = new Set(ambito.sucursalIds);
@@ -376,7 +379,8 @@ export class InventarioPtService {
           new Map<string, MovimientosDia>();
         return {
           dias: serie(aj, movs, desde, hasta),
-          conDatos: tieneDatos(aj, movs),
+          ajustes: aj,
+          primerMovimiento: primeros.get(clave(s, p.presentacionId)) ?? null,
           aj,
           movs,
         };

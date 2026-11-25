@@ -202,45 +202,62 @@ export function sumarRenglones<T extends MovimientosDia & EstadoPt>(
   const movs = partes.reduce<MovimientosDia>((t, p) => sumarMovimientos(t, p), {
     ...SIN_MOVIMIENTOS,
   });
+  const inicial = sumaONull(partes.map((p) => p.inicial));
   return {
     ...partes[0],
     ...movs,
-    inicial: sumaONull(partes.map((p) => p.inicial)),
+    inicial,
     final: sumaONull(partes.map((p) => p.final)),
     mermaAcumulada: sumaONull(partes.map((p) => p.mermaAcumulada)),
-    ajustado: partes.some((p) => p.ajustado),
+    // Sin Inicial no hay numero que marcar: la pastilla sola confunde.
+    ajustado: inicial !== null && partes.some((p) => p.ajustado),
   };
 }
 
-/**
- * Una sucursal "tiene datos" de una presentacion si tiene un ajuste que la
- * encadena o algun movimiento distinto de 0 en el rango.
- */
-export function tieneDatos(
-  ajustes: readonly AjustePt[],
-  movimientos: ReadonlyMap<string, MovimientosDia>,
-): boolean {
-  if (ajustes.length > 0) return true;
-  for (const m of movimientos.values())
-    if (CAMPOS.some((c) => m[c] !== 0)) return true;
-  return false;
+/** Lo que una sucursal aporta a "Todas" de una presentacion. */
+export interface SerieSucursal {
+  /** Su serie de `[desde, hasta]` (`serie`). */
+  dias: readonly DiaPt[];
+  /** Sus ajustes vivos (basta el mas reciente <= `desde` y los del rango). */
+  ajustes: readonly AjustePt[];
+  /** Su primer dia con movimiento de la presentacion (<= `hasta`), o `null`. */
+  primerMovimiento: string | null;
 }
 
 /**
- * Todas (decision del controlador, 2026-11-25): una sucursal sin ajuste y sin
- * ningun movimiento en esa presentacion aporta 0 (nunca la manejo); una con
- * movimiento y sin ajuste deja la presentacion en null. Si ninguna tiene
- * datos, la presentacion queda sin inventario inicial (null, no 0).
+ * Todas, decidido por dia y por sucursal (lo mismo en la tabla y en el
+ * historial, sin depender de la ventana cargada):
+ * - con un ajuste <= ese dia, encadena desde el (su numero);
+ * - sin ajuste <= ese dia y con algun movimiento <= ese dia: `null` (la manejo
+ *   y nadie la ha contado) y el total queda vacio;
+ * - sin ajuste ni movimiento hasta ese dia: aporta 0 (nunca la manejo).
+ * Si ninguna sucursal tiene ajuste <= ese dia, el total es `null` (no 0).
  */
-export function sumarSucursales(
-  series: readonly { dias: DiaPt[]; conDatos: boolean }[],
-): DiaPt[] {
-  const conDatos = series.filter((s) => s.conDatos);
-  const usadas = conDatos.length > 0 ? conDatos : series.slice(0, 1);
-  if (usadas.length === 0) return [];
-  return usadas[0].dias.map((_, i) =>
-    sumarRenglones(usadas.map((s) => s.dias[i])),
-  );
+export function sumarSucursales(series: readonly SerieSucursal[]): DiaPt[] {
+  if (series.length === 0) return [];
+  return series[0].dias.map((_, i) => {
+    const fecha = series[0].dias[i].fecha;
+    let algunAjuste = false;
+    const partes = series.map((s) => {
+      const d = s.dias[i];
+      if (s.ajustes.some((a) => a.fecha <= fecha)) {
+        algunAjuste = true;
+        return d;
+      }
+      if (s.primerMovimiento !== null && s.primerMovimiento <= fecha) return d;
+      return { ...d, inicial: 0, final: 0, mermaAcumulada: 0, ajustado: false };
+    });
+    const total = sumarRenglones(partes);
+    return algunAjuste
+      ? total
+      : {
+          ...total,
+          inicial: null,
+          final: null,
+          mermaAcumulada: null,
+          ajustado: false,
+        };
+  });
 }
 
 /** Orden de la vista por presentacion: tamano, producto, id. */

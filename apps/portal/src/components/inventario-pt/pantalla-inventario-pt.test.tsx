@@ -202,6 +202,31 @@ describe("PantallaInventarioPt: el día", () => {
     expect(screen.getByRole("button", { name: "Ajustar inventario" })).toBeDisabled();
   });
 
+  it("sin Inicial no hay marca Ajustado, aunque llegue marcado", async () => {
+    vi.mocked(lib.leerInventarioPt).mockResolvedValue({
+      ...DIA,
+      renglones: [renglon("Agua", "1 L", { inicial: null, final: null, mermaAcumulada: null, ajustado: true })],
+    });
+    render(<PantallaInventarioPt sucursal={null} />);
+    const t = await tabla();
+    expect(within(fila(t, "Agua")).queryByText("Ajustado")).toBeNull();
+  });
+
+  it("con Todas, el aviso de sin inventario inicial manda a elegir la sucursal, no al botón", async () => {
+    mockAuth([VER, AJUSTAR], null);
+    const { unmount } = render(<PantallaInventarioPt sucursal="todas" />);
+    await tabla();
+    const aviso = screen.getByText(/1 presentación sin inventario inicial/);
+    expect(aviso).toHaveTextContent(/cada sucursal capture su ajuste/);
+    expect(aviso).toHaveTextContent(/menú lateral/);
+    expect(aviso).not.toHaveTextContent(/«Ajustar inventario»/);
+    unmount();
+    // Con una sucursal sigue mandando al botón.
+    render(<PantallaInventarioPt sucursal="tj" />);
+    await tabla();
+    expect(screen.getByText(/1 presentación sin inventario inicial/)).toHaveTextContent(/«Ajustar inventario»/);
+  });
+
   it("un fallo se muestra como error", async () => {
     vi.mocked(lib.leerInventarioPt).mockRejectedValue(new Error("x"));
     render(<PantallaInventarioPt sucursal={null} />);

@@ -971,7 +971,7 @@ usuario con sesion pasa.
   - **Cuentas por Cobrar** se queda en el menú; su **Cobrar** (`enlaceCobrar`) lleva a Notas con ese cliente y esa nota palomeada,
     con la sucursal **del cliente** cuando la vista está en "Todas" (si no, Procesos pediría elegir sucursal).
   - **Nube**: nada que subir (sin migración). Backend y portal juntos (el portal pide los filtros nuevos de `GET /ventas`).
-- **Inventario de PT con Ventas (2026-11-27).** *Producción → Inventario de PT con Ventas*
+- **Inventario de PT con Ventas (2026-11-25).** *Producción → Inventario de PT con Ventas*
   (`/produccion/inventario-pt-ventas`): el inventario real del almacén por día y presentación, **calculado** (no se guarda) a
   partir de un conteo físico de arranque. Spec: `docs/superpowers/specs/2026-11-25-inventario-pt-ventas-design.md`.
   - **Fórmula (D2):** `Final = Inicial − Ventas − Merma − Consumo − Promo − Descuentos + Cambios + Entradas − Envíos`;
@@ -990,9 +990,14 @@ usuario con sesion pasa.
     renglones que cambian**. Un ajuste a media serie fija el Inicial de ese día y los siguientes encadenan desde ahí; el día
     anterior no cambia. Se **da de baja** (baja lógica, `DELETE`): ese día vuelve a encadenar desde el ajuste anterior.
   - **Sin ajuste previo → `null`**, nunca 0: Inicial, Final y Merma acumulada salen vacíos ("Sin inventario inicial") y los
-    movimientos del día sí se ven. **"Todas"** = suma de las sucursales vivas; una sin ajuste y sin ningún movimiento en la cadena
-    aporta 0, con movimientos y sin ajuste deja el resultado en `null`. En la pantalla, un total de tamaño con algún renglón
-    `null` queda vacío (no se suma a medias).
+    movimientos del día sí se ven. **"Todas"** = suma de las sucursales vivas, decidida **por día y por (sucursal, presentación)**
+    (`sumarSucursales`), igual en la tabla y en el historial: con un ajuste vivo ≤ ese día encadena desde él; sin ajuste ≤ ese día
+    pero con **algún movimiento de esa presentación en cualquier día ≤ ese día** deja el total en `null`; sin ajuste ni movimiento
+    hasta ese día aporta 0. Si ninguna tiene ajuste ≤ ese día, `null`. El primer movimiento sale de **una** consulta
+    (`primerosMovimientos`, `min(fecha)` por sucursal y presentación, sin límite hacia atrás), **no** de la ventana cargada: así
+    el ajuste de otra presentación no cambia el resultado. **"Ajustado" exige Inicial**: un total `null` no lleva la marca
+    (`sumarRenglones` y `InicialConMarca`). En la pantalla, un total de tamaño con algún renglón `null` queda vacío (no se suma a
+    medias); con "Todas" el aviso manda a capturar el ajuste eligiendo cada sucursal en el menú lateral.
   - **Vendedor dado de baja:** su merma sigue contando en la historia (`movimientosDelRango` con `incluirDadosDeBaja`, solo
     desde aquí; corte, Inventario por vendedor y candado de venta siguen con vendedores vivos). La merma de un vendedor se asigna
     a su sucursal **actual**.

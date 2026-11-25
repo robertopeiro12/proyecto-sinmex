@@ -28,13 +28,14 @@ export function Opcional({ valor }: { valor: number | null }) {
 /**
  * El Inicial con la marca "Ajustado" (D3) si ese día sale de un ajuste. Solo por
  * presentación: un renglón por producto (`presentacionId` null) mezcla presentaciones
- * ajustadas y sin ajustar, así que no lleva la marca (decisión del controlador).
+ * ajustadas y sin ajustar, así que no lleva la marca (decisión del controlador). Sin Inicial
+ * tampoco: la marca sola, sin número, se lee como "se ajustó" y no hay nada que ver.
  */
 export function InicialConMarca({ r }: { r: Pick<RenglonPt, "inicial" | "ajustado" | "presentacionId"> }) {
   return (
     <span className="inline-flex flex-col items-end gap-0.5">
       <Opcional valor={r.inicial} />
-      {r.ajustado && r.presentacionId !== null && (
+      {r.ajustado && r.inicial !== null && r.presentacionId !== null && (
         <Etiqueta tono="informacion" className="px-1.5 py-0 text-[11px]">
           Ajustado
         </Etiqueta>
