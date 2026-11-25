@@ -1,7 +1,7 @@
 import type { BaseDatos } from '../base-datos';
 import { depsDePrueba, snapshotDePrueba } from '../pruebas-apoyo';
 import { crearRepositorioCatalogos } from '../repositorios/catalogos';
-import { migraciones, versionEsquema } from './index';
+import { migraciones } from './index';
 
 /**
  * La 020 (rediseno pieza 2) agrega a la venta quien atendio y el abono al
@@ -16,11 +16,9 @@ function baseAlDia(): BaseDatos {
 }
 
 describe('migracion 020: quien atendio y abono de la venta', () => {
-  it('la 020 es la ultima y deja versionEsquema en 20', () => {
+  it('la 020 es venta-atendio-abono', () => {
     expect(migraciones[19]?.nombre).toBe('venta-atendio-abono');
     expect(migraciones[19]?.version).toBe(20);
-    expect(migraciones).toHaveLength(20);
-    expect(versionEsquema(baseAlDia())).toBe(20);
   });
 
   it('una venta vieja queda con atendio_nombre y abono_centavos nulos', () => {

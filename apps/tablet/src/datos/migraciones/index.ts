@@ -18,6 +18,7 @@ import { cargas } from './017-cargas';
 import { movimientos } from './018-movimientos';
 import { notasAsignadas } from './019-notas-asignadas';
 import { ventaAtendioAbono } from './020-venta-atendio-abono';
+import { cargaRenglon } from './021-carga-renglon';
 import type { Migracion } from './motor';
 
 /**
@@ -50,6 +51,7 @@ export const migraciones: readonly Migracion[] = [
   movimientos,
   notasAsignadas,
   ventaAtendioAbono,
+  cargaRenglon,
 ];
 
 export { ejecutarMigraciones, versionEsquema } from './motor';

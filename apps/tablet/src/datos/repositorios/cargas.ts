@@ -30,7 +30,18 @@ export interface FilaCargaPull {
   version: number;
   respondida_en: MomentoISO | null;
   activo: Booleano;
-  lineas: { presentacion_id: string; piezas: number }[];
+  /**
+   * `aceptada` (pieza 3) como la manda el contrato; opcional para un servidor de
+   * antes de la pieza 3, que no la manda (se guarda nula).
+   */
+  lineas: { presentacion_id: string; piezas: number; aceptada?: boolean | null }[];
+}
+
+/** El booleano del contrato a la columna 1/0/nulo de `carga_detalle`. */
+function aceptadaEnColumna(aceptada: boolean | null | undefined): 0 | 1 | null {
+  if (aceptada === true) return 1;
+  if (aceptada === false) return 0;
+  return null;
 }
 
 export interface LineaCargaConEtiqueta extends CargaDetalle {
@@ -68,7 +79,8 @@ export const PRODUCTO_FUERA_DE_CATALOGO = 'Producto fuera del catálogo';
  * - Una version menor llega tarde: el portal ya la edito despues.
  * - Misma version, la local ya respondida y la que llega pendiente: es un pull
  *   que salio ANTES de que el vendedor aceptara o rechazara. Sin esto, la carga
- *   aceptada volveria a "por aceptar" hasta el pull siguiente.
+ *   aceptada volveria a "por aceptar" hasta el pull siguiente. Desde la pieza 3
+ *   tampoco se tocan sus renglones (y su `aceptada`): se salta la fila entera.
  */
 function llegaTarde(
   local: Pick<Carga, 'estado' | 'version' | 'activo'>,
@@ -133,9 +145,14 @@ export function aplicarSnapshotCargas(
     bd.runSync('delete from carga_detalle where carga_id = $id', { $id: f.id });
     for (const l of f.lineas) {
       bd.runSync(
-        `insert into carga_detalle (carga_id, presentacion_id, piezas)
-         values ($carga_id, $presentacion_id, $piezas)`,
-        { $carga_id: f.id, $presentacion_id: l.presentacion_id, $piezas: l.piezas },
+        `insert into carga_detalle (carga_id, presentacion_id, piezas, aceptada)
+         values ($carga_id, $presentacion_id, $piezas, $aceptada)`,
+        {
+          $carga_id: f.id,
+          $presentacion_id: l.presentacion_id,
+          $piezas: l.piezas,
+          $aceptada: aceptadaEnColumna(l.aceptada),
+        },
       );
     }
     escritas += 1;

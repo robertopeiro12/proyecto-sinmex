@@ -629,6 +629,12 @@ export interface CargaDetalle {
   carga_id: string;
   presentacion_id: string;
   piezas: number;
+  /**
+   * Rediseno pieza 3: si el vendedor acepto el renglon. Nulo mientras la carga
+   * esta pendiente y en las respondidas antes de la pieza 3: en una `aceptada`
+   * cuenta como aceptado (`renglonAceptado`).
+   */
+  aceptada: 0 | 1 | null;
 }
 
 /** T-27 pieza 2: los movimientos que no son venta (D1, D3). */

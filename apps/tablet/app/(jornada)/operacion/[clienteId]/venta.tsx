@@ -42,6 +42,7 @@ import {
 } from '@/estado/venta-pasos';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
+import { Palomita, Renglon } from '@/ui/checklist';
 import { Chip } from '@/ui/chip';
 import { Cifra, pesos } from '@/ui/cifra';
 import { Icono } from '@/ui/icono';
@@ -849,69 +850,6 @@ export default function PantallaVenta() {
     true,
   );
 }
-
-/** Un renglon tocable de la lista o del checklist. */
-function Renglon({
-  children,
-  onPress,
-  etiqueta,
-  borde,
-  fondo = colores.superficie,
-  estadoA11y,
-}: {
-  children: ReactNode;
-  onPress: () => void;
-  etiqueta: string;
-  borde: string;
-  fondo?: string;
-  estadoA11y?: boolean;
-}) {
-  return (
-    <Pressable
-      accessibilityRole={estadoA11y === undefined ? 'button' : 'checkbox'}
-      accessibilityState={estadoA11y === undefined ? undefined : { checked: estadoA11y }}
-      accessibilityLabel={etiqueta}
-      onPress={onPress}
-      style={({ pressed }) => [
-        {
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: espacio.sm,
-          padding: espacio.sm,
-          marginBottom: espacio.sm,
-          borderRadius: radio.medio,
-          borderWidth: grosor.fuerte,
-          borderColor: borde,
-          backgroundColor: fondo,
-        },
-        pressed && { opacity: 0.9 },
-      ]}
-    >
-      {children}
-    </Pressable>
-  );
-}
-
-/** La casilla del checklist: palomita SVG cuando esta encendida. */
-function Palomita({ encendida }: { encendida: boolean }) {
-  return (
-    <View
-      style={{
-        width: 26,
-        height: 26,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderRadius: radio.chico,
-        borderWidth: grosor.fuerte,
-        borderColor: encendida ? colores.exito : colores.bordeFuerte,
-        backgroundColor: encendida ? colores.exito : colores.superficie,
-      }}
-    >
-      {encendida ? <Icono nombre="palomita" tamano={18} color={colores.tintaInversa} /> : null}
-    </View>
-  );
-}
-
 
 /** Un renglon de la nota: "12 × Jamaica 500 ml" y su importe. */
 function LineaNota({ texto, importe }: { texto: string; importe: number }) {

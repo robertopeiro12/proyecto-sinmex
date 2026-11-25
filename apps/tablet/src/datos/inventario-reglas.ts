@@ -21,6 +21,21 @@ export const MOTIVO_CARGA_PENDIENTE = 'Tienes una carga por aceptar';
 export interface LineaCargaInventario {
   presentacion_id: string;
   piezas: number;
+  /** Rediseno pieza 3: 1, 0 o nulo (ver `renglonAceptado`). Ausente = nulo. */
+  aceptada?: 0 | 1 | null;
+}
+
+/**
+ * Rediseno pieza 3: ¿el renglon cuenta en el inventario? Solo en una carga
+ * `aceptada`, y ahi todo renglon que no este en 0: el nulo es una carga
+ * respondida antes de la pieza 3 (se acepto completa). Es la unica regla: la
+ * usan `existencias`, `candadoDeClientes` y los textos de la pantalla.
+ */
+export function renglonAceptado(
+  estado: EstadoCarga,
+  linea: { aceptada?: 0 | 1 | null },
+): boolean {
+  return estado === 'aceptada' && linea.aceptada !== 0;
 }
 
 /** Lo que el inventario necesita de una carga (una `CargaConLineas` sirve tal cual). */
@@ -81,7 +96,8 @@ export interface Faltante {
 }
 
 /**
- * Por presentacion: lo cargado (cargas **aceptadas** y vivas de `hoy`) menos lo
+ * Por presentacion: lo cargado (renglones **aceptados** de las cargas aceptadas
+ * y vivas de `hoy`; pieza 3) menos lo
  * vendido y lo regalado en las ventas de `hoy` (D10: el regalo tambien sale de
  * la camioneta) y, desde la pieza 2, menos la merma entregada, la del trayecto y
  * el consumo de `hoy`. La merma recibida no suma: se cuenta aparte para
@@ -114,7 +130,11 @@ export function existencias(
   };
   for (const c of cargas) {
     if (c.estado !== 'aceptada' || c.activo !== 1 || c.fecha !== hoy) continue;
-    for (const l of c.lineas) de(l.presentacion_id).cargado += l.piezas;
+    for (const l of c.lineas) {
+      // Pieza 3: lo que no palomeo no entra (ni como fila en cero).
+      if (!renglonAceptado(c.estado, l)) continue;
+      de(l.presentacion_id).cargado += l.piezas;
+    }
   }
   for (const v of ventas) {
     if (v.fecha !== hoy) continue;
@@ -192,6 +212,10 @@ export type CandadoClientes =
  *
  * La primera pendiente es la primera en el orden recibido (`leerInventarioDelDia`
  * las da por numero).
+ *
+ * Pieza 3: una `aceptada` con todos sus renglones en 0 cuenta como `rechazada`
+ * (el servidor no la manda asi, pero el inventario no tendria nada). Sin
+ * `lineas` (o vacias) cuenta como lo dice su estado.
  */
 export function candadoDeClientes({
   jornada,
@@ -202,16 +226,29 @@ export function candadoDeClientes({
   jornada: { fecha: FechaISO } | null;
   hoy: FechaISO;
   controlInventario: boolean;
-  cargas: readonly Pick<CargaInventario, 'id' | 'fecha' | 'estado' | 'activo'>[];
+  cargas: readonly (Pick<CargaInventario, 'id' | 'fecha' | 'estado' | 'activo'> & {
+    lineas?: readonly { aceptada?: 0 | 1 | null }[];
+  })[];
 }): CandadoClientes {
   if (jornada?.fecha !== hoy) return { tipo: 'empezar' };
   if (!controlInventario) return null;
-  const deHoy = cargas.filter((c) => c.activo === 1 && c.fecha === hoy);
+  const deHoy = cargas
+    .filter((c) => c.activo === 1 && c.fecha === hoy)
+    .map((c) => ({ id: c.id, estado: estadoEfectivo(c) }));
   if (deHoy.some((c) => c.estado === 'aceptada')) return null;
   const pendiente = deHoy.find((c) => c.estado === 'pendiente');
   if (pendiente) return { tipo: 'carga-pendiente', cargaId: pendiente.id };
   if (deHoy.some((c) => c.estado === 'rechazada')) return { tipo: 'rechazada' };
   return { tipo: 'sin-carga' };
+}
+
+/** `aceptada` sin ningun renglon aceptado = `rechazada` (pieza 3). */
+function estadoEfectivo(c: {
+  estado: EstadoCarga;
+  lineas?: readonly { aceptada?: 0 | 1 | null }[];
+}): EstadoCarga {
+  if (c.estado !== 'aceptada' || !c.lineas || c.lineas.length === 0) return c.estado;
+  return c.lineas.some((l) => renglonAceptado(c.estado, l)) ? 'aceptada' : 'rechazada';
 }
 
 /**

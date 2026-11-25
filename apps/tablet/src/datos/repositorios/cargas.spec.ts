@@ -93,6 +93,61 @@ describe('aplicarSnapshotCargas (mezcla del pull)', () => {
     expect(cargas.porId('carga-1')?.activo).toBe(0);
   });
 
+  it('pieza 3: guarda aceptada por renglon (true 1, false 0, null o ausente nulo)', () => {
+    const { deps, cargas } = montar();
+    aplicarSnapshotCargas(
+      deps.bd,
+      [
+        fila({
+          estado: 'aceptada',
+          lineas: [
+            { presentacion_id: 'pre-1', piezas: 24, aceptada: true },
+            { presentacion_id: 'pre-2', piezas: 12, aceptada: false },
+          ],
+        }),
+        fila({ id: 'c-vieja', numero: 2, estado: 'aceptada', lineas: [{ presentacion_id: 'pre-1', piezas: 5 }] }),
+        fila({ id: 'c-nula', numero: 3, lineas: [{ presentacion_id: 'pre-1', piezas: 5, aceptada: null }] }),
+      ],
+      MOMENTO,
+    );
+    expect(cargas.porId('carga-1')?.lineas.map((l) => [l.presentacion_id, l.aceptada])).toEqual([
+      ['pre-1', 1],
+      ['pre-2', 0],
+    ]);
+    expect(cargas.porId('c-vieja')?.lineas[0]?.aceptada).toBeNull();
+    expect(cargas.porId('c-nula')?.lineas[0]?.aceptada).toBeNull();
+  });
+
+  it('pieza 3: un pull viejo (misma version, pendiente) no pisa la respuesta ni sus renglones', () => {
+    const { deps, cargas } = montar();
+    cargas.aplicarRespuesta(
+      fila({
+        estado: 'aceptada',
+        lineas: [
+          { presentacion_id: 'pre-1', piezas: 24, aceptada: true },
+          { presentacion_id: 'pre-2', piezas: 12, aceptada: false },
+        ],
+      }),
+    );
+    expect(
+      aplicarSnapshotCargas(
+        deps.bd,
+        [
+          fila({
+            lineas: [
+              { presentacion_id: 'pre-1', piezas: 24, aceptada: null },
+              { presentacion_id: 'pre-2', piezas: 12, aceptada: null },
+            ],
+          }),
+        ],
+        MOMENTO,
+      ),
+    ).toBe(0);
+    const carga = cargas.porId('carga-1');
+    expect(carga?.estado).toBe('aceptada');
+    expect(carga?.lineas.map((l) => l.aceptada)).toEqual([1, 0]);
+  });
+
   it('catalogos.guardarSnapshot aplica las cargas del pull y avisa del cambio', () => {
     const { catalogos, cargas } = montar();
     const antes = catalogos.version();
@@ -154,6 +209,25 @@ describe('el inventario del dia', () => {
         mermaEntregada: 0, mermaTrayecto: 0, consumo: 0, mermaRecibida: 0, existencia: 12, mermaPorRegresar: 0,
       },
     ]);
+  });
+
+  it('pieza 3: el renglon no aceptado no suma al inventario ni a la venta', () => {
+    const { deps, cargas } = montar();
+    aplicarSnapshotCargas(
+      deps.bd,
+      [
+        fila({
+          estado: 'aceptada',
+          lineas: [
+            { presentacion_id: 'pre-1', piezas: 24, aceptada: true },
+            { presentacion_id: 'pre-2', piezas: 12, aceptada: false },
+          ],
+        }),
+      ],
+      MOMENTO,
+    );
+    expect(cargas.filasInventario('ven-1').map((f) => [f.presentacionId, f.cargado])).toEqual([['pre-1', 24]]);
+    expect(cargas.paraVenta('ven-1').existencias.has('pre-2')).toBe(false);
   });
 
   it('paraVenta: control, bloqueo y existencias del momento', () => {
@@ -229,6 +303,32 @@ describe('candadoDeHoy (rediseño, pieza 1)', () => {
     expect(cargas.candadoDeHoy('ven-1', jornadaDeHoy)).toEqual({ tipo: 'carga-pendiente', cargaId: 'carga-1' });
 
     cargas.aplicarRespuesta(fila({ estado: 'aceptada' }));
+    expect(cargas.candadoDeHoy('ven-1', jornadaDeHoy)).toBeNull();
+  });
+
+  it('pieza 3: rechazar todo deja los clientes cerrados; aceptar uno los abre', () => {
+    const { deps, cargas } = montar();
+    deps.bd.runSync("update vendedor set control_inventario = 1 where id = 'ven-1'");
+    cargas.aplicarRespuesta(
+      fila({
+        estado: 'rechazada',
+        motivo_rechazo: null,
+        lineas: [
+          { presentacion_id: 'pre-1', piezas: 24, aceptada: false },
+          { presentacion_id: 'pre-2', piezas: 12, aceptada: false },
+        ],
+      }),
+    );
+    expect(cargas.candadoDeHoy('ven-1', jornadaDeHoy)).toEqual({ tipo: 'rechazada' });
+
+    cargas.aplicarRespuesta(
+      fila({
+        id: 'c-2',
+        numero: 2,
+        estado: 'aceptada',
+        lineas: [{ presentacion_id: 'pre-1', piezas: 24, aceptada: true }],
+      }),
+    );
     expect(cargas.candadoDeHoy('ven-1', jornadaDeHoy)).toBeNull();
   });
 

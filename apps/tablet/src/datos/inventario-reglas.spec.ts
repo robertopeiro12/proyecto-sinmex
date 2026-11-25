@@ -1,11 +1,13 @@
 import {
   bloqueoDeVenta,
+  candadoDeClientes,
   cargaPendiente,
   consumoDelDia,
   existencias,
   faltantesDeMovimiento,
   faltantesDeVenta,
   MOTIVO_CARGA_PENDIENTE,
+  renglonAceptado,
   textoFaltante,
   type CargaInventario,
   type LineaMovimientoInventario,
@@ -251,5 +253,53 @@ describe('consumoDelDia (D4)', () => {
         HOY,
       ),
     ).toBe(2);
+  });
+});
+
+describe('aceptacion por renglon (rediseño, pieza 3)', () => {
+  const tres = [
+    { presentacion_id: 'horchata', piezas: 20, aceptada: 1 as const },
+    { presentacion_id: 'jamaica', piezas: 12, aceptada: 1 as const },
+    { presentacion_id: 'limon', piezas: 6, aceptada: 0 as const },
+  ];
+
+  it('existencias: una carga aceptada 2 de 3 no suma la tercera', () => {
+    const e = existencias([carga({ lineas: tres })], [], HOY);
+    expect(e.get('horchata')?.cargado).toBe(20);
+    expect(e.get('jamaica')?.cargado).toBe(12);
+    expect(e.has('limon')).toBe(false);
+  });
+
+  it('existencias: null en una aceptada cuenta como aceptado (respondida antes de la pieza 3)', () => {
+    const e = existencias([carga({ lineas: [{ presentacion_id: 'horchata', piezas: 20, aceptada: null }] })], [], HOY);
+    expect(e.get('horchata')?.cargado).toBe(20);
+  });
+
+  it('renglonAceptado: solo en una carga aceptada, y 0 no cuenta', () => {
+    expect(renglonAceptado('aceptada', { aceptada: 1 })).toBe(true);
+    expect(renglonAceptado('aceptada', { aceptada: null })).toBe(true);
+    expect(renglonAceptado('aceptada', {})).toBe(true);
+    expect(renglonAceptado('aceptada', { aceptada: 0 })).toBe(false);
+    expect(renglonAceptado('rechazada', { aceptada: null })).toBe(false);
+    expect(renglonAceptado('pendiente', { aceptada: null })).toBe(false);
+  });
+
+  describe('candadoDeClientes', () => {
+    const base = { jornada: { fecha: HOY }, hoy: HOY, controlInventario: true };
+    const ceros = tres.map((l) => ({ ...l, aceptada: 0 as const }));
+
+    it('una aceptada con todos los renglones en 0 cuenta como rechazada', () => {
+      expect(candadoDeClientes({ ...base, cargas: [carga({ lineas: ceros })] })).toEqual({ tipo: 'rechazada' });
+    });
+
+    it('con un renglon en 1 abre los clientes', () => {
+      expect(candadoDeClientes({ ...base, cargas: [carga({ lineas: tres })] })).toBeNull();
+    });
+
+    it('la pendiente sigue ganandole a una aceptada sin renglones aceptados', () => {
+      expect(
+        candadoDeClientes({ ...base, cargas: [carga({ lineas: ceros }), carga({ id: 'c-2', numero: 2, estado: 'pendiente' })] }),
+      ).toEqual({ tipo: 'carga-pendiente', cargaId: 'c-2' });
+    });
   });
 });

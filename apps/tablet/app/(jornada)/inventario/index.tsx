@@ -2,7 +2,14 @@ import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { Text, View } from 'react-native';
 
-import { filasPorRegresar, NOTA_CONTROL_APAGADO, pastillaCarga, totalPiezas } from '@/estado/inventario';
+import {
+  filasPorRegresar,
+  NOTA_CONTROL_APAGADO,
+  pastillaCarga,
+  salio,
+  tituloAvisoCarga,
+  totalPiezas,
+} from '@/estado/inventario';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import { Boton } from '@/ui/boton';
@@ -13,12 +20,13 @@ import { useTema } from '@/ui/tema';
 import { espacio } from '@/ui/tokens';
 
 /**
- * Inventario (T-27, entrada del menu): las cargas de hoy con su estado y total;
- * por presentacion Cargado − Vendido − Regalado − Merma entregada − Merma del
- * trayecto − Consumo = Existencia (pieza 2), y lo que hay que regresar a la
- * planta: piezas buenas y merma. Con el control apagado se muestra igual, con
- * la nota. Toda la cuenta vive en `inventario-reglas.ts` (con pruebas); aqui
- * solo se pinta.
+ * Inventario (T-27, entrada del menu; rediseño pieza 3, maqueta 5): arriba, el
+ * aviso de cada carga o recarga por aceptar ("Revisar recarga" abre el mismo
+ * checklist); el resumen por producto: Cargado · Salió · Te quedan (solo los
+ * renglones aceptados; Salió = vendido, regalado, mermas y consumo); lo que hay
+ * que regresar a la planta, y las cargas de hoy ya respondidas con su estado
+ * ("Aceptada 3 de 5"). Con el control apagado se muestra igual, con la nota.
+ * Toda la cuenta vive en `inventario-reglas.ts` (con pruebas); aqui solo se pinta.
  */
 export default function Inventario() {
   const { datos, vendedor, versionCatalogos } = useJawa();
@@ -39,12 +47,14 @@ export default function Inventario() {
   }, [datos, vendedor, versionCatalogos, ultimaSincronizacion]);
 
   const porRegresar = filasPorRegresar(vista.filas);
+  const pendientes = vista.cargas.filter((c) => c.estado === 'pendiente');
+  const respondidas = vista.cargas.filter((c) => c.estado !== 'pendiente');
+  const abrir = (cargaId: string) =>
+    router.push({ pathname: '/(jornada)/inventario/[cargaId]', params: { cargaId } });
 
   return (
     <MarcoMenu clave="inventario" titulo="Inventario">
-      <Pantalla
-        subtitulo="Lo que traes hoy: tus cargas aceptadas menos lo que vendiste, regalaste, repusiste, se mermó y consumiste."
-      >
+      <Pantalla subtitulo="Lo que traes hoy: lo que aceptaste menos lo que vendiste, regalaste, repusiste, se mermó y consumiste.">
         {!vista.control ? (
           <Tarjeta estado="pendiente" etiqueta="Control apagado">
             <Text style={estilos.textoTarjeta}>{NOTA_CONTROL_APAGADO}.</Text>
@@ -52,67 +62,52 @@ export default function Inventario() {
           </Tarjeta>
         ) : null}
 
-        <Text style={estilos.seccion}>Cargas de hoy</Text>
-        {vista.cargas.length === 0 ? (
-          <Tarjeta etiqueta="Sin cargas">
+        {pendientes.map((c) => (
+          <Tarjeta key={c.id} estado="pendiente" etiqueta={tituloAvisoCarga(c)}>
+            <Text style={estilos.textoTarjeta}>
+              Carga n.º {c.numero} · {c.lineas.length === 1 ? '1 producto' : `${c.lineas.length} productos`} ·{' '}
+              <Cifra valor={totalPiezas(c.lineas)} /> piezas
+            </Text>
+            <Boton
+              etiqueta={c.numero > 1 ? 'Revisar recarga' : 'Revisar carga'}
+              tono="primaria"
+              icono="adelante"
+              ancho="ajustado"
+              onPress={() => abrir(c.id)}
+              estilo={{ marginTop: espacio.sm }}
+            />
+          </Tarjeta>
+        ))}
+
+        <Text style={estilos.seccion}>Lo que traes</Text>
+        {vista.filas.length === 0 ? (
+          <Tarjeta etiqueta="Sin producto">
             <Text style={estilos.textoSuave}>
-              El almacén todavía no te registra carga hoy. Cuando te la entreguen, toca Refrescar en la ruta.
+              {vista.cargas.length === 0
+                ? 'El almacén todavía no te registra carga hoy. Cuando te la entreguen, toca Refrescar en la ruta.'
+                : 'Acepta una carga para ver lo que traes.'}
             </Text>
           </Tarjeta>
         ) : (
-          vista.cargas.map((c) => {
-            const p = pastillaCarga(c.estado);
-            return (
-              <Tarjeta key={c.id} estado={p.estado} etiqueta={`Carga n.º ${c.numero}`}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: espacio.sm }}>
-                  <Pastilla texto={p.texto} estado={p.estado} />
-                  <Text style={estilos.textoSuave}>
-                    <Cifra valor={totalPiezas(c.lineas)} tono="suave" /> piezas
-                  </Text>
-                </View>
-                {c.estado === 'rechazada' && c.motivo_rechazo ? (
-                  <Text style={estilos.error}>La rechazaste: {c.motivo_rechazo}</Text>
-                ) : null}
-                <Boton
-                  etiqueta={c.estado === 'pendiente' ? 'Revisar y aceptar' : 'Ver la carga'}
-                  tono={c.estado === 'pendiente' ? 'primaria' : 'neutra'}
-                  icono="adelante"
-                  ancho="ajustado"
-                  onPress={() =>
-                    router.push({ pathname: '/(jornada)/inventario/[cargaId]', params: { cargaId: c.id } })
-                  }
-                  estilo={{ marginTop: espacio.sm }}
-                />
-              </Tarjeta>
-            );
-          })
-        )}
-
-        <Text style={estilos.seccion}>Por presentación</Text>
-        {vista.filas.length === 0 ? (
-          <Tarjeta etiqueta="Sin producto">
-            <Text style={estilos.textoSuave}>Acepta una carga para ver lo que traes.</Text>
-          </Tarjeta>
-        ) : (
-          <Tarjeta etiqueta="Cargado − Vendido − Regalado − Merma entregada − Merma del trayecto − Consumo = Existencia">
+          <Tarjeta etiqueta="Por producto">
+            <View style={[filaResumen, { marginBottom: espacio.sm }]}>
+              <Text style={[estilos.etiqueta, { flex: 2 }]}>Producto</Text>
+              <Text style={[estilos.etiqueta, columnaTitulo]}>Cargado</Text>
+              <Text style={[estilos.etiqueta, columnaTitulo]}>Salió</Text>
+              <Text style={[estilos.etiqueta, columnaTitulo]}>Te quedan</Text>
+            </View>
             {vista.filas.map((f) => (
-              <View
-                key={f.presentacionId}
-                style={{
-                  flexDirection: 'row',
-                  flexWrap: 'wrap',
-                  justifyContent: 'space-between',
-                  gap: espacio.sm,
-                  marginBottom: espacio.xs,
-                }}
-              >
-                <Text style={[estilos.textoTarjeta, { flexShrink: 1 }]}>{f.etiqueta}</Text>
-                <Text style={estilos.textoSuave}>
-                  <Cifra valor={f.cargado} tono="suave" /> − <Cifra valor={f.vendido} tono="suave" /> −{' '}
-                  <Cifra valor={f.regalado} tono="suave" /> − <Cifra valor={f.mermaEntregada} tono="suave" /> −{' '}
-                  <Cifra valor={f.mermaTrayecto} tono="suave" /> − <Cifra valor={f.consumo} tono="suave" /> ={' '}
+              <View key={f.presentacionId} style={[filaResumen, { marginBottom: espacio.xs }]}>
+                <Text style={[estilos.textoTarjeta, { flex: 2 }]}>{f.etiqueta}</Text>
+                <View style={columnaCifra}>
+                  <Cifra valor={f.cargado} tono="suave" />
+                </View>
+                <View style={columnaCifra}>
+                  <Cifra valor={salio(f)} tono="suave" />
+                </View>
+                <View style={columnaCifra}>
                   <Cifra valor={f.existencia} tono={f.existencia <= 0 ? 'peligro' : 'tinta'} />
-                </Text>
+                </View>
               </View>
             ))}
           </Tarjeta>
@@ -139,7 +134,41 @@ export default function Inventario() {
             ))}
           </Tarjeta>
         )}
+
+        {respondidas.length > 0 ? (
+          <>
+            <Text style={estilos.seccion}>Cargas de hoy</Text>
+            {respondidas.map((c) => {
+              const p = pastillaCarga(c);
+              return (
+                <Tarjeta key={c.id} estado={p.estado} etiqueta={`Carga n.º ${c.numero}`}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: espacio.sm }}>
+                    <Pastilla texto={p.texto} estado={p.estado} />
+                    <Text style={estilos.textoSuave}>
+                      <Cifra valor={totalPiezas(c.lineas)} tono="suave" /> piezas
+                    </Text>
+                  </View>
+                  {c.estado === 'rechazada' && c.motivo_rechazo ? (
+                    <Text style={estilos.error}>La rechazaste: {c.motivo_rechazo}</Text>
+                  ) : null}
+                  <Boton
+                    etiqueta="Ver la carga"
+                    tono="neutra"
+                    icono="adelante"
+                    ancho="ajustado"
+                    onPress={() => abrir(c.id)}
+                    estilo={{ marginTop: espacio.sm }}
+                  />
+                </Tarjeta>
+              );
+            })}
+          </>
+        ) : null}
       </Pantalla>
     </MarcoMenu>
   );
 }
+
+const filaResumen = { flexDirection: 'row', alignItems: 'center', gap: espacio.sm } as const;
+const columnaTitulo = { flex: 1, textAlign: 'right' } as const;
+const columnaCifra = { flex: 1, alignItems: 'flex-end' } as const;
