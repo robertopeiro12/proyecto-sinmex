@@ -17,6 +17,9 @@ import { InventarioVendedorService } from './inventario-vendedor.service';
 import { InventarioPtController } from './inventario-pt.controller';
 import { InventarioPtRepository } from './inventario-pt.repository';
 import { InventarioPtService } from './inventario-pt.service';
+import { InventarioPtRecargasController } from './inventario-pt-recargas.controller';
+import { InventarioPtRecargasRepository } from './inventario-pt-recargas.repository';
+import { InventarioPtRecargasService } from './inventario-pt-recargas.service';
 
 // T-27 pieza 1: la carga y las recargas del vendedor (tabla `carga`). Exporta
 // `CargasService` para que sincronizacion/ baje las cargas en el pull y atienda
@@ -35,6 +38,9 @@ import { InventarioPtService } from './inventario-pt.service';
 // Inventario de PT con Ventas (tabla `inventario_pt_ajuste`): solo lectura de
 // ventas, Registro de Operacion, Procesos y la tablet, mas los ajustes. La
 // merma de los vendedores sale de la cuenta del corte (`movimientosDelRango`).
+//
+// Inventario de PT con Recargas: solo lectura de hoy (cargas y Registro de
+// Operacion); el Inicial lo da `InventarioPtService` (la misma cuenta).
 @Module({
   imports: [AuthModule],
   controllers: [
@@ -44,6 +50,7 @@ import { InventarioPtService } from './inventario-pt.service';
     OperacionesAlmacenController,
     InventarioVendedorController,
     InventarioPtController,
+    InventarioPtRecargasController,
   ],
   providers: [
     CargasService,
@@ -57,6 +64,8 @@ import { InventarioPtService } from './inventario-pt.service';
     InventarioVendedorService,
     InventarioPtService,
     InventarioPtRepository,
+    InventarioPtRecargasService,
+    InventarioPtRecargasRepository,
   ],
   exports: [CargasService, CortesService],
 })

@@ -99,7 +99,7 @@ export interface AjustesPt {
 }
 
 /** Las sucursales que se suman: una, o todas las vivas. */
-interface Ambito {
+export interface Ambito {
   sucursalIds: string[];
   /** `null` = todas. */
   codigo: string | null;
@@ -290,6 +290,28 @@ export class InventarioPtService {
   }
 
   /**
+   * El Inicial (y si viene de un ajuste) de cada presentacion en `fecha`, ya
+   * sumado sobre el ambito: la misma cuenta de la tabla (ajuste de ese dia o
+   * Final del anterior; "Todas" con `sumarSucursales`). Lo usa Inventario de PT
+   * con Recargas, que arranca del mismo numero; no exige `inventario_pt.ver`
+   * (el permiso lo pone el controller de quien llama).
+   */
+  async inicialesDelDia(
+    ambito: Ambito,
+    presentaciones: PresentacionPt[],
+    fecha: string,
+  ): Promise<Map<string, { inicial: number | null; ajustado: boolean }>> {
+    if (presentaciones.length === 0) return new Map();
+    const series = await this.calcular(ambito, presentaciones, fecha, fecha);
+    return new Map(
+      series.map(({ presentacion, dias }) => [
+        presentacion.presentacionId,
+        { inicial: dias[0].inicial, ajustado: dias[0].ajustado },
+      ]),
+    );
+  }
+
+  /**
    * La serie de cada presentacion de `[desde, hasta]`, sumada sobre las
    * sucursales del ambito. Con `objetivo = null`: las presentaciones vivas mas
    * las que tuvieron movimiento en el rango o un ajuste que las encadena.
@@ -404,8 +426,8 @@ export class InventarioPtService {
     });
   }
 
-  /** La presentacion pedida o las del producto pedido (exactamente uno). */
-  private async objetivo(q: {
+  /** La presentacion pedida o las del producto pedido (exactamente uno). Publico para PT con Recargas. */
+  async objetivo(q: {
     presentacion?: string;
     producto?: string;
   }): Promise<PresentacionPt[]> {
@@ -426,8 +448,8 @@ export class InventarioPtService {
     return todas;
   }
 
-  /** Las sucursales del alcance. `soloUna`: `todas` = 400 (ajustes). */
-  private async ambito(
+  /** Las sucursales del alcance. `soloUna`: `todas` = 400 (ajustes). Publico para PT con Recargas. */
+  async ambito(
     usuarioId: string,
     sucursal: string | undefined,
     soloUna = false,
@@ -449,7 +471,8 @@ export class InventarioPtService {
     return { sucursalIds: [s.id], codigo: s.codigo };
   }
 
-  private hoy(): Promise<string> {
+  /** Hoy en Tijuana (reloj de Postgres). */
+  hoy(): Promise<string> {
     return this.cortes.hoyEnTijuana();
   }
 
