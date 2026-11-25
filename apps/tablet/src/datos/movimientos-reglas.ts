@@ -13,7 +13,7 @@ import type { SentidoMovimiento, TipoMovimiento } from './tipos';
 export const MAX_PIEZAS_MOVIMIENTO = 99_999;
 export const LARGO_MAX_COMENTARIO_MOVIMIENTO = 300;
 
-export const MENSAJE_FALTA_RECIBIDO = 'Captura al menos una pieza en «Recibí dañado».';
+export const MENSAJE_FALTA_RECIBIDO = 'Captura al menos una pieza en «Me entregó el cliente».';
 export const MENSAJE_SIN_PIEZAS = 'Captura al menos una pieza.';
 /** Rediseño pieza 4 (decision 1 del plan): las dos mermas llevan motivo. */
 export const MENSAJE_FALTA_MOTIVO = 'Elige el motivo de la merma.';
@@ -68,7 +68,8 @@ export function validarMovimiento(e: EntradaMovimiento): string[] {
   if (esCambio && e.clienteId === null) errores.push('El cambio necesita al cliente.');
   if (!conCliente && e.clienteId !== null) errores.push('La merma del trayecto y el consumo no llevan cliente.');
 
-  const motivo = e.motivoMermaId ?? null;
+  // '' (un selector sin eleccion) cuenta como sin motivo, igual que null.
+  const motivo = e.motivoMermaId || null;
   if (llevaMotivo(e.tipo) && motivo === null) errores.push(MENSAJE_FALTA_MOTIVO);
   if (!llevaMotivo(e.tipo) && motivo !== null) errores.push('El cambio y el consumo no llevan motivo de merma.');
 

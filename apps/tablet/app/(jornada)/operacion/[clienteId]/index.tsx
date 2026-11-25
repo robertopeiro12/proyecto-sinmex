@@ -6,9 +6,9 @@ import { motivoBloqueoVenta, porAtender } from '@/datos/notas-asignadas-reglas';
 import type { SyncEstado } from '@/datos/tipos';
 import { TEXTO_CANDADO } from '@/estado/empezar-ruta';
 import { firmaPorSubir } from '@/estado/firma';
-import { accionesCliente } from '@/estado/hoja-cliente';
+import { accionesCliente, TITULO_MERMA_Y_CAMBIOS } from '@/estado/hoja-cliente';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
-import { pastillaMovimiento, resumenMovimiento } from '@/estado/movimiento';
+import { ETIQUETA_TIPO_MOVIMIENTO, pastillaMovimiento, resumenMovimiento } from '@/estado/movimiento';
 import { etiquetaCondicionPendiente, notaParaCobrar, venderDesdeFicha } from '@/estado/notas-asignadas';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
@@ -405,10 +405,11 @@ export default function FichaCliente() {
           destino={{ pathname: '/(jornada)/operacion/[clienteId]/visita-sin-venta', params }}
           habilitado={acciones.visita.habilitado}
         />
-        {/* T-27 pieza 2 (D2): la merma del cliente. Tambien al prospecto: pudo
-            recibir producto dañado en su regalo de bienvenida. */}
+        {/* T-27 pieza 2 (D2): la merma del cliente; desde la pieza 4 del rediseño
+            tambien los cambios. Tambien al prospecto: pudo recibir producto
+            dañado en su regalo de bienvenida. */}
         <BotonAccion
-          titulo="Merma"
+          titulo={TITULO_MERMA_Y_CAMBIOS}
           icono="merma"
           nota={null}
           destino={{ pathname: '/(jornada)/operacion/[clienteId]/merma', params }}
@@ -575,18 +576,19 @@ export default function FichaCliente() {
             )}
           </Tarjeta>
 
-          {/* T-27 pieza 2: la merma con este cliente, con su subida. No se edita ni se borra (D6). */}
+          {/* T-27 pieza 2: la merma (y desde la pieza 4, los cambios) con este cliente, con su subida. No se edita ni se borra (D6). */}
           <Tarjeta estado={estadoMovimientos} etiqueta="Movimientos de hoy">
             {hoy.movimientos.length === 0 ? (
-              <Text style={estilos.textoSuave}>Sin merma registrada hoy.</Text>
+              <Text style={estilos.textoSuave}>Sin merma ni cambios hoy.</Text>
             ) : (
               hoy.movimientos.map((m) => {
                 const p = pastillaMovimiento(m);
                 return (
                   <View key={m.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
                     <Text style={estilos.textoTarjeta}>
-                      Merma · <Cifra valor={formatearHora(m.registrado_en)} />
+                      {ETIQUETA_TIPO_MOVIMIENTO[m.tipo]} · <Cifra valor={formatearHora(m.registrado_en)} />
                     </Text>
+                    {m.motivo_nombre ? <Text style={estilos.textoSuave}>{m.motivo_nombre}</Text> : null}
                     <Text style={estilos.textoSuave}>{resumenMovimiento(m)}</Text>
                     {m.comentario ? <Text style={estilos.textoSuave}>{m.comentario}</Text> : null}
                     <Pastilla texto={p.texto} estado={p.estado} />

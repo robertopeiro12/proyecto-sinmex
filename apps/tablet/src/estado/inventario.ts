@@ -127,9 +127,13 @@ export function tituloAvisoCarga(carga: { numero: number }): string {
   return carga.numero > 1 ? 'Recarga esperando' : 'Carga por aceptar';
 }
 
-/** "Salió" del resumen: vendido + regalado + mermas + consumo, o sea cargado − existencia. */
+/**
+ * "Salió" del resumen: vendido + regalado + mermas + consumo, o sea cargado −
+ * existencia. Nunca negativo: un cambio que recibe mas de lo que entrega de una
+ * presentacion deja la existencia arriba de lo cargado (rediseño pieza 4).
+ */
 export function salio(fila: { cargado: number; existencia: number }): number {
-  return fila.cargado - fila.existencia;
+  return Math.max(0, fila.cargado - fila.existencia);
 }
 
 export function totalPiezas(lineas: readonly { piezas: number }[]): number {

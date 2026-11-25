@@ -21,8 +21,15 @@ export interface AccionesCliente {
    */
   cobrar: { visible: boolean; principal: boolean; nota: string } | null;
   visita: { habilitado: boolean };
+  /** "Merma y cambios" (`TITULO_MERMA_Y_CAMBIOS`). */
   merma: { habilitado: boolean };
 }
+
+/**
+ * Rediseño pieza 4 (maqueta 14): un solo boton para la merma y los cambios del
+ * cliente; dentro, dos apartados.
+ */
+export const TITULO_MERMA_Y_CAMBIOS = 'Merma y cambios';
 
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 

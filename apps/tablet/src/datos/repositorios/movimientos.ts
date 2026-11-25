@@ -50,6 +50,7 @@ export interface MovimientoConLineas extends Movimiento {
 /** Una fila de captura: las presentaciones activas del catalogo local. */
 export interface PresentacionMovimiento {
   presentacionId: string;
+  /** "Jamaica · 1 L", como la lista de venta (rediseño pieza 4, maquetas 14 y 16). */
   etiqueta: string;
 }
 
@@ -108,7 +109,9 @@ export function crearRepositorioMovimientos(
       }
 
       const comentario = recortar(datos.comentario);
-      const errores = validarMovimiento({ ...datos, comentario });
+      // '' (un selector sin eleccion) cuenta como sin motivo, igual que null.
+      const motivoMermaId = datos.motivoMermaId || null;
+      const errores = validarMovimiento({ ...datos, motivoMermaId, comentario });
       if (errores.length > 0) throw new ErrorMovimiento(errores.join(' '));
 
       if (datos.clienteId !== null) {
@@ -125,8 +128,8 @@ export function crearRepositorioMovimientos(
       // Rediseño pieza 4: el motivo tiene que estar vivo y aplicar a esta merma
       // (los de solo almacen tambien bajan en el pull). Se copia su nombre.
       let motivoNombre: string | null = null;
-      if (llevaMotivo(datos.tipo) && datos.motivoMermaId) {
-        const motivo = catalogos.obtenerMotivoMerma(datos.motivoMermaId);
+      if (llevaMotivo(datos.tipo) && motivoMermaId !== null) {
+        const motivo = catalogos.obtenerMotivoMerma(motivoMermaId);
         const aplica = datos.tipo === 'merma_cliente' ? motivo?.aplica_cliente : motivo?.aplica_vehiculo;
         if (!motivo || motivo.activo !== 1 || aplica !== 1) throw new ErrorMovimiento(MENSAJE_MOTIVO_NO_SIRVE);
         motivoNombre = motivo.nombre;
@@ -192,7 +195,7 @@ export function crearRepositorioMovimientos(
             $cliente_id: datos.clienteId,
             $tipo: datos.tipo,
             $comentario: comentario,
-            $motivo_merma_id: motivoNombre === null ? null : (datos.motivoMermaId ?? null),
+            $motivo_merma_id: motivoNombre === null ? null : motivoMermaId,
             $motivo_nombre: motivoNombre,
             $registrado_en: reloj.ahora(),
           },
@@ -260,7 +263,7 @@ export function crearRepositorioMovimientos(
     /** Las presentaciones activas, por producto y volumen: las filas de captura (de cualquier sabor y tamaño, D2). */
     presentaciones(): PresentacionMovimiento[] {
       return bd.getAllSync<PresentacionMovimiento>(
-        `select pr.id as presentacionId, p.nombre || ' ' || pr.volumen as etiqueta
+        `select pr.id as presentacionId, p.nombre || ' · ' || pr.volumen as etiqueta
            from presentacion pr
            join producto p on p.id = pr.producto_id
           where pr.activo = 1 and p.activo = 1

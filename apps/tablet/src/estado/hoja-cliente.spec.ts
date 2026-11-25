@@ -1,6 +1,6 @@
 import type { NotaAsignadaDeHoy } from '@/datos/notas-asignadas-reglas';
 
-import { accionesCliente } from './hoja-cliente';
+import { accionesCliente, TITULO_MERMA_Y_CAMBIOS } from './hoja-cliente';
 
 function asignada(cambios: Partial<NotaAsignadaDeHoy> = {}): NotaAsignadaDeHoy {
   return {
@@ -107,4 +107,8 @@ test('prospecto: sin Cobrar y Vender con su nota', () => {
 test('sin bloqueo y sin candado: todo encendido', () => {
   const a = accionesCliente({ asignadas: [], notasConSaldo: 0, esProspecto: false, operacionesHabilitadas: true, candado: null });
   expect(a).toEqual({ vender: { habilitado: true, nota: null }, cobrar: null, visita: { habilitado: true }, merma: { habilitado: true } });
+});
+
+test('el boton de la merma dice "Merma y cambios" (rediseño pieza 4)', () => {
+  expect(TITULO_MERMA_Y_CAMBIOS).toBe('Merma y cambios');
 });

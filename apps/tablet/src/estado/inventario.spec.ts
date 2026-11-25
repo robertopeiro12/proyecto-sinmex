@@ -180,6 +180,8 @@ describe('el resumen de Inventario (maqueta 5)', () => {
   it('salio = cargado − existencia (vendido, regalado, mermas y consumo)', () => {
     expect(salio({ cargado: 48, existencia: 28 })).toBe(20);
     expect(salio({ cargado: 0, existencia: -4 })).toBe(4);
+    // Un cambio que recibe mas de lo que entrega sube la existencia arriba de lo cargado.
+    expect(salio({ cargado: 10, existencia: 13 })).toBe(0);
   });
 
   it('tituloAvisoCarga: la primera es "Carga por aceptar", las demas "Recarga esperando"', () => {

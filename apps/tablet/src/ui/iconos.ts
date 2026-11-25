@@ -31,7 +31,8 @@ export type NombreIcono =
   | 'salir'
   | 'foto'
   | 'registros'
-  | 'borrar';
+  | 'borrar'
+  | 'abajo';
 
 export const TRAZOS: Record<NombreIcono, readonly string[]> = {
   menu: ['M3 6h18M3 12h18M3 18h18'],
@@ -63,6 +64,8 @@ export const TRAZOS: Record<NombreIcono, readonly string[]> = {
   foto: ['M4 8h3l2-3h6l2 3h3v12H4z', 'M12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z'],
   registros: ['M8 6h13M8 12h13M8 18h13', 'M3.5 6h.01M3.5 12h.01M3.5 18h.01'],
   borrar: ['M21 5H9l-6 7 6 7h12z', 'M12 9l6 6M18 9l-6 6'],
+  // El selector que se despliega ("Motivo de la merma", maquetas 14 y 16).
+  abajo: ['M6 9l6 6 6-6'],
 };
 
 export const NOMBRES_ICONO = Object.keys(TRAZOS) as readonly NombreIcono[];

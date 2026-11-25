@@ -65,11 +65,11 @@ export default function LayoutJornada() {
         name="operacion/[clienteId]/visita-sin-venta"
         options={{ title: 'Visita sin venta' }}
       />
-      <Stack.Screen name="operacion/[clienteId]/merma" options={{ title: 'Merma' }} />
+      <Stack.Screen name="operacion/[clienteId]/merma" options={{ title: 'Merma y cambios' }} />
       <Stack.Screen name="prospectos" options={{ title: 'Prospectos', headerShown: false }} />
       <Stack.Screen name="gastos/index" options={{ title: 'Gastos', headerShown: false }} />
-      <Stack.Screen name="merma/index" options={{ title: 'Merma y consumo', headerShown: false }} />
-      <Stack.Screen name="merma/registrar" options={{ title: 'Merma y consumo' }} />
+      <Stack.Screen name="merma/index" options={{ title: 'Merma / Cambios', headerShown: false }} />
+      <Stack.Screen name="merma/registrar" options={{ title: 'Merma del vehículo' }} />
       <Stack.Screen name="inventario/index" options={{ title: 'Inventario', headerShown: false }} />
       <Stack.Screen name="inventario/[cargaId]" options={{ title: 'Carga' }} />
       {/* Pantallas del menu: dibujan su cabecera con `MarcoMenu` (se desliza con el menu). */}

@@ -1,9 +1,8 @@
-import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { Alert, Platform, Text, ToastAndroid } from 'react-native';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { Alert, BackHandler, Keyboard, Platform, ScrollView, Text, ToastAndroid, View } from 'react-native';
 
 import { ErrorJornada, ErrorMovimiento } from '@/datos';
-import { textoTeQuedan } from '@/estado/inventario';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
 import {
   capturar,
@@ -12,18 +11,25 @@ import {
   faltantesVisiblesMovimiento,
   LARGO_MAX_COMENTARIO_MOVIMIENTO,
   piezasCapturadas,
+  piezasDelSentido,
+  renglonesMovimiento,
   textoConsumoRestante,
+  textoPiezasBarra,
   tipoDeCaptura,
   TITULO_MOVIMIENTO,
+  topeTeclado,
   validarCapturaMovimiento,
   type CapturaMovimiento,
 } from '@/estado/movimiento';
 import { useJawa } from '@/estado/proveedor-jawa';
+import { teclear, type TeclaNumerica } from '@/estado/venta-pasos';
 import { Boton } from '@/ui/boton';
+import { BarraAbajo, RenglonCantidad, SelectorMotivo } from '@/ui/captura-movimiento';
 import { Campo } from '@/ui/campo';
 import { Pantalla, Tarjeta } from '@/ui/pantalla';
+import { TecladoCantidad } from '@/ui/teclado-cantidad';
 import { useTema } from '@/ui/tema';
-import { espacio } from '@/ui/tokens';
+import { colores, espacio } from '@/ui/tokens';
 
 function avisar(texto: string) {
   if (Platform.OS === 'android') ToastAndroid.show(texto, ToastAndroid.SHORT);
@@ -31,10 +37,13 @@ function avisar(texto: string) {
 }
 
 /**
- * Captura de la merma del trayecto o del consumo propio (T-27 pieza 2, D3): una
- * fila por presentacion con las piezas que salen de la camioneta, y un
- * comentario. El consumo dice "Te quedan N de consumo hoy" y no deja pasar el
- * limite (D4); con el control prendido, cada fila dice "Te quedan N" (D5).
+ * Merma del vehiculo (rediseño pieza 4, maqueta 16) y consumo propio (T-27 pieza
+ * 2, D3), desde Merma / Cambios del menu. Los productos son los que trae el
+ * vendedor (decision 4 del plan), con "te quedan N" si hay control de
+ * inventario; se capturan con el renglon y el teclado de la venta (pieza 2).
+ * La merma lleva "Motivo de la merma" (de la lista del portal con
+ * `aplica_vehiculo`); el consumo no lleva motivo y dice "Te quedan N de consumo
+ * hoy" (D4). Comentario opcional en los dos.
  */
 export default function RegistrarMovimiento() {
   const params = useLocalSearchParams<{ tipo?: string }>();
@@ -43,14 +52,21 @@ export default function RegistrarMovimiento() {
   const { estilos } = useTema();
   const menu = estadoMenuJornada(jornada);
 
-  const presentaciones = useMemo(() => {
+  const motivos = useMemo(() => {
     void versionCatalogos;
-    return datos.movimientos.presentaciones();
+    return datos.catalogos.listarMotivosMerma('vehiculo');
   }, [datos, versionCatalogos]);
 
-  const inventario = useMemo(() => {
+  // Solo para pintar: `movimientos.registrar` vuelve a calcular al grabar.
+  const renglones = useMemo(() => {
     void versionCatalogos;
-    return vendedor ? datos.cargas.paraVenta(vendedor.id) : null;
+    if (!vendedor) return [];
+    const inventario = datos.cargas.paraVenta(vendedor.id);
+    return renglonesMovimiento({
+      presentaciones: datos.movimientos.presentacionesQueTrae(vendedor.id),
+      existencias: inventario.existencias,
+      controlInventario: inventario.controlInventario,
+    });
   }, [datos, vendedor, versionCatalogos]);
 
   const consumo = useMemo(() => {
@@ -64,22 +80,40 @@ export default function RegistrarMovimiento() {
   }, [datos, vendedor, versionCatalogos]);
 
   const [captura, setCaptura] = useState<CapturaMovimiento>({});
+  const [motivoId, setMotivoId] = useState<string | null>(null);
   const [comentario, setComentario] = useState('');
+  /** El renglon con el teclado abierto; `null` = cerrado. */
+  const [activo, setActivo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [grabado, setGrabado] = useState(false);
   const [guardia] = useState(() => crearGuardiaRegistro());
 
+  const atras = useCallback((): boolean => {
+    if (activo === null) return false;
+    setActivo(null);
+    return true;
+  }, [activo]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', atras);
+      return () => sub.remove();
+    }, [atras]),
+  );
+
   if (tipo === null) {
     return (
-      <Pantalla titulo="Sección no encontrada" subtitulo="Vuelve a Merma y consumo.">
+      <Pantalla titulo="Sección no encontrada" subtitulo="Vuelve a Merma / Cambios.">
         <Text style={estilos.textoSuave}>Esta captura no existe.</Text>
       </Pantalla>
     );
   }
 
+  const esMerma = tipo === 'merma_trayecto';
   const entrada = {
     tipo,
     clienteId: null,
+    motivoMermaId: esMerma ? motivoId : null,
     captura,
     comentario,
     diaCerrado: !menu.operacionesHabilitadas,
@@ -88,6 +122,27 @@ export default function RegistrarMovimiento() {
   const validacion = validarCapturaMovimiento(entrada);
   const faltantes = faltantesVisiblesMovimiento(entrada, validacion);
   const restante = consumoRestante(consumo);
+  const piezas = piezasDelSentido(captura, 'entregado');
+
+  const indiceActivo = activo === null ? -1 : renglones.findIndex((r) => r.presentacionId === activo);
+  const siguienteRenglon = indiceActivo >= 0 ? renglones[indiceActivo + 1] : undefined;
+
+  function abrirTeclado(presentacionId: string) {
+    Keyboard.dismiss();
+    setError(null);
+    setActivo(presentacionId);
+  }
+
+  function tecla(valor: TeclaNumerica | 'borrar') {
+    if (activo === null) return;
+    const id = activo;
+    const maximo = topeTeclado('entregado', renglones.find((r) => r.presentacionId === id)?.quedan ?? null);
+    setCaptura((c) => capturar(c, id, 'entregado', teclear(c[id]?.entregado ?? '', valor, maximo)));
+  }
+
+  function siguiente() {
+    setActivo(siguienteRenglon ? siguienteRenglon.presentacionId : null);
+  }
 
   function registrar() {
     setError(null);
@@ -102,13 +157,14 @@ export default function RegistrarMovimiento() {
           vendedorId: vendedor.id,
           tipo,
           clienteId: null,
+          motivoMermaId: esMerma ? motivoId : null,
           lineas: validacion.lineas,
           comentario: validacion.comentario,
         }),
       );
       if (m === null) return;
       setGrabado(true);
-      avisar(tipo === 'consumo' ? 'Consumo registrado' : 'Merma registrada');
+      avisar(esMerma ? 'Merma registrada' : 'Consumo registrado');
       router.back();
     } catch (e) {
       setError(e instanceof ErrorMovimiento || e instanceof ErrorJornada ? e.message : 'No se pudo registrar.');
@@ -116,56 +172,79 @@ export default function RegistrarMovimiento() {
   }
 
   return (
-    <Pantalla
-      titulo={TITULO_MOVIMIENTO[tipo]}
-      subtitulo={tipo === 'consumo' ? 'Lo que tomas para ti de la camioneta' : 'Lo que se rompió o se echó a perder'}
-    >
-      {tipo === 'consumo' ? (
-        <Tarjeta estado={restante > 0 ? 'listo' : 'pendiente'} etiqueta="Consumo de hoy">
-          <Text style={estilos.textoTarjeta}>{textoConsumoRestante(restante)}</Text>
-        </Tarjeta>
-      ) : null}
-
-      {presentaciones.map((p) => {
-        const sale = piezasCapturadas(captura, p.presentacionId, 'entregado');
-        const quedan = inventario?.controlInventario
-          ? textoTeQuedan(inventario.existencias.get(p.presentacionId)?.existencia ?? 0, sale)
-          : null;
-        return (
-          <Tarjeta key={p.presentacionId} etiqueta={p.etiqueta}>
-            <Campo
-              etiqueta="Piezas"
-              cifra
-              placeholder="0"
-              value={captura[p.presentacionId]?.entregado ?? ''}
-              onChangeText={(v) => setCaptura((c) => capturar(c, p.presentacionId, 'entregado', v))}
-              invalido={quedan?.falta ?? false}
-            />
-            {quedan ? <Text style={quedan.falta ? estilos.error : estilos.textoSuave}>{quedan.texto}</Text> : null}
+    <View style={{ flex: 1, backgroundColor: colores.papel }}>
+      <Stack.Screen options={{ title: esMerma ? 'Merma del vehículo' : TITULO_MOVIMIENTO[tipo] }} />
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={[estilos.contenido, { paddingBottom: espacio.lg }]}
+        keyboardShouldPersistTaps="handled"
+      >
+        {tipo === 'consumo' ? (
+          <Tarjeta estado={restante > 0 ? 'listo' : 'pendiente'} etiqueta="Consumo de hoy">
+            <Text style={estilos.textoTarjeta}>{textoConsumoRestante(restante)}</Text>
           </Tarjeta>
-        );
-      })}
+        ) : null}
 
-      <Campo
-        etiqueta="Comentario (opcional)"
-        value={comentario}
-        onChangeText={setComentario}
-        placeholder="Lo que haya que recordar"
-        maxLength={LARGO_MAX_COMENTARIO_MOVIMIENTO}
-        multiline
-      />
+        {esMerma ? (
+          <SelectorMotivo motivos={motivos} elegido={motivoId} onElegir={setMotivoId} onAbrir={() => setActivo(null)} />
+        ) : null}
 
-      {faltantes.length > 0 ? <Text style={estilos.textoSuave}>{faltantes.join(' ')}</Text> : null}
-      {menu.avisoDiaCerrado ? <Text style={estilos.error}>{menu.avisoDiaCerrado}</Text> : null}
-      {error ? <Text style={estilos.error}>{error}</Text> : null}
+        <Text style={estilos.etiqueta}>{esMerma ? 'Producto dañado' : 'Producto'}</Text>
+        {renglones.length === 0 ? (
+          <Tarjeta estado="pendiente" etiqueta="Sin productos">
+            <Text style={estilos.textoTarjeta}>No traes producto con existencia.</Text>
+            <Text style={estilos.textoSuave}>Los productos bajan del portal con la sincronización.</Text>
+          </Tarjeta>
+        ) : (
+          renglones.map((r) => (
+            <RenglonCantidad
+              key={r.presentacionId}
+              etiqueta={r.etiqueta}
+              piezas={piezasCapturadas(captura, r.presentacionId, 'entregado')}
+              quedan={r.quedan}
+              activo={activo === r.presentacionId}
+              onPress={() => abrirTeclado(r.presentacionId)}
+            />
+          ))
+        )}
 
-      <Boton
-        etiqueta={tipo === 'consumo' ? 'Registrar consumo' : 'Registrar merma del trayecto'}
-        icono="palomita"
-        deshabilitado={!validacion.listo || grabado || presentaciones.length === 0}
-        onPress={registrar}
-        estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
-      />
-    </Pantalla>
+        <Campo
+          etiqueta="Comentario (opcional)"
+          value={comentario}
+          onChangeText={setComentario}
+          onFocus={() => setActivo(null)}
+          placeholder={esMerma ? 'Ej. se rompió al frenar' : 'Lo que haya que recordar'}
+          maxLength={LARGO_MAX_COMENTARIO_MOVIMIENTO}
+          multiline
+        />
+      </ScrollView>
+
+      {activo !== null ? (
+        <TecladoCantidad
+          onTecla={tecla}
+          onSiguiente={siguiente}
+          etiquetaSiguiente={siguienteRenglon ? 'Siguiente' : 'Listo'}
+        />
+      ) : (
+        <BarraAbajo>
+          {faltantes.length > 0 ? <Text style={estilos.textoSuave}>{faltantes.join(' ')}</Text> : null}
+          {menu.avisoDiaCerrado ? <Text style={estilos.error}>{menu.avisoDiaCerrado}</Text> : null}
+          {error ? <Text style={estilos.error}>{error}</Text> : null}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: espacio.md }}>
+            <View style={{ flex: 1 }}>
+              <Text style={[estilos.etiqueta, { marginBottom: 0 }]}>{textoPiezasBarra(piezas)}</Text>
+            </View>
+            <View style={{ flex: 1.6 }}>
+              <Boton
+                etiqueta={esMerma ? 'Registrar merma' : 'Registrar consumo'}
+                icono="palomita"
+                deshabilitado={!validacion.listo || grabado}
+                onPress={registrar}
+              />
+            </View>
+          </View>
+        </BarraAbajo>
+      )}
+    </View>
   );
 }

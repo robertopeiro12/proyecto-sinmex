@@ -93,7 +93,8 @@ function partes(etiqueta: string): { producto: string; volumen: string } {
     : { producto: etiqueta.slice(0, i), volumen: etiqueta.slice(i + 3) };
 }
 
-function compararEtiquetas(a: string, b: string): number {
+/** Orden de la lista de venta: producto (sin acentos) y, dentro, de menor a mayor volumen. */
+export function compararEtiquetas(a: string, b: string): number {
   const pa = partes(a);
   const pb = partes(b);
   const porProducto = sinAcentos(pa.producto).localeCompare(sinAcentos(pb.producto), 'es');

@@ -82,6 +82,11 @@ describe('validarMovimiento (rediseño pieza 4)', () => {
     expect(validarMovimiento(merma({ motivoMermaId: null }))).toEqual([MENSAJE_FALTA_MOTIVO]);
     expect(validarMovimiento(merma({ motivoMermaId: undefined }))).toEqual([MENSAJE_FALTA_MOTIVO]);
     expect(validarMovimiento(trayecto({ motivoMermaId: null }))).toEqual([MENSAJE_FALTA_MOTIVO]);
+    // Un selector sin eleccion manda '': cuenta como sin motivo.
+    expect(validarMovimiento(merma({ motivoMermaId: '' }))).toEqual([MENSAJE_FALTA_MOTIVO]);
+    expect(validarMovimiento(trayecto({ motivoMermaId: '' }))).toEqual([MENSAJE_FALTA_MOTIVO]);
+    expect(validarMovimiento(cambio({ motivoMermaId: '' }))).toEqual([]);
+    expect(validarMovimiento(trayecto({ tipo: 'consumo', motivoMermaId: '' }))).toEqual([]);
     expect(MENSAJE_FALTA_MOTIVO).toBe('Elige el motivo de la merma.');
     const sinMotivo = 'El cambio y el consumo no llevan motivo de merma.';
     expect(validarMovimiento(cambio({ motivoMermaId: 'mm-1' }))).toEqual([sinMotivo]);
@@ -101,7 +106,7 @@ describe('validarMovimiento', () => {
       validarMovimiento(merma({ lineas: [{ presentacionId: 'pre-2', sentido: 'entregado', piezas: 2 }] })),
     ).toEqual([MENSAJE_FALTA_RECIBIDO]);
     expect(validarMovimiento(merma({ lineas: [] }))).toEqual([MENSAJE_FALTA_RECIBIDO]);
-    expect(MENSAJE_FALTA_RECIBIDO).toBe('Captura al menos una pieza en «Recibí dañado».');
+    expect(MENSAJE_FALTA_RECIBIDO).toBe('Captura al menos una pieza en «Me entregó el cliente».');
   });
 
   it('la merma del cliente necesita al cliente; el trayecto y el consumo no lo llevan', () => {

@@ -151,7 +151,7 @@ describe('movimientos.registrar (T-27 pieza 2)', () => {
       movimientos.registrar(
         mermaCliente({ lineas: [{ presentacionId: 'pre-2', sentido: 'entregado', piezas: 2 }] }),
       ),
-    ).toThrow(new ErrorMovimiento('Captura al menos una pieza en «Recibí dañado».'));
+    ).toThrow(new ErrorMovimiento('Captura al menos una pieza en «Me entregó el cliente».'));
     expect(cuantos(deps)).toEqual({ movimientos: 0, lineas: 0 });
   });
 
@@ -302,6 +302,25 @@ describe('cambios y motivos de merma (rediseño pieza 4)', () => {
     expect(cuantos(deps)).toEqual({ movimientos: 0, lineas: 0 });
   });
 
+  it("un motivo vacio ('') cuenta como sin motivo: la merma no se graba; el cambio y el consumo si, con null", () => {
+    const { movimientos, deps } = montar();
+    expect(() => movimientos.registrar(mermaCliente({ motivoMermaId: '' }))).toThrow(
+      new ErrorMovimiento('Elige el motivo de la merma.'),
+    );
+    expect(() => movimientos.registrar({ ...sale('merma_trayecto'), motivoMermaId: '' })).toThrow(
+      new ErrorMovimiento('Elige el motivo de la merma.'),
+    );
+    expect(cuantos(deps)).toEqual({ movimientos: 0, lineas: 0 });
+    expect(movimientos.registrar(cambio({ motivoMermaId: '' }))).toMatchObject({
+      motivo_merma_id: null,
+      motivo_nombre: null,
+    });
+    expect(movimientos.registrar({ ...sale('consumo'), motivoMermaId: '' })).toMatchObject({
+      motivo_merma_id: null,
+      motivo_nombre: null,
+    });
+  });
+
   it('un motivo dado de baja, sin su bandera, de almacen o que no existe no se graba', () => {
     const { movimientos, deps } = montar();
     const noSirve = 'Ese motivo de merma ya no se puede usar aquí. Sincroniza y elige otro.';
@@ -382,7 +401,7 @@ describe('cambios y motivos de merma (rediseño pieza 4)', () => {
     ]);
     movimientos.registrar(sale('merma_trayecto', 1, 'pre-1'));
     expect(movimientos.presentacionesQueTrae('ven-1')).toEqual([
-      { presentacionId: 'pre-2', etiqueta: 'Jamaica 500 ml' },
+      { presentacionId: 'pre-2', etiqueta: 'Jamaica · 500 ml' },
     ]);
   });
 });
@@ -410,11 +429,11 @@ describe('consultas y cola de movimientos', () => {
     expect(movimientos.porId(b.id)?.sync_estado).toBe('error');
   });
 
-  it('presentaciones: las activas del catalogo, con su nombre', () => {
+  it('presentaciones: las activas del catalogo, con su nombre como en la lista de venta', () => {
     const { movimientos } = montar();
     expect(movimientos.presentaciones()).toEqual([
-      { presentacionId: 'pre-1', etiqueta: 'Jamaica 1 L' },
-      { presentacionId: 'pre-2', etiqueta: 'Jamaica 500 ml' },
+      { presentacionId: 'pre-1', etiqueta: 'Jamaica · 1 L' },
+      { presentacionId: 'pre-2', etiqueta: 'Jamaica · 500 ml' },
     ]);
   });
 
