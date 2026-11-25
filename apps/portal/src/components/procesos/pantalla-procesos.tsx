@@ -107,6 +107,8 @@ export function PantallaProcesos({
 
   async function cambiarCliente(nuevo: ClienteResumen | null) {
     if (!(await soltarCaptura())) return;
+    // La búsqueda que dejó "Ver en Notas" era del cliente anterior.
+    setBusquedaNotas(null);
     setCliente(nuevo);
   }
 

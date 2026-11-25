@@ -253,6 +253,15 @@ describe("PantallaProcesos", () => {
     expect(screen.getByPlaceholderText("Folio o # de nota")).toHaveValue("TJ261125OF01");
     // La línea del cliente se volvió a pedir (la venta cambia su deuda).
     expect(vi.mocked(procesosLib.resumenCliente).mock.calls.filter(([id]) => id === "c1").length).toBeGreaterThan(1);
+
+    // Revisión T-2 (4): otro cliente abre en Con saldo, sin la búsqueda del anterior.
+    await u.click(screen.getByRole("button", { name: "Quitar cliente" }));
+    await elegirCliente(u, "lupi", /Tienda Lupita/);
+    await waitFor(() =>
+      expect(ventasLib.buscarVentas).toHaveBeenLastCalledWith({ sucursal: "TJ", clienteId: "c2", filtro: "con_saldo" }),
+    );
+    expect(screen.getByPlaceholderText("Folio o # de nota")).toHaveValue("");
+    expect(screen.getByRole("radio", { name: "Con saldo" })).toHaveAttribute("aria-checked", "true");
   });
 
   it("con todas las sucursales pide elegir una", () => {

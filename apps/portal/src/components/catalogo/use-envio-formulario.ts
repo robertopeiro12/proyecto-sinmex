@@ -37,5 +37,8 @@ export function useEnvioFormulario(mensajeFallback: string) {
     [mensajeFallback],
   );
 
-  return { enviando, error, enviar };
+  /** Quita el mensaje de error (una acción nueva lo dejó viejo). */
+  const limpiarError = useCallback(() => setError(null), []);
+
+  return { enviando, error, enviar, limpiarError };
 }

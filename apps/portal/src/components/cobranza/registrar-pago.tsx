@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
 import { formatearFecha } from "@/lib/formato";
@@ -73,7 +73,9 @@ export function usePago({
   const [avisoLocal, setAvisoLocal] = useState<string | null>(null);
   const [previsualizando, setPrevisualizando] = useState(false);
   const [errorVista, setErrorVista] = useState<string | null>(null);
-  const { enviando, error, enviar } = useEnvioFormulario(FALLO_COBRO);
+  const { enviando, error, enviar, limpiarError } = useEnvioFormulario(FALLO_COBRO);
+  // La vista previa más reciente: una respuesta (o un error) de una petición anterior se ignora.
+  const ultimaVista = useRef(0);
 
   useEffect(() => {
     let vigente = true;
@@ -106,16 +108,21 @@ export function usePago({
     const motivo = problema();
     setAvisoLocal(motivo);
     if (motivo !== null || monto === null) return;
+    const mia = ++ultimaVista.current;
     setErrorVista(null);
+    // Como antes del refactor: pedir la vista previa deja viejo el error de un grabado.
+    limpiarError();
     setPrevisualizando(true);
     try {
       const nuevo = await vistaPreviaCobro({ clienteId: cliente.id, notaIds, montoCentavos: monto, modo: "pago" });
+      if (mia !== ultimaVista.current) return;
       // Con la clave de cuando se pidió: una respuesta que llega tarde no vale para lo que hay ahora.
       setVista({ clave, plan: nuevo });
     } catch (err) {
+      if (mia !== ultimaVista.current) return;
       setErrorVista(mensajeDeFallo(err, FALLO_COBRO));
     } finally {
-      setPrevisualizando(false);
+      if (mia === ultimaVista.current) setPrevisualizando(false);
     }
   }
 

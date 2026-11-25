@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
@@ -50,7 +50,9 @@ export function useSaldoFavor({
   const [avisoLocal, setAvisoLocal] = useState<string | null>(null);
   const [previsualizando, setPrevisualizando] = useState(false);
   const [errorVista, setErrorVista] = useState<string | null>(null);
-  const { enviando, error, enviar } = useEnvioFormulario(FALLO_SALDO);
+  const { enviando, error, enviar, limpiarError } = useEnvioFormulario(FALLO_SALDO);
+  // La vista previa más reciente: una respuesta (o un error) de una petición anterior se ignora.
+  const ultimaVista = useRef(0);
 
   const notaIds = palomeadas.map((n) => n.id);
   const monto = leerMontoCentavos(montoTexto);
@@ -68,7 +70,10 @@ export function useSaldoFavor({
     const motivo = problema();
     setAvisoLocal(motivo);
     if (motivo !== null || monto === null) return;
+    const mia = ++ultimaVista.current;
     setErrorVista(null);
+    // Como antes del refactor: pedir la vista previa deja viejo el error de un grabado.
+    limpiarError();
     setPrevisualizando(true);
     try {
       const nuevo = await vistaPreviaCobro({
@@ -77,13 +82,15 @@ export function useSaldoFavor({
         montoCentavos: monto,
         modo: "saldo_favor",
       });
+      if (mia !== ultimaVista.current) return;
       setVista({ clave, plan: nuevo });
     } catch (err) {
+      if (mia !== ultimaVista.current) return;
       setErrorVista(
         err instanceof ErrorApi ? (err.mensajeApi ?? FALLO_SALDO) : "No se pudo conectar con el servidor. Intenta de nuevo.",
       );
     } finally {
-      setPrevisualizando(false);
+      if (mia === ultimaVista.current) setPrevisualizando(false);
     }
   }
 

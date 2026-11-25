@@ -14,6 +14,7 @@ export function SelectorSegmentado<T extends string>({
   onCambio,
   etiqueta,
   resaltado = false,
+  deshabilitado = false,
 }: {
   opciones: { valor: T; texto: string }[];
   valor: T;
@@ -21,6 +22,8 @@ export function SelectorSegmentado<T extends string>({
   etiqueta: string;
   /** La elegida en relleno oscuro y un poco más grande, para cuando es la única forma de elegir (Envíos: Hoy · Ayer). */
   resaltado?: boolean;
+  /** Ninguna opción se puede elegir (Notas, con el cobro abierto). */
+  deshabilitado?: boolean;
 }) {
   // Si `valor` no coincide con ninguna opción, la primera es la tabulable.
   const hayElegida = opciones.some((o) => o.valor === valor);
@@ -51,11 +54,12 @@ export function SelectorSegmentado<T extends string>({
             type="button"
             role="radio"
             aria-checked={elegida}
+            disabled={deshabilitado}
             tabIndex={elegida || (!hayElegida && i === 0) ? 0 : -1}
             onClick={() => onCambio(o.valor)}
             onKeyDown={(e) => alTeclear(e, i)}
             className={cn(
-              "rounded-md outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sucursal",
+              "rounded-md outline-none transition-colors focus-visible:ring-2 focus-visible:ring-sucursal disabled:cursor-not-allowed disabled:opacity-50",
               resaltado ? "px-5 py-2 text-sm font-semibold" : "px-3.5 py-1.5 text-[13px] font-medium",
               elegida
                 ? resaltado

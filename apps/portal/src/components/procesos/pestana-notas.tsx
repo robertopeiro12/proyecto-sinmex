@@ -178,7 +178,9 @@ export function PestanaNotas({
   const conSaldo = marcadas.filter((v) => v.saldoCentavos > 0);
   const saldoMarcado = marcadas.reduce((t, v) => t + v.saldoCentavos, 0);
   const todas = marcables.length > 0 && marcadas.length === marcables.length;
-  const bloqueadas = cargando || cobro !== null;
+  // Con el cobro abierto, nada que lo desmonte o le cambie las notas (revisión T-2, 5).
+  const cobrando = cobro !== null;
+  const bloqueadas = cargando || cobrando;
   const puedeCobrar = puede("cobranza.registrar");
   const puedeFacturar = puede("venta.asignar_factura");
   const facturables = marcadas.length > 0 && marcadas.every((v) => v.factura.estado === "pendiente");
@@ -270,6 +272,7 @@ export function PestanaNotas({
             maxLength={30}
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
+            disabled={cobrando}
             className="w-64"
           />
         </form>
@@ -279,12 +282,14 @@ export function PestanaNotas({
           valor={busqueda ? ("" as FiltroNotas) : filtro}
           onCambio={elegirFiltro}
           resaltado
+          deshabilitado={cobrando}
         />
         {puedeFacturar && (
           <Button
             type="button"
             variant="link"
             className="ml-auto font-semibold text-sucursal"
+            disabled={cobrando}
             onClick={() => setBuscandoFactura(true)}
           >
             Buscar factura
@@ -298,7 +303,8 @@ export function PestanaNotas({
           {cliente ? `, de ${cliente.nombre}.` : ", de toda la sucursal."}{" "}
           <button
             type="button"
-            className="font-semibold text-sucursal hover:underline"
+            className="font-semibold text-sucursal hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={cobrando}
             onClick={() => {
               setTexto("");
               setBusqueda(null);
@@ -316,7 +322,7 @@ export function PestanaNotas({
           hasta={borrador.hasta}
           onCambio={setBorrador}
           onMostrar={(r) => setRango({ ...r })}
-          deshabilitado={cargando}
+          deshabilitado={cargando || cobrando}
         />
       )}
 
@@ -408,8 +414,9 @@ export function PestanaNotas({
                           <button
                             type="button"
                             aria-label={`Ver ${v.folio}`}
+                            disabled={cobrando}
                             onClick={() => void abrir(v.id)}
-                            className="rounded font-semibold whitespace-nowrap text-sucursal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-sucursal"
+                            className="rounded font-semibold whitespace-nowrap text-sucursal outline-none hover:underline focus-visible:ring-2 focus-visible:ring-sucursal disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline"
                           >
                             Ver ›
                           </button>
@@ -435,7 +442,7 @@ export function PestanaNotas({
           </p>
           <div className="flex gap-2">
             {puedeFacturar && facturables && (
-              <Button type="button" variant="outline" size="lg" onClick={() => setAnotando(true)}>
+              <Button type="button" variant="outline" size="lg" disabled={cobrando} onClick={() => setAnotando(true)}>
                 Anotar factura
               </Button>
             )}

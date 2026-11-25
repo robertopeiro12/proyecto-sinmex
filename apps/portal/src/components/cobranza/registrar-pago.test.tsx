@@ -161,4 +161,17 @@ describe("RegistrarPago", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("Elige la fecha del pago.");
     expect(vistaPreviaCobro).not.toHaveBeenCalled();
   });
+
+  it("revisión T-2 (3): un error del grabado se limpia cuando una vista previa nueva sale bien", async () => {
+    registrarCobro.mockRejectedValueOnce(new ErrorApi("x", 400, "El monto no cuadra."));
+    const { usuario } = renderizar();
+    await usuario.type(screen.getByLabelText("Monto"), "150");
+    await usuario.click(screen.getByRole("button", { name: "Vista previa" }));
+    await usuario.click(await screen.findByRole("button", { name: "Grabar cobro" }));
+    expect(await screen.findByText("El monto no cuadra.")).toBeInTheDocument();
+    await usuario.type(screen.getByLabelText("Monto"), "0");
+    await usuario.click(screen.getByRole("button", { name: "Vista previa" }));
+    await screen.findByRole("button", { name: "Grabar cobro" });
+    expect(screen.queryByText("El monto no cuadra.")).toBeNull();
+  });
 });

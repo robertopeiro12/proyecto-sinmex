@@ -427,4 +427,23 @@ describe("PestanaNotas", () => {
     await waitFor(() => expect(filas()).toHaveLength(3));
     expect(buscarVentas).toHaveBeenCalledTimes(2);
   });
+
+  it("revisión T-2 (5): con el recuadro de cobro abierto no se puede ver, filtrar, buscar ni anotar factura", async () => {
+    const { u } = renderizar();
+    await palomear(u, "TJ261124RI03");
+    const barra = screen.getByRole("region", { name: "Notas marcadas" });
+    expect(within(barra).getByRole("button", { name: "Anotar factura" })).toBeEnabled();
+    await u.click(screen.getByRole("button", { name: "Cobrar 1 nota…" }));
+    await screen.findByRole("region", { name: "Cobrar 1 nota" });
+    for (const folio of ["TJ261118OF02", "TJ261120RI05", "TJ261124RI03"])
+      expect(screen.getByRole("button", { name: `Ver ${folio}` })).toBeDisabled();
+    for (const f of ["Con saldo", "Por facturar", "Todas"]) expect(screen.getByRole("radio", { name: f })).toBeDisabled();
+    expect(screen.getByPlaceholderText("Folio o # de nota")).toBeDisabled();
+    expect(within(barra).getByRole("button", { name: "Anotar factura" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Buscar factura" })).toBeDisabled();
+    // Al cancelar vuelve todo.
+    await u.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.getByRole("button", { name: "Ver TJ261124RI03" })).toBeEnabled();
+    expect(screen.getByRole("radio", { name: "Todas" })).toBeEnabled();
+  });
 });
