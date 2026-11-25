@@ -61,6 +61,16 @@ export const EXPLICACION_PERMISO: Record<string, string> = {
     "Abre la pestaña Descuentos del Registro de Operación: puede registrar, corregir y eliminar el producto que se descuenta a un trabajador.",
   "operacion.retiro_merma":
     "Abre la pestaña Retiro de merma del Registro de Operación: puede pedir, corregir y eliminar retiros; los autoriza quien gestiona Peticiones.",
+  "proceso.merma":
+    "Abre la pestaña Merma de Operación → Procesos: puede registrar, corregir y eliminar la merma de un cliente (lo dañado y lo que se le repuso) o del almacén.",
+  "proceso.cambio":
+    "Abre la pestaña Cambios de Operación → Procesos: puede registrar, corregir y eliminar cambios de producto con un cliente.",
+  "proceso.consumo":
+    "Abre la pestaña Consumos de Operación → Procesos: puede registrar, corregir y eliminar el producto que se tomó para consumo.",
+  "proceso.promocion":
+    "Abre la pestaña Promoción de Operación → Procesos: puede registrar, corregir y eliminar piezas regaladas a un cliente fuera de una venta.",
+  "proceso.descuento":
+    "Abre la pestaña Descuentos de Operación → Procesos: puede registrar, corregir y eliminar las piezas que se le descuentan a un vendedor (se precargan los faltantes de su corte).",
   "motivo_merma.gestionar":
     "Puede dar de alta, editar o dar de baja los motivos de merma del catálogo.",
   "almacen_sucursal.gestionar":

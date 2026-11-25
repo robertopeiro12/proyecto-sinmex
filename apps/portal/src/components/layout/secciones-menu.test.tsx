@@ -32,9 +32,10 @@ describe("SeccionesMenu", () => {
 
   it("lo que todavía no existe dice Pronto; lo que existe no", () => {
     render(<SeccionesMenu pathname="/operacion/ventas" sucursal={null} />);
-    const procesos = screen.getByRole("link", { name: "Procesos Pronto" });
-    expect(within(procesos).getByText("Pronto")).toBeInTheDocument();
+    const notificaciones = screen.getByRole("link", { name: "Notificaciones Pronto" });
+    expect(within(notificaciones).getByText("Pronto")).toBeInTheDocument();
     expect(within(screen.getByRole("link", { name: "Ventas" })).queryByText("Pronto")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("link", { name: "Procesos" })).queryByText("Pronto")).not.toBeInTheDocument();
   });
 
   it("Tesorería y Flujo de Efectivo no salen en el menú; Gastos sí", async () => {

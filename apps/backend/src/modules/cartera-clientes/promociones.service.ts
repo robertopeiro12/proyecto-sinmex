@@ -67,26 +67,7 @@ export class PromocionesService {
       ) {
         throw new NotFoundException(MOTIVO_CLIENTE_INEXISTENTE);
       }
-      const filas = (
-        await this.repo.deCliente(
-          cliente.id,
-          cliente.sucursalId,
-          cliente.prospectoSinVenta,
-        )
-      ).map((f) => this.conTexto(f));
-      const propias = filas.filter(
-        (f) => f.audiencia === 'cliente' && f.activo,
-      );
-      return filas.map((f) =>
-        f.audiencia !== 'cliente'
-          ? {
-              ...f,
-              desplazada: propias.some((p) =>
-                propiaDesplaza(cobertura(p), cobertura(f)),
-              ),
-            }
-          : f,
-      );
+      return this.deClienteConDesplazada(cliente);
     }
     if (alcance.tipo === 'todas') {
       throw new BadRequestException(
@@ -97,6 +78,46 @@ export class PromocionesService {
     if (!sucursal) throw new NotFoundException(MOTIVO_SUCURSAL_INEXISTENTE);
     return (await this.repo.generales(sucursal.id)).map((f) =>
       this.conTexto(f),
+    );
+  }
+
+  /**
+   * Las frases de las promociones que hoy le aplican a un cliente vivo: activas
+   * y no desplazadas por una propia (D5), en el orden de `GET ?clienteId=`
+   * (propias primero). Sin alcance: lo resuelve quien llama (Procesos).
+   * Cliente inexistente o dado de baja = `[]`.
+   */
+  async vigentesDeCliente(clienteId: string): Promise<string[]> {
+    const cliente = await this.repo.clienteVivo(clienteId);
+    if (!cliente) return [];
+    return (await this.deClienteConDesplazada(cliente))
+      .filter((p) => p.activo && !p.desplazada)
+      .map((p) => p.texto);
+  }
+
+  /** Las propias del cliente y las generales que le tocan, con `desplazada` (D5). */
+  private async deClienteConDesplazada(cliente: {
+    id: string;
+    sucursalId: string;
+    prospectoSinVenta: boolean;
+  }): Promise<Promocion[]> {
+    const filas = (
+      await this.repo.deCliente(
+        cliente.id,
+        cliente.sucursalId,
+        cliente.prospectoSinVenta,
+      )
+    ).map((f) => this.conTexto(f));
+    const propias = filas.filter((f) => f.audiencia === 'cliente' && f.activo);
+    return filas.map((f) =>
+      f.audiencia !== 'cliente'
+        ? {
+            ...f,
+            desplazada: propias.some((p) =>
+              propiaDesplaza(cobertura(p), cobertura(f)),
+            ),
+          }
+        : f,
     );
   }
 

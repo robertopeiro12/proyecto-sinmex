@@ -62,8 +62,12 @@ import { UbicacionClientesService } from './ubicacion-clientes.service';
   // dependencia sigue yendo de sincronizacion hacia Cartera de Clientes.
   //
   // T-72: `sincronizacion/` dispara el intento de geocodificar despues del commit de un prospecto.
+  //
+  // Operacion -> Procesos: `inventario/` muestra las promociones vigentes del
+  // cliente en su resumen (`PromocionesService.vigentesDeCliente`).
   exports: [
     PreciosRepository,
+    PromocionesService,
     ClientesService,
     FotosService,
     UbicacionClientesService,

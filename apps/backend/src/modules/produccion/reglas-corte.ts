@@ -5,8 +5,8 @@
  * Specs: docs/superpowers/specs/2026-11-12-corte-de-mercancia-design.md (D7–D9, D13)
  * y 2026-11-18-corte-por-tamano-y-merma-design.md (C3–C6, D1, D3, D8, D9).
  *
- * La teorica ya resta merma entregada, merma de almacen y consumo; los cambios
- * fisicos entran en la cuenta pero valen 0 hasta T-33.
+ * La teorica ya resta merma entregada, merma de almacen y consumo, y suma o
+ * resta los cambios fisicos (hoy solo los captura Operacion -> Procesos).
  */
 import {
   esFechaReal,
@@ -42,7 +42,7 @@ export interface MovimientoPresentacion {
   /** Merma del trayecto (almacen). */
   mermaAlmacen: number;
   consumo: number;
-  /** Cambios fisicos: no existen todavia (T-33), valen 0. */
+  /** Cambios fisicos: piezas entregadas y recibidas (Operacion -> Procesos). */
   cambiosEntregados: number;
   cambiosRecibidos: number;
   /** Lo contado por el almacen (0 si no hay fila). */
