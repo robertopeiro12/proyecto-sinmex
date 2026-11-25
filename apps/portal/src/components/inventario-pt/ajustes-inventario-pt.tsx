@@ -1,7 +1,6 @@
 "use client";
 
 import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { diaEscrito } from "@/components/procesos/captura-proceso";
 import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
 import { AreaTexto, Campo, Entrada } from "@/components/ui/campo";
@@ -10,9 +9,10 @@ import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantall
 import { Etiqueta } from "@/components/ui/etiqueta";
 import { CajaTabla, Fila, FilaGrupo, FilaVacia, Tabla, Td, Th } from "@/components/ui/tabla";
 import { mensajeDe } from "@/lib/api";
-import { claveTamano, compararTamano } from "@/lib/cortes";
+import { claveTamano } from "@/lib/cortes";
 import { diaAnterior } from "@/lib/fechas";
 import {
+  agruparPorTamano,
   borrarAjustePt,
   cambiosDeAjuste,
   guardarAjustesPt,
@@ -21,24 +21,12 @@ import {
   type CapturaAjuste,
   type RenglonAjustePt,
 } from "@/lib/inventario-pt";
-import { plural } from "@/lib/formato";
+import { diaEscrito, plural } from "@/lib/formato";
 import { TITULO } from "./tabla-inventario-pt";
 
 type Columna = "inicial" | "merma";
 const COLUMNAS: Columna[] = ["inicial", "merma"];
 const texto = (n: number | null) => (n === null ? "" : String(n));
-
-function gruposAjuste(renglones: readonly RenglonAjustePt[]) {
-  const porClave = new Map<string, RenglonAjustePt[]>();
-  for (const r of renglones) {
-    const clave = claveTamano(r.volumen);
-    porClave.set(clave, [...(porClave.get(clave) ?? []), r]);
-  }
-  return [...porClave.values()]
-    .map((rs) => [...rs].sort((a, b) => a.producto.localeCompare(b.producto, "es")))
-    .sort((a, b) => compararTamano(a[0].volumen, b[0].volumen))
-    .map((rs) => ({ tamano: rs[0].volumen, renglones: rs }));
-}
 
 /**
  * D3, "borrón y cuenta nueva": la rejilla por tamaño (como Registro de Operación) con el
@@ -90,14 +78,14 @@ export function AjustesInventarioPt({
     };
   }, [fecha, sucursal, version]);
 
-  const grupos = useMemo(() => gruposAjuste(precarga ?? []), [precarga]);
+  const grupos = useMemo(() => agruparPorTamano(precarga ?? []), [precarga]);
   const orden = useMemo(
     () => COLUMNAS.flatMap((c) => grupos.flatMap((g) => g.renglones.map((r) => `${c}|${r.presentacionId}`))),
     [grupos],
   );
   const { renglones: cambiados, invalidos, incompletos } = cambiosDeAjuste(precarga ?? [], captura);
-  const sucio = cambiados.length > 0 || invalidos.length > 0 || incompletos.length > 0;
   const comentarioLimpio = comentario.trim();
+  const sucio = cambiados.length > 0 || invalidos.length > 0 || incompletos.length > 0 || comentarioLimpio !== "";
   const puedeGuardar = !ocupado && precarga !== null && cambiados.length > 0 && invalidos.length === 0 && incompletos.length === 0;
 
   async function soltar(): Promise<boolean> {

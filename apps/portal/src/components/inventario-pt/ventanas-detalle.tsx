@@ -56,7 +56,8 @@ export function VentanaHistorial({
 }) {
   const [desde, setDesde] = useState(() => semanaQueTermina(fecha));
   const [hasta, setHasta] = useState(fecha);
-  const [dias, setDias] = useState<DiaPt[] | null>(null);
+  // Los días pintados y el rango que pidieron: el título sigue a la tabla, no a los campos.
+  const [pintado, setPintado] = useState<{ desde: string; hasta: string; dias: DiaPt[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const ultima = useRef(0);
   const nombre = nombreDe(renglon);
@@ -78,20 +79,22 @@ export function VentanaHistorial({
     leerHistorialPt(cualDe(renglon), desde, hasta, sucursal)
       .then((r) => {
         if (esta !== ultima.current) return;
-        setDias(r.dias);
+        setPintado({ desde, hasta, dias: r.dias });
         setError(null);
       })
       .catch((err: unknown) => {
         if (esta !== ultima.current) return;
-        setDias(null);
+        setPintado(null);
         setError(mensajeDe(err, "No se pudieron cargar los días."));
       });
   }, [desde, hasta, sucursal, renglon, problema]);
 
+  const dias = pintado?.dias ?? null;
   const total = dias ? totalesHistorial(dias) : null;
+  const rango = pintado ? textoRango(pintado.desde, pintado.hasta) : textoRango(semanaQueTermina(fecha), fecha);
 
   return (
-    <Ventana abierta alCerrar={alCerrar} ancho="detalle" titulo={`${nombre} · ${textoRango(desde || fecha, hasta || fecha)}`}>
+    <Ventana abierta alCerrar={alCerrar} ancho="detalle" titulo={`${nombre} · ${rango}`}>
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-end gap-3">
           <Campo id="pt-historial-desde" etiqueta="Desde" className="w-44">

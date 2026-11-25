@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatearDiaCorto, formatearDiaHoraTijuana, formatearDiaLargo, formatearFecha, formatearFechaHora, formatearPesos, iniciales, plural } from "./formato";
+import { diaEscrito, formatearDiaCorto, formatearDiaHoraTijuana, formatearDiaLargo, formatearFecha, formatearFechaHora, formatearPesos, iniciales, plural } from "./formato";
 import * as reportes from "./reportes";
 import * as ventas from "./ventas";
 
@@ -94,5 +94,13 @@ describe("formatearDiaHoraTijuana", () => {
   it("lo que no tiene esa forma sale tal cual", () => {
     expect(formatearDiaHoraTijuana("ayer")).toBe("ayer");
     expect(formatearDiaHoraTijuana("2026-11-24T19:00:00.000Z")).toBe("2026-11-24T19:00:00.000Z");
+  });
+});
+
+describe("diaEscrito", () => {
+  it("Hoy, Ayer o el día largo", () => {
+    expect(diaEscrito("2026-11-25", "2026-11-25")).toBe("Hoy, miércoles 25 de noviembre");
+    expect(diaEscrito("2026-11-24", "2026-11-25")).toBe("Ayer, martes 24 de noviembre");
+    expect(diaEscrito("2026-11-23", "2026-11-25")).toBe("lunes 23 de noviembre");
   });
 });

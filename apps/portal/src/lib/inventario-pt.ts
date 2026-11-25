@@ -180,9 +180,11 @@ function sumaCompleta(renglones: readonly RenglonPt[], valor: (r: RenglonPt) => 
   return total;
 }
 
-/** Por tamaño (`compararTamano`, de chico a grande) y dentro por producto, con su total. */
-export function gruposPt(renglones: readonly RenglonPt[]): GrupoPt[] {
-  const porClave = new Map<string, RenglonPt[]>();
+/** Por tamaño (`compararTamano`, de chico a grande) y dentro por producto (la tabla y la rejilla de ajustes). */
+export function agruparPorTamano<T extends { producto: string; volumen: string }>(
+  renglones: readonly T[],
+): { tamano: string; renglones: T[] }[] {
+  const porClave = new Map<string, T[]>();
   for (const r of renglones) {
     const clave = claveTamano(r.volumen);
     porClave.set(clave, [...(porClave.get(clave) ?? []), r]);
@@ -190,8 +192,13 @@ export function gruposPt(renglones: readonly RenglonPt[]): GrupoPt[] {
   return [...porClave.values()]
     .map((rs) => [...rs].sort((a, b) => a.producto.localeCompare(b.producto, "es")))
     .sort((a, b) => compararTamano(a[0].volumen, b[0].volumen))
-    .map((rs) => ({
-      tamano: rs[0].volumen,
+    .map((rs) => ({ tamano: rs[0].volumen, renglones: rs }));
+}
+
+/** Los grupos por tamaño de la tabla del día, con su total. */
+export function gruposPt(renglones: readonly RenglonPt[]): GrupoPt[] {
+  return agruparPorTamano(renglones).map(({ tamano, renglones: rs }) => ({
+      tamano,
       renglones: rs,
       totales: {
         ...totalesHistorial(rs),

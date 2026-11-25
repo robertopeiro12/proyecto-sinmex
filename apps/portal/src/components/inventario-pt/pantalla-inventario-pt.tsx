@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
-import { diaEscrito } from "@/components/procesos/captura-proceso";
 import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
 import { Entrada } from "@/components/ui/campo";
@@ -11,6 +10,7 @@ import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { SelectorSegmentado } from "@/components/ui/selector-segmentado";
 import { mensajeDe } from "@/lib/api";
 import { diaAnterior } from "@/lib/fechas";
+import { diaEscrito } from "@/lib/formato";
 import { leerInventarioPt, type InventarioPt, type RenglonPt, type VistaPt } from "@/lib/inventario-pt";
 import { hoyEnTijuana } from "@/lib/ventas";
 import { AjustesInventarioPt } from "./ajustes-inventario-pt";
@@ -170,7 +170,8 @@ function Inventario({ sucursal, puedeAjustar }: { sucursal: string; puedeAjustar
           }. Los movimientos del día sí se ven.`}
         </Aviso>
       )}
-      {cargandoDatos && !datos && !error && <EstadoPantalla tipo="cargando" />}
+      {/* Sin datos de esta vista todavía (al abrir o al cambiar de vista): "Cargando…", nunca vacío. */}
+      {cargandoDatos && !deVista && !error && <EstadoPantalla tipo="cargando" />}
       {datos && deVista && (
         <div className={cargandoDatos ? "flex flex-col gap-2 opacity-60" : "flex flex-col gap-2"}>
           <TablaInventarioPt

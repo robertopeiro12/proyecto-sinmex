@@ -79,7 +79,7 @@ const PRODUCTO: InventarioPt = {
   hoyEnTijuana: HOY,
   renglones: [
     renglon("Agua", "", { presentacionId: null, ventas: 210, inicial: null, final: null, mermaAcumulada: null }),
-    renglon("Horchata", "", { presentacionId: null, ventas: 900, inicial: 2000, final: 1500 }),
+    renglon("Horchata", "", { presentacionId: null, ventas: 900, inicial: 2000, final: 1500, ajustado: true }),
   ],
 };
 
@@ -146,7 +146,25 @@ describe("PantallaInventarioPt: el día", () => {
     await within(t).findByText("Horchata");
     expect(within(t).queryByRole("rowheader")).toBeNull();
     expect(celdas(fila(t, "Horchata"))[1]).toBe("2000");
+    // Por producto no lleva la marca "Ajustado" (decisión del controlador): mezcla presentaciones.
+    expect(within(t).queryByText("Ajustado")).toBeNull();
     expect(screen.getByText(/1 producto sin inventario inicial/)).toBeInTheDocument();
+  });
+
+  it("al cambiar de vista, mientras llega la consulta no queda la pantalla vacía", async () => {
+    render(<PantallaInventarioPt sucursal={null} />);
+    await tabla();
+    vi.mocked(lib.leerInventarioPt).mockReturnValue(new Promise(() => {}));
+    await userEvent.click(screen.getByRole("radio", { name: "Por producto" }));
+    expect(screen.getByText("Cargando…")).toBeInTheDocument();
+  });
+
+  it("al cambiar de día, la tabla anterior queda atenuada mientras llega la nueva", async () => {
+    render(<PantallaInventarioPt sucursal={null} />);
+    await tabla();
+    vi.mocked(lib.leerInventarioPt).mockReturnValue(new Promise(() => {}));
+    await userEvent.click(screen.getByRole("button", { name: "Hoy" }));
+    expect(screen.getByRole("table", { name: "Inventario de PT" })).toBeInTheDocument();
   });
 
   it("Hoy vuelve a consultar", async () => {
@@ -215,7 +233,10 @@ describe("PantallaInventarioPt: detalles al picar", () => {
     expect(celdas(total)).toEqual(["Total", "", "691", "2", "0", "0", "0", "−1", "1258", "0", "", "", "0"]);
   });
 
-  it("en la vista por producto el historial se pide por producto", async () => {
+  it("en la vista por producto el historial se pide por producto y no lleva la marca Ajustado", async () => {
+    vi.mocked(lib.leerHistorialPt).mockResolvedValue({
+      dias: [{ ...renglon("Horchata", "", { presentacionId: null, inicial: 5, ajustado: true }), fecha: AYER }],
+    });
     render(<PantallaInventarioPt sucursal={null} />);
     await tabla();
     await userEvent.click(screen.getByRole("radio", { name: "Por producto" }));
@@ -224,6 +245,27 @@ describe("PantallaInventarioPt: detalles al picar", () => {
     await waitFor(() =>
       expect(lib.leerHistorialPt).toHaveBeenCalledWith({ producto: "prod-Horchata" }, expect.any(String), AYER, "TJ"),
     );
+    const h = await within(await screen.findByRole("dialog")).findByRole("table", { name: "Días de Horchata" });
+    expect(within(h).getByText("5")).toBeInTheDocument();
+    expect(within(h).queryByText("Ajustado")).toBeNull();
+  });
+
+  it("el título del historial cambia junto con la tabla", async () => {
+    render(<PantallaInventarioPt sucursal={null} />);
+    const t = await tabla();
+    await userEvent.click(within(t).getByRole("button", { name: "Horchata" }));
+    const ventana = await screen.findByRole("dialog");
+    await waitFor(() => expect(lib.leerHistorialPt).toHaveBeenCalledTimes(1));
+    const antes = within(ventana).getByText(/^Horchata 500 ml · /).textContent;
+    let soltar: (v: { dias: [] }) => void = () => {};
+    vi.mocked(lib.leerHistorialPt).mockReturnValue(new Promise((r) => (soltar = r)));
+    const hasta = within(ventana).getByLabelText("Hasta");
+    await userEvent.clear(hasta);
+    await userEvent.type(hasta, diaAnterior(AYER));
+    await waitFor(() => expect(lib.leerHistorialPt).toHaveBeenCalledTimes(2));
+    expect(within(ventana).getByText(/^Horchata 500 ml · /).textContent).toBe(antes);
+    soltar({ dias: [] });
+    await waitFor(() => expect(within(ventana).getByText(/^Horchata 500 ml · /).textContent).not.toBe(antes));
   });
 
   it("un rango de más de 62 días no se pide", async () => {
@@ -335,6 +377,13 @@ describe("PantallaInventarioPt: ajustar inventario", () => {
     await userEvent.click(within(confirmar).getByRole("button", { name: "Quitar ajuste" }));
     await waitFor(() => expect(lib.borrarAjustePt).toHaveBeenCalledWith(AYER, "TJ", "h5"));
     await waitFor(() => expect(lib.leerAjustesPt).toHaveBeenCalledTimes(2));
+  });
+
+  it("volver con solo un comentario escrito también pregunta", async () => {
+    await abrirAjustes();
+    await userEvent.type(screen.getByLabelText(/Comentario/), "Conteo");
+    await userEvent.click(screen.getByRole("button", { name: /Volver a Inventario de PT/ }));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
   });
 
   it("volver con cambios sin guardar pregunta antes", async () => {

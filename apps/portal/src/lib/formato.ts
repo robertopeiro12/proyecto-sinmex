@@ -4,6 +4,8 @@
  * re-exportan para no romper importaciones.
  */
 
+import { diaAnterior } from "./fechas";
+
 /** Centavos a `$1,234.56`. El signo va antes del $ ("-$50.00"), como se escribe a mano (T-34). */
 export function formatearPesos(centavos: number): string {
   const signo = centavos < 0 ? "-" : "";
@@ -41,6 +43,14 @@ export function formatearDiaLargo(iso: string): string {
   const [anio, mes, dia] = [Number(m[1]), Number(m[2]), Number(m[3])];
   const semana = new Date(Date.UTC(anio, mes - 1, dia)).getUTCDay();
   return `${DIAS[semana]} ${dia} de ${MESES[mes - 1]}`;
+}
+
+/** "Hoy, miércoles 25 de noviembre" / "Ayer, martes 24 de noviembre" / "lunes 23 de noviembre". */
+export function diaEscrito(fecha: string, hoy: string): string {
+  const largo = formatearDiaLargo(fecha);
+  if (fecha === hoy) return `Hoy, ${largo}`;
+  if (fecha === diaAnterior(hoy)) return `Ayer, ${largo}`;
+  return largo;
 }
 
 const DIAS_CORTOS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];

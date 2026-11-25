@@ -25,12 +25,16 @@ export function Opcional({ valor }: { valor: number | null }) {
   return valor === null ? <span role="img" aria-label="Sin inventario inicial" title="Sin inventario inicial" /> : <>{valor}</>;
 }
 
-/** El Inicial con la marca "Ajustado" (D3) si ese día sale de un ajuste. */
-export function InicialConMarca({ r }: { r: Pick<RenglonPt, "inicial" | "ajustado"> }) {
+/**
+ * El Inicial con la marca "Ajustado" (D3) si ese día sale de un ajuste. Solo por
+ * presentación: un renglón por producto (`presentacionId` null) mezcla presentaciones
+ * ajustadas y sin ajustar, así que no lleva la marca (decisión del controlador).
+ */
+export function InicialConMarca({ r }: { r: Pick<RenglonPt, "inicial" | "ajustado" | "presentacionId"> }) {
   return (
     <span className="inline-flex flex-col items-end gap-0.5">
       <Opcional valor={r.inicial} />
-      {r.ajustado && (
+      {r.ajustado && r.presentacionId !== null && (
         <Etiqueta tono="informacion" className="px-1.5 py-0 text-[11px]">
           Ajustado
         </Etiqueta>
