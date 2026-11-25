@@ -7,18 +7,16 @@ import { agruparPorTamano, sumaCompleta, type CualPt, type VistaPt } from "./inv
 // reglas-inventario-pt-recargas.ts). El portal no importa del backend: un cambio de forma en un
 // lado exige el equivalente en el otro. Spec:
 // docs/superpowers/specs/2026-11-25-inventario-pt-recargas-design.md. El portal NO recalcula el
-// inventario: solo suma los totales por tamaño. "Hoy" lo dice el servidor (no hay fecha).
+// inventario: solo suma los totales por tamaño. "Hoy" lo dice el servidor (no hay fecha). Es una
+// fotografía a grandes rasgos (tío, 2026-11-25): el inventario real es el de PT con Ventas.
 
 export interface MovimientosRecargas {
-  /** Renglones de cargas vivas de hoy, pendientes o aceptados. */
+  /** Renglones aceptados de cargas vivas de hoy (una pendiente no resta). */
   recargas: number;
   /** Envíos que salieron. */
   envios: number;
-  /** Registro `entrada` + envíos recibidos. */
+  /** Registro `entrada` (producción/compras) + envíos recibidos. */
   entradas: number;
-  merma: number;
-  consumo: number;
-  descuentos: number;
 }
 
 export interface RenglonPtRecargas extends MovimientosRecargas {
@@ -45,17 +43,11 @@ export interface InventarioPtRecargas {
   renglones: RenglonPtRecargas[];
 }
 
-export type ColumnaDetalleRecargas = "recargas" | "descuentos";
-
-export type EstadoCargaPt = "pendiente" | "aceptada";
-
+/** A quién se le recargó: el vendedor, su n.º de carga y las piezas aceptadas. */
 export interface FilaDetalleRecargas {
-  /** Vendedor (recargas) o trabajador (descuentos). */
   quien: string;
-  /** `carga.numero`; `null` en descuentos. */
-  carga: number | null;
-  /** `null` en descuentos. */
-  estado: EstadoCargaPt | null;
+  /** `carga.numero`. */
+  carga: number;
   piezas: number;
 }
 
@@ -69,19 +61,15 @@ export function leerInventarioPtRecargas(sucursal: string, vista: VistaPt): Prom
   return apiFetch<InventarioPtRecargas>(`/inventario-pt/recargas?${params.toString()}`);
 }
 
-export function leerDetallePtRecargas(
-  c: CualPt,
-  sucursal: string,
-  columna: ColumnaDetalleRecargas,
-): Promise<DetallePtRecargas> {
+export function leerDetallePtRecargas(c: CualPt, sucursal: string): Promise<DetallePtRecargas> {
   const cual: [string, string] = "presentacion" in c ? ["presentacion", c.presentacion] : ["producto", c.producto];
-  const params = new URLSearchParams([cual, ["sucursal", sucursal], ["columna", columna]]);
+  const params = new URLSearchParams([cual, ["sucursal", sucursal]]);
   return apiFetch<DetallePtRecargas>(`/inventario-pt/recargas/detalle?${params.toString()}`);
 }
 
 // ── Reglas de la pantalla (puras) ──────────────────────────────────────────────
 
-const MOVIMIENTOS: (keyof MovimientosRecargas)[] = ["recargas", "envios", "entradas", "merma", "consumo", "descuentos"];
+const MOVIMIENTOS: (keyof MovimientosRecargas)[] = ["recargas", "envios", "entradas"];
 
 export type TotalesPtRecargas = MovimientosRecargas & {
   /** `null` si algún renglón del grupo no tiene inventario inicial. */
@@ -113,8 +101,17 @@ export function gruposPtRecargas(renglones: readonly RenglonPtRecargas[]): Grupo
   });
 }
 
-export function textoEstadoCarga(e: EstadoCargaPt | null): string {
-  if (e === "pendiente") return "Pendiente";
-  if (e === "aceptada") return "Aceptada";
-  return "";
+/** El aviso "sin inventario inicial": el ajuste se captura en Inventario de PT con Ventas (aquí no se ajusta). */
+export function textoSinInicialRecargas(cuantos: number, vista: VistaPt, todas: boolean): string {
+  const uno = cuantos === 1;
+  const que =
+    vista === "producto"
+      ? uno
+        ? "producto sin inventario inicial"
+        : "productos sin inventario inicial"
+      : uno
+        ? "presentación sin inventario inicial"
+        : "presentaciones sin inventario inicial";
+  const quien = todas ? "cada sucursal capture su ajuste" : "se capture un ajuste";
+  return `${cuantos} ${que}: su Inicial y Actual quedan vacíos hasta que ${quien} en Inventario de PT con Ventas. Los movimientos de hoy sí se ven.`;
 }

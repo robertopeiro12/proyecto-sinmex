@@ -128,10 +128,7 @@ export class InventarioPtRecargasService {
     const hoy = await this.pt.hoy();
     const ids = objetivo.map((p) => p.presentacionId);
     return {
-      detalle:
-        q.columna === 'recargas'
-          ? await this.repo.detalleRecargas(ambito.sucursalIds, ids, hoy)
-          : await this.repo.detalleDescuentos(ambito.sucursalIds, ids, hoy),
+      detalle: await this.repo.detalleRecargas(ambito.sucursalIds, ids, hoy),
     };
   }
 }

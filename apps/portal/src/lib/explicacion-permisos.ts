@@ -78,7 +78,7 @@ export const EXPLICACION_PERMISO: Record<string, string> = {
   "carga.gestionar": "Puede registrar qué mercancía sale cargada en cada vehículo.",
   "inventario.ver": "Puede consultar cuánto inventario hay disponible.",
   "inventario_pt_recargas.ver":
-    "Abre Producción → Inventario de PT con Recargas: lo que hay hoy en el almacén (inicial, recargas a vendedores, envíos, entradas, merma, consumo, descuentos y actual), con a quién se le recargó o descontó.",
+    "Abre Producción → Inventario de PT con Recargas: una fotografía de lo que hay hoy en el almacén (inicial, recargas aceptadas por los vendedores, envíos, entradas y actual), con a quién se le recargó.",
   "inventario_pt.ver":
     "Abre Producción → Inventario de PT con Ventas: el inventario real del almacén por día (inicial, ventas, merma, entradas, final), con los días anteriores de cada producto y a quién se le descontó.",
   "inventario_pt.ajustar":

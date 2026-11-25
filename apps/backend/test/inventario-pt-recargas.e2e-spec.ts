@@ -19,10 +19,11 @@ import type {
 } from './../src/modules/produccion/inventario-pt-recargas.service';
 
 /**
- * Inventario de PT con Recargas (Tarea 2): cada columna con su fuente (D2),
- * Review Focus 1–5 del plan, la carga de otra sucursal y la de ayer no
- * cuentan, presentaciones dadas de baja con movimiento hoy, "a quién" de
- * recargas y descuentos, permisos y alcance.
+ * Inventario de PT con Recargas: cada columna con su fuente (D2, con los
+ * cambios del tío del 2026-11-25: solo recargas ACEPTADAS; sin merma, consumo
+ * ni descuentos), la carga de otra sucursal y la de ayer no cuentan,
+ * presentaciones dadas de baja con movimiento hoy, "a quién" de recargas,
+ * permisos y alcance.
  *
  * Sucursales YE y YF, todo de esta corrida y limpiado por id al final.
  */
@@ -521,9 +522,10 @@ describe('Inventario de PT con Recargas (e2e)', () => {
     // Medio YE: ajuste de hoy (RF 3).
     await ajuste(kId, medio, hoy, 300);
 
-    // Recargas de litro en YE (RF 1): pendiente 10 completa; aceptada con
-    // litro aceptado 20 y medio rechazado 7; aceptada de antes (null) 5;
-    // rechazada 99 y eliminada 50 no cuentan; vendedor dado de baja 2 sí.
+    // Recargas de litro en YE (tío 2026-11-25: solo lo aceptado): pendiente
+    // 10 NO cuenta; aceptada con litro aceptado 20 y medio rechazado 7;
+    // aceptada de antes (null) 5; rechazada 99 y eliminada 50 no cuentan;
+    // vendedor dado de baja 2 sí.
     await crearCarga({
       vendedorId: vendedorA,
       numero: 1,
@@ -564,7 +566,7 @@ describe('Inventario de PT con Recargas (e2e)', () => {
     await crearCarga({
       vendedorId: vendedorBaja,
       numero: 1,
-      estado: 'pendiente',
+      estado: 'aceptada',
       lineas: [
         { presentacionId: litro, piezas: 2 },
         { presentacionId: vieja, piezas: 3 },
@@ -575,7 +577,7 @@ describe('Inventario de PT con Recargas (e2e)', () => {
       vendedorId: vendedorL,
       sucursalId: lId,
       numero: 1,
-      estado: 'pendiente',
+      estado: 'aceptada',
       lineas: [{ presentacionId: litro, piezas: 8 }],
     });
 
@@ -623,7 +625,8 @@ describe('Inventario de PT con Recargas (e2e)', () => {
       lineas: [{ presentacionId: litro, piezas: 1 }],
     });
 
-    // RF 2: lo de la app y Procesos NO entra aquí (sí en PT con Ventas).
+    // Merma, consumo y descuentos (Registro, app y Procesos) NO entran aquí
+    // (sí en PT con Ventas).
     await crearMovimiento('consumo', 9);
     await crearMovimiento('merma_trayecto', 9);
     await crearProceso({
@@ -747,8 +750,8 @@ describe('Inventario de PT con Recargas (e2e)', () => {
   });
 
   // Litro de YE hoy: Inicial 520 (Final de ayer).
-  const RECARGAS_LITRO_K = 10 + 20 + 5 + 2;
-  const ACTUAL_LITRO_K = 520 - RECARGAS_LITRO_K - 6 + 100 - 2 - 3 - (4 + 1);
+  const RECARGAS_LITRO_K = 20 + 5 + 2;
+  const ACTUAL_LITRO_K = 520 - RECARGAS_LITRO_K - 6 + 100;
 
   describe('cada columna con su fuente (D2)', () => {
     it('hoy de Tijuana, con la hora de la consulta', async () => {
@@ -758,7 +761,7 @@ describe('Inventario de PT con Recargas (e2e)', () => {
       expect(r.consultadoEn).toMatch(/^\d{2}:\d{2}$/);
     });
 
-    it('litro de YE: recargas, envíos, entradas, merma, consumo, descuentos y Actual', async () => {
+    it('litro de YE: Actual = Inicial − Recargas − Envíos + Entradas', async () => {
       expect(renglon(await leer({ sucursal: K }), litro)).toEqual({
         presentacionId: litro,
         productoId: producto,
@@ -768,9 +771,6 @@ describe('Inventario de PT con Recargas (e2e)', () => {
         recargas: RECARGAS_LITRO_K,
         envios: 6,
         entradas: 100,
-        merma: 2,
-        consumo: 3,
-        descuentos: 5,
         actual: ACTUAL_LITRO_K,
         ajustado: false,
       });
@@ -779,11 +779,17 @@ describe('Inventario de PT con Recargas (e2e)', () => {
     it('RF 1: renglón rechazado de una carga aceptada no cuenta', async () => {
       expect(renglon(await leer({ sucursal: K }), medio)).toMatchObject({
         recargas: 0,
-        descuentos: 2,
       });
     });
 
-    it('RF 2: app y Procesos no cambian esta pantalla, pero sí PT con Ventas', async () => {
+    it('una recarga pendiente no resta hasta que el vendedor la acepta', async () => {
+      const r = await detalle({ presentacion: litro, sucursal: K });
+      expect(r.detalle.find((f) => f.quien === nombreA && f.carga === 1)).toBe(
+        undefined,
+      );
+    });
+
+    it('merma, consumo y descuentos no cambian esta pantalla, pero sí PT con Ventas', async () => {
       const pt = (await leerPt(hoy, K)).renglones.find(
         (x) => x.presentacionId === litro,
       );
@@ -793,7 +799,10 @@ describe('Inventario de PT con Recargas (e2e)', () => {
       expect(pt?.descuentos).toBe(5 + 7);
       expect(pt?.ventas).toBe(11);
       const r = renglon(await leer({ sucursal: K }), litro);
-      expect(r).toMatchObject({ merma: 2, consumo: 3, descuentos: 5 });
+      expect(r).not.toHaveProperty('merma');
+      expect(r).not.toHaveProperty('consumo');
+      expect(r).not.toHaveProperty('descuentos');
+      expect(r?.actual).toBe(ACTUAL_LITRO_K);
     });
 
     it('RF 3: sin ajuste hoy, el Inicial = Final de ayer de PT con Ventas', async () => {
@@ -809,7 +818,7 @@ describe('Inventario de PT con Recargas (e2e)', () => {
     it('RF 3: con ajuste hoy, el Inicial es el del ajuste y lleva "Ajustado"', async () => {
       expect(renglon(await leer({ sucursal: K }), medio)).toMatchObject({
         inicial: 300,
-        actual: 300 - 2,
+        actual: 300,
         ajustado: true,
       });
     });
@@ -894,103 +903,53 @@ describe('Inventario de PT con Recargas (e2e)', () => {
         inicial: 520 + 300 + 100,
         recargas: RECARGAS_LITRO_K + 1,
         envios: 12,
-        descuentos: 7,
-        actual: ACTUAL_LITRO_K + 298 + 93,
+        actual: ACTUAL_LITRO_K + 300 + 93,
         ajustado: false,
       });
     });
   });
 
   describe('a quién (D5)', () => {
-    it('recargas de litro en YE: vendedor, carga, estado y piezas que cuentan', async () => {
-      const r = await detalle({
-        presentacion: litro,
-        sucursal: K,
-        columna: 'recargas',
-      });
+    it('recargas de litro en YE: vendedor, carga y piezas aceptadas', async () => {
+      const r = await detalle({ presentacion: litro, sucursal: K });
       expect(r.detalle).toEqual([
-        { quien: nombreA, carga: 1, estado: 'pendiente', piezas: 10 },
-        { quien: nombreA, carga: 2, estado: 'aceptada', piezas: 20 },
-        { quien: nombreA, carga: 3, estado: 'aceptada', piezas: 5 },
-        { quien: nombreBaja, carga: 1, estado: 'pendiente', piezas: 2 },
+        { quien: nombreA, carga: 2, piezas: 20 },
+        { quien: nombreA, carga: 3, piezas: 5 },
+        { quien: nombreBaja, carga: 1, piezas: 2 },
       ]);
     });
 
     it('renglón rechazado: sin filas', async () => {
-      const r = await detalle({
-        presentacion: medio,
-        sucursal: K,
-        columna: 'recargas',
-      });
+      const r = await detalle({ presentacion: medio, sucursal: K });
       expect(r.detalle).toEqual([]);
     });
 
     it('por producto: suma las presentaciones de cada carga', async () => {
-      const r = await detalle({
-        producto,
-        sucursal: K,
-        columna: 'recargas',
-      });
+      const r = await detalle({ producto, sucursal: K });
       expect(r.detalle).toEqual([
-        { quien: nombreA, carga: 1, estado: 'pendiente', piezas: 10 },
-        { quien: nombreA, carga: 2, estado: 'aceptada', piezas: 20 },
-        { quien: nombreA, carga: 3, estado: 'aceptada', piezas: 6 },
-        { quien: nombreBaja, carga: 1, estado: 'pendiente', piezas: 2 },
+        { quien: nombreA, carga: 2, piezas: 20 },
+        { quien: nombreA, carga: 3, piezas: 6 },
+        { quien: nombreBaja, carga: 1, piezas: 2 },
       ]);
     });
 
     it('Todas: también las de YF', async () => {
-      const r = await detalle({
-        presentacion: litro,
-        sucursal: 'todas',
-        columna: 'recargas',
-      });
-      expect(r.detalle).toContainEqual({
-        quien: nombreL,
-        carga: 1,
-        estado: 'pendiente',
-        piezas: 8,
-      });
+      const r = await detalle({ presentacion: litro, sucursal: 'todas' });
+      expect(r.detalle).toContainEqual({ quien: nombreL, carga: 1, piezas: 8 });
       expect(r.detalle.reduce((t, f) => t + f.piezas, 0)).toBe(
         RECARGAS_LITRO_K + 8,
       );
     });
 
-    it('descuentos: trabajador del Registro (no Procesos)', async () => {
-      const r = await detalle({
-        presentacion: litro,
-        sucursal: K,
-        columna: 'descuentos',
-      });
-      expect(r.detalle).toEqual([
-        { quien: JUAN, carga: null, estado: null, piezas: 4 },
-        { quien: PEDRO, carga: null, estado: null, piezas: 1 },
-      ]);
-    });
-
-    it('validación: una presentación o un producto; columna conocida', async () => {
+    it('validación: una presentación o un producto', async () => {
       const pedir = (q: Record<string, string>) =>
         http()
           .get('/inventario-pt/recargas/detalle')
           .query(q)
           .set('Cookie', cookieGeneral);
-      await pedir({ sucursal: K, columna: 'recargas' }).expect(400);
-      await pedir({
-        presentacion: litro,
-        producto,
-        sucursal: K,
-        columna: 'recargas',
-      }).expect(400);
-      await pedir({
-        presentacion: litro,
-        sucursal: K,
-        columna: 'merma',
-      }).expect(400);
-      await pedir({
-        presentacion: randomUUID(),
-        sucursal: K,
-        columna: 'recargas',
-      }).expect(404);
+      await pedir({ sucursal: K }).expect(400);
+      await pedir({ presentacion: litro, producto, sucursal: K }).expect(400);
+      await pedir({ presentacion: randomUUID(), sucursal: K }).expect(404);
     });
   });
 
@@ -998,14 +957,7 @@ describe('Inventario de PT con Recargas (e2e)', () => {
     it('RF 5: con solo inventario_pt_recargas.ver funciona la pantalla y sus detalles', async () => {
       const r = await leer({ sucursal: K }, cookieKVer);
       expect(renglon(r, litro)?.actual).toBe(ACTUAL_LITRO_K);
-      await detalle(
-        { presentacion: litro, sucursal: K, columna: 'recargas' },
-        cookieKVer,
-      );
-      await detalle(
-        { presentacion: litro, sucursal: K, columna: 'descuentos' },
-        cookieKVer,
-      );
+      await detalle({ presentacion: litro, sucursal: K }, cookieKVer);
       // Y no abre PT con Ventas.
       await http()
         .get('/inventario-pt')
@@ -1022,7 +974,7 @@ describe('Inventario de PT con Recargas (e2e)', () => {
         .expect(403);
       await http()
         .get('/inventario-pt/recargas/detalle')
-        .query({ presentacion: litro, sucursal: K, columna: 'recargas' })
+        .query({ presentacion: litro, sucursal: K })
         .set('Cookie', cookieKSin)
         .expect(403);
     });
@@ -1035,7 +987,7 @@ describe('Inventario de PT con Recargas (e2e)', () => {
         .expect(403);
       await http()
         .get('/inventario-pt/recargas/detalle')
-        .query({ presentacion: litro, sucursal: L, columna: 'recargas' })
+        .query({ presentacion: litro, sucursal: L })
         .set('Cookie', cookieKVer)
         .expect(403);
       const propia = await leer({ sucursal: 'todas' }, cookieKVer);

@@ -2,21 +2,20 @@
  * Reglas del Inventario de PT con Recargas, sin base ni Nest: la UNICA cuenta
  * del Actual y la suma por producto. El Inicial no se calcula aqui: es el de
  * Inventario de PT con Ventas para hoy (`reglas-inventario-pt.ts`).
- * Spec: docs/superpowers/specs/2026-11-25-inventario-pt-recargas-design.md (D2, D3).
+ * Spec: docs/superpowers/specs/2026-11-25-inventario-pt-recargas-design.md (D2, D3 y los
+ * cambios del tío del 2026-11-25: es una fotografía a grandes rasgos; sin merma,
+ * consumo ni descuentos).
  */
 import { compararPresentaciones } from './reglas-inventario-pt';
 
 /** Lo que se movio hoy de una presentacion (D2). Solo Registro de Operacion y cargas. */
 export interface MovimientosRecargas {
-  /** Renglones de cargas vivas de hoy, pendientes o aceptados. */
+  /** Renglones aceptados de cargas vivas de hoy (una pendiente no resta). */
   recargas: number;
   /** Envios que salieron. */
   envios: number;
-  /** Registro `entrada` + envios recibidos. */
+  /** Registro `entrada` (produccion/compras) + envios recibidos. */
   entradas: number;
-  merma: number;
-  consumo: number;
-  descuentos: number;
 }
 
 export const SIN_MOVIMIENTOS_RECARGAS: Readonly<MovimientosRecargas> =
@@ -24,9 +23,6 @@ export const SIN_MOVIMIENTOS_RECARGAS: Readonly<MovimientosRecargas> =
     recargas: 0,
     envios: 0,
     entradas: 0,
-    merma: 0,
-    consumo: 0,
-    descuentos: 0,
   });
 
 const CAMPOS = Object.keys(
@@ -63,21 +59,13 @@ export function hayMovimientoRecargas(m: MovimientosRecargas): boolean {
   return CAMPOS.some((c) => m[c] !== 0);
 }
 
-/** `Actual = Inicial − Recargas − Envíos + Entradas − Merma − Consumo − Descuentos`. */
+/** `Actual = Inicial − Recargas − Envíos + Entradas`. */
 export function actualDelDia(
   inicial: number | null,
   m: MovimientosRecargas,
 ): number | null {
   if (inicial === null) return null;
-  return (
-    inicial -
-    m.recargas -
-    m.envios +
-    m.entradas -
-    m.merma -
-    m.consumo -
-    m.descuentos
-  );
+  return inicial - m.recargas - m.envios + m.entradas;
 }
 
 const sumaONull = (valores: (number | null)[]): number | null =>

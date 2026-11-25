@@ -4,34 +4,20 @@ import { Fragment, type ReactNode } from "react";
 import { InicialConMarca, Opcional, SEPARADOR } from "@/components/inventario-pt/tabla-inventario-pt";
 import { CajaTabla, Fila, FilaGrupo, FilaTotal, FilaVacia, Tabla, Td, Th } from "@/components/ui/tabla";
 import type { VistaPt } from "@/lib/inventario-pt";
-import {
-  gruposPtRecargas,
-  type ColumnaDetalleRecargas,
-  type RenglonPtRecargas,
-  type TotalesPtRecargas,
-} from "@/lib/inventario-pt-recargas";
+import { gruposPtRecargas, type RenglonPtRecargas, type TotalesPtRecargas } from "@/lib/inventario-pt-recargas";
 
 export const TITULO = "Inventario de PT con Recargas";
 
-const COLUMNAS = 9;
+const COLUMNAS = 6;
 
-/** Un número que se pica para ver a quién (Recargas o Descuentos ≠ 0); un 0 queda como texto. */
-function Picable({
-  valor,
-  que,
-  onPicar,
-}: {
-  valor: number;
-  /** "recarga" / "descuento", para el nombre accesible. */
-  que: string;
-  onPicar?: () => void;
-}) {
+/** Las Recargas ≠ 0 se pican para ver a quién; un 0 queda como texto. */
+function Picable({ valor, onPicar }: { valor: number; onPicar?: () => void }) {
   if (valor === 0 || !onPicar) return <>{valor}</>;
   return (
     <button
       type="button"
       onClick={onPicar}
-      aria-label={`Ver a quién: ${valor} ${valor === 1 ? "pieza" : "piezas"} de ${que}`}
+      aria-label={`Ver a quién: ${valor} ${valor === 1 ? "pieza" : "piezas"} de recarga`}
       className="text-info underline decoration-dotted underline-offset-4 outline-none hover:decoration-solid focus-visible:decoration-solid"
     >
       {valor}
@@ -39,29 +25,16 @@ function Picable({
   );
 }
 
-/** Las 8 celdas de números de un renglón o de un total, en el orden del Excel del cliente. */
-function Celdas({
-  r,
-  inicial,
-  onPicar,
-}: {
-  r: TotalesPtRecargas;
-  inicial?: ReactNode;
-  onPicar?: (columna: ColumnaDetalleRecargas) => void;
-}) {
+/** Las 5 celdas de números de un renglón o de un total, en el orden de la fórmula del cliente. */
+function Celdas({ r, inicial, onPicar }: { r: TotalesPtRecargas; inicial?: ReactNode; onPicar?: () => void }) {
   return (
     <>
       <Td alinear="derecha">{inicial ?? <Opcional valor={r.inicial} />}</Td>
       <Td alinear="derecha">
-        <Picable valor={r.recargas} que="recarga" onPicar={onPicar && (() => onPicar("recargas"))} />
+        <Picable valor={r.recargas} onPicar={onPicar} />
       </Td>
       <Td alinear="derecha">{r.envios}</Td>
       <Td alinear="derecha">{r.entradas}</Td>
-      <Td alinear="derecha">{r.merma}</Td>
-      <Td alinear="derecha">{r.consumo}</Td>
-      <Td alinear="derecha">
-        <Picable valor={r.descuentos} que="descuento" onPicar={onPicar && (() => onPicar("descuentos"))} />
-      </Td>
       <Td alinear="derecha" className={`${SEPARADOR} font-semibold`}>
         <Opcional valor={r.actual} />
       </Td>
@@ -70,9 +43,9 @@ function Celdas({
 }
 
 /**
- * La tabla de hoy (D1): Producto · Inicial · Recargas · Envíos · Entradas/Compras · Merma ·
- * Consumo · Descuentos · Actual. Por presentación, agrupada por tamaño con su total; por
- * producto, un renglón por producto. Recargas y Descuentos ≠ 0 se pican para ver a quién (D5).
+ * La tabla de hoy: Producto · Inicial · Recargas · Envíos · Entradas/Compras · Actual (fórmula del
+ * tío, 2026-11-25). Por presentación, agrupada por tamaño con su total; por producto, un renglón
+ * por producto. Recargas ≠ 0 se pica para ver a quién (D5).
  */
 export function TablaInventarioPtRecargas({
   renglones,
@@ -81,13 +54,13 @@ export function TablaInventarioPtRecargas({
 }: {
   renglones: RenglonPtRecargas[];
   vista: VistaPt;
-  onDetalle: (r: RenglonPtRecargas, columna: ColumnaDetalleRecargas) => void;
+  onDetalle: (r: RenglonPtRecargas) => void;
 }) {
   function renglon(r: RenglonPtRecargas) {
     return (
       <Fila key={r.presentacionId ?? r.productoId} className="align-middle">
         <Td className="truncate" title={r.producto}>{r.producto}</Td>
-        <Celdas r={r} inicial={<InicialConMarca r={r} />} onPicar={(c) => onDetalle(r, c)} />
+        <Celdas r={r} inicial={<InicialConMarca r={r} />} onPicar={() => onDetalle(r)} />
       </Fila>
     );
   }
@@ -127,9 +100,6 @@ export function TablaInventarioPtRecargas({
             <Th alinear="derecha" className={th}>Recargas</Th>
             <Th alinear="derecha" className={th}>Envíos</Th>
             <Th alinear="derecha" className={th}>Entradas / Compras</Th>
-            <Th alinear="derecha" className={th}>Merma</Th>
-            <Th alinear="derecha" className={th}>Consumo</Th>
-            <Th alinear="derecha" className={th}>Descuentos</Th>
             <Th alinear="derecha" className={`${th} ${SEPARADOR}`}>Actual</Th>
           </tr>
         </thead>

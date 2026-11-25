@@ -4,7 +4,7 @@ import {
   gruposPtRecargas,
   leerDetallePtRecargas,
   leerInventarioPtRecargas,
-  textoEstadoCarga,
+  textoSinInicialRecargas,
   type RenglonPtRecargas,
 } from "./inventario-pt-recargas";
 
@@ -21,9 +21,6 @@ const renglon = (producto: string, volumen: string, m: Partial<RenglonPtRecargas
   recargas: 0,
   envios: 0,
   entradas: 0,
-  merma: 0,
-  consumo: 0,
-  descuentos: 0,
   ...m,
 });
 
@@ -36,25 +33,25 @@ describe("llamadas", () => {
     expect(apiFetch).toHaveBeenCalledWith("/inventario-pt/recargas?sucursal=TJ&vista=producto");
   });
 
-  it("el detalle: presentación o producto, sucursal y columna", async () => {
+  it("el detalle: presentación o producto y sucursal", async () => {
     vi.mocked(apiFetch).mockResolvedValue({ detalle: [] });
-    await leerDetallePtRecargas({ presentacion: "p1" }, "todas", "recargas");
-    expect(apiFetch).toHaveBeenLastCalledWith("/inventario-pt/recargas/detalle?presentacion=p1&sucursal=todas&columna=recargas");
-    await leerDetallePtRecargas({ producto: "x" }, "TJ", "descuentos");
-    expect(apiFetch).toHaveBeenLastCalledWith("/inventario-pt/recargas/detalle?producto=x&sucursal=TJ&columna=descuentos");
+    await leerDetallePtRecargas({ presentacion: "p1" }, "todas");
+    expect(apiFetch).toHaveBeenLastCalledWith("/inventario-pt/recargas/detalle?presentacion=p1&sucursal=todas");
+    await leerDetallePtRecargas({ producto: "x" }, "TJ");
+    expect(apiFetch).toHaveBeenLastCalledWith("/inventario-pt/recargas/detalle?producto=x&sucursal=TJ");
   });
 });
 
 describe("gruposPtRecargas", () => {
   it("por tamaño (de chico a grande), dentro por producto, con su total", () => {
     const g = gruposPtRecargas([
-      renglon("Jamaica", "500 ml", { inicial: 10, recargas: 3, envios: 1, entradas: 2, merma: 1, consumo: 1, descuentos: 1, actual: 5 }),
+      renglon("Jamaica", "500 ml", { inicial: 10, recargas: 3, envios: 1, entradas: 2, actual: 8 }),
       renglon("Agua", "1 L", { inicial: 4, actual: 4 }),
       renglon("Horchata", "500 ml", { inicial: 20, recargas: 5, actual: 15 }),
     ]);
     expect(g.map((x) => x.tamano)).toEqual(["500 ml", "1 L"]);
     expect(g[0].renglones.map((r) => r.producto)).toEqual(["Horchata", "Jamaica"]);
-    expect(g[0].totales).toEqual({ inicial: 30, recargas: 8, envios: 1, entradas: 2, merma: 1, consumo: 1, descuentos: 1, actual: 20 });
+    expect(g[0].totales).toEqual({ inicial: 30, recargas: 8, envios: 1, entradas: 2, actual: 23 });
   });
 
   it("un total con algún renglón sin inicial queda vacío (null), los movimientos sí se suman", () => {
@@ -68,8 +65,13 @@ describe("gruposPtRecargas", () => {
   });
 });
 
-it("textoEstadoCarga", () => {
-  expect(textoEstadoCarga("pendiente")).toBe("Pendiente");
-  expect(textoEstadoCarga("aceptada")).toBe("Aceptada");
-  expect(textoEstadoCarga(null)).toBe("");
+describe("textoSinInicialRecargas", () => {
+  it("manda a capturar el ajuste en PT con Ventas (aquí no se ajusta)", () => {
+    expect(textoSinInicialRecargas(1, "presentacion", false)).toBe(
+      "1 presentación sin inventario inicial: su Inicial y Actual quedan vacíos hasta que se capture un ajuste en Inventario de PT con Ventas. Los movimientos de hoy sí se ven.",
+    );
+    expect(textoSinInicialRecargas(2, "producto", true)).toMatch(
+      /^2 productos sin inventario inicial: .* hasta que cada sucursal capture su ajuste en Inventario de PT con Ventas\./,
+    );
+  });
 });

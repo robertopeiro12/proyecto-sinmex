@@ -2,6 +2,20 @@
 
 Fecha: 2026-11-25 · Rama: `feature/inventario-pt-recargas` · Backend + portal (Roberto). La tablet no cambia.
 
+## Cambios del tío (2026-11-25, noche) — mandan sobre lo de abajo
+Contestó las 3 casillas del Word ("Así quedó el Inventario de PT con Recargas") por WhatsApp:
+- **Es una fotografía a grandes rasgos**, no el inventario real ("el exacto es el Inventario de PT con Ventas"; también el
+  Inventario por vendedor es real). Solo el día de hoy, nada de otros días.
+- **Fórmula:** `Inventario inicial − Recargas − Envíos + Producción/Compras = Inventario actual`. **Se quitan Merma, Consumo
+  y Descuentos** (columnas, "a quién" de descuentos y el parámetro `columna` del detalle).
+- **Inicial** = el Final real del día anterior (PT con Ventas). Se conserva: si hoy hay un ajuste capturado en PT con
+  Ventas, manda ese (es el conteo real de arranque de hoy).
+- **Recargas: solo cuando el vendedor acepta** (renglón aceptado de una carga `aceptada`). La pendiente **ya no resta**
+  (cambia R1). El "a quién" ya no lleva Estado.
+- **Sin botón "Ajustar inventario"**: el ajuste se hace sobre el inventario real (PT con Ventas). El aviso "Sin inventario
+  inicial" manda a capturarlo allá.
+- Envíos restan (confirma el "error de dedo").
+
 ## Para qué
 La "fotografía" de lo que hay **hoy** en el almacén (CF + almacén general) una vez que los vendedores salieron a ruta con
 sus recargas y se mandó mercancía a otra sucursal. Su gemelo, *Inventario de PT con Ventas*, dice con cuánto **terminó**

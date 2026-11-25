@@ -8,49 +8,37 @@ import { CajaTabla, Fila, FilaTotal, FilaVacia, Tabla, Td, Th } from "@/componen
 import { Ventana } from "@/components/ui/ventana";
 import { mensajeDe } from "@/lib/api";
 import { formatearDiaCorto } from "@/lib/formato";
-import {
-  leerDetallePtRecargas,
-  textoEstadoCarga,
-  type ColumnaDetalleRecargas,
-  type DetallePtRecargas,
-  type RenglonPtRecargas,
-} from "@/lib/inventario-pt-recargas";
+import { leerDetallePtRecargas, type DetallePtRecargas, type RenglonPtRecargas } from "@/lib/inventario-pt-recargas";
 
 /**
- * D5: a quién. Recargas: vendedor, n.º de carga, estado y piezas; Descuentos: el trabajador
- * (los del Registro de Operación) y piezas. Los dos con su total. Por producto, suman las
- * presentaciones del producto (lo hace el servidor).
+ * D5: a quién se le recargó: vendedor, n.º de carga y piezas aceptadas, con su total. Por
+ * producto, suman las presentaciones del producto (lo hace el servidor).
  */
 export function VentanaAQuien({
   renglon,
-  columna,
   fecha,
   sucursal,
   alCerrar,
 }: {
   renglon: RenglonPtRecargas;
-  columna: ColumnaDetalleRecargas;
   fecha: string;
   sucursal: string;
   alCerrar: () => void;
 }) {
   const [datos, setDatos] = useState<DetallePtRecargas | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const recargas = columna === "recargas";
 
   useEffect(() => {
     let vigente = true;
-    leerDetallePtRecargas(cualDe(renglon), sucursal, columna).then(
+    leerDetallePtRecargas(cualDe(renglon), sucursal).then(
       (r) => vigente && setDatos(r),
-      (err: unknown) =>
-        vigente && setError(mensajeDe(err, recargas ? "No se pudieron cargar las recargas." : "No se pudieron cargar los descuentos.")),
+      (err: unknown) => vigente && setError(mensajeDe(err, "No se pudieron cargar las recargas.")),
     );
     return () => {
       vigente = false;
     };
-  }, [renglon, sucursal, columna, recargas]);
+  }, [renglon, sucursal]);
 
-  const columnas = recargas ? 4 : 2;
   const total = datos?.detalle.reduce((t, d) => t + d.piezas, 0) ?? 0;
 
   return (
@@ -58,7 +46,7 @@ export function VentanaAQuien({
       abierta
       alCerrar={alCerrar}
       ancho="ancho"
-      titulo={`${recargas ? "Recargas" : "Descuentos"} · ${nombreDe(renglon)} · ${formatearDiaCorto(fecha)}`}
+      titulo={`Recargas · ${nombreDe(renglon)} · ${formatearDiaCorto(fecha)}`}
     >
       {error && <Aviso tono="error">{error}</Aviso>}
       {!datos && !error && <p className="text-sm text-muted-foreground">Cargando…</p>}
@@ -67,21 +55,19 @@ export function VentanaAQuien({
           <Tabla aria-label="A quién">
             <thead>
               <tr>
-                <Th>{recargas ? "Vendedor" : "Trabajador"}</Th>
-                {recargas && <Th alinear="derecha">Carga</Th>}
-                {recargas && <Th>Estado</Th>}
+                <Th>Vendedor</Th>
+                <Th alinear="derecha">Carga</Th>
                 <Th alinear="derecha">Piezas</Th>
               </tr>
             </thead>
             <tbody>
               {datos.detalle.length === 0 && (
-                <FilaVacia columnas={columnas}>{recargas ? "Sin recargas hoy." : "Sin descuentos hoy."}</FilaVacia>
+                <FilaVacia columnas={3}>Sin recargas aceptadas hoy.</FilaVacia>
               )}
               {datos.detalle.map((d, i) => (
-                <Fila key={`${d.quien}|${d.carga ?? ""}|${i}`}>
+                <Fila key={`${d.quien}|${d.carga}|${i}`}>
                   <Td>{d.quien}</Td>
-                  {recargas && <Td alinear="derecha">{d.carga ?? ""}</Td>}
-                  {recargas && <Td>{textoEstadoCarga(d.estado)}</Td>}
+                  <Td alinear="derecha">{d.carga}</Td>
                   <Td alinear="derecha">{d.piezas}</Td>
                 </Fila>
               ))}
@@ -90,8 +76,7 @@ export function VentanaAQuien({
               <tfoot>
                 <FilaTotal>
                   <Td>Total</Td>
-                  {recargas && <Td />}
-                  {recargas && <Td />}
+                  <Td />
                   <Td alinear="derecha">{total}</Td>
                 </FilaTotal>
               </tfoot>

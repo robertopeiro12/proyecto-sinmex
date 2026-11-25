@@ -16,7 +16,7 @@ export class ConsultaInventarioPtRecargasDto {
   vista?: 'presentacion' | 'producto';
 }
 
-/** `GET /inventario-pt/recargas/detalle`: una presentacion o un producto (uno de los dos). */
+/** `GET /inventario-pt/recargas/detalle` (a quien se le recargo): una presentacion o un producto (uno de los dos). */
 export class ConsultaDetallePtRecargasDto {
   @IsOptional()
   @IsUUID(undefined, { message: 'Elige una presentación válida.' })
@@ -29,9 +29,4 @@ export class ConsultaDetallePtRecargasDto {
   @IsOptional()
   @IsString({ message: MENSAJE_SUCURSAL })
   sucursal?: string;
-
-  @IsIn(['recargas', 'descuentos'], {
-    message: 'La columna debe ser recargas o descuentos.',
-  })
-  columna!: 'recargas' | 'descuentos';
 }

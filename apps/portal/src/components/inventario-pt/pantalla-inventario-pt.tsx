@@ -11,7 +11,7 @@ import { SelectorSegmentado } from "@/components/ui/selector-segmentado";
 import { mensajeDe } from "@/lib/api";
 import { diaAnterior } from "@/lib/fechas";
 import { diaEscrito } from "@/lib/formato";
-import { leerInventarioPt, textoSinInicial, type InventarioPt, type RenglonPt, type VistaPt } from "@/lib/inventario-pt";
+import { leerInventarioPt, type InventarioPt, type RenglonPt, type VistaPt } from "@/lib/inventario-pt";
 import { hoyEnTijuana } from "@/lib/ventas";
 import { AjustesInventarioPt } from "./ajustes-inventario-pt";
 import { TablaInventarioPt, TITULO } from "./tabla-inventario-pt";
@@ -157,14 +157,20 @@ function Inventario({ sucursal, puedeAjustar }: { sucursal: string; puedeAjustar
       {error && <Aviso tono="error">{error}</Aviso>}
       {sinInicial > 0 && deVista && (
         <Aviso tono="advertencia">
-          {textoSinInicial({
-            cuantos: sinInicial,
-            vista,
-            todas,
-            puedeAjustar,
-            vacias: "su Inicial, Final y Merma acumulada quedan vacíos",
-            movimientos: "Los movimientos del día sí se ven.",
-          })}
+          {`${sinInicial} ${
+            vista === "producto"
+              ? sinInicial === 1
+                ? "producto sin inventario inicial"
+                : "productos sin inventario inicial"
+              : sinInicial === 1
+                ? "presentación sin inventario inicial"
+                : "presentaciones sin inventario inicial"
+          }: su Inicial, Final y Merma acumulada quedan vacíos hasta que ${
+            todas
+              ? // Con Todas el botón está deshabilitado y el vacío puede venir de otra sucursal.
+                `cada sucursal capture su ajuste${puedeAjustar ? " (elígela en el menú lateral)" : ""}`
+              : `se capture un ajuste${puedeAjustar ? " con «Ajustar inventario»" : ""}`
+          }. Los movimientos del día sí se ven.`}
         </Aviso>
       )}
       {/* Sin datos de esta vista todavía (al abrir o al cambiar de vista): "Cargando…", nunca vacío. */}

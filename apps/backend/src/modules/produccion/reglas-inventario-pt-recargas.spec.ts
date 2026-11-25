@@ -35,16 +35,17 @@ describe('actualDelDia (D2)', () => {
     );
   });
 
-  it('Actual = Inicial − Recargas − Envíos + Entradas − Merma − Consumo − Descuentos', () => {
-    const m = mov({
-      recargas: 10,
-      envios: 20,
-      entradas: 100,
-      merma: 3,
-      consumo: 4,
-      descuentos: 5,
-    });
-    expect(actualDelDia(500, m)).toBe(500 - 10 - 20 + 100 - 3 - 4 - 5);
+  it('Actual = Inicial − Recargas − Envíos + Entradas (tío, 2026-11-25)', () => {
+    const m = mov({ recargas: 10, envios: 20, entradas: 100 });
+    expect(actualDelDia(500, m)).toBe(500 - 10 - 20 + 100);
+  });
+
+  it('solo lleva recargas, envíos y entradas (sin merma, consumo ni descuentos)', () => {
+    expect(Object.keys(SIN_MOVIMIENTOS_RECARGAS).sort()).toEqual([
+      'entradas',
+      'envios',
+      'recargas',
+    ]);
   });
 
   it('sin Inicial, el Actual queda vacío (nunca 0)', () => {
@@ -61,16 +62,9 @@ describe('sumarMovimientosRecargas', () => {
     expect(
       sumarMovimientosRecargas(
         mov({ recargas: 1, envios: 2, entradas: 3 }),
-        mov({ recargas: 10, merma: 4, consumo: 5, descuentos: 6 }),
+        mov({ recargas: 10, entradas: 4 }),
       ),
-    ).toEqual({
-      recargas: 11,
-      envios: 2,
-      entradas: 3,
-      merma: 4,
-      consumo: 5,
-      descuentos: 6,
-    });
+    ).toEqual({ recargas: 11, envios: 2, entradas: 7 });
   });
 });
 
@@ -99,7 +93,7 @@ describe('porProductoRecargas', () => {
         presentacionId: C,
         productoId: 'j',
         producto: 'Jamaica',
-        descuentos: 1,
+        entradas: 1,
         inicial: 4,
         actual: 3,
       }),
@@ -119,7 +113,7 @@ describe('porProductoRecargas', () => {
       expect.objectContaining({
         productoId: 'j',
         producto: 'Jamaica',
-        descuentos: 1,
+        entradas: 1,
         inicial: 4,
         actual: 3,
         ajustado: false,
