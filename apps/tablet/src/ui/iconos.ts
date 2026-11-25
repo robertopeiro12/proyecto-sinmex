@@ -32,7 +32,8 @@ export type NombreIcono =
   | 'registros'
   | 'borrar'
   | 'abajo'
-  | 'vaso';
+  | 'vaso'
+  | 'bluetooth';
 
 export const TRAZOS: Record<NombreIcono, readonly string[]> = {
   menu: ['M3 6h18M3 12h18M3 18h18'],
@@ -67,6 +68,8 @@ export const TRAZOS: Record<NombreIcono, readonly string[]> = {
   abajo: ['M6 9l6 6 6-6'],
   // Consumo propio (maqueta 15): un vaso con su popote.
   vaso: ['M6 6h12l-1.5 15h-9z', 'M6.5 11h11', 'M14 6l1.5-3.5'],
+  // La runa de Bluetooth (Seleccionar impresora, pieza 7b).
+  bluetooth: ['M7 7l10 10-5 5V2l5 5L7 17'],
 };
 
 export const NOMBRES_ICONO = Object.keys(TRAZOS) as readonly NombreIcono[];

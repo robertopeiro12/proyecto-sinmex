@@ -1,4 +1,12 @@
-import { CLAVE_PAPEL, crearPreferenciaPapel, interpretarPapel, type AlmacenPreferencia } from './preferencia';
+import {
+  CLAVE_IMPRESORA,
+  CLAVE_PAPEL,
+  crearPreferenciaImpresora,
+  crearPreferenciaPapel,
+  interpretarImpresora,
+  interpretarPapel,
+  type AlmacenPreferencia,
+} from './preferencia';
 
 function memoria(inicial: Record<string, string> = {}): AlmacenPreferencia & { datos: Record<string, string> } {
   const datos = { ...inicial };
@@ -48,5 +56,73 @@ describe('crearPreferenciaPapel', () => {
       escribir: async () => undefined,
     });
     expect(await pref.leerPapel()).toBe(58);
+  });
+});
+
+describe('interpretarImpresora', () => {
+  test('nada guardado es null', () => {
+    expect(interpretarImpresora(null)).toBeNull();
+    expect(interpretarImpresora(undefined)).toBeNull();
+    expect(interpretarImpresora('')).toBeNull();
+  });
+
+  test('reconoce la impresora Bluetooth y el diálogo', () => {
+    expect(interpretarImpresora('{"tipo":"bluetooth","nombre":"PT-210","direccion":"66:22:32:A1:B2:C3"}')).toEqual({
+      tipo: 'bluetooth',
+      nombre: 'PT-210',
+      direccion: '66:22:32:A1:B2:C3',
+    });
+    expect(interpretarImpresora('{"tipo":"dialogo"}')).toEqual({ tipo: 'dialogo' });
+  });
+
+  test('descarta campos de más', () => {
+    expect(interpretarImpresora('{"tipo":"dialogo","otro":1}')).toEqual({ tipo: 'dialogo' });
+  });
+
+  test('una lectura dañada es null', () => {
+    for (const v of [
+      'basura',
+      '{"tipo":',
+      '[]',
+      '"dialogo"',
+      '42',
+      'null',
+      '{"tipo":"wifi"}',
+      '{"tipo":"bluetooth","nombre":"PT-210"}',
+      '{"tipo":"bluetooth","direccion":"66:22:32:A1:B2:C3"}',
+      '{"tipo":"bluetooth","nombre":"","direccion":"66:22:32:A1:B2:C3"}',
+      '{"tipo":"bluetooth","nombre":"PT-210","direccion":""}',
+      '{"tipo":"bluetooth","nombre":7,"direccion":"66:22:32:A1:B2:C3"}',
+    ]) {
+      expect(interpretarImpresora(v)).toBeNull();
+    }
+  });
+});
+
+describe('crearPreferenciaImpresora', () => {
+  test('sin nada guardado es null; guarda y relee las dos formas', async () => {
+    const almacen = memoria();
+    const pref = crearPreferenciaImpresora(almacen);
+    expect(await pref.leerImpresora()).toBeNull();
+    const bt = { tipo: 'bluetooth', nombre: 'PT-210', direccion: '66:22:32:A1:B2:C3' } as const;
+    await pref.guardarImpresora(bt);
+    expect(JSON.parse(almacen.datos[CLAVE_IMPRESORA] ?? '')).toEqual(bt);
+    expect(await pref.leerImpresora()).toEqual(bt);
+    await pref.guardarImpresora({ tipo: 'dialogo' });
+    expect(await pref.leerImpresora()).toEqual({ tipo: 'dialogo' });
+  });
+
+  test('un almacén que falla al leer da null', async () => {
+    const pref = crearPreferenciaImpresora({
+      leer: async () => {
+        throw new Error('keystore');
+      },
+      escribir: async () => undefined,
+    });
+    expect(await pref.leerImpresora()).toBeNull();
+  });
+
+  test('la clave solo usa caracteres que acepta SecureStore', () => {
+    expect(CLAVE_IMPRESORA).toMatch(/^[A-Za-z0-9._-]+$/);
   });
 });
