@@ -170,7 +170,7 @@ export function totalesHistorial(renglones: readonly MovimientosDia[]): Movimien
 }
 
 /** Suma que se vuelve `null` si un renglón no tiene el dato: un total a medias engañaría. */
-function sumaCompleta(renglones: readonly RenglonPt[], valor: (r: RenglonPt) => number | null): number | null {
+export function sumaCompleta<T>(renglones: readonly T[], valor: (r: T) => number | null): number | null {
   let total = 0;
   for (const r of renglones) {
     const v = valor(r);

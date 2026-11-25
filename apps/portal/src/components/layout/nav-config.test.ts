@@ -31,8 +31,16 @@ describe("navSections", () => {
     expect(produccion.some((i) => i.href === "/produccion/retorno")).toBe(false);
   });
 
-  it("Producción: Corte · Inventario por vendedor · Registro de Operación · Inventario de PT con Ventas · Almacenes, sin Peticiones ni Producción del día", () => {
-    expect(navSections[2].items.map((i) => i.label)).toEqual(["Corte", "Inventario por vendedor", "Registro de Operación", "Inventario de PT con Ventas", "Almacenes"]);
+  it("Producción: Corte · Inventario por vendedor · Registro de Operación · Inventario de PT con Recargas · Inventario de PT con Ventas · Almacenes, sin Peticiones ni Producción del día", () => {
+    expect(navSections[2].items.map((i) => i.label)).toEqual([
+      "Corte",
+      "Inventario por vendedor",
+      "Registro de Operación",
+      "Inventario de PT con Recargas",
+      "Inventario de PT con Ventas",
+      "Almacenes",
+    ]);
+    expect(navSections[2].items).toContainEqual({ label: "Inventario de PT con Recargas", href: "/produccion/inventario-pt-recargas" });
   });
 
   it("Registrar venta, Ventas, Facturas y Cobranza ya no están en el menú (viven en Procesos)", () => {
