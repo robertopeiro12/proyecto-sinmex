@@ -339,6 +339,22 @@ usuario con sesion pasa.
     - **Huellas** (`huellaApartado`): al cerrar un apartado se guarda lo que decía el sistema; si después cambia (venta,
       cobro, gasto, merma) el apartado se **reabre** para que lo revise.
   - **Tablet, local**: migración 023 (tabla de cortes, `crearRepositorioCortes`); fuente de push `fuente-cortes.ts`.
+  - **Candado de Corte**: falta(n) N cliente(s) por visitar. Una fila viva cuyo cliente está **dado de baja** en el
+    catálogo de la tablet (`cliente_activo = 0` en `rutas.delDia`) no cuenta: va a "Dados de baja" en la Ruta, sin
+    tocar (ninguna operación acepta un cliente inactivo; si contara, el día no se podría cerrar).
+  - **Día del corte**: la pantalla lee todo con `jornada.fecha` (no el reloj) y el corte enviado por `jornada.id`
+    (`cortes.deJornada`). El candado de inventario (`candadoDeHoy`) sí es del reloj.
+  - **"Debes traer" ≠ Flujo diario de la oficina** (`flujo-diario.repository.ts`). Son cifras distintas a propósito;
+    **no se concilian**:
+    - **Abono al vender**: la tablet lo pone en "Abonos y cobros"; la oficina, dentro de `contado` (`cobranza_abono`
+      con origen `venta_contado`).
+    - **Forma de pago**: la tablet espera solo **efectivo** (transferencia y cheque aparte); la oficina suma todas las
+      formas en `anteriores` + `a_favor`.
+    - **Día del cobro**: la tablet usa `cobranza.fecha` (captura); la oficina, `fecha_pago`.
+    - **Rechazado o sin subir**: la tablet lo cuenta (filas locales, cualquier `sync_estado`); la oficina no, hasta
+      que se aplica (y lo borrado sale).
+    - La "Cobranza" del resumen (todas las formas, sin abono al vender) sí equivale a `anteriores + a_favor` de la
+      oficina, pero por `fecha` y no por `fecha_pago`.
 - **Ruta semanal y Ruta diaria (T-37 + 2026-11-10).** La oficina tiene rutas fijas por día (*Operación → Ruta Semanal*), le
   asigna una a cada vendedor cada mañana (*Ruta Diaria*), la ajusta, le pone vehículo y le asigna notas por cobrar; el
   vendedor la complementa desde la tablet con la operación **`ruta-alta`** (no `ruta`, que sigue guardada sin proyectar; la
