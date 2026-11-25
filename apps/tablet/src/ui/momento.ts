@@ -49,3 +49,16 @@ export function formatearFechaCorta(fecha: string): string {
   if (mes === undefined || dia < 1 || dia > 31) return fecha;
   return `${dia} ${mes} ${m[1]}`;
 }
+
+/**
+ * Un momento ISO como lo pone la nota impresa (pieza 7): `18 nov 2026 · 11:58`,
+ * fecha corta y hora en la zona LOCAL de la tablet (Tijuana), con la misma regla
+ * que `formatearMomento`. Lo que no sea fecha sale tal cual.
+ */
+export function formatearFechaHora(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const dos = (n: number) => `${n}`.padStart(2, '0');
+  const fecha = `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
+  return `${formatearFechaCorta(fecha)} · ${dos(d.getHours())}:${dos(d.getMinutes())}`;
+}
