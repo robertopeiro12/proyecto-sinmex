@@ -120,6 +120,53 @@ describe('prepararProyeccion', () => {
     });
   });
 
+  it('un corte pasa por prepararCorte y sale como proyeccion de corte (rediseño pieza 6)', () => {
+    const r = prepararProyeccion(
+      op({
+        tipo: 'corte',
+        clave: 'c0ffee00-0000-4000-8000-000000000601',
+        folio: null,
+        clienteId: null,
+        datos: {
+          efectivo: { esperado_centavos: 1000, traido_centavos: 900 },
+          notas: [
+            { folio: 'TJ261125AP01', traida: false, saldo_centavos: 500 },
+          ],
+          inventario: [{ presentacion_id: PRE_A, sistema: 2, contado: 1 }],
+          merma: { sistema: 1, contado: 1 },
+          enviado_en: '2026-11-26T01:30:00.000Z',
+        },
+      }),
+    );
+    expect(r).toEqual({
+      ok: true,
+      proyeccion: {
+        tipo: 'corte',
+        corte: {
+          efectivo: { esperadoCentavos: 1000, traidoCentavos: 900 },
+          notas: [{ folio: 'TJ261125AP01', traida: false, saldoCentavos: 500 }],
+          inventario: [{ presentacionId: PRE_A, sistema: 2, contado: 1 }],
+          merma: { sistema: 1, contado: 1 },
+          enviadoEn: '2026-11-26T01:30:00.000Z',
+        },
+      },
+    });
+  });
+
+  it('un corte con folio es datos-invalidos (rediseño pieza 6)', () => {
+    expect(
+      prepararProyeccion(
+        op({
+          tipo: 'corte',
+          clave: 'c0ffee00-0000-4000-8000-000000000602',
+          folio: 'TJ261125AP01',
+          clienteId: null,
+          datos: {},
+        }),
+      ),
+    ).toMatchObject({ ok: false, codigo: 'datos-invalidos' });
+  });
+
   it('una jornada pasa por prepararJornada y sale como proyeccion de jornada (T-38)', () => {
     const VEHICULO = '106c93f1-0c9a-4efc-b167-8c73eea9b023';
     const r = prepararProyeccion(

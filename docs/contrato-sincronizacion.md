@@ -512,7 +512,7 @@ servidor anterior no lo manda y la tablet conserva lo que tenía (1 la primera v
   "operaciones": [
     {
       "clave": "9e0b…-4a1f",             // OBLIGATORIA. Ver idempotencia
-      "tipo": "jornada",                  // jornada|venta|cobranza|gasto|merma|ruta|prospecto|ruta-alta|visita|movimiento|nota-no-cobrada
+      "tipo": "jornada",                  // jornada|venta|cobranza|gasto|merma|ruta|prospecto|ruta-alta|visita|movimiento|nota-no-cobrada|corte
       "fecha_operacion": "2026-08-07",   // día de trabajo (§4)
       "ocurrido_en": "2026-08-07T14:03:22.000-07:00",
       "cliente_id": "…",                  // opcional; se valida el alcance
@@ -558,7 +558,7 @@ no hacer.
 no sube la versión del contrato. Hoy tienen forma fija **`venta`** (T-16),
 **`prospecto`** (T-40), **`cobranza`** (T-20), **`jornada`** (T-38),
 **`ruta-alta`** (T-37), **`visita`** (T-39), **`gasto`** (T-30/T-31) y
-**`movimiento`** (T-27 pieza 2) y **`nota-no-cobrada`**, los nueve abajo; `merma` y `ruta` siguen reservados
+**`movimiento`** (T-27 pieza 2), **`nota-no-cobrada`** y **`corte`** (rediseño pieza 6), los diez abajo; `merma` y `ruta` siguen reservados
 sin forma, y el servidor los guarda tal cual.
 
 ### `datos` de una venta (T-16)
@@ -898,7 +898,7 @@ permiso o no haber señal, y eso no le impide registrar al prospecto.
 - **El servidor no revisa "exige foto" ni "exige nombre"**: lo exige la tablet al guardar.
 - Se guarda en `visita` con `id = clave` y `fecha = fecha_operacion`; el buzón apunta a esa fila
   (`entidad_tabla = 'visita'`). Puede haber varias visitas al día por cliente, y se puede visitar a un prospecto.
-- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → notas-no-cobradas → visitas → gastos → movimientos → rutas`. La visita a un prospecto
+- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → notas-no-cobradas → visitas → gastos → movimientos → cortes → rutas`. La visita a un prospecto
   capturado sin red necesita que su alta ya haya entrado en un lote anterior (el alcance se comprueba una vez por
   lote, como la venta de bienvenida de T-75).
 
@@ -932,7 +932,7 @@ El vendedor, sin red, deja un comentario de por qué no cobró una nota que la o
   estaba sin red, y el comentario ya se escribió.
 - Se guarda en `nota_no_cobrada` con `id = clave` y `fecha = fecha_operacion`; el buzón apunta a esa fila
   (`entidad_tabla = 'nota_no_cobrada'`). Puede haber varios comentarios sobre la misma nota.
-- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → notas-no-cobradas → visitas → gastos → movimientos → rutas`.
+- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → notas-no-cobradas → visitas → gastos → movimientos → cortes → rutas`.
 
 ### `datos` de un gasto de la ruta (T-30/T-31)
 
@@ -962,7 +962,7 @@ El vendedor, sin red, deja un comentario de por qué no cobró una nota que la o
   `metodo = 'efectivo_cobranza_dia'`, `origen = 'app'`, `quien` = el nombre del vendedor y una copia del nombre y
   el tipo del campo. El buzón apunta a esa fila (`entidad_tabla = 'gasto'`).
 - Tesorería **lee** la tabla `gasto` (no copia nada) y resta el gasto de la cuenta de efectivo de la sucursal.
-- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → notas-no-cobradas → visitas → gastos → movimientos → rutas`.
+- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → notas-no-cobradas → visitas → gastos → movimientos → cortes → rutas`.
 - Las operaciones `gasto` que llegaron antes de T-30/T-31 (ninguna tablet las mandaba) se quedan en el buzón sin
   proyectar y sin relleno.
 
@@ -1007,9 +1007,57 @@ El vendedor, sin red, deja un comentario de por qué no cobró una nota que la o
   `recibido` y **resta** lo `entregado` de las piezas teóricas por regresar; no es merma (no entra a la merma teórica).
 - Se guarda en `movimiento_inventario` con `id = clave`, `fecha = fecha_operacion` y la sucursal del token, y sus
   líneas en `movimiento_inventario_linea`. El buzón apunta a esa fila (`entidad_tabla = 'movimiento_inventario'`).
-- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → notas-no-cobradas → visitas → gastos → movimientos → rutas`. Una
+- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → notas-no-cobradas → visitas → gastos → movimientos → cortes → rutas`. Una
   merma a un prospecto cuya alta viaja en el mismo lote cae `cliente-fuera-de-alcance` (como la visita) y entra en el
   lote siguiente con la misma clave.
+
+### `datos` de un corte del vendedor (rediseño pieza 6)
+
+El corte que el vendedor hace en la tablet al cerrar el día (spec del rediseño §13): por apartado, lo que decía el
+sistema de la tablet y lo que él capturó. **Es informativo**: no mueve saldos, existencias ni el corte de mercancía de
+la oficina (`corte_mercancia`).
+
+```jsonc
+{
+  "clave": "uuid de la fila local",     // ES el id del corte en el servidor: debe ser uuid
+  "tipo": "corte",
+  "fecha_operacion": "2026-11-25",      // el día de la jornada que cerró
+  "ocurrido_en": "2026-11-26T01:30:00.000Z",
+  // sin "cliente_id" ni "folio"
+  "datos": {
+    "efectivo": { "esperado_centavos": 432500, "traido_centavos": 430000 },
+    "notas": [
+      { "folio": "TJ261125AP01", "traida": true, "saldo_centavos": 30000 }
+    ],
+    "inventario": [
+      { "presentacion_id": "uuid", "sistema": 8, "contado": 7 }
+    ],
+    "merma": { "sistema": 5, "contado": 5 },
+    "enviado_en": "2026-11-25T17:30:00-08:00"
+  }
+}
+```
+
+- `efectivo.esperado_centavos` es lo que debe traer según la tablet (contado + abonos al vender + cobros en efectivo −
+  gastos) y **puede ser negativo**; `traido_centavos`, entero ≥ 0. `notas` (0–500) son las del apartado, con `traida`
+  = palomeada y el saldo que tenían; `inventario` (0–200) una entrada por presentación (uuid, **sin repetir**) con las
+  buenas del sistema y las contadas; `merma` es un solo total. Todo entero ≥ 0 salvo el esperado. **No se revisa que el
+  folio ni la presentación existan.**
+- La tablet manda **0** en lo que quedó sin capturar (efectivo, una presentación sin contar, la merma) y una presentación
+  contada que el sistema no traía va con `sistema: 0`.
+- La forma se valida **antes** de la transacción (`prepararCorte` + `normalizarDatosCorte`): clave no uuid, folio o
+  `cliente_id` en el sobre, o `datos` mal formado es `datos-invalidos` con un motivo que nombra el campo
+  (`inventario[0].contado: …`). Un corte enviado ya no cambia en la tablet: un rechazo de forma es para siempre.
+- Dentro de la transacción (`CortesVendedorService.registrarCorte`, `modules/rutas/`): **uno vivo por vendedor y día**.
+  Otro corte de ese día con **otra** clave es `corte-duplicado` (la tablet lo deja en `error`, como `jornada-duplicada`);
+  la misma clave reenviada es `duplicada`. Un id que ya ocupa otro registro es `datos-invalidos` con motivo neutro
+  (`clave: …`), como el `id-ocupado` del prospecto.
+- Se guarda en `corte_vendedor` con `id = clave`, `fecha = fecha_operacion`, la sucursal del token y tres `jsonb` en el
+  formato de arriba: `efectivo`, `notas` e `inventario` = `{ "renglones": [...], "merma": {...} }`. El buzón apunta a
+  esa fila (`entidad_tabla = 'corte_vendedor'`).
+- **Orden del push**: `jornadas → prospectos → ventas → cobranzas → notas-no-cobradas → visitas → gastos → movimientos → cortes → rutas`.
+- Un servidor anterior a la pieza 6 lo rechaza `tipo-desconocido` y la tablet lo reintenta en la siguiente
+  sincronización; una tablet que no conoce el tipo simplemente no lo manda. `CONTRATO_ACTUAL` sigue en 1.
 
 ### Fotos: subida y descarga (canal aparte del lote; T-40, T-39, T-30, T-73)
 
@@ -1124,6 +1172,7 @@ texto en español** si reintenta o si avisa al vendedor.
 | `gasto-id-ocupado` | El id (la clave) del gasto ya lo ocupa otro registro. Motivo neutro; avisar a la oficina (T-30/T-31) |
 | `movimiento-id-ocupado` | El id (la clave) del movimiento de inventario ya lo ocupa otro registro. Motivo neutro; avisar a la oficina (T-27 pieza 2) |
 | `motivo-merma-inexistente` | El `motivo_merma_id` de un movimiento no existe. Uno dado de baja **sí** se acepta y las banderas `aplica_*` no se revisan. Se reintenta (rediseño pieza 4) |
+| `corte-duplicado` | Ya hay un corte vivo de ese vendedor ese día, subido con **otra** clave (la misma clave es `duplicada`). Se queda en `error`; avisar a la oficina (rediseño pieza 6) |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo
@@ -1167,7 +1216,7 @@ El rechazo se recalcula en cada intento: es determinista y no necesita memoria.
 ### Una transacción por operación (T-16, ADR-0009)
 
 Cuando un `tipo` tiene un módulo de dominio que lo proyecta (hoy `venta`,
-`cobranza`, `prospecto`, `jornada`, `ruta-alta`, `visita`, `gasto`, `movimiento` y `nota-no-cobrada`), cada operación del lote se aplica **en su
+`cobranza`, `prospecto`, `jornada`, `ruta-alta`, `visita`, `gasto`, `movimiento`, `nota-no-cobrada` y `corte`), cada operación del lote se aplica **en su
 propia transacción**:
 
 1. `INSERT` en `sync_operacion` con `on conflict (vendedor_id, clave_idempotencia) do nothing`.
@@ -1201,8 +1250,12 @@ propia transacción**:
    - `MovimientosService.registrarMovimiento` (T-27 pieza 2) → comprueba que existan las presentaciones (**aunque
      estén dadas de baja**) y, si viene, el motivo de merma (**aunque esté dado de baja**; si no, `motivo-merma-inexistente`), inserta en `movimiento_inventario` con `id = clave` y `on conflict (id) do nothing` (si no
      insertó, `movimiento-id-ocupado`) y luego sus líneas. La entidad es la fila de `movimiento_inventario`.
+   - `CortesVendedorService.registrarCorte` (rediseño pieza 6) → inserta en `corte_vendedor` con `id = clave` y
+     `on conflict do nothing` (sin árbitro: el único vivo por vendedor y día o el id); si no insertó y el vendedor ya
+     tiene un corte vivo ese día, `corte-duplicado`; si no, `datos-invalidos` neutro. La entidad es la fila de
+     `corte_vendedor`.
 3. `commit` → `aplicada`. Si el dominio rechaza (`presentacion-inactiva`,
-   `precio-no-asignado`, `nota-no-encontrada`, `vehiculo-inexistente`, `jornada-duplicada`, `cliente-inexistente`, `ruta-duplicada`, `motivo-visita-inexistente`, `visita-id-ocupado`, `campo-egreso-inexistente`, `gasto-id-ocupado`, `movimiento-id-ocupado`, `motivo-merma-inexistente`, `nota-no-cobrada-id-ocupado`),
+   `precio-no-asignado`, `nota-no-encontrada`, `vehiculo-inexistente`, `jornada-duplicada`, `cliente-inexistente`, `ruta-duplicada`, `motivo-visita-inexistente`, `visita-id-ocupado`, `campo-egreso-inexistente`, `gasto-id-ocupado`, `movimiento-id-ocupado`, `motivo-merma-inexistente`, `nota-no-cobrada-id-ocupado`, `corte-duplicado`),
    `rollback`: no queda **ni** la fila de negocio **ni** la del buzón.
 
 Los tipos reservados sin módulo (`merma`, `ruta`) se guardan en el buzón y

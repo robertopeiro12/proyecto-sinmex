@@ -1,5 +1,6 @@
 import type { FuenteOperaciones } from './motor';
 import { fuenteCobranzas } from './fuente-cobranzas';
+import { fuenteCortes } from './fuente-cortes';
 import { fuenteGastos } from './fuente-gastos';
 import { fuenteJornadas } from './fuente-jornadas';
 import { fuenteNotasNoCobradas } from './fuente-notas-no-cobradas';
@@ -33,6 +34,8 @@ import type { FuentesConPendientes } from './pendientes';
  *   despues; la merma a un prospecto capturado sin red necesita su alta ya
  *   aplicada (van despues de prospectos, como la visita). Antes de las altas de
  *   ruta para que el orden del spec quede fijo.
+ * - El corte despues de movimientos (rediseño pieza 6): sube al cerrar el dia,
+ *   cuando todo lo del dia ya esta arriba; no depende de nada que suba despues.
  * - Altas de ruta (T-37) no dependen de nadie: al final.
  *
  * Vive aqui y no en `proveedor-sesion.tsx` para que el orden tenga prueba.
@@ -47,6 +50,7 @@ export function fuentesDelPush(datos: FuentesConPendientes): FuenteOperaciones[]
     fuenteVisitas(datos.visitas),
     fuenteGastos(datos.gastos),
     fuenteMovimientos(datos.movimientos),
+    fuenteCortes(datos.cortes),
     fuenteRutas(datos.rutas),
   ];
 }

@@ -56,7 +56,9 @@ export type TipoOperacion =
   /** T-27 pieza 2. Merma del cliente, del trayecto o consumo: se proyecta a `movimiento_inventario`. */
   | 'movimiento'
   /** Notas asignadas: el comentario "no cobre" sobre una nota asignada; el servidor lo guarda con id = clave. */
-  | 'nota-no-cobrada';
+  | 'nota-no-cobrada'
+  /** Rediseño pieza 6. El corte del vendedor al cerrar el dia: se proyecta a `corte_vendedor` con id = clave. */
+  | 'corte';
 
 export type EstadoOperacion = 'aplicada' | 'duplicada' | 'rechazada';
 
@@ -152,6 +154,8 @@ export const CODIGOS_RECHAZO = [
    * nunca existio; uno dado de baja se acepta). El movimiento queda en `error`.
    */
   'motivo-merma-inexistente',
+  /** Rediseño pieza 6: ya hay otro corte vivo de este vendedor ese dia (subido con otra clave). */
+  'corte-duplicado',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -887,6 +891,19 @@ export type DatosNotaNoCobrada = {
   comentario: string;
   /** Instante ISO-8601 con zona en que el vendedor lo guardo. */
   registrado_en: string;
+};
+
+/**
+ * `datos` de una operacion `tipo: "corte"` (rediseño pieza 6). Copia de la del
+ * backend: sin folio ni `cliente_id`, la `clave` es el id del corte (uuid).
+ * `esperado_centavos` puede ser negativo; lo demas son enteros ≥ 0.
+ */
+export type DatosCorte = {
+  efectivo: { esperado_centavos: number; traido_centavos: number };
+  notas: { folio: string; traida: boolean; saldo_centavos: number }[];
+  inventario: { presentacion_id: string; sistema: number; contado: number }[];
+  merma: { sistema: number; contado: number };
+  enviado_en: string;
 };
 
 export interface ResultadoOperacion {

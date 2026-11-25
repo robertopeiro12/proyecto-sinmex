@@ -1,6 +1,7 @@
 import { depsDePrueba, snapshotDePrueba } from '@/datos/pruebas-apoyo';
 import { crearRepositorioCatalogos } from '@/datos/repositorios/catalogos';
 import { crearRepositorioCobranzas } from '@/datos/repositorios/cobranzas';
+import { crearRepositorioCortes } from '@/datos/repositorios/cortes';
 import { crearRepositorioVisitas } from '@/datos/repositorios/visitas';
 import { crearRepositorioGastos } from '@/datos/repositorios/gastos';
 import { crearRepositorioFolios } from '@/datos/repositorios/folios';
@@ -28,12 +29,13 @@ function montar() {
     visitas: crearRepositorioVisitas(deps, { catalogos }),
     gastos: crearRepositorioGastos(deps, { catalogos }),
     movimientos: crearRepositorioMovimientos(deps, { catalogos }),
+    cortes: crearRepositorioCortes(deps),
     rutas: crearRepositorioRutas(deps, { catalogos }),
   };
 }
 
-describe('fuentesDelPush (T-75, D3; T-30/T-31, D5; T-27 pieza 2)', () => {
-  it('sube prospectos ANTES que ventas (T-75), notas no cobradas despues de cobranzas, visitas despues de ellas (T-39), gastos despues de visitas (T-30/T-31) y movimientos despues de gastos (T-27)', () => {
+describe('fuentesDelPush (T-75, D3; T-30/T-31, D5; T-27 pieza 2; rediseño pieza 6)', () => {
+  it('sube prospectos ANTES que ventas (T-75), notas no cobradas despues de cobranzas, visitas despues de ellas (T-39), gastos despues de visitas (T-30/T-31), movimientos despues de gastos (T-27) y el corte despues de movimientos (pieza 6)', () => {
     const datos = montar();
     expect(fuentesDelPush(datos).map((f) => f.tipo)).toEqual([
       'jornada',
@@ -44,6 +46,7 @@ describe('fuentesDelPush (T-75, D3; T-30/T-31, D5; T-27 pieza 2)', () => {
       'visita',
       'gasto',
       'movimiento',
+      'corte',
       'ruta-alta',
     ]);
   });

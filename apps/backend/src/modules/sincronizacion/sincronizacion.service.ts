@@ -20,6 +20,8 @@ import { GastosService } from '../compras-egresos/gastos.service';
 import { MovimientoRechazado } from '../inventario/movimiento-rechazado';
 import { MovimientosService } from '../inventario/movimientos.service';
 import { CargasService } from '../produccion/cargas.service';
+import { CorteRechazado } from '../rutas/corte-rechazado';
+import { CortesVendedorService } from '../rutas/cortes-vendedor.service';
 import { JornadaRechazada } from '../rutas/jornada-rechazada';
 import { JornadasService } from '../rutas/jornadas.service';
 import { RutaRechazada } from '../rutas/ruta-rechazada';
@@ -46,6 +48,7 @@ import {
   type Proyeccion,
 } from './despacho';
 import { CODIGO_POR_RAZON_COBRANZA } from './despacho-cobranza';
+import { CODIGO_POR_RAZON_CORTE } from './despacho-corte';
 import { CODIGO_POR_RAZON_JORNADA } from './despacho-jornada';
 import { CODIGO_POR_RAZON_MOVIMIENTO } from './despacho-movimiento';
 import {
@@ -113,6 +116,8 @@ export class SincronizacionService {
     private readonly cargas: CargasService,
     // T-27 pieza 2: Inventario es el dueno de los movimientos (merma y consumo).
     private readonly movimientos: MovimientosService,
+    // Rediseño pieza 6: Rutas tambien es la duena del corte del vendedor.
+    private readonly cortesVendedor: CortesVendedorService,
   ) {}
 
   /* ---------------------------------------------------------------- */
@@ -531,6 +536,16 @@ export class SincronizacionService {
           motivo: error.message,
         };
       }
+      // Rediseño pieza 6: el rollback ya dejo sin fila tanto el buzon como el corte.
+      if (error instanceof CorteRechazado) {
+        return {
+          clave: op.clave,
+          tipo: op.tipo,
+          estado: 'rechazada',
+          codigo: CODIGO_POR_RAZON_CORTE[error.razon],
+          motivo: error.message,
+        };
+      }
       if (esColisionDeFolio(error)) {
         return this.clasificarColision(vendedor, op);
       }
@@ -691,6 +706,21 @@ export class SincronizacionService {
             sucursalId: vendedor.sucursal_id,
             vendedorId: vendedor.id,
             clienteId: proyeccion.clienteId,
+            // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
+            fechaOperacion: op.fechaOperacion,
+          },
+          trx,
+        );
+      case 'corte':
+        // La entidad del buzon es la fila de `corte_vendedor` (ADR-0009 §2.4, enmendado).
+        return this.cortesVendedor.registrarCorte(
+          proyeccion.corte,
+          {
+            // La clave ES el id del corte (uuid validado en prepararCorte).
+            id: op.clave,
+            // Del token, nunca del cuerpo.
+            sucursalId: vendedor.sucursal_id,
+            vendedorId: vendedor.id,
             // Tal cual lo mando la tablet: el servidor no re-deriva el dia de UTC.
             fechaOperacion: op.fechaOperacion,
           },

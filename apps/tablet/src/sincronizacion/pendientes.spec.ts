@@ -1,6 +1,7 @@
-import { depsDePrueba, ATENDIO_DE_PRUEBA, snapshotDePrueba } from '@/datos/pruebas-apoyo';
+import { depsDePrueba, ATENDIO_DE_PRUEBA, CORTE_DE_PRUEBA, snapshotDePrueba } from '@/datos/pruebas-apoyo';
 import { crearRepositorioCatalogos } from '@/datos/repositorios/catalogos';
 import { crearRepositorioCobranzas } from '@/datos/repositorios/cobranzas';
+import { crearRepositorioCortes } from '@/datos/repositorios/cortes';
 import { crearRepositorioVisitas } from '@/datos/repositorios/visitas';
 import { crearRepositorioGastos } from '@/datos/repositorios/gastos';
 import { crearRepositorioFolios } from '@/datos/repositorios/folios';
@@ -27,6 +28,7 @@ function montar() {
     visitas: crearRepositorioVisitas(deps, { catalogos }),
     gastos: crearRepositorioGastos(deps, { catalogos }),
     movimientos: crearRepositorioMovimientos(deps, { catalogos }),
+    cortes: crearRepositorioCortes(deps),
     rutas: crearRepositorioRutas(deps, { catalogos }),
   };
 }
@@ -38,11 +40,11 @@ describe('contarPendientesDeSubir', () => {
   });
 
   /**
-   * Las 9 fuentes del push de hoy (T-07, T-16, T-40, T-20, T-39, T-30/T-31, T-37,
-   * T-27 pieza 2). Si se olvida una aqui, el menu de la jornada y "cerrar el
+   * Las 10 fuentes del push de hoy (T-07, T-16, T-40, T-20, T-39, T-30/T-31, T-37,
+   * T-27 pieza 2, rediseño pieza 6). Si se olvida una aqui, el menu de la jornada y "cerrar el
    * dia" dicen "listo" con datos sin subir (I-1, PR #90).
    */
-  it('suma jornada, venta, prospecto, cobranza, nota no cobrada, visita, gasto, movimiento y alta de ruta pendientes', () => {
+  it('suma jornada, venta, prospecto, cobranza, nota no cobrada, visita, gasto, movimiento, corte y alta de ruta pendientes', () => {
     const fuentes = montar();
     const { jornadas, ventas, prospectos, cobranzas, notasAsignadas, visitas, gastos, movimientos, rutas } = fuentes;
 
@@ -113,10 +115,11 @@ describe('contarPendientesDeSubir', () => {
     rutas.agregar('cli-1', { vendedorId: 'ven-1', sucursalId: 'suc-tj' });
 
     // La jornada cuenta solo cerrada (D7). Se cierra al final: con el dia
-    // cerrado ya no se puede registrar nada (D6).
-    jornadas.cerrar(jornada.id, 20);
+    // cerrado ya no se puede registrar nada (D6). Rediseño pieza 6: se cierra
+    // con el corte, que tambien cuenta.
+    jornadas.cerrarConCorte(jornada.id, 20, CORTE_DE_PRUEBA);
 
-    expect(contarPendientesDeSubir(fuentes)).toBe(9);
+    expect(contarPendientesDeSubir(fuentes)).toBe(10);
   });
 
   it('una jornada abierta no cuenta; al cerrarla, si (T-38, D7)', () => {

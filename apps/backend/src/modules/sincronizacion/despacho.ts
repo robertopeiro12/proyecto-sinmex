@@ -6,6 +6,7 @@ import {
   normalizarDatosVenta,
   type VentaNormalizada,
 } from '../ventas-cobranza/datos-venta';
+import type { CorteNormalizado } from '../rutas/datos-corte';
 import type { JornadaNormalizada } from '../rutas/datos-jornada';
 import type { NotaNoCobradaNormalizada } from '../rutas/datos-nota-no-cobrada';
 import type { VisitaNormalizada } from '../rutas/datos-visita';
@@ -14,6 +15,7 @@ import type { CobranzaNormalizada } from '../ventas-cobranza/datos-cobranza';
 import type { RazonRechazoVenta } from '../ventas-cobranza/venta-rechazada';
 import type { CodigoRechazo } from './contrato';
 import { prepararCobranza } from './despacho-cobranza';
+import { prepararCorte } from './despacho-corte';
 import { prepararGasto } from './despacho-gasto';
 import { prepararJornada } from './despacho-jornada';
 import { prepararMovimiento } from './despacho-movimiento';
@@ -37,7 +39,7 @@ import type { OperacionNormalizada, Rechazo } from './operaciones';
  * se guarda en el buzon y queda `aplicada`, como desde T-07.
  * Orden acordado entre tickets: `venta`, `prospecto` (T-40), `cobranza` (T-20),
  * `nota-no-cobrada`, `jornada` (T-38), `ruta-alta` (T-37), `visita` (T-39), `gasto` (T-30/T-31),
- * `movimiento` (T-27 pieza 2).
+ * `movimiento` (T-27 pieza 2), `corte` (rediseño pieza 6).
  */
 export type Proyeccion =
   // T-17: el folio viaja con la proyeccion. Aqui ya se comprobo que no es null,
@@ -67,7 +69,9 @@ export type Proyeccion =
       tipo: 'movimiento';
       movimiento: MovimientoNormalizado;
       clienteId: string | null;
-    };
+    }
+  // Rediseño pieza 6. La fila es de `corte_vendedor` con id = clave; sin cliente.
+  | { tipo: 'corte'; corte: CorteNormalizado };
 
 export type ResultadoPreparacion =
   { ok: true; proyeccion: Proyeccion | null } | ({ ok: false } & Rechazo);
@@ -153,6 +157,13 @@ export function prepararProyeccion(
           clienteId: r.clienteId,
         },
       };
+    }
+    case 'corte': {
+      // Rediseño pieza 6. La forma la revisa `despacho-corte.ts`; el dia
+      // repetido, `CortesVendedorService` dentro de la transaccion.
+      const r = prepararCorte(op);
+      if (!r.ok) return r;
+      return { ok: true, proyeccion: { tipo: 'corte', corte: r.corte } };
     }
     case 'merma':
     case 'ruta':

@@ -144,6 +144,20 @@ export interface CorteMercancia {
   vendedor_id: string;
 }
 
+export interface CorteVendedor {
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  efectivo: Json;
+  enviado_en: Timestamp;
+  fecha: Timestamp;
+  id: string;
+  inventario: Json;
+  notas: Json;
+  sucursal_id: string;
+  updated_at: Generated<Timestamp>;
+  vendedor_id: string;
+}
+
 export interface Factura {
   actualizado_en: Timestamp | null;
   actualizado_por_usuario_id: string | null;
@@ -728,6 +742,7 @@ export interface DB {
   cobranza_abono: CobranzaAbono;
   cobro: Cobro;
   corte_mercancia: CorteMercancia;
+  corte_vendedor: CorteVendedor;
   factura: Factura;
   folio_oficina_contador: FolioOficinaContador;
   gasto: Gasto;

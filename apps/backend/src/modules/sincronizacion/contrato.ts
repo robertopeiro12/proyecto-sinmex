@@ -93,6 +93,12 @@ export const MAX_BYTES_POR_LOTE = 1_000_000;
  * Hecho: T-38 — `jornada` (vehiculo + kilometraje inicial/final del dia ya
  *        cerrado, ver {@link DatosJornada}); se proyecta a la tabla `jornada`.
  *
+ * Hecho: rediseño pieza 6 — `corte`, el corte que el vendedor hace en la tablet
+ *        al cerrar el dia (ver {@link DatosCorte}); se proyecta a
+ *        `corte_vendedor` con `id = clave`. Tipo nuevo = cambio aditivo: no sube
+ *        la version (un servidor anterior lo rechaza `tipo-desconocido` y la
+ *        tablet lo reintenta).
+ *
  * Hecho: T-40 — `prospecto`, el unico tipo que **crea** una fila de catalogo
  *        (`cliente` con `tipo = 'prospecto'`) en vez de una de operacion. Es un
  *        tipo nuevo, es decir un cambio **aditivo**: no sube la version.
@@ -109,6 +115,7 @@ export const TIPOS_OPERACION = [
   'visita',
   'movimiento',
   'nota-no-cobrada',
+  'corte',
 ] as const;
 
 export type TipoOperacion = (typeof TIPOS_OPERACION)[number];
@@ -296,6 +303,11 @@ export const CODIGOS_RECHAZO = [
    * existio (bug de la tablet).
    */
   'motivo-merma-inexistente',
+  /**
+   * Ya hay un corte vivo de ese vendedor ese dia, subido con OTRA clave.
+   * Rediseño pieza 6. La misma clave reenviada es `duplicada`, no esto.
+   */
+  'corte-duplicado',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -650,6 +662,37 @@ export type DatosMovimiento = {
     sentido: 'recibido' | 'entregado';
     piezas: number;
   }[];
+};
+
+/**
+ * `datos` de una operacion `tipo: "corte"` (rediseño pieza 6, spec §13): el
+ * corte del vendedor al cerrar el dia, apartado por apartado, con lo que decia
+ * el sistema de la tablet y lo que el vendedor capturo. **Informativo**: no
+ * mueve saldos, existencias ni el corte de mercancia de la oficina.
+ *
+ * - `efectivo.esperado_centavos`: lo que debe traer segun la tablet (contado +
+ *   abonos + cobros en efectivo − gastos); **puede ser negativo**.
+ *   `traido_centavos`: lo que dijo que trae, entero ≥ 0.
+ * - `notas`: las notas del apartado (asignadas y nuevas), con `traida` y el
+ *   saldo que tenian; de 0 a 500. No se revisa que el folio exista.
+ * - `inventario`: una entrada por presentacion (uuid, sin repetir), con las
+ *   buenas que decia el sistema y las contadas; de 0 a 200. No se revisa que
+ *   la presentacion exista.
+ * - `merma`: un solo total, sistema y contado.
+ * - `enviado_en`: instante ISO-8601 con zona en que el vendedor lo envio.
+ *
+ * Sin folio ni `cliente_id`. La `clave` **es el id** de `corte_vendedor`: debe
+ * ser uuid. El dia es `fecha_operacion`. Uno vivo por vendedor y dia: otro con
+ * distinta clave es `corte-duplicado`.
+ *
+ * Es `type` y no `interface` por la misma razon que {@link DatosVenta}.
+ */
+export type DatosCorte = {
+  efectivo: { esperado_centavos: number; traido_centavos: number };
+  notas: { folio: string; traida: boolean; saldo_centavos: number }[];
+  inventario: { presentacion_id: string; sistema: number; contado: number }[];
+  merma: { sistema: number; contado: number };
+  enviado_en: string;
 };
 
 export interface ResultadoOperacion {
