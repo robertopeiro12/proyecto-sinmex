@@ -192,7 +192,12 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
     sucursalId: string;
     fecha: string;
     estado: 'pendiente' | 'aceptada' | 'rechazada';
-    lineas: { presentacionId: string; piezas: number }[];
+    lineas: {
+      presentacionId: string;
+      piezas: number;
+      /** Respuesta por renglon (pieza 3); sin ella, `null` como una carga de antes. */
+      aceptada?: boolean | null;
+    }[];
   }): Promise<void> => {
     numeroCarga++;
     const { id } = await db
@@ -217,6 +222,7 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
           carga_id: id,
           presentacion_id: l.presentacionId,
           piezas: l.piezas,
+          aceptada: l.aceptada ?? null,
         })),
       )
       .execute();
@@ -833,6 +839,42 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
       });
       expect(res.hecho?.por).toBe(LOGIN_GENERAL);
       expect(typeof res.hecho?.en).toBe('string');
+    });
+
+    it('carga aceptada 2 de 3: solo cuentan los renglones aceptados; una aceptada vieja (renglones null) cuenta completa', async () => {
+      const dia = diaDeLaCorrida(3);
+      const v = await crearVendedor('Cor renglones', tjId);
+      await crearCarga({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'aceptada',
+        lineas: [
+          { presentacionId: litro, piezas: 10, aceptada: true },
+          { presentacionId: medio, piezas: 7, aceptada: false },
+          { presentacionId: otra, piezas: 3, aceptada: true },
+        ],
+      });
+      // Respondida antes de la pieza 3: renglones null, cuenta completa.
+      await crearCarga({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'aceptada',
+        lineas: [
+          { presentacionId: litro, piezas: 5 },
+          { presentacionId: otra, piezas: 1 },
+        ],
+      });
+
+      const corte = (
+        await leer(cookieGeneral, { fecha: dia, vendedor: v }).expect(200)
+      ).body as CorteVendedor;
+      expect(linea(corte, litro)?.cargadas).toBe(15);
+      expect(linea(corte, otra)?.cargadas).toBe(4);
+      // El renglon no aceptado no trae nada mas: medio no sale.
+      expect(linea(corte, medio)).toBeUndefined();
+      expect(corte.totales.cargadas).toBe(19);
     });
 
     it('guardar todo en 0 deja el corte hecho, sin filas de retorno', async () => {

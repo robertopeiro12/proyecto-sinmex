@@ -73,7 +73,12 @@ describe('Venta del portal contra el inventario del vendedor (e2e)', () => {
     vendedorId: string,
     fecha: string,
     estado: 'pendiente' | 'aceptada',
-    lineas: { presentacionId: string; piezas: number }[],
+    lineas: {
+      presentacionId: string;
+      piezas: number;
+      /** Respuesta por renglon (pieza 3); sin ella, `null` como una carga de antes. */
+      aceptada?: boolean | null;
+    }[],
   ) => {
     numeroCarga++;
     const { id } = await db
@@ -96,6 +101,7 @@ describe('Venta del portal contra el inventario del vendedor (e2e)', () => {
           carga_id: id,
           presentacion_id: l.presentacionId,
           piezas: l.piezas,
+          aceptada: l.aceptada ?? null,
         })),
       )
       .execute();
@@ -450,6 +456,24 @@ describe('Venta del portal contra el inventario del vendedor (e2e)', () => {
       expect((res.body as { message: string }).message).toContain(
         `${nombreLitro()}, falta 1`,
       );
+    });
+
+    it('una carga aceptada en parte: el renglon no aceptado no se vende; una aceptada vieja (renglones null) cuenta completa', async () => {
+      const fecha = '2024-05-12';
+      const ana = await crearVendedor('Inv Parcial');
+      await crearCarga(ana, fecha, 'aceptada', [
+        { presentacionId: litro, piezas: 3, aceptada: true },
+        { presentacionId: medio, piezas: 10, aceptada: false },
+      ]);
+      // Aceptada antes de la pieza 3: sus renglones (null) cuentan.
+      await crearCarga(ana, fecha, 'aceptada', [
+        { presentacionId: litro, piezas: 2 },
+      ]);
+      const res = await registrar(fecha, ana, [linea(medio, 1)]).expect(409);
+      expect((res.body as { message: string }).message).toContain(
+        `${nombreMedio()}, falta 1`,
+      );
+      await registrar(fecha, ana, [linea(litro, 5)]).expect(201);
     });
 
     it('la merma de trayecto y el consumo restan lo vendible; la merma recibida no suma', async () => {

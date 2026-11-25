@@ -29,7 +29,10 @@ export interface MovimientoPresentacion {
   producto: string;
   /** Tamano tal cual esta en la presentacion ("500 ml"). */
   volumen: string;
-  /** Piezas de cargas aceptadas. */
+  /**
+   * Piezas de los renglones aceptados de cargas aceptadas (pieza 3: un renglon
+   * con `aceptada = false` no cuenta; `null` en una aceptada vieja, si).
+   */
   cargadas: number;
   /** `cantidad` de lineas vivas de ventas vivas. */
   vendidas: number;
