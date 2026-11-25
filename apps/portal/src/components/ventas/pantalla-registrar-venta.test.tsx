@@ -81,7 +81,7 @@ async function prepararPantalla() {
   const usuario = userEvent.setup();
   render(<PantallaRegistrarVenta sucursal={null} />);
   await usuario.type(screen.getByLabelText("Cliente"), "lupi");
-  await usuario.click(await screen.findByRole("button", { name: /Abarrotes Lupita/ }));
+  await usuario.click(await screen.findByRole("option", { name: /Abarrotes Lupita/ }));
   await screen.findByLabelText("Cantidad de Horchata 1 L");
   await screen.findByRole("option", { name: "Ana Pérez" });
   return usuario;

@@ -32,7 +32,7 @@ async function elegirCliente() {
   const usuario = userEvent.setup();
   render(<AsignarFactura sucursal={null} />);
   await usuario.type(screen.getByLabelText("Cliente"), "coba");
-  await usuario.click(await screen.findByRole("button", { name: /Cobach XXI/ }));
+  await usuario.click(await screen.findByRole("option", { name: /Cobach XXI/ }));
   await screen.findByText("TJ240401OF01");
   return usuario;
 }
@@ -84,7 +84,7 @@ describe("AsignarFactura", () => {
     const usuario = userEvent.setup();
     render(<AsignarFactura sucursal={null} />);
     await usuario.type(screen.getByLabelText("Cliente"), "coba");
-    await usuario.click(await screen.findByRole("button", { name: /Cobach XXI/ }));
+    await usuario.click(await screen.findByRole("option", { name: /Cobach XXI/ }));
     expect(await screen.findByText("Este cliente no tiene ventas por facturar.")).toBeInTheDocument();
   });
 
@@ -109,7 +109,7 @@ describe("AsignarFactura", () => {
     const usuario = userEvent.setup();
     render(<AsignarFactura sucursal={null} />);
     await usuario.type(screen.getByLabelText("Cliente"), "coba");
-    await usuario.click(await screen.findByRole("button", { name: /Cobach XXI/ }));
+    await usuario.click(await screen.findByRole("option", { name: /Cobach XXI/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo cargar la lista de ventas por facturar.");
     expect(screen.queryByText("Este cliente no tiene ventas por facturar.")).not.toBeInTheDocument();
   });
@@ -166,7 +166,7 @@ describe("AsignarFactura", () => {
     const usuario = userEvent.setup();
     render(<AsignarFactura sucursal={null} />);
     await usuario.type(screen.getByLabelText("Cliente"), "coba");
-    await usuario.click(await screen.findByRole("button", { name: /Cobach XXI/ }));
+    await usuario.click(await screen.findByRole("option", { name: /Cobach XXI/ }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Sin acceso a esa sucursal.");
     await usuario.click(screen.getByLabelText("Mostrar también las N/A"));
     expect(await screen.findByText("TJ240401OF01")).toBeInTheDocument();

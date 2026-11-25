@@ -135,7 +135,7 @@ describe("PantallaVentas", () => {
     fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2024-03-01" } });
     fireEvent.change(screen.getByLabelText("Hasta"), { target: { value: "2024-03-31" } });
     await usuario.type(screen.getByLabelText("Cliente"), "lupi");
-    await usuario.click(await screen.findByRole("button", { name: /Abarrotes Lupita · TJ/ }));
+    await usuario.click(await screen.findByRole("option", { name: /Abarrotes Lupita · TJ/ }));
     await usuario.type(screen.getByLabelText("# de nota"), "1234");
     await usuario.click(screen.getByRole("button", { name: "Mostrar" }));
 

@@ -60,7 +60,7 @@ describe("PantallaFacturas", () => {
     const usuario = userEvent.setup();
     render(<PantallaFacturas sucursal={null} />);
     await usuario.type(screen.getAllByLabelText("Cliente")[0], "coba");
-    await usuario.click(await screen.findByRole("button", { name: /Cobach XXI/ }));
+    await usuario.click(await screen.findByRole("option", { name: /Cobach XXI/ }));
     await usuario.click(await screen.findByLabelText("Marcar TJ240401OF01"));
     await waitFor(() => expect(screen.getByLabelText("Marcar TJ240401OF01")).toBeChecked());
     const asignar = screen.getByRole("tab", { name: "Asignar" });

@@ -63,7 +63,7 @@ describe("PantallaCobranza", () => {
     const usuario = userEvent.setup();
     render(<PantallaCobranza sucursal={null} />);
     await usuario.type(screen.getByLabelText("Cliente"), "coba");
-    await usuario.click(await screen.findByRole("button", { name: /Cobach XXI/ }));
+    await usuario.click(await screen.findByRole("option", { name: /Cobach XXI/ }));
     expect(await screen.findByText("Cobranza · Cobach XXI")).toBeInTheDocument();
     await usuario.click(screen.getByRole("button", { name: "← Volver a buscar" }));
     expect(screen.getByLabelText("Fecha de la venta")).toBeInTheDocument();

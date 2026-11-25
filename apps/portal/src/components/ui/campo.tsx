@@ -37,6 +37,7 @@ export function Campo({
   id,
   etiqueta,
   opcional = false,
+  etiquetaOculta = false,
   ayuda,
   error,
   className,
@@ -45,6 +46,8 @@ export function Campo({
   id: string;
   etiqueta: ReactNode;
   opcional?: boolean;
+  /** La etiqueta solo para el lector de pantalla (el campo se explica solo, p. ej. con su placeholder). */
+  etiquetaOculta?: boolean;
   ayuda?: ReactNode;
   error?: string | null;
   className?: string;
@@ -56,7 +59,7 @@ export function Campo({
   return (
     <Contexto.Provider value={{ id, describidoPor, invalido: Boolean(error) }}>
       <div className={cn("flex flex-col gap-1.5", className)}>
-        <label htmlFor={id} className="text-[13px] font-semibold">
+        <label htmlFor={id} className={etiquetaOculta ? "sr-only" : "text-[13px] font-semibold"}>
           {etiqueta}
           {opcional && <span className="font-normal text-muted-foreground"> (opcional)</span>}
         </label>

@@ -91,7 +91,7 @@ const delDia = (procesos: Proceso[]) => ({ fecha: HOY, hoy: HOY, procesos });
 
 async function elegirCliente(u: ReturnType<typeof userEvent.setup>, texto: string, nombre: RegExp) {
   await u.type(screen.getByPlaceholderText("Escribe el nombre del cliente"), texto);
-  await u.click(await screen.findByRole("button", { name: nombre }));
+  await u.click(await screen.findByRole("option", { name: nombre }));
 }
 
 /** "+ Agregar producto" de una caja, busca y elige; luego escribe las piezas. */
