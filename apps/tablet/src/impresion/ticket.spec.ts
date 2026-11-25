@@ -50,9 +50,11 @@ const ENCABEZADO_32 = [
 
 const TABLA_32 = [
   'Cant Producto       P.U. Importe',
-  '  12 Jamaica 500 m 18.00  216.00',
+  '  12 Jamaica 500   18.00  216.00',
+  '     ml',
   '   6 Jamaica 1 L   32.00  192.00',
   '   6 Horchata 500  18.00  108.00',
+  '     ml',
   '  12 Mango 500 ml  24.00  288.00',
   '   4 Mango 500 ml  PROMO    0.00',
   '     Por cada 6 Mango 500 ml, 2',
@@ -236,12 +238,35 @@ describe('armarTicket: nada se sale del papel', () => {
     }
   });
 
-  it('el nombre de 60 caracteres se corta; el dinero nunca', () => {
+  it('el cliente de 60 caracteres se corta; el producto pasa al renglón de abajo; el dinero nunca', () => {
     expect(LARGO).toHaveLength(60);
     const t = armarTicket(largos, 32);
     expect(t).toContain('Cliente Distribuidoras de Abarro');
-    expect(t).toContain(' 120 Distrib 1,234.56 148,147.20');
+    const i = t.indexOf(' 120 Distrib 1,234.56 148,147.20');
+    expect(i).toBeGreaterThan(-1);
+    // El nombre del producto nunca se pierde: sigue en renglones sangrados, sin montos.
+    expect(t.slice(i + 1, i + 4)).toEqual([
+      '     uidoras de Abarrotes y',
+      '     Bebidas La Esperanza del',
+      '     Norte',
+    ]);
     expect(t).toContain('TOTAL                $148,147.20');
+  });
+
+  it('una promoción de nombre largo también sigue abajo, antes de su frase', () => {
+    const d = nota({
+      renglones: [],
+      promociones: [{ cantidad: 2, etiqueta: 'Tamarindo natural 500 ml', texto: 'Regalo de bienvenida' }],
+      totalCentavos: 0,
+    });
+    const t = armarTicket(d, 32);
+    const i = t.indexOf('   2 Tamarindo     PROMO    0.00');
+    expect(t.slice(i, i + 4)).toEqual([
+      '   2 Tamarindo     PROMO    0.00',
+      '     natural 500 ml',
+      '     Regalo de bienvenida',
+      '--------------------------------',
+    ]);
   });
 
   it('a 48 columnas los nombres de la maqueta caben completos', () => {

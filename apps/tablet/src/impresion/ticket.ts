@@ -13,10 +13,12 @@ import { pesos } from '@/ui/pesos';
  * Reglas de acomodo:
  * - Un renglón "etiqueta ... valor" alinea el valor a la derecha; si no cabe, se
  *   corta el valor (un nombre largo de cliente, de quien atendió o del vendedor).
- * - La tabla es `Cant Producto P.U. Importe`. El dinero **nunca** se corta: primero
- *   se arma la parte numérica de la derecha y el nombre del producto se queda con lo
- *   que sobre (a 32 columnas, 13 caracteres). Un precio o importe más ancho que su
- *   columna recorre ese renglón a la izquierda y le quita espacio al nombre.
+ * - La tabla es `Cant Producto P.U. Importe`. Ni el dinero ni el nombre del producto
+ *   se pierden: primero se arma la parte numérica de la derecha, el nombre ocupa lo
+ *   que sobre en ese renglón (a 32 columnas, 13 caracteres, cortado por palabras) y
+ *   el resto sigue en renglones de abajo, sangrados y sin montos. Un precio o
+ *   importe más ancho que su columna recorre ese renglón a la izquierda y le quita
+ *   espacio al nombre.
  * - La frase de la promoción y el aviso "Detalle no disponible…" se cortan por
  *   palabras.
  * - La LIQUIDADA no lleva espacio de firma (plan, decisión 3).
@@ -92,12 +94,23 @@ function porPalabras(s: string, ancho: number): string[] {
   return salida;
 }
 
-function renglonTabla(cant: string, nombre: string, pu: string, importe: string, columnas: number): string {
+/**
+ * Un renglón de la tabla. El nombre del producto **nunca** se pierde: el primer
+ * renglón lleva cantidad, lo que quepa del nombre (cortado por palabras), P.U. e
+ * importe; el resto del nombre sigue abajo, sangrado como la frase de la promoción
+ * y sin montos.
+ */
+function renglonesTabla(cant: string, nombre: string, pu: string, importe: string, columnas: number): string[] {
   const izquierda = cant.padStart(ANCHO_CANT) + ' ';
   const derecha = ` ${pu.padStart(ANCHO_PU)} ${importe.padStart(ANCHO_IMPORTE)}`;
   const ancho = Math.max(0, columnas - izquierda.length - derecha.length);
-  const n = texto(nombre).slice(0, ancho).trimEnd().padEnd(ancho);
-  return (izquierda + n + derecha).slice(-columnas);
+  const completo = texto(nombre).split(/\s+/).filter(Boolean).join(' ');
+  const primero = ancho > 0 ? (porPalabras(completo, ancho)[0] ?? '') : '';
+  const resto = completo.slice(primero.length).trim();
+  return [
+    (izquierda + primero.padEnd(ancho) + derecha).slice(-columnas),
+    ...porPalabras(resto, columnas - SANGRIA_PROMO).map((l) => ' '.repeat(SANGRIA_PROMO) + l),
+  ];
 }
 
 export function armarTicket(d: DatosTicket, columnas: 32 | 48): string[] {
@@ -120,10 +133,10 @@ export function armarTicket(d: DatosTicket, columnas: 32 | 48): string[] {
       `${'Cant'.padEnd(ANCHO_CANT)} ${'Producto'.padEnd(columnas - SANGRIA_PROMO - ANCHO_PU - ANCHO_IMPORTE - 2)} ${'P.U.'.padStart(ANCHO_PU)} Importe`,
     );
     for (const x of d.renglones) {
-      r.push(renglonTabla(String(x.cantidad), x.etiqueta, monto(x.precioCentavos), monto(x.importeCentavos), columnas));
+      r.push(...renglonesTabla(String(x.cantidad), x.etiqueta, monto(x.precioCentavos), monto(x.importeCentavos), columnas));
     }
     for (const p of d.promociones) {
-      r.push(renglonTabla(String(p.cantidad), p.etiqueta, 'PROMO', monto(0), columnas));
+      r.push(...renglonesTabla(String(p.cantidad), p.etiqueta, 'PROMO', monto(0), columnas));
       for (const l of porPalabras(p.texto, columnas - SANGRIA_PROMO)) r.push(' '.repeat(SANGRIA_PROMO) + l);
     }
     r.push(separador);
