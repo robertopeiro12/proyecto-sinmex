@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorApi } from "@/lib/api";
@@ -445,5 +445,22 @@ describe("PestanaNotas", () => {
     await u.click(screen.getByRole("button", { name: "Cancelar" }));
     expect(screen.getByRole("button", { name: "Ver TJ261124RI03" })).toBeEnabled();
     expect(screen.getByRole("radio", { name: "Todas" })).toBeEnabled();
+  });
+  it("con más de 200 notas avisa que acote las fechas o elija un cliente", async () => {
+    buscarVentas.mockResolvedValue({ ventas: [V1, V2, V3], hayMas: true });
+    const { u } = renderizar({ cliente: null });
+    await u.click(await screen.findByRole("radio", { name: "Todas" }));
+    expect(await screen.findByText("Hay más de 200 notas: acota las fechas o elige un cliente.")).toBeInTheDocument();
+  });
+
+  it("Todas con fechas invertidas avisa y no vuelve a buscar", async () => {
+    const { u } = renderizar();
+    await u.click(await screen.findByRole("radio", { name: "Todas" }));
+    await waitFor(() => expect(buscarVentas).toHaveBeenLastCalledWith(expect.objectContaining({ filtro: "todas" })));
+    const llamadas = buscarVentas.mock.calls.length;
+    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2099-12-31" } });
+    await u.click(screen.getByRole("button", { name: "Mostrar" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("La fecha inicial no puede ser posterior a la final.");
+    expect(buscarVentas).toHaveBeenCalledTimes(llamadas);
   });
 });

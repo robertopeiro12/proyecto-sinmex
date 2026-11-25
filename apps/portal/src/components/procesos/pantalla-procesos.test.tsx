@@ -233,6 +233,39 @@ describe("PantallaProcesos", () => {
     expect(ventasLib.buscarVentas).toHaveBeenCalledWith({ sucursal: "TJ", clienteId: "c1", filtro: "con_saldo" });
   });
 
+  it("URL hostil: una pestaña desconocida abre en la primera permitida", async () => {
+    mockAuth(["venta.registrar", "proceso.merma"]);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="<script>" />);
+    expect(screen.getByRole("tab", { name: "Ventas" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("Elige un cliente arriba.")).toBeInTheDocument();
+  });
+
+  it("URL hostil: una pestaña sin permiso también cae a la primera permitida", async () => {
+    mockAuth(["otro"]);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="descuento" />);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Notas"]);
+    expect(screen.getByRole("tab", { name: "Notas" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("URL hostil: un cliente que no existe o es de otra sucursal deja la pantalla sin cliente", async () => {
+    mockAuth(TODOS);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="notas" clienteInicial="c-de-mx" notaInicial="v2" />);
+    await waitFor(() => expect(clientesLib.listarClientes).toHaveBeenCalledWith("TJ", "todos"));
+    expect(await screen.findByText("Elige un cliente arriba.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Quitar cliente" })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(procesosLib.resumenCliente).not.toHaveBeenCalled();
+  });
+
+  it("URL hostil: una nota que no es del cliente no palomea nada", async () => {
+    mockAuth([...TODOS, "cobranza.registrar"]);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="notas" clienteInicial="c1" notaInicial="v-de-otro" />);
+    expect(await screen.findByRole("checkbox", { name: "Marcar TJ261120RI05" })).not.toBeChecked();
+    expect(screen.queryByRole("region", { name: "Notas marcadas" })).toBeNull();
+    // La nota ajena no está en la lista: la selección se suelta y "Marcar todas" sigue vacía.
+    expect(screen.getByRole("checkbox", { name: "Marcar todas" })).not.toBeChecked();
+  });
+
   it("Review Focus 3: cambiar de cliente con el detalle abierto lo cierra sin preguntar", async () => {
     mockAuth(TODOS);
     const u = userEvent.setup();
