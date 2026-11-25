@@ -882,6 +882,11 @@ usuario con sesion pasa.
       **Con el día cerrado** (Mario, 2026-11-25) Merma / Cambios **sigue en el menú** como consulta (`entradasMenu`
       solo apaga Gastos): el registro y sus filtros funcionan, pero "Merma del vehículo" y "Consumo" se apagan con
       `AVISO_MERMA_SOLO_CONSULTA` y `merma/registrar.tsx` rechaza por `MENSAJE_DIA_CERRADO_MOVIMIENTO`.
+    - **En la oficina**: Dashboard / Flujo diario › Por vendedor, pestaña "Mermas/Cambios/Promociones" (merma del vehículo y,
+      por cliente: mermas recibidas con motivo y comentario, reposición, cambios y promociones; "Sin motivo" si la tablet no
+      lo mandó) y Flujo diario › Por día › Mermas (Vendedor · Cliente o "Vehículo" · Producto · Cantidad · Motivo). Los datos
+      salen de `detalle.repository.ts` (`movimientos`): solo `movimiento_inventario` vivo de la tablet; el consumo y los
+      Procesos de la oficina no salen ahí. Tipos duplicados en `apps/portal/src/lib/flujo-diario.ts`.
     - **Nube**: `20261128120000_movimiento_cambio_motivo.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
       (pre-flight: nada que contar; los checks solo se ensanchan y la columna es nula). **Backend antes que la app.**
       Si la APK se instaló antes que el backend, el pull incremental no trae los motivos sembrados (no cambian de

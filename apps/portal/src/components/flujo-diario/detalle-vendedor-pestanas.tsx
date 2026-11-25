@@ -509,7 +509,20 @@ function TablaMovimientos({
     <div className="min-w-0">
       <TituloBloque tenue>{titulo}</TituloBloque>
       <CajaTabla>
-        <Tabla densidad="compacta" aria-label={aria}>
+        <Tabla densidad="compacta" aria-label={aria} className="table-fixed">
+          {conMotivo ? (
+            <colgroup>
+              <col className="w-[28%]" />
+              <col className="w-[10%]" />
+              <col className="w-[24%]" />
+              <col />
+            </colgroup>
+          ) : (
+            <colgroup>
+              <col />
+              <col className="w-[5rem]" />
+            </colgroup>
+          )}
           <thead>
             <tr>
               <Th>Producto</Th>
@@ -521,8 +534,12 @@ function TablaMovimientos({
           <tbody>
             {movimientos.map((m, i) => (
               <tr key={`${m.producto}-${i}`}>
-                <Td>{m.producto}</Td>
-                <Td alinear="derecha">{formatearPiezas(m.cantidad)}</Td>
+                <Td className="truncate" title={m.producto}>
+                  {m.producto}
+                </Td>
+                <Td alinear="derecha" className="whitespace-nowrap">
+                  {formatearPiezas(m.cantidad)}
+                </Td>
                 {conMotivo && (
                   <Td>
                     <TextoMotivo motivo={m.motivo} />
@@ -581,13 +598,11 @@ export function PestanaMermas({
             {recibidas.length > 0 && (
               <TablaMovimientos titulo="Mermas recibidas" aria={`Mermas recibidas de ${cliente}`} movimientos={recibidas} conMotivo />
             )}
-            {reposicion.length > 0 && (
-              <div className="max-w-xl">
-                <TablaMovimientos titulo="Reposición entregada" aria={`Reposición entregada a ${cliente}`} movimientos={reposicion} conMotivo={false} />
-              </div>
-            )}
-            {(cambioEntrego.length > 0 || cambioRecibio.length > 0) && (
+            {(reposicion.length > 0 || cambioEntrego.length > 0 || cambioRecibio.length > 0) && (
               <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2">
+                {reposicion.length > 0 && (
+                  <TablaMovimientos titulo="Reposición entregada" aria={`Reposición entregada a ${cliente}`} movimientos={reposicion} conMotivo={false} />
+                )}
                 {cambioEntrego.length > 0 && (
                   <TablaMovimientos titulo="Cambios (entregó)" aria={`Cambios (entregó) de ${cliente}`} movimientos={cambioEntrego} conMotivo={false} />
                 )}
@@ -597,10 +612,15 @@ export function PestanaMermas({
               </div>
             )}
             {promos.length > 0 && (
-              <div className="max-w-xl">
+              <div className="grid grid-cols-1 md:grid-cols-2">
+                <div className="min-w-0">
                 <TituloBloque tenue>Promociones</TituloBloque>
                 <CajaTabla>
-                  <Tabla densidad="compacta" aria-label={`Promociones de ${cliente}`}>
+                  <Tabla densidad="compacta" aria-label={`Promociones de ${cliente}`} className="table-fixed">
+                    <colgroup>
+                      <col />
+                      <col className="w-[5rem]" />
+                    </colgroup>
                     <thead>
                       <tr>
                         <Th>Producto</Th>
@@ -621,6 +641,7 @@ export function PestanaMermas({
                     </tbody>
                   </Tabla>
                 </CajaTabla>
+                </div>
               </div>
             )}
           </section>

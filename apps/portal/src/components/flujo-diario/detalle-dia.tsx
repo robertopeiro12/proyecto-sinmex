@@ -290,7 +290,14 @@ function PestanaMermasDia({ mermas }: { mermas: DatosDetalleDia["mermas"] }) {
     <div className="mx-auto w-full max-w-5xl">
       <TituloBloque>Mermas</TituloBloque>
       <CajaTabla>
-        <Tabla densidad="compacta" aria-label="Mermas">
+        <Tabla densidad="compacta" aria-label="Mermas" className="table-fixed">
+          <colgroup>
+            <col className="w-[16%]" />
+            <col className="w-[24%]" />
+            <col />
+            <col className="w-[8rem]" />
+            <col className="w-[22%]" />
+          </colgroup>
           <thead>
             <tr>
               <Th>Vendedor</Th>
