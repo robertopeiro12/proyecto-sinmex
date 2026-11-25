@@ -36,7 +36,7 @@ apps/tablet/
 │       ├── operacion/         # hoja del cliente -> venta / cobranza / visita / merma
 │       ├── gastos/            # Gastos: motivo + cantidad y los de hoy, una pantalla (T-30/T-31)
 │       ├── inventario/        # Inventario y el detalle de una carga (T-27)
-│       ├── merma/             # Merma y consumo: trayecto y consumo propio (T-27 pieza 2)
+│       ├── merma/             # Merma / Cambios: vehículo y consumo propio (T-27 pieza 2, rediseño pieza 4)
 │       ├── prospectos.tsx     # capturados hoy, nuevo prospecto y los de la sucursal
 │       ├── registros.tsx      # Ventas / Cobranza (provisional; pieza 5)
 │       ├── sugerido-de-carga.tsx # provisional (pieza 7)
@@ -382,12 +382,16 @@ Spec: `docs/superpowers/specs/2026-10-23-t-27-merma-y-consumo-design.md`.
 
 - **Migración 018**: `movimiento` y `movimiento_linea` (los escribe la tablet y los sube el push como `tipo:
   'movimiento'`, entre gastos y rutas) y `vendedor.consumo_diario_max` (el límite de su sucursal; baja en el pull).
-- **Ficha → "Merma"** (`operacion/[clienteId]/merma.tsx`, también para un prospecto): por presentación "Recibí dañado"
-  y "Le entregué" (con "Te quedan N" si el control está prendido), comentario y "Registrar merma". La ficha muestra
-  "Movimientos de hoy".
-- **Menú → "Merma y consumo"** (`merma/index.tsx`): "Merma del trayecto" y "Consumo propio" (con "Te quedan N de
-  consumo hoy"; con límite 0 no aparece) abren `merma/registrar.tsx`; debajo, los movimientos de hoy con su subida.
-- **Inventario**: Cargado − Vendido − Regalado − Merma entregada − Merma del trayecto − Consumo = Existencia, y "Por
+- **Ficha → "Merma y cambios"** (`operacion/[clienteId]/merma.tsx`, también para un prospecto; rediseño pieza 4): dos
+  pestañas. **Merma**: "Recibí dañado" (al menos una pieza), "Le entregué" y el motivo (obligatorio, de los
+  `aplica_cliente`). **Cambio**: lo que recibe del cliente y lo que entrega (al menos una pieza de cada lado). Tras
+  grabar, la pantalla se queda en la pestaña grabada. La ficha muestra "Movimientos de hoy".
+- **Menú → "Merma / Cambios"** (`merma/index.tsx`): "Merma del vehículo" (motivo obligatorio, de los `aplica_vehiculo`) y
+  "Consumo propio" (con "Te quedan N de consumo hoy"; con límite 0 no aparece) abren `merma/registrar.tsx`; debajo, los
+  movimientos de hoy con su subida y los filtros Todo / Merma / Cambios.
+- **Migración 022** reconstruye `movimiento` (tipo `cambio`, `motivo_merma_id`) y reinicia el cursor del pull para bajar
+  `motivos_merma`.
+- **Inventario**: Cargado − Vendido − Regalado − Merma entregada − Merma del trayecto − Consumo − Cambios entregados + Cambios recibidos = Existencia, y "Por
   regresar a la planta" (piezas buenas, que nunca bajan de 0, y merma). La merma recibida del cliente no suma a la
   existencia.
 - `movimientos.registrar()` valida forma, límite de consumo, carga pendiente y faltantes **dentro de su transacción**

@@ -234,7 +234,7 @@ usuario con sesion pasa.
 - **Con `sucursal.control_inventario` prendida, el portal no le vende a un vendedor más de lo que trae cargado** (cliente,
   2026-11-12; la misma casilla y la misma regla que la app de T-27). Aplica a `POST /ventas` y a `PATCH /ventas/:id` solo
   si la venta tiene vendedor (Oficina nunca se revisa): existencia = las piezas teóricas por regresar del corte (cargados aceptados − vendidas − regaladas − merma entregada − merma de
-  almacén − consumo) de ese vendedor en la **fecha de la venta**, la misma cuenta del corte (`movimientosDelDia` de
+  almacén − consumo − cambios entregados + cambios recibidos) de ese vendedor en la **fecha de la venta**, la misma cuenta del corte (`movimientosDelDia` de
   `produccion/cortes.repository.ts` + `existenciasPorPresentacion` de `reglas-corte.ts`; la merma **recibida** no suma a lo vendible). Si no alcanza → **409** "No le alcanza el producto a …: Horchata 1 L, faltan 3; …" antes del folio (no
   lo quema). Al editar se suman de vuelta las líneas de la propia venta si sigue con el mismo vendedor, y una presentación
   que no sube nunca se rechaza. Una carga **pendiente** no bloquea en el portal (la app sí). Reglas puras en
@@ -767,6 +767,25 @@ usuario con sesion pasa.
     los movimientos. Pantallas: ficha → "Merma" y "Movimientos de hoy"; menú → "Merma y consumo" (+ `merma/registrar`;
     con límite de consumo 0 el botón no aparece); Inventario con Merma entregada, Merma del trayecto, Consumo y "Por
     regresar a la planta". La pantalla "Próximamente" (`pendiente/[seccion]`) ya no existe.
+  - **Rediseño pieza 4: cambios y motivo de merma** (spec `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md` §11;
+    issue #162 T-81; plan `docs/superpowers/plans/2026-11-25-rediseno-pieza-4-merma-y-cambios.md`).
+    - **Tipo `cambio`** (`movimiento_inventario.tipo`, mismo sobre `movimiento`): cambio físico con un cliente; lo
+      **recibido suma a la existencia** del vendedor y lo **entregado resta**, sin cobrar diferencia. Lleva cliente
+      (**obligatorio**, `ck_movimiento_cliente` = `merma_cliente` o `cambio`) y exige **al menos una línea recibida y al
+      menos una entregada** (`datos-invalidos` si no). `existencias` de la tablet y la teórica del corte lo cuentan.
+    - **`motivo_merma_id`** (migración `20261128120000_movimiento_cambio_motivo.sql`, columna nula + `ck_movimiento_motivo`:
+      solo `merma_cliente` y `merma_trayecto`). **Opcional para el servidor** (una tablet vieja entra con `null`); **obligatorio
+      en la app**, que ofrece los motivos con `aplica_cliente` (merma del cliente) o `aplica_vehiculo` (del trayecto). Un
+      motivo que nunca existió se rechaza con `motivo-merma-inexistente`; uno dado de baja o sin la bandera **sí entra**
+      (se capturó sin red). El servidor no revisa `aplica_*`.
+    - **Pull `motivos_merma`** (colección aditiva, por `actualizado_en`; ver `docs/contrato-sincronizacion.md`). Tablet:
+      **migración 022** (`022-cambios-motivo-merma.ts`) reconstruye `movimiento` (admite `cambio` y `motivo_merma_id`) y
+      **reinicia el cursor del pull** para bajar el catálogo nuevo.
+    - **Pantallas**: ficha → **"Merma y cambios"** (`operacion/[clienteId]/merma.tsx`, dos pestañas: merma y cambio);
+      menú → **"Merma / Cambios"** (`merma/index.tsx`: "Merma del vehículo", "Consumo" —solo si el límite > 0— y los
+      movimientos de hoy con filtros Todo / Merma / Cambios) → `merma/registrar.tsx`.
+    - **Nube**: `20261128120000_movimiento_cambio_motivo.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
+      (pre-flight: nada que contar; los checks solo se ensanchan y la columna es nula). **Backend antes que la app.**
   - **Nube**: `20261025120000_movimiento_inventario.sql` se sube a `sinmex dev` después del merge, con el protocolo de
     push (pre-flight: tablas nuevas y una columna con default; nada que contar). Backend antes que la app.
 - **Registro de Operación (parte 1).** *Producción → Registro de Operación* (`/produccion/registro-operacion`, pestañas
@@ -793,7 +812,7 @@ usuario con sesion pasa.
     usuario atado a X con `operacion.entrada` los ve aunque no alcance la sucursal de origen.
   - **Catálogo `motivo_merma`** global (como `motivo_visita`), con `aplica_almacen`/`aplica_cliente`/`aplica_vehiculo`, baja
     lógica y semilla de 4 motivos; `/motivos-merma`, permiso `motivo_merma.gestionar` (grupo General); portal *Catálogo →
-    Motivos de merma*. Un motivo dado de baja o sin "almacén" no se acepta en una merma nueva, pero una existente lo conserva
+    Motivos de merma*; la tablet también lo baja (pull `motivos_merma`, rediseño pieza 4: ver *Merma y consumo en la tablet*). Un motivo dado de baja o sin "almacén" no se acepta en una merma nueva, pero una existente lo conserva
     al editar si no se cambia.
   - Tipos duplicados backend ↔ portal (`lib/operaciones-almacen.ts`, `lib/motivos-merma.ts`): si cambias uno, cambia el otro.
   - **Nube**: `20261124120000_registro_operacion.sql` se sube a `sinmex dev` después del merge, con el protocolo de push.
@@ -867,7 +886,8 @@ usuario con sesion pasa.
       − cambios entregados + cambios recibidos, **en vivo** y sin recortar (negativo = "Salió más de lo cargado").
       **Merma teórica (C4)** = merma recibida del cliente + merma de almacén. Los movimientos salen de `movimiento_inventario`
       vivo (`merma_cliente` entregado/recibido, `merma_trayecto` = de almacén, `consumo`) por `fecha` y vendedor. **Cambios
-      físicos = 0 siempre** (no existen hasta T-33; los campos ya están para que solo se llene la consulta).
+      físicos** = movimientos `cambio` de `movimiento_inventario` (rediseño pieza 4): lo entregado resta y lo recibido suma
+      a la teórica de producto terminado; la merma teórica (C4) no los cuenta.
     - Cargadas = solo **renglones aceptados** (`coalesce(carga_detalle.aceptada, true)` en una carga `aceptada`; rediseño pieza 3); vendidas/regaladas = `cantidad`/`cantidad_promocion` de líneas **vivas** de
       ventas **vivas** del vendedor con esa `fecha`, de cualquier status. Un vendedor con solo merma o consumo ese día también
       sale en la lista.
