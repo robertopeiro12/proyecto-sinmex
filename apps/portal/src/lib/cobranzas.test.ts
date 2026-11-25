@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "./api";
 import {
   aplicarSaldoFavor,
-  buscarPorCobrar,
   describirAplicacion,
   leerMontoCentavos,
   porCobrarDeCliente,
@@ -26,13 +25,6 @@ describe("lib/cobranzas", () => {
   it("porCobrarDeCliente pide por clienteId", async () => {
     await porCobrarDeCliente("c1");
     expect(apiFetch).toHaveBeenCalledWith("/cobranzas/por-cobrar?clienteId=c1");
-  });
-
-  it("buscarPorCobrar manda la fecha o el # de nota, y la sucursal si hay", async () => {
-    await buscarPorCobrar({ fecha: "2026-10-01" }, "TJ");
-    expect(apiFetch).toHaveBeenLastCalledWith("/cobranzas/por-cobrar?fecha=2026-10-01&sucursal=TJ");
-    await buscarPorCobrar({ numNota: " 77 " }, null);
-    expect(apiFetch).toHaveBeenLastCalledWith("/cobranzas/por-cobrar?numNota=77");
   });
 
   it("vista previa, pago y saldo a favor hacen POST con el cuerpo", async () => {

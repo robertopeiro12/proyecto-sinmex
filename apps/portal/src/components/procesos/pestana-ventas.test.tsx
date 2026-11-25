@@ -101,4 +101,28 @@ describe("PestanaVentas", () => {
     await u.click(screen.getByRole("button", { name: "Ver en Notas" }));
     expect(onVerEnNotas).toHaveBeenCalledWith("TJ261125OF01");
   });
+  it("I-2: tras grabar vuelve a pedir las ventas del día, y la siguiente del mismo cliente avisa del posible duplicado", async () => {
+    const u = userEvent.setup();
+    const buscarVentas = vi.mocked(ventasLib.buscarVentas);
+    render(<PestanaVentas sucursal="TJ" cliente={C1} onVerEnNotas={vi.fn()} onSucio={vi.fn()} onRegistrada={vi.fn()} />);
+    await waitFor(() => expect(buscarVentas).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/Este cliente ya tiene/)).toBeNull();
+
+    buscarVentas.mockResolvedValue({
+      ventas: [
+        {
+          id: "v9", folio: "TJ261125OF01", fecha: hoyEnTijuana(), clienteId: "c1", cliente: "Abarrotes Lupita",
+          repartidor: null, vendedorId: null, factura: { estado: "N/A", numero: null }, numNota: null,
+          montoCentavos: 3000, status: "pendiente", origen: "portal", saldoCentavos: 3000,
+        },
+      ],
+      hayMas: false,
+    });
+    await u.selectOptions(await screen.findByLabelText("Repartidor"), "oficina");
+    await u.type(screen.getByLabelText("Cantidad de Horchata 1 L"), "3");
+    await u.click(screen.getByRole("button", { name: "Grabar" }));
+
+    await waitFor(() => expect(buscarVentas).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText(/Este cliente ya tiene 1 venta/)).toBeInTheDocument();
+  });
 });

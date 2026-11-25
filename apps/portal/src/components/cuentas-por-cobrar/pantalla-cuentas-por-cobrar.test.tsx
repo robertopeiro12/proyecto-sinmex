@@ -122,6 +122,22 @@ describe("PantallaCuentasPorCobrar", () => {
     );
   });
 
+  it("con la vista en Todas, Cobrar lleva la sucursal del cliente (no se queda en \"Elige una sucursal\")", async () => {
+    mockAuth(["cuentas_cobrar.ver", "cobranza.registrar"]);
+    const u = userEvent.setup();
+    render(<PantallaCuentasPorCobrar sucursal={null} />);
+    await u.click(await screen.findByRole("button", { name: /Cobach XXI/ }));
+    await u.click(screen.getByRole("button", { name: /El Moreno/ }));
+    expect(screen.getByRole("link", { name: "Cobrar TJ260913AP05" })).toHaveAttribute(
+      "href",
+      "/operacion/procesos?pestana=notas&cliente=c1&nota=n1&sucursal=TJ",
+    );
+    expect(screen.getByRole("link", { name: "Cobrar MX261001JP01" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("&sucursal=MX"),
+    );
+  });
+
   it("sin cobranza.registrar no hay botón Cobrar", async () => {
     mockAuth(["cuentas_cobrar.ver"]);
     const u = userEvent.setup();

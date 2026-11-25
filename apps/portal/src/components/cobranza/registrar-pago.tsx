@@ -1,13 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Aviso } from "@/components/ui/aviso";
-import { Button } from "@/components/ui/button";
 import { formatearFecha } from "@/lib/formato";
 import { useEnvioFormulario } from "@/components/catalogo/use-envio-formulario";
 import {
   MENSAJE_MONTO,
-  METODOS_PAGO_COBRO,
   leerMontoCentavos,
   registrarCobro,
   vistaPreviaCobro,
@@ -18,7 +15,6 @@ import {
 } from "@/lib/cobranzas";
 import { REPARTIDOR_OFICINA, formatearPesos, hoyEnTijuana, listarRepartidores, type Repartidor } from "@/lib/ventas";
 import { ErrorApi } from "@/lib/api";
-import { VistaPreviaCobro } from "./vista-previa-cobro";
 
 /** El 409 de "la nota ya no tiene saldo": lo que se ve en pantalla quedó viejo. */
 export function esNotaSinSaldo(err: unknown): err is ErrorApi {
@@ -36,9 +32,9 @@ const FALLO_COBRO = "No se pudo registrar el cobro.";
 
 /**
  * §3.3, la lógica del pago sin la pantalla: monto, fecha, método y cobrador →
- * vista previa calculada en el servidor → grabar. La comparten *Cobranza*
- * (`RegistrarPago`, con su botón Vista previa) y *Procesos → Notas*
- * (`RecuadroCobro`, que pide la vista previa sola). Cualquier cambio deja vieja
+ * vista previa calculada en el servidor → grabar. La usa *Procesos → Notas*
+ * (`RecuadroCobro`, que pide la vista previa sola); viene de la pantalla
+ * *Cobranza*, que se quitó en Procesos PR B. Cualquier cambio deja vieja
  * la vista previa (`plan` vuelve a `null`), y toda recarga del cliente la
  * invalida. Al grabar, el servidor vuelve a repartir con los saldos del momento y
  * las notas bloqueadas: si un cobro de la tablet entró entre la vista previa y
@@ -70,7 +66,6 @@ export function usePago({
   const [cobrador, setCobrador] = useState(REPARTIDOR_OFICINA);
   const [repartidores, setRepartidores] = useState<Repartidor[]>([]);
   const [vista, setVista] = useState<{ clave: string; plan: PlanDeCobro } | null>(null);
-  const [avisoLocal, setAvisoLocal] = useState<string | null>(null);
   const [previsualizando, setPrevisualizando] = useState(false);
   const [errorVista, setErrorVista] = useState<string | null>(null);
   const { enviando, error, enviar, limpiarError } = useEnvioFormulario(FALLO_COBRO);
@@ -106,7 +101,6 @@ export function usePago({
 
   async function revisar() {
     const motivo = problema();
-    setAvisoLocal(motivo);
     if (motivo !== null || monto === null) return;
     const mia = ++ultimaVista.current;
     setErrorVista(null);
@@ -171,150 +165,10 @@ export function usePago({
     clave,
     plan,
     problema,
-    avisoLocal,
     revisar,
     previsualizando,
     grabar,
     enviando,
     error: error ?? errorVista,
   };
-}
-
-/**
- * §3.3 en *Cobranza*: el formulario del pago con su botón Vista previa y, ya con
- * la vista previa, "Grabar cobro". La lógica vive en `usePago`.
- */
-export function RegistrarPago({
-  cliente,
-  palomeadas,
-  onRegistrado,
-  onDesactualizado,
-}: {
-  cliente: ClientePorCobrar;
-  palomeadas: NotaPorCobrar[];
-  onRegistrado: (mensaje: string) => void;
-  /** Recarga el cliente conservando este mensaje (el 409 "ya no tiene saldo"). */
-  onDesactualizado: (mensaje: string) => void;
-}) {
-  const {
-    hoy,
-    masVieja,
-    deben,
-    montoTexto,
-    setMontoTexto,
-    fechaPago,
-    setFechaPago,
-    metodo,
-    setMetodo,
-    cobrador,
-    setCobrador,
-    repartidores,
-    plan,
-    avisoLocal,
-    revisar,
-    previsualizando,
-    grabar,
-    enviando: grabando,
-    error,
-  } = usePago({ cliente, palomeadas, onRegistrado, onDesactualizado });
-  const enviando = grabando || previsualizando;
-
-  return (
-    <section aria-label="Registrar pago" className="flex flex-col gap-3 rounded-md border p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="font-semibold">Registrar pago</h3>
-        <p className="text-sm text-muted-foreground">
-          {palomeadas.length} {palomeadas.length === 1 ? "nota marcada" : "notas marcadas"} · deben{" "}
-          {formatearPesos(deben)}
-        </p>
-      </div>
-
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="pago-monto" className="text-sm font-medium">
-            Monto
-          </label>
-          <input
-            id="pago-monto"
-            inputMode="decimal"
-            placeholder="0.00"
-            value={montoTexto}
-            onChange={(e) => setMontoTexto(e.target.value)}
-            disabled={enviando}
-            className="w-36 rounded-md border px-3 py-2 text-sm"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="pago-fecha" className="text-sm font-medium">
-            Fecha del pago
-          </label>
-          <input
-            id="pago-fecha"
-            type="date"
-            min={masVieja}
-            max={hoy}
-            value={fechaPago}
-            onChange={(e) => setFechaPago(e.target.value)}
-            disabled={enviando}
-            className="rounded-md border px-3 py-2 text-sm"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="pago-metodo" className="text-sm font-medium">
-            Método
-          </label>
-          <select
-            id="pago-metodo"
-            value={metodo}
-            onChange={(e) => setMetodo(e.target.value as MetodoPagoCobro)}
-            disabled={enviando}
-            className="rounded-md border px-3 py-2 text-sm"
-          >
-            {METODOS_PAGO_COBRO.map((m) => (
-              <option key={m.valor} value={m.valor}>
-                {m.texto}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="pago-cobrador" className="text-sm font-medium">
-            Cobró
-          </label>
-          <select
-            id="pago-cobrador"
-            value={cobrador}
-            onChange={(e) => setCobrador(e.target.value)}
-            disabled={enviando}
-            className="w-56 rounded-md border px-3 py-2 text-sm"
-          >
-            <option value={REPARTIDOR_OFICINA}>Oficina</option>
-            {repartidores.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.nombre}
-              </option>
-            ))}
-          </select>
-        </div>
-        <Button type="button" variant="outline" onClick={() => void revisar()} disabled={enviando}>
-          Vista previa
-        </Button>
-      </div>
-
-      {avisoLocal && <Aviso tono="error">{avisoLocal}</Aviso>}
-
-      {plan && (
-        <>
-          <VistaPreviaCobro plan={plan} palomeadas={palomeadas} />
-          <div>
-            <Button type="button" onClick={() => void grabar()} disabled={enviando}>
-              {enviando ? "Grabando…" : "Grabar cobro"}
-            </Button>
-          </div>
-        </>
-      )}
-
-      {error && <Aviso tono="error">{error}</Aviso>}
-    </section>
-  );
 }

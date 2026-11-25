@@ -81,6 +81,9 @@ export function PantallaRegistrarVenta({
   const [catalogo, setCatalogo] = useState<PresentacionDeCatalogo[]>([]);
   const [captura, setCaptura] = useState<Captura>({});
   const [ventasDelDia, setVentasDelDia] = useState<VentaEncontrada[]>([]);
+  // Sube con cada venta grabada en Procesos (mismo cliente y fecha): vuelve a pedir
+  // las ventas del dia para que el aviso de duplicado cuente la que se acaba de grabar.
+  const [grabadas, setGrabadas] = useState(0);
   const [condiciones, setCondiciones] = useState<CondicionesVenta>(CONDICIONES_INICIALES);
   const [errorLocal, setErrorLocal] = useState<string | null>(null);
   const [resultado, setResultado] = useState<VentaRegistrada | null>(null);
@@ -166,7 +169,7 @@ export function PantallaRegistrarVenta({
     return () => {
       vigente = false;
     };
-  }, [cliente, fecha]);
+  }, [cliente, fecha, grabadas]);
 
   // Solo cuentan las presentaciones con precio: una deshabilitada nunca suma ni viaja.
   const filas = useMemo(() => filasDeCatalogo(catalogo), [catalogo]);
@@ -242,6 +245,7 @@ export function PantallaRegistrarVenta({
           setRepartidor("");
           setCaptura({});
           setCondiciones(CONDICIONES_INICIALES);
+          setGrabadas((n) => n + 1);
           onRegistrada?.();
         }
       },

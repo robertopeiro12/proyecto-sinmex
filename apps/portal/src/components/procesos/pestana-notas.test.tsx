@@ -279,16 +279,21 @@ describe("PestanaNotas", () => {
     expect(await screen.findByText("Elige un cliente arriba.")).toBeInTheDocument();
   });
 
-  it("palomear: la barra suma saldo; Anotar factura solo si todas están pendientes; Cobrar según el permiso", async () => {
+  it("palomear: la barra suma saldo; Anotar factura si ninguna está facturada (N/A sí, como Facturas); Cobrar según el permiso", async () => {
     const { u } = renderizar();
     await palomear(u, "TJ261124RI03", "TJ261120RI05");
     const barra = screen.getByRole("region", { name: "Notas marcadas" });
     expect(barra).toHaveTextContent("2 notas");
     expect(barra).toHaveTextContent("saldo $1,250.00");
-    // TJ261120RI05 es N/A: no se puede anotar factura.
-    expect(within(barra).queryByRole("button", { name: "Anotar factura" })).toBeNull();
+    // TJ261120RI05 es N/A: también se le puede anotar factura (I-3).
+    expect(within(barra).getByRole("button", { name: "Anotar factura" })).toBeInTheDocument();
     expect(within(barra).getByRole("button", { name: "Cobrar 2 notas…" })).toBeInTheDocument();
-    await u.click(screen.getByRole("checkbox", { name: "Marcar TJ261120RI05" }));
+    // TJ261118OF02 ya está facturada: con ella marcada no se ofrece.
+    await u.click(screen.getByRole("checkbox", { name: "Marcar TJ261118OF02" }));
+    expect(within(barra).queryByRole("button", { name: "Anotar factura" })).toBeNull();
+    await u.click(screen.getByRole("checkbox", { name: "Marcar TJ261118OF02" }));
+    await u.click(screen.getByRole("checkbox", { name: "Marcar TJ261124RI03" }));
+    // Solo la N/A marcada.
     expect(within(barra).getByRole("button", { name: "Anotar factura" })).toBeInTheDocument();
     expect(within(barra).getByRole("button", { name: "Cobrar 1 nota…" })).toBeInTheDocument();
   });
@@ -451,6 +456,13 @@ describe("PestanaNotas", () => {
     const { u } = renderizar({ cliente: null });
     await u.click(await screen.findByRole("radio", { name: "Todas" }));
     expect(await screen.findByText("Hay más de 200 notas: acota las fechas o elige un cliente.")).toBeInTheDocument();
+  });
+
+  it("con saldo y más de 200 notas no habla de fechas (no aplican): pide buscar por folio o # de nota", async () => {
+    buscarVentas.mockResolvedValue({ ventas: [V1, V2, V3], hayMas: true });
+    renderizar();
+    expect(await screen.findByText("Hay más de 200 notas con saldo; busca por folio o # de nota.")).toBeInTheDocument();
+    expect(screen.queryByText(/acota las fechas/)).toBeNull();
   });
 
   it("Todas con fechas invertidas avisa y no vuelve a buscar", async () => {

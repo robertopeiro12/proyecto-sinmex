@@ -117,8 +117,8 @@ export class VentasConsultaRepository {
   constructor(@Inject(DB_CONNECTION) private readonly db: Database) {}
 
   /**
-   * Por fecha descendente y luego folio. `limite` lo fija el servicio (tope + 1,
-   * para saber si hay mas).
+   * Por fecha descendente y luego folio; con `ids` (Con saldo), ascendente.
+   * `limite` lo fija el servicio (tope + 1, para saber si hay mas).
    *
    * El # de nota se compara como lo compara el indice unico de #95
    * (`lower(btrim(...))`): "buscar la 1234" encuentra exactamente la nota que
@@ -149,6 +149,12 @@ export class VentasConsultaRepository {
       condiciones.push(
         sql`lower(btrim(vn.num_nota)) = lower(btrim(${filtro.numNota}))`,
       );
+
+    // Con `ids` (el filtro Con saldo) va de la mas vieja a la mas nueva: la
+    // primera que se cobra, y si hay mas del tope se cortan las mas nuevas.
+    const orden = filtro.ids
+      ? sql`vn.fecha, vn.folio`
+      : sql`vn.fecha desc, vn.folio`;
 
     const filas = await sql<{
       id: string;
@@ -183,7 +189,7 @@ export class VentasConsultaRepository {
              and ca.deleted_at is null
         ) a on true
        where ${sql.join(condiciones, sql` and `)}
-       order by vn.fecha desc, vn.folio
+       order by ${orden}
        limit ${limite}
     `.execute(this.db);
 

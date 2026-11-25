@@ -946,8 +946,12 @@ usuario con sesion pasa.
     `numNota` en cualquier fecha) y Con saldo · Por facturar · Todas (Todas con `FiltroFechas`, este mes). Sin cliente: Con saldo y
     Por facturar piden uno; Todas y el buscador cubren la sucursal con columna Cliente y sin casillas. Tabla sencilla (Saldo en
     ámbar, Status y Factura en texto) con Ver › (detalle y edición dentro de la pestaña, "← Volver a Notas"). Casillas → barra
-    "N notas · saldo $X" con **Anotar factura** (`venta.asignar_factura`, todas en `pendiente`) y **Cobrar N notas…**
-    (`cobranza.registrar`); "Buscar factura" abre `BuscarFacturas` en una `Ventana`. Más de 200 = aviso de acotar.
+    "N notas · saldo $X" con **Anotar factura** (`venta.asignar_factura`; se ofrece si **ninguna** marcada está `facturada`: `N/A`
+    y `pendiente` sí, como el "Mostrar también las N/A" de la vieja Facturas, y el backend acepta las dos) y **Cobrar N notas…**
+    (`cobranza.registrar`); "Buscar factura" abre `BuscarFacturas` en una `Ventana`. Más de 200 = aviso de acotar las fechas;
+    con **Con saldo** (no usa fechas) dice "Hay más de 200 notas con saldo; busca por folio o # de nota.".
+  - **La pestaña Ventas vuelve a pedir las ventas del día tras grabar** (contador `grabadas` en el efecto de `ventasDelDia`): la
+    siguiente venta del mismo cliente y fecha avisa del posible duplicado.
   - **Cobro** (`cobranza/recuadro-cobro.tsx`, hooks `usePago`/`useSaldoFavor`): el **mismo cuerpo, vista previa y 409** que la vieja
     Cobranza. "Así queda" sale **sola** 300 ms después de la última tecla (una respuesta vieja se ignora); Grabar pago solo con
     vista previa vigente; **Cancelar y Grabar pago juntos abajo a la derecha, después de "Así queda"** (R3); la barra esconde su
@@ -956,14 +960,16 @@ usuario con sesion pasa.
     cobro o una venta a medio capturar. La línea del cliente suma "A favor $X" y se recarga tras venta, cobro, factura o edición.
   - **`GET /ventas`** ganó `folio` (exacto, sin espacios y en mayúsculas; ignora fechas) y `filtro` = `con_saldo|por_facturar|todas`
     (omisión `todas` = lo de siempre; otro = 400). `con_saldo`/`por_facturar` **exigen `clienteId`** (400 "Elige un cliente.") e
-    ignoran fechas; `con_saldo` usa la misma consulta de notas con saldo de la ruta (`NotasRutaRepository.notasConSaldo`). Cada
+    ignoran fechas; `con_saldo` usa la misma consulta de notas con saldo de la ruta (`NotasRutaRepository.notasConSaldo`) y
+    **ordena de la más vieja a la más nueva antes del `limit`** (si hay más de 200, se cortan las más nuevas). Cada
     fila trae `vendedorId` y `factura: { estado, numero }`. **`GET /procesos/cliente/:id`** solo pide sesión y trae
     `saldoFavorCentavos`.
   - **URL y redirecciones** (de servidor, conservan `?sucursal`): `/operacion/registrar-venta` → `/operacion/procesos?pestana=ventas`;
     `/operacion/ventas` y `/operacion/facturas` → `?pestana=notas`; `/operacion/cobranza?cliente&nota` →
     `?pestana=notas&cliente=…&nota=…`. Procesos lee `pestana`, `cliente` y `nota`: una pestaña desconocida o sin permiso cae a la
     primera permitida, un cliente que no está en la lista de la sucursal se ignora y la nota solo se palomea si es de ese cliente.
-  - **Cuentas por Cobrar** se queda en el menú; su **Cobrar** (`enlaceCobrar`) lleva a Notas con ese cliente y esa nota palomeada.
+  - **Cuentas por Cobrar** se queda en el menú; su **Cobrar** (`enlaceCobrar`) lleva a Notas con ese cliente y esa nota palomeada,
+    con la sucursal **del cliente** cuando la vista está en "Todas" (si no, Procesos pediría elegir sucursal).
   - **Nube**: nada que subir (sin migración). Backend y portal juntos (el portal pide los filtros nuevos de `GET /ventas`).
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.

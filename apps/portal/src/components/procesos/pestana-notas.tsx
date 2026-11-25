@@ -85,8 +85,8 @@ type Vista = { tipo: "lista" } | { tipo: "detalle"; venta: VentaDetalle } | { ti
 type AvisoNotas = { texto: string; tono: "exito" | "advertencia" };
 
 /**
- * Procesos → Notas (spec D2, boceto de Notas): junta *Ventas*, *Facturas* y
- * *Cobranza*. Las notas del cliente de arriba con filtros Con saldo · Por facturar ·
+ * Procesos → Notas (spec D2, boceto de Notas): reemplaza a las pantallas *Ventas*,
+ * *Facturas* y *Cobranza*, que se quitaron. Las notas del cliente de arriba con filtros Con saldo · Por facturar ·
  * Todas y el buscador de folio o # de nota; sin cliente, solo el buscador o Todas
  * con fechas para toda la sucursal. Las casillas (solo del cliente) abren la barra
  * con Anotar factura y Cobrar; Ver › abre el detalle de siempre aquí mismo.
@@ -183,7 +183,9 @@ export function PestanaNotas({
   const bloqueadas = cargando || cobrando;
   const puedeCobrar = puede("cobranza.registrar");
   const puedeFacturar = puede("venta.asignar_factura");
-  const facturables = marcadas.length > 0 && marcadas.every((v) => v.factura.estado === "pendiente");
+  // N/A y pendiente se pueden facturar (como "Mostrar también las N/A" de la vieja
+  // Facturas; el backend acepta las dos). Solo una ya facturada lo impide.
+  const facturables = marcadas.length > 0 && marcadas.every((v) => v.factura.estado !== "facturada");
 
   function alternar(id: string) {
     setSeleccion((actual) => {
@@ -337,7 +339,12 @@ export function PestanaNotas({
         resultado && (
           <>
             {resultado.hayMas && (
-              <Aviso tono="advertencia">Hay más de 200 notas: acota las fechas o elige un cliente.</Aviso>
+              <Aviso tono="advertencia">
+                {!busqueda && filtro === "con_saldo"
+                  ? // Con saldo no usa fechas: se cortan las más nuevas (el servidor las da de la más vieja).
+                    "Hay más de 200 notas con saldo; busca por folio o # de nota."
+                  : "Hay más de 200 notas: acota las fechas o elige un cliente."}
+              </Aviso>
             )}
             <CajaTabla>
               <Tabla aria-label="Notas" className="min-w-[880px]">

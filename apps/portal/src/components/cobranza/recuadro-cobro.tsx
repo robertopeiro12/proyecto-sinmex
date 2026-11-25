@@ -39,8 +39,8 @@ function useVistaPreviaSola(clave: string, valido: boolean, revisar: () => Promi
 
 /**
  * *Procesos → Notas*: el cobro de las notas marcadas (spec D2, R3). Es el pago de
- * *Cobranza* (`usePago`, `useSaldoFavor`: mismo backend, mismo cuerpo, misma
- * vista previa, el mismo 409) con otra cara: la vista previa "Así queda" sale
+ * la vieja *Cobranza* (`usePago`, `useSaldoFavor`: mismo backend, mismo cuerpo,
+ * misma vista previa, el mismo 409) con otra cara: la vista previa "Así queda" sale
  * sola y **Cancelar** y **Grabar pago** van juntos abajo a la derecha. Carga las
  * notas por cobrar del cliente al abrirse: una marcada que ya no tiene saldo no
  * entra.

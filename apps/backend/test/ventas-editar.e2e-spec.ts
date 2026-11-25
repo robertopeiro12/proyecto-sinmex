@@ -804,6 +804,24 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
         });
       });
 
+      it('con_saldo ordena de la más vieja a la más nueva (el tope de 200 corta las nuevas, no las que se cobran primero)', async () => {
+        const nueva = await registrar({ fecha: FECHA_EDICION });
+        const vieja = await registrar({ fecha: FECHA_A });
+        const res = (
+          await buscar(cookieGeneral, {
+            filtro: 'con_saldo',
+            clienteId: clienteTj,
+          }).expect(200)
+        ).body as ResultadoBusquedaVentas;
+        const encontrados = ids(res);
+        expect(encontrados.indexOf(vieja.id)).toBeGreaterThanOrEqual(0);
+        expect(encontrados.indexOf(vieja.id)).toBeLessThan(
+          encontrados.indexOf(nueva.id),
+        );
+        const fechas = res.ventas.map((v) => v.fecha);
+        expect(fechas).toEqual([...fechas].sort());
+      });
+
       it('con_saldo no incluye una nota en cuenta perdida', async () => {
         const v = await registrar();
         await db
