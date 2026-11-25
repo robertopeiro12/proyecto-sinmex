@@ -2,9 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Aviso } from "@/components/ui/aviso";
-import { Button } from "@/components/ui/button";
 import { useConfirmar } from "@/components/ui/confirmar";
-import { Etiqueta, type TonoEtiqueta } from "@/components/ui/etiqueta";
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { CajaTabla, Fila, FilaVacia, Tabla, Td, Th } from "@/components/ui/tabla";
 import { mensajeDe } from "@/lib/api";
@@ -24,22 +22,36 @@ export function fraseDia(fecha: string, hoy: string): string {
   return fecha === hoy ? "de hoy" : `del ${formatearDiaLargo(fecha)}`;
 }
 
-function Pastillas({ lineas, tono }: { lineas: LineaProceso[]; tono: TonoEtiqueta }) {
+/** "Horchata 500 ml × 5, Jamaica 500 ml × 3" en texto normal; sin líneas, una raya. */
+function Productos({ lineas }: { lineas: LineaProceso[] }) {
   if (lineas.length === 0) return <span className="text-muted-foreground">—</span>;
   return (
-    <div className="flex flex-wrap gap-1">
-      {lineas.map((l) => (
-        <Etiqueta key={`${l.sentido}-${l.presentacionId}`} tono={tono}>
-          {`${l.nombre} · ${l.piezas}`}
-        </Etiqueta>
+    <span>
+      {lineas.map((l, i) => (
+        <span key={`${l.sentido}-${l.presentacionId}`}>
+          {i > 0 && ", "}
+          {`${l.nombre} × ${l.piezas}`}
+        </span>
       ))}
-    </div>
+    </span>
   );
 }
 
+const TITULO_QUIEN: Record<TipoProceso, string> = {
+  merma: "Recogió",
+  cambio: "Quién",
+  consumo: "Quién",
+  promocion: "Quién",
+  descuento: "Vendedor",
+};
+
+/** Editar y Eliminar como texto gris (boceto 2), no como botones con borde. */
+const ACCION = "rounded px-0.5 text-muted-foreground outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-sucursal";
+
 /**
- * La lista del día de una pestaña de Procesos (D1), debajo de la captura: Hora · Quién ·
- * (Cliente) · Recibido / Entregado o Productos · Capturó · Editar · Eliminar.
+ * La lista del día de una pestaña de Procesos (D1, boceto 2), debajo de la captura: Hora ·
+ * Recogió/Quién/Vendedor · (Cliente) · Recibido / Entregado o Productos · Capturó · Editar ·
+ * Eliminar. Todo en texto normal (sin pastillas): "Mermas de hoy".
  */
 export function ListaProcesos({
   tipo,
@@ -123,11 +135,10 @@ export function ListaProcesos({
   const conCliente = tipo === "merma" && !clienteId;
   const columnas = 4 + (dosColumnas ? 2 : 1) + (conCliente ? 1 : 0);
   const procesos = datos?.procesos ?? [];
-  const deQuien = clienteId ? "de este cliente" : "de la sucursal";
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-base font-semibold">{`${info.plural} ${fraseDia(fecha, hoy)} ${deQuien}`}</h2>
+      <h2 className="text-base font-semibold">{`${info.plural} ${fraseDia(fecha, hoy)}`}</h2>
       {error && <Aviso tono="error">{error}</Aviso>}
       {errorAccion && <Aviso tono="error">{errorAccion}</Aviso>}
       {cargando && !datos && <EstadoPantalla tipo="cargando" />}
@@ -135,18 +146,18 @@ export function ListaProcesos({
         <CajaTabla className={cargando ? "opacity-60" : undefined}>
           <Tabla aria-label={`${info.plural} del día`} className="table-fixed">
             <colgroup>
-              <col className="w-16" />
-              <col className="w-32" />
-              {conCliente && <col className="w-40" />}
+              <col className="w-20" />
+              <col className="w-36" />
+              {conCliente && <col className="w-44" />}
               <col />
               {dosColumnas && <col />}
+              <col className="w-32" />
               <col className="w-36" />
-              <col className="w-40" />
             </colgroup>
             <thead>
               <tr>
                 <Th>Hora</Th>
-                <Th>Quién</Th>
+                <Th>{TITULO_QUIEN[tipo]}</Th>
                 {conCliente && <Th>Cliente</Th>}
                 {dosColumnas ? (
                   <>
@@ -169,36 +180,37 @@ export function ListaProcesos({
                 procesos.map((p) => (
                   <Fila key={p.id} className={editandoId === p.id ? "bg-info-soft/40 align-middle" : "align-middle"}>
                     <Td>{p.hora}</Td>
-                    <Td className="truncate">{p.vendedor ? p.vendedor.nombre : <Etiqueta>Oficina</Etiqueta>}</Td>
+                    <Td className="truncate">{p.vendedor ? p.vendedor.nombre : "Oficina"}</Td>
                     {conCliente && (
                       <Td className="truncate" title={p.cliente?.nombre}>
-                        {p.cliente ? p.cliente.nombre : <Etiqueta>Almacén</Etiqueta>}
+                        {p.cliente ? p.cliente.nombre : "Almacén"}
                       </Td>
                     )}
                     {dosColumnas ? (
                       <>
                         <Td>
-                          <Pastillas lineas={p.lineas.filter((l) => l.sentido === "recibido")} tono="error" />
+                          <Productos lineas={p.lineas.filter((l) => l.sentido === "recibido")} />
                         </Td>
                         <Td>
-                          <Pastillas lineas={p.lineas.filter((l) => l.sentido === "entregado")} tono="exito" />
+                          <Productos lineas={p.lineas.filter((l) => l.sentido === "entregado")} />
                         </Td>
                       </>
                     ) : (
                       <Td>
-                        <Pastillas lineas={p.lineas} tono="neutro" />
+                        <Productos lineas={p.lineas} />
                       </Td>
                     )}
                     <Td className="truncate">{p.capturo}</Td>
                     <Td alinear="derecha">
-                      <div className="flex justify-end gap-1">
-                        <Button type="button" size="sm" variant="outline" onClick={() => onEditar(p)}>
+                      <span className="whitespace-nowrap text-muted-foreground">
+                        <button type="button" className={ACCION} onClick={() => onEditar(p)}>
                           Editar
-                        </Button>
-                        <Button type="button" size="sm" variant="outline" onClick={() => void eliminar(p)}>
+                        </button>
+                        {" · "}
+                        <button type="button" className={ACCION} onClick={() => void eliminar(p)}>
                           Eliminar
-                        </Button>
-                      </div>
+                        </button>
+                      </span>
                     </Td>
                   </Fila>
                 ))

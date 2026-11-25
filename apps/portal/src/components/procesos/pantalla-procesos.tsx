@@ -16,7 +16,7 @@ import { hoyEnTijuana } from "@/lib/ventas";
 import type { OpcionPresentacion } from "./caja-productos";
 import { CapturaProceso, QUIEN_OFICINA, type ModoFecha } from "./captura-proceso";
 import { ListaProcesos } from "./lista-procesos";
-import { TarjetaCliente } from "./tarjeta-cliente";
+import { ClienteProcesos } from "./cliente-procesos";
 
 const TITULO = "Procesos";
 const DESCRIPCION = "Lo que la oficina captura de cada cliente: ventas, notas, merma, cambios, consumos y promoción.";
@@ -94,7 +94,7 @@ export function PantallaProcesos({ sucursal }: { sucursal: string | null }) {
   return (
     <Pantalla>
       <EncabezadoPantalla titulo={TITULO} descripcion={DESCRIPCION} />
-      <TarjetaCliente
+      <ClienteProcesos
         clientes={clientes}
         cliente={cliente}
         onElegir={(c) => void cambiarCliente(c)}

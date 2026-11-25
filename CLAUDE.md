@@ -876,17 +876,19 @@ usuario con sesion pasa.
     uno, cambia el otro en el mismo commit. La segunda fila del encabezado es `sticky` con `TOP2` (`top-[32.5px]`, medido:
     la primera fila mide 32,5 px a 1366 y 1920); si cambias el texto del encabezado, vuelve a medir.
 - **Procesos (PR A).** *Operación → Procesos* (`/operacion/procesos`): lo que **Administración** captura de lo que pasó en la
-  calle, por cliente (como el Procesos del viejo). Cliente arriba (tarjeta con tipo de negocio, crédito, "Debe $X en N notas",
-  última compra y promociones vigentes) y pestañas **Merma · Cambios · Consumos · Promoción · Descuentos**, cada una con la
+  calle, por cliente (como el Procesos del viejo). Cliente arriba (campo con el nombre y ✕; debajo **una línea de texto gris**
+  sin pastillas: `[Prospecto ·] Contado | Crédito N días · Debe $X en N notas · Última compra mar 24 nov · N promociones`, lo
+  que no hay se omite y las promociones se listan en un globito; `cliente-procesos.tsx`) y pestañas **Merma · Cambios · Consumos · Promoción · Descuentos**, cada una con la
   captura arriba y la lista del día abajo. Ventas y Notas llegan en el PR B. Spec:
-  `docs/superpowers/specs/2026-11-25-procesos-design.md` (boceto en `img/2026-11-25-procesos-boceto-merma.png`).
+  `docs/superpowers/specs/2026-11-25-procesos-design.md` (boceto vigente, "menos amontonado": `img/2026-11-25-procesos-boceto-2.png`).
   - **Tablas.** `proceso_oficina` (`tipo` `merma|cambio|consumo|promocion|descuento`, `sucursal_id`, `fecha`, `cliente_id`,
     `vendedor_id` **null = Oficina**, `merma_de` `cliente|almacen` solo en merma, `comentario` 1..300 recortado o `null`,
     `capturo_usuario_id`/`actualizado_por_usuario_id`, baja lógica) + `proceso_oficina_linea` (`sentido` `recibido|entregado`,
     piezas 1..100000, máx. 200, una por presentación y sentido). Checks **totales** por tipo; lo que no cabe en un check lo
     exige el servicio (`inventario/procesos.*`, reglas puras en `reglas-procesos.ts`).
   - **Por tipo.** Merma de cliente y Cambios: cliente obligatorio, recibido **y** entregado, **total entregado = total recibido**
-    de cualquier producto y tamaño (si no, 400; el portal pinta la barra de cuadre y no deja guardar). Merma de almacén: sin
+    de cualquier producto y tamaño (si no, 400; el portal no deja guardar y junto a Guardar dice en texto corto "Recibió 5 ·
+    entregó 5 ✓" en verde o "Recibió 5 · entregó 3 — faltan 2" / "— sobran 2" en ámbar, `cuadre` de `lib/procesos.ts`). Merma de almacén: sin
     cliente, solo recibido. Consumo: sin cliente, solo entregado. Promoción: cliente, solo entregado. Descuento: **vendedor
     obligatorio** (sin Oficina), sin cliente, solo entregado. Cliente y vendedor vivos y de la sucursal del proceso (otro = 400);
     al editar se conservan los ya guardados aunque se hayan dado de baja. Fecha: hoy o antes (Tijuana).
@@ -908,6 +910,10 @@ usuario con sesion pasa.
     (`precargaPorTamano` en `reglas-procesos.ts`). Sin corte hecho: `corteHecho: false`, nada que precargar. Hereda el alcance
     de `CortesService.leer` y solo pide `proceso.descuento`.
   - **Portal** (`components/procesos/`, `lib/procesos.ts`; tipos duplicados con el backend: si cambias uno, cambia el otro).
+    Diseño del boceto 2: fila de opciones en una línea (Merma: "De este cliente | De almacén"; día; "Recogió" / "Quién" /
+    "Vendedor" con etiqueta en línea), cajas como **tablas sencillas** sin color (dos lado a lado en Merma de cliente y Cambios),
+    Comentario + cuadre + Guardar en una fila (sin "Limpiar": al corregir, Cancelar), y la lista "Mermas de hoy" con los productos
+    en texto ("Horchata 500 ml × 5, …") y Editar · Eliminar como texto.
     Cambiar de cliente o de pestaña con algo escrito pregunta (`useConfirmar`); la pestaña se monta con `key` = tipo + cliente.
     Merma de cliente, Cambios y Promoción sin cliente: solo "Elige un cliente arriba." (sin lista). Pasar Merma a Almacén
     descarta "Le entregué" (preguntando si había algo). Descuentos precarga al cambiar vendedor o día; "Otro día" sin cambiar la

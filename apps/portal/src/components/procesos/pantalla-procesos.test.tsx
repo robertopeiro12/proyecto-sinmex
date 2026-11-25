@@ -143,18 +143,31 @@ describe("PantallaProcesos", () => {
     expect(await screen.findByText("Elige un cliente arriba.")).toBeInTheDocument();
   });
 
-  it("la tarjeta del cliente muestra sus pastillas", async () => {
+  it("el cliente elegido: una sola línea de texto, sin pastillas", async () => {
     mockAuth(TODOS);
     const u = userEvent.setup();
     render(<PantallaProcesos sucursal={null} />);
     await elegirCliente(u, "maris", /Mariscos Bucanero/);
-    expect(await screen.findByText("$1,240.00", { exact: false })).toBeInTheDocument();
-    const deuda = screen.getByText(/Debe/).closest("[data-tono]");
-    expect(deuda).toHaveAttribute("data-tono", "advertencia");
-    expect(deuda).toHaveTextContent("Debe $1,240.00 en 3 notas");
-    expect(screen.getByText(/Crédito/).closest("[data-tono]")).toHaveTextContent("Crédito 15 días");
-    expect(screen.getByText(/compra 10, lleva 1/)).toBeInTheDocument();
-    expect(screen.getByText(/Última compra/).closest("[data-tono]")).toHaveTextContent("Última compra domingo 22 de noviembre");
+    const linea = (await screen.findByText(/Última compra/)).closest("p")!;
+    expect(linea).toHaveTextContent("Crédito 15 días · Debe $1,240.00 en 3 notas · Última compra dom 22 nov · 1 promoción");
+    expect(within(linea).getByText("Debe $1,240.00")).toHaveClass("text-warning");
+    expect(linea.querySelector("[data-tono]")).toBeNull();
+    // El nombre va dentro del campo, con ✕ para quitarlo.
+    expect(screen.getByRole("button", { name: "Quitar cliente" })).toBeInTheDocument();
+    await u.hover(within(linea).getByRole("button", { name: "1 promoción" }));
+    expect(await screen.findByText("compra 10, lleva 1")).toBeInTheDocument();
+  });
+
+  it("sin deuda ni promociones no las menciona; un prospecto empieza con Prospecto", async () => {
+    mockAuth(TODOS);
+    const u = userEvent.setup();
+    vi.mocked(procesosLib.resumenCliente).mockResolvedValue(
+      resumen("c2", "Tienda Lupita", { tipo: "prospecto", diasCredito: null, deudaCentavos: 0, notasConSaldo: 0, promociones: [], ultimaCompra: null }),
+    );
+    render(<PantallaProcesos sucursal={null} />);
+    await elegirCliente(u, "lupi", /Tienda Lupita/);
+    const linea = (await screen.findByText(/Contado/)).closest("p")!;
+    expect(linea).toHaveTextContent(/^Prospecto · Contado$/);
   });
 
   it("sin cliente: Merma de cliente, Cambios y Promoción piden uno; Consumos y Merma de almacén capturan", async () => {
@@ -165,7 +178,7 @@ describe("PantallaProcesos", () => {
     // Merma de cliente sin cliente: solo el aviso, sin la lista de toda la sucursal.
     expect(screen.queryByRole("heading", { name: /Mermas/ })).toBeNull();
     expect(procesosLib.listarProcesos).not.toHaveBeenCalled();
-    await u.click(screen.getByRole("radio", { name: "Almacén" }));
+    await u.click(screen.getByRole("radio", { name: "De almacén" }));
     expect(screen.queryByText("Elige un cliente arriba.")).toBeNull();
     expect(screen.getByRole("button", { name: "Agregar producto a Productos dañados" })).toBeInTheDocument();
     expect(screen.queryByText("Le entregué")).toBeNull();
@@ -191,15 +204,16 @@ describe("PantallaProcesos", () => {
     await waitFor(() =>
       expect(procesosLib.listarProcesos).toHaveBeenLastCalledWith({ tipo: "merma", fecha: HOY, sucursal: "TJ", cliente: "c1" }),
     );
-    await u.selectOptions(screen.getByLabelText("¿Quién la recogió?"), "Ricardo");
+    await u.selectOptions(screen.getByLabelText("Recogió"), "Ricardo");
     expect(screen.queryByRole("option", { name: "Baja" })).toBeNull();
     await agregar(u, "Recibí dañado", "horch", "Horchata 500 ml", "5");
     await agregar(u, "Le entregué", "jam", "Jamaica 500 ml", "3");
-    expect(screen.getByText("Recibió 5 y llevas 3 entregadas — faltan 2.")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Recibió 5 · entregó 3 — faltan 2");
     expect(screen.getByRole("button", { name: "Guardar merma" })).toBeDisabled();
 
     await agregar(u, "Le entregué", "horch", "Horchata 1 L", "2");
-    expect(screen.getByText("✓ Cuadra: recibió 5 y se le entregaron 5.")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Recibió 5 · entregó 5 ✓");
+    expect(screen.queryByRole("button", { name: "Limpiar" })).toBeNull();
     await u.type(screen.getByRole("textbox", { name: "Comentario" }), "  venían rotas ");
     await u.click(screen.getByRole("button", { name: "Guardar merma" }));
     expect(procesosLib.crearProceso).toHaveBeenCalledWith({
@@ -252,23 +266,26 @@ describe("PantallaProcesos", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("La fecha no puede ser posterior a hoy.");
   });
 
-  it("la lista pinta pastillas; Editar carga el registro y Cancelar lo suelta", async () => {
+  it("la lista pinta los productos en texto; Editar carga el registro y Cancelar lo suelta", async () => {
     mockAuth(TODOS);
     const u = userEvent.setup();
     vi.mocked(procesosLib.listarProcesos).mockResolvedValue(delDia([proceso({ comentario: "rotas" })]));
     vi.mocked(procesosLib.editarProceso).mockResolvedValue(proceso());
     render(<PantallaProcesos sucursal={null} />);
     await elegirCliente(u, "maris", /Mariscos Bucanero/);
+    expect(await screen.findByRole("heading", { name: "Mermas de hoy" })).toBeInTheDocument();
+    expect(screen.getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Hora", "Recogió", "Recibido", "Entregado", "Capturó", "Acciones"]);
     const fila = within(await screen.findByRole("row", { name: /08:15/ }));
-    expect(fila.getByText("Horchata 500 ml · 5").closest("[data-tono]")).toHaveAttribute("data-tono", "error");
-    expect(fila.getByText("Jamaica 500 ml · 5").closest("[data-tono]")).toHaveAttribute("data-tono", "exito");
+    expect(fila.getByText("Horchata 500 ml × 5")).toBeInTheDocument();
+    expect(fila.getByText("Jamaica 500 ml × 5")).toBeInTheDocument();
+    expect(fila.queryAllByText(/×/).every((e) => !e.closest("[data-tono]"))).toBe(true);
     expect(fila.getByText("Ricardo")).toBeInTheDocument();
 
     await u.click(fila.getByRole("button", { name: "Editar" }));
     expect(screen.getByRole("textbox", { name: "Piezas de Horchata 500 ml en Recibí dañado" })).toHaveValue("5");
     expect(screen.getByRole("textbox", { name: "Piezas de Jamaica 500 ml en Le entregué" })).toHaveValue("5");
     expect(screen.getByRole("textbox", { name: "Comentario" })).toHaveValue("rotas");
-    expect(screen.getByLabelText("¿Quién la recogió?")).toHaveValue("v1");
+    expect(screen.getByLabelText("Recogió")).toHaveValue("v1");
     expect(screen.getByRole("button", { name: "Guardar cambios" })).toBeEnabled();
 
     await u.click(screen.getByRole("button", { name: "Cancelar" }));
@@ -312,10 +329,11 @@ describe("PantallaProcesos", () => {
       delDia([proceso({ id: "a1", hora: "09:00", mermaDe: "almacen", cliente: null, vendedor: null, lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", sentido: "recibido", piezas: 2 }] })]),
     );
     render(<PantallaProcesos sucursal={null} />);
-    await u.click(screen.getByRole("radio", { name: "Almacén" }));
+    await u.click(screen.getByRole("radio", { name: "De almacén" }));
     const fila = within(await screen.findByRole("row", { name: /09:00/ }));
-    expect(fila.getByText("Almacén")).toBeInTheDocument();
-    expect(fila.getByText("Oficina")).toBeInTheDocument();
+    expect(fila.getByText("Almacén")).not.toHaveAttribute("data-tono");
+    expect(fila.getByText("Oficina")).not.toHaveAttribute("data-tono");
+    expect(fila.getByText("Horchata 1 L × 2")).toBeInTheDocument();
     expect(procesosLib.listarProcesos).toHaveBeenLastCalledWith({ tipo: "merma", fecha: HOY, sucursal: "TJ" });
   });
 
@@ -326,12 +344,12 @@ describe("PantallaProcesos", () => {
     await elegirCliente(u, "maris", /Mariscos Bucanero/);
     await agregar(u, "Recibí dañado", "horch", "Horchata 500 ml", "5");
 
-    await u.click(screen.getByRole("button", { name: "Cambiar" }));
+    await u.click(screen.getByRole("button", { name: "Quitar cliente" }));
     const ventana = await screen.findByRole("alertdialog");
     await u.click(within(ventana).getByRole("button", { name: "Cancelar" }));
     expect(screen.getByRole("textbox", { name: "Piezas de Horchata 500 ml en Recibí dañado" })).toHaveValue("5");
 
-    await u.click(screen.getByRole("button", { name: "Cambiar" }));
+    await u.click(screen.getByRole("button", { name: "Quitar cliente" }));
     await u.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Descartar" }));
     await elegirCliente(u, "lupi", /Tienda Lupita/);
     expect(screen.queryByRole("textbox", { name: /Piezas de/ })).toBeNull();
@@ -410,17 +428,17 @@ describe("PantallaProcesos", () => {
     await agregar(u, "Recibí dañado", "horch", "Horchata 500 ml", "5");
     await agregar(u, "Le entregué", "jam", "Jamaica 500 ml", "5");
 
-    await u.click(screen.getByRole("radio", { name: "Almacén" }));
+    await u.click(screen.getByRole("radio", { name: "De almacén" }));
     await u.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Cancelar" }));
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
-    expect(screen.getByRole("radio", { name: "Este cliente" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "De este cliente" })).toBeChecked();
     expect(screen.getByRole("textbox", { name: "Piezas de Jamaica 500 ml en Le entregué" })).toHaveValue("5");
 
-    await u.click(screen.getByRole("radio", { name: "Almacén" }));
+    await u.click(screen.getByRole("radio", { name: "De almacén" }));
     await u.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Descartar" }));
-    expect(await screen.findByRole("radio", { name: "Almacén" })).toBeChecked();
+    expect(await screen.findByRole("radio", { name: "De almacén" })).toBeChecked();
     expect(screen.getByRole("textbox", { name: "Piezas de Horchata 500 ml en Productos dañados" })).toHaveValue("5");
-    await u.click(screen.getByRole("radio", { name: "Este cliente" }));
+    await u.click(screen.getByRole("radio", { name: "De este cliente" }));
     expect(screen.queryByRole("textbox", { name: /en Le entregué/ })).toBeNull();
   });
 
@@ -430,9 +448,9 @@ describe("PantallaProcesos", () => {
     render(<PantallaProcesos sucursal={null} />);
     await elegirCliente(u, "maris", /Mariscos Bucanero/);
     await agregar(u, "Recibí dañado", "horch", "Horchata 500 ml", "5");
-    await u.click(screen.getByRole("radio", { name: "Almacén" }));
+    await u.click(screen.getByRole("radio", { name: "De almacén" }));
     expect(screen.queryByRole("alertdialog")).toBeNull();
-    expect(screen.getByRole("radio", { name: "Almacén" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "De almacén" })).toBeChecked();
   });
 
   it("Descuentos: picar Otro día sin cambiar la fecha no vuelve a precargar ni borra lo corregido", async () => {

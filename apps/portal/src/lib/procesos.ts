@@ -163,7 +163,7 @@ export function resumenCliente(id: string): Promise<ResumenCliente> {
 }
 
 /**
- * La barra de cuadre de Merma de cliente y Cambios (R4): el total entregado tiene que ser
+ * El cuadre de Merma de cliente y Cambios (R4), el texto corto junto a Guardar: el total entregado tiene que ser
  * igual al total recibido, de cualquier producto y tamaño. El servidor aplica la misma regla.
  */
 export function cuadre(lineas: readonly { sentido: SentidoProceso; piezas: number }[]): {
@@ -179,9 +179,9 @@ export function cuadre(lineas: readonly { sentido: SentidoProceso; piezas: numbe
     else entregado += l.piezas;
   }
   if (recibido === entregado) {
-    return { recibido, entregado, cuadra: true, texto: `✓ Cuadra: recibió ${recibido} y se le entregaron ${entregado}.` };
+    return { recibido, entregado, cuadra: true, texto: `Recibió ${recibido} · entregó ${entregado} ✓` };
   }
   const diferencia = Math.abs(recibido - entregado);
   const cola = entregado < recibido ? `faltan ${diferencia}` : `sobran ${diferencia}`;
-  return { recibido, entregado, cuadra: false, texto: `Recibió ${recibido} y llevas ${entregado} entregadas — ${cola}.` };
+  return { recibido, entregado, cuadra: false, texto: `Recibió ${recibido} · entregó ${entregado} — ${cola}` };
 }

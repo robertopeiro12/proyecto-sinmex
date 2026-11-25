@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight } from "lucide-react";
 import { Aviso } from "@/components/ui/aviso";
 import { Button } from "@/components/ui/button";
 import { useConfirmar } from "@/components/ui/confirmar";
-import { Campo, Entrada, Lista } from "@/components/ui/campo";
+import { Entrada, Lista } from "@/components/ui/campo";
 import { SelectorSegmentado } from "@/components/ui/selector-segmentado";
 import { mensajeDe } from "@/lib/api";
 import { formatearDiaLargo } from "@/lib/formato";
@@ -31,10 +30,10 @@ import { CajaProductos, piezasValidas, type OpcionPresentacion, type RenglonCaja
 export const QUIEN_OFICINA = "oficina";
 
 const ETIQUETA_QUIEN: Record<TipoProceso, string> = {
-  merma: "¿Quién la recogió?",
-  cambio: "¿Quién?",
-  consumo: "¿Quién?",
-  promocion: "¿Quién?",
+  merma: "Recogió",
+  cambio: "Quién",
+  consumo: "Quién",
+  promocion: "Quién",
   descuento: "Vendedor",
 };
 
@@ -60,9 +59,10 @@ function renglonDe(linea: { presentacionId: string; nombre: string; piezas: numb
 export type ModoFecha = "hoy" | "otro";
 
 /**
- * La captura de una pestaña de Procesos (D1): fila de opciones, las cajas de productos,
- * la barra de cuadre (Merma de cliente y Cambios), comentario, Limpiar y Guardar. Con
- * `editando`, carga ese registro y guarda con "Guardar cambios" / "Cancelar". Quien la
+ * La captura de una pestaña de Procesos (D1, boceto 2): una fila compacta de opciones, las
+ * cajas de productos (dos tablas lado a lado en Merma de cliente y Cambios) y una fila con
+ * comentario, el cuadre en texto corto y Guardar. Con `editando`, carga ese registro y guarda
+ * con "Guardar cambios" / "Cancelar" (Cancelar es la forma de soltarlo; no hay "Limpiar"). Quien la
  * monta le pone `key` por registro: lo escrito vive aquí y se pierde al cambiar de key.
  */
 export function CapturaProceso({
@@ -245,14 +245,6 @@ export function CapturaProceso({
     fecha !== "" &&
     fecha <= hoy;
 
-  function limpiar() {
-    setRecibido([]);
-    setEntregado([]);
-    setComentario("");
-    setError(null);
-    setAvisoPrecarga(null);
-  }
-
   async function guardar() {
     setGuardando(true);
     setError(null);
@@ -281,52 +273,50 @@ export function CapturaProceso({
       ? [...activos, { id: editando.vendedor.id, nombre: editando.vendedor.nombre }]
       : activos;
 
+  const quienId = `quien-${tipo}`;
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-start gap-6">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
         {tipo === "merma" && (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[13px] font-semibold">Merma de</span>
-            <SelectorSegmentado
-              etiqueta="Merma de"
-              resaltado
-              valor={mermaDe}
-              onCambio={(m) => void cambiarMermaDe(m)}
-              opciones={[
-                { valor: "cliente", texto: "Este cliente" },
-                { valor: "almacen", texto: "Almacén" },
-              ]}
-            />
-          </div>
+          <SelectorSegmentado
+            etiqueta="Merma de"
+            resaltado
+            valor={mermaDe}
+            onCambio={(m) => void cambiarMermaDe(m)}
+            opciones={[
+              { valor: "cliente", texto: "De este cliente" },
+              { valor: "almacen", texto: "De almacén" },
+            ]}
+          />
         )}
-        <div className="flex flex-col gap-1.5">
-          <span className="text-[13px] font-semibold">Fecha</span>
-          <div className="flex items-center gap-2">
-            <SelectorSegmentado<ModoFecha>
-              etiqueta="Fecha"
-              resaltado
-              valor={modoFecha}
-              onCambio={(m) => void cambiarFecha(m === "hoy" ? hoy : fecha, m)}
-              opciones={[
-                { valor: "hoy", texto: `Hoy · ${formatearDiaLargo(hoy)}` },
-                { valor: "otro", texto: "Otro día" },
-              ]}
+        <div className="flex items-center gap-2">
+          <SelectorSegmentado<ModoFecha>
+            etiqueta="Fecha"
+            valor={modoFecha}
+            onCambio={(m) => void cambiarFecha(m === "hoy" ? hoy : fecha, m)}
+            opciones={[
+              { valor: "hoy", texto: `Hoy · ${formatearDiaLargo(hoy)}` },
+              { valor: "otro", texto: "Otro día" },
+            ]}
+          />
+          {modoFecha === "otro" && (
+            <Entrada
+              type="date"
+              aria-label="Día"
+              required
+              max={hoy}
+              value={fecha}
+              onChange={(e) => void cambiarFecha(e.target.value, "otro")}
+              className="w-40"
             />
-            {modoFecha === "otro" && (
-              <Entrada
-                type="date"
-                aria-label="Día"
-                required
-                max={hoy}
-                value={fecha}
-                onChange={(e) => void cambiarFecha(e.target.value, "otro")}
-                className="w-40"
-              />
-            )}
-          </div>
+          )}
         </div>
-        <Campo id={`quien-${tipo}`} etiqueta={ETIQUETA_QUIEN[tipo]} className="w-56">
-          <Lista value={quien} onChange={(e) => void cambiarQuien(e.target.value)}>
+        <div className="flex items-center gap-2">
+          <label htmlFor={quienId} className="text-sm text-muted-foreground">
+            {ETIQUETA_QUIEN[tipo]}
+          </label>
+          <Lista id={quienId} value={quien} onChange={(e) => void cambiarQuien(e.target.value)} className="w-40">
             {tipo === "descuento" ? <option value="">Elige un vendedor…</option> : <option value={QUIEN_OFICINA}>Oficina</option>}
             {opcionesQuien.map((v) => (
               <option key={v.id} value={v.id}>
@@ -334,7 +324,7 @@ export function CapturaProceso({
               </option>
             ))}
           </Lista>
-        </Campo>
+        </div>
       </div>
 
       {avisoQuien && <Aviso tono="informacion">{avisoQuien}</Aviso>}
@@ -351,68 +341,49 @@ export function CapturaProceso({
         <>
           {avisoPrecarga && <Aviso tono="advertencia">{avisoPrecarga}</Aviso>}
           {dosCajas ? (
-            <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-4">
-              <CajaProductos titulo={titulos.recibido!} tono="recibido" renglones={recibido} opciones={opciones} onCambio={setRecibido} disabled={guardando} />
-              <ArrowRight aria-hidden className="mt-16 size-5 text-muted-foreground" />
-              <CajaProductos titulo={titulos.entregado!} tono="entregado" renglones={entregado} opciones={opciones} onCambio={setEntregado} disabled={guardando} />
+            <div className="grid grid-cols-2 items-start gap-6">
+              <CajaProductos titulo={titulos.recibido!} renglones={recibido} opciones={opciones} onCambio={setRecibido} disabled={guardando} />
+              <CajaProductos titulo={titulos.entregado!} renglones={entregado} opciones={opciones} onCambio={setEntregado} disabled={guardando} />
             </div>
           ) : titulos.recibido ? (
             <div className="max-w-xl">
-              <CajaProductos titulo={titulos.recibido} tono="recibido" renglones={recibido} opciones={opciones} onCambio={setRecibido} disabled={guardando} />
+              <CajaProductos titulo={titulos.recibido} renglones={recibido} opciones={opciones} onCambio={setRecibido} disabled={guardando} />
             </div>
           ) : (
             <div className="max-w-xl">
-              <CajaProductos titulo={titulos.entregado!} tono="neutro" renglones={entregado} opciones={opciones} onCambio={setEntregado} disabled={guardando || precargando} />
+              <CajaProductos titulo={titulos.entregado!} renglones={entregado} opciones={opciones} onCambio={setEntregado} disabled={guardando || precargando} />
             </div>
           )}
 
-          {dosCajas && barra.recibido + barra.entregado > 0 && <BarraCuadre texto={barra.texto} cuadra={barra.cuadra} recibido={barra.recibido} entregado={barra.entregado} />}
           {hayMalEscritas && <Aviso tono="error">Las piezas son números enteros de 1 a 100000.</Aviso>}
           {error && <Aviso tono="error">{error}</Aviso>}
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <Entrada
               aria-label="Comentario"
               placeholder="Comentario (opcional)"
               maxLength={MAX_COMENTARIO_PROCESO}
               value={comentario}
               onChange={(e) => setComentario(e.target.value)}
-              className="min-w-0 flex-1"
+              className="h-10 min-w-0 flex-1"
             />
-            {editando ? (
-              <Button type="button" variant="outline" onClick={onCancelar} disabled={guardando}>
+            {dosCajas && barra.recibido + barra.entregado > 0 && (
+              <p role="status" className={cn("shrink-0 text-sm font-semibold whitespace-nowrap", barra.cuadra ? "text-success" : "text-warning")}>
+                {barra.texto}
+              </p>
+            )}
+            {editando && (
+              <Button type="button" variant="outline" className="h-10 px-4" onClick={onCancelar} disabled={guardando}>
                 Cancelar
               </Button>
-            ) : (
-              <Button type="button" variant="outline" onClick={limpiar} disabled={guardando}>
-                Limpiar
-              </Button>
             )}
-            <Button type="button" disabled={!puedeGuardar} onClick={() => void guardar()}>
+            <Button type="button" className="h-10 px-5 font-semibold" disabled={!puedeGuardar} onClick={() => void guardar()}>
               {guardando ? "Guardando…" : editando ? "Guardar cambios" : info.guardar}
             </Button>
           </div>
         </>
       )}
       {ventana}
-    </div>
-  );
-}
-
-function BarraCuadre({ texto, cuadra, recibido, entregado }: { texto: string; cuadra: boolean; recibido: number; entregado: number }) {
-  const avance = recibido === 0 ? 1 : Math.min(entregado / recibido, 1);
-  return (
-    <div
-      role="status"
-      className={cn(
-        "flex items-center gap-4 rounded-[10px] px-4 py-3 text-sm",
-        cuadra ? "bg-success-soft text-success" : "bg-warning-soft text-warning",
-      )}
-    >
-      <span className="min-w-0 flex-1 font-medium">{texto}</span>
-      <span aria-hidden className="h-1.5 w-48 shrink-0 overflow-hidden rounded-full bg-background">
-        <span className="block h-full rounded-full bg-current" style={{ width: `${Math.round(avance * 100)}%` }} />
-      </span>
     </div>
   );
 }

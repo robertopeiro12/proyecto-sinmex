@@ -30,33 +30,20 @@ export const piezasValidas = (texto: string) => {
   return ENTERO.test(t) && Number(t) >= 1 && Number(t) <= MAX_PIEZAS_PROCESO;
 };
 
-/** Suma de las piezas válidas (lo que no es número no suma). */
-export const totalCaja = (renglones: readonly RenglonCaja[]) =>
-  renglones.reduce((s, r) => s + (piezasValidas(r.piezas) ? Number(r.piezas.trim()) : 0), 0);
-
-export type TonoCaja = "recibido" | "entregado" | "neutro";
-
-const ENCABEZADO: Record<TonoCaja, string> = {
-  recibido: "bg-destructive-soft text-destructive",
-  entregado: "bg-success-soft text-success",
-  neutro: "bg-menu text-foreground",
-};
-
 /**
- * Una caja de la captura (D1): renglones producto · tamaño · piezas · ✕ en el orden en que
- * se agregaron, y "+ Agregar producto" con un buscador de presentaciones activas. Una
+ * Una caja de la captura (D1, boceto 2): una tabla sencilla con el título de la caja y
+ * "Piezas" de encabezado, renglones producto · piezas · ✕ en el orden en que se agregaron, y
+ * "+ Agregar producto" con un buscador de presentaciones activas. Sin fondos de color. Una
  * presentación va una sola vez por caja.
  */
 export function CajaProductos({
   titulo,
-  tono,
   renglones,
   opciones,
   onCambio,
   disabled = false,
 }: {
   titulo: string;
-  tono: TonoCaja;
   renglones: RenglonCaja[];
   opciones: OpcionPresentacion[];
   onCambio: (renglones: RenglonCaja[]) => void;
@@ -77,28 +64,30 @@ export function CajaProductos({
     setBuscando(false);
   }
 
-  const total = totalCaja(renglones);
+  const COLUMNAS = "grid grid-cols-[minmax(0,1fr)_5rem_1.75rem] items-center gap-3 px-4";
 
   return (
     <section aria-label={titulo} className="flex min-w-0 flex-col overflow-hidden rounded-[10px] border">
-      <header className={cn("flex items-center justify-between px-4 py-2.5 text-sm font-semibold", ENCABEZADO[tono])}>
-        <span>{titulo}</span>
-        <span>{total} pz</span>
+      <header className={cn(COLUMNAS, "border-b py-2.5 text-[13px] font-semibold text-muted-foreground")}>
+        <span className="truncate">{titulo}</span>
+        <span className="text-right">Piezas</span>
+        <span />
       </header>
       <ul className="flex flex-col">
         {renglones.map((r) => {
           const invalido = r.piezas.trim() !== "" && !piezasValidas(r.piezas);
           return (
-            <li key={r.presentacionId} className="flex items-center gap-3 border-b px-4 py-2 text-sm">
-              <span className="min-w-0 flex-1 truncate">{r.producto}</span>
-              <span className="w-16 shrink-0 text-right text-muted-foreground">{r.volumen}</span>
+            <li key={r.presentacionId} className={cn(COLUMNAS, "border-b py-2 text-sm")}>
+              <span className="min-w-0 truncate" title={r.nombre}>
+                {r.nombre}
+              </span>
               <Entrada
                 type="text"
                 inputMode="numeric"
                 aria-label={`Piezas de ${r.nombre} en ${titulo}`}
                 aria-invalid={invalido || undefined}
                 disabled={disabled}
-                className="w-20 shrink-0 bg-warning-soft/40 text-right"
+                className="w-20 text-right"
                 value={r.piezas}
                 onChange={(e) =>
                   onCambio(renglones.map((x) => (x.presentacionId === r.presentacionId ? { ...x, piezas: e.target.value } : x)))
@@ -109,7 +98,7 @@ export function CajaProductos({
                 aria-label={`Quitar ${r.nombre} de ${titulo}`}
                 disabled={disabled}
                 onClick={() => onCambio(renglones.filter((x) => x.presentacionId !== r.presentacionId))}
-                className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="grid size-7 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
               >
                 <X aria-hidden className="size-4" />
               </button>
