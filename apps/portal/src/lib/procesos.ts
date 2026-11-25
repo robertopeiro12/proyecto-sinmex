@@ -102,6 +102,8 @@ export interface ResumenCliente {
   /** AAAA-MM-DD o null. */
   ultimaCompra: string | null;
   promociones: string[];
+  /** Saldo a favor del cliente (Procesos PR B: "A favor $X"). */
+  saldoFavorCentavos: number;
 }
 
 export interface LineaDatosProceso {

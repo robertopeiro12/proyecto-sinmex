@@ -1,11 +1,12 @@
-import { PantallaPromociones } from "@/components/promociones/pantalla-promociones";
+import { redirect } from "next/navigation";
 
-// Server component delgado (mismo patrón que /operacion/ruta-diaria).
+// Promociones pasó a Catálogo (es configuración, como Listas de Precios): la dirección vieja lleva ahí y conserva la
+// sucursal.
 export default async function Page({
   searchParams,
 }: {
   searchParams: Promise<{ sucursal?: string }>;
 }) {
   const { sucursal } = await searchParams;
-  return <PantallaPromociones sucursal={sucursal ?? null} />;
+  redirect(sucursal ? `/catalogo/promociones?${new URLSearchParams({ sucursal }).toString()}` : "/catalogo/promociones");
 }

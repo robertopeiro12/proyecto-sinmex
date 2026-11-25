@@ -10,7 +10,9 @@ import * as productosLib from "@/lib/productos";
 import * as vendedoresLib from "@/lib/vendedores";
 import { diaAnterior } from "@/lib/fechas";
 import { formatearDiaLargo } from "@/lib/formato";
-import { hoyEnTijuana } from "@/lib/ventas";
+import * as ventasLib from "@/lib/ventas";
+import * as cobranzasLib from "@/lib/cobranzas";
+import { hoyEnTijuana, type VentaDetalle, type VentaEncontrada } from "@/lib/ventas";
 import { PantallaProcesos } from "./pantalla-procesos";
 
 vi.mock("@/components/auth/auth-provider");
@@ -26,9 +28,24 @@ vi.mock("@/lib/procesos", async (importOriginal) => {
     resumenCliente: vi.fn(),
   };
 });
-vi.mock("@/lib/clientes", () => ({ listarClientes: vi.fn() }));
+vi.mock("@/lib/clientes", () => ({ listarClientes: vi.fn(), obtenerCliente: vi.fn() }));
 vi.mock("@/lib/vendedores", () => ({ listarVendedores: vi.fn() }));
 vi.mock("@/lib/productos", () => ({ listarProductos: vi.fn() }));
+vi.mock("@/lib/ventas", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/ventas")>();
+  return {
+    ...real,
+    buscarVentas: vi.fn(),
+    obtenerVenta: vi.fn(),
+    listarRepartidores: vi.fn(),
+    obtenerCatalogoVenta: vi.fn(),
+    registrarVenta: vi.fn(),
+  };
+});
+vi.mock("@/lib/cobranzas", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/cobranzas")>();
+  return { ...real, porCobrarDeCliente: vi.fn(), vistaPreviaCobro: vi.fn(), registrarCobro: vi.fn() };
+});
 
 const HOY = hoyEnTijuana();
 const TODOS = ["proceso.merma", "proceso.cambio", "proceso.consumo", "proceso.promocion", "proceso.descuento"];
@@ -68,6 +85,7 @@ const resumen = (id: string, nombre: string, m: Partial<ResumenCliente> = {}): R
   notasConSaldo: 3,
   ultimaCompra: "2026-11-22",
   promociones: ["compra 10, lleva 1"],
+  saldoFavorCentavos: 0,
   ...m,
 });
 
@@ -90,6 +108,23 @@ const proceso = (m: Partial<Proceso> = {}): Proceso => ({
 });
 
 const delDia = (procesos: Proceso[]) => ({ fecha: HOY, hoy: HOY, procesos });
+
+/** La única nota con saldo de cada cliente (mismo folio, otro id). */
+const notaDe = (clienteId: string): VentaEncontrada => ({
+  id: clienteId === "c1" ? "v2" : "v2b",
+  folio: "TJ261120RI05",
+  fecha: "2026-11-20",
+  clienteId,
+  cliente: clienteId,
+  repartidor: "Ricardo",
+  vendedorId: "v1",
+  numNota: null,
+  montoCentavos: 70000,
+  status: "abonado",
+  origen: "app",
+  saldoCentavos: 45000,
+  factura: { estado: "N/A", numero: null },
+});
 
 async function elegirCliente(u: ReturnType<typeof userEvent.setup>, texto: string, nombre: RegExp) {
   await u.type(screen.getByPlaceholderText("Escribe el nombre del cliente"), texto);
@@ -114,6 +149,17 @@ describe("PantallaProcesos", () => {
       id === "c1" ? resumen("c1", "Mariscos Bucanero") : resumen("c2", "Tienda Lupita", { deudaCentavos: 0, notasConSaldo: 0, promociones: [] }),
     );
     vi.mocked(clientesLib.listarClientes).mockResolvedValue([cliente("c1", "Mariscos Bucanero"), cliente("c2", "Tienda Lupita")]);
+    vi.mocked(clientesLib.obtenerCliente).mockResolvedValue({ id: "c1", sucursalId: "s" } as Awaited<ReturnType<typeof clientesLib.obtenerCliente>>);
+    vi.mocked(ventasLib.buscarVentas).mockImplementation(async (f) => ({ ventas: f.clienteId ? [notaDe(f.clienteId)] : [], hayMas: false }));
+    vi.mocked(ventasLib.obtenerVenta).mockResolvedValue({ id: "v2", folio: "TJ261120RI05", lineas: [], cobros: [], firma: { esperada: false, nombre: null, subidaEn: null } } as unknown as VentaDetalle);
+    vi.mocked(ventasLib.listarRepartidores).mockResolvedValue([]);
+    vi.mocked(ventasLib.obtenerCatalogoVenta).mockResolvedValue([{ presentacionId: "p1", producto: "Horchata", volumen: "1 L", precioCentavos: 1000 }]);
+    vi.mocked(ventasLib.registrarVenta).mockResolvedValue({ id: "v9", folio: "TJ261125OF01", montoCentavos: 3000, status: "pendiente" });
+    vi.mocked(cobranzasLib.porCobrarDeCliente).mockResolvedValue({
+      id: "c1", nombre: "Mariscos Bucanero", sucursalId: "s", sucursalCodigo: "TJ", saldoFavorCentavos: 0,
+      notas: [{ id: "v2", folio: "TJ261120RI05", numNota: null, fecha: "2026-11-20", clienteId: "c1", cliente: "Mariscos Bucanero", sucursalCodigo: "TJ", montoCentavos: 70000, saldoCentavos: 45000, status: "abonado", abonos: [] }],
+    });
+    vi.mocked(cobranzasLib.vistaPreviaCobro).mockResolvedValue({ aplicaciones: [], saldoFavorCentavos: 0 });
     vi.mocked(vendedoresLib.listarVendedores).mockResolvedValue([
       { id: "v1", nombre: "Ricardo", login: "ricardo", sucursalId: "s", sucursalCodigo: "TJ", folioSegmento: "RI", activo: true },
       { id: "v2", nombre: "Pedro", login: "pedro", sucursalId: "s", sucursalCodigo: "TJ", folioSegmento: "PE", activo: true },
@@ -126,29 +172,157 @@ describe("PantallaProcesos", () => {
     ]);
   });
 
-  it("sin ningún permiso de procesos no hay pantalla", () => {
+  it("sin ningún permiso queda Notas (solo pide sesión) y abre en ella", async () => {
     mockAuth(["otro"]);
     render(<PantallaProcesos sucursal={null} />);
-    expect(screen.getByText("No tienes permiso para ver esta sección.")).toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Notas"]);
+    expect(await screen.findByRole("radio", { name: "Con saldo" })).toBeInTheDocument();
+    expect(vendedoresLib.listarVendedores).not.toHaveBeenCalled();
+  });
+
+  it("Ventas (venta.registrar) y Notas van antes de Merma; abre en la primera", async () => {
+    mockAuth(["venta.registrar", "proceso.merma"]);
+    render(<PantallaProcesos sucursal={null} />);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Ventas", "Notas", "Merma"]);
+    expect(screen.getByRole("tab", { name: "Ventas" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("Elige un cliente arriba.")).toBeInTheDocument();
+  });
+
+  it("la línea del cliente suma A favor $X si tiene saldo a favor", async () => {
+    mockAuth(TODOS);
+    vi.mocked(procesosLib.resumenCliente).mockResolvedValue(resumen("c1", "Mariscos Bucanero", { saldoFavorCentavos: 15000 }));
+    const u = userEvent.setup();
+    render(<PantallaProcesos sucursal={null} />);
+    await elegirCliente(u, "maris", /Mariscos Bucanero/);
+    const linea = (await screen.findByText(/Última compra/)).closest("p")!;
+    expect(linea).toHaveTextContent("Crédito 15 días · Debe $1,240.00 en 3 notas · A favor $150.00 · Última compra dom 22 nov · 1 promoción");
+  });
+
+  it("Review Focus 3: cambiar de cliente limpia casillas y recuadro de cobro (pregunta si hay un cobro a medio capturar)", async () => {
+    mockAuth([...TODOS, "cobranza.registrar"]);
+    const u = userEvent.setup();
+    render(<PantallaProcesos sucursal={null} />);
+    await elegirCliente(u, "maris", /Mariscos Bucanero/);
+    await u.click(await screen.findByRole("checkbox", { name: "Marcar TJ261120RI05" }));
+    await u.click(screen.getByRole("button", { name: "Cobrar 1 nota…" }));
+    const recuadro = await screen.findByRole("region", { name: "Cobrar 1 nota" });
+    await u.type(within(recuadro).getByLabelText("Monto"), "100");
+
+    await u.click(screen.getByRole("button", { name: "Quitar cliente" }));
+    const pregunta = await screen.findByRole("alertdialog");
+    await u.click(within(pregunta).getByRole("button", { name: "Cancelar" }));
+    expect(screen.getByRole("region", { name: "Cobrar 1 nota" })).toBeInTheDocument();
+
+    await u.click(screen.getByRole("button", { name: "Quitar cliente" }));
+    await u.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Descartar" }));
+    await elegirCliente(u, "lupi", /Tienda Lupita/);
+    await waitFor(() =>
+      expect(ventasLib.buscarVentas).toHaveBeenLastCalledWith({ sucursal: "TJ", clienteId: "c2", filtro: "con_saldo" }),
+    );
+    expect(screen.queryByRole("region", { name: "Cobrar 1 nota" })).toBeNull();
+    expect(await screen.findByRole("checkbox", { name: "Marcar TJ261120RI05" })).not.toBeChecked();
+    expect(screen.queryByRole("region", { name: "Notas marcadas" })).toBeNull();
+  });
+
+  it("Review Focus 2: con clienteInicial y notaInicial abre en Notas con ese cliente y esa nota palomeada", async () => {
+    mockAuth(TODOS);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="notas" clienteInicial="c1" notaInicial="v2" />);
+    expect(await screen.findByRole("checkbox", { name: "Marcar TJ261120RI05" })).toBeChecked();
+    expect(screen.getByRole("tab", { name: "Notas" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: "Quitar cliente" })).toBeInTheDocument();
+    expect(ventasLib.buscarVentas).toHaveBeenCalledWith({ sucursal: "TJ", clienteId: "c1", filtro: "con_saldo" });
+  });
+
+  it("URL hostil: una pestaña desconocida abre en la primera permitida", async () => {
+    mockAuth(["venta.registrar", "proceso.merma"]);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="<script>" />);
+    expect(screen.getByRole("tab", { name: "Ventas" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("Elige un cliente arriba.")).toBeInTheDocument();
+  });
+
+  it("URL hostil: una pestaña sin permiso también cae a la primera permitida", async () => {
+    mockAuth(["otro"]);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="descuento" />);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Notas"]);
+    expect(screen.getByRole("tab", { name: "Notas" })).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("URL hostil: un cliente que no existe o es de otra sucursal deja la pantalla sin cliente", async () => {
+    mockAuth(TODOS);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="notas" clienteInicial="c-de-mx" notaInicial="v2" />);
+    await waitFor(() => expect(clientesLib.listarClientes).toHaveBeenCalledWith("TJ", "todos"));
+    expect(await screen.findByText("Elige un cliente arriba.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Quitar cliente" })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(procesosLib.resumenCliente).not.toHaveBeenCalled();
+  });
+
+  it("URL hostil: una nota que no es del cliente no palomea nada", async () => {
+    mockAuth([...TODOS, "cobranza.registrar"]);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="notas" clienteInicial="c1" notaInicial="v-de-otro" />);
+    expect(await screen.findByRole("checkbox", { name: "Marcar TJ261120RI05" })).not.toBeChecked();
+    expect(screen.queryByRole("region", { name: "Notas marcadas" })).toBeNull();
+    // La nota ajena no está en la lista: la selección se suelta y "Marcar todas" sigue vacía.
+    expect(screen.getByRole("checkbox", { name: "Marcar todas" })).not.toBeChecked();
+  });
+
+  it("Review Focus 3: cambiar de cliente con el detalle abierto lo cierra sin preguntar", async () => {
+    mockAuth(TODOS);
+    const u = userEvent.setup();
+    render(<PantallaProcesos sucursal={null} />);
+    await elegirCliente(u, "maris", /Mariscos Bucanero/);
+    await u.click(await screen.findByRole("button", { name: "Ver TJ261120RI05" }));
+    expect(await screen.findByRole("button", { name: "← Volver a Notas" })).toBeInTheDocument();
+    await u.click(screen.getByRole("button", { name: "Quitar cliente" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(screen.queryByRole("button", { name: "← Volver a Notas" })).toBeNull();
+    expect(await screen.findByText("Elige un cliente arriba.")).toBeInTheDocument();
+  });
+
+  it("Ventas: tras grabar, Ver en Notas pasa a Notas buscando ese folio", async () => {
+    mockAuth(["venta.registrar"]);
+    const u = userEvent.setup();
+    render(<PantallaProcesos sucursal={null} />);
+    await elegirCliente(u, "maris", /Mariscos Bucanero/);
+    await u.selectOptions(await screen.findByLabelText("Repartidor"), "oficina");
+    await u.type(await screen.findByLabelText("Cantidad de Horchata 1 L"), "3");
+    await u.click(screen.getByRole("button", { name: "Grabar" }));
+    await u.click(await screen.findByRole("button", { name: "Ver en Notas" }));
+    expect(screen.getByRole("tab", { name: "Notas" })).toHaveAttribute("aria-selected", "true");
+    await waitFor(() =>
+      expect(ventasLib.buscarVentas).toHaveBeenLastCalledWith({ sucursal: "TJ", clienteId: "c1", filtro: "todas", folio: "TJ261125OF01" }),
+    );
+    expect(screen.getByPlaceholderText("Folio o # de nota")).toHaveValue("TJ261125OF01");
+    // La línea del cliente se volvió a pedir (la venta cambia su deuda).
+    expect(vi.mocked(procesosLib.resumenCliente).mock.calls.filter(([id]) => id === "c1").length).toBeGreaterThan(1);
+
+    // Revisión T-2 (4): otro cliente abre en Con saldo, sin la búsqueda del anterior.
+    await u.click(screen.getByRole("button", { name: "Quitar cliente" }));
+    await elegirCliente(u, "lupi", /Tienda Lupita/);
+    await waitFor(() =>
+      expect(ventasLib.buscarVentas).toHaveBeenLastCalledWith({ sucursal: "TJ", clienteId: "c2", filtro: "con_saldo" }),
+    );
+    expect(screen.getByPlaceholderText("Folio o # de nota")).toHaveValue("");
+    expect(screen.getByRole("radio", { name: "Con saldo" })).toHaveAttribute("aria-checked", "true");
   });
 
   it("con todas las sucursales pide elegir una", () => {
     mockAuth(TODOS, null);
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="merma" />);
     expect(screen.getByText(/Elige una sucursal/)).toBeInTheDocument();
   });
 
   it("solo salen las pestañas con su permiso", async () => {
     mockAuth(["proceso.consumo", "proceso.merma"]);
-    render(<PantallaProcesos sucursal={null} />);
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Merma", "Consumos"]);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="merma" />);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Notas", "Merma", "Consumos"]);
     expect(await screen.findByText("Elige un cliente arriba.")).toBeInTheDocument();
   });
 
   it("el cliente elegido: una sola línea de texto, sin pastillas", async () => {
     mockAuth(TODOS);
     const u = userEvent.setup();
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="merma" />);
     await elegirCliente(u, "maris", /Mariscos Bucanero/);
     const linea = (await screen.findByText(/Última compra/)).closest("p")!;
     expect(linea).toHaveTextContent("Crédito 15 días · Debe $1,240.00 en 3 notas · Última compra dom 22 nov · 1 promoción");
@@ -166,7 +340,7 @@ describe("PantallaProcesos", () => {
     vi.mocked(procesosLib.resumenCliente).mockResolvedValue(
       resumen("c2", "Tienda Lupita", { tipo: "prospecto", diasCredito: null, deudaCentavos: 0, notasConSaldo: 0, promociones: [], ultimaCompra: null }),
     );
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="merma" />);
     await elegirCliente(u, "lupi", /Tienda Lupita/);
     const linea = (await screen.findByText(/Contado/)).closest("p")!;
     expect(linea).toHaveTextContent(/^Prospecto · Contado$/);
@@ -175,7 +349,7 @@ describe("PantallaProcesos", () => {
   it("sin cliente: Merma de cliente, Cambios y Promoción piden uno; Consumos y Merma de almacén capturan", async () => {
     mockAuth(TODOS);
     const u = userEvent.setup();
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="merma" />);
     expect(await screen.findByText("Elige un cliente arriba.")).toBeInTheDocument();
     // Merma de cliente sin cliente: solo el aviso, sin la lista de toda la sucursal.
     expect(screen.queryByRole("heading", { name: /Mermas/ })).toBeNull();
@@ -201,7 +375,7 @@ describe("PantallaProcesos", () => {
     mockAuth(TODOS);
     const u = userEvent.setup();
     vi.mocked(procesosLib.crearProceso).mockResolvedValue(proceso());
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="merma" />);
     await elegirCliente(u, "maris", /Mariscos Bucanero/);
     await waitFor(() =>
       expect(procesosLib.listarProcesos).toHaveBeenLastCalledWith({ tipo: "merma", fecha: HOY, sucursal: "TJ", cliente: "c1" }),
@@ -241,7 +415,7 @@ describe("PantallaProcesos", () => {
     mockAuth(["proceso.consumo"]);
     const u = userEvent.setup();
     vi.mocked(procesosLib.crearProceso).mockResolvedValue(proceso({ tipo: "consumo" }));
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="consumo" />);
     await agregar(u, "Productos", "jam", "Jamaica 500 ml", "2");
     await u.click(screen.getByRole("button", { name: "Guardar consumo" }));
     expect(procesosLib.crearProceso).toHaveBeenCalledWith({
@@ -262,7 +436,7 @@ describe("PantallaProcesos", () => {
     vi.mocked(procesosLib.crearProceso).mockRejectedValue(
       new ErrorApi("x", 400, "La fecha no puede ser posterior a hoy."),
     );
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="consumo" />);
     await agregar(u, "Productos", "jam", "Jamaica 500 ml", "2");
     await u.click(screen.getByRole("button", { name: "Guardar consumo" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("La fecha no puede ser posterior a hoy.");
@@ -273,7 +447,7 @@ describe("PantallaProcesos", () => {
     const u = userEvent.setup();
     vi.mocked(procesosLib.listarProcesos).mockResolvedValue(delDia([proceso({ comentario: "rotas" })]));
     vi.mocked(procesosLib.editarProceso).mockResolvedValue(proceso());
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="merma" />);
     await elegirCliente(u, "maris", /Mariscos Bucanero/);
     expect(await screen.findByRole("heading", { name: "Mermas de hoy" })).toBeInTheDocument();
     expect(screen.getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Hora", "Recogió", "Recibido", "Entregado", "Capturó", "Acciones"]);
@@ -314,7 +488,7 @@ describe("PantallaProcesos", () => {
     const u = userEvent.setup();
     vi.mocked(procesosLib.listarProcesos).mockResolvedValue(delDia([proceso()]));
     vi.mocked(procesosLib.eliminarProceso).mockResolvedValue();
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="merma" />);
     await elegirCliente(u, "maris", /Mariscos Bucanero/);
     const fila = within(await screen.findByRole("row", { name: /08:15/ }));
     await u.click(fila.getByRole("button", { name: "Eliminar" }));
@@ -330,7 +504,7 @@ describe("PantallaProcesos", () => {
     vi.mocked(procesosLib.listarProcesos).mockResolvedValue(
       delDia([proceso({ id: "a1", hora: "09:00", mermaDe: "almacen", cliente: null, vendedor: null, lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", sentido: "recibido", piezas: 2 }] })]),
     );
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="merma" />);
     await u.click(screen.getByRole("radio", { name: "De almacén" }));
     const fila = within(await screen.findByRole("row", { name: /09:00/ }));
     expect(fila.getByText("Almacén")).not.toHaveAttribute("data-tono");
@@ -342,7 +516,7 @@ describe("PantallaProcesos", () => {
   it("cambiar de cliente pregunta si hay algo escrito y no deja lo del otro cliente (Review Focus 5)", async () => {
     mockAuth(TODOS);
     const u = userEvent.setup();
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="merma" />);
     await elegirCliente(u, "maris", /Mariscos Bucanero/);
     await agregar(u, "Recibí dañado", "horch", "Horchata 500 ml", "5");
 
@@ -363,7 +537,7 @@ describe("PantallaProcesos", () => {
   it("cambiar de pestaña con algo escrito pregunta y limpia", async () => {
     mockAuth(TODOS);
     const u = userEvent.setup();
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="merma" />);
     await u.click(screen.getByRole("tab", { name: "Consumos" }));
     await agregar(u, "Productos", "jam", "Jamaica 500 ml", "2");
     await u.click(screen.getByRole("tab", { name: "Descuentos" }));
@@ -389,7 +563,7 @@ describe("PantallaProcesos", () => {
       lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", piezas: 3 }],
     });
     vi.mocked(procesosLib.crearProceso).mockResolvedValue(proceso({ tipo: "descuento" }));
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="descuento" />);
     const vendedor = await screen.findByLabelText("Vendedor");
     expect(within(vendedor).queryByRole("option", { name: "Oficina" })).toBeNull();
     expect(screen.getByRole("button", { name: "Guardar descuento" })).toBeDisabled();
@@ -416,7 +590,7 @@ describe("PantallaProcesos", () => {
     mockAuth(["proceso.descuento"]);
     const u = userEvent.setup();
     vi.mocked(procesosLib.precargaDescuentos).mockResolvedValue({ corteHecho: false, lineas: [] });
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="descuento" />);
     await u.selectOptions(await screen.findByLabelText("Vendedor"), "Pedro");
     expect(await screen.findByText("Ese día no tiene corte hecho: no hay faltantes que precargar.")).toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /Piezas de/ })).toBeNull();
@@ -425,7 +599,7 @@ describe("PantallaProcesos", () => {
   it("Merma: pasar a Almacén descarta lo de Le entregué, preguntando antes", async () => {
     mockAuth(TODOS);
     const u = userEvent.setup();
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="merma" />);
     await elegirCliente(u, "maris", /Mariscos Bucanero/);
     await agregar(u, "Recibí dañado", "horch", "Horchata 500 ml", "5");
     await agregar(u, "Le entregué", "jam", "Jamaica 500 ml", "5");
@@ -447,7 +621,7 @@ describe("PantallaProcesos", () => {
   it("Merma: pasar a Almacén sin nada en Le entregué no pregunta", async () => {
     mockAuth(TODOS);
     const u = userEvent.setup();
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="merma" />);
     await elegirCliente(u, "maris", /Mariscos Bucanero/);
     await agregar(u, "Recibí dañado", "horch", "Horchata 500 ml", "5");
     await u.click(screen.getByRole("radio", { name: "De almacén" }));
@@ -462,7 +636,7 @@ describe("PantallaProcesos", () => {
       corteHecho: true,
       lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", piezas: 3 }],
     });
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="descuento" />);
     await u.selectOptions(await screen.findByLabelText("Vendedor"), "Pedro");
     const campo = await screen.findByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" });
     await u.clear(campo);
@@ -479,7 +653,7 @@ describe("PantallaProcesos", () => {
     const u = userEvent.setup();
     const AYER = diaAnterior(HOY);
     vi.mocked(procesosLib.crearProceso).mockResolvedValue(proceso({ tipo: "consumo" }));
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="consumo" />);
     const dia = await screen.findByLabelText("Día");
     expect(dia).toHaveAttribute("type", "date");
     expect(dia).toHaveAttribute("max", HOY);
@@ -510,7 +684,7 @@ describe("PantallaProcesos", () => {
       corteHecho: true,
       lineas: [{ presentacionId: vendedor === "v2" ? "p1" : "p3", nombre: vendedor === "v2" ? "Horchata 1 L" : "Jamaica 500 ml", piezas: 3 }],
     }));
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="descuento" />);
     const vendedor = await screen.findByLabelText("Vendedor");
     await u.selectOptions(vendedor, "Pedro");
     const campo = await screen.findByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" });
@@ -538,7 +712,7 @@ describe("PantallaProcesos", () => {
       corteHecho: true,
       lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", piezas: 3 }],
     });
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="descuento" />);
     const vendedor = await screen.findByLabelText("Vendedor");
     await u.selectOptions(vendedor, "Pedro");
     await screen.findByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" });
@@ -557,7 +731,7 @@ describe("PantallaProcesos", () => {
     vi.mocked(procesosLib.precargaDescuentos)
       .mockRejectedValueOnce(new ErrorApi("x", 404, "No existe ese vendedor."))
       .mockResolvedValue({ corteHecho: true, lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", piezas: 3 }] });
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="descuento" />);
     const vendedor = await screen.findByLabelText("Vendedor");
     await u.selectOptions(vendedor, "Pedro");
     expect(await screen.findByRole("alert")).toHaveTextContent("No existe ese vendedor.");
@@ -572,7 +746,7 @@ describe("PantallaProcesos", () => {
     vi.mocked(procesosLib.precargaDescuentos)
       .mockResolvedValueOnce({ corteHecho: true, lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", piezas: 3 }] })
       .mockRejectedValueOnce(new ErrorApi("x", 404, "No existe ese vendedor."));
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="descuento" />);
     const vendedor = await screen.findByLabelText("Vendedor");
     await u.selectOptions(vendedor, "Pedro");
     await screen.findByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" });
@@ -590,7 +764,7 @@ describe("PantallaProcesos", () => {
     vi.mocked(procesosLib.precargaDescuentos)
       .mockResolvedValueOnce({ corteHecho: true, lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", piezas: 3 }] })
       .mockImplementationOnce(() => new Promise((r) => (responder = r)));
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="descuento" />);
     const vendedor = await screen.findByLabelText("Vendedor");
     await u.selectOptions(vendedor, "Pedro");
     await screen.findByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" });
@@ -610,7 +784,7 @@ describe("PantallaProcesos", () => {
     type Precarga = Awaited<ReturnType<typeof procesosLib.precargaDescuentos>>;
     const pendientes: Record<string, (v: Precarga) => void> = {};
     vi.mocked(procesosLib.precargaDescuentos).mockImplementation((v) => new Promise<Precarga>((r) => (pendientes[v] = r)));
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="descuento" />);
     const vendedor = await screen.findByLabelText("Vendedor");
     await u.selectOptions(vendedor, "Pedro");
     await u.selectOptions(vendedor, "Ricardo");
@@ -631,7 +805,7 @@ describe("PantallaProcesos", () => {
       delDia([proceso({ tipo: "descuento", mermaDe: null, cliente: null, vendedor: { id: "v2", nombre: "Pedro" }, lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", sentido: "entregado", piezas: 3 }] })]),
     );
     vi.mocked(procesosLib.precargaDescuentos).mockResolvedValue({ corteHecho: true, lineas: [{ presentacionId: "p1", nombre: "Horchata 1 L", piezas: 3 }] });
-    render(<PantallaProcesos sucursal={null} />);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="descuento" />);
     const vendedor = await screen.findByLabelText("Vendedor");
     await screen.findByRole("table", { name: "Descuentos del día" });
     expect(screen.queryByText(/Ya hay un descuento de/)).toBeNull();

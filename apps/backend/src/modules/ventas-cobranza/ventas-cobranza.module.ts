@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { CarteraClientesModule } from '../cartera-clientes/cartera-clientes.module';
+import { RutasModule } from '../rutas/rutas.module';
 import { CobrosBorradoRepository } from './cobros-borrado.repository';
 import { CobrosBorradoService } from './cobros-borrado.service';
 import { CobrosController } from './cobros.controller';
@@ -36,7 +37,7 @@ import { VentasService } from './ventas.service';
 // T-17: el portal registra ventas por `VentasController`, que entra por el
 // mismo `VentasService` que la tablet.
 @Module({
-  imports: [CarteraClientesModule],
+  imports: [CarteraClientesModule, RutasModule],
   controllers: [
     VentasController,
     FacturasController,

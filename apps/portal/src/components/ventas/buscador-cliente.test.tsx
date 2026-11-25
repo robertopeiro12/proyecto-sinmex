@@ -4,7 +4,11 @@ import userEvent from "@testing-library/user-event";
 import type { ClienteResumen } from "@/lib/clientes";
 import { BuscadorCliente } from "./buscador-cliente";
 
-const cliente = (id: string, nombre: string, m: Partial<ClienteResumen> = {}): ClienteResumen => ({
+const cliente = (
+  id: string,
+  nombre: string,
+  m: Partial<ClienteResumen> = {},
+): ClienteResumen => ({
   id,
   nombre,
   telefono: "",
@@ -27,7 +31,13 @@ function montar(m: Partial<Parameters<typeof BuscadorCliente>[0]> = {}) {
   const u = userEvent.setup();
   const r = render(
     <>
-      <BuscadorCliente clientes={CLIENTES} cliente={null} onElegir={onElegir} onQuitar={onQuitar} {...m} />
+      <BuscadorCliente
+        clientes={CLIENTES}
+        cliente={null}
+        onElegir={onElegir}
+        onQuitar={onQuitar}
+        {...m}
+      />
       <button type="button">Afuera</button>
     </>,
   );
@@ -38,7 +48,12 @@ const nombres = () => screen.getAllByRole("option").map((o) => o.textContent);
 
 describe("BuscadorCliente", () => {
   it("dos buscadores a la vez: cada etiqueta apunta a su propio cuadro", () => {
-    const props = { clientes: [], cliente: null, onElegir: () => {}, onQuitar: () => {} };
+    const props = {
+      clientes: [],
+      cliente: null,
+      onElegir: () => {},
+      onQuitar: () => {},
+    };
     const { container } = render(
       <>
         <BuscadorCliente {...props} />
@@ -57,7 +72,10 @@ describe("BuscadorCliente", () => {
     const { u } = montar();
     expect(screen.queryByRole("listbox")).toBeNull();
     await u.click(screen.getByRole("combobox", { name: "Cliente" }));
-    expect(screen.getByRole("combobox", { name: "Cliente" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("combobox", { name: "Cliente" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
     expect(nombres()).toEqual([
       "Abarrotes Ñoño · TJ",
       "Árbol de Café · TJ · Prospecto",
@@ -73,13 +91,24 @@ describe("BuscadorCliente", () => {
     await u.clear(screen.getByRole("combobox", { name: "Cliente" }));
     await u.type(screen.getByRole("combobox", { name: "Cliente" }), "zzz");
     expect(screen.queryAllByRole("option")).toHaveLength(0);
-    expect(screen.getByText("Ningún cliente con ese nombre.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Ningún cliente con ese nombre."),
+    ).toBeInTheDocument();
   });
 
   it("la lista flota: no empuja lo de abajo", async () => {
     const { u } = montar();
     await u.click(screen.getByRole("combobox", { name: "Cliente" }));
-    expect(screen.getByRole("listbox")).toHaveClass("absolute");
+    expect(screen.getByRole("listbox").style.position).toBe("fixed");
+  });
+
+  it("la lista se monta en el body, fuera del contenedor (una ventana no la recorta)", async () => {
+    const { u, container } = montar();
+    await u.click(screen.getByRole("combobox", { name: "Cliente" }));
+    const lista = screen.getByRole("listbox");
+    expect(container.contains(lista)).toBe(false);
+    expect(lista.parentElement).toBe(document.body);
+    expect(lista.style.position).toBe("fixed");
   });
 
   it("flechas mueven, Enter elige y Escape cierra", async () => {
@@ -91,7 +120,9 @@ describe("BuscadorCliente", () => {
     expect(activa).toHaveAttribute("aria-selected", "true");
     expect(cuadro).toHaveAttribute("aria-activedescendant", activa.id);
     await u.keyboard("{ArrowUp}");
-    expect(screen.getByRole("option", { name: /Abarrotes Ñoño/ })).toHaveAttribute("aria-selected", "true");
+    expect(
+      screen.getByRole("option", { name: /Abarrotes Ñoño/ }),
+    ).toHaveAttribute("aria-selected", "true");
     await u.keyboard("{Escape}");
     expect(screen.queryByRole("listbox")).toBeNull();
     expect(onElegir).not.toHaveBeenCalled();
@@ -115,14 +146,21 @@ describe("BuscadorCliente", () => {
   });
 
   it("ya elegido: el nombre en una línea con elipsis y el botón para quitarlo", async () => {
-    const { u, onQuitar } = montar({ cliente: CLIENTES[2], etiquetaQuitar: "Quitar" });
+    const { u, onQuitar } = montar({
+      cliente: CLIENTES[2],
+      etiquetaQuitar: "Quitar",
+    });
     expect(screen.getByText("Mariscos Bucanero · TJ")).toHaveClass("truncate");
     await u.click(screen.getByRole("button", { name: "Quitar" }));
     expect(onQuitar).toHaveBeenCalled();
   });
 
   it("variante campo: sin etiqueta visible, el elegido dentro del campo con ✕", async () => {
-    const { u, onQuitar } = montar({ cliente: CLIENTES[2], variante: "campo", etiquetaQuitar: "Quitar cliente" });
+    const { u, onQuitar } = montar({
+      cliente: CLIENTES[2],
+      variante: "campo",
+      etiquetaQuitar: "Quitar cliente",
+    });
     const nombre = screen.getByText("Mariscos Bucanero");
     expect(nombre).toHaveClass("truncate");
     expect(screen.getByText("Cliente")).toHaveClass("sr-only");

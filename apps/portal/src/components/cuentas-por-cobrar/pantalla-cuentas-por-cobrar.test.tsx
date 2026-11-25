@@ -111,14 +111,30 @@ describe("PantallaCuentasPorCobrar", () => {
     expect(screen.queryByText("TJ260913AP05")).not.toBeInTheDocument();
   });
 
-  it("con cobranza.registrar, Cobrar enlaza a Cobranza con cliente, nota y sucursal", async () => {
+  it("con cobranza.registrar, Cobrar enlaza a Notas de Procesos con cliente, nota y sucursal", async () => {
     mockAuth(["cuentas_cobrar.ver", "cobranza.registrar"]);
     const u = userEvent.setup();
     render(<PantallaCuentasPorCobrar sucursal="TJ" />);
     await u.click(await screen.findByRole("button", { name: /Cobach XXI/ }));
     expect(screen.getByRole("link", { name: "Cobrar TJ260913AP05" })).toHaveAttribute(
       "href",
-      "/operacion/cobranza?cliente=c1&nota=n1&sucursal=TJ",
+      "/operacion/procesos?pestana=notas&cliente=c1&nota=n1&sucursal=TJ",
+    );
+  });
+
+  it("con la vista en Todas, Cobrar lleva la sucursal del cliente (no se queda en \"Elige una sucursal\")", async () => {
+    mockAuth(["cuentas_cobrar.ver", "cobranza.registrar"]);
+    const u = userEvent.setup();
+    render(<PantallaCuentasPorCobrar sucursal={null} />);
+    await u.click(await screen.findByRole("button", { name: /Cobach XXI/ }));
+    await u.click(screen.getByRole("button", { name: /El Moreno/ }));
+    expect(screen.getByRole("link", { name: "Cobrar TJ260913AP05" })).toHaveAttribute(
+      "href",
+      "/operacion/procesos?pestana=notas&cliente=c1&nota=n1&sucursal=TJ",
+    );
+    expect(screen.getByRole("link", { name: "Cobrar MX261001JP01" })).toHaveAttribute(
+      "href",
+      expect.stringContaining("&sucursal=MX"),
     );
   });
 

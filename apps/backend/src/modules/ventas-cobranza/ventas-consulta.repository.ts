@@ -14,6 +14,12 @@ export interface FiltroBusquedaVentas {
   sucursalCodigo: string | null;
   clienteId: string | null;
   numNota: string | null;
+  /** Folio ya normalizado: coincidencia exacta, ignora `desde`/`hasta`. */
+  folio?: string | null;
+  /** Solo notas con factura `pendiente`. */
+  soloPorFacturar?: boolean;
+  /** Si viene, solo esas ventas (las "con saldo" que decide `NotasRutaRepository`). */
+  ids?: readonly string[] | null;
 }
 
 /** Una fila de la tabla de resultados (§3.1). */
@@ -26,6 +32,10 @@ export interface VentaEncontrada {
   cliente: string;
   /** Nombre del vendedor; `null` = Oficina. */
   repartidor: string | null;
+  /** `null` = Oficina. */
+  vendedorId: string | null;
+  /** Estado de la factura y su número cuando está facturada (T-19). */
+  factura: { estado: string; numero: string | null };
   /** `null` si no hubo nota de papel. */
   numNota: string | null;
   montoCentavos: number;
@@ -107,8 +117,8 @@ export class VentasConsultaRepository {
   constructor(@Inject(DB_CONNECTION) private readonly db: Database) {}
 
   /**
-   * Por fecha descendente y luego folio. `limite` lo fija el servicio (tope + 1,
-   * para saber si hay mas).
+   * Por fecha descendente y luego folio; con `ids` (Con saldo), ascendente.
+   * `limite` lo fija el servicio (tope + 1, para saber si hay mas).
    *
    * El # de nota se compara como lo compara el indice unico de #95
    * (`lower(btrim(...))`): "buscar la 1234" encuentra exactamente la nota que
@@ -118,10 +128,19 @@ export class VentasConsultaRepository {
     filtro: FiltroBusquedaVentas,
     limite: number,
   ): Promise<VentaEncontrada[]> {
-    const condiciones = [
-      sql`vn.deleted_at is null`,
-      sql`vn.fecha between ${filtro.desde}::date and ${filtro.hasta}::date`,
-    ];
+    const condiciones = [sql`vn.deleted_at is null`];
+    if (filtro.folio) condiciones.push(sql`upper(vn.folio) = ${filtro.folio}`);
+    else if (!filtro.ids && !filtro.soloPorFacturar)
+      condiciones.push(
+        sql`vn.fecha between ${filtro.desde}::date and ${filtro.hasta}::date`,
+      );
+    if (filtro.ids)
+      condiciones.push(
+        filtro.ids.length === 0
+          ? sql`false`
+          : sql`vn.id in (${sql.join(filtro.ids.map((i) => sql`${i}::uuid`))})`,
+      );
+    if (filtro.soloPorFacturar) condiciones.push(sql`vn.factura = 'pendiente'`);
     if (filtro.sucursalCodigo !== null)
       condiciones.push(sql`s.codigo = ${filtro.sucursalCodigo}`);
     if (filtro.clienteId !== null)
@@ -131,6 +150,12 @@ export class VentasConsultaRepository {
         sql`lower(btrim(vn.num_nota)) = lower(btrim(${filtro.numNota}))`,
       );
 
+    // Con `ids` (el filtro Con saldo) va de la mas vieja a la mas nueva: la
+    // primera que se cobra, y si hay mas del tope se cortan las mas nuevas.
+    const orden = filtro.ids
+      ? sql`vn.fecha, vn.folio`
+      : sql`vn.fecha desc, vn.folio`;
+
     const filas = await sql<{
       id: string;
       folio: string;
@@ -138,6 +163,9 @@ export class VentasConsultaRepository {
       cliente_id: string;
       cliente: string;
       repartidor: string | null;
+      vendedor_id: string | null;
+      factura: string;
+      factura_numero: string | null;
       num_nota: string | null;
       monto_total: string;
       status: string;
@@ -146,12 +174,14 @@ export class VentasConsultaRepository {
     }>`
       select vn.id, vn.folio, to_char(vn.fecha, 'YYYY-MM-DD') as fecha,
              vn.cliente_id, c.nombre as cliente, v.nombre as repartidor,
+             vn.vendedor_id, vn.factura, f.numero as factura_numero,
              vn.num_nota, vn.monto_total, vn.status, vn.origen,
              coalesce(a.abonado, 0)::text as abonado
         from venta_nota vn
         join cliente c on c.id = vn.cliente_id
         join sucursal s on s.id = vn.sucursal_id
         left join vendedor v on v.id = vn.vendedor_id
+        left join factura f on f.id = vn.factura_id
         left join lateral (
           select sum(ca.monto) as abonado
             from cobranza_abono ca
@@ -159,7 +189,7 @@ export class VentasConsultaRepository {
              and ca.deleted_at is null
         ) a on true
        where ${sql.join(condiciones, sql` and `)}
-       order by vn.fecha desc, vn.folio
+       order by ${orden}
        limit ${limite}
     `.execute(this.db);
 
@@ -170,6 +200,8 @@ export class VentasConsultaRepository {
       clienteId: f.cliente_id,
       cliente: f.cliente,
       repartidor: f.repartidor,
+      vendedorId: f.vendedor_id,
+      factura: { estado: f.factura, numero: f.factura_numero },
       numNota: f.num_nota,
       montoCentavos: aCentavos(f.monto_total),
       status: f.status,

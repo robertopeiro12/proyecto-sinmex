@@ -3,7 +3,7 @@ import type { StatusVenta } from "./ventas";
 
 // Copia normativa de las formas de
 // apps/backend/src/modules/ventas-cobranza/facturas.repository.ts
-// (`VentaDeFactura`, `VentaPorFacturar`, `FacturaConVentas`) y de
+// (`VentaDeFactura`, `FacturaConVentas`) y de
 // dto/facturas.dto.ts. Mismo trato que lib/ventas.ts: un cambio de forma en un
 // lado exige el equivalente en el otro.
 
@@ -14,10 +14,6 @@ export interface VentaDeFactura {
   numNota: string | null;
   montoCentavos: number;
   status: StatusVenta;
-}
-
-export interface VentaPorFacturar extends VentaDeFactura {
-  factura: "N/A" | "pendiente";
 }
 
 export interface FacturaConVentas {
@@ -33,12 +29,6 @@ export interface FacturaConVentas {
 }
 
 export const LARGO_MAX_NUMERO_FACTURA = 30;
-
-export function listarPorFacturar(clienteId: string, incluirNA: boolean): Promise<VentaPorFacturar[]> {
-  const params = new URLSearchParams({ clienteId });
-  if (incluirNA) params.set("incluirNA", "true");
-  return apiFetch<VentaPorFacturar[]>(`/facturas/por-facturar?${params.toString()}`);
-}
 
 export function asignarFactura(
   clienteId: string,
@@ -80,8 +70,4 @@ export function quitarDeFactura(
     method: "POST",
     body: JSON.stringify({ ventaIds }),
   });
-}
-
-export function totalSeleccionado(ventas: VentaDeFactura[], seleccion: ReadonlySet<string>): number {
-  return ventas.reduce((t, v) => (seleccion.has(v.id) ? t + v.montoCentavos : t), 0);
 }

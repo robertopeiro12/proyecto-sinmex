@@ -25,7 +25,7 @@ const ATADO: UsuarioSesion = { ...GENERAL, id: "u2", sucursal: { id: "s1", codig
 const cerrarSesion = vi.fn();
 
 function preparar(query = "sucursal=TJ", usuario: UsuarioSesion = GENERAL) {
-  vi.mocked(usePathname).mockReturnValue("/operacion/ventas");
+  vi.mocked(usePathname).mockReturnValue("/operacion/procesos");
   vi.mocked(useSearchParams).mockReturnValue(new URLSearchParams(query) as unknown as ReturnType<typeof useSearchParams>);
   vi.mocked(useRouter).mockReturnValue({ push: vi.fn() } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(useAuth).mockReturnValue({ usuario, cargando: false, cerrarSesion, puede: () => true });
@@ -54,7 +54,7 @@ describe("MarcoPortal", () => {
     const main = screen.getByText("Contenido de la pantalla").closest("main");
     expect(main).toHaveClass("min-w-0", "border-sucursal");
     expect(screen.getByRole("navigation", { name: "Menú principal" }).closest("aside")).toHaveClass("sticky", "h-dvh");
-    expect(screen.getByRole("link", { name: "Ventas" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Procesos" })).toHaveAttribute("aria-current", "page");
   });
 
   it("el color de la sucursal llega a todo el marco", () => {
@@ -67,13 +67,13 @@ describe("MarcoPortal", () => {
   it("la pestaña dice la pantalla y la sucursal", async () => {
     preparar();
     renderizar();
-    await waitFor(() => expect(document.title).toBe("Ventas | JAWA Tijuana"));
+    await waitFor(() => expect(document.title).toBe("Procesos | JAWA Tijuana"));
   });
 
   it("con todas las sucursales la pestaña dice solo JAWA", async () => {
     preparar("");
     renderizar();
-    await waitFor(() => expect(document.title).toBe("Ventas | JAWA"));
+    await waitFor(() => expect(document.title).toBe("Procesos | JAWA"));
     // El botón aparece cuando llega la lista de sucursales (hay más de una para elegir).
     expect(await screen.findByRole("button", { name: /Sucursal: Todas las sucursales/ })).toBeInTheDocument();
   });
@@ -81,7 +81,7 @@ describe("MarcoPortal", () => {
   it("un usuario atado ve su sucursal sin lista y la pestaña la dice", async () => {
     preparar("sucursal=MX", ATADO);
     renderizar();
-    await waitFor(() => expect(document.title).toBe("Ventas | JAWA Tijuana"));
+    await waitFor(() => expect(document.title).toBe("Procesos | JAWA Tijuana"));
     expect(screen.queryByRole("button", { name: /Cambiar de sucursal/ })).not.toBeInTheDocument();
   });
 

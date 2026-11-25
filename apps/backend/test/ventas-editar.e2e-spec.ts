@@ -656,6 +656,8 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
         status: 'pendiente',
         origen: 'portal',
         saldoCentavos: 27000,
+        vendedorId: vendedorTj,
+        factura: { estado: 'N/A', numero: null },
       });
 
       const ambas = (
@@ -732,6 +734,177 @@ describe('Buscar, editar y eliminar ventas desde el portal (e2e)', () => {
         }).expect(200)
       ).body as ResultadoBusquedaVentas;
       expect(parcial.ventas).toEqual([]);
+    });
+
+    describe('folio y filtros del Procesos (con_saldo, por_facturar)', () => {
+      const ids = (r: ResultadoBusquedaVentas) => r.ventas.map((v) => v.id);
+
+      it('por folio exacto: ignora fechas y mayúsculas/espacios, y no es parcial', async () => {
+        const v = await registrar({ fecha: FECHA_B });
+        const exacto = (
+          await buscar(cookieGeneral, {
+            folio: `  ${v.folio.toLowerCase()} `,
+          }).expect(200)
+        ).body as ResultadoBusquedaVentas;
+        expect(ids(exacto)).toEqual([v.id]);
+        const parcial = (
+          await buscar(cookieGeneral, { folio: v.folio.slice(0, -1) }).expect(
+            200,
+          )
+        ).body as ResultadoBusquedaVentas;
+        expect(parcial.ventas).toEqual([]);
+      });
+
+      it('el folio de otra sucursal no aparece (alcance de siempre)', async () => {
+        const mx = await registrar({
+          clienteId: clienteMx,
+          vendedorId: vendedorMx,
+          lineas: [{ presentacionId: pre1, cantidad: 1, cantidadPromocion: 0 }],
+        });
+        const res = (
+          await buscar(cookieTijuana, { folio: mx.folio }).expect(200)
+        ).body as ResultadoBusquedaVentas;
+        expect(res.ventas).toEqual([]);
+        const general = (
+          await buscar(cookieGeneral, { folio: mx.folio }).expect(200)
+        ).body as ResultadoBusquedaVentas;
+        expect(ids(general)).toEqual([mx.id]);
+      });
+
+      it('con_saldo: solo notas a crédito con saldo del cliente, sin importar fechas', async () => {
+        const conSaldo = await registrar({ fecha: FECHA_B });
+        const abonada = await registrar();
+        await abonar(abonada.id, '100.00');
+        const saldada = await registrar({ fecha: FECHA_B });
+        await abonar(saldada.id, '270.00');
+        await db
+          .updateTable('venta_nota')
+          .set({ status: 'pagada' })
+          .where('id', '=', saldada.id)
+          .execute();
+        const contado = await registrar({ contadoCredito: 'contado' });
+        const otroCliente = await registrar({ clienteId: clienteTj2 });
+
+        const res = (
+          await buscar(cookieGeneral, {
+            filtro: 'con_saldo',
+            clienteId: clienteTj,
+            desde: '2000-01-01',
+            hasta: '2000-01-01',
+          }).expect(200)
+        ).body as ResultadoBusquedaVentas;
+        const encontrados = ids(res);
+        expect(encontrados).toContain(conSaldo.id);
+        expect(encontrados).toContain(abonada.id);
+        expect(encontrados).not.toContain(saldada.id);
+        expect(encontrados).not.toContain(contado.id);
+        expect(encontrados).not.toContain(otroCliente.id);
+        expect(res.ventas.find((v) => v.id === abonada.id)).toMatchObject({
+          saldoCentavos: 17000,
+        });
+      });
+
+      it('con_saldo ordena de la más vieja a la más nueva (el tope de 200 corta las nuevas, no las que se cobran primero)', async () => {
+        const nueva = await registrar({ fecha: FECHA_EDICION });
+        const vieja = await registrar({ fecha: FECHA_A });
+        const res = (
+          await buscar(cookieGeneral, {
+            filtro: 'con_saldo',
+            clienteId: clienteTj,
+          }).expect(200)
+        ).body as ResultadoBusquedaVentas;
+        const encontrados = ids(res);
+        expect(encontrados.indexOf(vieja.id)).toBeGreaterThanOrEqual(0);
+        expect(encontrados.indexOf(vieja.id)).toBeLessThan(
+          encontrados.indexOf(nueva.id),
+        );
+        const fechas = res.ventas.map((v) => v.fecha);
+        expect(fechas).toEqual([...fechas].sort());
+      });
+
+      it('con_saldo no incluye una nota en cuenta perdida', async () => {
+        const v = await registrar();
+        await db
+          .updateTable('venta_nota')
+          .set({ status: 'cuenta_perdida' })
+          .where('id', '=', v.id)
+          .execute();
+        const res = (
+          await buscar(cookieGeneral, {
+            filtro: 'con_saldo',
+            clienteId: clienteTj,
+          }).expect(200)
+        ).body as ResultadoBusquedaVentas;
+        expect(ids(res)).not.toContain(v.id);
+      });
+
+      it('por_facturar: solo factura pendiente; trae factura {estado, numero} en cada fila', async () => {
+        const pendiente = await registrar({ factura: 'pendiente' });
+        const facturada = await registrar({ factura: 'pendiente' });
+        await facturar(facturada.id, `PF-${SUFIJO}`.slice(0, 30));
+        const normal = await registrar();
+        const res = (
+          await buscar(cookieGeneral, {
+            filtro: 'por_facturar',
+            clienteId: clienteTj,
+          }).expect(200)
+        ).body as ResultadoBusquedaVentas;
+        const encontrados = ids(res);
+        expect(encontrados).toContain(pendiente.id);
+        expect(encontrados).not.toContain(facturada.id);
+        expect(encontrados).not.toContain(normal.id);
+        expect(res.ventas.find((v) => v.id === pendiente.id)?.factura).toEqual({
+          estado: 'pendiente',
+          numero: null,
+        });
+
+        const todas = (
+          await buscar(cookieGeneral, {
+            clienteId: clienteTj,
+            desde: FECHA_A,
+            hasta: FECHA_A,
+          }).expect(200)
+        ).body as ResultadoBusquedaVentas;
+        expect(
+          todas.ventas.find((v) => v.id === facturada.id)?.factura,
+        ).toEqual({ estado: 'facturada', numero: `PF-${SUFIJO}`.slice(0, 30) });
+      });
+
+      it('con_saldo / por_facturar sin cliente son 400 "Elige un cliente."', async () => {
+        for (const filtro of ['con_saldo', 'por_facturar']) {
+          const res = await buscar(cookieGeneral, { filtro }).expect(400);
+          expect(JSON.stringify(res.body)).toContain('Elige un cliente.');
+        }
+      });
+
+      it('filtro desconocido es 400; "todas" se comporta como sin filtro', async () => {
+        await buscar(cookieGeneral, { filtro: 'raro' }).expect(400);
+        const v = await registrar();
+        const res = (
+          await buscar(cookieGeneral, {
+            filtro: 'todas',
+            desde: FECHA_A,
+            hasta: FECHA_A,
+            clienteId: clienteTj,
+          }).expect(200)
+        ).body as ResultadoBusquedaVentas;
+        expect(ids(res)).toContain(v.id);
+      });
+
+      it('con_saldo de un cliente de otra sucursal no devuelve nada', async () => {
+        await registrar({
+          clienteId: clienteMx,
+          vendedorId: vendedorMx,
+          lineas: [{ presentacionId: pre1, cantidad: 1, cantidadPromocion: 0 }],
+        });
+        const res = (
+          await buscar(cookieTijuana, {
+            filtro: 'con_saldo',
+            clienteId: clienteMx,
+          }).expect(200)
+        ).body as ResultadoBusquedaVentas;
+        expect(res.ventas).toEqual([]);
+      });
     });
 
     it('respeta el alcance: Tijuana no ve Mexicali, y pedir MX es 403', async () => {

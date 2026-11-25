@@ -3,10 +3,8 @@ import * as api from "./api";
 import {
   asignarFactura,
   buscarFacturas,
-  listarPorFacturar,
   quitarDeFactura,
   renombrarFactura,
-  totalSeleccionado,
 } from "./facturas";
 
 vi.mock("./api", async (importOriginal) => {
@@ -19,13 +17,6 @@ describe("lib/facturas", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     apiFetch.mockResolvedValue([]);
-  });
-
-  it("listarPorFacturar manda incluirNA solo si es true", async () => {
-    await listarPorFacturar("c1", true);
-    expect(apiFetch).toHaveBeenLastCalledWith("/facturas/por-facturar?clienteId=c1&incluirNA=true");
-    await listarPorFacturar("c1", false);
-    expect(apiFetch).toHaveBeenLastCalledWith("/facturas/por-facturar?clienteId=c1");
   });
 
   it("asignarFactura hace POST con el cuerpo", async () => {
@@ -62,13 +53,5 @@ describe("lib/facturas", () => {
       method: "POST",
       body: JSON.stringify({ ventaIds: ["v1"] }),
     });
-  });
-
-  it("suma solo lo seleccionado", () => {
-    const ventas = [
-      { id: "v1", folio: "A", fecha: "2024-04-01", numNota: null, montoCentavos: 1000, status: "pendiente" as const },
-      { id: "v2", folio: "B", fecha: "2024-04-02", numNota: null, montoCentavos: 550, status: "pendiente" as const },
-    ];
-    expect(totalSeleccionado(ventas, new Set(["v2"]))).toBe(550);
   });
 });

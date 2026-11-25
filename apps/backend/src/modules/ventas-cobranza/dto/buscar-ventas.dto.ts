@@ -1,5 +1,6 @@
 import { Transform } from 'class-transformer';
 import {
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -8,6 +9,9 @@ import {
 } from 'class-validator';
 import { LARGO_MAX_NUM_NOTA } from '../datos-venta';
 import { recortar } from './registrar-venta.dto';
+
+export const FILTROS_VENTAS = ['con_saldo', 'por_facturar', 'todas'] as const;
+export type FiltroVentas = (typeof FILTROS_VENTAS)[number];
 
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -45,4 +49,18 @@ export class BuscarVentasDto {
     message: `El número de nota no puede pasar de ${LARGO_MAX_NUM_NOTA} caracteres.`,
   })
   numNota?: string;
+
+  /** Folio exacto (Procesos): sin espacios y en mayúsculas; ignora las fechas. */
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.replace(/\s+/g, '').toUpperCase() : value,
+  )
+  @IsString()
+  @MaxLength(30, { message: 'El folio no puede pasar de 30 caracteres.' })
+  folio?: string;
+
+  /** `con_saldo` y `por_facturar` exigen `clienteId` e ignoran las fechas. */
+  @IsOptional()
+  @IsIn(FILTROS_VENTAS, { message: 'El filtro no es válido.' })
+  filtro?: FiltroVentas;
 }

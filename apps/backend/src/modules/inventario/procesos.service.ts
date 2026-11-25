@@ -13,6 +13,7 @@ import { movimientosDelDia } from '../produccion/cortes.repository';
 import { CortesService } from '../produccion/cortes.service';
 import type { ConsultaCorteVendedorDto } from '../produccion/dto/corte.dto';
 import { NotasRutaRepository } from '../rutas/notas-ruta.repository';
+import { aCentavos } from '../sincronizacion/dinero';
 import {
   esFechaReal,
   MENSAJE_FECHA_FUTURA,
@@ -34,7 +35,6 @@ import {
   type FilaProceso,
 } from './procesos.repository';
 import {
-  TIPOS_PROCESO,
   precargaPorTamano,
   validarProceso,
   type EntradaProcesoLimpia,
@@ -52,7 +52,6 @@ export const MOTIVO_VENDEDOR_AJENO =
   'El vendedor no existe o no es de esta sucursal.';
 export const MOTIVO_CLIENTE_INEXISTENTE = 'No existe ese cliente.';
 const MOTIVO_SIN_PERMISO = 'No tienes permiso para este tipo de proceso.';
-const MOTIVO_SIN_PERMISO_PROCESOS = 'No tienes permiso para Procesos.';
 
 export interface LineaProceso {
   presentacionId: string;
@@ -115,6 +114,8 @@ export interface ResumenCliente {
   ultimaCompra: string | null;
   /** Frases de las promociones vigentes (`textoPromocion`), propias primero. */
   promociones: string[];
+  /** Saldo a favor (Procesos PR B: "A favor $X" en la linea del cliente). */
+  saldoFavorCentavos: number;
 }
 
 /**
@@ -156,16 +157,15 @@ export class ProcesosService {
   }
 
   /**
-   * `GET /procesos/cliente/:id` (cualquiera de los cinco permisos): ficha corta
+   * `GET /procesos/cliente/:id` (solo sesion, Procesos PR B): ficha corta
    * del cliente. Otra sucursal, dado de baja o inexistente = el mismo 404.
    */
   async resumenCliente(
     usuarioId: string,
     clienteId: string,
   ): Promise<ResumenCliente> {
-    const permisos = await this.permisos.permisosDe(usuarioId);
-    if (!TIPOS_PROCESO.some((t) => permisos.has(`proceso.${t}`)))
-      throw new ForbiddenException(MOTIVO_SIN_PERMISO_PROCESOS);
+    // Basta la sesion (Procesos PR B, D5): la pestana Notas no pide permiso y
+    // la linea del cliente sale arriba de todas. El alcance de sucursal sigue.
     const usuario = await this.usuario(usuarioId);
     const id = clienteId.toLowerCase();
     const cliente = await this.repo.clienteResumen(id);
@@ -189,6 +189,7 @@ export class ProcesosService {
       notasConSaldo: notas.length,
       ultimaCompra: cliente.ultimaCompra,
       promociones,
+      saldoFavorCentavos: aCentavos(cliente.saldoFavor),
     };
   }
 
