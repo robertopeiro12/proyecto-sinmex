@@ -405,6 +405,20 @@ Spec: `docs/superpowers/specs/2026-10-23-t-27-merma-y-consumo-design.md`.
 - Lógica con pruebas: `src/datos/movimientos-reglas.ts`, `src/datos/inventario-reglas.ts`,
   `src/datos/repositorios/movimientos.ts`, `src/estado/movimiento.ts`, `src/sincronizacion/fuente-movimientos.ts`.
 
+## Impresion de notas (rediseño pieza 7)
+
+La nota se imprime con `expo-print` (`src/impresion/`). Es un modulo **nativo**: tras
+`npm install` hay que correr `expo prebuild -p android` y compilar una **APK nueva**; Metro
+solo no basta. Imprime por la impresora configurada en Android; ahi `ok` significa que el
+dialogo se abrio.
+
+- El papel (58 o 80 mm, por omision 58) se elige en "Seleccionar impresora" y vive en SecureStore.
+- `armarTicket` es puro (32 o 48 columnas); los nombres se parten en renglones, no se cortan.
+- Imprime "Grabar e imprimir" (Vender y Cobrar; el cobro reimprime cada nota de su reparto) y
+  "Reimprimir" en el detalle de Ventas / Cobranza. Un fallo al imprimir nunca deshace lo grabado.
+- Reimprimir una nota de otra tablet usa `nota_pendiente.detalle_json` (migracion 024, viene del
+  pull); con un servidor anterior sale sin renglones. Contrato: `docs/contrato-sincronizacion.md`.
+
 ## Pruebas
 
 `npm test --workspace=apps/tablet` corre Jest con `ts-jest` en Node puro y prueba

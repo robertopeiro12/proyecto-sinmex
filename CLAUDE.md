@@ -454,6 +454,24 @@ usuario con sesion pasa.
     `registros/[tipo]/[id].tsx` (un `sync_error` se muestra con `motivoDeRechazo`). `catalogos.folioDeNota` ignora `activo`
     (una nota dada de baja sigue mostrando su folio).
 
+- **Impresión de notas (rediseño pieza 7, spec §12 `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md`).**
+  La tablet imprime la nota con `expo-print` (módulo **nativo**: hace falta `expo prebuild` y una **APK nueva**). Imprime por la
+  impresora que el vendedor tenga configurada en Android; en Android `ok` solo significa que **el diálogo se abrió**, no que
+  salió papel. Código en `apps/tablet/src/impresion/`.
+  - **Papel**: preferencia 58 o 80 mm en "Seleccionar impresora" (`impresora.tsx`), guardada en SecureStore
+    (`preferencia.ts`, clave `jawa.impresion.papel`); sin dato o dato ilegible, 58.
+  - **Ticket**: `armarTicket(datos, 32 | 48)` es **puro** (32 columnas en 58 mm, 48 en 80 mm). El nombre del producto se
+    **parte en renglones, nunca se corta**. `datos-ticket.ts` arma `DatosTicket` desde lo guardado; `html.ts` lo vuelve HTML.
+  - **Cuándo imprime**: "Grabar e imprimir" en Vender y en Cobrar; el cobro **reimprime cada nota de su reparto** (con
+    "Reimpresión" / "Cobró" en el ticket); "Reimprimir" en el detalle de Ventas / Cobranza (`registros/[tipo]/[id].tsx`).
+  - **Imprimir nunca deshace lo grabado**: si falla o se cancela solo avisa; la nota ya está guardada y se reimprime después.
+  - **Pull**: `NotaPendientePull.detalle` (aditivo, ver `docs/contrato-sincronizacion.md`) trae líneas, promociones y
+    nombres para reimprimir una nota que no se vendió en esa tablet; la migración local **024** (`nota_pendiente.detalle_json`)
+    **reinicia el cursor del pull** para bajar el detalle de todas las notas. **Backend antes que la APK**: un servidor
+    viejo no manda `detalle` y la reimpresión de una nota no local sale **sin renglones**.
+  - **Preguntas abiertas para Mario**: modelo de la impresora térmica real (no se ha probado con papel) y si la nota
+    liquidada lleva espacio para firma.
+
 - **Promociones (T-74).** Regla de regalo por compra, configurada en el portal (*Operación → Promociones*, permiso
   `promocion.gestionar`; backend en `cartera-clientes/promociones.*`, `/promociones`) y **aplicada solo por la
   tablet**. Reemplaza al enum `cliente.promocion` y a `cliente_promocion_producto`. Spec:
