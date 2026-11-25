@@ -134,7 +134,7 @@ export function TablaPorVendedor({
           />
         )}
       </VentanaDetalle>
-      <Tabla aria-label="Por vendedor" className="min-w-[97rem] table-fixed">
+      <Tabla aria-label="Por vendedor" className="min-w-[99rem] table-fixed">
         <colgroup>
           <col className="w-24" />
           <col />
@@ -148,7 +148,8 @@ export function TablaPorVendedor({
           <col className="w-20" />
           <col className="w-16" />
           <col className="w-22" />
-          <col className="w-36" />
+          {/* Inventario: cabe "Faltan: N pz p/Almacen" en un renglón (la merma va en el segundo). */}
+          <col className="w-48" />
         </colgroup>
         <thead>
           <tr>

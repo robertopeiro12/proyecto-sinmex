@@ -870,7 +870,10 @@ usuario con sesion pasa.
     "Sin carga aceptada ni venta ese día." (Inventario y Merma).
   - **Dashboard y Flujo diario**: la columna Inventario trae la **pastilla del corte** (`FilaVendedorDia.corte`: Sin corte /
     Corte hecho / "Faltan: N pz p/Almacen · N pz merma", cliente 2026-11-24) y `ResumenDia.faltantesCorte`; picarla abre el detalle en la pestaña **Inventario**
-    (la misma tabla; sin `inventario.ver` dice "No tienes permiso" y el resto del detalle sigue). En Flujo con varios días,
+    (la misma tabla; sin `inventario.ver` dice "No tienes permiso" y el resto del detalle sigue). Con faltante de piezas y de
+    merma la pastilla se parte en **dos renglones** ("Faltan: 1 pz p/Almacen" / "1 pz merma", `PastillaCorte` en
+    `flujo-diario/piezas.tsx`, sin cambiar `fraseFaltan`) y la columna Inventario mide `w-48` en las dos tablas (Flujo diario
+    `min-w-[99rem]`: a 1920 no se desplaza; Dashboard `min-w-[85rem]`). En Flujo con varios días,
     cada renglón (vendedor, fecha) trae el estado de **su** corte.
   - **Tipos duplicados** backend ↔ portal en `apps/portal/src/lib/inventario-vendedor.ts` y `lib/flujo-diario.ts`: si cambias
     uno, cambia el otro en el mismo commit. La segunda fila del encabezado es `sticky` con `TOP2` (`top-[32.5px]`, medido:

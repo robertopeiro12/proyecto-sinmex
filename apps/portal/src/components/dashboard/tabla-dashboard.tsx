@@ -178,12 +178,13 @@ export function TablaDashboard({
           />
         )}
       </VentanaDetalle>
-      <Tabla aria-label="Vendedores de hoy" className="min-w-[82rem] table-fixed">
+      <Tabla aria-label="Vendedores de hoy" className="min-w-[85rem] table-fixed">
         <colgroup>
           <col />
           <col className="w-36" />
           <col className="w-24" />
-          <col className="w-36" />
+          {/* Inventario: cabe "Faltan: N pz p/Almacen" en un renglón (la merma va en el segundo). */}
+          <col className="w-48" />
           <col className="w-20" />
           <col className="w-22" />
           <col className="w-28" />

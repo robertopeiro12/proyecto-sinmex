@@ -249,9 +249,15 @@ export function BotonRenglon({ children, onClick }: { children: ReactNode; onCli
   );
 }
 
-/** La pastilla del estado del corte del renglón ("Sin corte", "Corte hecho", "Faltan 7"); picarla abre el Inventario. */
+/**
+ * La pastilla del estado del corte del renglón ("Sin corte", "Corte hecho", "Faltan: 7 pz p/Almacen"); picarla abre el
+ * Inventario. Con faltante de piezas **y** de merma, "Faltan: 1 pz p/Almacen · 1 pz merma" no cabe en la columna: se parte
+ * en dos renglones ("Faltan: 1 pz p/Almacen" / "1 pz merma") sin cambiar el texto de `fraseFaltan` (el " · " queda para
+ * el lector de pantalla).
+ */
 export function PastillaCorte({ corte, etiqueta, onClick }: { corte: EstadoCorteFila; etiqueta: string; onClick: () => void }) {
   const { texto, tono } = etiquetaEstadoCorte(corte);
+  const partes = texto.split(" · ");
   return (
     <button
       type="button"
@@ -263,7 +269,18 @@ export function PastillaCorte({ corte, etiqueta, onClick }: { corte: EstadoCorte
       }}
       className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-sucursal"
     >
-      <Etiqueta tono={tono}>{texto}</Etiqueta>
+      {partes.length > 1 ? (
+        <Etiqueta tono={tono} className="flex-col rounded-[10px] py-1 leading-tight whitespace-normal">
+          {partes.map((p, i) => (
+            <span key={i} className="block">
+              {i > 0 && <span className="sr-only">{" · "}</span>}
+              {p}
+            </span>
+          ))}
+        </Etiqueta>
+      ) : (
+        <Etiqueta tono={tono}>{texto}</Etiqueta>
+      )}
     </button>
   );
 }
