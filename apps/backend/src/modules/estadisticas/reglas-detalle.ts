@@ -82,8 +82,25 @@ export interface DetalleVendedorDia {
   notasNoEntregadas: NotaNoEntregada[];
   visitas: VisitaDetalle[];
   promociones: { cliente: string; producto: string; cantidad: number }[];
+  /**
+   * Mermas y cambios que registro la tablet ese dia: un renglon por linea,
+   * cada uno con el motivo y el comentario del movimiento. En una merma de
+   * cliente, `recibido` es la merma y `entregado` la reposicion. Orden:
+   * registro, luego producto.
+   */
+  movimientos: MovimientoDetalle[];
   /** `null` sin jornada cerrada. */
   corte: Corte | null;
+}
+
+export interface MovimientoDetalle {
+  tipo: MovimientoFila['tipo'];
+  cliente: string | null;
+  producto: string;
+  sentido: MovimientoFila['sentido'];
+  cantidad: number;
+  motivo: string | null;
+  comentario: string | null;
 }
 
 /** Una nota en la revision de la tarde (nueva a credito o asignada). */
@@ -134,6 +151,17 @@ export interface DetalleDia {
   gastos: { vendedor: string; descripcion: string; montoCentavos: number }[];
   visitas: (Omit<VisitaDetalle, 'atendio'> & { vendedor: string })[];
   promociones: { producto: string; cantidad: number }[];
+  /**
+   * Mermas de la tablet: la del vehiculo y lo `recibido` de las de cliente
+   * (nunca la reposicion ni los cambios). Orden: vendedor, registro, producto.
+   */
+  mermas: {
+    vendedor: string;
+    cliente: string | null;
+    producto: string;
+    cantidad: number;
+    motivo: string | null;
+  }[];
 }
 
 /* ---- Filas planas que entrega el repositorio ---- */
@@ -235,6 +263,20 @@ export interface PromoFila {
   cantidad: number;
 }
 
+/** Una linea de un movimiento de la tablet (merma o cambio) vivo del dia. */
+export interface MovimientoFila {
+  tipo: 'merma_cliente' | 'merma_trayecto' | 'cambio';
+  vendedor: string;
+  cliente: string | null;
+  producto: string;
+  sentido: 'recibido' | 'entregado';
+  piezas: number;
+  motivo: string | null;
+  comentario: string | null;
+  /** ISO UTC. */
+  registradoEn: string;
+}
+
 /**
  * Mililitros de una etiqueta de volumen: "500 ml" = 500, "1 Lt" / "1 L" = 1000,
  * "1.5 Lt" = 1500. `null` si no se entiende.
@@ -331,6 +373,7 @@ export function armarDetalleVendedor(
     gastos: GastoFila[];
     visitasSinVenta: VisitaSinVentaFila[];
     promociones: PromoFila[];
+    movimientos: MovimientoFila[];
     /** Las trae aparte el servicio; sin ellas, ninguna. */
     noEntregadas?: NotaNoEntregada[];
     /** Su ruta diaria de ese dia; sin ella, solo los clientes que atendió. */
@@ -534,6 +577,20 @@ export function armarDetalleVendedor(
     promociones: [...filas.promociones].sort(
       (a, b) => cmp(a.cliente, b.cliente) || cmp(a.producto, b.producto),
     ),
+    movimientos: [...filas.movimientos]
+      .sort(
+        (a, b) =>
+          cmp(a.registradoEn, b.registradoEn) || cmp(a.producto, b.producto),
+      )
+      .map((m) => ({
+        tipo: m.tipo,
+        cliente: m.cliente,
+        producto: m.producto,
+        sentido: m.sentido,
+        cantidad: m.piezas,
+        motivo: m.motivo,
+        comentario: m.comentario,
+      })),
     corte,
   };
 }
@@ -548,6 +605,7 @@ export function armarDetalleDia(
     gastos: GastoFila[];
     visitasSinVenta: VisitaSinVentaFila[];
     promociones: PromoFila[];
+    movimientos: MovimientoFila[];
   },
 ): DetalleDia {
   const conVenta = lineasConVenta(filas.ventas, filas.lineas);
@@ -657,5 +715,24 @@ export function armarDetalleDia(
     promociones: [...promos.entries()]
       .map(([producto, cantidad]) => ({ producto, cantidad }))
       .sort((a, b) => cmp(a.producto, b.producto)),
+    mermas: filas.movimientos
+      .filter(
+        (m) =>
+          m.tipo === 'merma_trayecto' ||
+          (m.tipo === 'merma_cliente' && m.sentido === 'recibido'),
+      )
+      .sort(
+        (a, b) =>
+          cmp(a.vendedor, b.vendedor) ||
+          cmp(a.registradoEn, b.registradoEn) ||
+          cmp(a.producto, b.producto),
+      )
+      .map((m) => ({
+        vendedor: m.vendedor,
+        cliente: m.cliente,
+        producto: m.producto,
+        cantidad: m.piezas,
+        motivo: m.motivo,
+      })),
   };
 }
