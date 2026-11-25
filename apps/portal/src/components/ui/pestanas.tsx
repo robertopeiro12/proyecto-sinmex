@@ -21,6 +21,7 @@ export interface Pestana {
 export function Pestanas({
   pestanas,
   valorInicial,
+  valor,
   conservarMontadas = false,
   onCambio,
   etiqueta,
@@ -28,6 +29,11 @@ export function Pestanas({
 }: {
   pestanas: Pestana[];
   valorInicial?: string;
+  /**
+   * Pestaña controlada: con `valor`, cambiar de pestaña solo avisa por `onCambio` y la
+   * pantalla decide si pasa (Procesos pregunta antes de perder lo escrito).
+   */
+  valor?: string;
   conservarMontadas?: boolean;
   /** Avisa la pestaña a la que se pasó (clic o flechas); la pestaña sigue siendo no controlada. */
   onCambio?: (valor: string) => void;
@@ -36,10 +42,12 @@ export function Pestanas({
 }) {
   return (
     <Tabs.Root
-      defaultValue={valorInicial ?? pestanas[0]?.valor}
+      {...(valor !== undefined ? { value: valor } : { defaultValue: valorInicial ?? pestanas[0]?.valor })}
       onValueChange={(valor) => onCambio?.(String(valor))}
       className={cn("flex flex-col gap-4", className)}>
-      <Tabs.List activateOnFocus aria-label={etiqueta} className="flex gap-1 border-b">
+      {/* Controlada, el foco no cambia de pestaña: al cerrarse una ventana de confirmar el foco
+          vuelve a la pestaña pedida y, si la activara, volvería a preguntar sin fin. */}
+      <Tabs.List activateOnFocus={valor === undefined} aria-label={etiqueta} className="flex gap-1 border-b">
         {pestanas.map((p) => (
           <Tabs.Tab
             key={p.valor}

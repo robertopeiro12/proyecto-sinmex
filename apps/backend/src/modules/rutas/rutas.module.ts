@@ -69,7 +69,10 @@ import { VisitasService } from './visitas.service';
     CortesVendedorService,
     CortesVendedorRepository,
   ],
+  // Operacion -> Procesos: `NotasRutaRepository` es la unica regla de "nota con
+  // saldo"; el resumen del cliente (`inventario/`) la reutiliza.
   exports: [
+    NotasRutaRepository,
     JornadasService,
     RutasDiariasService,
     VisitasService,

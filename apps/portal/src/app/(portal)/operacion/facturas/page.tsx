@@ -1,11 +1,13 @@
-import { PantallaFacturas } from "@/components/facturas/pantalla-facturas";
+import { redirect } from "next/navigation";
 
-// Server component delgado (mismo patron que /operacion/ventas).
+// Procesos › Notas reemplazó a esta pantalla: la dirección vieja lleva ahí y conserva la sucursal.
 export default async function Page({
   searchParams,
 }: {
   searchParams: Promise<{ sucursal?: string }>;
 }) {
   const { sucursal } = await searchParams;
-  return <PantallaFacturas sucursal={sucursal ?? null} />;
+  const params = new URLSearchParams({ pestana: "notas" });
+  if (sucursal) params.set("sucursal", sucursal);
+  redirect(`/operacion/procesos?${params.toString()}`);
 }

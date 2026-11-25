@@ -35,6 +35,12 @@ describe("navSections", () => {
     expect(navSections[2].items.map((i) => i.label)).toEqual(["Corte", "Inventario por vendedor", "Registro de Operación", "Almacenes"]);
   });
 
+  it("Registrar venta, Ventas, Facturas y Cobranza ya no están en el menú (viven en Procesos)", () => {
+    const hrefs = navSections.flatMap((s) => s.items.map((i) => i.href));
+    for (const h of ["/operacion/registrar-venta", "/operacion/ventas", "/operacion/facturas", "/operacion/cobranza"])
+      expect(hrefs).not.toContain(h);
+  });
+
   it("Catálogo trae Motivos de merma", () => {
     expect(navSections[1].items).toContainEqual({ label: "Motivos de merma", href: "/catalogo/motivos-de-merma" });
   });
@@ -54,16 +60,16 @@ describe("navSections", () => {
 
 describe("buscarItemActual", () => {
   it("la opción exacta", () => {
-    expect(buscarItemActual("/operacion/ventas")).toEqual({
+    expect(buscarItemActual("/operacion/procesos")).toEqual({
       seccion: "Operación",
-      item: { label: "Ventas", href: "/operacion/ventas" },
+      item: { label: "Procesos", href: "/operacion/procesos" },
     });
   });
 
   it("una pantalla dentro de otra es la de href más largo, por segmentos completos", () => {
     expect(buscarItemActual("/informacion/reportes/kilometraje")?.item.label).toBe("Reportes");
     expect(buscarItemActual("/operacion")?.item.label).toBe("Dashboard");
-    expect(buscarItemActual("/operacion/ventas/algo")?.item.label).toBe("Ventas");
+    expect(buscarItemActual("/operacion/procesos/algo")?.item.label).toBe("Procesos");
     expect(buscarItemActual("/operacionx")).toBeNull();
     expect(buscarItemActual("/operacion/reporte-de-ventas")?.item.label).toBe("Flujo diario");
     expect(buscarItemActual("/login")).toBeNull();
@@ -77,8 +83,8 @@ describe("tituloDePestana", () => {
   });
 
   it("pantalla | JAWA y la sucursal; con todas, sin sucursal", () => {
-    expect(tituloDePestana("/operacion/ventas", "Tijuana")).toBe("Ventas | JAWA Tijuana");
-    expect(tituloDePestana("/operacion/ventas", null)).toBe("Ventas | JAWA");
+    expect(tituloDePestana("/operacion/procesos", "Tijuana")).toBe("Procesos | JAWA Tijuana");
+    expect(tituloDePestana("/operacion/procesos", null)).toBe("Procesos | JAWA");
     expect(tituloDePestana("/informacion/reportes/kilometraje", "Mexicali")).toBe("Reportes | JAWA Mexicali");
   });
 

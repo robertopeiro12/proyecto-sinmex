@@ -6,8 +6,9 @@
  * y 2026-11-18-corte-por-tamano-y-merma-design.md (C3–C6, D1, D3, D8, D9).
  *
  * La teorica resta merma entregada, merma de almacen, consumo y cambios
- * entregados, y suma los cambios recibidos (rediseño pieza 4: el cambio fisico
- * con el cliente). La merma teorica no cuenta los cambios.
+ * entregados, y suma los cambios recibidos: el cambio fisico con el cliente lo
+ * captura la tablet (rediseño pieza 4, `movimiento_inventario` tipo `cambio`) y
+ * la oficina (Operacion -> Procesos). La merma teorica no cuenta los cambios.
  */
 import {
   esFechaReal,
@@ -46,7 +47,7 @@ export interface MovimientoPresentacion {
   /** Merma del trayecto (almacen). */
   mermaAlmacen: number;
   consumo: number;
-  /** Cambios fisicos con el cliente (`movimiento_inventario` tipo `cambio`): lo entregado y lo recibido. */
+  /** Cambios fisicos: piezas entregadas y recibidas (tablet, tipo `cambio`, y Operacion -> Procesos). */
   cambiosEntregados: number;
   cambiosRecibidos: number;
   /** Lo contado por el almacen (0 si no hay fila). */

@@ -383,6 +383,30 @@ export interface Presentacion {
   volumen: string;
 }
 
+export interface ProcesoOficina {
+  actualizado_por_usuario_id: string | null;
+  capturo_usuario_id: string;
+  cliente_id: string | null;
+  comentario: string | null;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  fecha: Timestamp;
+  id: Generated<string>;
+  merma_de: string | null;
+  sucursal_id: string;
+  tipo: string;
+  updated_at: Generated<Timestamp>;
+  vendedor_id: string | null;
+}
+
+export interface ProcesoOficinaLinea {
+  id: Generated<string>;
+  piezas: number;
+  presentacion_id: string;
+  proceso_id: string;
+  sentido: string;
+}
+
 export interface Produccion {
   actualizado_por_usuario_id: string | null;
   capturo_usuario_id: string;
@@ -762,6 +786,8 @@ export interface DB {
   peticion: Peticion;
   precio: Precio;
   presentacion: Presentacion;
+  proceso_oficina: ProcesoOficina;
+  proceso_oficina_linea: ProcesoOficinaLinea;
   produccion: Produccion;
   producto: Producto;
   promocion: Promocion;

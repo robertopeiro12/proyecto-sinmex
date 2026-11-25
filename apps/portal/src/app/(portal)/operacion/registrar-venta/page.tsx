@@ -1,12 +1,13 @@
-import { PantallaRegistrarVenta } from "@/components/ventas/pantalla-registrar-venta";
+import { redirect } from "next/navigation";
 
-// Server component delgado (mismo patron que /catalogo/clientes): solo lee el
-// filtro de sucursal; en Next 15 `searchParams` es una promesa.
+// Procesos › Ventas reemplazó a esta pantalla: la dirección vieja lleva ahí y conserva la sucursal.
 export default async function Page({
   searchParams,
 }: {
   searchParams: Promise<{ sucursal?: string }>;
 }) {
   const { sucursal } = await searchParams;
-  return <PantallaRegistrarVenta sucursal={sucursal ?? null} />;
+  const params = new URLSearchParams({ pestana: "ventas" });
+  if (sucursal) params.set("sucursal", sucursal);
+  redirect(`/operacion/procesos?${params.toString()}`);
 }

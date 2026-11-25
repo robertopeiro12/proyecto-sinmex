@@ -102,17 +102,6 @@ export function porCobrarDeCliente(clienteId: string): Promise<ClientePorCobrar>
   return apiFetch<ClientePorCobrar>(`/cobranzas/por-cobrar?clienteId=${encodeURIComponent(clienteId)}`);
 }
 
-export function buscarPorCobrar(
-  filtro: { fecha: string } | { numNota: string },
-  sucursal: string | null,
-): Promise<NotaPorCobrar[]> {
-  const params = new URLSearchParams();
-  if ("fecha" in filtro) params.set("fecha", filtro.fecha);
-  else params.set("numNota", filtro.numNota.trim());
-  if (sucursal) params.set("sucursal", sucursal);
-  return apiFetch<NotaPorCobrar[]>(`/cobranzas/por-cobrar?${params.toString()}`);
-}
-
 export function vistaPreviaCobro(cuerpo: {
   clienteId: string;
   notaIds: string[];

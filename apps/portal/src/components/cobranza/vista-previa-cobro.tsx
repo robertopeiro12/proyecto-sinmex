@@ -13,12 +13,21 @@ function porFechaYFolio(a: NotaPorCobrar, b: NotaPorCobrar): number {
  * notas y a saldo a favor. Lo calculó el servidor con la misma regla que la
  * tablet: aquí solo se pinta.
  */
-export function VistaPreviaCobro({ plan, palomeadas }: { plan: PlanDeCobro; palomeadas: NotaPorCobrar[] }) {
+export function VistaPreviaCobro({
+  plan,
+  palomeadas,
+  titulo = "Así quedaría:",
+}: {
+  plan: PlanDeCobro;
+  palomeadas: NotaPorCobrar[];
+  /** Procesos → Notas dice "Así queda:" (boceto). */
+  titulo?: string;
+}) {
   const recibe = new Map(plan.aplicaciones.map((a) => [a.notaId, a]));
   const otras = plan.aplicaciones.filter((a) => !a.palomeada);
   return (
     <div role="region" aria-label="Vista previa" className="flex flex-col gap-1 rounded-md bg-muted p-3 text-sm">
-      <p className="font-medium">Así quedaría:</p>
+      <p className="font-medium">{titulo}</p>
       <ul className="list-inside list-disc">
         {[...palomeadas].sort(porFechaYFolio).map((n) => {
           const a = recibe.get(n.id);

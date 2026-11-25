@@ -145,7 +145,7 @@ describe("BuscarFacturas", () => {
     const usuario = userEvent.setup();
     render(<BuscarFacturas sucursal="TJ" />);
     await usuario.type(screen.getByLabelText("Cliente"), "coba");
-    await usuario.click(await screen.findByRole("button", { name: /Cobach XXI/ }));
+    await usuario.click(await screen.findByRole("option", { name: /Cobach XXI/ }));
     await usuario.click(screen.getByRole("button", { name: "Buscar" }));
     await screen.findByText("Factura A708");
     expect(buscarFacturas).toHaveBeenCalledWith({ numero: undefined, clienteId: "c1", sucursal: "TJ" });

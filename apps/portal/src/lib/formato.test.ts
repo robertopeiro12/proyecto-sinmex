@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatearDiaHoraTijuana, formatearDiaLargo, formatearFecha, formatearFechaHora, formatearPesos, iniciales, plural } from "./formato";
+import { formatearDiaCorto, formatearDiaHoraTijuana, formatearDiaLargo, formatearFecha, formatearFechaHora, formatearPesos, iniciales, plural } from "./formato";
 import * as reportes from "./reportes";
 import * as ventas from "./ventas";
 
@@ -60,6 +60,18 @@ describe("iniciales", () => {
     expect(iniciales("Roberto")).toBe("RO");
     expect(iniciales("ángel")).toBe("ÁN");
     expect(iniciales("   ")).toBe("?");
+  });
+});
+
+describe("formatearDiaCorto", () => {
+  it("día de la semana y mes abreviados: mar 24 nov", () => {
+    expect(formatearDiaCorto("2026-11-24")).toBe("mar 24 nov");
+    expect(formatearDiaCorto("2026-11-25")).toBe("mié 25 nov");
+    expect(formatearDiaCorto("2027-01-02")).toBe("sáb 2 ene");
+  });
+
+  it("lo que no es AAAA-MM-DD sale tal cual", () => {
+    expect(formatearDiaCorto("ayer")).toBe("ayer");
   });
 });
 

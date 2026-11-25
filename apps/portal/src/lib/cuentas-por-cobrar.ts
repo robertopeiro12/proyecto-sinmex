@@ -65,11 +65,11 @@ export function textoVence(n: { vence: string | null; diasAtraso: number }): str
   return `${fecha} · ${n.diasAtraso} ${n.diasAtraso === 1 ? "día" : "días"}`;
 }
 
-/** Cobranza abre directo ese cliente con esa nota marcada (T-22, criterio 3). */
+/** Procesos › Notas abre directo ese cliente con esa nota marcada (T-22, criterio 3). */
 export function enlaceCobrar(clienteId: string, notaId: string, sucursal: string | null): string {
-  const q = new URLSearchParams({ cliente: clienteId, nota: notaId });
+  const q = new URLSearchParams({ pestana: "notas", cliente: clienteId, nota: notaId });
   if (sucursal) q.set("sucursal", sucursal);
-  return `/operacion/cobranza?${q.toString()}`;
+  return `/operacion/procesos?${q.toString()}`;
 }
 
 const pesos = (centavos: number): number => centavos / 100;

@@ -69,6 +69,8 @@ const YA_REGISTRADA: VentaEncontrada = {
   clienteId: "c1",
   cliente: "Abarrotes Lupita",
   repartidor: "Ana Pérez",
+  vendedorId: "v-ana",
+  factura: { estado: "N/A", numero: null },
   numNota: null,
   montoCentavos: 27000,
   status: "pendiente",
@@ -81,7 +83,7 @@ async function prepararPantalla() {
   const usuario = userEvent.setup();
   render(<PantallaRegistrarVenta sucursal={null} />);
   await usuario.type(screen.getByLabelText("Cliente"), "lupi");
-  await usuario.click(await screen.findByRole("button", { name: /Abarrotes Lupita/ }));
+  await usuario.click(await screen.findByRole("option", { name: /Abarrotes Lupita/ }));
   await screen.findByLabelText("Cantidad de Horchata 1 L");
   await screen.findByRole("option", { name: "Ana Pérez" });
   return usuario;

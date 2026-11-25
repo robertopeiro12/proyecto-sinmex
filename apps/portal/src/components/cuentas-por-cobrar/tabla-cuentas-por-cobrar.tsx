@@ -102,7 +102,7 @@ export function TablaCuentasPorCobrar({
                                 {puedeCobrar && !c.clienteDadoDeBaja && (
                                   <Td alinear="derecha">
                                     <Link
-                                      href={enlaceCobrar(c.clienteId, n.id, sucursal)}
+                                      href={enlaceCobrar(c.clienteId, n.id, sucursal ?? c.sucursalCodigo)}
                                       aria-label={`Cobrar ${n.folio}`}
                                       className={buttonVariants({ size: "sm" })}
                                     >

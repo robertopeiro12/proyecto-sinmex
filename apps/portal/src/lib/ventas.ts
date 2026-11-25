@@ -115,6 +115,12 @@ export const ETIQUETA_ORIGEN: Record<OrigenVenta, string> = {
   portal: "Portal",
 };
 
+/** La factura de una venta (T-19): `numero` solo en `facturada`. */
+export interface FacturaDeVenta {
+  estado: "N/A" | "pendiente" | "facturada";
+  numero: string | null;
+}
+
 /** Una fila de la búsqueda. `repartidor: null` = Oficina. */
 export interface VentaEncontrada {
   id: string;
@@ -123,6 +129,9 @@ export interface VentaEncontrada {
   clienteId: string;
   cliente: string;
   repartidor: string | null;
+  /** `null` = Oficina (Procesos PR B). */
+  vendedorId: string | null;
+  factura: FacturaDeVenta;
   /** `null` = sin nota de papel. */
   numNota: string | null;
   montoCentavos: number;
@@ -137,12 +146,20 @@ export interface ResultadoBusquedaVentas {
   hayMas: boolean;
 }
 
+/** Procesos → Notas: `con_saldo` y `por_facturar` exigen cliente e ignoran las fechas. */
+export type FiltroNotas = "con_saldo" | "por_facturar" | "todas";
+
 export interface FiltroVentas {
-  desde: string;
-  hasta: string;
+  /** Sin fechas el servidor usa hoy; con `folio`, `con_saldo` o `por_facturar` no se aplican. */
+  desde?: string;
+  hasta?: string;
   sucursal: string | null;
-  clienteId: string | null;
-  numNota: string;
+  clienteId?: string | null;
+  numNota?: string;
+  /** Folio exacto (el servidor quita espacios y lo pasa a mayúsculas). */
+  folio?: string;
+  /** Sin él, `todas` (lo de siempre). */
+  filtro?: FiltroNotas;
 }
 
 export interface LineaDetalleVenta {
@@ -216,11 +233,16 @@ export interface VentaDetalle {
 export type CambiosVenta = Omit<NuevaVenta, "fecha" | "clienteId">;
 
 export function buscarVentas(filtro: FiltroVentas): Promise<ResultadoBusquedaVentas> {
-  const params = new URLSearchParams({ desde: filtro.desde, hasta: filtro.hasta });
+  const params = new URLSearchParams();
+  if (filtro.desde) params.set("desde", filtro.desde);
+  if (filtro.hasta) params.set("hasta", filtro.hasta);
   if (filtro.sucursal) params.set("sucursal", filtro.sucursal);
   if (filtro.clienteId) params.set("clienteId", filtro.clienteId);
-  const numNota = filtro.numNota.trim();
+  const numNota = filtro.numNota?.trim();
   if (numNota) params.set("numNota", numNota);
+  const folio = filtro.folio?.trim();
+  if (folio) params.set("folio", folio);
+  if (filtro.filtro) params.set("filtro", filtro.filtro);
   return apiFetch<ResultadoBusquedaVentas>(`/ventas?${params.toString()}`);
 }
 
