@@ -6,7 +6,9 @@ import {
   destinoRenglon,
   encabezadoVenta,
   FILTROS_REGISTRO,
+  mensajeRegistroVacio,
   notasDelCobro,
+  quedoAFavor,
   renglonesDeVenta,
   textoResumenRegistro,
   textoSincronizada,
@@ -111,6 +113,21 @@ describe('detalle de un movimiento (rediseño pieza 5, maqueta 18)', () => {
   describe('cobro', () => {
     const folios: Record<string, string> = { 'nota-1': 'TJ261030JP04', 'nota-2': 'TJ261103JP07' };
     const folioDeNota = (id: string) => folios[id] ?? null;
+
+    it('quedó a favor: monto menos lo aplicado; nada si cuadra o no hay reparto', () => {
+      const reparto = JSON.stringify([{ venta_nota_id: 'nota-1', monto_centavos: 85000, saldo_despues_centavos: 0 }]);
+      expect(quedoAFavor({ monto_centavos: 100000, reparto_json: reparto })).toEqual({
+        etiqueta: 'Quedó a favor',
+        valor: '$150.00',
+      });
+      expect(quedoAFavor({ monto_centavos: 85000, reparto_json: reparto })).toBeNull();
+      expect(quedoAFavor({ monto_centavos: 5000, reparto_json: '[]' })).toBeNull();
+    });
+
+    it('lista vacía: Notas pendientes habla de notas por cobrar', () => {
+      expect(mensajeRegistroVacio('pendientes')).toBe('No traes notas por cobrar.');
+      expect(mensajeRegistroVacio('todo')).toBe('Aún no hay movimientos hoy.');
+    });
 
     it('una nota por cada linea del reparto: folio, aplicado y saldo despues', () => {
       expect(

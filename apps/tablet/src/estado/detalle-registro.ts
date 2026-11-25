@@ -20,6 +20,12 @@ export const FILTROS_REGISTRO: readonly { clave: FiltroRegistro; etiqueta: strin
 ];
 
 export const MENSAJE_REGISTRO_VACIO = 'Aún no hay movimientos hoy.';
+export const MENSAJE_PENDIENTES_VACIO = 'No traes notas por cobrar.';
+
+/** El texto de la lista vacia: en Notas pendientes habla de notas, no de movimientos. */
+export function mensajeRegistroVacio(filtro: FiltroRegistro): string {
+  return filtro === 'pendientes' ? MENSAJE_PENDIENTES_VACIO : MENSAJE_REGISTRO_VACIO;
+}
 
 /** La tarjeta de arriba: "Hoy · 5 movimientos"; en Notas pendientes, "Hoy · 2 notas por cobrar". */
 export function textoResumenRegistro(filtro: FiltroRegistro, n: number): string {
@@ -151,6 +157,18 @@ export function notasDelCobro(
       saldoDespues: l.saldo_despues_centavos === null ? null : `Saldo después ${pesos(l.saldo_despues_centavos)}`,
     };
   });
+}
+
+/**
+ * "Quedó a favor $X": lo que el cobro trajo de mas sobre lo aplicado a notas
+ * (`reparto_json`). `null` si no sobra nada o el cobro no guardo reparto
+ * (no se inventa).
+ */
+export function quedoAFavor(c: Pick<Cobranza, 'monto_centavos' | 'reparto_json'>): DatoDetalle | null {
+  const reparto = leerReparto(c.reparto_json);
+  if (reparto.length === 0) return null;
+  const sobra = c.monto_centavos - reparto.reduce((suma, l) => suma + l.monto_centavos, 0);
+  return sobra > 0 ? { etiqueta: 'Quedó a favor', valor: pesos(sobra) } : null;
 }
 
 export type DestinoRenglon =

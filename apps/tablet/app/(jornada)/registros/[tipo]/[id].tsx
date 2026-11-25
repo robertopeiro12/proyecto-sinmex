@@ -10,6 +10,7 @@ import {
   datosDePago,
   encabezadoVenta,
   notasDelCobro,
+  quedoAFavor,
   renglonesDeVenta,
   type DatoDetalle,
 } from '@/estado/detalle-registro';
@@ -117,6 +118,7 @@ function DetalleCobroVista({ cobro: c, cliente }: { cobro: Cobranza; cliente: st
   const { datos } = useJawa();
   const { estilos } = useTema();
   const notas = notasDelCobro(c, (id) => datos.catalogos.folioDeNota(id));
+  const aFavor = quedoAFavor(c);
   return (
     <Pantalla>
       <Stack.Screen options={{ title: 'Cobro' }} />
@@ -126,6 +128,7 @@ function DetalleCobroVista({ cobro: c, cliente }: { cobro: Cobranza; cliente: st
           {datosDelCobro(c).map((d) => (
             <Dato key={d.etiqueta} dato={d} color={d.etiqueta === 'Sincronizada' ? colorSincronizada(d) : undefined} />
           ))}
+          {aFavor ? <Dato dato={aFavor} color={colores.primario} /> : null}
         </View>
         {c.sync_estado === 'error' && c.sync_error ? <Text style={estilos.error}>{motivoDeRechazo(c.sync_error)}</Text> : null}
       </Tarjeta>

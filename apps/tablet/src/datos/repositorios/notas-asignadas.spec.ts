@@ -399,6 +399,37 @@ describe('repositorio de notas asignadas', () => {
         expect(notas.queTraePorCliente('ven-1')).toEqual(porCliente);
       };
 
+      it('asignada abonada hoy: sigue en la lista con el saldo que queda', () => {
+        const { cobranzas, notas } = montar();
+        cobranzas.registrar(cobro({ montoCentavos: 5000 }));
+        const lista = notas.queTraeDelVendedor('ven-1');
+        expect(lista.map((n) => [n.origen, n.folio, n.saldoCentavos])).toEqual([['asignada', 'TJ260801AP01', 10000]]);
+        coincide(notas);
+      });
+
+      it('venta propia abonada al vender, aun sin bajar: saldo = total - abono', () => {
+        const { deps, notas } = montar([]);
+        insertarVentaDePrueba(deps, {
+          id: 'ven-ab',
+          folio: 'AB1',
+          montoCentavos: 50000,
+          contadoCredito: 'credito',
+          abonoCentavos: 20000,
+        });
+        expect(notas.queTraeDelVendedor('ven-1')).toEqual([
+          {
+            origen: 'nueva',
+            clienteId: 'cli-1',
+            folio: 'AB1',
+            ventaNotaId: null,
+            ventaId: 'ven-ab',
+            saldoCentavos: 30000,
+            fecha: HOY,
+          },
+        ]);
+        coincide(notas);
+      });
+
       it('asignada con saldo + venta a credito local, sin contar doble la que ya bajo', () => {
         const { deps, catalogos, cobranzas, notas } = montar([]);
         expect(notas.queTraeDelVendedor('ven-1')).toEqual([]);

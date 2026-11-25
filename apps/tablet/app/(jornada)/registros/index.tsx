@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   destinoRenglon,
   FILTROS_REGISTRO,
-  MENSAJE_REGISTRO_VACIO,
+  mensajeRegistroVacio,
   textoResumenRegistro,
 } from '@/estado/detalle-registro';
 import { useJawa } from '@/estado/proveedor-jawa';
@@ -94,7 +94,7 @@ export default function Registros() {
           </View>
 
           {renglones.length === 0 ? (
-            <Text style={estilos.textoSuave}>{MENSAJE_REGISTRO_VACIO}</Text>
+            <Text style={estilos.textoSuave}>{mensajeRegistroVacio(filtro)}</Text>
           ) : (
             renglones.map((r) => <Renglon key={r.clave} renglon={r} onTocar={() => abrir(r)} />)
           )}
