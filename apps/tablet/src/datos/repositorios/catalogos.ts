@@ -7,6 +7,7 @@ import type {
   ClientePrecio,
   FechaISO,
   MomentoISO,
+  MotivoMerma,
   MotivoVisita,
   NotaAsignada,
   NotaPendiente,
@@ -58,6 +59,8 @@ export interface SnapshotCatalogos {
   tiposNegocio?: Omit<TipoNegocio, 'sincronizado_en'>[];
   /** T-39. Coleccion nueva del pull: el catalogo de la pantalla de visita. Baja como bandera. */
   motivosVisita?: Omit<MotivoVisita, 'sincronizado_en'>[];
+  /** Rediseño pieza 4. Coleccion nueva del pull: los motivos de merma. Baja como bandera. */
+  motivosMerma?: Omit<MotivoMerma, 'sincronizado_en'>[];
   /** T-30/T-31. Coleccion nueva del pull: el catalogo de la pantalla Gastos. Baja como bandera. */
   camposEgreso?: Omit<CampoEgreso, 'sincronizado_en'>[];
   precios?: Omit<ClientePrecio, 'sincronizado_en'>[];
@@ -108,6 +111,7 @@ const COLUMNAS = {
   producto: ['id', 'nombre', 'activo'],
   tipo_negocio: ['id', 'nombre', 'activo'],
   motivo_visita: ['id', 'nombre', 'exige_foto', 'exige_atendio', 'activo'],
+  motivo_merma: ['id', 'nombre', 'aplica_cliente', 'aplica_vehiculo', 'activo'],
   campo_egreso: ['id', 'nombre', 'tipo', 'se_usa_en_app', 'activo'],
   presentacion: ['id', 'producto_id', 'volumen', 'activo'],
   cliente: [
@@ -308,6 +312,9 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
           upsert(bd, 'tipo_negocio', COLUMNAS.tipo_negocio, snapshot.tiposNegocio, ahora) +
           // T-39: sin llaves foraneas hacia nadie; catalogo de empresa como tipo_negocio.
           upsert(bd, 'motivo_visita', COLUMNAS.motivo_visita, snapshot.motivosVisita, ahora) +
+          // Rediseño pieza 4: catalogo de empresa como motivo_visita; nada del
+          // snapshot lo referencia (solo `movimiento`, que escribe la tablet).
+          upsert(bd, 'motivo_merma', COLUMNAS.motivo_merma, snapshot.motivosMerma, ahora) +
           // T-30/T-31: sin llaves foraneas hacia nadie; catalogo de empresa como motivo_visita.
           upsert(bd, 'campo_egreso', COLUMNAS.campo_egreso, snapshot.camposEgreso, ahora) +
           upsert(bd, 'presentacion', COLUMNAS.presentacion, snapshot.presentaciones, ahora) +
@@ -380,6 +387,23 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
      */
     obtenerMotivoVisita(id: string): MotivoVisita | null {
       return bd.getFirstSync<MotivoVisita>('select * from motivo_visita where id = $id', { $id: id });
+    },
+
+    /**
+     * Motivos de merma **activos** que aplican a la merma del cliente o a la del
+     * vehiculo, por nombre (rediseño pieza 4). Los que solo son de almacen no
+     * salen.
+     */
+    listarMotivosMerma(aplica: 'cliente' | 'vehiculo'): MotivoMerma[] {
+      const columna = aplica === 'cliente' ? 'aplica_cliente' : 'aplica_vehiculo';
+      return bd.getAllSync<MotivoMerma>(
+        `select * from motivo_merma where activo = 1 and ${columna} = 1 order by nombre`,
+      );
+    },
+
+    /** Un motivo de merma por id, activo o no (`movimientos.registrar` decide si sirve). */
+    obtenerMotivoMerma(id: string): MotivoMerma | null {
+      return bd.getFirstSync<MotivoMerma>('select * from motivo_merma where id = $id', { $id: id });
     },
 
     /**

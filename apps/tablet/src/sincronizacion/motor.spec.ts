@@ -1233,6 +1233,21 @@ describe('aSnapshot (T-39)', () => {
   });
 });
 
+describe('aSnapshot (rediseño pieza 4)', () => {
+  it('los motivos de merma bajan con sus banderas booleanas como 0/1, tambien los de almacen', () => {
+    const respuesta = respuestaPullDePrueba();
+    respuesta.catalogos.motivos_merma = [
+      { id: 'mm1', nombre: 'Caducado', aplica_cliente: true, aplica_vehiculo: false, activo: 1 },
+      { id: 'mm2', nombre: 'Mal sellado', aplica_cliente: false, aplica_vehiculo: false, activo: 0 },
+    ];
+    expect(aSnapshot(respuesta).motivosMerma).toEqual([
+      { id: 'mm1', nombre: 'Caducado', aplica_cliente: 1, aplica_vehiculo: 0, activo: 1 },
+      { id: 'mm2', nombre: 'Mal sellado', aplica_cliente: 0, aplica_vehiculo: 0, activo: 0 },
+    ]);
+    expect(aSnapshot(respuestaPullDePrueba()).motivosMerma).toBeUndefined();
+  });
+});
+
 describe('aSnapshot (T-30/T-31)', () => {
   it('los campos de egreso bajan con la casilla booleana como 0/1 de SQLite', () => {
     const respuesta = respuestaPullDePrueba();

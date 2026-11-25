@@ -106,6 +106,7 @@ describe('contarPendientesDeSubir', () => {
       vendedorId: 'ven-1',
       tipo: 'merma_trayecto',
       clienteId: null,
+      motivoMermaId: 'mm-golpe',
       comentario: null,
       lineas: [{ presentacionId: 'pre-1', sentido: 'entregado', piezas: 1 }],
     });

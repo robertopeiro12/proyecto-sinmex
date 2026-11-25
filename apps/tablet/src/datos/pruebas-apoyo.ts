@@ -131,6 +131,14 @@ export function snapshotDePrueba(): SnapshotCatalogos {
       // Dado de baja en el portal: baja con la bandera y ya no se ofrece.
       { id: 'mot-baja', nombre: 'Vacaciones', exige_foto: 0, exige_atendio: 0, activo: 0 },
     ],
+    // Rediseño pieza 4: uno por bandera, uno solo de almacen y uno dado de baja.
+    motivosMerma: [
+      { id: 'mm-caducado', nombre: 'Caducado', aplica_cliente: 1, aplica_vehiculo: 0, activo: 1 },
+      { id: 'mm-golpe', nombre: 'Golpe en el camino', aplica_cliente: 0, aplica_vehiculo: 1, activo: 1 },
+      { id: 'mm-reventado', nombre: 'Reventado', aplica_cliente: 1, aplica_vehiculo: 1, activo: 1 },
+      { id: 'mm-almacen', nombre: 'Mal sellado', aplica_cliente: 0, aplica_vehiculo: 0, activo: 1 },
+      { id: 'mm-baja', nombre: 'Derramado', aplica_cliente: 1, aplica_vehiculo: 1, activo: 0 },
+    ],
     camposEgreso: [
       { id: 'ce-gasolina', nombre: 'Gasolina', tipo: 'operacion', se_usa_en_app: 1, activo: 1 },
       { id: 'ce-hielo', nombre: 'Hielo', tipo: 'operacion', se_usa_en_app: 1, activo: 1 },

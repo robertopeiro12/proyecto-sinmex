@@ -506,6 +506,16 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
       exige_foto: mo.exige_foto ? 1 : 0,
       exige_atendio: mo.exige_atendio ? 1 : 0,
     })),
+    // Rediseño pieza 4: un servidor anterior no manda la coleccion (`undefined`
+    // no escribe nada). Las banderas llegan booleanas y SQLite guarda 0/1. Trae
+    // tambien los motivos que solo aplican al almacen: filtra `listarMotivosMerma`.
+    motivosMerma: c.motivos_merma?.map((mo) => ({
+      id: mo.id,
+      nombre: mo.nombre,
+      aplica_cliente: mo.aplica_cliente ? 1 : 0,
+      aplica_vehiculo: mo.aplica_vehiculo ? 1 : 0,
+      activo: mo.activo,
+    })),
     // T-30/T-31: un servidor anterior no manda la coleccion (`undefined` no
     // escribe nada). La casilla llega booleana y SQLite guarda 0/1, como `exige_foto`.
     camposEgreso: c.campos_egreso?.map((ce) => ({

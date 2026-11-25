@@ -5,7 +5,7 @@ import {
   faltantesDeMovimiento,
   textoFaltante,
 } from '../inventario-reglas';
-import { motivoDeConsumo, validarMovimiento, type LineaMovimiento } from '../movimientos-reglas';
+import { llevaMotivo, motivoDeConsumo, validarMovimiento, type LineaMovimiento } from '../movimientos-reglas';
 import type { FechaISO, Movimiento, MovimientoLinea, TipoMovimiento } from '../tipos';
 import { etiquetasDelCatalogo, leerInventarioDelDia, PRODUCTO_FUERA_DE_CATALOGO } from './cargas';
 import type { RepositorioCatalogos } from './catalogos';
@@ -24,11 +24,18 @@ export class ErrorMovimiento extends Error {
 export interface DatosRegistroMovimiento {
   vendedorId: string;
   tipo: TipoMovimiento;
-  /** Solo en la merma del cliente. */
+  /** Solo en la merma del cliente y el cambio. */
   clienteId: string | null;
+  /**
+   * Rediseño pieza 4: el motivo de la merma, obligatorio en las dos mermas
+   * (vivo y con la bandera de su tipo) y prohibido en el cambio y el consumo.
+   */
+  motivoMermaId?: string | null;
   lineas: LineaMovimiento[];
   comentario: string | null;
 }
+
+export const MENSAJE_MOTIVO_NO_SIRVE = 'Ese motivo de merma ya no se puede usar aquí. Sincroniza y elige otro.';
 
 export interface LineaMovimientoConEtiqueta extends MovimientoLinea {
   /** "Jamaica 1 L", o `PRODUCTO_FUERA_DE_CATALOGO`. */
@@ -50,7 +57,8 @@ export type RepositorioMovimientos = ReturnType<typeof crearRepositorioMovimient
 
 /**
  * Los movimientos de inventario (T-27 pieza 2): la merma del cliente, la del
- * trayecto y el consumo propio. Grabar, consultar el dia y la cola del push.
+ * trayecto y el consumo propio; desde el rediseño (pieza 4), el cambio con un
+ * cliente y el motivo de las mermas. Grabar, consultar el dia y la cola del push.
  *
  * Un movimiento grabado **no se edita ni se borra** en la app (D6): la
  * correccion es de la oficina (T-35). Por eso no hay `editar` ni `eliminar`.
@@ -107,9 +115,21 @@ export function crearRepositorioMovimientos(
         const cliente = catalogos.obtenerCliente(datos.clienteId);
         if (!cliente || cliente.activo !== 1) {
           throw new ErrorMovimiento(
-            'Este cliente ya no está en el catálogo de la tablet. Sincroniza antes de registrar la merma.',
+            `Este cliente ya no está en el catálogo de la tablet. Sincroniza antes de registrar ${
+              datos.tipo === 'cambio' ? 'el cambio' : 'la merma'
+            }.`,
           );
         }
+      }
+
+      // Rediseño pieza 4: el motivo tiene que estar vivo y aplicar a esta merma
+      // (los de solo almacen tambien bajan en el pull). Se copia su nombre.
+      let motivoNombre: string | null = null;
+      if (llevaMotivo(datos.tipo) && datos.motivoMermaId) {
+        const motivo = catalogos.obtenerMotivoMerma(datos.motivoMermaId);
+        const aplica = datos.tipo === 'merma_cliente' ? motivo?.aplica_cliente : motivo?.aplica_vehiculo;
+        if (!motivo || motivo.activo !== 1 || aplica !== 1) throw new ErrorMovimiento(MENSAJE_MOTIVO_NO_SIRVE);
+        motivoNombre = motivo.nombre;
       }
 
       const nombres = etiquetasDelCatalogo(bd);
@@ -160,8 +180,10 @@ export function crearRepositorioMovimientos(
         }
 
         bd.runSync(
-          `insert into movimiento (id, fecha, vendedor_id, cliente_id, tipo, comentario, registrado_en, sync_estado)
-           values ($id, $fecha, $vendedor_id, $cliente_id, $tipo, $comentario, $registrado_en, 'pendiente')`,
+          `insert into movimiento (id, fecha, vendedor_id, cliente_id, tipo, comentario,
+                                   motivo_merma_id, motivo_nombre, registrado_en, sync_estado)
+           values ($id, $fecha, $vendedor_id, $cliente_id, $tipo, $comentario,
+                   $motivo_merma_id, $motivo_nombre, $registrado_en, 'pendiente')`,
           {
             $id: id,
             // El dia de trabajo de la tablet (Tijuana): viaja como `fecha_operacion`.
@@ -170,6 +192,8 @@ export function crearRepositorioMovimientos(
             $cliente_id: datos.clienteId,
             $tipo: datos.tipo,
             $comentario: comentario,
+            $motivo_merma_id: motivoNombre === null ? null : (datos.motivoMermaId ?? null),
+            $motivo_nombre: motivoNombre,
             $registrado_en: reloj.ahora(),
           },
         );
@@ -242,6 +266,20 @@ export function crearRepositorioMovimientos(
           where pr.activo = 1 and p.activo = 1
           order by p.nombre, pr.volumen`,
       );
+    },
+
+    /**
+     * Rediseño pieza 4 ("Le entregué" del cambio y la merma del vehiculo): con
+     * el control de inventario prendido, solo las presentaciones activas que el
+     * vendedor trae hoy (existencia > 0); apagado, todas las activas.
+     */
+    presentacionesQueTrae(vendedorId: string): PresentacionMovimiento[] {
+      const hoy = reloj.hoy();
+      const inventario = leerInventarioDelDia(bd, vendedorId, hoy);
+      const todas = repo.presentaciones();
+      if (!inventario.controlInventario) return todas;
+      const disponibles = existencias(inventario.cargas, inventario.ventas, hoy, inventario.movimientos);
+      return todas.filter((p) => (disponibles.get(p.presentacionId)?.existencia ?? 0) > 0);
     },
 
     /**

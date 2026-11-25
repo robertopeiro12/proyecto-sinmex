@@ -76,8 +76,13 @@ export interface Existencia {
   consumo: number;
   /** Lo danado que devolvio el cliente ("Recibí dañado"). NO suma a la existencia. */
   mermaRecibida: number;
+  /** Rediseño pieza 4: lo que el cliente regreso en un cambio. SI suma: es producto bueno. */
+  cambiosRecibidos: number;
+  /** Rediseño pieza 4: lo que se le entrego al cliente en un cambio. */
+  cambiosEntregados: number;
   /**
-   * cargado − vendido − regalado − mermaEntregada − mermaTrayecto − consumo.
+   * cargado − vendido − regalado − mermaEntregada − mermaTrayecto − consumo
+   * + cambiosRecibidos − cambiosEntregados (la teorica del corte del portal).
    * Puede ser negativa si se vendio o registro con el control apagado.
    */
   existencia: number;
@@ -101,7 +106,8 @@ export interface Faltante {
  * vendido y lo regalado en las ventas de `hoy` (D10: el regalo tambien sale de
  * la camioneta) y, desde la pieza 2, menos la merma entregada, la del trayecto y
  * el consumo de `hoy`. La merma recibida no suma: se cuenta aparte para
- * regresarla a la planta.
+ * regresarla a la planta. Desde la pieza 4 del rediseño, lo recibido en un
+ * cambio suma y lo entregado resta.
  */
 export function existencias(
   cargas: readonly CargaInventario[],
@@ -121,6 +127,8 @@ export function existencias(
         mermaTrayecto: 0,
         consumo: 0,
         mermaRecibida: 0,
+        cambiosRecibidos: 0,
+        cambiosEntregados: 0,
         existencia: 0,
         mermaPorRegresar: 0,
       };
@@ -145,14 +153,27 @@ export function existencias(
   for (const m of movimientos) {
     if (m.fecha !== hoy) continue;
     const e = de(m.presentacion_id);
-    // Solo la merma del cliente trae lineas `recibido` (validarMovimiento).
-    if (m.sentido === 'recibido') e.mermaRecibida += m.piezas;
+    // El cambio va primero: su `recibido` es producto bueno, no merma.
+    if (m.tipo === 'cambio') {
+      if (m.sentido === 'recibido') e.cambiosRecibidos += m.piezas;
+      else e.cambiosEntregados += m.piezas;
+    }
+    // Fuera del cambio, solo la merma del cliente trae lineas `recibido` (validarMovimiento).
+    else if (m.sentido === 'recibido') e.mermaRecibida += m.piezas;
     else if (m.tipo === 'merma_cliente') e.mermaEntregada += m.piezas;
     else if (m.tipo === 'merma_trayecto') e.mermaTrayecto += m.piezas;
     else e.consumo += m.piezas;
   }
   for (const e of mapa.values()) {
-    e.existencia = e.cargado - e.vendido - e.regalado - e.mermaEntregada - e.mermaTrayecto - e.consumo;
+    e.existencia =
+      e.cargado -
+      e.vendido -
+      e.regalado -
+      e.mermaEntregada -
+      e.mermaTrayecto -
+      e.consumo +
+      e.cambiosRecibidos -
+      e.cambiosEntregados;
     e.mermaPorRegresar = e.mermaRecibida + e.mermaTrayecto;
   }
   return mapa;

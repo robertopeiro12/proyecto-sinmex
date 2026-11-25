@@ -18,8 +18,8 @@ export type FilaAgrupable = Pick<FilaRutaDelDia, 'cliente_id' | 'activo' | 'visi
  * "Por visitar", "Visitados" y "Fuera de ruta" (rediseño §6; D16):
  *
  * - Viva sin nada hecho hoy → "Por visitar".
- * - Viva con algo hecho hoy (venta, cobro, visita, comentario de no cobro o
- *   merma), con o sin venta → "Visitados". Se puede volver a abrir.
+ * - Viva con algo hecho hoy (venta, cobro, visita, comentario de no cobro,
+ *   merma o cambio), con o sin venta → "Visitados". Se puede volver a abrir.
  * - Quitada por la oficina **con** actividad hoy → "Fuera de ruta".
  * - Quitada **sin** actividad → desaparece.
  * - Si el cliente quitado volvio a la ruta (otra fila viva), no se pinta dos veces.
@@ -51,7 +51,8 @@ export function sinRutaAsignada(grupos: {
  * La linea bajo el nombre en "Visitados" (rediseño §6, maqueta 6): lo que se
  * hizo hoy con el cliente, en este orden y unido con " · ": "Cobro $850.00",
  * "Venta $1,240.00" (contado), "Venta a crédito $1,240.00" (con abono al
- * vender: "Venta a crédito $720.00 · Abonó $300.00"), "Merma". Sin
+ * vender: "Venta a crédito $720.00 · Abonó $300.00"), "Merma", "Cambio"
+ * (rediseño pieza 4). Sin
  * ninguna de esas y con visita: "Visita sin venta · <motivo en minusculas>"
  * ("Visita sin venta" a secas sin motivo, p. ej. solo el comentario de no
  * cobro). Dinero con centavos, como en toda la app (`pesos`).
@@ -64,6 +65,7 @@ export function resumenVisitado(
     | 'venta_abono_centavos'
     | 'cobro_centavos'
     | 'con_merma'
+    | 'con_cambio'
     | 'ultima_visita_motivo'
     | 'visita_sin_venta'
   >,
@@ -76,6 +78,7 @@ export function resumenVisitado(
     if (f.venta_abono_centavos > 0) partes.push(`Abonó ${pesos(f.venta_abono_centavos)}`);
   }
   if (f.con_merma) partes.push('Merma');
+  if (f.con_cambio) partes.push('Cambio');
   if (partes.length === 0 && f.visita_sin_venta) {
     const motivo = f.ultima_visita_motivo?.trim();
     return motivo ? `Visita sin venta · ${motivo.toLowerCase()}` : 'Visita sin venta';

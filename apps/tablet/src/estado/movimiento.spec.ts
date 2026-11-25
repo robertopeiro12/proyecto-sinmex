@@ -19,6 +19,7 @@ import {
 const entrada = (extra: Partial<EntradaCapturaMovimiento> = {}): EntradaCapturaMovimiento => ({
   tipo: 'merma_cliente',
   clienteId: 'cli-1',
+  motivoMermaId: 'mm-1',
   captura: { 'pre-1': { recibido: '3' }, 'pre-2': { entregado: '2' } },
   comentario: '',
   diaCerrado: false,
@@ -69,6 +70,7 @@ describe('validarCapturaMovimiento', () => {
         entrada({
           tipo: 'consumo',
           clienteId: null,
+          motivoMermaId: null,
           captura: { 'pre-1': { entregado: piezas } },
           consumo: { limite: 1, consumoDeHoy },
         }),
@@ -118,6 +120,7 @@ describe('lista de movimientos', () => {
       merma_cliente: 'Merma del cliente',
       merma_trayecto: 'Merma del trayecto',
       consumo: 'Consumo propio',
+      cambio: 'Cambio',
     });
   });
 

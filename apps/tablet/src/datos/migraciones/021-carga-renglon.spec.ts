@@ -25,11 +25,10 @@ function insertarCarga(bd: BaseDatos) {
 }
 
 describe('migracion 021: aceptada por renglon de la carga', () => {
-  it('la 021 es la ultima y deja versionEsquema en 21', () => {
+  it('la 021 es carga-renglon y deja de ser la ultima con la 022 (rediseno pieza 4)', () => {
     expect(migraciones[20]?.nombre).toBe('carga-renglon');
     expect(migraciones[20]?.version).toBe(21);
-    expect(migraciones).toHaveLength(21);
-    expect(versionEsquema(baseAlDia())).toBe(21);
+    expect(versionEsquema(baseAlDia())).toBe(migraciones.length);
   });
 
   it('un renglon viejo queda con aceptada nula', () => {

@@ -55,7 +55,7 @@ describe('agruparRutaEnCurso (spec §6, maqueta 6)', () => {
 
 describe('resumenVisitado (spec §6)', () => {
   test('resumen de lo hecho', () => {
-    const base = { venta_contado_centavos: 0, venta_credito_centavos: 0, venta_abono_centavos: 0, cobro_centavos: 0, con_merma: false, ultima_visita_motivo: null, visita_sin_venta: false };
+    const base = { venta_contado_centavos: 0, venta_credito_centavos: 0, venta_abono_centavos: 0, cobro_centavos: 0, con_merma: false, con_cambio: false, ultima_visita_motivo: null, visita_sin_venta: false };
     expect(resumenVisitado({ ...base, cobro_centavos: 85000, venta_credito_centavos: 124000 })).toBe('Cobro $850.00 · Venta a crédito $1,240.00');
     expect(resumenVisitado({ ...base, venta_contado_centavos: 50000, con_merma: true })).toBe('Venta $500.00 · Merma');
     expect(resumenVisitado({ ...base, visita_sin_venta: true, ultima_visita_motivo: 'Cerrado' })).toBe('Visita sin venta · cerrado');
@@ -64,7 +64,7 @@ describe('resumenVisitado (spec §6)', () => {
   });
 
   test('venta a crédito con abono al vender dice cuánto abonó (pieza 2)', () => {
-    const base = { venta_contado_centavos: 0, venta_credito_centavos: 0, venta_abono_centavos: 0, cobro_centavos: 0, con_merma: false, ultima_visita_motivo: null, visita_sin_venta: false };
+    const base = { venta_contado_centavos: 0, venta_credito_centavos: 0, venta_abono_centavos: 0, cobro_centavos: 0, con_merma: false, con_cambio: false, ultima_visita_motivo: null, visita_sin_venta: false };
     expect(resumenVisitado({ ...base, venta_credito_centavos: 72000, venta_abono_centavos: 30000 })).toBe(
       'Venta a crédito $720.00 · Abonó $300.00',
     );
@@ -75,11 +75,19 @@ describe('resumenVisitado (spec §6)', () => {
   });
 
   test('todo junto, en su orden; con algo hecho la visita no se menciona', () => {
-    const base = { venta_contado_centavos: 0, venta_credito_centavos: 0, venta_abono_centavos: 0, cobro_centavos: 0, con_merma: false, ultima_visita_motivo: null, visita_sin_venta: false };
+    const base = { venta_contado_centavos: 0, venta_credito_centavos: 0, venta_abono_centavos: 0, cobro_centavos: 0, con_merma: false, con_cambio: false, ultima_visita_motivo: null, visita_sin_venta: false };
     expect(
       resumenVisitado({ ...base, cobro_centavos: 100, venta_contado_centavos: 200, venta_credito_centavos: 300, con_merma: true }),
     ).toBe('Cobro $1.00 · Venta $2.00 · Venta a crédito $3.00 · Merma');
     expect(resumenVisitado({ ...base, con_merma: true, visita_sin_venta: true, ultima_visita_motivo: 'Cerrado' })).toBe('Merma');
+    // Rediseño pieza 4: el cambio va despues de la merma.
+    expect(resumenVisitado({ ...base, con_cambio: true })).toBe('Cambio');
+    expect(resumenVisitado({ ...base, venta_contado_centavos: 200, con_merma: true, con_cambio: true })).toBe(
+      'Venta $2.00 · Merma · Cambio',
+    );
+    expect(resumenVisitado({ ...base, con_cambio: true, visita_sin_venta: true, ultima_visita_motivo: 'Cerrado' })).toBe(
+      'Cambio',
+    );
   });
 });
 

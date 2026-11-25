@@ -36,6 +36,7 @@ const mermaCliente = (extra: Partial<DatosRegistroMovimiento> = {}): DatosRegist
   vendedorId: 'ven-1',
   tipo: 'merma_cliente',
   clienteId: 'cli-1',
+  motivoMermaId: 'mm-caducado',
   comentario: null,
   lineas: [
     { presentacionId: 'pre-1', sentido: 'recibido', piezas: 3 },
@@ -53,8 +54,23 @@ const sale = (
   vendedorId: 'ven-1',
   tipo,
   clienteId: null,
+  // Rediseño pieza 4: la merma del vehiculo lleva motivo; el consumo no.
+  motivoMermaId: tipo === 'merma_trayecto' ? 'mm-golpe' : null,
   comentario: null,
   lineas: [{ presentacionId, sentido: 'entregado', piezas }],
+});
+
+/** Cambio: el cliente regresa 2 Jamaica 1 L y se lleva 2 Jamaica 500 ml. */
+const cambio = (extra: Partial<DatosRegistroMovimiento> = {}): DatosRegistroMovimiento => ({
+  vendedorId: 'ven-1',
+  tipo: 'cambio',
+  clienteId: 'cli-1',
+  comentario: null,
+  lineas: [
+    { presentacionId: 'pre-1', sentido: 'recibido', piezas: 2 },
+    { presentacionId: 'pre-2', sentido: 'entregado', piezas: 2 },
+  ],
+  ...extra,
 });
 
 const cuantos = (deps: DepsRepositorio) => ({
@@ -264,6 +280,113 @@ describe('movimientos.registrar (T-27 pieza 2)', () => {
   });
 });
 
+describe('cambios y motivos de merma (rediseño pieza 4)', () => {
+  it('la merma copia el nombre del motivo; las filas sin motivo quedan en null', () => {
+    const { movimientos } = montar();
+    expect(movimientos.registrar(mermaCliente())).toMatchObject({
+      motivo_merma_id: 'mm-caducado',
+      motivo_nombre: 'Caducado',
+    });
+    expect(movimientos.registrar(sale('merma_trayecto'))).toMatchObject({
+      motivo_merma_id: 'mm-golpe',
+      motivo_nombre: 'Golpe en el camino',
+    });
+    expect(movimientos.registrar(sale('consumo'))).toMatchObject({ motivo_merma_id: null, motivo_nombre: null });
+  });
+
+  it('una merma sin motivo no se graba', () => {
+    const { movimientos, deps } = montar();
+    expect(() => movimientos.registrar(mermaCliente({ motivoMermaId: null }))).toThrow(
+      new ErrorMovimiento('Elige el motivo de la merma.'),
+    );
+    expect(cuantos(deps)).toEqual({ movimientos: 0, lineas: 0 });
+  });
+
+  it('un motivo dado de baja, sin su bandera, de almacen o que no existe no se graba', () => {
+    const { movimientos, deps } = montar();
+    const noSirve = 'Ese motivo de merma ya no se puede usar aquí. Sincroniza y elige otro.';
+    expect(() => movimientos.registrar(mermaCliente({ motivoMermaId: 'mm-baja' }))).toThrow(noSirve);
+    // Golpe en el camino solo aplica al vehiculo; Caducado solo al cliente.
+    expect(() => movimientos.registrar(mermaCliente({ motivoMermaId: 'mm-golpe' }))).toThrow(noSirve);
+    expect(() => movimientos.registrar({ ...sale('merma_trayecto'), motivoMermaId: 'mm-caducado' })).toThrow(
+      noSirve,
+    );
+    expect(() => movimientos.registrar(mermaCliente({ motivoMermaId: 'mm-almacen' }))).toThrow(noSirve);
+    expect(() => movimientos.registrar(mermaCliente({ motivoMermaId: 'no-existe' }))).toThrow(noSirve);
+    // Reventado aplica a los dos.
+    expect(movimientos.registrar(mermaCliente({ motivoMermaId: 'mm-reventado' })).motivo_nombre).toBe('Reventado');
+    expect(cuantos(deps).movimientos).toBe(1);
+  });
+
+  it('graba el cambio con su cliente y sus dos lados, sin motivo', () => {
+    const { movimientos } = montar();
+    const m = movimientos.registrar(cambio());
+    expect(m).toMatchObject({
+      tipo: 'cambio',
+      cliente_id: 'cli-1',
+      motivo_merma_id: null,
+      motivo_nombre: null,
+      sync_estado: 'pendiente',
+    });
+    expect(m.lineas.map((l) => [l.etiqueta, l.sentido, l.piezas])).toEqual([
+      ['Jamaica 1 L', 'recibido', 2],
+      ['Jamaica 500 ml', 'entregado', 2],
+    ]);
+    expect(movimientos.delDiaDelCliente('cli-1').map((x) => x.id)).toEqual([m.id]);
+  });
+
+  it('un cambio con motivo, sin cliente o sin un lado no se graba', () => {
+    const { movimientos, deps } = montar();
+    expect(() => movimientos.registrar(cambio({ motivoMermaId: 'mm-caducado' }))).toThrow(ErrorMovimiento);
+    expect(() => movimientos.registrar(cambio({ clienteId: null }))).toThrow('El cambio necesita al cliente.');
+    expect(() =>
+      movimientos.registrar(cambio({ lineas: [{ presentacionId: 'pre-1', sentido: 'recibido', piezas: 1 }] })),
+    ).toThrow('Captura al menos una pieza en «Le entregué».');
+    expect(cuantos(deps)).toEqual({ movimientos: 0, lineas: 0 });
+  });
+
+  it('Review Focus 2: un cambio que entrega mas de lo que trae no se graba', () => {
+    const { movimientos, deps } = montar();
+    prenderControl(deps);
+    cargar(deps, 'carga-1', 1, 'aceptada', [{ presentacion_id: 'pre-2', piezas: 1 }]);
+    expect(() => movimientos.registrar(cambio())).toThrow(
+      'No te alcanza el producto: Jamaica 500 ml: falta 1 pieza.',
+    );
+    expect(cuantos(deps)).toEqual({ movimientos: 0, lineas: 0 });
+  });
+
+  it('Review Focus 3: lo recibido en un cambio suma a lo vendible y no es merma', () => {
+    const { movimientos, cargas, deps } = montar();
+    prenderControl(deps);
+    cargar(deps, 'carga-1', 1, 'aceptada', [{ presentacion_id: 'pre-2', piezas: 5 }]);
+    movimientos.registrar(cambio());
+    const filas = cargas.filasInventario('ven-1');
+    expect(filas.find((f) => f.presentacionId === 'pre-1')).toMatchObject({
+      existencia: 2,
+      cambiosRecibidos: 2,
+      mermaPorRegresar: 0,
+    });
+    expect(filas.find((f) => f.presentacionId === 'pre-2')).toMatchObject({ existencia: 3, cambiosEntregados: 2 });
+    // Y se puede vender o volver a entregar.
+    expect(movimientos.registrar(sale('merma_trayecto', 2, 'pre-1')).tipo).toBe('merma_trayecto');
+  });
+
+  it('presentacionesQueTrae: con el control prendido, solo lo que tiene existencia; apagado, todo', () => {
+    const { movimientos, deps } = montar();
+    expect(movimientos.presentacionesQueTrae('ven-1')).toEqual(movimientos.presentaciones());
+    prenderControl(deps);
+    expect(movimientos.presentacionesQueTrae('ven-1')).toEqual([]);
+    cargar(deps, 'carga-1', 1, 'aceptada', [
+      { presentacion_id: 'pre-1', piezas: 1 },
+      { presentacion_id: 'pre-2', piezas: 3 },
+    ]);
+    movimientos.registrar(sale('merma_trayecto', 1, 'pre-1'));
+    expect(movimientos.presentacionesQueTrae('ven-1')).toEqual([
+      { presentacionId: 'pre-2', etiqueta: 'Jamaica 500 ml' },
+    ]);
+  });
+});
+
 describe('consultas y cola de movimientos', () => {
   it('delDia y delDiaDelCliente, en orden de captura', () => {
     const { movimientos } = montar();
@@ -309,12 +432,14 @@ describe('consultas y cola de movimientos', () => {
         presentacionId: 'pre-1', etiqueta: 'Jamaica 1 L',
         cargado: 24, vendido: 0, regalado: 0,
         mermaEntregada: 0, mermaTrayecto: 1, consumo: 0, mermaRecibida: 3,
+        cambiosRecibidos: 0, cambiosEntregados: 0,
         existencia: 23, mermaPorRegresar: 4,
       },
       {
         presentacionId: 'pre-2', etiqueta: 'Jamaica 500 ml',
         cargado: 12, vendido: 0, regalado: 0,
         mermaEntregada: 2, mermaTrayecto: 0, consumo: 1, mermaRecibida: 0,
+        cambiosRecibidos: 0, cambiosEntregados: 0,
         existencia: 9, mermaPorRegresar: 0,
       },
     ]);

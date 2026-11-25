@@ -35,6 +35,7 @@ export const TITULO_MOVIMIENTO: Record<TipoMovimiento, string> = {
   merma_cliente: 'Merma del cliente',
   merma_trayecto: 'Merma del trayecto',
   consumo: 'Consumo propio',
+  cambio: 'Cambio',
 };
 
 /** Lo capturado por presentacion, tal cual (el texto de cada campo). */
@@ -62,6 +63,8 @@ export function piezasCapturadas(
 export interface EntradaCapturaMovimiento {
   tipo: TipoMovimiento;
   clienteId: string | null;
+  /** Rediseño pieza 4: el motivo elegido (las dos mermas lo exigen). */
+  motivoMermaId?: string | null;
   captura: CapturaMovimiento;
   comentario: string;
   /** La jornada de hoy ya esta cerrada (`estadoMenuJornada`). */
@@ -102,7 +105,9 @@ export function validarCapturaMovimiento(e: EntradaCapturaMovimiento): Validacio
 
   const faltantes: string[] = [];
   if (ilegible) faltantes.push(`Las piezas son números enteros de 1 a ${MAX_PIEZAS_MOVIMIENTO}.`);
-  faltantes.push(...validarMovimiento({ tipo: e.tipo, clienteId: e.clienteId, lineas, comentario }));
+  faltantes.push(
+    ...validarMovimiento({ tipo: e.tipo, clienteId: e.clienteId, motivoMermaId: e.motivoMermaId, lineas, comentario }),
+  );
   if (e.tipo === 'consumo' && e.consumo && lineas.length > 0) {
     const motivo = motivoDeConsumo({
       limite: e.consumo.limite,

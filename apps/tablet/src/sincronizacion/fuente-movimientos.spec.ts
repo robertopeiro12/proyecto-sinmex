@@ -9,7 +9,7 @@ function montar() {
   const catalogos = crearRepositorioCatalogos(deps);
   catalogos.guardarSnapshot(snapshotDePrueba());
   const movimientos = crearRepositorioMovimientos(deps, { catalogos });
-  return { movimientos, fuente: fuenteMovimientos(movimientos) };
+  return { movimientos, fuente: fuenteMovimientos(movimientos), bd: deps.bd };
 }
 
 describe('fuente de movimientos (T-27 pieza 2)', () => {
@@ -25,6 +25,7 @@ describe('fuente de movimientos (T-27 pieza 2)', () => {
       vendedorId: 'ven-1',
       tipo: 'merma_cliente',
       clienteId: 'cli-1',
+      motivoMermaId: 'mm-caducado',
       comentario: 'Reventadas',
       lineas: [
         { presentacionId: 'pre-1', sentido: 'recibido', piezas: 3 },
@@ -41,6 +42,7 @@ describe('fuente de movimientos (T-27 pieza 2)', () => {
       datos: {
         tipo: 'merma_cliente',
         comentario: 'Reventadas',
+        motivo_merma_id: 'mm-caducado',
         registrado_en: MOMENTO,
         lineas: [
           { presentacion_id: 'pre-1', sentido: 'recibido', piezas: 3 },
@@ -57,12 +59,59 @@ describe('fuente de movimientos (T-27 pieza 2)', () => {
       vendedorId: 'ven-1',
       tipo: 'merma_trayecto',
       clienteId: null,
+      motivoMermaId: 'mm-golpe',
       comentario: null,
       lineas: [{ presentacionId: 'pre-1', sentido: 'entregado', piezas: 1 }],
     });
     const [op] = fuente.pendientes();
     expect(op).not.toHaveProperty('cliente_id');
-    expect(op?.datos).toMatchObject({ tipo: 'merma_trayecto', comentario: null });
+    expect(op?.datos).toMatchObject({ tipo: 'merma_trayecto', comentario: null, motivo_merma_id: 'mm-golpe' });
+  });
+
+  it('rediseño pieza 4: el cambio lleva cliente_id y sus dos lados, sin motivo', () => {
+    const { movimientos, fuente } = montar();
+    const m = movimientos.registrar({
+      vendedorId: 'ven-1',
+      tipo: 'cambio',
+      clienteId: 'cli-1',
+      comentario: null,
+      lineas: [
+        { presentacionId: 'pre-1', sentido: 'recibido', piezas: 2 },
+        { presentacionId: 'pre-2', sentido: 'entregado', piezas: 2 },
+      ],
+    });
+    expect(fuente.pendientes()).toEqual([
+      {
+        clave: m.id,
+        tipo: 'movimiento',
+        fecha_operacion: '2026-08-07',
+        ocurrido_en: MOMENTO,
+        cliente_id: 'cli-1',
+        datos: {
+          tipo: 'cambio',
+          comentario: null,
+          registrado_en: MOMENTO,
+          lineas: [
+            { presentacion_id: 'pre-1', sentido: 'recibido', piezas: 2 },
+            { presentacion_id: 'pre-2', sentido: 'entregado', piezas: 2 },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('una merma vieja sin motivo (antes de la 022) sube sin la llave', () => {
+    const { movimientos, fuente, bd } = montar();
+    const m = movimientos.registrar({
+      vendedorId: 'ven-1',
+      tipo: 'merma_trayecto',
+      clienteId: null,
+      motivoMermaId: 'mm-golpe',
+      comentario: null,
+      lineas: [{ presentacionId: 'pre-1', sentido: 'entregado', piezas: 1 }],
+    });
+    bd.runSync('update movimiento set motivo_merma_id = null, motivo_nombre = null where id = $id', { $id: m.id });
+    expect(fuente.pendientes()[0]?.datos).not.toHaveProperty('motivo_merma_id');
   });
 
   it('Review Focus 4: un rechazo por alcance se queda en la cola con la misma clave', () => {
@@ -72,6 +121,7 @@ describe('fuente de movimientos (T-27 pieza 2)', () => {
       vendedorId: 'ven-1',
       tipo: 'merma_cliente',
       clienteId: 'cli-2',
+      motivoMermaId: 'mm-caducado',
       comentario: null,
       lineas: [{ presentacionId: 'pre-1', sentido: 'recibido', piezas: 1 }],
     });

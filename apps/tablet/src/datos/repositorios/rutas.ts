@@ -54,7 +54,7 @@ export interface FilaRutaDelDia {
   /** El recado de la oficina para este cliente en la ruta (`ruta.recado`), o `null`. */
   recado: string | null;
   /**
-   * Hoy tiene venta, cobro, visita, comentario de no cobro o merma del cliente en
+   * Hoy tiene venta, cobro, visita, comentario de no cobro, merma del cliente o cambio en
    * esta tablet (D5; T-39; rediseño §6): va a "Visitados". Se deriva, no se guarda.
    */
   visitado: boolean;
@@ -70,6 +70,8 @@ export interface FilaRutaDelDia {
   cobro_centavos: number;
   /** Hoy tiene merma del cliente (`movimiento` de tipo `merma_cliente`). */
   con_merma: boolean;
+  /** Rediseño pieza 4: hoy tiene un cambio con el cliente (`movimiento` de tipo `cambio`). */
+  con_cambio: boolean;
   /** Motivo de la ultima visita de hoy (la copia `motivo_nombre`), o `null`. */
   ultima_visita_motivo: string | null;
   /** Hora de la ultima visita de hoy, o `null`. */
@@ -208,8 +210,8 @@ export function crearRepositorioRutas(
      * la base, pero nadie la escribe ni la lee aqui. Trae tambien las filas que
      * la oficina quito (`activo = 0`): `agruparRutaEnCurso` decide si se ven.
      *
-     * `visitado` es venta, cobro, visita, comentario de no cobro **o merma del
-     * cliente** de hoy; `visita_sin_venta` es visita sin venta ni cobro (D8). Las
+     * `visitado` es venta, cobro, visita, comentario de no cobro, **merma del
+     * cliente o cambio** (rediseño pieza 4) de hoy; `visita_sin_venta` es visita sin venta ni cobro (D8). Las
      * sumas de venta y cobro alimentan el resumen de "Visitados". La ultima
      * visita, su estado y su error salen de subconsultas con el mismo estilo.
      * `notas_pendientes` es la misma consulta que `catalogos.notasPendientesDe`
@@ -221,12 +223,13 @@ export function crearRepositorioRutas(
     delDia(vendedorId: string, fecha: FechaISO = reloj.hoy()): FilaRutaDelDia[] {
       type FilaCruda = Omit<
         FilaRutaDelDia,
-        'visitado' | 'visita_sin_venta' | 'notas_que_trae' | 'con_merma'
+        'visitado' | 'visita_sin_venta' | 'notas_que_trae' | 'con_merma' | 'con_cambio'
       > & {
         atendido: number;
         con_visita: number;
         con_comentario: number;
         con_merma: number;
+        con_cambio: number;
       };
       const filas = bd.getAllSync<FilaCruda>(
         `select r.id, r.cliente_id, r.fecha, r.orden, r.origen, r.activo, r.recado,
@@ -246,6 +249,9 @@ export function crearRepositorioRutas(
                 exists (select 1 from movimiento m
                          where m.cliente_id = r.cliente_id and m.fecha = r.fecha
                            and m.tipo = 'merma_cliente') as con_merma,
+                exists (select 1 from movimiento m
+                         where m.cliente_id = r.cliente_id and m.fecha = r.fecha
+                           and m.tipo = 'cambio') as con_cambio,
                 (select coalesce(sum(v.monto_total_centavos), 0) from venta v
                   where v.cliente_id = r.cliente_id and v.fecha = r.fecha
                     and v.contado_credito = 'contado') as venta_contado_centavos,
@@ -288,13 +294,14 @@ export function crearRepositorioRutas(
       // Atendido (venta o cobro) gana a la visita (D8): no es visita sin venta.
       // Un comentario de "Continuar sin cobrar" cuenta como visita (decision 17).
       const queTrae = notasAsignadas.queTraePorCliente(vendedorId);
-      return filas.map(({ atendido, con_visita, con_comentario, con_merma, ...f }) => {
+      return filas.map(({ atendido, con_visita, con_comentario, con_merma, con_cambio, ...f }) => {
         const visita = con_visita === 1 || con_comentario === 1;
         return {
           ...f,
           notas_que_trae: queTrae.get(f.cliente_id) ?? 0,
           con_merma: con_merma === 1,
-          visitado: atendido === 1 || visita || con_merma === 1,
+          con_cambio: con_cambio === 1,
+          visitado: atendido === 1 || visita || con_merma === 1 || con_cambio === 1,
           visita_sin_venta: visita && atendido !== 1,
         };
       });

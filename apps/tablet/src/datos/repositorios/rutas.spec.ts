@@ -689,11 +689,42 @@ describe('delDia: lo hecho hoy (rediseño, spec §6)', () => {
       vendedorId: 'ven-1',
       tipo: 'merma_cliente',
       clienteId: 'cli-1',
+      motivoMermaId: 'mm-caducado',
       comentario: null,
       lineas: [{ presentacionId: 'pre-1', sentido: 'recibido', piezas: 2 }],
     });
 
-    expect(rutas.delDia('ven-1')[0]).toMatchObject({ visitado: true, con_merma: true, visita_sin_venta: false });
+    expect(rutas.delDia('ven-1')[0]).toMatchObject({
+      visitado: true,
+      con_merma: true,
+      con_cambio: false,
+      visita_sin_venta: false,
+    });
+  });
+
+  it('rediseño pieza 4: un cambio con el cliente hoy lo manda a visitados, sin contar como merma', () => {
+    const { rutas, jornadas, movimientos } = montar();
+    rutas.aplicarSnapshot([delServidor()]);
+    jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 10 });
+    expect(rutas.delDia('ven-1')[0]).toMatchObject({ visitado: false, con_cambio: false });
+
+    movimientos.registrar({
+      vendedorId: 'ven-1',
+      tipo: 'cambio',
+      clienteId: 'cli-1',
+      comentario: null,
+      lineas: [
+        { presentacionId: 'pre-1', sentido: 'recibido', piezas: 1 },
+        { presentacionId: 'pre-2', sentido: 'entregado', piezas: 1 },
+      ],
+    });
+
+    expect(rutas.delDia('ven-1')[0]).toMatchObject({
+      visitado: true,
+      con_merma: false,
+      con_cambio: true,
+      visita_sin_venta: false,
+    });
   });
 
   it('suma venta de contado, a crédito y cobro de hoy', () => {
@@ -729,6 +760,7 @@ describe('delDia: lo hecho hoy (rediseño, spec §6)', () => {
       venta_abono_centavos: 0,
       cobro_centavos: 85000,
       con_merma: false,
+      con_cambio: false,
     });
   });
 });

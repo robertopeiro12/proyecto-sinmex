@@ -94,6 +94,22 @@ export interface TipoNegocio {
   sincronizado_en: MomentoISO;
 }
 
+/**
+ * Motivo de merma (rediseño pieza 4). Catalogo global que baja del pull; trae
+ * tambien los de almacen: la tablet ofrece los activos con su bandera.
+ */
+export interface MotivoMerma {
+  id: string;
+  nombre: string;
+  /** `1` = se ofrece en la merma del cliente. */
+  aplica_cliente: Booleano;
+  /** `1` = se ofrece en la merma del vehiculo (`merma_trayecto`). */
+  aplica_vehiculo: Booleano;
+  /** `0` = dado de baja en el portal: ya no se ofrece ni se acepta al grabar. */
+  activo: Booleano;
+  sincronizado_en: MomentoISO;
+}
+
 /** Motivo de una visita sin venta. Catalogo global que baja del pull (T-39). */
 export interface MotivoVisita {
   id: string;
@@ -637,8 +653,11 @@ export interface CargaDetalle {
   aceptada: 0 | 1 | null;
 }
 
-/** T-27 pieza 2: los movimientos que no son venta (D1, D3). */
-export type TipoMovimiento = 'merma_cliente' | 'merma_trayecto' | 'consumo';
+/**
+ * T-27 pieza 2: los movimientos que no son venta (D1, D3). El rediseño (pieza 4)
+ * suma el cambio fisico con un cliente: lo recibido regresa al inventario.
+ */
+export type TipoMovimiento = 'merma_cliente' | 'merma_trayecto' | 'consumo' | 'cambio';
 
 /** `recibido` = entra a la camioneta (lo danado que devuelve el cliente); `entregado` = sale. */
 export type SentidoMovimiento = 'recibido' | 'entregado';
@@ -649,10 +668,14 @@ export interface Movimiento {
   /** Dia de trabajo (`reloj.hoy()`), el de `fecha_operacion`. */
   fecha: FechaISO;
   vendedor_id: string;
-  /** Solo en la merma del cliente. */
+  /** Solo en la merma del cliente y el cambio. */
   cliente_id: string | null;
   tipo: TipoMovimiento;
   comentario: string | null;
+  /** Rediseño pieza 4: solo en las mermas; `null` en las de antes de la 022. */
+  motivo_merma_id: string | null;
+  /** Copia del nombre del motivo al grabar. */
+  motivo_nombre: string | null;
   /** Cuando lo guardo el vendedor. Viaja como `ocurrido_en` y `datos.registrado_en`. */
   registrado_en: MomentoISO;
   sync_estado: SyncEstado;

@@ -501,6 +501,31 @@ describe('motivos de visita (T-39)', () => {
   });
 });
 
+describe('motivos de merma (rediseño pieza 4)', () => {
+  it('lista los activos de cada bandera, por nombre; los de almacen no salen', () => {
+    const { catalogos } = conCatalogos();
+    expect(catalogos.listarMotivosMerma('cliente').map((m) => m.nombre)).toEqual(['Caducado', 'Reventado']);
+    expect(catalogos.listarMotivosMerma('vehiculo').map((m) => m.nombre)).toEqual([
+      'Golpe en el camino',
+      'Reventado',
+    ]);
+  });
+
+  it('obtenerMotivoMerma encuentra tambien uno dado de baja', () => {
+    const { catalogos } = conCatalogos();
+    expect(catalogos.obtenerMotivoMerma('mm-baja')).toMatchObject({ nombre: 'Derramado', activo: 0 });
+    expect(catalogos.obtenerMotivoMerma('no-existe')).toBeNull();
+  });
+
+  it('la baja llega como bandera: el pull siguiente lo deja de ofrecer', () => {
+    const { catalogos } = conCatalogos();
+    catalogos.guardarSnapshot({
+      motivosMerma: [{ id: 'mm-caducado', nombre: 'Caducado', aplica_cliente: 1, aplica_vehiculo: 0, activo: 0 }],
+    });
+    expect(catalogos.listarMotivosMerma('cliente').map((m) => m.id)).toEqual(['mm-reventado']);
+  });
+});
+
 describe('foto del cliente (T-39, D9)', () => {
   it('el pull escribe foto_subida_en y no pisa la marca de la cache', () => {
     const { catalogos } = conCatalogos();
