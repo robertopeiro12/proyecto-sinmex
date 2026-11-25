@@ -103,6 +103,8 @@ export default function Registros() {
         <View
           style={{
             flexDirection: 'row',
+            // En celular los cuatro no caben en una fila: se apilan, no se parten (D3).
+            flexWrap: 'wrap',
             gap: espacio.sm,
             paddingHorizontal: espacio.md,
             paddingTop: espacio.sm,
@@ -118,7 +120,7 @@ export default function Registros() {
               etiqueta={f.etiqueta}
               elegida={filtro === f.clave}
               onPress={() => setFiltro(f.clave)}
-              ancho
+              envolver
             />
           ))}
         </View>

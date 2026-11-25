@@ -7,6 +7,7 @@ import {
   NOTA_CONTROL_APAGADO,
   pastillaCarga,
   cambiosNetos,
+  etiquetaSinCortarVolumen,
   salio,
   textoCambios,
   piezasDeCarga,
@@ -94,7 +95,7 @@ export default function Inventario() {
         ) : (
           <Tarjeta etiqueta="Por producto">
             <View style={[filaResumen, { marginBottom: espacio.sm }]}>
-              <Text style={[estilos.etiqueta, { flex: 2 }]}>Producto</Text>
+              <Text style={[estilos.etiqueta, columnaProducto]}>Producto</Text>
               <Text style={[estilos.etiqueta, columnaTitulo]}>Cargado</Text>
               <Text style={[estilos.etiqueta, columnaTitulo]}>Salió</Text>
               <Text style={[estilos.etiqueta, columnaTitulo]}>Cambios</Text>
@@ -102,7 +103,7 @@ export default function Inventario() {
             </View>
             {vista.filas.map((f) => (
               <View key={f.presentacionId} style={[filaResumen, { marginBottom: espacio.xs }]}>
-                <Text style={[estilos.textoTarjeta, { flex: 2 }]}>{f.etiqueta}</Text>
+                <Text style={[estilos.textoTarjeta, columnaProducto]}>{etiquetaSinCortarVolumen(f.etiqueta)}</Text>
                 <View style={columnaCifra}>
                   <Cifra valor={f.cargado} tono="suave" />
                 </View>
@@ -176,6 +177,11 @@ export default function Inventario() {
   );
 }
 
-const filaResumen = { flexDirection: 'row', alignItems: 'center', gap: espacio.sm } as const;
-const columnaTitulo = { flex: 1, textAlign: 'right' } as const;
+// Recorrido final, D3: a 1080 px los encabezados se partian a media palabra
+// ("CARGA/DO", "CAMBI/OS"). Menos hueco, el producto un poco mas angosto y menos
+// interletrado en los encabezados de numeros: caben, y "Te quedan" se parte por
+// palabras.
+const filaResumen = { flexDirection: 'row', alignItems: 'center', gap: espacio.xs } as const;
+const columnaProducto = { flex: 1.5 } as const;
+const columnaTitulo = { flex: 1, textAlign: 'right', letterSpacing: 0.3 } as const;
 const columnaCifra = { flex: 1, alignItems: 'flex-end' } as const;

@@ -162,6 +162,16 @@ export function totalPiezas(lineas: readonly { piezas: number }[]): number {
 }
 
 /**
+ * La etiqueta de una presentacion para una columna angosta (recorrido final,
+ * D3): pega el volumen a su unidad con un espacio duro ("1\u00A0L",
+ * "500\u00A0ml"), asi el renglon se parte entre producto y volumen y nunca deja
+ * la unidad sola abajo ("Horchata 1 / L").
+ */
+export function etiquetaSinCortarVolumen(etiqueta: string): string {
+  return etiqueta.replace(/(\d) (\S+)$/, '$1\u00A0$2');
+}
+
+/**
  * Las piezas que se muestran de una carga (recorrido final, D6): ya aceptada,
  * solo los renglones que entraron (`renglonAceptado`); pendiente o rechazada,
  * todo lo que mando el almacen.

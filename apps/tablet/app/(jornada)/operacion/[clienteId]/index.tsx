@@ -99,6 +99,8 @@ function BotonAccion({
         <Icono nombre={icono} tamano={24} color={principal ? colores.primario : colores.tinta} />
         <Text
           style={{
+            // Sin esto el titulo no se ajusta al boton y se sale (D3, "Merma y cambios").
+            flexShrink: 1,
             fontFamily: fuente.tituloMedio,
             fontSize: t(tipo.subtitulo),
             color: principal ? colores.primario : colores.tinta,

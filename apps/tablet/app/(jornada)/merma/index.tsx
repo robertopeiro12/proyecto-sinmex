@@ -74,7 +74,8 @@ export default function MermaYCambios() {
         <ScrollView style={{ flex: 1 }} contentContainerStyle={[estilos.contenido, { paddingBottom: espacio.lg }]}>
           <View style={{ gap: espacio.sm, marginBottom: espacio.md }}>
             <View style={{ flexDirection: 'row', gap: espacio.sm }}>
-              <View style={{ flex: 2 }}>
+              {/* Consumo mide su texto y Merma del vehículo toma el resto: con `flex` 2:1, en celular "Consumo" se partía (D3). */}
+              <View style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0 }}>
                 <Boton
                   etiqueta="Merma del vehículo"
                   icono="camion"
@@ -85,7 +86,7 @@ export default function MermaYCambios() {
                 />
               </View>
               {ofreceConsumo(vista.limite) ? (
-                <View style={{ flex: 1 }}>
+                <View style={{ flexShrink: 0 }}>
                   <Boton
                     etiqueta="Consumo"
                     icono="vaso"

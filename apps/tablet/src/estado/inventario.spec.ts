@@ -25,6 +25,7 @@ import {
   textoTeQuedan,
   tituloAvisoCarga,
   todosSeleccionados,
+  etiquetaSinCortarVolumen,
   piezasDeCarga,
   totalPiezas,
   type PasosRespuestaCarga,
@@ -100,6 +101,12 @@ describe('textos del inventario', () => {
     expect(pastillaCarga({ estado: 'rechazada', lineas: [l(0)] })).toEqual({ texto: 'Rechazada', estado: 'error' });
     expect(pastillaCarga({ estado: 'aceptada', lineas: [l(0)] })).toEqual({ texto: 'Rechazada', estado: 'error' });
     expect(totalPiezas([{ piezas: 24 }, { piezas: 12 }])).toBe(36);
+  });
+
+  it('etiquetaSinCortarVolumen: el volumen queda pegado a su unidad (D3)', () => {
+    expect(etiquetaSinCortarVolumen('Horchata 1 L')).toBe('Horchata 1\u00A0L');
+    expect(etiquetaSinCortarVolumen('Tamarindo 500 ml')).toBe('Tamarindo 500\u00A0ml');
+    expect(etiquetaSinCortarVolumen('Agua de sabor')).toBe('Agua de sabor');
   });
 
   it('piezasDeCarga: aceptada cuenta solo lo que entro (D6); pendiente o rechazada, todo', () => {

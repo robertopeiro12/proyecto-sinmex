@@ -142,6 +142,9 @@ export function Boton({
           {icono ? <Icono nombre={icono} tamano={t(tipo.destacado)} color={p.texto} /> : null}
           <Text
             style={{
+              // En un boton angosto la etiqueta se parte por palabras, no se sale (D3).
+              flexShrink: 1,
+              textAlign: 'center',
               fontFamily: fuente.cuerpoFuerte,
               fontSize: t(tipo.destacado),
               letterSpacing: 0.3,
