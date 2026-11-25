@@ -24,8 +24,8 @@ import type {
  */
 const SUFIJO = `${Date.now()}-${process.pid}`;
 const PASSWORD = 'contrasena-de-prueba';
-const K = 'ZQ';
-const L = 'ZR';
+const K = 'ZJ';
+const L = 'ZY';
 const PRODUCTO = `ZZ-retm-${SUFIJO}`;
 
 interface Retiros {

@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Migración `supabase/migrations/20261127120000_inventario_pt_ajuste.sql` (versión única).
+- Migración `supabase/migrations/20261130120000_inventario_pt_ajuste.sql` (versión única).
 - Fórmulas exactas del spec D2: `Final = Inicial − Ventas − Merma − Consumo − Promo − Descuentos + Cambios + Entradas − Envíos`; `Merma acumulada = anterior + Merma − Retiro`; Inicial = Final del día anterior o el del ajuste de ese día.
 - Fuentes exactas por columna: spec D2 (todo vivo; merma de vendedores = contada si el corte está hecho, si no teórica; Procesos merma solo con Oficina; retiro solo autorizado; envíos recibidos dentro de Entradas).
 - Sin ajuste previo: Inicial/Final/Merma acumulada `null` ("Sin inventario inicial"), nunca 0.
@@ -31,7 +31,7 @@
 ---
 
 ### Tarea 1: Migración y pgTAP
-**Files:** `supabase/migrations/20261127120000_inventario_pt_ajuste.sql`, `supabase/tests/99_inventario_pt_test.sql`, `apps/backend/src/database/schema.d.ts`.
+**Files:** `supabase/migrations/20261130120000_inventario_pt_ajuste.sql`, `supabase/tests/99_inventario_pt_test.sql`, `apps/backend/src/database/schema.d.ts`.
 - `inventario_pt_ajuste`: `id`, `sucursal_id`, `presentacion_id`, `fecha`, `inventario_inicial int >= 0`, `merma_acumulada_inicial int >= 0`, `comentario` (1..300 recortado o null), `capturo_usuario_id`, `actualizado_por_usuario_id`, tiempos con trigger de `updated_at`, `deleted_at`; único parcial vivo `(sucursal_id, presentacion_id, fecha)`; índice `(sucursal_id, fecha) where deleted_at is null`. Permisos `inventario_pt.ver`, `inventario_pt.ajustar`.
 - [ ] pgTAP rojo → migración → `npm run supabase -- migration up --local`, `npm run supabase -- test db` PASS (ajusta el conteo de permisos de `93_permiso_sucursal_test.sql`) → prueba en autocommit como el CI (base temporal `prueba_ci`, borrarla) → db:types → **Commit** `Inventario de PT: migración (ajustes y permisos)`.
 

@@ -1181,7 +1181,7 @@ usuario con sesion pasa.
     "Ajustar inventario" es una pantalla completa precargada con lo que calcula el sistema (TAB baja por columna; "Quitar" con
     `useConfirmar`); con "Todas" está deshabilitado. La marca "Ajustado" solo va por presentación. Revisada a 1366 px sin scroll
     horizontal. **Aún no alimenta almacenes** (T-63) ni cambios físicos (T-33, hoy 0).
-  - **Nube:** `20261127120000_inventario_pt_ajuste.sql` (tabla nueva, índices, trigger y 2 permisos) se sube a `sinmex dev`
+  - **Nube:** `20261130120000_inventario_pt_ajuste.sql` (tabla nueva, índices, trigger y 2 permisos) se sube a `sinmex dev`
     después del merge, con el protocolo de push. Pre-flight: **nada que contar**. **Backend y portal juntos** (el portal nuevo
     llama a `/inventario-pt`).
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
