@@ -338,7 +338,7 @@ usuario con sesion pasa.
       merma, que viaja dentro de `inventario` (`inventario.merma`).
     - **Huellas** (`huellaApartado`): al cerrar un apartado se guarda lo que decía el sistema; si después cambia (venta,
       cobro, gasto, merma) el apartado se **reabre** para que lo revise.
-  - **Tablet, local**: migración 023 (`cortes`, repositorio `datos.cortes`); fuente de push `fuente-cortes.ts`.
+  - **Tablet, local**: migración 023 (tabla de cortes, `crearRepositorioCortes`); fuente de push `fuente-cortes.ts`.
 - **Ruta semanal y Ruta diaria (T-37 + 2026-11-10).** La oficina tiene rutas fijas por día (*Operación → Ruta Semanal*), le
   asigna una a cada vendedor cada mañana (*Ruta Diaria*), la ajusta, le pone vehículo y le asigna notas por cobrar; el
   vendedor la complementa desde la tablet con la operación **`ruta-alta`** (no `ruta`, que sigue guardada sin proyectar; la
