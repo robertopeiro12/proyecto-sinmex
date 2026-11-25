@@ -200,6 +200,26 @@ describe("TablasInventario", () => {
     expect(within(tabla).queryByText(/Motivo/)).not.toBeInTheDocument();
   });
 
+  it("Recargas: el renglón no aceptado de una carga parcial dice No aceptado y se tiñe", async () => {
+    const r = [
+      recarga({ aceptada: true, renglonesAceptados: 1, renglones: 2 }),
+      recarga({
+        presentacionId: "p2",
+        nombre: "Otro",
+        aceptada: false,
+        renglonesAceptados: 1,
+        renglones: 2,
+      }),
+    ];
+    render(<TablasInventario datos={datos({ recargas: r })} />);
+    await userEvent.click(screen.getByRole("tab", { name: "Recargas" }));
+    const tabla = screen.getByRole("table", { name: "Recargas" });
+    const no = within(tabla).getByText("No aceptado");
+    expect(no.closest("tr")).toHaveClass("bg-destructive-soft/40");
+    const si = within(tabla).getByText("Aceptada 1 de 2");
+    expect(si.closest("tr")).not.toHaveClass("bg-destructive-soft/40");
+  });
+
   it("Recargas: hora, estado y motivo; Vendedor solo con Todos", async () => {
     const r = [
       recarga(),
