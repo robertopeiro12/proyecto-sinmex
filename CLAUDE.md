@@ -635,7 +635,7 @@ usuario con sesion pasa.
   sin poder omitirla) antes de grabarla; la firma complementa la nota de papel. Spec:
   `docs/superpowers/specs/2026-10-21-t-73-firma-del-cliente-design.md`.
   - **Desde el rediseño (pieza 2, spec `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md` §9) la tablet
-    ya NO captura la firma dibujada**: se quitaron `recuadro-firma.tsx`, `firma-expo.ts` y `puedeGrabarVenta`; el cliente
+    ya NO captura la firma dibujada**: se quitaron `recuadro-firma.tsx`, `firma-expo.ts`, `puedeGrabarVenta` y `crearGrabadorVenta` (queda `firmaPorSubir`); el cliente
     firma a mano la nota impresa. Lo de abajo describe el contrato y la tablet de T-73 (016); una venta vieja con imagen
     pendiente **sigue subiendo** su firma por la cola de fotos. En su lugar, la venta lleva **`atendio`** (quien atendió
     al vendedor; **obligatorio en la app**, opcional y aditivo en el contrato; `venta_nota.atendio_nombre`, migración
