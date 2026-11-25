@@ -238,10 +238,24 @@ describe('menu hamburguesa (spec §5, maqueta 3)', () => {
     expect(corte).toMatchObject({ deshabilitada: false, nota: null });
   });
 
-  test('con el día cerrado, Corte se abre (ya se hizo) y lo que captura se apaga', () => {
+  test('con el día cerrado, Corte se abre (ya se hizo) y solo Gastos se apaga', () => {
     const e = entradasMenu({ porVisitar: 3, candado: null, diaCerrado: true, sinJornada: false });
     expect(e.find((x) => x.clave === 'corte')!.deshabilitada).toBe(false);
-    expect(e.filter((x) => x.deshabilitada).map((x) => x.clave).sort()).toEqual(['gastos', 'merma']);
+    expect(e.filter((x) => x.deshabilitada).map((x) => x.clave)).toEqual(['gastos']);
+  });
+
+  test('con el día cerrado, Merma / Cambios sigue abierta como consulta (sin nota)', () => {
+    const merma = entradasMenu({ porVisitar: 0, candado: null, diaCerrado: true, sinJornada: false }).find(
+      (x) => x.clave === 'merma',
+    )!;
+    expect(merma).toMatchObject({ deshabilitada: false, nota: null, destino: '/(jornada)/merma' });
+  });
+
+  test('sin jornada de hoy, Merma / Cambios sí se apaga ("Empieza tu ruta")', () => {
+    const merma = entradasMenu({ porVisitar: 0, candado: { tipo: 'empezar' }, diaCerrado: false, sinJornada: true }).find(
+      (x) => x.clave === 'merma',
+    )!;
+    expect(merma).toMatchObject({ deshabilitada: true, nota: NOTA_SIN_JORNADA });
   });
 
   test('ninguna entrada abre una pantalla "Próximamente" por sección', () => {

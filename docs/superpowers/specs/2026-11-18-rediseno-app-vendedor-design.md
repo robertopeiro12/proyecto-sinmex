@@ -209,6 +209,8 @@ reimpresión de tickets al cobrar". Lo demás de esa spec sigue vigente (tampoco
   cambios y el consumo no llevan motivo. Catálogo, pull, captura y validación van en **T-81 (#162)**.
 - La opción **Merma / Cambios** del menú (M15) es el registro del día de estos movimientos, con filtros Todo, Merma y
   Cambios, y arriba el botón **Merma del vehículo**.
+- **Con el día cerrado** (Mario, 2026-11-25) Merma / Cambios sigue en el menú como **consulta**: el registro y sus
+  filtros funcionan, pero no se captura merma, cambio ni consumo (los botones se apagan con el aviso del día cerrado).
 - **Merma del vehículo (M16)**: lo que se daña en la camioneta, sin cliente (`merma_trayecto`). Motivo de la lista del
   portal (obligatorio), producto y piezas de lo que el vendedor trae, y comentario opcional. Funciona sin red.
 - *(Decisión de diseño)* El **consumo** propio se sigue capturando desde Merma / Cambios, con un botón secundario

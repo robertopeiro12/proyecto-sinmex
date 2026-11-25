@@ -213,8 +213,9 @@ export const NOTA_SIN_JORNADA = 'Empieza tu ruta';
 
 /**
  * Las entradas del menu, en el orden del spec §5 (maqueta 3). Con el dia
- * cerrado se deshabilita solo lo que captura (gastos, merma); lo que consulta
- * se sigue viendo, y Corte se abre (ya se hizo). Corte lleva candado mientras
+ * cerrado se deshabilita solo Gastos (solo captura); lo que consulta se sigue
+ * viendo: Merma / Cambios abre su registro de solo lectura (Mario, 2026-11-25:
+ * la pantalla apaga la captura) y Corte se abre (ya se hizo). Corte lleva candado mientras
  * falten clientes por visitar (`corteDisponible`, pieza 6), salvo con el
  * candado de inventario (`candado` no nulo): ahi los clientes no se abren y el
  * dia quedaria sin poder cerrarse.
@@ -255,7 +256,7 @@ export function entradasMenu({
     entrada('inventario', 'Inventario', 'inventario', '/(jornada)/inventario'),
     entrada('sugerido', 'Sugerido de carga', 'sugerido', '/(jornada)/sugerido-de-carga'),
     entrada('registros', 'Ventas / Cobranza', 'registros', '/(jornada)/registros'),
-    entrada('merma', 'Merma / Cambios', 'merma', '/(jornada)/merma', { deshabilitada: diaCerrado }),
+    entrada('merma', 'Merma / Cambios', 'merma', '/(jornada)/merma'),
     entrada('gastos', 'Gastos', 'gasto', '/(jornada)/gastos', { deshabilitada: diaCerrado }),
     entrada('corte', 'Corte', 'corte', '/(jornada)/corte', {
       deshabilitada: corteConCandado,

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { estadoMenuJornada } from '@/estado/menu-jornada';
 import {
+  AVISO_MERMA_SOLO_CONSULTA,
   consumoRestante,
   detalleMovimiento,
   ETIQUETA_TIPO_MOVIMIENTO,
@@ -39,7 +40,9 @@ import { colores, espacio, fuente, grosor, radio, tipo } from '@/ui/tokens';
  * nuevo arriba (hora, cliente o "Vehículo", tipo, motivo o resumen y piezas, con
  * su subida); abajo los filtros Todo / Merma / Cambios. La merma y los cambios
  * de un cliente se registran en su hoja. Un movimiento grabado no se edita ni
- * se borra (D6).
+ * se borra (D6). Con el día cerrado la pantalla sigue abierta desde el menú como
+ * consulta (Mario, 2026-11-25): los filtros funcionan y los botones de captura
+ * se apagan con `AVISO_MERMA_SOLO_CONSULTA`.
  */
 export default function MermaYCambios() {
   const { datos, vendedor, jornada, versionCatalogos } = useJawa();
@@ -102,7 +105,7 @@ export default function MermaYCambios() {
                 {restante > 0 ? textoConsumoRestante(restante) : MENSAJE_CONSUMO_AGOTADO}
               </Text>
             ) : null}
-            {menu.avisoDiaCerrado ? <Text style={estilos.error}>{menu.avisoDiaCerrado}</Text> : null}
+            {deshabilitado ? <Text style={estilos.error}>{AVISO_MERMA_SOLO_CONSULTA}</Text> : null}
           </View>
 
           <View

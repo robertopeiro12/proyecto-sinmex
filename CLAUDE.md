@@ -857,6 +857,9 @@ usuario con sesion pasa.
     - **Pantallas**: ficha → **"Merma y cambios"** (`operacion/[clienteId]/merma.tsx`, dos pestañas: merma y cambio);
       menú → **"Merma / Cambios"** (`merma/index.tsx`: "Merma del vehículo", "Consumo" —solo si el límite > 0— y los
       movimientos de hoy con filtros Todo / Merma / Cambios) → `merma/registrar.tsx`.
+      **Con el día cerrado** (Mario, 2026-11-25) Merma / Cambios **sigue en el menú** como consulta (`entradasMenu`
+      solo apaga Gastos): el registro y sus filtros funcionan, pero "Merma del vehículo" y "Consumo" se apagan con
+      `AVISO_MERMA_SOLO_CONSULTA` y `merma/registrar.tsx` rechaza por `MENSAJE_DIA_CERRADO_MOVIMIENTO`.
     - **Nube**: `20261128120000_movimiento_cambio_motivo.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
       (pre-flight: nada que contar; los checks solo se ensanchan y la columna es nula). **Backend antes que la app.**
       Si la APK se instaló antes que el backend, el pull incremental no trae los motivos sembrados (no cambian de

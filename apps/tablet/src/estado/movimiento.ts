@@ -33,6 +33,13 @@ export type { EntradaMovimiento, LineaMovimiento } from '@/datos/movimientos-reg
 
 export const MENSAJE_DIA_CERRADO_MOVIMIENTO = 'El día ya está cerrado: no se pueden registrar movimientos.';
 
+/**
+ * Merma / Cambios con el día cerrado (Mario, 2026-11-25): la pantalla sigue
+ * abierta para consultar el registro, pero sin captura; esta es la razón que
+ * va bajo los botones apagados.
+ */
+export const AVISO_MERMA_SOLO_CONSULTA = 'Día cerrado: solo consulta. Ya no se registra merma, cambio ni consumo.';
+
 export const TITULO_MOVIMIENTO: Record<TipoMovimiento, string> = {
   merma_cliente: 'Merma del cliente',
   // Rediseño pieza 4 (maqueta 16): la merma del trayecto se llama "Merma del vehículo".
