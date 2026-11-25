@@ -406,10 +406,14 @@ Spec: `docs/superpowers/specs/2026-10-23-t-27-merma-y-consumo-design.md`.
 
 ## Impresion de notas (rediseño pieza 7)
 
-La nota se imprime con `expo-print` (`src/impresion/`). Es un modulo **nativo**: tras
-`npm install` hay que correr `expo prebuild -p android` y compilar una **APK nueva**; Metro
-solo no basta. Imprime por la impresora configurada en Android; ahi `ok` significa que el
-dialogo se abrio.
+La nota se imprime directo por Bluetooth a una termica ESC/POS de 58 mm (`escpos.ts`, modulo
+local `modules/impresora-bluetooth`) o, con la opcion "Dialogo de Android", con `expo-print`
+(emulador / otras impresoras). Son modulos **nativos**: tras `npm install` hay que correr
+`expo prebuild -p android` y compilar una **APK nueva** (`JAVA_HOME` = JBR de Android Studio,
+`ANDROID_HOME` definido); Metro solo no basta. La impresora se empareja antes en Android
+(Ajustes > Bluetooth, PIN 0000 / 1234); cada tablet la elige una vez en "Seleccionar impresora"
+(solo aparecen las emparejadas; el permiso de Bluetooth se pide al primer uso). Con el dialogo
+de Android, `ok` significa que se abrio. Falta probar con la impresora fisica.
 
 - El papel (58 o 80 mm, por omision 58) se elige en "Seleccionar impresora" y vive en SecureStore.
 - `armarTicket` es puro (32 o 48 columnas); los nombres se parten en renglones, no se cortan.

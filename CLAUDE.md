@@ -455,9 +455,19 @@ usuario con sesion pasa.
     (una nota dada de baja sigue mostrando su folio).
 
 - **Impresión de notas (rediseño pieza 7, spec §12 `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md`).**
-  La tablet imprime la nota con `expo-print` (módulo **nativo**: hace falta `expo prebuild` y una **APK nueva**). Imprime por la
-  impresora que el vendedor tenga configurada en Android; en Android `ok` solo significa que **el diálogo se abrió**, no que
-  salió papel. Código en `apps/tablet/src/impresion/`.
+  La tablet imprime **directo por Bluetooth** a la térmica portátil de 58 mm ESC/POS que eligió Mario (clase PT-210 /
+  MTP-II); `expo-print` se conserva para el emulador y otras impresoras. Ambos son módulos **nativos**: hace falta
+  `expo prebuild` y una **APK nueva**. Código en `apps/tablet/src/impresion/`.
+  - **Bluetooth**: `escpos.ts` codifica el ticket (CP850, 4 LF de avance, **sin corte**). Módulo Expo local
+    `apps/tablet/modules/impresora-bluetooth` (Kotlin, SPP, conexión con límite de 10 s, **solo dispositivos ya
+    emparejados**). `BLUETOOTH_CONNECT` se pide **solo después de que el nativo responde `sin-permiso`**. El
+    emparejado se hace en Android Ajustes > Bluetooth (PIN 0000 / 1234). "Seleccionar impresora" lista las emparejadas
+    más la opción "Diálogo de Android" (`expo-print`). **Cada tablet elige una vez**; no hay respaldo silencioso a otra
+    impresora. Errores (`errores-impresora.ts`): sin Bluetooth, "Prende el Bluetooth.", "Da permiso de Bluetooth a la
+    app.", "No se pudo conectar con X. ¿Está prendida?", "Se cortó la conexión con X al mandar la nota…". Los tickets
+    de un cobro salen en **un solo envío**.
+  - **Compilar**: `JAVA_HOME` = JBR de Android Studio y `ANDROID_HOME` definidos. **Falta la prueba con la impresora
+    física** (Mario).
   - **Papel**: preferencia 58 o 80 mm en "Seleccionar impresora" (`impresora.tsx`), guardada en SecureStore
     (`preferencia.ts`, clave `jawa.impresion.papel`); sin dato o dato ilegible, 58.
   - **Ticket**: `armarTicket(datos, 32 | 48)` es **puro** (32 columnas en 58 mm, 48 en 80 mm). El nombre del producto se
@@ -482,7 +492,6 @@ usuario con sesion pasa.
     $0.00 (`armarTicket` decide por `abonos.length`). `ticketDeNota` lee los abonos de la nota aunque esté inactiva y
     los deja vacíos si la venta de esta tablet con ese folio es de contado (el servidor guarda un abono `venta_contado`
     por el total; una de contado solo baja si la oficina la editó o la borró).
-  - **Pregunta abierta para Mario**: modelo de la impresora térmica real (no se ha probado con papel).
 
 - **Promociones (T-74).** Regla de regalo por compra, configurada en el portal (*Operación → Promociones*, permiso
   `promocion.gestionar`; backend en `cartera-clientes/promociones.*`, `/promociones`) y **aplicada solo por la
