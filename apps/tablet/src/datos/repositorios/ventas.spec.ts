@@ -273,6 +273,40 @@ describe('repositorio de ventas (T-16)', () => {
     });
   });
 
+  describe('detalle (pieza 5: abrir un movimiento)', () => {
+    it('la venta con sus renglones, importes, promociones y etiquetas del catalogo', () => {
+      const { ventas } = montar();
+      const v = ventas.registrar(
+        venta({
+          lineas: [
+            { presentacionId: 'pre-1', cantidad: 24, cantidadPromocion: 2 },
+            { presentacionId: 'pre-2', cantidad: 0, cantidadPromocion: 3 },
+          ],
+          regalos: [
+            { promocionId: 'promo-general', presentacionId: 'pre-1', cantidad: 2, texto: TEXTO_GENERAL },
+            { promocionId: 'promo-prospecto', presentacionId: 'pre-2', cantidad: 3, texto: 'Bienvenida' },
+          ],
+        }),
+      );
+      expect(ventas.detalle(v.id)).toEqual({
+        venta: v,
+        lineas: [
+          { etiqueta: 'Jamaica 1 L', cantidad: 24, cantidadPromocion: 2, precioCentavos: 2800, importeCentavos: 67200 },
+          { etiqueta: 'Jamaica 500 ml', cantidad: 0, cantidadPromocion: 3, precioCentavos: 0, importeCentavos: 0 },
+        ],
+        promociones: [
+          { etiqueta: 'Jamaica 1 L', cantidad: 2, texto: TEXTO_GENERAL },
+          { etiqueta: 'Jamaica 500 ml', cantidad: 3, texto: 'Bienvenida' },
+        ],
+      });
+    });
+
+    it('una venta que no existe da null', () => {
+      const { ventas } = montar();
+      expect(ventas.detalle('no-existe')).toBeNull();
+    });
+  });
+
   describe('consultas y cola de sincronizacion', () => {
     it('delDia lista las ventas de ese cliente en ese dia, en el orden en que se grabaron', () => {
       const { deps, catalogos, ventas } = montar();

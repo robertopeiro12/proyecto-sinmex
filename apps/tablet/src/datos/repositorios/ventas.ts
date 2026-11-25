@@ -9,7 +9,7 @@ import type {
 } from '../tipos';
 import { bloqueoDeVenta, existencias, faltantesDeVenta, textoFaltante } from '../inventario-reglas';
 import { problemasDeCaptura, resumirCaptura, validarAtendio, type LineaCaptura } from '../ventas-reglas';
-import { leerInventarioDelDia } from './cargas';
+import { etiquetasDelCatalogo, leerInventarioDelDia, PRODUCTO_FUERA_DE_CATALOGO } from './cargas';
 import type { RepositorioCatalogos } from './catalogos';
 import type { DepsRepositorio } from './deps';
 import { enTransaccion } from './deps';
@@ -82,6 +82,30 @@ export interface DatosRegistroVenta {
    * Solo a credito y `0 < abono < total`; ausente o `null` = sin abono.
    */
   abonoCentavos?: number | null;
+}
+
+/** Un renglon del detalle de una venta (rediseño pieza 5, maqueta 18). */
+export interface LineaDetalleVenta {
+  /** "Jamaica 500 ml", o `PRODUCTO_FUERA_DE_CATALOGO`. */
+  etiqueta: string;
+  cantidad: number;
+  cantidadPromocion: number;
+  precioCentavos: number;
+  /** cantidad × precio guardado; las piezas de promocion no suman. */
+  importeCentavos: number;
+}
+
+/** Un regalo de la venta con la frase congelada al vender (T-74). */
+export interface PromocionDetalleVenta {
+  etiqueta: string;
+  cantidad: number;
+  texto: string;
+}
+
+export interface DetalleVenta {
+  venta: Venta;
+  lineas: LineaDetalleVenta[];
+  promociones: PromocionDetalleVenta[];
 }
 
 export type RepositorioVentas = ReturnType<typeof crearRepositorioVentas>;
@@ -373,6 +397,34 @@ export function crearRepositorioVentas(
         'select * from venta_promocion where venta_id = $venta_id order by rowid',
         { $venta_id: ventaId },
       );
+    },
+
+    /**
+     * Una venta para "Abrir un movimiento" (rediseño pieza 5, maqueta 18): la
+     * venta, sus renglones con la etiqueta del catalogo ("Jamaica 500 ml") e
+     * importe (cantidad × precio guardado; las piezas de promocion no suman), y
+     * sus regalos con la frase congelada. `null` si no existe.
+     */
+    detalle(ventaId: string): DetalleVenta | null {
+      const v = repo.porId(ventaId);
+      if (!v) return null;
+      const nombres = etiquetasDelCatalogo(bd);
+      const etiqueta = (presentacionId: string) => nombres.get(presentacionId) ?? PRODUCTO_FUERA_DE_CATALOGO;
+      return {
+        venta: v,
+        lineas: repo.lineasDe(ventaId).map((l) => ({
+          etiqueta: etiqueta(l.presentacion_id),
+          cantidad: l.cantidad,
+          cantidadPromocion: l.cantidad_promocion,
+          precioCentavos: l.precio_centavos,
+          importeCentavos: l.cantidad * l.precio_centavos,
+        })),
+        promociones: repo.regalosDe(ventaId).map((r) => ({
+          etiqueta: etiqueta(r.presentacion_id),
+          cantidad: r.cantidad,
+          texto: r.texto,
+        })),
+      };
     },
 
     /** ¿Le hemos vendido alguna vez desde esta tablet? Decide la bienvenida al prospecto (D7). */

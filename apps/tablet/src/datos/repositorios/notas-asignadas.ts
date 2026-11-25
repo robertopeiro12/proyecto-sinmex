@@ -38,6 +38,24 @@ export interface DatosNotasNoCobradasLocal {
   comentario: string;
 }
 
+/**
+ * Una nota por cobrar que el vendedor trae hoy (rediseño pieza 5). `asignada`:
+ * la oficina se la asigno; `nueva`: venta a credito de hoy de esta tablet.
+ */
+export interface NotaQueTrae {
+  origen: 'asignada' | 'nueva';
+  clienteId: string;
+  folio: string;
+  /** `null` = venta de hoy que todavia no baja como `nota_pendiente`. */
+  ventaNotaId: string | null;
+  /** La venta de esta tablet con ese folio; `null` si se vendio en otro lado. */
+  ventaId: string | null;
+  /** El de la nota; sin bajar, total − abono al vender. */
+  saldoCentavos: number;
+  /** De la nota (asignada) o de la venta (nueva). */
+  fecha: FechaISO;
+}
+
 export type RepositorioNotasAsignadas = ReturnType<typeof crearRepositorioNotasAsignadas>;
 
 interface FilaAsignada {
@@ -171,35 +189,57 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
     },
 
     /**
-     * Cuantas notas por cobrar **trae** el vendedor de cada cliente hoy: el
-     * numero de la fila de la ruta (spec del rediseño, §4). Sin entrada = 0.
+     * Las notas por cobrar que **trae** el vendedor hoy: la regla unica del
+     * numero de la ruta (spec del rediseño, §4) y del filtro "Notas
+     * pendientes" de Ventas / Cobranza (§16-bis). `queTraePorCliente` la cuenta;
+     * no se re-deriva en otro lado.
      *
      * - Asignadas de hoy con saldo > 0 y **no liquidadas hoy** (un abono que no
      *   liquida la deja contando: la nota de papel sigue en su mano). No es
-     *   `porAtender`, que saca cualquier nota tocada hoy.
-     * - Mas las ventas **a credito** de hoy de este vendedor. Una que ya bajo
-     *   como `nota_pendiente` (mismo `folio`) cuenta solo si esa nota sigue
-     *   activa, con saldo y sin liquidar hoy en la tablet; si ademas esta
-     *   asignada, ya la conto la asignacion y no se cuenta dos veces.
+     *   `porAtender`, que saca cualquier nota tocada hoy. Orden: fecha y folio.
+     * - Mas las ventas **a credito** de hoy de este vendedor, en orden de
+     *   captura. Una que ya bajo como `nota_pendiente` (mismo `folio`) cuenta
+     *   solo si esa nota sigue activa, con saldo y sin liquidar hoy en la
+     *   tablet; si ademas esta asignada, ya la conto la asignacion y no sale dos
+     *   veces. Sin bajar, su saldo es total − abono al vender.
+     *
+     * `ventaId` es la venta de esta tablet con ese folio, si la hay.
      */
-    queTraePorCliente(vendedorId: string): Map<string, number> {
+    queTraeDelVendedor(vendedorId: string): NotaQueTrae[] {
       const hoy = reloj.hoy();
-      const conteo = new Map<string, number>();
-      const sumar = (clienteId: string) => conteo.set(clienteId, (conteo.get(clienteId) ?? 0) + 1);
+      const lista: NotaQueTrae[] = [];
 
       const asignadas = new Set<string>();
       for (const n of deHoy(null)) {
         asignadas.add(n.ventaNotaId);
-        if (n.saldoCentavos > 0 && !n.liquidadaHoy) sumar(n.clienteId);
+        if (n.saldoCentavos > 0 && !n.liquidadaHoy) {
+          const venta = bd.getFirstSync<{ id: string }>('select id from venta where folio = $folio', {
+            $folio: n.folio,
+          });
+          lista.push({
+            origen: 'asignada',
+            clienteId: n.clienteId,
+            folio: n.folio,
+            ventaNotaId: n.ventaNotaId,
+            ventaId: venta?.id ?? null,
+            saldoCentavos: n.saldoCentavos,
+            fecha: n.fecha,
+          });
+        }
       }
 
       const ventas = bd.getAllSync<{
+        id: string;
         cliente_id: string;
+        folio: string;
+        fecha: FechaISO;
+        monto_total_centavos: number;
+        abono_centavos: number | null;
         nota_id: string | null;
         nota_activo: number | null;
         nota_saldo: number | null;
       }>(
-        `select v.cliente_id,
+        `select v.id, v.cliente_id, v.folio, v.fecha, v.monto_total_centavos, v.abono_centavos,
                 np.id as nota_id, np.activo as nota_activo, np.saldo_centavos as nota_saldo
            from venta v
            left join nota_pendiente np on np.folio = v.folio
@@ -207,7 +247,7 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
           order by v.rowid`,
         { $vendedor_id: vendedorId, $hoy: hoy },
       );
-      if (ventas.length === 0) return conteo;
+      if (ventas.length === 0) return lista;
 
       const liquidadas = new Set<string>();
       for (const c of bd.getAllSync<{ reparto_json: string }>(
@@ -220,14 +260,32 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
       }
 
       for (const v of ventas) {
+        const base = { origen: 'nueva' as const, clienteId: v.cliente_id, folio: v.folio, ventaId: v.id, fecha: v.fecha };
         if (v.nota_id === null) {
-          sumar(v.cliente_id);
+          lista.push({
+            ...base,
+            ventaNotaId: null,
+            saldoCentavos: v.monto_total_centavos - (v.abono_centavos ?? 0),
+          });
           continue;
         }
         if (asignadas.has(v.nota_id)) continue;
         if (v.nota_activo === 1 && (v.nota_saldo ?? 0) > 0 && !liquidadas.has(v.nota_id)) {
-          sumar(v.cliente_id);
+          lista.push({ ...base, ventaNotaId: v.nota_id, saldoCentavos: v.nota_saldo ?? 0 });
         }
+      }
+      return lista;
+    },
+
+    /**
+     * Cuantas notas por cobrar **trae** el vendedor de cada cliente hoy: el
+     * numero de la fila de la ruta (spec del rediseño, §4). Sin entrada = 0.
+     * Es el conteo de `queTraeDelVendedor`, la regla unica.
+     */
+    queTraePorCliente(vendedorId: string): Map<string, number> {
+      const conteo = new Map<string, number>();
+      for (const n of repo.queTraeDelVendedor(vendedorId)) {
+        conteo.set(n.clienteId, (conteo.get(n.clienteId) ?? 0) + 1);
       }
       return conteo;
     },

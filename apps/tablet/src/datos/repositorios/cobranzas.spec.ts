@@ -223,6 +223,24 @@ describe('repositorio de cobranzas (T-20; sin folio desde T-21)', () => {
     expect(cobranzas.delDia('cli-1', '2026-08-06')).toEqual([]);
   });
 
+  it('delDiaDelVendedor (pieza 5): los cobros del dia de ese vendedor, de todos sus clientes, en orden', () => {
+    const { deps, cobranzas } = montar();
+    const a = cobranzas.registrar(cobro());
+    const b = cobranzas.registrar(cobro({ ventaNotaId: 'nota-2', montoCentavos: 1000 }));
+    // Directo a la tabla: uno de otro vendedor y uno de ayer.
+    deps.bd.runSync(
+      `insert into cobranza (id, fecha, cliente_id, vendedor_id, sucursal_id, venta_nota_id,
+         monto_centavos, metodo_pago, fecha_pago, grabada_en, sync_estado, reparto_json)
+       values ('cob-ajeno', '2026-08-07', 'cli-2', 'ven-2', 'suc-tj', 'nota-2', 100, 'efectivo',
+               '2026-08-07', '2026-08-07T15:00:00.000Z', 'pendiente', '[]'),
+              ('cob-ayer', '2026-08-06', 'cli-2', 'ven-1', 'suc-tj', 'nota-2', 100, 'efectivo',
+               '2026-08-06', '2026-08-06T15:00:00.000Z', 'pendiente', '[]')`,
+    );
+    expect(cobranzas.delDiaDelVendedor('ven-1').map((c) => c.id)).toEqual([a.id, b.id]);
+    expect(cobranzas.delDiaDelVendedor('ven-1', '2026-08-06').map((c) => c.id)).toEqual(['cob-ayer']);
+    expect(cobranzas.delDiaDelVendedor('ven-2').map((c) => c.id)).toEqual(['cob-ajeno']);
+  });
+
   it('un cobro rechazado sigue en la cola con su motivo; uno aceptado sale', () => {
     const { cobranzas } = montar();
     const c = cobranzas.registrar(cobro());

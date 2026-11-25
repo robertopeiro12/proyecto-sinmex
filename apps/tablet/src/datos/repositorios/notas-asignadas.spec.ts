@@ -389,6 +389,96 @@ describe('repositorio de notas asignadas', () => {
       expect(notas.queTraePorCliente('ven-1').get('cli-2')).toBe(1);
     });
 
+    describe('queTraeDelVendedor (pieza 5: la lista de la que sale el conteo)', () => {
+      /** El conteo por cliente tiene que salir de la lista, sin otra regla. */
+      const coincide = (notas: ReturnType<typeof montar>['notas']) => {
+        const porCliente = new Map<string, number>();
+        for (const n of notas.queTraeDelVendedor('ven-1')) {
+          porCliente.set(n.clienteId, (porCliente.get(n.clienteId) ?? 0) + 1);
+        }
+        expect(notas.queTraePorCliente('ven-1')).toEqual(porCliente);
+      };
+
+      it('asignada con saldo + venta a credito local, sin contar doble la que ya bajo', () => {
+        const { deps, catalogos, cobranzas, notas } = montar([]);
+        expect(notas.queTraeDelVendedor('ven-1')).toEqual([]);
+
+        catalogos.guardarSnapshot({
+          notas: [notaUnoDelPull(100000, [])],
+          notasAsignadas: [asignacion({ condicion_venta: 'ninguna' })],
+        });
+        expect(notas.queTraeDelVendedor('ven-1')).toEqual([
+          {
+            origen: 'asignada',
+            clienteId: 'cli-1',
+            folio: 'TJ260801AP01',
+            ventaNotaId: 'nota-1',
+            ventaId: null,
+            saldoCentavos: 100000,
+            fecha: '2026-08-01',
+          },
+        ]);
+        coincide(notas);
+
+        // Venta a credito de hoy con abono al vender, todavia sin bajar: saldo = total - abono.
+        insertarVentaDePrueba(deps, {
+          id: 'ven-f1',
+          folio: 'F1',
+          montoCentavos: 124000,
+          contadoCredito: 'credito',
+          abonoCentavos: 30000,
+        });
+        expect(notas.queTraeDelVendedor('ven-1')[1]).toEqual({
+          origen: 'nueva',
+          clienteId: 'cli-1',
+          folio: 'F1',
+          ventaNotaId: null,
+          ventaId: 'ven-f1',
+          saldoCentavos: 94000,
+          fecha: HOY,
+        });
+        coincide(notas);
+
+        // Baja como nota pendiente: la misma, con el saldo del servidor.
+        catalogos.guardarSnapshot({ notas: [notaF1({ saldo_centavos: 94000 })] });
+        expect(notas.queTraeDelVendedor('ven-1').map((n) => [n.origen, n.folio, n.ventaNotaId, n.ventaId, n.saldoCentavos])).toEqual([
+          ['asignada', 'TJ260801AP01', 'nota-1', null, 100000],
+          ['nueva', 'F1', 'nota-f1', 'ven-f1', 94000],
+        ]);
+        coincide(notas);
+
+        // Y ademas se la asignan: sale una sola vez, como asignada, y conserva su venta local.
+        catalogos.guardarSnapshot({
+          notasAsignadas: [asignacion({ id: 'asg-f1', venta_nota_id: 'nota-f1', condicion_venta: 'ninguna' })],
+        });
+        expect(notas.queTraeDelVendedor('ven-1').map((n) => [n.origen, n.folio, n.ventaId])).toEqual([
+          ['asignada', 'TJ260801AP01', null],
+          ['asignada', 'F1', 'ven-f1'],
+        ]);
+        coincide(notas);
+
+        // La asignada liquidada hoy sale.
+        cobranzas.registrar(cobro({ montoCentavos: 100000 }));
+        expect(notas.queTraeDelVendedor('ven-1').map((n) => n.folio)).toEqual(['F1']);
+        coincide(notas);
+
+        // Contado no es nota por cobrar.
+        insertarVentaDePrueba(deps, { id: 'ven-contado', folio: 'C1', montoCentavos: 5000 });
+        expect(notas.queTraeDelVendedor('ven-1').map((n) => n.folio)).toEqual(['F1']);
+        coincide(notas);
+      });
+
+      it('la venta de hoy cuya nota se liquido hoy en la tablet sale de la lista', () => {
+        const { deps, catalogos, cobranzas, notas } = montar([]);
+        insertarVentaDePrueba(deps, { id: 'ven-f1', folio: 'F1', montoCentavos: 124000, contadoCredito: 'credito' });
+        catalogos.guardarSnapshot({ notas: [notaF1()] });
+        expect(notas.queTraeDelVendedor('ven-1')).toHaveLength(1);
+        cobranzas.registrar(cobro({ ventaNotaId: 'nota-f1', montoCentavos: 124000 }));
+        expect(notas.queTraeDelVendedor('ven-1')).toEqual([]);
+        coincide(notas);
+      });
+    });
+
     it('una venta de hoy cuya nota ya se liquido hoy en la tablet no cuenta', () => {
       const { deps, catalogos, cobranzas, notas } = montar([]);
       insertarVentaDePrueba(deps, { id: 'ven-f1', folio: 'F1', montoCentavos: 124000, contadoCredito: 'credito' });
