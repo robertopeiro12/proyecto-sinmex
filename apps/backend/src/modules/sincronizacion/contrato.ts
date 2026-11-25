@@ -345,7 +345,9 @@ export type DatosVenta = {
   /**
    * T-73. Opcional y aditivo (`CONTRATO_ACTUAL` sigue en 1). Presente = la venta
    * espera la imagen de la firma del cliente por el canal de fotos. Ausente (o
-   * `null`) = tablet anterior a T-73: la venta entra sin firma. Un `nombre` que no
+   * `null`) = la venta entra sin firma: tablet anterior a T-73, o venta nueva
+   * desde el rediseño (pieza 2, el cliente firma a mano la nota impresa); solo
+   * una venta grabada con la tablet de T-73 la manda. Un `nombre` que no
    * es texto o pasa de 80 caracteres es `datos-invalidos` (`firma.nombre: …`).
    */
   firma?: FirmaVenta | null;

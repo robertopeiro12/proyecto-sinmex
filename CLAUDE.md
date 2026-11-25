@@ -671,7 +671,10 @@ usuario con sesion pasa.
   - **Nube**: `20261021120000_venta_firma.sql` se sube a `sinmex dev` después del merge y **antes** del backend (y el
     backend antes de la app), con el protocolo de push (pre-flight: columnas nuevas con default; nada que contar).
   - **Nube (pieza 2)**: `20261126120000_venta_atendio.sql` se sube a `sinmex dev` después del merge, con el protocolo de push.
-    Pre-flight: columna nula y check que toda fila cumple en null; nada que contar. **Backend y portal juntos.**
+    Pre-flight: columna nula y check que toda fila cumple en null; nada que contar. **Backend antes que la app**
+    (migración → backend + portal juntos → APK): un backend anterior ignora `abono_centavos` (y `atendio`) **sin
+    avisar**; la venta "Abonar" entraría `pendiente` por el total, la tablet la daría por sincronizada y el abono que
+    el vendedor recibió no existiría en el servidor.
 - **Carga y recarga del vendedor (T-27 pieza 1 / T-26).** Producción registra en el portal la carga de la mañana y cada
   recarga; la carga baja a la tablet, el vendedor la **acepta o la rechaza** con red y, con el control de inventario de
   su sucursal prendido, no vende con una carga pendiente ni deja una presentación en negativo. Spec:

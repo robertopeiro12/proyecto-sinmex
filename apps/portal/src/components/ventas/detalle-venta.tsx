@@ -30,6 +30,15 @@ const ETIQUETA_COBRO: Record<VentaDetalle["cobros"][number]["origen"], string> =
   saldo_favor: "Saldo a favor",
 };
 
+/**
+ * El rótulo de un pago de la venta. El pago al vender de una venta a crédito es
+ * el abono que el vendedor recibió al grabarla (rediseño, pieza 2), no un contado.
+ */
+function etiquetaCobro(origen: VentaDetalle["cobros"][number]["origen"], venta: VentaDetalle): string {
+  if (origen === "venta_contado" && venta.contadoCredito === "credito") return "Abono al vender";
+  return ETIQUETA_COBRO[origen];
+}
+
 /** Lo que salió de pedir un borrado: bien (verde) o la pantalla quedó vieja (ámbar). */
 type AvisoDetalle = { texto: string; tono: "exito" | "advertencia" };
 
@@ -184,7 +193,7 @@ export function DetalleVenta({
                       <Fecha valor={c.fechaPago} />
                     </Td>
                     <Td>{ETIQUETA_METODO_PAGO[c.metodoPago] ?? c.metodoPago}</Td>
-                    <Td>{ETIQUETA_COBRO[c.origen]}</Td>
+                    <Td>{etiquetaCobro(c.origen, venta)}</Td>
                     <TdMonto centavos={c.montoCentavos} />
                     <Td alinear="derecha">
                       {c.cobroId !== null && c.peticionPendiente && (

@@ -56,8 +56,9 @@ export interface VentaNormalizada {
   /** T-74 (D13). Vacio si la tablet no mando regalos. */
   regalos: RegaloNormalizado[];
   /**
-   * T-73. `null` = la venta no espera firma (tablet anterior a T-73 o venta del
-   * portal). Presente = la imagen llegara por el canal de fotos.
+   * T-73. `null` = la venta no espera firma (tablet anterior a T-73, venta nueva
+   * desde la pieza 2 del rediseno o venta del portal). Presente = la imagen
+   * llegara por el canal de fotos.
    */
   firma: FirmaNormalizada | null;
   /** Pieza 2: quien atendio en el negocio. Recortado, 1..80; `null` si no vino. */

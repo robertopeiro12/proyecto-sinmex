@@ -611,8 +611,11 @@ Los regalos de la venta: qué promoción dio cuántas piezas de qué presentaci�
 
 #### `firma` (T-73)
 
-La firma del cliente en la nota. **Opcional y aditivo** (`CONTRATO_ACTUAL` sigue en 1): la tablet desde T-73 la manda
-en toda venta (la firma es obligatoria en la app); una tablet anterior no la manda y la venta del portal no la lleva.
+La firma del cliente en la nota. **Opcional y aditivo** (`CONTRATO_ACTUAL` sigue en 1): la tablet de T-73 (016 a 019)
+la manda en toda venta (ahí la firma era obligatoria). Desde el rediseño (pieza 2, migración local 020) la tablet ya no
+captura la firma dibujada y una venta nueva **no** la manda (el cliente firma a mano la nota impresa); una venta vieja
+grabada con firma la sigue mandando y subiendo su imagen. Una tablet anterior a T-73 tampoco la manda, y la venta del
+portal no la lleva.
 
 ```jsonc
 "firma": { "nombre": "Doña Lupe" }    // opcional; ausente o null = la venta no espera firma
@@ -630,6 +633,11 @@ en toda venta (la firma es obligatoria en la app); una tablet anterior no la man
 
 **Opcionales y aditivos** (`CONTRATO_ACTUAL` sigue en 1): una tablet anterior no los manda y la venta entra igual
 que antes. La venta del portal no los lleva.
+
+> **Despliegue: backend antes que la app** (migración → backend + portal → APK). Un servidor anterior a la pieza 2
+> solo lee las claves que conoce e **ignora `abono_centavos` y `atendio` sin avisar**: la venta "Abonar" entraría
+> `pendiente` por el total, la tablet la marcaría sincronizada y el abono que el vendedor recibió no existiría en el
+> servidor (la oficina le cobraría de más al cliente).
 
 ```jsonc
 "atendio": "Doña Lupe",     // opcional; ausente, null o en blanco = null
