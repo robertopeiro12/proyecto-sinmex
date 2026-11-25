@@ -321,6 +321,23 @@ describe("PantallaFlujoDiario", () => {
     expect(invLib.leerInventarioVendedor).toHaveBeenCalledWith("2026-11-09", "TJ", "ricardo");
   });
 
+  it("Por vendedor: con faltante de piezas y de merma la pastilla se parte en dos líneas y cabe en su columna", async () => {
+    mockAuth([PERMISO]);
+    obtenerFlujo.mockResolvedValue({
+      ...DOS_SUCURSALES,
+      porVendedor: [{ ...RICARDO, corte: { estado: "con_faltante", piezasFaltantes: 7, mermaFaltante: 2 } }, LUIS],
+    });
+    render(<PantallaFlujoDiario sucursal={null} />);
+    const tabla = await screen.findByRole("table", { name: "Por vendedor" });
+    const pastilla = within(tabla).getByRole("button", { name: "Inventario de Ricardo" });
+    const etiqueta = pastilla.querySelector("[data-tono]")!;
+    // El texto de fraseFaltan no cambia; solo se acomoda en dos renglones.
+    expect(etiqueta).toHaveTextContent("Faltan: 7 pz p/Almacen · 2 pz merma");
+    expect(etiqueta).toHaveClass("whitespace-normal");
+    expect(within(pastilla).getByText("Faltan: 7 pz p/Almacen")).toHaveClass("block");
+    expect(within(pastilla).getByText("2 pz merma")).toHaveClass("block");
+  });
+
   it("Por día: Inventario dice los faltantes del día (vacío si null) y no es botón", async () => {
     mockAuth([PERMISO]);
     obtenerFlujo.mockResolvedValue({
@@ -335,8 +352,13 @@ describe("PantallaFlujoDiario", () => {
     await screen.findByRole("table", { name: "Por vendedor" });
     await u.click(screen.getByRole("tab", { name: "Resultados por día" }));
     const tabla = screen.getByRole("table", { name: "Por día" });
-    const texto = within(tabla).getByText("Faltan: 7 pz p/Almacen · 2 pz merma");
-    expect(texto.closest("button")).toBeNull();
+    // Misma pastilla que Por vendedor: en dos renglones para que quepa, pero no es botón.
+    const parte = within(tabla).getByText("Faltan: 7 pz p/Almacen");
+    expect(parte).toHaveClass("block");
+    const etiqueta = parte.closest("[data-tono]")!;
+    expect(etiqueta).toHaveAttribute("data-tono", "error");
+    expect(etiqueta).toHaveTextContent("Faltan: 7 pz p/Almacen · 2 pz merma");
+    expect(parte.closest("button")).toBeNull();
     expect(within(tabla).queryByText("Pronto")).not.toBeInTheDocument();
   });
 

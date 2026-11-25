@@ -41,7 +41,7 @@ describe("BuscarPorCobrar", () => {
   it("por cliente entra directo a su cobranza", async () => {
     const { usuario, onElegir } = renderizar();
     await usuario.type(screen.getByLabelText("Cliente"), "coba");
-    await usuario.click(await screen.findByRole("button", { name: /Cobach XXI/ }));
+    await usuario.click(await screen.findByRole("option", { name: /Cobach XXI/ }));
     expect(onElegir).toHaveBeenCalledWith("c1", null);
   });
 

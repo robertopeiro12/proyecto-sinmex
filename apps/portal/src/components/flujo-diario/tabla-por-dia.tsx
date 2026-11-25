@@ -13,7 +13,7 @@ import {
 import { textoFaltantesDia } from "@/lib/inventario-vendedor";
 import { formatearFecha, formatearPesos } from "@/lib/formato";
 import { DetalleDia, ETIQUETA_PESTANA_DIA, type PestanaDetalleDia } from "./detalle-dia";
-import { Barra, BotonNumero, BotonRenglon, BotonVer, formatearPiezas } from "./piezas";
+import { Barra, BotonNumero, BotonRenglon, BotonVer, EtiquetaPartida, formatearPiezas } from "./piezas";
 import { useDetalleAbierto } from "./use-detalle-abierto";
 import { VentanaDetalle } from "./ventana-detalle";
 
@@ -77,10 +77,8 @@ export function TablaPorDia({
         <Td>
           <VisitasRuta totales={t} onClick={() => verEn("visitas")} />
         </Td>
-        <Td alinear="centro" className="whitespace-nowrap">
-          {textoFaltantesDia(d.faltantesCorte) ? (
-            <span className="font-semibold text-destructive">{textoFaltantesDia(d.faltantesCorte)}</span>
-          ) : null}
+        <Td alinear="centro">
+          {textoFaltantesDia(d.faltantesCorte) ? <EtiquetaPartida texto={textoFaltantesDia(d.faltantesCorte)!} tono="error" /> : null}
         </Td>
       </Fila>
     );
@@ -121,7 +119,7 @@ export function TablaPorDia({
           <col className="w-20" />
           <col className="w-24" />
           <col />
-          <col className="w-40" />
+          <col className="w-48" />
         </colgroup>
         <thead>
           <tr>

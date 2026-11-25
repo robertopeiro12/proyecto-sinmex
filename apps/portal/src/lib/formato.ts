@@ -43,6 +43,17 @@ export function formatearDiaLargo(iso: string): string {
   return `${DIAS[semana]} ${dia} de ${MESES[mes - 1]}`;
 }
 
+const DIAS_CORTOS = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+
+/** `AAAA-MM-DD` → "mar 24 nov" (para una línea de datos corta). Lo que no tenga esa forma sale tal cual. */
+export function formatearDiaCorto(iso: string): string {
+  const m = SOLO_FECHA.exec(iso);
+  if (!m) return iso;
+  const [anio, mes, dia] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const semana = new Date(Date.UTC(anio, mes - 1, dia)).getUTCDay();
+  return `${DIAS_CORTOS[semana]} ${dia} ${MESES[mes - 1].slice(0, 3)}`;
+}
+
 /**
  * `AAAA-MM-DD hh:mm` (hora de Tijuana, como la manda el servidor) → "el martes 24 de noviembre
  * a las 12:08". Lo que no tenga esa forma sale tal cual.

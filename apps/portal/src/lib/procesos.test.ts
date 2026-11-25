@@ -24,7 +24,7 @@ describe("cuadre", () => {
       recibido: 5,
       entregado: 5,
       cuadra: true,
-      texto: "✓ Cuadra: recibió 5 y se le entregaron 5.",
+      texto: "Recibió 5 · entregó 5 ✓",
     });
   });
 
@@ -33,7 +33,7 @@ describe("cuadre", () => {
       recibido: 5,
       entregado: 3,
       cuadra: false,
-      texto: "Recibió 5 y llevas 3 entregadas — faltan 2.",
+      texto: "Recibió 5 · entregó 3 — faltan 2",
     });
   });
 
@@ -42,7 +42,7 @@ describe("cuadre", () => {
       recibido: 5,
       entregado: 7,
       cuadra: false,
-      texto: "Recibió 5 y llevas 7 entregadas — sobran 2.",
+      texto: "Recibió 5 · entregó 7 — sobran 2",
     });
   });
 });
