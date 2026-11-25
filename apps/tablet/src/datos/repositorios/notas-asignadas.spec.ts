@@ -320,6 +320,22 @@ describe('repositorio de notas asignadas', () => {
     expect(notas.pendientesDeSincronizar()).toEqual([]);
   });
 
+  it('asignadasDeHoy (corte, pieza 6): todas las de hoy, liquidadas hoy incluidas, en orden', () => {
+    const { notas, cobranzas } = montar([
+      asignacion({ id: 'asg-2', venta_nota_id: 'nota-2' }),
+      asignacion({ id: 'asg-1', venta_nota_id: 'nota-1' }),
+      asignacion({ id: 'asg-3', venta_nota_id: 'nota-1', fecha: AYER }),
+    ]);
+    cobranzas.registrar(cobro({ ventaNotaId: 'nota-2', montoCentavos: 10000 }));
+    const lista = notas.asignadasDeHoy();
+    expect(lista.map((n) => [n.asignacionId, n.liquidadaHoy])).toEqual([
+      ['asg-1', false],
+      ['asg-2', true],
+    ]);
+    // La regla de lo que trae no cambia: la liquidada hoy no sale ahi.
+    expect(notas.queTraeDelVendedor('ven-1').map((n) => n.folio)).toEqual(['TJ260801AP01']);
+  });
+
   describe('queTraePorCliente (spec §4: el numero de la ruta)', () => {
     const notaF1 = (cambios: Record<string, unknown> = {}) => ({
       id: 'nota-f1',

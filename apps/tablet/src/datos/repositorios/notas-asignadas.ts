@@ -67,6 +67,7 @@ interface FilaAsignada {
   saldo_centavos: number;
   condicion_venta: CondicionVenta;
   plazo_credito_dias: number | null;
+  activo: number;
 }
 
 /**
@@ -85,17 +86,22 @@ interface FilaAsignada {
  * suba el cobro no desbloquea ni bloquea de mas.
  */
 export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRepositorio) {
-  /** Las asignaciones de hoy, de un cliente o de todos. */
-  function deHoy(clienteId: string | null): NotaAsignadaDeHoy[] {
+  /**
+   * Las asignaciones de hoy, de un cliente o de todos. Con
+   * `conLiquidadasHoy`, tambien las que un cobro de hoy en esta tablet dejo en
+   * 0 (el cobro retira la `nota_pendiente` con `activo = 0`); sin el, solo las
+   * de nota viva, como siempre.
+   */
+  function deHoy(clienteId: string | null, { conLiquidadasHoy = false } = {}): NotaAsignadaDeHoy[] {
     const hoy = reloj.hoy();
     const filtroCliente = clienteId === null ? '' : 'and np.cliente_id = $cliente_id';
     const params: ParametrosSQL = clienteId === null ? { $hoy: hoy } : { $hoy: hoy, $cliente_id: clienteId };
 
     const filas = bd.getAllSync<FilaAsignada>(
       `select na.id as asignacion_id, na.venta_nota_id, np.cliente_id, np.folio, np.fecha,
-              np.saldo_centavos, na.condicion_venta, c.plazo_credito_dias
+              np.saldo_centavos, na.condicion_venta, c.plazo_credito_dias, np.activo
          from nota_asignada na
-         join nota_pendiente np on np.id = na.venta_nota_id and np.activo = 1
+         join nota_pendiente np on np.id = na.venta_nota_id ${conLiquidadasHoy ? '' : 'and np.activo = 1'}
          left join cliente c on c.id = np.cliente_id
         where na.fecha = $hoy and na.activo = 1 ${filtroCliente}
         order by np.fecha, np.folio, na.id`,
@@ -126,7 +132,7 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
         .map((f) => f.venta_nota_id),
     );
 
-    return filas.map((f) => ({
+    return filas.filter((f) => f.activo === 1 || liquidadas.has(f.venta_nota_id)).map((f) => ({
       asignacionId: f.asignacion_id,
       ventaNotaId: f.venta_nota_id,
       clienteId: f.cliente_id,
@@ -186,6 +192,17 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
     /** Las asignadas de hoy del cliente, saldo 0 incluido. Orden: fecha y folio de la nota. */
     deHoyDelCliente(clienteId: string): NotaAsignadaDeHoy[] {
       return deHoy(clienteId);
+    },
+
+    /**
+     * Todas las asignadas de hoy de esta tablet (de todos los clientes), saldo
+     * 0 y liquidadas hoy incluidas (aunque el cobro ya retiro su nota): el
+     * apartado Notas del corte (pieza 6) las lista todas, la liquidada como
+     * "liquidada $0.00". Lo que el vendedor **trae** sigue siendo
+     * `queTraeDelVendedor`.
+     */
+    asignadasDeHoy(): NotaAsignadaDeHoy[] {
+      return deHoy(null, { conLiquidadasHoy: true });
     },
 
     /**
