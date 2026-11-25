@@ -1,5 +1,6 @@
 import { apiFetch } from "./api";
 import { claveTamano, compararTamano, fraseFaltan } from "./cortes";
+import { textoEstadoCarga } from "./cargas";
 import type { EstadoCorte, TotalesCorte } from "./cortes";
 
 // Copia normativa de `InventarioVendedor`, `LineaInventario` y `RecargaInventario`
@@ -24,6 +25,12 @@ export interface RecargaInventario {
   hora: string;
   estado: "pendiente" | "aceptada" | "rechazada";
   motivoRechazo: string | null;
+  /** Este renglon: `null` si la carga esta pendiente. */
+  aceptada: boolean | null;
+  /** Renglones aceptados de la carga; `null` si esta pendiente. */
+  renglonesAceptados: number | null;
+  /** Renglones de la carga. */
+  renglones: number;
 }
 
 /**
@@ -165,10 +172,10 @@ export function gruposPorTamano(
 export const mermaRegistrada = (l: LineaInventario): number =>
   l.mermaEntregada + l.mermaAlmacen;
 
-export function textoEstadoRecarga(r: Pick<RecargaInventario, "estado">): string {
-  if (r.estado === "aceptada") return "Aceptada";
-  if (r.estado === "rechazada") return "Rechazada";
-  return "Pendiente";
+export function textoEstadoRecarga(
+  r: Pick<RecargaInventario, "estado" | "renglones" | "renglonesAceptados">,
+): string {
+  return textoEstadoCarga(r);
 }
 
 /** `"07:29"` → `"7:29 a. m."`; lo que no tiene forma de hora se deja tal cual. */

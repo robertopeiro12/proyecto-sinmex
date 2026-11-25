@@ -126,6 +126,23 @@ describe("textoEstadoRecarga", () => {
   });
 });
 
+describe("textoEstadoRecarga por renglón", () => {
+  const r = (estado: string, aceptados: number | null, total: number) =>
+    ({ estado, renglonesAceptados: aceptados, renglones: total }) as RecargaInventario;
+  it("todos aceptados: Aceptada", () => {
+    expect(textoEstadoRecarga(r("aceptada", 3, 3))).toBe("Aceptada");
+  });
+  it("algunos: Aceptada N de M", () => {
+    expect(textoEstadoRecarga(r("aceptada", 2, 3))).toBe("Aceptada 2 de 3");
+  });
+  it("ninguno: Rechazada", () => {
+    expect(textoEstadoRecarga(r("rechazada", 0, 3))).toBe("Rechazada");
+  });
+  it("pendiente: Pendiente", () => {
+    expect(textoEstadoRecarga(r("pendiente", null, 3))).toBe("Pendiente");
+  });
+});
+
 describe("textoHora", () => {
   it.each([
     ["07:29", "7:29 a. m."],

@@ -69,6 +69,11 @@ export interface SucursalRejilla {
   nombre: string;
 }
 
+export interface LineaCargaRejilla extends LineaCarga {
+  /** `null` = pendiente; si no, lo que el vendedor contesto a ese renglon. */
+  aceptada: boolean | null;
+}
+
 export interface CargaRejilla {
   id: string;
   numero: number;
@@ -76,7 +81,11 @@ export interface CargaRejilla {
   motivoRechazo: string | null;
   version: number;
   respondidaEn: string | null;
-  lineas: LineaCarga[];
+  /** Renglones que trae la carga. */
+  renglones: number;
+  /** `null` mientras esta pendiente. */
+  renglonesAceptados: number | null;
+  lineas: LineaCargaRejilla[];
 }
 
 export interface VendedorRejilla {
@@ -192,6 +201,12 @@ export function ordenarPresentaciones(
 }
 
 export function aCargaRejilla(f: FilaCarga): CargaRejilla {
+  const pendiente = f.estado === 'pendiente';
+  const lineas = f.lineas.map((l) => ({
+    presentacionId: l.presentacionId,
+    piezas: l.piezas,
+    aceptada: pendiente ? null : renglonAceptado(f.estado, l),
+  }));
   return {
     id: f.id,
     numero: f.numero,
@@ -199,12 +214,11 @@ export function aCargaRejilla(f: FilaCarga): CargaRejilla {
     motivoRechazo: f.motivoRechazo,
     version: f.version,
     respondidaEn: f.respondidaEn === null ? null : f.respondidaEn.toISOString(),
-    // El renglon aceptado llega a la rejilla en la Task 4 de la pieza 3 (junto
-    // con el tipo duplicado del portal); aqui la forma no cambia todavia.
-    lineas: f.lineas.map((l) => ({
-      presentacionId: l.presentacionId,
-      piezas: l.piezas,
-    })),
+    renglones: lineas.length,
+    renglonesAceptados: pendiente
+      ? null
+      : lineas.filter((l) => l.aceptada).length,
+    lineas,
   };
 }
 

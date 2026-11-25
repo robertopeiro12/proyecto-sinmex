@@ -54,7 +54,9 @@ const carga = (id: string, numero: number, estado: CargaRejilla["estado"], m: Pa
   motivoRechazo: null,
   version: 3,
   respondidaEn: null,
-  lineas: [{ presentacionId: "p1", piezas: 50 }],
+  renglones: 1,
+  renglonesAceptados: estado === "pendiente" ? null : estado === "aceptada" ? 1 : 0,
+  lineas: [{ presentacionId: "p1", piezas: 50, aceptada: estado === "pendiente" ? null : estado === "aceptada" }],
   ...m,
 });
 
@@ -316,6 +318,39 @@ describe("Pestaña Recargas del Registro de Operación", () => {
     expect(document.querySelectorAll("tbody td.bg-destructive-soft\\/40").length).toBe(5);
   });
 
+  it("una carga parcial tinta solo los renglones no aceptados y dice Aceptada 2 de 3", async () => {
+    vi.mocked(cargasLib.obtenerRejilla).mockImplementation(async () => {
+      const r = rejilla();
+      r.vendedores[2].cargas = [
+        carga("c9", 1, "aceptada", {
+          renglones: 3,
+          renglonesAceptados: 2,
+          lineas: [
+            { presentacionId: "p1", piezas: 10, aceptada: true },
+            { presentacionId: "p2", piezas: 5, aceptada: false },
+            { presentacionId: "p3", piezas: 7, aceptada: true },
+          ],
+        }),
+      ];
+      return r;
+    });
+    await abrirRejilla();
+    expect(screen.getByText("Aceptada 2 de 3")).toBeInTheDocument();
+    // solo el renglón de p2 (Jamaica 500 ml) de esa carga; la rechazada de Juan pinta sus 5
+    expect(document.querySelectorAll("tbody td.bg-destructive-soft\\/40").length).toBe(6);
+  });
+
+  it("una rechazada sin motivo no pinta Motivo", async () => {
+    vi.mocked(cargasLib.obtenerRejilla).mockImplementation(async () => {
+      const r = rejilla();
+      r.vendedores[1].cargas = [carga("c3", 1, "rechazada")];
+      return r;
+    });
+    await abrirRejilla();
+    expect(screen.getByText("Rechazada")).toBeInTheDocument();
+    expect(screen.queryByText(/Motivo/)).not.toBeInTheDocument();
+  });
+
   it("cambiar de pestaña y volver conserva lo escrito", async () => {
     const u = userEvent.setup();
     await abrirRejilla();
@@ -415,7 +450,7 @@ describe("Pestaña Recargas del Registro de Operación", () => {
     vi.mocked(cargasLib.obtenerRejilla).mockImplementation(async () => {
       const r = rejilla();
       r.presentaciones.push({ id: "p4", productoNombre: "Viejo", volumen: "1 L", activa: false });
-      r.vendedores[1].cargas[0].lineas = [{ presentacionId: "p1", piezas: 5 }, { presentacionId: "p4", piezas: 9 }];
+      r.vendedores[1].cargas[0].lineas = [{ presentacionId: "p1", piezas: 5, aceptada: false }, { presentacionId: "p4", piezas: 9, aceptada: false }];
       return r;
     });
     await abrirRejilla();

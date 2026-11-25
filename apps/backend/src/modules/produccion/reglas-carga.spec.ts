@@ -194,8 +194,47 @@ describe('armarRejilla (GET /cargas)', () => {
       motivoRechazo: 'Faltan 2 cajas',
       version: 1,
       respondidaEn: '2026-10-22T15:00:00.000Z',
-      lineas: [{ presentacionId: A, piezas: 24 }],
+      renglones: 1,
+      renglonesAceptados: 0,
+      lineas: [{ presentacionId: A, piezas: 24, aceptada: false }],
     });
+  });
+
+  it('aCargaRejilla: pendiente no tiene respuesta (null)', () => {
+    const c = aCargaRejilla(fila());
+    expect(c.renglonesAceptados).toBeNull();
+    expect(c.renglones).toBe(1);
+    expect(c.lineas[0].aceptada).toBeNull();
+  });
+
+  it('aCargaRejilla: parcial cuenta los renglones aceptados', () => {
+    const c = aCargaRejilla(
+      fila({
+        estado: 'aceptada',
+        lineas: [
+          { presentacionId: A, piezas: 1, aceptada: true },
+          { presentacionId: B, piezas: 2, aceptada: false },
+          { presentacionId: C, piezas: 3, aceptada: true },
+        ],
+      }),
+    );
+    expect(c.renglones).toBe(3);
+    expect(c.renglonesAceptados).toBe(2);
+    expect(c.lineas.map((l) => l.aceptada)).toEqual([true, false, true]);
+  });
+
+  it('aCargaRejilla: una aceptada vieja (null) cuenta como toda aceptada', () => {
+    const c = aCargaRejilla(
+      fila({
+        estado: 'aceptada',
+        lineas: [
+          { presentacionId: A, piezas: 1, aceptada: null },
+          { presentacionId: B, piezas: 2, aceptada: null },
+        ],
+      }),
+    );
+    expect(c.renglonesAceptados).toBe(2);
+    expect(c.lineas.every((l) => l.aceptada === true)).toBe(true);
   });
 });
 

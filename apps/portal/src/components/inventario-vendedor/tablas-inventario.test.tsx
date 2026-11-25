@@ -45,6 +45,9 @@ const recarga = (m: Partial<RecargaInventario> = {}): RecargaInventario => ({
   hora: "07:29",
   estado: "aceptada",
   motivoRechazo: null,
+  aceptada: true,
+  renglonesAceptados: 1,
+  renglones: 1,
   ...m,
 });
 
@@ -178,6 +181,25 @@ describe("TablasInventario", () => {
     expect(within(tabla).getByText("Total 1 L")).toBeInTheDocument();
   });
 
+  it("Recargas: una carga parcial dice Aceptada N de M y una rechazada sin motivo no pinta Motivo", async () => {
+    const r = [
+      recarga({ aceptada: true, renglonesAceptados: 2, renglones: 3 }),
+      recarga({
+        cargaId: "c2",
+        estado: "rechazada",
+        aceptada: false,
+        renglonesAceptados: 0,
+        renglones: 1,
+      }),
+    ];
+    render(<TablasInventario datos={datos({ recargas: r })} />);
+    await userEvent.click(screen.getByRole("tab", { name: "Recargas" }));
+    const tabla = screen.getByRole("table", { name: "Recargas" });
+    expect(within(tabla).getByText("Aceptada 2 de 3")).toBeInTheDocument();
+    expect(within(tabla).getByText("Rechazada")).toBeInTheDocument();
+    expect(within(tabla).queryByText(/Motivo/)).not.toBeInTheDocument();
+  });
+
   it("Recargas: hora, estado y motivo; Vendedor solo con Todos", async () => {
     const r = [
       recarga(),
@@ -185,6 +207,8 @@ describe("TablasInventario", () => {
         cargaId: "c2",
         numero: 2,
         estado: "rechazada",
+        aceptada: false,
+        renglonesAceptados: 0,
         motivoRechazo: "No cuadra",
         hora: "13:05",
       }),
