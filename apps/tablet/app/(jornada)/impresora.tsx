@@ -50,6 +50,18 @@ export default function Impresora() {
   const { papel, elegirPapel, imprimirTicket } = useImpresion();
   const [imprimiendo, setImprimiendo] = useState(false);
   const [resultado, setResultado] = useState<ResultadoImpresion | null>(null);
+  const [errorPapel, setErrorPapel] = useState<string | null>(null);
+
+  // Si no se pudo guardar, se queda el papel de antes (el hook no lo cambia) y se avisa.
+  const cambiarPapel = async (p: Papel) => {
+    setResultado(null);
+    setErrorPapel(null);
+    try {
+      await elegirPapel(p);
+    } catch {
+      setErrorPapel('No se pudo guardar el ancho del papel. Se queda el de antes; intenta de nuevo.');
+    }
+  };
 
   const imprimirPrueba = async () => {
     setImprimiendo(true);
@@ -81,16 +93,14 @@ export default function Impresora() {
                 etiqueta={p.etiqueta}
                 elegida={papel === p.papel}
                 ancho
-                onPress={() => {
-                  setResultado(null);
-                  void elegirPapel(p.papel);
-                }}
+                onPress={() => void cambiarPapel(p.papel)}
               />
             ))}
           </View>
           <Text style={[estilos.textoSuave, { marginTop: espacio.sm }]}>
             58 mm es el rollo angosto (32 letras por renglón); 80 mm, el ancho (48).
           </Text>
+          {errorPapel ? <Text style={[estilos.error, { marginTop: espacio.sm }]}>{errorPapel}</Text> : null}
         </Tarjeta>
 
         <Boton

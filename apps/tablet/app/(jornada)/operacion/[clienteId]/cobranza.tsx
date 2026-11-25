@@ -21,6 +21,9 @@ import { crearGuardiaRegistro } from '@/estado/movimiento';
 import { agruparNotasParaCobrar } from '@/estado/notas-asignadas';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { textoSaldoPendiente } from '@/estado/venta-pasos';
+import { AVISO_NO_IMPRESO, ticketsDelCobro } from '@/impresion/datos-ticket';
+import type { DatosTicket } from '@/impresion/ticket';
+import { useImpresion } from '@/impresion/usar-impresion';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
 import { Chip } from '@/ui/chip';
@@ -63,6 +66,9 @@ export default function PantallaCobranza() {
   const { datos, vendedor, versionCatalogos } = useJawa();
   const { estilos, t } = useTema();
   const insets = useSafeAreaInsets();
+  const { imprimirTickets } = useImpresion();
+  /** Rediseño pieza 7: tras grabar se reimprime cada nota que tocó el cobro; un fallo solo avisa. */
+  const [impresion, setImpresion] = useState<'imprimiendo' | 'enviada' | 'no-impresa' | null>(null);
 
   // El dia de trabajo del reloj de la tablet: el de `fecha_operacion`.
   const hoy = datos.deps.reloj.hoy();
@@ -212,6 +218,12 @@ export default function PantallaCobranza() {
             nota, el servidor pasa el dinero a las otras notas o al saldo a favor.
           </Text>
         </Tarjeta>
+        {impresion === 'imprimiendo' ? <Text style={estilos.textoSuave}>Imprimiendo la nota…</Text> : null}
+        {impresion === 'no-impresa' ? (
+          <Tarjeta estado="pendiente" etiqueta="Nota sin imprimir">
+            <Text style={estilos.textoTarjeta}>{AVISO_NO_IMPRESO}</Text>
+          </Tarjeta>
+        ) : null}
         {/* `back` y no `dismissTo` la ruta: debajo esta la venta (que relee la nota al enfocarse) o la ficha. */}
         <Boton
           etiqueta={desde === 'venta' ? 'Seguir con la venta' : 'Volver al cliente'}
@@ -297,6 +309,19 @@ export default function PantallaCobranza() {
   const abonos = leerAbonos(notaFrente.abonos_json);
   const abonoCentavos = montoACentavos(montoTexto) ?? 0;
 
+  // Fuera del try de grabar: el cobro ya esta firme. Cada nota del reparto sale
+  // completa, con el abono nuevo, "Reimpresión <ahora>" y "Cobró <vendedor>".
+  async function reimprimir(cobro: Cobranza) {
+    setImpresion('imprimiendo');
+    let tickets: (DatosTicket | null)[] = [null];
+    try {
+      tickets = ticketsDelCobro(datos.deps.bd, cobro, datos.deps.reloj.ahora());
+    } catch {
+      // Se avisa como cualquier impresion que no salio.
+    }
+    setImpresion((await imprimirTickets(tickets)) ? 'enviada' : 'no-impresa');
+  }
+
   function grabar() {
     const cobro = validarCobro({ opcion, montoTexto, saldoCentavos: saldo });
     const monto = cobro.montoCentavos;
@@ -335,6 +360,7 @@ export default function PantallaCobranza() {
       if (registrado === null) return;
       setProblemas([]);
       setGrabado({ cobro: registrado, lineas, saldoFavorCentavos });
+      void reimprimir(registrado);
     } catch (e) {
       setProblemas([
         e instanceof ErrorCobranza || e instanceof ErrorJornada
@@ -465,7 +491,7 @@ export default function PantallaCobranza() {
           {p}
         </Text>
       ))}
-      <Boton etiqueta="Grabar" icono="palomita" onPress={grabar} />
+      <Boton etiqueta="Grabar e imprimir" icono="impresora" onPress={grabar} />
     </View>,
   );
 }

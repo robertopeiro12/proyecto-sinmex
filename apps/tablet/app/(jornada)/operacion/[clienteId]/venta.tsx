@@ -40,6 +40,8 @@ import {
   type PasoVenta,
   type TeclaNumerica,
 } from '@/estado/venta-pasos';
+import { AVISO_NO_IMPRESO, ticketDeVenta } from '@/impresion/datos-ticket';
+import { useImpresion } from '@/impresion/usar-impresion';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
 import { Palomita, Renglon } from '@/ui/checklist';
@@ -142,6 +144,9 @@ export default function PantallaVenta() {
   const [atendio, setAtendio] = useState('');
   const [problemas, setProblemas] = useState<string[]>([]);
   const [grabada, setGrabada] = useState<Venta | null>(null);
+  /** Rediseño pieza 7: la nota se imprime despues de grabar; un fallo solo avisa. */
+  const [impresion, setImpresion] = useState<'imprimiendo' | 'enviada' | 'no-impresa' | null>(null);
+  const { imprimirTickets } = useImpresion();
   /** Guardia de doble toque: un segundo toque en "Grabar" no emite otro folio. */
   const [guardia] = useState(() => crearGuardiaRegistro());
 
@@ -368,6 +373,12 @@ export default function PantallaVenta() {
             un error, se corrige desde el portal.
           </Text>
         </Tarjeta>
+        {impresion === 'imprimiendo' ? <Text style={estilos.textoSuave}>Imprimiendo la nota…</Text> : null}
+        {impresion === 'no-impresa' ? (
+          <Tarjeta estado="pendiente" etiqueta="Nota sin imprimir">
+            <Text style={estilos.textoTarjeta}>{AVISO_NO_IMPRESO}</Text>
+          </Tarjeta>
+        ) : null}
         <Boton
           etiqueta="Volver a la ruta"
           icono="atras"
@@ -480,6 +491,19 @@ export default function PantallaVenta() {
     const etiquetaDe = (l: LineaCaptura) =>
       l.etiqueta !== '' ? l.etiqueta : (catalogoPromos.presentaciones.get(l.presentacionId)?.etiqueta ?? '');
 
+    // Fuera del try de grabar: la venta ya esta firme; armar o imprimir la nota
+    // nunca puede decir "no se consumió ningún folio" ni invitar a grabar otra vez.
+    async function imprimir(ventaId: string) {
+      setImpresion('imprimiendo');
+      let ticket: ReturnType<typeof ticketDeVenta> = null;
+      try {
+        ticket = ticketDeVenta(datos.deps.bd, ventaId);
+      } catch {
+        // Sin ticket: se avisa abajo, como cualquier impresion que no salio.
+      }
+      setImpresion((await imprimirTickets([ticket])) ? 'enviada' : 'no-impresa');
+    }
+
     function grabar() {
       if (opcionVigente === null) {
         setProblemas(['Elige cómo paga el cliente: Liquidar, Abonar o Crédito.']);
@@ -517,6 +541,7 @@ export default function PantallaVenta() {
         setProblemas([]);
         setGrabada(venta);
         setPaso('grabada');
+        void imprimir(venta.id);
       } catch (e) {
         setProblemas([
           e instanceof ErrorVenta || e instanceof ErrorFolio || e instanceof ErrorJornada
@@ -614,7 +639,7 @@ export default function PantallaVenta() {
       barra(
         <>
           {avisos}
-          <Boton etiqueta="Grabar" icono="palomita" onPress={grabar} deshabilitado={grabada !== null} />
+          <Boton etiqueta="Grabar e imprimir" icono="impresora" onPress={grabar} deshabilitado={grabada !== null} />
         </>,
       ),
     );

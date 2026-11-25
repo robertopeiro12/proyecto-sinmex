@@ -1,7 +1,8 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
 
+import type { BaseDatos } from '@/datos/base-datos';
 import type { DetalleVenta } from '@/datos/repositorios/ventas';
 import type { Cobranza } from '@/datos/tipos';
 import {
@@ -17,6 +18,9 @@ import {
 import { motivoDeRechazo } from '@/estado/ruta-del-dia';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
+import { AVISO_NO_IMPRESO, ticketDeVentaParaReimprimir, ticketsDelCobro } from '@/impresion/datos-ticket';
+import type { DatosTicket } from '@/impresion/ticket';
+import { useImpresion } from '@/impresion/usar-impresion';
 import { Boton } from '@/ui/boton';
 import { Cifra, pesos } from '@/ui/cifra';
 import { formatearHora } from '@/ui/momento';
@@ -28,8 +32,8 @@ import { colores, espacio, fuente, grosor, tipo } from '@/ui/tokens';
  * Abrir un movimiento del registro (rediseño pieza 5, maqueta 18): la venta
  * (folio, cliente, hora, renglones, promociones, Total, Pagó, Quedó a crédito,
  * Atendió, Vendedor, Sincronizada) o el cobro (cliente, hora, monto, método y
- * cada nota que toco). Solo lectura: lo grabado no se edita. Reimprimir llega
- * con la pieza 7.
+ * cada nota que toco). Solo lectura: lo grabado no se edita. "Reimprimir"
+ * (pieza 7) saca otra vez la nota de la venta o cada nota que toco el cobro.
  */
 export default function DetalleRegistro() {
   const { tipo: tipoMov, id } = useLocalSearchParams<{ tipo: string; id: string }>();
@@ -110,6 +114,7 @@ function DetalleVentaVista({ detalle, cliente }: { detalle: DetalleVenta; client
         ))}
         {v.sync_estado === 'error' && v.sync_error ? <Text style={estilos.error}>{motivoDeRechazo(v.sync_error)}</Text> : null}
       </Tarjeta>
+      <Reimprimir armar={(bd) => [ticketDeVentaParaReimprimir(bd, v.id)]} />
     </Pantalla>
   );
 }
@@ -149,7 +154,48 @@ function DetalleCobroVista({ cobro: c, cliente }: { cobro: Cobranza; cliente: st
           </View>
         ))}
       </Tarjeta>
+      <Reimprimir armar={(bd, ahora) => ticketsDelCobro(bd, c, ahora)} />
     </Pantalla>
+  );
+}
+
+/**
+ * "Reimprimir" (rediseño pieza 7). La venta sale como su nota actual (con los
+ * abonos de despues, si ya bajo); el cobro reimprime cada nota que toco, con
+ * "Reimpresión <ahora>" y "Cobró <quien cobro>". Si no sale, solo se avisa.
+ */
+function Reimprimir({
+  armar,
+}: {
+  armar: (bd: BaseDatos, ahora: string) => (DatosTicket | null)[];
+}) {
+  const { datos } = useJawa();
+  const { estilos } = useTema();
+  const { imprimirTickets } = useImpresion();
+  const [imprimiendo, setImprimiendo] = useState(false);
+  const [noImpresa, setNoImpresa] = useState(false);
+
+  const reimprimir = async () => {
+    setImprimiendo(true);
+    setNoImpresa(false);
+    try {
+      let tickets: (DatosTicket | null)[] = [null];
+      try {
+        tickets = armar(datos.deps.bd, datos.deps.reloj.ahora());
+      } catch {
+        // Se avisa como cualquier impresion que no salio.
+      }
+      setNoImpresa(!(await imprimirTickets(tickets)));
+    } finally {
+      setImprimiendo(false);
+    }
+  };
+
+  return (
+    <View style={{ marginTop: espacio.lg, marginBottom: espacio.xl, gap: espacio.sm }}>
+      {noImpresa ? <Text style={estilos.error}>{AVISO_NO_IMPRESO}</Text> : null}
+      <Boton etiqueta="Reimprimir" icono="impresora" onPress={() => void reimprimir()} ocupado={imprimiendo} />
+    </View>
   );
 }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { crearControladorExpoPrint, type ResultadoImpresion } from './controlador';
+import { imprimirEnOrden } from './datos-ticket';
 import { COLUMNAS, type Papel } from './html';
 import { guardarPapel, leerPapel } from './preferencia-expo';
 import { armarTicket, type DatosTicket } from './ticket';
@@ -26,9 +27,14 @@ export function useImpresion() {
     };
   }, []);
 
+  /**
+   * Guarda primero y solo entonces pinta el papel nuevo: si guardar falla, la
+   * pantalla sigue mostrando el que de verdad se usara al imprimir (el guardado).
+   * Lanza el error para que la pantalla avise.
+   */
   const elegirPapel = useCallback(async (p: Papel) => {
-    setPapel(p);
     await guardarPapel(p);
+    setPapel(p);
   }, []);
 
   const imprimirTicket = useCallback(async (d: DatosTicket): Promise<ResultadoImpresion> => {
@@ -40,6 +46,12 @@ export function useImpresion() {
     }
   }, []);
 
+  /** Varias notas, una tras otra; `true` solo si salieron todas (ver `imprimirEnOrden`). */
+  const imprimirTickets = useCallback(
+    (tickets: (DatosTicket | null)[]) => imprimirEnOrden(imprimirTicket, tickets),
+    [imprimirTicket],
+  );
+
   /** `null` mientras se lee la preferencia. */
-  return { papel, elegirPapel, imprimirTicket };
+  return { papel, elegirPapel, imprimirTicket, imprimirTickets };
 }
