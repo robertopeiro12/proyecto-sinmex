@@ -21,6 +21,7 @@ import { ventaAtendioAbono } from './020-venta-atendio-abono';
 import { cargaRenglon } from './021-carga-renglon';
 import { cambiosMotivoMerma } from './022-cambios-motivo-merma';
 import { corte } from './023-corte';
+import { notaDetalle } from './024-nota-detalle';
 import type { Migracion } from './motor';
 
 /**
@@ -56,6 +57,7 @@ export const migraciones: readonly Migracion[] = [
   cargaRenglon,
   cambiosMotivoMerma,
   corte,
+  notaDetalle,
 ];
 
 export { ejecutarMigraciones, versionEsquema } from './motor';

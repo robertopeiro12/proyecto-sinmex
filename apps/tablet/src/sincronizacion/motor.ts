@@ -536,9 +536,12 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
       se_usa_en_app: ce.se_usa_en_app ? 1 : 0,
     })),
     precios: c.precios,
-    notas: respuesta.notas_pendientes.map(({ abonos, ...nota }) => ({
+    // Rediseño pieza 7: el detalle se guarda como texto; un servidor anterior
+    // no lo manda y la nota queda con `null` (reimpresion sin renglones).
+    notas: respuesta.notas_pendientes.map(({ abonos, detalle, ...nota }) => ({
       ...nota,
       abonos_json: JSON.stringify(abonos ?? []),
+      detalle_json: detalle ? JSON.stringify(detalle) : null,
     })),
     // T-37: un servidor anterior a este ticket no manda la coleccion. Se pasa
     // `undefined` y `guardarSnapshot` no escribe nada de la ruta: la tablet

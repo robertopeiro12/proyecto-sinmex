@@ -461,15 +461,75 @@ export class SincronizacionRepository {
       abonado: string;
       abonos: { fecha_pago: string; monto: string; metodo_pago: string }[];
       borrada: Date | null;
+      lineas: {
+        presentacion_id: string;
+        etiqueta: string;
+        cantidad: number;
+        cantidad_promocion: number;
+        precio: string;
+      }[];
+      promociones: {
+        presentacion_id: string;
+        etiqueta: string;
+        cantidad: number;
+        texto: string;
+      }[];
+      vendedor_nombre: string | null;
+      atendio: string | null;
+      sucursal_nombre: string | null;
+      creada_en: Date;
     }>`
       select vn.id, vn.folio, vn.num_nota,
              to_char(vn.fecha, 'YYYY-MM-DD') as fecha,
              vn.cliente_id, vn.status, vn.monto_total,
              coalesce(a.abonado, 0)::text as abonado,
              coalesce(a.abonos, '[]'::json) as abonos,
-             vn.deleted_at as borrada
+             vn.deleted_at as borrada,
+             -- Rediseño pieza 7: el detalle para reimprimir, en la misma
+             -- consulta (sin N+1). Los joins de etiqueta y nombres NO filtran
+             -- bajas: lo vendido se imprime aunque el catalogo cambie.
+             coalesce(l.lineas, '[]'::json) as lineas,
+             coalesce(pm.promociones, '[]'::json) as promociones,
+             ven.nombre as vendedor_nombre,
+             vn.atendio_nombre as atendio,
+             suc.nombre as sucursal_nombre,
+             vn.created_at as creada_en
         from venta_nota vn
         join cliente c on c.id = vn.cliente_id
+        left join vendedor ven on ven.id = vn.vendedor_id
+        left join sucursal suc on suc.id = vn.sucursal_id
+        left join lateral (
+          select json_agg(
+                   json_build_object(
+                     'presentacion_id', d.presentacion_id,
+                     'etiqueta', p.nombre || ' ' || pr.volumen,
+                     'cantidad', d.cantidad,
+                     'cantidad_promocion', d.cantidad_promocion,
+                     -- Texto: un numeric como numero JSON pasa por coma flotante.
+                     'precio', d.precio::text
+                   ) order by d.created_at, p.nombre, pr.volumen, d.id
+                 ) as lineas
+            from venta_nota_detalle d
+            join presentacion pr on pr.id = d.presentacion_id
+            join producto p on p.id = pr.producto_id
+           where d.venta_nota_id = vn.id
+             and d.deleted_at is null
+        ) l on true
+        left join lateral (
+          -- Sin deleted_at: al editar la nota estas filas se borran (D15 de T-74).
+          select json_agg(
+                   json_build_object(
+                     'presentacion_id', vp.presentacion_id,
+                     'etiqueta', p.nombre || ' ' || pr.volumen,
+                     'cantidad', vp.cantidad,
+                     'texto', vp.promocion_texto
+                   ) order by vp.created_at, p.nombre, pr.volumen, vp.id
+                 ) as promociones
+            from venta_nota_promocion vp
+            join presentacion pr on pr.id = vp.presentacion_id
+            join producto p on p.id = pr.producto_id
+           where vp.venta_nota_id = vn.id
+        ) pm on true
         left join lateral (
           select sum(ca.monto) as abonado,
                  json_agg(
@@ -528,6 +588,20 @@ export class SincronizacionRepository {
           metodo_pago: a.metodo_pago as MetodoPagoAbono,
         })),
         activo: abierta && f.borrada === null ? 1 : 0,
+        detalle: {
+          lineas: f.lineas.map((ln) => ({
+            presentacion_id: ln.presentacion_id,
+            etiqueta: ln.etiqueta,
+            cantidad: ln.cantidad,
+            cantidad_promocion: ln.cantidad_promocion,
+            precio_centavos: aCentavos(ln.precio),
+          })),
+          promociones: f.promociones,
+          vendedor_nombre: f.vendedor_nombre,
+          atendio: f.atendio,
+          sucursal_nombre: f.sucursal_nombre ?? '',
+          creada_en: new Date(f.creada_en).toISOString(),
+        },
       };
     });
   }

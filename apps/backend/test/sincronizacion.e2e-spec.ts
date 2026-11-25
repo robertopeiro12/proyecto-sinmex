@@ -1121,6 +1121,127 @@ describe('Sincronizacion pull/push (e2e)', () => {
       ]);
     });
 
+    it('una nota pendiente trae su detalle para reimprimirla (rediseño pieza 7)', async () => {
+      // Una nota a credito vendida en OTRA tablet: dos lineas vivas, una que
+      // la oficina borro en el portal y una promocion. La tablet que la cobra
+      // no tiene la venta; reimprime con lo que baja aqui.
+      const creada = new Date('2026-08-05T18:30:00.000Z');
+      const nota = await db
+        .insertInto('venta_nota')
+        .values({
+          folio: `E2D${SUFIJO}`.slice(0, 20),
+          fecha: '2026-08-05',
+          cliente_id: clienteId,
+          vendedor_id: vendedorId,
+          monto_total: '268.70',
+          num_nota: siguienteNota(),
+          contado_credito: 'credito',
+          semana: 32,
+          mes: 8,
+          status: 'pendiente',
+          sucursal_id: sucursalId,
+          atendio_nombre: 'Dona Lupe',
+          created_at: creada,
+        })
+        .returning('id')
+        .executeTakeFirstOrThrow();
+
+      try {
+        await db
+          .insertInto('venta_nota_detalle')
+          .values([
+            {
+              venta_nota_id: nota.id,
+              presentacion_id: presentacionId,
+              cantidad: 24,
+              cantidad_promocion: 2,
+              // 10.10 delata una conversion con coma flotante.
+              precio: '10.10',
+            },
+            {
+              venta_nota_id: nota.id,
+              presentacion_id: presentacionSinPrecioId,
+              cantidad: 3,
+              cantidad_promocion: 0,
+              precio: '8.80',
+            },
+            {
+              venta_nota_id: nota.id,
+              presentacion_id: presentacionSinPrecioId,
+              cantidad: 99,
+              cantidad_promocion: 0,
+              precio: '1.00',
+              deleted_at: new Date(),
+            },
+          ])
+          .execute();
+        await db
+          .insertInto('venta_nota_promocion')
+          .values({
+            venta_nota_id: nota.id,
+            presentacion_id: presentacionId,
+            cantidad: 2,
+            promocion_texto: 'Por cada 12, 1 gratis',
+          })
+          .execute();
+
+        const cuerpo = (await pull().expect(200)).body as RespuestaPull;
+        const bajada = cuerpo.notas_pendientes.find((n) => n.id === nota.id);
+        const sucursal = await db
+          .selectFrom('sucursal')
+          .select('nombre')
+          .where('id', '=', sucursalId)
+          .executeTakeFirstOrThrow();
+
+        expect(bajada?.detalle).toEqual({
+          lineas: [
+            {
+              presentacion_id: presentacionId,
+              etiqueta: `Jamaica ${SUFIJO} 1 L`,
+              cantidad: 24,
+              cantidad_promocion: 2,
+              precio_centavos: 1010,
+            },
+            {
+              presentacion_id: presentacionSinPrecioId,
+              etiqueta: `Jamaica ${SUFIJO} 500 ml`,
+              cantidad: 3,
+              cantidad_promocion: 0,
+              precio_centavos: 880,
+            },
+          ],
+          promociones: [
+            {
+              presentacion_id: presentacionId,
+              etiqueta: `Jamaica ${SUFIJO} 1 L`,
+              cantidad: 2,
+              texto: 'Por cada 12, 1 gratis',
+            },
+          ],
+          vendedor_nombre: 'Vendedor sync',
+          atendio: 'Dona Lupe',
+          sucursal_nombre: sucursal.nombre,
+          creada_en: creada.toISOString(),
+        });
+
+        // Una nota sin lineas ni promociones trae listas vacias, no null.
+        const vieja = cuerpo.notas_pendientes.find((n) => n.id === notaId);
+        expect(vieja?.detalle?.lineas).toEqual([]);
+        expect(vieja?.detalle?.promociones).toEqual([]);
+        expect(vieja?.detalle?.atendio).toBeNull();
+      } finally {
+        await db
+          .deleteFrom('venta_nota_promocion')
+          .where('venta_nota_id', '=', nota.id)
+          .execute();
+        await db
+          .deleteFrom('venta_nota_detalle')
+          .where('venta_nota_id', '=', nota.id)
+          .execute();
+        await db.deleteFrom('venta_nota').where('id', '=', nota.id).execute();
+      }
+    });
+
     it('NO baja clientes de otra sucursal', async () => {
       const res = await pull().expect(200);
       const cuerpo = res.body as RespuestaPull;

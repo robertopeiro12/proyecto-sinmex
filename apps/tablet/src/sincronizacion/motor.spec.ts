@@ -220,6 +220,36 @@ describe('aSnapshot (T-20)', () => {
   });
 });
 
+describe('aSnapshot (rediseño pieza 7)', () => {
+  it('guarda el detalle de la nota como JSON tal cual y null si el servidor no lo manda', () => {
+    const detalle = {
+      lineas: [
+        {
+          presentacion_id: 'pre-1',
+          etiqueta: 'Jamaica 1 L',
+          cantidad: 24,
+          cantidad_promocion: 2,
+          precio_centavos: 1010,
+        },
+      ],
+      promociones: [
+        { presentacion_id: 'pre-1', etiqueta: 'Jamaica 1 L', cantidad: 2, texto: 'Por cada 12, 1 gratis' },
+      ],
+      vendedor_nombre: 'Abraham Perez',
+      atendio: 'Dona Lupe',
+      sucursal_nombre: 'Tijuana',
+      creada_en: '2026-08-05T18:30:00.000Z',
+    };
+    const respuesta = respuestaPullDePrueba();
+    respuesta.notas_pendientes[0] = { ...respuesta.notas_pendientes[0]!, detalle };
+
+    const notas = aSnapshot(respuesta).notas ?? [];
+    expect(notas.map((n) => n.detalle_json)).toEqual([JSON.stringify(detalle), null]);
+    // `detalle` no viaja como columna: solo su texto.
+    expect(notas[0]).not.toHaveProperty('detalle');
+  });
+});
+
 describe('aSnapshot (T-37)', () => {
   it('pasa la ruta del pull al snapshot y tolera un servidor que todavia no la manda', () => {
     const fila = {

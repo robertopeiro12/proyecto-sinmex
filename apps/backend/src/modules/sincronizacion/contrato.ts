@@ -992,6 +992,45 @@ export interface NotaPendientePull extends FilaSincronizable {
   saldo_centavos: number;
   /** Vivos, por fecha de pago. Aditivo: una tablet vieja lo ignora. */
   abonos: AbonoPull[];
+  /**
+   * Rediseño pieza 7: lo necesario para **reimprimir** una nota que no se
+   * vendio en esta tablet. Aditivo y opcional: este servidor siempre lo manda;
+   * una tablet vieja lo ignora. Ver {@link DetalleNotaPull}.
+   */
+  detalle?: DetalleNotaPull;
+}
+
+/**
+ * El detalle de una nota pendiente para el ticket (rediseño pieza 7).
+ *
+ * - Lineas y promociones **vivas**: una linea que la oficina quito en el portal
+ *   (`venta_nota_detalle.deleted_at`) no viaja; las promociones se borran de
+ *   verdad al editar (D15 de T-74).
+ * - `etiqueta` = "Producto volumen", aunque la presentacion o el producto se
+ *   hayan dado de baja despues: lo vendido se imprime igual.
+ * - `precio_centavos` es el precio **unitario** guardado en la linea.
+ * - `vendedor_nombre` es `null` en una venta de mostrador; `atendio` es `null`
+ *   si la venta no lo trae.
+ * - `creada_en` = `venta_nota.created_at`, ISO-8601 en UTC.
+ */
+export interface DetalleNotaPull {
+  lineas: {
+    presentacion_id: string;
+    etiqueta: string;
+    cantidad: number;
+    cantidad_promocion: number;
+    precio_centavos: number;
+  }[];
+  promociones: {
+    presentacion_id: string;
+    etiqueta: string;
+    cantidad: number;
+    texto: string;
+  }[];
+  vendedor_nombre: string | null;
+  atendio: string | null;
+  sucursal_nombre: string;
+  creada_en: string;
 }
 
 /**

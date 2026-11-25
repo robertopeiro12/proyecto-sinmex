@@ -64,7 +64,9 @@ export interface SnapshotCatalogos {
   /** T-30/T-31. Coleccion nueva del pull: el catalogo de la pantalla Gastos. Baja como bandera. */
   camposEgreso?: Omit<CampoEgreso, 'sincronizado_en'>[];
   precios?: Omit<ClientePrecio, 'sincronizado_en'>[];
-  notas?: Omit<NotaPendiente, 'sincronizado_en'>[];
+  /** `detalle_json` (rediseño pieza 7) es opcional: ausente, el upsert escribe `null`. */
+  notas?: (Omit<NotaPendiente, 'sincronizado_en' | 'detalle_json'> &
+    Partial<Pick<NotaPendiente, 'detalle_json'>>)[];
   /**
    * T-37. La ruta diaria del vendedor. Se aplica con su propia regla de fusion
    * (`aplicarSnapshotRutas`), no con el upsert generico.
@@ -161,6 +163,8 @@ const COLUMNAS = {
     'activo',
     // T-20: los abonos previos, en JSON.
     'abonos_json',
+    // Rediseño pieza 7: el detalle para reimprimir, en JSON tal cual llego.
+    'detalle_json',
   ],
   ruta_dia: ['id', 'fecha', 'nombre_ruta', 'vehiculo_id', 'activo'],
   nota_asignada: ['id', 'venta_nota_id', 'fecha', 'condicion_venta', 'activo'],

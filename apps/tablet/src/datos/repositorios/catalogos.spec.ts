@@ -184,6 +184,21 @@ describe('repositorio de catalogos', () => {
       expect(catalogos.folioDeNota('no-existe')).toBeNull();
     });
 
+    it('guarda el detalle_json de la nota y una nota sin detalle lo deja en null (rediseño pieza 7)', () => {
+      const { catalogos } = conCatalogos();
+      expect(catalogos.notasPendientesDe('cli-1').map((n) => n.detalle_json)).toEqual([null, null]);
+
+      const detalle = JSON.stringify({ lineas: [], promociones: [], creada_en: '2026-08-01T15:00:00.000Z' });
+      catalogos.guardarSnapshot({
+        notas: [{ ...snapshotDePrueba().notas![0]!, detalle_json: detalle }],
+      });
+      expect(catalogos.notasPendientesDe('cli-1').map((n) => n.detalle_json)).toEqual([detalle, null]);
+
+      // Un pull de un servidor que no lo manda lo vuelve null: lo que guarda es lo que llego.
+      catalogos.guardarSnapshot({ notas: [snapshotDePrueba().notas![0]!] });
+      expect(catalogos.notasPendientesDe('cli-1')[0]!.detalle_json).toBeNull();
+    });
+
     it('un cliente sin notas devuelve lista vacia, no null', () => {
       const { catalogos } = conCatalogos();
       expect(catalogos.notasPendientesDe('cli-2')).toEqual([]);

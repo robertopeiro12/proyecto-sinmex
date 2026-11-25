@@ -234,6 +234,11 @@ export interface NotaPendiente {
    * con `leerAbonos`, que tolera un texto corrupto.
    */
   abonos_json: string;
+  /**
+   * Rediseño pieza 7: `NotaPendientePull.detalle` en JSON, tal cual llego en el
+   * pull (migracion 024), para reimprimir. `null` si el servidor no lo mando.
+   */
+  detalle_json: string | null;
   activo: Booleano;
   sincronizado_en: MomentoISO;
 }

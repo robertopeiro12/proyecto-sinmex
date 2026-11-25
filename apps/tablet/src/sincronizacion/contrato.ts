@@ -345,6 +345,37 @@ export interface NotaPendientePull extends FilaSincronizable {
   monto_total_centavos: number;
   saldo_centavos: number;
   abonos: AbonoPull[];
+  /**
+   * Rediseño pieza 7: el detalle para reimprimir una nota que no se vendio en
+   * esta tablet. **Opcional**: un servidor anterior no lo manda.
+   */
+  detalle?: DetalleNotaPull;
+}
+
+/**
+ * El detalle de una nota pendiente para el ticket (rediseño pieza 7). Copia
+ * del backend: lineas y promociones vivas, `etiqueta` "Producto volumen",
+ * `precio_centavos` unitario, `vendedor_nombre` null en venta de mostrador,
+ * `creada_en` ISO-8601 en UTC.
+ */
+export interface DetalleNotaPull {
+  lineas: {
+    presentacion_id: string;
+    etiqueta: string;
+    cantidad: number;
+    cantidad_promocion: number;
+    precio_centavos: number;
+  }[];
+  promociones: {
+    presentacion_id: string;
+    etiqueta: string;
+    cantidad: number;
+    texto: string;
+  }[];
+  vendedor_nombre: string | null;
+  atendio: string | null;
+  sucursal_nombre: string;
+  creada_en: string;
 }
 
 /**

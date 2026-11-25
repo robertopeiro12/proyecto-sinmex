@@ -211,6 +211,14 @@ nadie relacionaría con nada.
                           "monto_total_centavos": 25000, "saldo_centavos": 15000,
                           "abonos": [{ "fecha_pago": "2026-08-03", "monto_centavos": 10000,
                                        "metodo_pago": "efectivo" }],
+                          "detalle": { "lineas": [{ "presentacion_id": "…", "etiqueta": "Jamaica 1 L",
+                                                    "cantidad": 24, "cantidad_promocion": 2,
+                                                    "precio_centavos": 1010 }],
+                                       "promociones": [{ "presentacion_id": "…", "etiqueta": "Jamaica 1 L",
+                                                         "cantidad": 2, "texto": "Por cada 12, 1 gratis" }],
+                                       "vendedor_nombre": "Abraham Pérez", "atendio": "Doña Lupe",
+                                       "sucursal_nombre": "Tijuana",
+                                       "creada_en": "2026-08-01T18:30:00.000Z" },
                           "activo": 1 }],
   "rutas": [{ "id": "…", "cliente_id": "…", "fecha": "2026-10-12", "orden": 1,
               "origen": "oficina", "recado": null, "activo": 1 }],
@@ -395,6 +403,29 @@ listas en campo.
   Un cobro que deja saldo a favor le toca `updated_at` al cliente, así que vuelve a bajar en el
   pull incremental (y con él, la colección de precios completa: es su regla de siempre).
 - Los tres campos son **aditivos**: una tablet vieja los ignora.
+
+### `detalle` de la nota pendiente: para reimprimir (rediseño pieza 7)
+
+Cada nota de `notas_pendientes` trae `detalle`, lo que la tablet necesita para **reimprimir una nota
+que no se vendió en ella** (la vendió otro vendedor u otra tablet, o la registró la oficina):
+
+- **`lineas`**: las líneas **vivas** de `venta_nota_detalle` (`deleted_at is null`; una línea que la
+  oficina quitó en el portal no viaja), con `presentacion_id`, `etiqueta`, `cantidad`,
+  `cantidad_promocion` y `precio_centavos` (el precio **unitario** guardado en la línea, en centavos).
+- **`promociones`**: las filas de `venta_nota_promocion` (`presentacion_id`, `etiqueta`, `cantidad` y
+  `texto`, la frase congelada al vender). No tienen baja lógica: al editar la nota se borran (D15 de T-74).
+- **`etiqueta`** = "Producto volumen" (`Jamaica 1 L`). Sale aunque la presentación o el producto se
+  hayan dado de baja después: lo vendido se imprime igual.
+- **`vendedor_nombre`** (`null` en una venta de mostrador), **`atendio`** (`venta_nota.atendio_nombre`,
+  `null` si no lo trae), **`sucursal_nombre`** (la sucursal de la venta) y **`creada_en`**
+  (`venta_nota.created_at`, ISO-8601 en UTC).
+- Una nota sin líneas trae listas vacías, nunca `null`. El servidor siempre lo manda; viaja con la nota,
+  así que en el pull incremental llega cuando la nota cambia (una edición en el portal mueve su
+  `updated_at`).
+
+**Aditivo y opcional** (`CONTRATO_ACTUAL` sigue en 1): una tablet vieja lo ignora. La tablet lo guarda
+como texto tal cual en `nota_pendiente.detalle_json` (migración local 024); si el servidor no lo manda,
+queda `null` y la reimpresión sale sin renglones.
 
 ### `rutas`: la ruta diaria del vendedor (T-37)
 
