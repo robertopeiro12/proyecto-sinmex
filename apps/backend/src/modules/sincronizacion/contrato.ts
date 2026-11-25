@@ -75,7 +75,8 @@ export const MAX_BYTES_POR_LOTE = 1_000_000;
  * Hecho: T-27 pieza 2 — `movimiento`, la merma del cliente, la merma del
  *        trayecto o el consumo propio (ver {@link DatosMovimiento}); se proyecta
  *        a `movimiento_inventario` con `id = clave`. Tipo nuevo = cambio aditivo:
- *        no sube la version.
+ *        no sube la version. El rediseño (pieza 4) le suma el `cambio` con un
+ *        cliente y el `motivo_merma_id` de las mermas, tambien aditivos.
  * Hecho: T-39 — `visita`, una visita sin venta con su motivo (ver
  *        {@link DatosVisita}); se proyecta a la tabla `visita` con `id = clave`.
  *        **No** reutiliza `ruta`, que sigue reservado y se guarda sin proyectar.
@@ -91,6 +92,12 @@ export const MAX_BYTES_POR_LOTE = 1_000_000;
  *        nuevo = cambio aditivo: no sube la version.
  * Hecho: T-38 — `jornada` (vehiculo + kilometraje inicial/final del dia ya
  *        cerrado, ver {@link DatosJornada}); se proyecta a la tabla `jornada`.
+ *
+ * Hecho: rediseño pieza 6 — `corte`, el corte que el vendedor hace en la tablet
+ *        al cerrar el dia (ver {@link DatosCorte}); se proyecta a
+ *        `corte_vendedor` con `id = clave`. Tipo nuevo = cambio aditivo: no sube
+ *        la version (un servidor anterior lo rechaza `tipo-desconocido` y la
+ *        tablet lo reintenta).
  *
  * Hecho: T-40 — `prospecto`, el unico tipo que **crea** una fila de catalogo
  *        (`cliente` con `tipo = 'prospecto'`) en vez de una de operacion. Es un
@@ -108,6 +115,7 @@ export const TIPOS_OPERACION = [
   'visita',
   'movimiento',
   'nota-no-cobrada',
+  'corte',
 ] as const;
 
 export type TipoOperacion = (typeof TIPOS_OPERACION)[number];
@@ -288,6 +296,18 @@ export const CODIGOS_RECHAZO = [
    * no esto. Motivo neutro.
    */
   'movimiento-id-ocupado',
+  /**
+   * El `motivo_merma_id` de un movimiento no existe en el catalogo. Rediseño
+   * pieza 4. Un motivo **dado de baja si se acepta** (el vendedor lo eligio sin
+   * red) y no se miran las banderas `aplica_*`. Solo cae con un id que nunca
+   * existio (bug de la tablet).
+   */
+  'motivo-merma-inexistente',
+  /**
+   * Ya hay un corte vivo de ese vendedor ese dia, subido con OTRA clave.
+   * Rediseño pieza 6. La misma clave reenviada es `duplicada`, no esto.
+   */
+  'corte-duplicado',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -345,10 +365,28 @@ export type DatosVenta = {
   /**
    * T-73. Opcional y aditivo (`CONTRATO_ACTUAL` sigue en 1). Presente = la venta
    * espera la imagen de la firma del cliente por el canal de fotos. Ausente (o
-   * `null`) = tablet anterior a T-73: la venta entra sin firma. Un `nombre` que no
+   * `null`) = la venta entra sin firma: tablet anterior a T-73, o venta nueva
+   * desde el rediseño (pieza 2, el cliente firma a mano la nota impresa); solo
+   * una venta grabada con la tablet de T-73 la manda. Un `nombre` que no
    * es texto o pasa de 80 caracteres es `datos-invalidos` (`firma.nombre: …`).
    */
   firma?: FirmaVenta | null;
+  /**
+   * Pieza 2 del rediseno. Opcional y aditivo (`CONTRATO_ACTUAL` sigue en 1):
+   * quien atendio al vendedor en el negocio. Se recorta, de 1 a 80; ausente,
+   * `null` o en blanco es `null`. Otro tipo o mas de 80 es `datos-invalidos`
+   * (`atendio: …`). Se guarda en `venta_nota.atendio_nombre`.
+   */
+  atendio?: string | null;
+  /**
+   * Pieza 2 del rediseno. Opcional y aditivo: lo que el cliente pago al recibir
+   * una venta **a credito**, en centavos enteros, `0 < abono < total`. Con
+   * `contado`, en una venta de $0 o fuera de rango es `datos-invalidos`
+   * (`abono_centavos: …`). Con abono la venta nace `abonado` y el servidor
+   * escribe un `cobranza_abono` de origen `venta_contado` (sin `cobro`, efectivo,
+   * `fecha_pago = fecha_operacion`) por ese monto, como el cobro del contado.
+   */
+  abono_centavos?: number | null;
 };
 
 /**
@@ -595,6 +633,14 @@ export type DatosGasto = {
  *   reposicion, de cualquier sabor y tamano).
  * - `merma_trayecto` y `consumo`: el sobre **no** lleva `cliente_id`; solo lineas
  *   `entregado`, al menos una.
+ * - `cambio` (rediseño pieza 4): el sobre **lleva** `cliente_id`; al menos una
+ *   linea `recibido` (regresa al inventario del vendedor) y al menos una
+ *   `entregado`. No se cobra diferencia.
+ *
+ * `motivo_merma_id` (rediseño pieza 4, aditivo): uuid del catalogo de motivos de
+ * merma, **solo** en `merma_cliente` y `merma_trayecto` (en `cambio`/`consumo` es
+ * `datos-invalidos`). Opcional para el servidor (tablets viejas); uno que nunca
+ * existio es `motivo-merma-inexistente`, uno dado de baja se acepta.
  *
  * Sin folio. La `clave` **es el id** de la fila `movimiento_inventario`: debe ser
  * uuid. El dia es `fecha_operacion`. El servidor **no** revisa el limite de
@@ -603,9 +649,11 @@ export type DatosGasto = {
  * Es `type` y no `interface` por la misma razon que {@link DatosVenta}.
  */
 export type DatosMovimiento = {
-  tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo';
+  tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo' | 'cambio';
   /** Hasta 300 caracteres; se recorta y uno vacio es `null`. */
   comentario?: string | null;
+  /** uuid de `motivo_merma`; solo en mermas. Ausente o `null` = sin motivo. */
+  motivo_merma_id?: string | null;
   /** Instante ISO-8601 con zona en que el vendedor lo guardo. */
   registrado_en: string;
   /** De 1 a 200; una presentacion una sola vez por sentido; piezas enteras 1..99 999. */
@@ -614,6 +662,37 @@ export type DatosMovimiento = {
     sentido: 'recibido' | 'entregado';
     piezas: number;
   }[];
+};
+
+/**
+ * `datos` de una operacion `tipo: "corte"` (rediseño pieza 6, spec §13): el
+ * corte del vendedor al cerrar el dia, apartado por apartado, con lo que decia
+ * el sistema de la tablet y lo que el vendedor capturo. **Informativo**: no
+ * mueve saldos, existencias ni el corte de mercancia de la oficina.
+ *
+ * - `efectivo.esperado_centavos`: lo que debe traer segun la tablet (contado +
+ *   abonos + cobros en efectivo − gastos); **puede ser negativo**.
+ *   `traido_centavos`: lo que dijo que trae, entero ≥ 0.
+ * - `notas`: las notas del apartado (asignadas y nuevas), con `traida` y el
+ *   saldo que tenian; de 0 a 500. No se revisa que el folio exista.
+ * - `inventario`: una entrada por presentacion (uuid, sin repetir), con las
+ *   buenas que decia el sistema y las contadas; de 0 a 200. No se revisa que
+ *   la presentacion exista.
+ * - `merma`: un solo total, sistema y contado.
+ * - `enviado_en`: instante ISO-8601 con zona en que el vendedor lo envio.
+ *
+ * Sin folio ni `cliente_id`. La `clave` **es el id** de `corte_vendedor`: debe
+ * ser uuid. El dia es `fecha_operacion`. Uno vivo por vendedor y dia: otro con
+ * distinta clave es `corte-duplicado`.
+ *
+ * Es `type` y no `interface` por la misma razon que {@link DatosVenta}.
+ */
+export type DatosCorte = {
+  efectivo: { esperado_centavos: number; traido_centavos: number };
+  notas: { folio: string; traida: boolean; saldo_centavos: number }[];
+  inventario: { presentacion_id: string; sistema: number; contado: number }[];
+  merma: { sistema: number; contado: number };
+  enviado_en: string;
 };
 
 export interface ResultadoOperacion {
@@ -755,6 +834,26 @@ export interface MotivoVisitaPull extends FilaSincronizable {
 }
 
 /**
+ * Un motivo de merma (rediseño pieza 4): el catalogo `motivo_merma` del Registro
+ * de Operacion, para que el vendedor diga por que es merma. Global (no cuelga de
+ * sucursal), como `motivos_visita`. Coleccion nueva = aditiva. Incremental por
+ * `actualizado_en`; la baja logica viaja como `activo: 0`.
+ *
+ * Bajan todos (tambien los que solo aplican al almacen); la tablet ofrece en la
+ * merma del cliente los vivos con `aplica_cliente` y en la del trayecto los vivos
+ * con `aplica_vehiculo`. Una merma ya guardada con un motivo que despues se dio
+ * de baja o perdio la bandera sube igual: el servidor no revisa ni la baja ni las
+ * banderas (`motivo_merma_id` en {@link DatosMovimiento}).
+ */
+export interface MotivoMermaPull extends FilaSincronizable {
+  nombre: string;
+  /** Se ofrece en la merma del cliente. */
+  aplica_cliente: boolean;
+  /** Se ofrece en la merma del trayecto (vehiculo). */
+  aplica_vehiculo: boolean;
+}
+
+/**
  * Un campo de egreso (T-30, D6): el catalogo de la pantalla "Gastos" de la
  * tablet. Global (no cuelga de sucursal), como `motivos_visita`. Coleccion
  * nueva = aditiva. Incremental por `actualizado_en`; la baja logica viaja como
@@ -893,6 +992,49 @@ export interface NotaPendientePull extends FilaSincronizable {
   saldo_centavos: number;
   /** Vivos, por fecha de pago. Aditivo: una tablet vieja lo ignora. */
   abonos: AbonoPull[];
+  /**
+   * Rediseño pieza 7: lo necesario para **reimprimir** una nota que no se
+   * vendio en esta tablet. Aditivo y opcional: este servidor siempre lo manda;
+   * una tablet vieja lo ignora. Ver {@link DetalleNotaPull}.
+   */
+  detalle?: DetalleNotaPull;
+}
+
+/**
+ * El detalle de una nota pendiente para el ticket (rediseño pieza 7).
+ *
+ * - Lineas y promociones **vivas**: una linea que la oficina quito en el portal
+ *   (`venta_nota_detalle.deleted_at`) no viaja; las promociones se borran de
+ *   verdad al editar (D15 de T-74).
+ * - `etiqueta` = "Producto volumen", aunque la presentacion o el producto se
+ *   hayan dado de baja despues: lo vendido se imprime igual.
+ * - `precio_centavos` es el precio **unitario** guardado en la linea.
+ * - `vendedor_nombre` es `null` en una venta de mostrador; `atendio` es `null`
+ *   si la venta no lo trae.
+ * - `creada_en` = la hora de la venta en la tablet: el `ocurrido_en` mas
+ *   antiguo de `sync_operacion` para la nota y su vendedor, ISO-8601 en UTC.
+ *   Si no hay (una nota de la oficina), **solo la fecha** de la nota
+ *   (`venta_nota.fecha`, `YYYY-MM-DD`, sin hora): la hora de captura en el
+ *   portal no es la de la nota. El ticket imprime entonces solo el dia.
+ */
+export interface DetalleNotaPull {
+  lineas: {
+    presentacion_id: string;
+    etiqueta: string;
+    cantidad: number;
+    cantidad_promocion: number;
+    precio_centavos: number;
+  }[];
+  promociones: {
+    presentacion_id: string;
+    etiqueta: string;
+    cantidad: number;
+    texto: string;
+  }[];
+  vendedor_nombre: string | null;
+  atendio: string | null;
+  sucursal_nombre: string;
+  creada_en: string;
 }
 
 /**
@@ -1024,6 +1166,12 @@ export interface LineaCargaPull {
   presentacion_id: string;
   /** Piezas enteras, 1..99 999. */
   piezas: number;
+  /**
+   * Pieza 3: si el vendedor acepto este renglon. `null` mientras la carga esta
+   * pendiente y en las cargas respondidas antes de la pieza 3: en una
+   * `aceptada` cuenta como aceptado, en una `rechazada` como no aceptado.
+   */
+  aceptada: boolean | null;
 }
 
 /**
@@ -1045,8 +1193,15 @@ export interface CargaPull extends FilaSincronizable {
   fecha: string;
   /** 1, 2, 3… por vendedor y dia. */
   numero: number;
+  /**
+   * `aceptada` si se acepto al menos un renglon (todos o una parte: ver
+   * `lineas[].aceptada`), `rechazada` si ninguno.
+   */
   estado: EstadoCargaPull;
-  /** Solo en `rechazada` (1..300). */
+  /**
+   * Solo puede venir en `rechazada` (1..300), y solo si se rechazo con la forma
+   * vieja (`accion: 'rechazar'`); la lista vacia rechaza sin motivo.
+   */
   motivo_rechazo: string | null;
   version: number;
   /** Instante ISO de la respuesta, o `null` si sigue pendiente. */
@@ -1056,14 +1211,19 @@ export interface CargaPull extends FilaSincronizable {
 
 /**
  * Cuerpo de `POST /sync/cargas/:id/respuesta` (T-27, D2/D6). Viaja con red, en
- * el momento: no es una operacion del push ni lleva `contrato`. `motivo` solo
- * con `rechazar` (1..300, se recorta); con `aceptar` es 400.
+ * el momento: no es una operacion del push ni lleva `contrato`.
+ *
+ * - Forma nueva (pieza 3): `aceptadas`, los `presentacion_id` de los renglones
+ *   aceptados, cada uno de la carga y una sola vez (si no, 400). Vacia rechaza
+ *   la carga sin motivo; no lleva `accion` ni `motivo`. La aceptacion parcial es
+ *   definitiva: lo no aceptado llega en una recarga nueva.
+ * - Forma vieja (tablets sin actualizar): `accion: 'aceptar'` = todos los
+ *   renglones, sin motivo (400 si trae); `accion: 'rechazar'` = ninguno, con
+ *   `motivo` de 1..300 (se recorta).
  */
-export type CuerpoRespuestaCarga = {
-  version: number;
-  accion: 'aceptar' | 'rechazar';
-  motivo?: string;
-};
+export type CuerpoRespuestaCarga =
+  | { version: number; aceptadas: string[] }
+  | { version: number; accion: 'aceptar' | 'rechazar'; motivo?: string };
 
 export interface RespuestaPull {
   contrato: number;
@@ -1105,6 +1265,8 @@ export interface RespuestaPull {
     tipos_negocio: TipoNegocioPull[];
     /** T-39. Aditiva: una tablet vieja la ignora. */
     motivos_visita: MotivoVisitaPull[];
+    /** Rediseño pieza 4. Aditiva: una tablet vieja la ignora. */
+    motivos_merma: MotivoMermaPull[];
     /** T-30. Aditiva: una tablet vieja la ignora. */
     campos_egreso: CampoEgresoPull[];
     /**

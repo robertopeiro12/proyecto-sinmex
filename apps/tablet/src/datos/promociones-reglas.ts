@@ -257,5 +257,5 @@ export function aplicarRegalos(
 export function problemasDeRegalos(regalos: readonly Regalo[]): string[] {
   return regalos
     .filter((r) => r.presentacionId === null)
-    .map((r) => `Elige la presentación del regalo de «${r.texto}».`);
+    .map((r) => `Elige qué presentación se entrega de la promoción «${r.texto}».`);
 }

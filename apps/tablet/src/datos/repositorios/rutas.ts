@@ -43,21 +43,40 @@ export interface FilaRutaDelDia {
   sync_error: string | null;
   nombre: string;
   domicilio: string | null;
-  /** La que puso el dedo del vendedor, o `null` si no ha reordenado a este cliente. */
-  posicion: number | null;
-  /** Notas con saldo del cliente: la burbuja. Baja al cobrar sin red. */
+  /**
+   * `cliente.activo` del catalogo de la tablet. Una fila viva de un cliente dado
+   * de baja no cuenta como "Por visitar" (`agruparRutaEnCurso`, pieza 6 I-1).
+   */
+  cliente_activo: Booleano;
+  /** Notas con saldo del cliente (todas, no solo las que trae). Baja al cobrar sin red. */
   notas_pendientes: number;
   /**
-   * Asignadas de hoy por atender (con saldo y sin cobro de hoy): la MISMA cuenta que
-   * `notasAsignadas.conteoDeHoyPorCliente()` (`porAtender`); no se re-deriva en SQL.
+   * Las notas por cobrar que el vendedor trae de este cliente (spec del rediseño, §4):
+   * la MISMA cuenta que `notasAsignadas.queTraePorCliente()`; no se re-deriva en SQL.
+   * Sin vendedor (`delDia` sin `vendedorId`) solo cuenta las asignadas.
    */
-  notas_asignadas: number;
+  notas_que_trae: number;
   /** El recado de la oficina para este cliente en la ruta (`ruta.recado`), o `null`. */
   recado: string | null;
-  /** Hoy tiene venta, cobro o visita en esta tablet (D5; T-39). Se deriva, no se guarda. */
+  /**
+   * Hoy tiene venta, cobro, visita, comentario de no cobro, merma del cliente o cambio en
+   * esta tablet (D5; T-39; rediseño §6): va a "Visitados". Se deriva, no se guarda.
+   */
   visitado: boolean;
-  /** T-39 (D8): hoy tiene visita y NO tiene venta ni cobro: va a "Visitados sin venta". */
+  /** T-39 (D8): hoy tiene visita (o comentario de no cobro) y NO tiene venta ni cobro. */
   visita_sin_venta: boolean;
+  /** Suma de las ventas de contado de hoy al cliente (todas las de la tablet). */
+  venta_contado_centavos: number;
+  /** Suma de las ventas a credito de hoy al cliente. */
+  venta_credito_centavos: number;
+  /** Suma de lo abonado al vender en las ventas a credito de hoy (rediseño, pieza 2). */
+  venta_abono_centavos: number;
+  /** Suma de los cobros de hoy al cliente. */
+  cobro_centavos: number;
+  /** Hoy tiene merma del cliente (`movimiento` de tipo `merma_cliente`). */
+  con_merma: boolean;
+  /** Rediseño pieza 4: hoy tiene un cambio con el cliente (`movimiento` de tipo `cambio`). */
+  con_cambio: boolean;
   /** Motivo de la ultima visita de hoy (la copia `motivo_nombre`), o `null`. */
   ultima_visita_motivo: string | null;
   /** Hora de la ultima visita de hoy, o `null`. */
@@ -106,8 +125,7 @@ export function restarDias(fecha: FechaISO, dias: number): FechaISO {
  *    que la tablet trata como aplicada) o una baja vieja (la oficina quito y
  *    volvio a poner al cliente: en el servidor es otra fila). Sin este paso la
  *    fila viva nueva chocaria con `uq_ruta_fecha_cliente`.
- * 3. Upsert por `id`. Nunca toca `sync_estado` ni `clave`, ni `ruta_orden_local`:
- *    la posicion va por `(fecha, cliente)` y sobrevive a la fusion.
+ * 3. Upsert por `id`. Nunca toca `sync_estado` ni `clave`, ni `ruta_orden_local`.
  *
  * Una fila con `activo: 0` se queda con la bandera; la pantalla decide (D16).
  *
@@ -179,8 +197,8 @@ export function aplicarSnapshotRutas(
 export type RepositorioRutas = ReturnType<typeof crearRepositorioRutas>;
 
 /**
- * La ruta del dia en la tablet (T-37, D15): lo que baja del portal, lo que el
- * vendedor agrega y el orden en que la recorre.
+ * La ruta del dia en la tablet (T-37, D15): lo que baja del portal y lo que el
+ * vendedor agrega. El orden es el del portal (rediseño, §4).
  *
  * Recibe `catalogos` para leer el cliente y para **publicar el cambio**: la
  * pantalla principal escucha `versionCatalogos`, y SQLite no avisa a nadie.
@@ -192,28 +210,36 @@ export function crearRepositorioRutas(
   const notasAsignadas = crearRepositorioNotasAsignadas({ bd, reloj, generarId });
   const repo = {
     /**
-     * La ruta de un dia, en el orden del vendedor: primero su posicion local y,
-     * sin ella, el orden del servidor (al final). Trae tambien las filas que la
-     * oficina quito (`activo = 0`): `agruparRuta` decide si se ven.
+     * La ruta de un dia, en el orden del portal (`orden`, desempate por nombre).
+     * El vendedor ya no reordena (rediseño, §4): `ruta_orden_local` se queda en
+     * la base, pero nadie la escribe ni la lee aqui. Trae tambien las filas que
+     * la oficina quito (`activo = 0`): `agruparRutaEnCurso` decide si se ven.
      *
-     * `visitado` es venta, cobro **o visita** de hoy (T-39); `visita_sin_venta` es visita
-     * sin venta ni cobro (D8). La ultima visita, su estado y su error salen de subconsultas
-     * con el mismo estilo. Venta y cobro: el mismo predicado que `ventas.delDia(cliente).length > 0 ||
-     * cobranzas.delDia(cliente).length > 0` (D5), en la misma consulta. La
-     * burbuja es la misma consulta que `catalogos.notasPendientesDe` mas
-     * `saldo_centavos > 0`.
+     * `visitado` es venta, cobro, visita, comentario de no cobro, **merma del
+     * cliente o cambio** (rediseño pieza 4) de hoy; `visita_sin_venta` es visita sin venta ni cobro (D8). Las
+     * sumas de venta y cobro alimentan el resumen de "Visitados". La ultima
+     * visita, su estado y su error salen de subconsultas con el mismo estilo.
+     * `notas_pendientes` es la misma consulta que `catalogos.notasPendientesDe`
+     * mas `saldo_centavos > 0`.
+     *
+     * @param vendedorId el vendedor con sesion: sus ventas a credito de hoy
+     *   cuentan en `notas_que_trae` (las de otro vendedor no).
      */
-    delDia(fecha: FechaISO = reloj.hoy()): FilaRutaDelDia[] {
-      type FilaCruda = Omit<FilaRutaDelDia, 'visitado' | 'visita_sin_venta' | 'notas_asignadas'> & {
+    delDia(vendedorId: string, fecha: FechaISO = reloj.hoy()): FilaRutaDelDia[] {
+      type FilaCruda = Omit<
+        FilaRutaDelDia,
+        'visitado' | 'visita_sin_venta' | 'notas_que_trae' | 'con_merma' | 'con_cambio'
+      > & {
         atendido: number;
         con_visita: number;
         con_comentario: number;
+        con_merma: number;
+        con_cambio: number;
       };
       const filas = bd.getAllSync<FilaCruda>(
         `select r.id, r.cliente_id, r.fecha, r.orden, r.origen, r.activo, r.recado,
                 r.sync_estado, r.sync_error,
-                c.nombre, c.domicilio,
-                o.posicion,
+                c.nombre, c.domicilio, c.activo as cliente_activo,
                 (select count(*) from nota_pendiente n
                   where n.cliente_id = r.cliente_id
                     and n.activo = 1 and n.saldo_centavos > 0) as notas_pendientes,
@@ -225,6 +251,23 @@ export function crearRepositorioRutas(
                          where w.cliente_id = r.cliente_id and w.fecha = r.fecha) as con_visita,
                 exists (select 1 from nota_no_cobrada q
                          where q.cliente_id = r.cliente_id and q.fecha = r.fecha) as con_comentario,
+                exists (select 1 from movimiento m
+                         where m.cliente_id = r.cliente_id and m.fecha = r.fecha
+                           and m.tipo = 'merma_cliente') as con_merma,
+                exists (select 1 from movimiento m
+                         where m.cliente_id = r.cliente_id and m.fecha = r.fecha
+                           and m.tipo = 'cambio') as con_cambio,
+                (select coalesce(sum(v.monto_total_centavos), 0) from venta v
+                  where v.cliente_id = r.cliente_id and v.fecha = r.fecha
+                    and v.contado_credito = 'contado') as venta_contado_centavos,
+                (select coalesce(sum(v.monto_total_centavos), 0) from venta v
+                  where v.cliente_id = r.cliente_id and v.fecha = r.fecha
+                    and v.contado_credito = 'credito') as venta_credito_centavos,
+                (select coalesce(sum(v.abono_centavos), 0) from venta v
+                  where v.cliente_id = r.cliente_id and v.fecha = r.fecha
+                    and v.contado_credito = 'credito') as venta_abono_centavos,
+                (select coalesce(sum(k.monto_centavos), 0) from cobranza k
+                  where k.cliente_id = r.cliente_id and k.fecha = r.fecha) as cobro_centavos,
                 (select w.motivo_nombre from visita w
                   where w.cliente_id = r.cliente_id and w.fecha = r.fecha
                   order by w.visitada_en desc, w.rowid desc limit 1) as ultima_visita_motivo,
@@ -249,21 +292,21 @@ export function crearRepositorioRutas(
                   order by w.visitada_en desc, w.rowid desc limit 1) as visita_error
            from ruta r
            join cliente c on c.id = r.cliente_id
-           left join ruta_orden_local o
-                  on o.fecha = r.fecha and o.cliente_id = r.cliente_id
           where r.fecha = $fecha
-          order by coalesce(o.posicion, 1000000000 + r.orden), r.orden, c.nombre`,
+          order by r.orden, c.nombre`,
         { $fecha: fecha },
       );
-      // Atendido (venta o cobro) gana a visitado (D8): con venta, sigue en la ruta.
+      // Atendido (venta o cobro) gana a la visita (D8): no es visita sin venta.
       // Un comentario de "Continuar sin cobrar" cuenta como visita (decision 17).
-      const asignadas = notasAsignadas.conteoDeHoyPorCliente();
-      return filas.map(({ atendido, con_visita, con_comentario, ...f }) => {
+      const queTrae = notasAsignadas.queTraePorCliente(vendedorId);
+      return filas.map(({ atendido, con_visita, con_comentario, con_merma, con_cambio, ...f }) => {
         const visita = con_visita === 1 || con_comentario === 1;
         return {
           ...f,
-          notas_asignadas: asignadas.get(f.cliente_id) ?? 0,
-          visitado: atendido === 1 || visita,
+          notas_que_trae: queTrae.get(f.cliente_id) ?? 0,
+          con_merma: con_merma === 1,
+          con_cambio: con_cambio === 1,
+          visitado: atendido === 1 || visita || con_merma === 1 || con_cambio === 1,
           visita_sin_venta: visita && atendido !== 1,
         };
       });
@@ -326,25 +369,6 @@ export function crearRepositorioRutas(
       const creada = repo.porId(id);
       if (!creada) throw new ErrorRuta('No se pudo leer el cliente recién agregado.');
       return creada;
-    },
-
-    /**
-     * Guarda el orden que el vendedor dejo con el dedo (D10), en UNA
-     * transaccion: si algo falla, se queda el orden anterior entero. No sube
-     * (D4) y ningun pull lo toca.
-     */
-    reordenar(fecha: FechaISO, clienteIds: readonly string[]): void {
-      enTransaccion(bd, () => {
-        bd.runSync('delete from ruta_orden_local where fecha = $fecha', { $fecha: fecha });
-        clienteIds.forEach((clienteId, i) => {
-          bd.runSync(
-            `insert into ruta_orden_local (fecha, cliente_id, posicion)
-             values ($fecha, $cliente_id, $posicion)`,
-            { $fecha: fecha, $cliente_id: clienteId, $posicion: i + 1 },
-          );
-        });
-      });
-      catalogos.publicarCambio();
     },
 
     /** Aplica filas del pull en su propia transaccion (pruebas y usos sueltos). */
@@ -427,7 +451,8 @@ export function crearRepositorioRutas(
     },
 
     /**
-     * Borra la ruta y el orden local de los dias anteriores a `antesDe` (por
+     * Borra la ruta y el orden local (que ya no se escribe, pero puede quedar
+     * de antes del rediseño) de los dias anteriores a `antesDe` (por
      * defecto, hoy - 7). Lo llama "Abrir el dia". Las altas `pendiente`
      * **se conservan**: borrarlas perderia lo que la oficina necesita saber.
      * Las altas en `error` viejas SI se borran: el servidor ya las rechazo

@@ -1,11 +1,13 @@
 import {
   bloqueoDeVenta,
+  candadoDeClientes,
   cargaPendiente,
   consumoDelDia,
   existencias,
   faltantesDeMovimiento,
   faltantesDeVenta,
   MOTIVO_CARGA_PENDIENTE,
+  renglonAceptado,
   textoFaltante,
   type CargaInventario,
   type LineaMovimientoInventario,
@@ -52,11 +54,13 @@ describe('existencias', () => {
     expect(e.get('horchata')).toEqual({
       cargado: 30, vendido: 8, regalado: 1,
       mermaEntregada: 0, mermaTrayecto: 0, consumo: 0, mermaRecibida: 0,
+      cambiosRecibidos: 0, cambiosEntregados: 0,
       existencia: 21, mermaPorRegresar: 0,
     });
     expect(e.get('jamaica')).toEqual({
       cargado: 6, vendido: 0, regalado: 0,
       mermaEntregada: 0, mermaTrayecto: 0, consumo: 0, mermaRecibida: 0,
+      cambiosRecibidos: 0, cambiosEntregados: 0,
       existencia: 6, mermaPorRegresar: 0,
     });
   });
@@ -70,6 +74,7 @@ describe('existencias', () => {
       mermaTrayecto: 0,
       consumo: 0,
       mermaRecibida: 0,
+      cambiosRecibidos: 0, cambiosEntregados: 0,
       existencia: -4,
       mermaPorRegresar: 0,
     });
@@ -204,6 +209,7 @@ describe('existencias con movimientos (T-27 pieza 2)', () => {
     expect(e.get('horchata')).toEqual({
       cargado: 20, vendido: 5, regalado: 1,
       mermaEntregada: 2, mermaTrayecto: 1, consumo: 1, mermaRecibida: 4,
+      cambiosRecibidos: 0, cambiosEntregados: 0,
       existencia: 10, mermaPorRegresar: 5,
     });
   });
@@ -213,6 +219,30 @@ describe('existencias con movimientos (T-27 pieza 2)', () => {
       movimiento({ tipo: 'merma_cliente', sentido: 'recibido', presentacion_id: 'jamaica', piezas: 3 }),
     ]);
     expect(e.get('jamaica')).toMatchObject({ existencia: 0, mermaRecibida: 3, mermaPorRegresar: 3 });
+  });
+});
+
+describe('existencias con cambios (rediseño pieza 4)', () => {
+  it('lo recibido en un cambio suma a la existencia y lo entregado resta; no es merma', () => {
+    const e = existencias([carga()], [venta()], HOY, [
+      movimiento({ tipo: 'cambio', sentido: 'recibido', piezas: 3 }),
+      movimiento({ tipo: 'cambio', sentido: 'entregado', piezas: 2 }),
+      movimiento({ tipo: 'cambio', sentido: 'recibido', piezas: 9, fecha: '2026-10-21' }),
+    ]);
+    // 20 − 5 − 1 + 3 − 2 = 15; nada regresa como merma.
+    expect(e.get('horchata')).toEqual({
+      cargado: 20, vendido: 5, regalado: 1,
+      mermaEntregada: 0, mermaTrayecto: 0, consumo: 0, mermaRecibida: 0,
+      cambiosRecibidos: 3, cambiosEntregados: 2,
+      existencia: 15, mermaPorRegresar: 0,
+    });
+  });
+
+  it('lo recibido en un cambio de una presentacion que no se cargo se puede vender', () => {
+    const e = existencias([], [], HOY, [
+      movimiento({ tipo: 'cambio', sentido: 'recibido', presentacion_id: 'jamaica', piezas: 2 }),
+    ]);
+    expect(e.get('jamaica')).toMatchObject({ existencia: 2, mermaRecibida: 0, cambiosRecibidos: 2, mermaPorRegresar: 0 });
   });
 });
 
@@ -251,5 +281,53 @@ describe('consumoDelDia (D4)', () => {
         HOY,
       ),
     ).toBe(2);
+  });
+});
+
+describe('aceptacion por renglon (rediseño, pieza 3)', () => {
+  const tres = [
+    { presentacion_id: 'horchata', piezas: 20, aceptada: 1 as const },
+    { presentacion_id: 'jamaica', piezas: 12, aceptada: 1 as const },
+    { presentacion_id: 'limon', piezas: 6, aceptada: 0 as const },
+  ];
+
+  it('existencias: una carga aceptada 2 de 3 no suma la tercera', () => {
+    const e = existencias([carga({ lineas: tres })], [], HOY);
+    expect(e.get('horchata')?.cargado).toBe(20);
+    expect(e.get('jamaica')?.cargado).toBe(12);
+    expect(e.has('limon')).toBe(false);
+  });
+
+  it('existencias: null en una aceptada cuenta como aceptado (respondida antes de la pieza 3)', () => {
+    const e = existencias([carga({ lineas: [{ presentacion_id: 'horchata', piezas: 20, aceptada: null }] })], [], HOY);
+    expect(e.get('horchata')?.cargado).toBe(20);
+  });
+
+  it('renglonAceptado: solo en una carga aceptada, y 0 no cuenta', () => {
+    expect(renglonAceptado('aceptada', { aceptada: 1 })).toBe(true);
+    expect(renglonAceptado('aceptada', { aceptada: null })).toBe(true);
+    expect(renglonAceptado('aceptada', {})).toBe(true);
+    expect(renglonAceptado('aceptada', { aceptada: 0 })).toBe(false);
+    expect(renglonAceptado('rechazada', { aceptada: null })).toBe(false);
+    expect(renglonAceptado('pendiente', { aceptada: null })).toBe(false);
+  });
+
+  describe('candadoDeClientes', () => {
+    const base = { jornada: { fecha: HOY }, hoy: HOY, controlInventario: true };
+    const ceros = tres.map((l) => ({ ...l, aceptada: 0 as const }));
+
+    it('una aceptada con todos los renglones en 0 cuenta como rechazada', () => {
+      expect(candadoDeClientes({ ...base, cargas: [carga({ lineas: ceros })] })).toEqual({ tipo: 'rechazada' });
+    });
+
+    it('con un renglon en 1 abre los clientes', () => {
+      expect(candadoDeClientes({ ...base, cargas: [carga({ lineas: tres })] })).toBeNull();
+    });
+
+    it('la pendiente sigue ganandole a una aceptada sin renglones aceptados', () => {
+      expect(
+        candadoDeClientes({ ...base, cargas: [carga({ lineas: ceros }), carga({ id: 'c-2', numero: 2, estado: 'pendiente' })] }),
+      ).toEqual({ tipo: 'carga-pendiente', cargaId: 'c-2' });
+    });
   });
 });

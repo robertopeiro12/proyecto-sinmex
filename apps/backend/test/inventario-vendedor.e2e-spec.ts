@@ -160,7 +160,12 @@ describe('Inventario por vendedor (e2e)', () => {
     sucursalId: string;
     fecha: string;
     estado: 'pendiente' | 'aceptada' | 'rechazada';
-    lineas: { presentacionId: string; piezas: number }[];
+    lineas: {
+      presentacionId: string;
+      piezas: number;
+      /** Respuesta por renglon (pieza 3); sin ella, `null` como una carga de antes. */
+      aceptada?: boolean | null;
+    }[];
   }): Promise<void> => {
     numeroCarga++;
     const { id } = await db
@@ -185,6 +190,7 @@ describe('Inventario por vendedor (e2e)', () => {
           carga_id: id,
           presentacion_id: l.presentacionId,
           piezas: l.piezas,
+          aceptada: l.aceptada ?? null,
         })),
       )
       .execute();
@@ -244,7 +250,7 @@ describe('Inventario por vendedor (e2e)', () => {
     vendedorId: string;
     sucursalId: string;
     fecha: string;
-    tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo';
+    tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo' | 'cambio';
     clienteId?: string;
     borrado?: boolean;
     lineas: {
@@ -261,7 +267,7 @@ describe('Inventario por vendedor (e2e)', () => {
         sucursal_id: opciones.sucursalId,
         vendedor_id: opciones.vendedorId,
         cliente_id:
-          opciones.tipo === 'merma_cliente'
+          opciones.tipo === 'merma_cliente' || opciones.tipo === 'cambio'
             ? (opciones.clienteId ?? clienteTj)
             : null,
         tipo: opciones.tipo,
@@ -530,6 +536,58 @@ describe('Inventario por vendedor (e2e)', () => {
       expect(con.totales.faltante).toBe(1);
     });
 
+    it('muestra los cambios: lo recibido sube la teorica, lo entregado la baja y la merma teorica no cambia', async () => {
+      const dia = diaDeLaCorrida(6);
+      const v = await crearVendedor('Inv cambio', tjId);
+      await crearCarga({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'aceptada',
+        lineas: [
+          { presentacionId: litro, piezas: 10 },
+          { presentacionId: medio, piezas: 6 },
+        ],
+      });
+      await crearMovimiento({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        tipo: 'cambio',
+        lineas: [
+          { presentacionId: medio, sentido: 'recibido', piezas: 3 },
+          { presentacionId: litro, sentido: 'entregado', piezas: 2 },
+        ],
+      });
+
+      const r = (
+        await consultar(cookieGeneral, {
+          fecha: dia,
+          sucursal: 'TJ',
+          vendedor: v,
+        }).expect(200)
+      ).body as InventarioVendedor;
+      expect(linea(r, medio)).toMatchObject({
+        cambiosRecibidos: 3,
+        cambiosEntregados: 0,
+        mermaRecibida: 0,
+        deberiaRegresar: 9,
+        mermaTeorica: 0,
+      });
+      expect(linea(r, litro)).toMatchObject({
+        cambiosRecibidos: 0,
+        cambiosEntregados: 2,
+        mermaEntregada: 0,
+        deberiaRegresar: 8,
+        mermaTeorica: 0,
+      });
+      expect(r.totales).toMatchObject({
+        cambiosRecibidos: 3,
+        cambiosEntregados: 2,
+        deberiaRegresar: 17,
+      });
+    });
+
     it('un vendedor sin movimiento ese dia da lineas vacias, sin error', async () => {
       const v = await crearVendedor('Inv vacio', tjId);
       const r = (
@@ -720,6 +778,94 @@ describe('Inventario por vendedor (e2e)', () => {
         new Set([v, w]),
       );
       expect(linea(todos, litro)?.cargadas).toBe(11);
+    });
+    it('una carga aceptada 2 de 3: cada renglon trae si se acepto y la carga cuantos; solo los aceptados suman', async () => {
+      const dia = diaDeLaCorrida(5);
+      const v = await crearVendedor('Inv renglones', tjId);
+      const tercio = await crearPresentacion(`${PRODUCTO}-r`, '355 ml');
+      await crearCarga({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'aceptada',
+        lineas: [
+          { presentacionId: litro, piezas: 10, aceptada: true },
+          { presentacionId: medio, piezas: 7, aceptada: false },
+          { presentacionId: tercio, piezas: 3, aceptada: true },
+        ],
+      });
+      // Aceptada antes de la pieza 3 (renglones null): cuenta completa.
+      await crearCarga({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'aceptada',
+        lineas: [{ presentacionId: litro, piezas: 5 }],
+      });
+      await crearCarga({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'pendiente',
+        lineas: [{ presentacionId: medio, piezas: 2 }],
+      });
+      await crearCarga({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'rechazada',
+        lineas: [{ presentacionId: medio, piezas: 4 }],
+      });
+
+      const r = (
+        await consultar(cookieGeneral, {
+          fecha: dia,
+          sucursal: 'TJ',
+          vendedor: v,
+        }).expect(200)
+      ).body as InventarioVendedor;
+      const deLaCarga = (piezas: number, presentacionId: string) =>
+        r.recargas.find(
+          (x) => x.piezas === piezas && x.presentacionId === presentacionId,
+        );
+      expect(deLaCarga(10, litro)).toMatchObject({
+        estado: 'aceptada',
+        aceptada: true,
+        renglones: 3,
+        renglonesAceptados: 2,
+      });
+      expect(deLaCarga(7, medio)).toMatchObject({
+        estado: 'aceptada',
+        aceptada: false,
+        renglones: 3,
+        renglonesAceptados: 2,
+      });
+      expect(deLaCarga(3, tercio)).toMatchObject({
+        aceptada: true,
+        renglones: 3,
+        renglonesAceptados: 2,
+      });
+      expect(deLaCarga(5, litro)).toMatchObject({
+        estado: 'aceptada',
+        aceptada: true,
+        renglones: 1,
+        renglonesAceptados: 1,
+      });
+      expect(deLaCarga(2, medio)).toMatchObject({
+        estado: 'pendiente',
+        aceptada: null,
+        renglones: 1,
+        renglonesAceptados: null,
+      });
+      expect(deLaCarga(4, medio)).toMatchObject({
+        estado: 'rechazada',
+        aceptada: false,
+        renglones: 1,
+        renglonesAceptados: 0,
+      });
+      expect(linea(r, litro)?.cargadas).toBe(15);
+      expect(linea(r, medio)?.cargadas ?? 0).toBe(0);
+      expect(linea(r, tercio)?.cargadas).toBe(3);
     });
   });
 

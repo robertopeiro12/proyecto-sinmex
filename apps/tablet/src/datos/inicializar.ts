@@ -6,6 +6,7 @@ import { relojSistema } from './reloj';
 import { crearRepositorioCargas, type RepositorioCargas } from './repositorios/cargas';
 import { crearRepositorioCatalogos, type RepositorioCatalogos } from './repositorios/catalogos';
 import { crearRepositorioCobranzas, type RepositorioCobranzas } from './repositorios/cobranzas';
+import { crearRepositorioCortes, type RepositorioCortes } from './repositorios/cortes';
 import { crearRepositorioVisitas, type RepositorioVisitas } from './repositorios/visitas';
 import { crearRepositorioGastos, type RepositorioGastos } from './repositorios/gastos';
 import { crearRepositorioRutas, type RepositorioRutas } from './repositorios/rutas';
@@ -57,6 +58,11 @@ export interface CapaDatos {
   movimientos: RepositorioMovimientos;
   /** Notas asignadas de hoy, bloqueo de venta y "Continuar sin cobrar" (spec 2026-11-13). */
   notasAsignadas: RepositorioNotasAsignadas;
+  /**
+   * El corte del vendedor: borrador y enviado (rediseño pieza 6). Se envia con
+   * `jornadas.cerrarConCorte`, que cierra el dia en la misma transaccion.
+   */
+  cortes: RepositorioCortes;
   /** Version de esquema con la que quedo la base tras migrar. */
   versionEsquema: number;
 }
@@ -107,6 +113,7 @@ export function inicializarCapaDatos(): CapaDatos {
     // Inventario, la ficha y "Merma y consumo".
     movimientos: crearRepositorioMovimientos(deps, { catalogos }),
     notasAsignadas: crearRepositorioNotasAsignadas(deps),
+    cortes: crearRepositorioCortes(deps),
     versionEsquema: versionFinal,
   };
 }

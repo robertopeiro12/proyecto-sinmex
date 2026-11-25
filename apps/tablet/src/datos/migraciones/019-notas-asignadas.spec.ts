@@ -39,11 +39,10 @@ function insertarNotaNoCobrada(bd: BaseDatos, cambios: Record<string, string | n
 }
 
 describe('migracion 019: notas asignadas', () => {
-  it('la 019 es la ultima y deja versionEsquema en 19', () => {
+  it('la 019 es notas-asignadas y deja de ser la ultima con la 020 (rediseno pieza 2)', () => {
     expect(migraciones[18]?.nombre).toBe('notas-asignadas');
     expect(migraciones[18]?.version).toBe(19);
-    expect(migraciones).toHaveLength(19);
-    expect(versionEsquema(baseAlDia())).toBe(19);
+    expect(versionEsquema(baseAlDia())).toBe(migraciones.length);
   });
 
   it('ruta lleva recado, ruta_dia y nota_asignada existen con sus columnas', () => {
@@ -92,7 +91,7 @@ describe('migracion 019: notas asignadas', () => {
         ('pull', 'c1', '2026-11-12T10:00:00.000Z'), ('otra', 'c2', '2026-11-12T10:00:00.000Z');
     `);
     ejecutarMigraciones(bd, migraciones);
-    expect(versionEsquema(bd)).toBe(19);
+    expect(versionEsquema(bd)).toBe(migraciones.length);
     expect(bd.getFirstSync('select reparto_json from cobranza where id = $id', { $id: 'cob-1' })).toEqual({
       reparto_json: '[]',
     });

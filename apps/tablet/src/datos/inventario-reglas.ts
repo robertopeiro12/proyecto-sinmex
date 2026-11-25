@@ -21,6 +21,21 @@ export const MOTIVO_CARGA_PENDIENTE = 'Tienes una carga por aceptar';
 export interface LineaCargaInventario {
   presentacion_id: string;
   piezas: number;
+  /** Rediseno pieza 3: 1, 0 o nulo (ver `renglonAceptado`). Ausente = nulo. */
+  aceptada?: 0 | 1 | null;
+}
+
+/**
+ * Rediseno pieza 3: ¿el renglon cuenta en el inventario? Solo en una carga
+ * `aceptada`, y ahi todo renglon que no este en 0: el nulo es una carga
+ * respondida antes de la pieza 3 (se acepto completa). Es la unica regla: la
+ * usan `existencias`, `candadoDeClientes` y los textos de la pantalla.
+ */
+export function renglonAceptado(
+  estado: EstadoCarga,
+  linea: { aceptada?: 0 | 1 | null },
+): boolean {
+  return estado === 'aceptada' && linea.aceptada !== 0;
 }
 
 /** Lo que el inventario necesita de una carga (una `CargaConLineas` sirve tal cual). */
@@ -61,8 +76,13 @@ export interface Existencia {
   consumo: number;
   /** Lo danado que devolvio el cliente ("Recibí dañado"). NO suma a la existencia. */
   mermaRecibida: number;
+  /** Rediseño pieza 4: lo que el cliente regreso en un cambio. SI suma: es producto bueno. */
+  cambiosRecibidos: number;
+  /** Rediseño pieza 4: lo que se le entrego al cliente en un cambio. */
+  cambiosEntregados: number;
   /**
-   * cargado − vendido − regalado − mermaEntregada − mermaTrayecto − consumo.
+   * cargado − vendido − regalado − mermaEntregada − mermaTrayecto − consumo
+   * + cambiosRecibidos − cambiosEntregados (la teorica del corte del portal).
    * Puede ser negativa si se vendio o registro con el control apagado.
    */
   existencia: number;
@@ -81,11 +101,13 @@ export interface Faltante {
 }
 
 /**
- * Por presentacion: lo cargado (cargas **aceptadas** y vivas de `hoy`) menos lo
+ * Por presentacion: lo cargado (renglones **aceptados** de las cargas aceptadas
+ * y vivas de `hoy`; pieza 3) menos lo
  * vendido y lo regalado en las ventas de `hoy` (D10: el regalo tambien sale de
  * la camioneta) y, desde la pieza 2, menos la merma entregada, la del trayecto y
  * el consumo de `hoy`. La merma recibida no suma: se cuenta aparte para
- * regresarla a la planta.
+ * regresarla a la planta. Desde la pieza 4 del rediseño, lo recibido en un
+ * cambio suma y lo entregado resta.
  */
 export function existencias(
   cargas: readonly CargaInventario[],
@@ -105,6 +127,8 @@ export function existencias(
         mermaTrayecto: 0,
         consumo: 0,
         mermaRecibida: 0,
+        cambiosRecibidos: 0,
+        cambiosEntregados: 0,
         existencia: 0,
         mermaPorRegresar: 0,
       };
@@ -114,7 +138,11 @@ export function existencias(
   };
   for (const c of cargas) {
     if (c.estado !== 'aceptada' || c.activo !== 1 || c.fecha !== hoy) continue;
-    for (const l of c.lineas) de(l.presentacion_id).cargado += l.piezas;
+    for (const l of c.lineas) {
+      // Pieza 3: lo que no palomeo no entra (ni como fila en cero).
+      if (!renglonAceptado(c.estado, l)) continue;
+      de(l.presentacion_id).cargado += l.piezas;
+    }
   }
   for (const v of ventas) {
     if (v.fecha !== hoy) continue;
@@ -125,14 +153,27 @@ export function existencias(
   for (const m of movimientos) {
     if (m.fecha !== hoy) continue;
     const e = de(m.presentacion_id);
-    // Solo la merma del cliente trae lineas `recibido` (validarMovimiento).
-    if (m.sentido === 'recibido') e.mermaRecibida += m.piezas;
+    // El cambio va primero: su `recibido` es producto bueno, no merma.
+    if (m.tipo === 'cambio') {
+      if (m.sentido === 'recibido') e.cambiosRecibidos += m.piezas;
+      else e.cambiosEntregados += m.piezas;
+    }
+    // Fuera del cambio, solo la merma del cliente trae lineas `recibido` (validarMovimiento).
+    else if (m.sentido === 'recibido') e.mermaRecibida += m.piezas;
     else if (m.tipo === 'merma_cliente') e.mermaEntregada += m.piezas;
     else if (m.tipo === 'merma_trayecto') e.mermaTrayecto += m.piezas;
     else e.consumo += m.piezas;
   }
   for (const e of mapa.values()) {
-    e.existencia = e.cargado - e.vendido - e.regalado - e.mermaEntregada - e.mermaTrayecto - e.consumo;
+    e.existencia =
+      e.cargado -
+      e.vendido -
+      e.regalado -
+      e.mermaEntregada -
+      e.mermaTrayecto -
+      e.consumo +
+      e.cambiosRecibidos -
+      e.cambiosEntregados;
     e.mermaPorRegresar = e.mermaRecibida + e.mermaTrayecto;
   }
   return mapa;
@@ -166,6 +207,69 @@ export function bloqueoDeVenta({
 }): string | null {
   if (!controlInventario) return null;
   return cargaPendiente(cargas, hoy) === null ? null : MOTIVO_CARGA_PENDIENTE;
+}
+
+/**
+ * El candado de los clientes de la Ruta (rediseño, spec §4 y §16-bis). `null` =
+ * clientes abiertos.
+ *
+ * - `empezar`: no hay jornada de HOY (la de ayer abierta no cuenta).
+ * - `sin-carga` / `carga-pendiente` / `rechazada`: con el control de inventario
+ *   prendido, el vendedor aun no tiene inventario aceptado hoy.
+ */
+export type CandadoClientes =
+  | { tipo: 'empezar' }
+  | { tipo: 'sin-carga' }
+  | { tipo: 'carga-pendiente'; cargaId: string }
+  | { tipo: 'rechazada' }
+  | null;
+
+/**
+ * Sin jornada de hoy → `empezar`. Control apagado → `null`. Con control, solo
+ * cuentan las cargas vivas de hoy: alguna `aceptada` → `null` (una recarga
+ * pendiente a media ruta NO vuelve a cerrar: la venta la bloquea
+ * `bloqueoDeVenta`); si no, la primera `pendiente` → `carga-pendiente`; si no,
+ * alguna `rechazada` → `rechazada`; sin ninguna → `sin-carga`.
+ *
+ * La primera pendiente es la primera en el orden recibido (`leerInventarioDelDia`
+ * las da por numero).
+ *
+ * Pieza 3: una `aceptada` con todos sus renglones en 0 cuenta como `rechazada`
+ * (el servidor no la manda asi, pero el inventario no tendria nada). Sin
+ * `lineas` (o vacias) cuenta como lo dice su estado.
+ */
+export function candadoDeClientes({
+  jornada,
+  hoy,
+  controlInventario,
+  cargas,
+}: {
+  jornada: { fecha: FechaISO } | null;
+  hoy: FechaISO;
+  controlInventario: boolean;
+  cargas: readonly (Pick<CargaInventario, 'id' | 'fecha' | 'estado' | 'activo'> & {
+    lineas?: readonly { aceptada?: 0 | 1 | null }[];
+  })[];
+}): CandadoClientes {
+  if (jornada?.fecha !== hoy) return { tipo: 'empezar' };
+  if (!controlInventario) return null;
+  const deHoy = cargas
+    .filter((c) => c.activo === 1 && c.fecha === hoy)
+    .map((c) => ({ id: c.id, estado: estadoEfectivo(c) }));
+  if (deHoy.some((c) => c.estado === 'aceptada')) return null;
+  const pendiente = deHoy.find((c) => c.estado === 'pendiente');
+  if (pendiente) return { tipo: 'carga-pendiente', cargaId: pendiente.id };
+  if (deHoy.some((c) => c.estado === 'rechazada')) return { tipo: 'rechazada' };
+  return { tipo: 'sin-carga' };
+}
+
+/** `aceptada` sin ningun renglon aceptado = `rechazada` (pieza 3). */
+function estadoEfectivo(c: {
+  estado: EstadoCarga;
+  lineas?: readonly { aceptada?: 0 | 1 | null }[];
+}): EstadoCarga {
+  if (c.estado !== 'aceptada' || !c.lineas || c.lineas.length === 0) return c.estado;
+  return c.lineas.some((l) => renglonAceptado(c.estado, l)) ? 'aceptada' : 'rechazada';
 }
 
 /**

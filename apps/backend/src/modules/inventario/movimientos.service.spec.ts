@@ -20,6 +20,7 @@ const contexto: ContextoMovimiento = {
 const movimiento: MovimientoNormalizado = {
   tipo: 'merma_cliente',
   comentario: 'Venían reventadas',
+  motivoMermaId: null,
   registradoEn: '2026-10-24T01:30:00.000Z',
   lineas: [
     { presentacionId: 'litro', sentido: 'recibido', piezas: 3 },
@@ -29,9 +30,16 @@ const movimiento: MovimientoNormalizado = {
 };
 
 function montar(
-  opciones: { existentes?: string[]; idInsertado?: string | null } = {},
+  opciones: {
+    existentes?: string[];
+    idInsertado?: string | null;
+    motivoExiste?: boolean;
+  } = {},
 ) {
   const repo = {
+    motivoMermaExiste: jest
+      .fn()
+      .mockResolvedValue(opciones.motivoExiste ?? true),
     presentacionesExistentes: jest
       .fn()
       .mockResolvedValue(new Set(opciones.existentes ?? ['litro', 'medio'])),
@@ -66,6 +74,7 @@ describe('MovimientosService.registrarMovimiento (T-27 pieza 2, D7)', () => {
         // El dia del sobre tal cual, aunque en UTC `registradoEn` ya sea el 24.
         fecha: '2026-10-23',
         comentario: 'Venían reventadas',
+        motivoMermaId: null,
         registradoEn: '2026-10-24T01:30:00.000Z',
       },
       trx,
@@ -75,6 +84,39 @@ describe('MovimientosService.registrarMovimiento (T-27 pieza 2, D7)', () => {
       movimiento.lineas,
       trx,
     );
+    // Sin motivo (tablet vieja) no se pregunta por el catalogo.
+    expect(repo.motivoMermaExiste).not.toHaveBeenCalled();
+  });
+
+  it('con motivo pregunta si existe y lo guarda (pieza 4)', async () => {
+    const { servicio, repo } = montar();
+    await servicio.registrarMovimiento(
+      { ...movimiento, motivoMermaId: 'motivo-1' },
+      contexto,
+      trx,
+    );
+    expect(repo.motivoMermaExiste).toHaveBeenCalledWith('motivo-1', trx);
+    expect(repo.insertar).toHaveBeenCalledWith(
+      expect.objectContaining({ motivoMermaId: 'motivo-1' }),
+      trx,
+    );
+  });
+
+  it('un motivo que no existe es motivo-merma-inexistente y no inserta nada', async () => {
+    const { servicio, repo } = montar({ motivoExiste: false });
+    const error = await servicio
+      .registrarMovimiento(
+        { ...movimiento, motivoMermaId: 'motivo-x' },
+        contexto,
+        trx,
+      )
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(MovimientoRechazado);
+    expect((error as MovimientoRechazado).razon).toBe(
+      'motivo-merma-inexistente',
+    );
+    expect((error as Error).message).toMatch(/^motivo_merma_id: .*motivo-x/);
+    expect(repo.insertar).not.toHaveBeenCalled();
   });
 
   it('una presentacion que no existe es presentacion-inexistente y no inserta nada', async () => {

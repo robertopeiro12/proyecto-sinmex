@@ -14,7 +14,11 @@ import {
   type UbicacionAlta,
 } from '@/estado/alta-prospecto';
 import { useJawa } from '@/estado/proveedor-jawa';
-import { enlaceAFicha } from '@/estado/ruta-del-dia';
+import {
+  listaProspectos,
+  primeraLineaDomicilio,
+  type FilaListaProspecto,
+} from '@/estado/ruta-del-dia';
 import { useSesion } from '@/estado/proveedor-sesion';
 import { OBJETIVO_BYTES, type FotoComprimida } from '@/fotos/comprimir';
 import { capturarFoto } from '@/fotos/expo';
@@ -22,6 +26,7 @@ import { obtenerUbicacion } from '@/ubicacion/obtener';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
 import { Cifra } from '@/ui/cifra';
+import { MarcoMenu } from '@/ui/marco-menu';
 import { Pantalla, Pastilla, Tarjeta, type Estado } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
 import { colores, espacio, grosor } from '@/ui/tokens';
@@ -78,7 +83,9 @@ export default function Prospectos() {
   const [tipoElegido, setTipoElegido] = useState<string | null>(null);
   // T-72 (D1): la ubicacion como estado de `validarAltaProspecto`. `sin-tomar`
   // tambien es "sin GPS": sin tocar "Usar mi ubicación" se exige la direccion.
-  const [ubicacion, setUbicacion] = useState<UbicacionAlta>({ estado: 'sin-tomar' });
+  const [ubicacion, setUbicacion] = useState<UbicacionAlta>({
+    estado: 'sin-tomar',
+  });
   const [domicilio, setDomicilio] = useState('');
   const [foto, setFoto] = useState<FotoComprimida | null>(null);
   const [avisoFoto, setAvisoFoto] = useState<string | null>(null);
@@ -86,37 +93,58 @@ export default function Prospectos() {
   const [error, setError] = useState<string | null>(null);
   const [guardado, setGuardado] = useState<string | null>(null);
   const [refrescos, setRefrescos] = useState(0);
+  // Maqueta 21: la lista "Capturados" va primero; el formulario se despliega con "Nuevo prospecto".
+  const [formularioAbierto, setFormularioAbierto] = useState(false);
   const [ultimoId, setUltimoId] = useState<string | null>(null);
 
   /**
    * El tipo seleccionado se **deriva** en vez de vivir solo en el estado: si el
    * portal da de baja el giro que el vendedor habia elegido, la seleccion cae
    * sola en vez de apuntar a una fila que ya no se lista (misma razon que el
-   * vehiculo en `abrir-dia.tsx`). Aqui **no** cae al primero: el tipo de negocio
+   * vehiculo en `src/ui/tarjeta-empezar-ruta.tsx`). Aqui **no** cae al primero: el tipo de negocio
    * es opcional y elegirlo por el seria inventarse el giro del negocio.
    */
-  const tipoNegocioId = tiposNegocio.find((t) => t.id === tipoElegido)?.id ?? null;
+  const tipoNegocioId =
+    tiposNegocio.find((t) => t.id === tipoElegido)?.id ?? null;
 
   // `ultimaSincronizacion` cubre el push que cambia el `sync_estado` de un
   // prospecto ya listado: sin ella, la pastilla se queda en "por subir" hasta
   // que algo mas vuelva a montar la pantalla, aunque el push haya terminado
   // con ella montada (M-3, PR #90; mismo patron que
   // `operacion/[clienteId]/index.tsx`).
-  const prospectosDeHoy = useMemo<Prospecto[]>(() => {
+  //
+  // Revision final de la pieza 1 (I1): ademas de lo capturado hoy, todos los
+  // prospectos vivos de la sucursal, para abrir la hoja (y venderle la
+  // bienvenida) al que se capturo otro dia o en otra tablet. La regla vive en
+  // `listaProspectos`, con prueba.
+  const lista = useMemo(() => {
     void refrescos;
     void versionCatalogos;
     void ultimaSincronizacion;
-    return vendedor ? datos.prospectos.delDia(vendedor.id) : [];
-  }, [datos, vendedor, refrescos, versionCatalogos, ultimaSincronizacion]);
+    return listaProspectos(
+      vendedor ? datos.prospectos.delDia(vendedor.id) : [],
+      sucursalId ? datos.catalogos.listarProspectos(sucursalId) : [],
+      (id) => datos.prospectos.porId(id),
+      (id) => datos.catalogos.obtenerCliente(id) !== null,
+    );
+  }, [datos, vendedor, sucursalId, refrescos, versionCatalogos, ultimaSincronizacion]);
 
   // Toda la regla del alta vive en `validarAltaProspecto` (T-72): los tres
   // obligatorios que dicto el cliente y la direccion cuando no hay GPS. La foto
   // **no** aparece: un prospecto sin foto es un prospecto completo.
   const validacion = useMemo(
-    () => validarAltaProspecto({ nombre, telefono, encargado, ubicacion, domicilio }),
+    () =>
+      validarAltaProspecto({
+        nombre,
+        telefono,
+        encargado,
+        ubicacion,
+        domicilio,
+      }),
     [nombre, telefono, encargado, ubicacion, domicilio],
   );
-  const puedeGuardar = vendedor !== null && sucursalId !== null && validacion.ubicacion !== null;
+  const puedeGuardar =
+    vendedor !== null && sucursalId !== null && validacion.ubicacion !== null;
 
   // Numero del formulario en curso: `guardar()` lo incrementa al limpiarlo, y
   // `ubicar()` descarta una lectura que llega despues (ver `ubicacionRecibida`).
@@ -149,7 +177,9 @@ export default function Prospectos() {
         if (!r.foto.objetivoAlcanzado) {
           // Pesa mas de lo previsto pero el servidor la acepta. Se avisa sin
           // alarmar: la foto es buena, solo va a tardar un poco mas en subir.
-          setAvisoFoto('La foto quedó más pesada de lo normal; va a subir igual.');
+          setAvisoFoto(
+            'La foto quedó más pesada de lo normal; va a subir igual.',
+          );
         }
         return;
       }
@@ -163,6 +193,26 @@ export default function Prospectos() {
     } finally {
       setTomandoFoto(false);
     }
+  }
+
+  /** Deja el formulario en blanco (tras guardar o al cancelar); invalida un GPS en vuelo. */
+  function limpiarFormulario() {
+    formulario.current += 1;
+    setNombre('');
+    setTelefono('');
+    setEncargado('');
+    setComentarios('');
+    setTipoElegido(null);
+    setUbicacion({ estado: 'sin-tomar' });
+    setDomicilio('');
+    setFoto(null);
+    setAvisoFoto(null);
+    setError(null);
+  }
+
+  function alternarFormulario() {
+    if (formularioAbierto) limpiarFormulario();
+    setFormularioAbierto((v) => !v);
   }
 
   function guardar() {
@@ -199,16 +249,7 @@ export default function Prospectos() {
 
       // Se limpia el formulario, no se navega: lo normal es registrar varios
       // prospectos seguidos en la misma calle.
-      formulario.current += 1;
-      setNombre('');
-      setTelefono('');
-      setEncargado('');
-      setComentarios('');
-      setTipoElegido(null);
-      setUbicacion({ estado: 'sin-tomar' });
-      setDomicilio('');
-      setFoto(null);
-      setAvisoFoto(null);
+      limpiarFormulario();
       setGuardado(
         p.lat === null
           ? `Guardado "${p.nombre}" sin GPS, con su dirección: la oficina lo ubicará con ella. Queda pendiente de subir.`
@@ -216,6 +257,7 @@ export default function Prospectos() {
       );
       setUltimoId(p.id);
       setRefrescos((n) => n + 1);
+      setFormularioAbierto(false);
     } catch (e) {
       setError(
         e instanceof ErrorProspecto || e instanceof ErrorJornada
@@ -226,215 +268,272 @@ export default function Prospectos() {
   }
 
   return (
-    <Pantalla
-      titulo="Prospectos"
-      subtitulo="Registra un negocio nuevo. El alta de clientes la hace la oficina; aquí solo prospectos."
-    >
-      <Campo
-        etiqueta="Nombre del negocio"
-        value={nombre}
-        onChangeText={setNombre}
-        placeholder="Ej. Tacos Aarón"
-        autoCapitalize="words"
-      />
-
-      <Campo
-        etiqueta="Teléfono"
-        value={telefono}
-        onChangeText={setTelefono}
-        placeholder="Ej. 664 111 2233"
-        keyboardType="phone-pad"
-      />
-
-      <Campo
-        etiqueta="Encargado"
-        value={encargado}
-        onChangeText={setEncargado}
-        placeholder="Quién atiende"
-        autoCapitalize="words"
-      />
-
-      <Text style={estilos.etiqueta}>Tipo de negocio</Text>
-
-      {tiposNegocio.length === 0 ? (
-        <Tarjeta estado="pendiente" etiqueta="Catálogo vacío">
-          <Text style={estilos.textoTarjeta}>Sin tipos de negocio</Text>
-          <Text style={estilos.textoSuave}>
-            Los tipos de negocio bajan del portal con la sincronización. Puedes registrar el
-            prospecto sin él y la oficina lo clasificará.
-          </Text>
-        </Tarjeta>
-      ) : (
-        <View style={estilos.rejilla}>
-          {tiposNegocio.map((tipo) => {
-            const seleccionado = tipo.id === tipoNegocioId;
-            return (
-              // No es un `<Boton>`: elegir el giro **no hace nada** todavia, solo
-              // marca. La accion de la pantalla es una sola, la de abajo.
-              //
-              // Lo seleccionado se distingue por tres canales (borde grueso,
-              // fondo y la palabra "Seleccionado"), no solo por color: al sol los
-              // fondos tenues se lavan y quedan todos del mismo blanco.
-              <Pressable
-                key={tipo.id}
-                accessibilityRole="radio"
-                accessibilityState={{ selected: seleccionado }}
-                accessibilityLabel={tipo.nombre}
-                // Volver a tocar el elegido lo deselecciona: el tipo de negocio
-                // es opcional y no puede haber forma de quedarse atrapado con uno
-                // puesto por error.
-                onPress={() => setTipoElegido(seleccionado ? null : tipo.id)}
-                style={({ pressed }) => [
-                  estilos.tarjeta,
-                  estilos.celdaRejilla,
-                  {
-                    borderWidth: grosor.fuerte,
-                    borderColor: seleccionado ? colores.primario : colores.borde,
-                  },
-                  seleccionado && { backgroundColor: colores.primarioTenue },
-                  pressed && {
-                    transform: [{ translateY: grosor.fuerte }],
-                    opacity: 0.9,
-                  },
-                ]}
-              >
-                <Text style={estilos.textoTarjeta}>{tipo.nombre}</Text>
-                {seleccionado ? <Text style={estilos.textoSuave}>Seleccionado</Text> : null}
-              </Pressable>
-            );
-          })}
-        </View>
-      )}
-
-      <Campo
-        etiqueta="Comentario"
-        value={comentarios}
-        onChangeText={setComentarios}
-        placeholder="Lo que haya que recordar (opcional)"
-        multiline
-      />
-
-      <Tarjeta
-        estado={ubicacion.estado === 'ok' && !validacion.domicilioObligatorio ? 'listo' : 'neutro'}
-        etiqueta="Ubicación del negocio"
-      >
-        {ubicacion.estado === 'ok' && !validacion.domicilioObligatorio ? (
-          <>
-            <Pastilla texto="ubicación capturada" estado="listo" />
-            {/* Toda cifra que el vendedor lea va en monoespaciada (regla 3). */}
-            <Cifra valor={`${ubicacion.lat.toFixed(6)}, ${ubicacion.lng.toFixed(6)}`} />
-          </>
-        ) : (
-          <Text style={estilos.textoSuave}>
-            Sin ubicación. Si no hay GPS, escribe abajo la dirección del negocio: la oficina lo ubicará con ella.
-          </Text>
-        )}
-
+    <MarcoMenu clave="prospectos" titulo="Prospectos">
+      <Pantalla subtitulo="Registra un negocio nuevo. El alta de clientes la hace la oficina; aquí solo prospectos.">
         <Boton
-          etiqueta={ubicacion.estado === 'ok' ? 'Volver a ubicar' : 'Usar mi ubicación'}
-          tono="neutra"
-          glifo="⌖"
-          onPress={ubicar}
-          ocupado={ubicacion.estado === 'buscando'}
-          estilo={{ marginTop: espacio.sm }}
+          etiqueta={formularioAbierto ? 'Cancelar' : 'Nuevo prospecto'}
+          icono={formularioAbierto ? undefined : 'prospecto'}
+          tono={formularioAbierto ? 'neutra' : 'primaria'}
+          onPress={alternarFormulario}
         />
 
-        {avisoUbicacionAlta(ubicacion) ? (
-          <Text style={estilos.textoSuave}>{avisoUbicacionAlta(ubicacion)}</Text>
+        {guardado && !formularioAbierto ? (
+          <Tarjeta estado="pendiente" etiqueta="Listo">
+            <Text style={estilos.textoTarjeta}>{guardado}</Text>
+            <Text style={estilos.textoSuave}>
+              Sube solo con la sincronización, al volver al WiFi del negocio.
+            </Text>
+            {/* T-75 (D6): venderle en cuanto se captura; la ficha ya existe porque
+                el alta creo su espejo en cliente. */}
+            {ultimoId !== null ? (
+              <Boton
+                etiqueta="Abrir su ficha"
+                tono="neutra"
+                onPress={() =>
+                  router.push({
+                    pathname: '/(jornada)/operacion/[clienteId]',
+                    params: { clienteId: ultimoId },
+                  })
+                }
+                estilo={{ marginTop: espacio.sm }}
+              />
+            ) : null}
+          </Tarjeta>
         ) : null}
-      </Tarjeta>
 
-      {/* T-72 (D1): siempre visible; obligatoria sin GPS. Si el GPS llega despues
-          de escribirla, se guardan las dos cosas. */}
-      <Campo
-        etiqueta={ETIQUETA_DOMICILIO}
-        ayuda={ayudaDomicilio(validacion.domicilioObligatorio)}
-        value={domicilio}
-        onChangeText={setDomicilio}
-        placeholder="Calle, número y colonia"
-        maxLength={LARGO_MAX_DOMICILIO}
-        multiline
-      />
+        <Text style={estilos.seccion}>Capturados hoy {lista.capturadosHoy.length}</Text>
 
-      <Tarjeta estado={foto ? 'listo' : 'neutro'} etiqueta="Foto del lugar">
-        {foto ? (
-          <>
-            <Pastilla texto="foto lista" estado="listo" />
-            {/* El tamano real medido, en monoespaciada (regla 3): es una cifra
-                que el vendedor puede necesitar leerle a la oficina si una foto
-                no sube. */}
-            <Cifra valor={`${Math.round(foto.bytes / 1024)} kB`} tamano="menor" />
-          </>
+        {lista.capturadosHoy.length === 0 ? (
+          <Tarjeta etiqueta="Sin registros">
+            <Text style={estilos.textoSuave}>
+              Todavía no has registrado prospectos hoy.
+            </Text>
+          </Tarjeta>
         ) : (
-          <Text style={estilos.textoSuave}>
-            Sin foto. No es obligatoria: el prospecto se guarda igual.
-          </Text>
+          lista.capturadosHoy.map((f) => <FilaProspecto key={f.id} fila={f} />)
         )}
 
-        <Boton
-          etiqueta={foto ? 'Volver a tomar la foto' : 'Tomar foto'}
-          tono="neutra"
-          glifo="⬤"
-          onPress={tomarFoto}
-          ocupado={tomandoFoto}
-          estilo={{ marginTop: espacio.sm }}
-        />
-
-        {avisoFoto ? <Text style={estilos.textoSuave}>{avisoFoto}</Text> : null}
-
-        <Text style={estilos.textoSuave}>
-          Se guarda en la tablet y sube sola con la sincronización (máximo{' '}
-          {Math.round(OBJETIVO_BYTES / 1024)} kB).
-        </Text>
-      </Tarjeta>
-
-      {error ? <Text style={estilos.error}>{error}</Text> : null}
-
-      {guardado ? (
-        <Tarjeta estado="pendiente" etiqueta="Listo">
-          <Text style={estilos.textoTarjeta}>{guardado}</Text>
-          <Text style={estilos.textoSuave}>
-            Sube solo con la sincronización, al volver al WiFi del negocio.
-          </Text>
-          {/* T-75 (D6): venderle en cuanto se captura; la ficha ya existe porque
-              el alta creo su espejo en cliente. */}
-          {ultimoId !== null ? (
-            <Boton
-              etiqueta="Abrir su ficha"
-              tono="neutra"
-              onPress={() =>
-                router.push({
-                  pathname: '/(jornada)/operacion/[clienteId]',
-                  params: { clienteId: ultimoId },
-                })
-              }
-              estilo={{ marginTop: espacio.sm }}
+        {formularioAbierto ? (
+          <>
+            <Campo
+              etiqueta="Nombre del negocio"
+              value={nombre}
+              onChangeText={setNombre}
+              placeholder="Ej. Tacos Aarón"
+              autoCapitalize="words"
             />
-          ) : null}
-        </Tarjeta>
-      ) : null}
 
-      <Boton
-        etiqueta="Guardar prospecto"
-        onPress={guardar}
-        deshabilitado={!puedeGuardar}
-        estilo={{ marginTop: espacio.md }}
-      />
+            <Campo
+              etiqueta="Teléfono"
+              value={telefono}
+              onChangeText={setTelefono}
+              placeholder="Ej. 664 111 2233"
+              keyboardType="phone-pad"
+            />
 
-      {validacion.faltantes.length > 0 ? (
-        <Text style={estilos.textoSuave}>{validacion.faltantes.join(' ')}</Text>
-      ) : null}
+            <Campo
+              etiqueta="Encargado"
+              value={encargado}
+              onChangeText={setEncargado}
+              placeholder="Quién atiende"
+              autoCapitalize="words"
+            />
 
-      <Text style={estilos.seccion}>Prospectos de hoy</Text>
+            <Text style={estilos.etiqueta}>Tipo de negocio</Text>
 
-      {prospectosDeHoy.length === 0 ? (
-        <Tarjeta etiqueta="Sin registros">
-          <Text style={estilos.textoSuave}>Todavía no has registrado prospectos hoy.</Text>
-        </Tarjeta>
-      ) : (
-        prospectosDeHoy.map((p) => <FilaProspecto key={p.id} prospecto={p} />)
-      )}
-    </Pantalla>
+            {tiposNegocio.length === 0 ? (
+              <Tarjeta estado="pendiente" etiqueta="Catálogo vacío">
+                <Text style={estilos.textoTarjeta}>Sin tipos de negocio</Text>
+                <Text style={estilos.textoSuave}>
+                  Los tipos de negocio bajan del portal con la sincronización.
+                  Puedes registrar el prospecto sin él y la oficina lo
+                  clasificará.
+                </Text>
+              </Tarjeta>
+            ) : (
+              <View style={estilos.rejilla}>
+                {tiposNegocio.map((tipo) => {
+                  const seleccionado = tipo.id === tipoNegocioId;
+                  return (
+                    // No es un `<Boton>`: elegir el giro **no hace nada** todavia, solo
+                    // marca. La accion de la pantalla es una sola, la de abajo.
+                    //
+                    // Lo seleccionado se distingue por tres canales (borde grueso,
+                    // fondo y la palabra "Seleccionado"), no solo por color: al sol los
+                    // fondos tenues se lavan y quedan todos del mismo blanco.
+                    <Pressable
+                      key={tipo.id}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected: seleccionado }}
+                      accessibilityLabel={tipo.nombre}
+                      // Volver a tocar el elegido lo deselecciona: el tipo de negocio
+                      // es opcional y no puede haber forma de quedarse atrapado con uno
+                      // puesto por error.
+                      onPress={() =>
+                        setTipoElegido(seleccionado ? null : tipo.id)
+                      }
+                      style={({ pressed }) => [
+                        estilos.tarjeta,
+                        estilos.celdaRejilla,
+                        {
+                          borderWidth: grosor.fuerte,
+                          borderColor: seleccionado
+                            ? colores.primario
+                            : colores.borde,
+                        },
+                        seleccionado && {
+                          backgroundColor: colores.primarioTenue,
+                        },
+                        pressed && {
+                          transform: [{ translateY: grosor.fuerte }],
+                          opacity: 0.9,
+                        },
+                      ]}
+                    >
+                      <Text style={estilos.textoTarjeta}>{tipo.nombre}</Text>
+                      {seleccionado ? (
+                        <Text style={estilos.textoSuave}>Seleccionado</Text>
+                      ) : null}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            <Campo
+              etiqueta="Comentario"
+              value={comentarios}
+              onChangeText={setComentarios}
+              placeholder="Lo que haya que recordar (opcional)"
+              multiline
+            />
+
+            <Tarjeta
+              estado={
+                ubicacion.estado === 'ok' && !validacion.domicilioObligatorio
+                  ? 'listo'
+                  : 'neutro'
+              }
+              etiqueta="Ubicación del negocio"
+            >
+              {ubicacion.estado === 'ok' && !validacion.domicilioObligatorio ? (
+                <>
+                  <Pastilla texto="ubicación capturada" estado="listo" />
+                  {/* Toda cifra que el vendedor lea va en monoespaciada (regla 3). */}
+                  <Cifra
+                    valor={`${ubicacion.lat.toFixed(6)}, ${ubicacion.lng.toFixed(6)}`}
+                  />
+                </>
+              ) : (
+                <Text style={estilos.textoSuave}>
+                  Sin ubicación. Si no hay GPS, escribe abajo la dirección del
+                  negocio: la oficina lo ubicará con ella.
+                </Text>
+              )}
+
+              <Boton
+                etiqueta={
+                  ubicacion.estado === 'ok'
+                    ? 'Volver a ubicar'
+                    : 'Usar mi ubicación'
+                }
+                tono="neutra"
+                icono="ubicacion"
+                onPress={ubicar}
+                ocupado={ubicacion.estado === 'buscando'}
+                estilo={{ marginTop: espacio.sm }}
+              />
+
+              {avisoUbicacionAlta(ubicacion) ? (
+                <Text style={estilos.textoSuave}>
+                  {avisoUbicacionAlta(ubicacion)}
+                </Text>
+              ) : null}
+            </Tarjeta>
+
+            {/* T-72 (D1): siempre visible; obligatoria sin GPS. Si el GPS llega despues
+            de escribirla, se guardan las dos cosas. */}
+            <Campo
+              etiqueta={ETIQUETA_DOMICILIO}
+              ayuda={ayudaDomicilio(validacion.domicilioObligatorio)}
+              value={domicilio}
+              onChangeText={setDomicilio}
+              placeholder="Calle, número y colonia"
+              maxLength={LARGO_MAX_DOMICILIO}
+              multiline
+            />
+
+            <Tarjeta
+              estado={foto ? 'listo' : 'neutro'}
+              etiqueta="Foto del lugar"
+            >
+              {foto ? (
+                <>
+                  <Pastilla texto="foto lista" estado="listo" />
+                  {/* El tamano real medido, en monoespaciada (regla 3): es una cifra
+                  que el vendedor puede necesitar leerle a la oficina si una foto
+                  no sube. */}
+                  <Cifra
+                    valor={`${Math.round(foto.bytes / 1024)} kB`}
+                    tamano="menor"
+                  />
+                </>
+              ) : (
+                <Text style={estilos.textoSuave}>
+                  Sin foto. No es obligatoria: el prospecto se guarda igual.
+                </Text>
+              )}
+
+              <Boton
+                etiqueta={foto ? 'Volver a tomar la foto' : 'Tomar foto'}
+                tono="neutra"
+                icono="foto"
+                onPress={tomarFoto}
+                ocupado={tomandoFoto}
+                estilo={{ marginTop: espacio.sm }}
+              />
+
+              {avisoFoto ? (
+                <Text style={estilos.textoSuave}>{avisoFoto}</Text>
+              ) : null}
+
+              <Text style={estilos.textoSuave}>
+                Se guarda en la tablet y sube sola con la sincronización (máximo{' '}
+                {Math.round(OBJETIVO_BYTES / 1024)} kB).
+              </Text>
+            </Tarjeta>
+
+            {error ? <Text style={estilos.error}>{error}</Text> : null}
+
+            <Boton
+              etiqueta="Guardar prospecto"
+              onPress={guardar}
+              deshabilitado={!puedeGuardar}
+              estilo={{ marginTop: espacio.md }}
+            />
+
+            {validacion.faltantes.length > 0 ? (
+              <Text style={estilos.textoSuave}>
+                {validacion.faltantes.join(' ')}
+              </Text>
+            ) : null}
+          </>
+        ) : null}
+
+        {/* Al final, despues del formulario: la sucursal puede tener muchos y
+            "Nuevo prospecto" no debe quedar debajo de todos. */}
+        {lista.otros.length > 0 ? (
+          <>
+            <Text style={estilos.seccion}>
+              Otros prospectos de la sucursal {lista.otros.length}
+            </Text>
+            {lista.otros.map((f) => (
+              <FilaProspecto key={f.id} fila={f} />
+            ))}
+          </>
+        ) : null}
+      </Pantalla>
+    </MarcoMenu>
   );
 }
 
@@ -449,26 +548,34 @@ export default function Prospectos() {
  */
 function estadoFoto(p: Prospecto): { texto: string; estado: Estado } | null {
   if (p.foto_uri === null) return null;
-  if (p.foto_subida_en !== null) return { texto: 'foto subida', estado: 'listo' };
-  if (p.foto_descartada === 1) return { texto: 'foto no subió', estado: 'error' };
+  if (p.foto_subida_en !== null)
+    return { texto: 'foto subida', estado: 'listo' };
+  if (p.foto_descartada === 1)
+    return { texto: 'foto no subió', estado: 'error' };
   return { texto: 'foto por subir', estado: 'pendiente' };
 }
 
 /** Estado de sincronizacion de una fila, en color + palabra (nunca color solo). */
 const ESTADO_SYNC = {
-  pendiente: { estado: 'pendiente' as const, texto: 'por subir' },
-  enviando: { estado: 'pendiente' as const, texto: 'subiendo' },
-  sincronizado: { estado: 'listo' as const, texto: 'subido' },
-  error: { estado: 'error' as const, texto: 'rechazado' },
+  pendiente: { estado: 'pendiente' as const, texto: 'Por subir' },
+  enviando: { estado: 'pendiente' as const, texto: 'Subiendo' },
+  sincronizado: { estado: 'listo' as const, texto: 'Sincronizado' },
+  error: { estado: 'error' as const, texto: 'Rechazado' },
 };
 
-function FilaProspecto({ prospecto }: { prospecto: Prospecto }) {
+/**
+ * Una fila de la lista. Con `fila.local` (lo capturo esta tablet) lleva la
+ * pastilla de subida, la de la foto y sus motivos; sin el (otro dia en otra
+ * tablet, o ya solo en el catalogo) es nombre, domicilio y el enlace a su hoja.
+ */
+function FilaProspecto({ fila }: { fila: FilaListaProspecto }) {
   const { datos } = useJawa();
   const { estilos } = useTema();
-  const pastilla = ESTADO_SYNC[prospecto.sync_estado];
-  const foto = estadoFoto(prospecto);
+  const prospecto = fila.local;
+  const pastilla = prospecto ? ESTADO_SYNC[prospecto.sync_estado] : null;
+  const foto = prospecto ? estadoFoto(prospecto) : null;
   const tipo =
-    prospecto.tipo_negocio_id === null
+    prospecto === null || prospecto.tipo_negocio_id === null
       ? null
       : // `obtenerTipoNegocio` y no `listarTiposNegocio`: hay que poder nombrar un
         // giro que el portal dio de baja despues de capturarse.
@@ -476,30 +583,49 @@ function FilaProspecto({ prospecto }: { prospecto: Prospecto }) {
 
   // Un prospecto anterior a T-75 no tiene espejo en `cliente`: sin ficha a donde
   // ir, la fila queda como siempre en vez de llevar a una pantalla vacia.
-  const destino = enlaceAFicha(prospecto.id, (id) => datos.catalogos.obtenerCliente(id) !== null);
+  const destino = fila.ficha;
 
   const tarjeta = (
-    <Tarjeta estado={pastilla.estado} etiqueta={tipo?.nombre ?? 'Sin tipo de negocio'}>
-      <Text style={estilos.textoTarjeta}>{prospecto.nombre}</Text>
-      <Cifra valor={prospecto.telefono} tamano="menor" />
-      <View style={{ flexDirection: 'row', gap: espacio.xs, marginTop: espacio.xs }}>
-        <Pastilla texto={pastilla.texto} estado={pastilla.estado} />
-        {prospecto.lat === null ? <Pastilla texto="sin ubicación" estado="neutro" /> : null}
-        {/* La foto tiene su PROPIA pastilla, separada de la del prospecto. Es lo
-            mismo que el diseno pide del modelo de datos: el estado de la foto no
-            es el estado del prospecto, y mezclarlos en pantalla haria creer que
-            un alta no entro cuando lo que no entro fue una foto opcional. */}
-        {foto ? <Pastilla texto={foto.texto} estado={foto.estado} /> : null}
-      </View>
-      {prospecto.sync_error ? <Text style={estilos.textoSuave}>{prospecto.sync_error}</Text> : null}
+    <Tarjeta
+      estado={pastilla?.estado ?? 'neutro'}
+      etiqueta={
+        prospecto === null
+          ? 'Prospecto'
+          : (tipo?.nombre ?? 'Sin tipo de negocio')
+      }
+    >
+      <Text style={estilos.textoTarjeta}>{fila.nombre}</Text>
+      <Text style={estilos.textoSuave}>
+        {primeraLineaDomicilio(fila.domicilio)}
+      </Text>
+      {prospecto && pastilla ? (
+        <View
+          style={{ flexDirection: 'row', gap: espacio.xs, marginTop: espacio.xs }}
+        >
+          <Pastilla texto={pastilla.texto} estado={pastilla.estado} />
+          {prospecto.lat === null ? (
+            <Pastilla texto="sin ubicación" estado="neutro" />
+          ) : null}
+          {/* La foto tiene su PROPIA pastilla, separada de la del prospecto. Es lo
+              mismo que el diseno pide del modelo de datos: el estado de la foto no
+              es el estado del prospecto, y mezclarlos en pantalla haria creer que
+              un alta no entro cuando lo que no entro fue una foto opcional. */}
+          {foto ? <Pastilla texto={foto.texto} estado={foto.estado} /> : null}
+        </View>
+      ) : null}
+      {prospecto?.sync_error ? (
+        <Text style={estilos.textoSuave}>{prospecto.sync_error}</Text>
+      ) : null}
       {/* El motivo del fallo de la foto se muestra solo mientras siga importando:
           si ya subio, un error viejo en pantalla se lee como un fallo que no
           existe. */}
-      {prospecto.foto_error && prospecto.foto_subida_en === null ? (
+      {prospecto?.foto_error && prospecto.foto_subida_en === null ? (
         <Text style={estilos.textoSuave}>Foto: {prospecto.foto_error}</Text>
       ) : null}
       {destino !== null ? (
-        <Text style={estilos.textoSuave}>Toca para abrir su ficha y darle su bienvenida.</Text>
+        <Text style={estilos.textoSuave}>
+          Toca para abrir su ficha y darle su bienvenida.
+        </Text>
       ) : null}
     </Tarjeta>
   );
@@ -508,7 +634,7 @@ function FilaProspecto({ prospecto }: { prospecto: Prospecto }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${prospecto.nombre}, abrir ficha`}
+      accessibilityLabel={`${fila.nombre}, abrir ficha`}
       onPress={() =>
         router.push({
           pathname: '/(jornada)/operacion/[clienteId]',

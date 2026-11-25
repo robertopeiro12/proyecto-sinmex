@@ -12,7 +12,13 @@ export type RazonRechazoMovimiento =
    */
   | 'presentacion-inexistente'
   /** El id (la clave) ya lo ocupa otro movimiento. */
-  | 'movimiento-id-ocupado';
+  | 'movimiento-id-ocupado'
+  /**
+   * Rediseño pieza 4: el `motivo_merma_id` nunca existio (bug de la tablet). Uno
+   * dado de baja SI se acepta (el vendedor lo eligio sin red), y no se miran las
+   * banderas `aplica_*`, como `motivo-visita-inexistente` (T-39).
+   */
+  | 'motivo-merma-inexistente';
 
 export interface RechazoMovimiento {
   razon: RazonRechazoMovimiento;

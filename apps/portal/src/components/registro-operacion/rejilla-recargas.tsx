@@ -14,7 +14,7 @@ import {
   crearCarga,
   editarCarga,
   eliminarCarga,
-  ETIQUETA_ESTADO,
+  textoEstadoCarga,
   leerBorrador,
   MAX_PIEZAS_LINEA,
   obtenerRejilla,
@@ -460,9 +460,7 @@ export function RejillaRecargas({
                                   />
                                 </td>
                               ) : (
-                                <td key={c.id} className={cn(CELDA, "text-foreground", c.estado === "rechazada" && "bg-destructive-soft/40")}>
-                                  {c.lineas.find((l) => l.presentacionId === p.id)?.piezas ?? ""}
-                                </td>
+                                <CeldaCarga key={c.id} carga={c} presentacionId={p.id} />
                               ),
                             )}
                             <td className={cn(CELDA, "bg-menu/40")}>
@@ -580,6 +578,13 @@ function CampoPiezas({
   );
 }
 
+/** Un renglon no aceptado (o toda la carga rechazada) va con el fondo rojo tenue. */
+function CeldaCarga({ carga, presentacionId }: { carga: CargaRejilla; presentacionId: string }) {
+  const linea = carga.lineas.find((l) => l.presentacionId === presentacionId);
+  const noAceptada = carga.estado === "rechazada" || linea?.aceptada === false;
+  return <td className={cn(CELDA, "text-foreground", noAceptada && "bg-destructive-soft/40")}>{linea?.piezas ?? ""}</td>;
+}
+
 function EncabezadoCarga({
   vendedor,
   carga,
@@ -619,7 +624,7 @@ function EncabezadoCarga({
           </span>
         )}
       </div>
-      <Etiqueta tono={TONO[carga.estado]}>{ETIQUETA_ESTADO[carga.estado]}</Etiqueta>
+      <Etiqueta tono={TONO[carga.estado]}>{textoEstadoCarga(carga)}</Etiqueta>
       {carga.estado === "rechazada" && carga.motivoRechazo && (
         <span className="line-clamp-2 text-[11px] whitespace-normal text-destructive" title={carga.motivoRechazo}>
           {carga.motivoRechazo}

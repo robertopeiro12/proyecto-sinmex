@@ -35,7 +35,11 @@ export const MOTIVO_ELIGE_SUCURSAL = 'Elige una sucursal.';
 export const MOTIVO_SUCURSAL_INEXISTENTE = 'No existe esa sucursal.';
 export const MOTIVO_VENDEDOR_INVALIDO = 'Elige un vendedor válido.';
 
-/** Una recarga (linea de carga) del dia, como la recibe el portal. */
+/**
+ * Una recarga (linea de carga) del dia, como la recibe el portal, con su estado
+ * por renglon (`aceptada`) y por carga (`renglonesAceptados` de `renglones`).
+ * Inventario solo suma los renglones aceptados.
+ */
 export type RecargaInventario = RecargaDelDia;
 
 /**

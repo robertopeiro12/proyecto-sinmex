@@ -3,6 +3,8 @@ import type { ResultadoApiCarga } from '@/sincronizacion/api-carga';
 import type { CargaPull } from '@/sincronizacion/contrato';
 
 import {
+  aceptadasDe,
+  alternarRenglon,
   crearRespondedorCarga,
   cuerpoRespuesta,
   existencias,
@@ -14,9 +16,19 @@ import {
   MENSAJE_SIN_RED_CARGA,
   pastillaCarga,
   puedeResponder,
+  cambiosNetos,
+  salio,
+  textoCambios,
+  seleccionarTodos,
+  textoAceptar,
+  textoEstadoCarga,
   textoTeQuedan,
+  tituloAvisoCarga,
+  todosSeleccionados,
+  etiquetaSinCortarVolumen,
+  palabraPiezas,
+  piezasDeCarga,
   totalPiezas,
-  validarRespuesta,
   type PasosRespuestaCarga,
 } from './inventario';
 
@@ -37,7 +49,7 @@ const CARGA: CargaPull = {
   version: 1,
   respondida_en: '2026-10-22T15:00:00.000Z',
   activo: 1,
-  lineas: [{ presentacion_id: 'pre-1', piezas: 24 }],
+  lineas: [{ presentacion_id: 'pre-1', piezas: 24, aceptada: null }],
 };
 
 function pasos(respuestas: (ResultadoApiCarga | Error)[]) {
@@ -61,21 +73,17 @@ describe('reexporta las reglas de la capa de datos', () => {
   });
 });
 
-describe('la respuesta del vendedor (D2)', () => {
-  it('aceptar no pide nada; rechazar pide motivo de hasta 300', () => {
-    expect(validarRespuesta('aceptar', '')).toEqual([]);
-    expect(validarRespuesta('rechazar', '   ')).toEqual(['Escribe por qué rechazas la carga.']);
-    expect(validarRespuesta('rechazar', 'x'.repeat(301))).toEqual(['El motivo lleva hasta 300 caracteres.']);
-    expect(validarRespuesta('rechazar', 'Faltan 2 cajas')).toEqual([]);
+describe('la respuesta del vendedor (pieza 3: checklist sin motivo)', () => {
+  it('el cuerpo lleva la version que se VE y los renglones aceptados; vacio rechaza', () => {
+    expect(cuerpoRespuesta(3, ['pre-1', 'pre-2'])).toEqual({ version: 3, aceptadas: ['pre-1', 'pre-2'] });
+    expect(cuerpoRespuesta(3, [])).toEqual({ version: 3, aceptadas: [] });
   });
 
-  it('el cuerpo lleva la version que se VE y el motivo recortado solo al rechazar', () => {
-    expect(cuerpoRespuesta('aceptar', 'lo que sea', 3)).toEqual({ version: 3, accion: 'aceptar' });
-    expect(cuerpoRespuesta('rechazar', '  Faltan 2 cajas  ', 3)).toEqual({
-      version: 3,
-      accion: 'rechazar',
-      motivo: 'Faltan 2 cajas',
-    });
+  it('el cuerpo no comparte el arreglo que recibe', () => {
+    const ids = ['pre-1'];
+    const cuerpo = cuerpoRespuesta(1, ids);
+    ids.push('pre-2');
+    expect(cuerpo).toEqual({ version: 1, aceptadas: ['pre-1'] });
   });
 
   it('solo se responde una pendiente, viva y de hoy', () => {
@@ -88,15 +96,53 @@ describe('la respuesta del vendedor (D2)', () => {
 
 describe('textos del inventario', () => {
   it('pastillaCarga y totalPiezas', () => {
-    expect(pastillaCarga('pendiente')).toEqual({ texto: 'Por aceptar', estado: 'pendiente' });
-    expect(pastillaCarga('aceptada')).toEqual({ texto: 'Aceptada', estado: 'listo' });
-    expect(pastillaCarga('rechazada')).toEqual({ texto: 'Rechazada', estado: 'error' });
+    const l = (aceptada: 0 | 1 | null) => ({ aceptada });
+    expect(pastillaCarga({ estado: 'pendiente', lineas: [l(null)] })).toEqual({ texto: 'Por aceptar', estado: 'pendiente' });
+    expect(pastillaCarga({ estado: 'aceptada', lineas: [l(1), l(0)] })).toEqual({ texto: 'Aceptada 1 de 2', estado: 'listo' });
+    expect(pastillaCarga({ estado: 'rechazada', lineas: [l(0)] })).toEqual({ texto: 'Rechazada', estado: 'error' });
+    expect(pastillaCarga({ estado: 'aceptada', lineas: [l(0)] })).toEqual({ texto: 'Rechazada', estado: 'error' });
     expect(totalPiezas([{ piezas: 24 }, { piezas: 12 }])).toBe(36);
+  });
+
+  it('palabraPiezas: singular solo con 1 (N2)', () => {
+    expect(palabraPiezas(1)).toBe('pieza');
+    expect(palabraPiezas(0)).toBe('piezas');
+    expect(palabraPiezas(90)).toBe('piezas');
+  });
+
+  it('etiquetaSinCortarVolumen: el volumen queda pegado a su unidad (D3)', () => {
+    expect(etiquetaSinCortarVolumen('Horchata 1 L')).toBe('Horchata 1\u00A0L');
+    expect(etiquetaSinCortarVolumen('Tamarindo 500 ml')).toBe('Tamarindo 500\u00A0ml');
+    expect(etiquetaSinCortarVolumen('Agua de sabor')).toBe('Agua de sabor');
+  });
+
+  it('piezasDeCarga: aceptada cuenta solo lo que entro (D6); pendiente o rechazada, todo', () => {
+    const lineas = [
+      { piezas: 40, aceptada: 1 as const },
+      { piezas: 30, aceptada: 1 as const },
+      { piezas: 20, aceptada: 1 as const },
+      { piezas: 10, aceptada: 0 as const },
+    ];
+    expect(piezasDeCarga({ estado: 'aceptada', lineas })).toBe(90);
+    expect(piezasDeCarga({ estado: 'aceptada', lineas: [{ piezas: 5, aceptada: null }] })).toBe(5);
+    expect(piezasDeCarga({ estado: 'pendiente', lineas: [{ piezas: 40, aceptada: null }, { piezas: 10 }] })).toBe(50);
+    expect(piezasDeCarga({ estado: 'rechazada', lineas })).toBe(100);
+  });
+
+  it('textoEstadoCarga: Aceptada, Aceptada 3 de 5, Rechazada, Por aceptar', () => {
+    const l = (aceptada: 0 | 1 | null) => ({ aceptada });
+    expect(textoEstadoCarga({ estado: 'aceptada', lineas: [l(1), l(1)] })).toBe('Aceptada');
+    expect(textoEstadoCarga({ estado: 'aceptada', lineas: [l(null), l(null)] })).toBe('Aceptada');
+    expect(textoEstadoCarga({ estado: 'aceptada', lineas: [l(1), l(1), l(1), l(0), l(0)] })).toBe('Aceptada 3 de 5');
+    expect(textoEstadoCarga({ estado: 'aceptada', lineas: [l(0), l(0)] })).toBe('Rechazada');
+    expect(textoEstadoCarga({ estado: 'rechazada', lineas: [l(null)] })).toBe('Rechazada');
+    expect(textoEstadoCarga({ estado: 'pendiente', lineas: [l(null)] })).toBe('Por aceptar');
   });
 
   it('"Te quedan N" descuenta lo capturado en esta venta; si no alcanza, dice cuanto falta', () => {
     expect(textoTeQuedan(20, 0)).toEqual({ texto: 'Te quedan 20', falta: false });
     expect(textoTeQuedan(20, 20)).toEqual({ texto: 'Te quedan 0', falta: false });
+    expect(textoTeQuedan(20, 19)).toEqual({ texto: 'Te queda 1', falta: false });
     expect(textoTeQuedan(20, 21)).toEqual({ texto: 'Falta 1 pieza', falta: true });
     expect(textoTeQuedan(20, 26)).toEqual({ texto: 'Faltan 6 piezas', falta: true });
   });
@@ -129,6 +175,67 @@ describe('textos del inventario', () => {
         regalos: [],
       }),
     ).toEqual([]);
+  });
+});
+
+describe('el checklist de la carga (pieza 3)', () => {
+  const ids = ['pre-1', 'pre-2', 'pre-3'];
+
+  it('alternarRenglon prende y apaga uno sin tocar el conjunto que recibe', () => {
+    const vacio = new Set<string>();
+    const uno = alternarRenglon(vacio, 'pre-2');
+    expect([...uno]).toEqual(['pre-2']);
+    expect(vacio.size).toBe(0);
+    expect([...alternarRenglon(uno, 'pre-2')]).toEqual([]);
+  });
+
+  it('seleccionarTodos: si faltan, palomea todos; si ya estan todos, los quita', () => {
+    expect([...seleccionarTodos(new Set(['pre-1']), ids)].sort()).toEqual(ids);
+    expect([...seleccionarTodos(new Set(ids), ids)]).toEqual([]);
+    expect(todosSeleccionados(new Set(ids), ids)).toBe(true);
+    expect(todosSeleccionados(new Set(['pre-1']), ids)).toBe(false);
+    expect(todosSeleccionados(new Set(), [])).toBe(false);
+  });
+
+  it('aceptadasDe: en el orden de la carga y solo los renglones que siguen en ella', () => {
+    const lineas = ids.map((presentacion_id) => ({ presentacion_id }));
+    expect(aceptadasDe(lineas, new Set(['pre-3', 'pre-1', 'pre-vieja']))).toEqual(['pre-1', 'pre-3']);
+  });
+
+  it('textoAceptar: "Aceptar 6 de 8"', () => {
+    expect(textoAceptar(6, 8)).toBe('Aceptar 6 de 8');
+  });
+});
+
+describe('el resumen de Inventario (maqueta 5)', () => {
+  it('salio = cargado − existencia (vendido, regalado, mermas y consumo)', () => {
+    expect(salio({ cargado: 48, existencia: 28 })).toBe(20);
+    expect(salio({ cargado: 0, existencia: -4 })).toBe(4);
+    // Un cambio que recibe mas de lo que entrega sube la existencia arriba de lo cargado.
+    expect(salio({ cargado: 10, existencia: 13 })).toBe(0);
+  });
+
+  it('Cargado − Salió + Cambios = Existencia cuando hay cambios', () => {
+    // Cargo 10, vendio 4, recibio 5 de cambio y entrego 1: existencia 10.
+    const fila = { cargado: 10, existencia: 10, cambiosRecibidos: 5, cambiosEntregados: 1 };
+    expect(cambiosNetos(fila)).toBe(4);
+    expect(salio(fila)).toBe(4);
+    expect(fila.cargado - salio(fila) + cambiosNetos(fila)).toBe(fila.existencia);
+    // Entrega mas de lo que recibe: la existencia baja sin que sea venta.
+    const otra = { cargado: 10, existencia: 5, cambiosRecibidos: 0, cambiosEntregados: 3 };
+    expect(salio(otra)).toBe(2);
+    expect(otra.cargado - salio(otra) + cambiosNetos(otra)).toBe(otra.existencia);
+  });
+
+  it('textoCambios: signo explicito', () => {
+    expect(textoCambios(4)).toBe('+4');
+    expect(textoCambios(-2)).toBe('−2');
+    expect(textoCambios(0)).toBe('0');
+  });
+
+  it('tituloAvisoCarga: la primera es "Carga por aceptar", las demas "Recarga esperando"', () => {
+    expect(tituloAvisoCarga({ numero: 1 })).toBe('Carga por aceptar');
+    expect(tituloAvisoCarga({ numero: 2 })).toBe('Recarga esperando');
   });
 });
 

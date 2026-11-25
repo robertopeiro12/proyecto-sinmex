@@ -1,13 +1,12 @@
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { BackHandler, Pressable, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
-  ayudaRangoFecha,
   ErrorCobranza,
   ErrorJornada,
   leerAbonos,
-  leerMontoCentavos,
   lineasDelCobro,
   NOMBRE_METODO,
   problemasDeCobro,
@@ -15,25 +14,25 @@ import {
   type LineaDeCobro,
   type MetodoPago,
   type NotaPendiente,
-  type SyncEstado,
 } from '@/datos';
+import { notaAlFrente, textoOtrasNotas, validarCobro, type OpcionCobro } from '@/estado/cobrar';
+import { montoACentavos } from '@/estado/gasto';
+import { crearGuardiaRegistro } from '@/estado/movimiento';
 import { agruparNotasParaCobrar } from '@/estado/notas-asignadas';
 import { useJawa } from '@/estado/proveedor-jawa';
-import { useSesion } from '@/estado/proveedor-sesion';
+import { textoSaldoPendiente } from '@/estado/venta-pasos';
+import { avisoNoImpreso, ticketsDelCobro } from '@/impresion/datos-ticket';
+import type { DatosTicket } from '@/impresion/ticket';
+import { useImpresion } from '@/impresion/usar-impresion';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
+import { Chip } from '@/ui/chip';
 import { Cifra, pesos } from '@/ui/cifra';
-import { Opcion } from '@/ui/opcion';
-import { Pantalla, Pastilla, Tarjeta, type Estado } from '@/ui/pantalla';
+import { Icono } from '@/ui/icono';
+import { formatearFechaCorta } from '@/ui/momento';
+import { Pantalla, Pastilla, Tarjeta } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
-import { colores, espacio, grosor } from '@/ui/tokens';
-
-/**
- * Los tres pasos del cobro (D16). Un cobro grabado no se edita en la tablet:
- * la revision es obligatoria y al final se muestra el monto y como quedaron las
- * notas (T-21: la cobranza no lleva folio).
- */
-type Paso = 'captura' | 'revision' | 'grabada';
+import { colores, espacio, fuente, grosor, tipo } from '@/ui/tokens';
 
 const METODOS: { valor: MetodoPago; etiqueta: string }[] = [
   { valor: 'efectivo', etiqueta: 'Efectivo' },
@@ -41,102 +40,37 @@ const METODOS: { valor: MetodoPago; etiqueta: string }[] = [
   { valor: 'cheque', etiqueta: 'Cheque' },
 ];
 
-/** Como se le dice al vendedor en que va cada cobro. */
-const ETIQUETA_SYNC: Record<SyncEstado, string> = {
-  pendiente: 'Por subir',
-  enviando: 'Subiendo',
-  sincronizado: 'Sincronizado',
-  error: 'Con error',
+const ETIQUETA_OPCION: Record<OpcionCobro, string> = {
+  liquidar: 'Liquidar',
+  abonar: 'Abonar',
 };
 
-const ESTADO_SYNC: Record<SyncEstado, Estado> = {
-  pendiente: 'pendiente',
-  enviando: 'pendiente',
-  sincronizado: 'listo',
-  error: 'error',
-};
-
-/** Centavos al texto del campo de monto, sin coma flotante ("150.50"). */
-function textoMonto(centavos: number): string {
-  return `${Math.floor(centavos / 100)}.${String(centavos % 100).padStart(2, '0')}`;
-}
-
 /**
- * Una nota pendiente que se puede elegir: folio, # de nota, fecha, total, saldo
- * y abonos previos ([[Cobranza-Abono]]: "mostrar fechas de abonos previos y
- * saldo pendiente").
- */
-function NotaSeleccionable({
-  nota,
-  seleccionada,
-  onPress,
-  condicion = null,
-}: {
-  nota: NotaPendiente;
-  seleccionada: boolean;
-  onPress: () => void;
-  /** "Debe liquidar" / "Debe abonar" de una nota asignada (spec 2026-11-13). */
-  condicion?: string | null;
-}) {
-  const { estilos } = useTema();
-  const abonos = leerAbonos(nota.abonos_json);
-  return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ selected: seleccionada }}
-      accessibilityLabel={nota.num_nota ? `Nota ${nota.num_nota}, folio ${nota.folio}` : `Folio ${nota.folio}`}
-      onPress={onPress}
-      style={({ pressed }) => [
-        estilos.tarjeta,
-        {
-          gap: espacio.xs,
-          borderWidth: grosor.fuerte,
-          borderColor: seleccionada ? colores.primario : colores.borde,
-        },
-        seleccionada && { backgroundColor: colores.primarioTenue },
-        pressed && { transform: [{ translateY: grosor.fuerte }], opacity: 0.9 },
-      ]}
-    >
-      <Text style={estilos.textoTarjeta}>
-        <Cifra valor={nota.folio} />
-        {nota.num_nota ? (
-          <>
-            {' '}
-            · nota <Cifra valor={nota.num_nota} />
-          </>
-        ) : null}{' '}
-        · {nota.fecha}
-      </Text>
-      <Text style={estilos.textoSuave}>
-        Total <Cifra valor={pesos(nota.monto_total_centavos)} tono="suave" /> · saldo{' '}
-        <Cifra valor={pesos(nota.saldo_centavos)} tono="aviso" />
-      </Text>
-      {abonos.map((a, i) => (
-        <Text key={`${a.fecha_pago}-${i}`} style={estilos.textoSuave}>
-          Abono del {a.fecha_pago}: <Cifra valor={pesos(a.monto_centavos)} tono="suave" /> en{' '}
-          {NOMBRE_METODO[a.metodo_pago] ?? a.metodo_pago}
-        </Text>
-      ))}
-      {condicion ? <Pastilla texto={condicion} estado="pendiente" /> : null}
-      {seleccionada ? <Text style={estilos.textoSuave}>Seleccionada</Text> : null}
-    </Pressable>
-  );
-}
-
-/**
- * Cobranza / abono de un cliente (T-20): elegir la nota, capturar el pago,
- * revisar el reparto y grabar. Sin folio desde T-21.
+ * Cobrar una nota pendiente (rediseno pieza 2, maqueta 13): la nota al frente
+ * (la pedida, la asignada o la mas antigua: `notaAlFrente`), Liquidar o Abonar,
+ * el metodo de pago y "Grabar", sin paso de revision. "Otras notas pendientes"
+ * abre las demas notas del cliente (asignadas y otras) para poner otra al frente.
  *
- * El reparto (nota elegida → otras notas → saldo a favor) lo calcula el
- * repositorio con la misma funcion que el servidor; esta pantalla solo lo
- * muestra.
+ * Sin firma: el cliente firma a mano la nota impresa. La fecha de pago es hoy.
+ * El reparto lo hace el repositorio (`datos.cobranzas.registrar`); con Liquidar
+ * o un abono menor al saldo todo cae en la nota del frente.
  */
 export default function PantallaCobranza() {
-  // `notaId`: la nota asignada que llega preseleccionada desde la ficha o la pantalla de la nota.
-  const { clienteId, notaId: notaIdInicial } = useLocalSearchParams<{ clienteId: string; notaId?: string }>();
+  // `notaId`: la nota que la ficha o la venta piden cobrar (`notaParaCobrar`).
+  // `desde: 'venta'`: se llego desde "Ir a cobrar" de la venta; al grabar se regresa a ella.
+  const {
+    clienteId,
+    notaId: notaIdInicial,
+    desde,
+  } = useLocalSearchParams<{ clienteId: string; notaId?: string; desde?: string }>();
   const { datos, vendedor, versionCatalogos } = useJawa();
-  const { ultimaSincronizacion } = useSesion();
-  const { estilos } = useTema();
+  const { estilos, t } = useTema();
+  const insets = useSafeAreaInsets();
+  const { imprimirTickets } = useImpresion();
+  /** Rediseño pieza 7: tras grabar se reimprime cada nota que tocó el cobro; un fallo solo avisa. */
+  const [impresion, setImpresion] = useState<'imprimiendo' | 'enviada' | 'no-impresa' | null>(null);
+  /** El motivo de la nota sin imprimir, para el vendedor (pieza 7b). */
+  const [motivoNoImpresa, setMotivoNoImpresa] = useState<string | undefined>(undefined);
 
   // El dia de trabajo del reloj de la tablet: el de `fecha_operacion`.
   const hoy = datos.deps.reloj.hoy();
@@ -150,68 +84,95 @@ export default function PantallaCobranza() {
 
   const notas = useMemo(() => {
     void versionCatalogos;
-    return datos.catalogos.notasPendientesDe(clienteId);
+    return datos.catalogos.notasPendientesDe(clienteId).filter((n) => n.saldo_centavos > 0);
   }, [datos, clienteId, versionCatalogos]);
 
-  // "Cobros de hoy": se relee al volver a la pantalla y cuando el push cambia
-  // su estado.
+  // Las asignadas se releen al volver a la pantalla (cobrar no publica cambio de catalogo).
   const [vueltas, setVueltas] = useState(0);
   useFocusEffect(
     useCallback(() => {
       setVueltas((n) => n + 1);
     }, []),
   );
-
-  // Spec 2026-11-13: las asignadas de hoy van primero, en su propio grupo.
-  const grupos = useMemo(() => {
+  const asignadas = useMemo(() => {
     void vueltas;
     void versionCatalogos;
-    return agruparNotasParaCobrar(notas, datos.notasAsignadas.deHoyDelCliente(clienteId));
-  }, [datos, clienteId, notas, vueltas, versionCatalogos]);
+    return datos.notasAsignadas.deHoyDelCliente(clienteId);
+  }, [datos, clienteId, vueltas, versionCatalogos]);
 
-  const cobrosDeHoy = useMemo(() => {
-    void vueltas;
-    void ultimaSincronizacion;
-    void versionCatalogos;
-    return datos.cobranzas.delDia(clienteId);
-  }, [datos, clienteId, vueltas, ultimaSincronizacion, versionCatalogos]);
-
-  const [paso, setPaso] = useState<Paso>('captura');
-  const [notaId, setNotaId] = useState<string | null>(notaIdInicial ?? null);
+  /** La nota que el vendedor puso al frente desde "Otras notas"; al inicio, la pedida. */
+  const [notaElegida, setNotaElegida] = useState<string | null>(notaIdInicial ?? null);
+  const [verOtras, setVerOtras] = useState(false);
+  const [opcion, setOpcion] = useState<OpcionCobro>('liquidar');
   const [montoTexto, setMontoTexto] = useState('');
   const [metodo, setMetodo] = useState<MetodoPago>('efectivo');
-  const [fechaPago, setFechaPago] = useState(hoy);
   const [problemas, setProblemas] = useState<string[]>([]);
-  const [grabado, setGrabado] = useState<{
-    cobro: Cobranza;
-    lineas: LineaDeCobro[];
-    saldoFavorCentavos: number;
-  } | null>(null);
-  const [grabando, setGrabando] = useState(false);
+  const [grabado, setGrabado] = useState<{ cobro: Cobranza; lineas: LineaDeCobro[]; saldoFavorCentavos: number } | null>(
+    null,
+  );
+  /** Guardia de doble toque: un segundo toque en "Grabar" no graba otro cobro. */
+  const [guardia] = useState(() => crearGuardiaRegistro());
 
-  const nota: NotaPendiente | null = notas.find((n) => n.id === notaId) ?? null;
-  const montoCentavos = leerMontoCentavos(montoTexto);
-  // `nota.id` siempre es `notaId` cuando `nota` no es null (viene de buscarlo por
-  // ese id): pasar el primitivo y no el objeto deja que `useMemo` de abajo solo
-  // dependa de un id, no de una referencia que cambia en cada render.
-  const notaSeleccionadaId = nota?.id ?? null;
+  const nota = notaAlFrente(notas, asignadas, notaElegida);
+  const grupos = agruparNotasParaCobrar(notas, asignadas);
+  const asignadaAlFrente = nota ? grupos.asignadas.find((a) => a.nota.id === nota.id) : undefined;
+  const otras = nota ? agruparNotasParaCobrar(notas.filter((n) => n.id !== nota.id), asignadas) : grupos;
+  const numOtras = otras.asignadas.length + otras.otras.length;
 
-  // El reparto se deriva en vivo, no se congela en estado: si un pull cambia un
-  // saldo mientras el vendedor esta en la revision, lo que ve tiene que seguir
-  // siendo lo que `grabar()` va a escribir, no una foto de cuando entro.
-  const reparto = useMemo(() => {
-    void versionCatalogos;
-    if (notaSeleccionadaId === null || montoCentavos === null) return null;
-    return datos.cobranzas.previsualizar(clienteId, notaSeleccionadaId, montoCentavos);
-  }, [datos, clienteId, notaSeleccionadaId, montoCentavos, versionCatalogos]);
+  /** "Otras notas pendientes" abierta (y el cobro sin grabar). */
+  const listaAbierta = verOtras && grabado === null;
+
+  /** Atras: `true` = se atendio aqui (cerrar la lista); `false` = salir. */
+  const atras = useCallback((): boolean => {
+    if (!listaAbierta) return false;
+    setVerOtras(false);
+    return true;
+  }, [listaAbierta, setVerOtras]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', atras);
+      return () => sub.remove();
+    }, [atras]),
+  );
+
+  const cabecera = (
+    <Stack.Screen
+      options={{
+        headerTitle: () => (
+          <View>
+            <Text style={{ fontFamily: fuente.tituloMedio, fontSize: t(tipo.subtitulo), color: colores.tinta }}>
+              {listaAbierta ? 'Otras notas pendientes' : 'Cobrar'}
+            </Text>
+            {cliente ? (
+              <Text style={{ fontFamily: fuente.cuerpo, fontSize: t(tipo.menor), color: colores.tintaSuave }}>
+                {cliente.nombre}
+              </Text>
+            ) : null}
+          </View>
+        ),
+        headerLeft: () => (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Atrás"
+            hitSlop={espacio.sm}
+            onPress={() => {
+              if (!atras()) router.back();
+            }}
+            style={{ paddingRight: espacio.md, paddingVertical: espacio.xs }}
+          >
+            <Icono nombre="atras" tamano={t(tipo.subtitulo)} color={colores.tinta} />
+          </Pressable>
+        ),
+      }}
+    />
+  );
 
   // Antes de este punto solo hay hooks: se llaman siempre, en el mismo orden.
   if (!cliente || !vendedor) {
     return (
-      <Pantalla
-        titulo="Cliente no encontrado"
-        subtitulo="No está en el catálogo local de esta tablet."
-      >
+      <Pantalla titulo="Cliente no encontrado" subtitulo="No está en el catálogo local de esta tablet.">
+        {cabecera}
         <Text style={estilos.textoSuave}>
           Puede que lo hayan dado de alta después de tu última sincronización.
         </Text>
@@ -222,79 +183,20 @@ export default function PantallaCobranza() {
   const vendedorId = vendedor.id;
   const nombreCliente = cliente.nombre;
 
-  function elegirNota(id: string) {
-    setNotaId(id);
-    setProblemas([]);
-  }
-
-  function liquidar() {
-    if (nota) setMontoTexto(textoMonto(nota.saldo_centavos));
-  }
-
-  function revisar() {
-    const encontrados = problemasDeCobro({
-      notaFecha: nota?.fecha ?? null,
-      montoCentavos,
-      metodoPago: metodo,
-      fechaPago,
-      hoy,
-    });
-    setProblemas(encontrados);
-    if (encontrados.length > 0 || nota === null || montoCentavos === null) return;
-    setPaso('revision');
-  }
-
-  function corregir() {
-    setProblemas([]);
-    setPaso('captura');
-  }
-
-  function grabar() {
-    // `revisar` no deja llegar aqui sin nota ni monto; la comprobacion es para el tipo.
-    if (nota === null || montoCentavos === null) return;
-    // Guardia contra doble toque: un segundo toque mientras el primero corre
-    // grabaria el cobro dos veces.
-    if (grabando) return;
-    setGrabando(true);
-    // Antes de grabar: una nota que queda en 0 sale de `notas` y ya no se
-    // encontraria su folio.
-    const lineas = reparto ? lineasDelCobro(reparto, notas) : [];
-    const saldoFavorCentavos = reparto?.saldoFavorCentavos ?? 0;
-    try {
-      const cobro = datos.cobranzas.registrar({
-        vendedorId,
-        clienteId,
-        ventaNotaId: nota.id,
-        montoCentavos,
-        metodoPago: metodo,
-        fechaPago,
-      });
-      setProblemas([]);
-      setGrabado({ cobro, lineas, saldoFavorCentavos });
-      setPaso('grabada');
-    } catch (e) {
-      setProblemas([
-        e instanceof ErrorCobranza || e instanceof ErrorJornada
-          ? e.message
-          : 'No se pudo grabar el cobro. No se guardó nada; intenta de nuevo.',
-      ]);
-    } finally {
-      setGrabando(false);
-    }
-  }
-
   /* ---------------------------------------------------------------- */
-  /* 3. Grabada: el monto y como quedaron las notas (T-21)             */
+  /* Grabado: el monto y como quedaron las notas                       */
   /* ---------------------------------------------------------------- */
 
-  if (paso === 'grabada' && grabado) {
+  // Antes que "sin notas": liquidar la unica nota deja `notas` vacio.
+  if (grabado) {
     const { cobro, lineas, saldoFavorCentavos } = grabado;
     return (
-      <Pantalla titulo="Cobro grabado" subtitulo={`${nombreCliente} · así quedaron sus notas.`}>
-        <Tarjeta estado="listo" etiqueta="Cobro">
+      <Pantalla subtitulo={`${nombreCliente} · así quedaron sus notas.`}>
+        {cabecera}
+        <Tarjeta estado="listo" etiqueta="Cobro grabado">
           <Cifra valor={pesos(cobro.monto_centavos)} tamano="grande" />
           <Text style={estilos.textoSuave}>
-            En {NOMBRE_METODO[cobro.metodo_pago]} · pagado el {cobro.fecha_pago}
+            En {NOMBRE_METODO[cobro.metodo_pago]} · pagado el {formatearFechaCorta(cobro.fecha_pago)}
           </Text>
           {lineas.map((l) => (
             <Text key={l.notaId} style={estilos.textoTarjeta}>
@@ -314,15 +216,27 @@ export default function PantallaCobranza() {
             </Text>
           ) : null}
           <Text style={estilos.textoSuave}>
-            Quedó guardado en la tablet y sube solo al sincronizar. Si otra tablet o la oficina ya
-            cobró esa nota, el servidor pasa el dinero a las otras notas o al saldo a favor.
+            Quedó guardado en la tablet y sube solo al sincronizar. Si otra tablet o la oficina ya cobró esa
+            nota, el servidor pasa el dinero a las otras notas o al saldo a favor.
           </Text>
         </Tarjeta>
-
-        {/* Unica accion de este paso. */}
+        {impresion === 'imprimiendo' ? <Text style={estilos.textoSuave}>Imprimiendo la nota…</Text> : null}
+        {impresion === 'no-impresa' ? (
+          <Tarjeta estado="pendiente" etiqueta="Nota sin imprimir">
+            <Text style={estilos.textoTarjeta}>{avisoNoImpreso(motivoNoImpresa)}</Text>
+            <Boton
+              etiqueta="Seleccionar impresora"
+              icono="impresora"
+              tono="neutra"
+              onPress={() => router.push('/(jornada)/impresora')}
+              estilo={{ marginTop: espacio.md }}
+            />
+          </Tarjeta>
+        ) : null}
+        {/* `back` y no `dismissTo` la ruta: debajo esta la venta (que relee la nota al enfocarse) o la ficha. */}
         <Boton
-          etiqueta="Volver al cliente"
-          glifo="←"
+          etiqueta={desde === 'venta' ? 'Seguir con la venta' : 'Volver al cliente'}
+          icono="atras"
           onPress={() => router.back()}
           estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
         />
@@ -330,214 +244,316 @@ export default function PantallaCobranza() {
     );
   }
 
-  /* ---------------------------------------------------------------- */
-  /* 2. Revision: el reparto previsto                                  */
-  /* ---------------------------------------------------------------- */
-
-  if (paso === 'revision' && reparto && nota && montoCentavos !== null) {
+  /** Lo que se desliza arriba y, si hay, una barra fija abajo. */
+  function marco(cuerpo: ReactNode, abajo: ReactNode = null) {
     return (
-      <Pantalla
-        titulo="Revisa el cobro"
-        subtitulo={`${nombreCliente} · un cobro grabado no se puede editar.`}
-      >
-        <Tarjeta estado="accion" etiqueta="Cobro">
-          <Cifra valor={pesos(montoCentavos)} tamano="grande" />
-          <Text style={estilos.textoSuave}>
-            En {NOMBRE_METODO[metodo]} · pagado el {fechaPago.trim()} · nota{' '}
-            <Cifra valor={nota.folio} tono="suave" />
-          </Text>
-        </Tarjeta>
-
-        <Tarjeta etiqueta="Cómo se reparte">
-          {lineasDelCobro(reparto, notas).map((l) => (
-            <Text key={l.notaId} style={estilos.textoTarjeta}>
-              <Cifra valor={l.folio} /> · <Cifra valor={pesos(l.montoCentavos)} /> ·{' '}
-              {l.saldoDespuesCentavos === 0 ? (
-                'queda pagada'
-              ) : (
-                <>
-                  queda debiendo <Cifra valor={pesos(l.saldoDespuesCentavos)} tono="aviso" />
-                </>
-              )}
-            </Text>
-          ))}
-          {reparto.saldoFavorCentavos > 0 ? (
-            <Text style={estilos.textoTarjeta}>
-              Saldo a favor del cliente:{' '}
-              <Cifra valor={pesos(reparto.saldoFavorCentavos)} tono="exito" />
-            </Text>
-          ) : null}
-        </Tarjeta>
-
-        {problemas.map((p) => (
-          <Text key={p} style={estilos.error}>
-            {p}
-          </Text>
-        ))}
-
-        {/*
-          Opuestas en tres ejes (sistema de diseno): Grabar es relleno naranja con
-          ✓; Corregir es contorno neutro con ←. Grabar es la unica primaria.
-        */}
-        <View style={estilos.filaAcciones}>
-          <Boton etiqueta="Corregir" tono="neutra" glifo="←" onPress={corregir} />
-          <Boton etiqueta="Grabar cobro" glifo="✓" onPress={grabar} ocupado={grabando} />
-        </View>
-      </Pantalla>
+      <View style={{ flex: 1, backgroundColor: colores.papel }}>
+        {cabecera}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[estilos.contenido, { paddingBottom: espacio.lg }]}
+          keyboardShouldPersistTaps="handled"
+        >
+          {cuerpo}
+        </ScrollView>
+        {abajo}
+      </View>
     );
   }
 
   /* ---------------------------------------------------------------- */
-  /* 1. Captura                                                        */
+  /* Sin notas                                                         */
   /* ---------------------------------------------------------------- */
 
-  // Lo mas grave manda: un error sobre "falta subir", y "falta subir" sobre "todo subido".
-  const estadoCobros: Estado = cobrosDeHoy.some((c) => c.sync_estado === 'error')
-    ? 'error'
-    : cobrosDeHoy.some((c) => c.sync_estado !== 'sincronizado')
-      ? 'pendiente'
-      : cobrosDeHoy.length > 0
-        ? 'listo'
-        : 'neutro';
+  if (nota === null) {
+    return marco(
+      <Tarjeta etiqueta="Sin notas">
+        <Text style={estilos.textoTarjeta}>Este cliente no tiene notas pendientes en la tablet.</Text>
+        <Text style={estilos.textoSuave}>Las notas bajan del portal al sincronizar.</Text>
+      </Tarjeta>,
+    );
+  }
 
-  return (
-    <Pantalla
-      formulario
-      titulo={`Cobranza · ${nombreCliente}`}
-      subtitulo="Elige la nota que paga. Si paga de más, el resto va a sus otras notas y después a saldo a favor."
-    >
-      {cliente.saldo_favor_centavos > 0 ? (
-        <Tarjeta estado="listo" etiqueta="Saldo a favor">
-          <Cifra valor={pesos(cliente.saldo_favor_centavos)} tamano="destacado" tono="exito" />
-          <Text style={estilos.textoSuave}>Lo aplica la oficina desde el portal.</Text>
-        </Tarjeta>
-      ) : null}
+  /** Pone otra nota al frente y empieza el cobro de cero (otro saldo). */
+  function elegirNota(id: string) {
+    setNotaElegida(id);
+    setOpcion('liquidar');
+    setMontoTexto('');
+    setProblemas([]);
+    setVerOtras(false);
+  }
 
-      {grupos.asignadas.length > 0 ? (
-        <>
-          <Text style={estilos.seccion}>Asignadas a ti</Text>
-          {grupos.asignadas.map(({ nota: n, etiqueta }) => (
-            <NotaSeleccionable
-              key={n.id}
-              nota={n}
-              condicion={etiqueta}
-              seleccionada={n.id === notaId}
-              onPress={() => elegirNota(n.id)}
-            />
-          ))}
-          {grupos.otras.length > 0 ? <Text style={estilos.seccion}>Otras notas del cliente</Text> : null}
-          {grupos.otras.map((n) => (
-            <NotaSeleccionable
-              key={n.id}
-              nota={n}
-              seleccionada={n.id === notaId}
-              onPress={() => elegirNota(n.id)}
-            />
-          ))}
-        </>
-      ) : (
-        <Text style={estilos.seccion}>Notas pendientes</Text>
-      )}
-      {grupos.asignadas.length > 0 ? null : notas.length === 0 ? (
-        <Tarjeta etiqueta="Sin notas">
-          <Text style={estilos.textoTarjeta}>Este cliente no tiene notas pendientes en la tablet.</Text>
-          <Text style={estilos.textoSuave}>Las notas bajan del portal al sincronizar.</Text>
-        </Tarjeta>
-      ) : (
-        notas.map((n) => (
-          <NotaSeleccionable
-            key={n.id}
-            nota={n}
-            seleccionada={n.id === notaId}
-            onPress={() => elegirNota(n.id)}
+  /* ---------------------------------------------------------------- */
+  /* Otras notas pendientes                                            */
+  /* ---------------------------------------------------------------- */
+
+  if (verOtras) {
+    return marco(
+      <>
+        <Text style={[estilos.textoSuave, { marginBottom: espacio.sm }]}>
+          Toca la nota que quieres cobrar; queda al frente.
+        </Text>
+        {otras.asignadas.length > 0 ? <Text style={estilos.seccion}>Asignadas a ti</Text> : null}
+        {otras.asignadas.map(({ nota: n, etiqueta }) => (
+          <NotaElegible key={n.id} nota={n} condicion={etiqueta} onPress={() => elegirNota(n.id)} />
+        ))}
+        {otras.otras.length > 0 ? (
+          <Text style={estilos.seccion}>
+            {otras.asignadas.length > 0 ? 'Otras notas del cliente' : 'Notas del cliente'}
+          </Text>
+        ) : null}
+        {otras.otras.map((n) => (
+          <NotaElegible key={n.id} nota={n} onPress={() => elegirNota(n.id)} />
+        ))}
+      </>,
+    );
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* Cobrar (maqueta 13)                                               */
+  /* ---------------------------------------------------------------- */
+
+  const notaFrente: NotaPendiente = nota;
+  const saldo = notaFrente.saldo_centavos;
+  const abonos = leerAbonos(notaFrente.abonos_json);
+  const abonoCentavos = montoACentavos(montoTexto) ?? 0;
+
+  // Fuera del try de grabar: el cobro ya esta firme. Cada nota del reparto sale
+  // completa, con el abono nuevo, "Reimpresión <ahora>" y "Cobró <vendedor>".
+  async function reimprimir(cobro: Cobranza) {
+    setImpresion('imprimiendo');
+    let tickets: (DatosTicket | null)[] = [null];
+    try {
+      tickets = ticketsDelCobro(datos.deps.bd, cobro, datos.deps.reloj.ahora());
+    } catch {
+      // Se avisa como cualquier impresion que no salio.
+    }
+    const r = await imprimirTickets(tickets);
+    setMotivoNoImpresa(r.ok ? undefined : r.detalle);
+    setImpresion(r.ok ? 'enviada' : 'no-impresa');
+  }
+
+  function grabar() {
+    const cobro = validarCobro({ opcion, montoTexto, saldoCentavos: saldo });
+    const monto = cobro.montoCentavos;
+    if (cobro.problemas.length > 0 || monto === null) {
+      setProblemas(cobro.problemas);
+      return;
+    }
+    const encontrados = problemasDeCobro({
+      notaFecha: notaFrente.fecha,
+      montoCentavos: monto,
+      metodoPago: metodo,
+      fechaPago: hoy,
+      hoy,
+    });
+    if (encontrados.length > 0) {
+      setProblemas(encontrados);
+      return;
+    }
+    // Antes de grabar: una nota que queda en 0 sale de `notas` y ya no se
+    // encontraria su folio para la pantalla de hecho.
+    const reparto = datos.cobranzas.previsualizar(clienteId, notaFrente.id, monto);
+    const lineas = reparto ? lineasDelCobro(reparto, notas) : [];
+    const saldoFavorCentavos = reparto?.saldoFavorCentavos ?? 0;
+    try {
+      const registrado = guardia.intentar(() =>
+        datos.cobranzas.registrar({
+          vendedorId,
+          clienteId,
+          ventaNotaId: notaFrente.id,
+          montoCentavos: monto,
+          metodoPago: metodo,
+          fechaPago: hoy,
+        }),
+      );
+      // Segundo toque mientras el primero corre: el primero se encarga de todo.
+      if (registrado === null) return;
+      setProblemas([]);
+      setGrabado({ cobro: registrado, lineas, saldoFavorCentavos });
+      void reimprimir(registrado);
+    } catch (e) {
+      setProblemas([
+        e instanceof ErrorCobranza || e instanceof ErrorJornada
+          ? e.message
+          : 'No se pudo grabar el cobro. No se guardó nada; intenta de nuevo.',
+      ]);
+    }
+  }
+
+  return marco(
+    <>
+      <Tarjeta etiqueta={asignadaAlFrente ? 'Nota asignada' : 'Nota pendiente'}>
+        <View
+          style={{
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: espacio.xs,
+          }}
+        >
+          <Text style={estilos.textoTarjeta}>
+            Nota <Cifra valor={notaFrente.folio} />
+            {notaFrente.num_nota ? (
+              <>
+                {' '}
+                · papel <Cifra valor={notaFrente.num_nota} />
+              </>
+            ) : null}
+          </Text>
+          {asignadaAlFrente?.etiqueta ? <Pastilla texto={asignadaAlFrente.etiqueta} estado="pendiente" /> : null}
+        </View>
+        <Dato etiqueta="Fecha" valor={formatearFechaCorta(notaFrente.fecha)} />
+        <Dato etiqueta="Total" valor={pesos(notaFrente.monto_total_centavos)} />
+        {abonos.map((a, i) => (
+          <Dato
+            key={`${a.fecha_pago}-${i}`}
+            etiqueta={`Abonado (${formatearFechaCorta(a.fecha_pago)}, ${NOMBRE_METODO[a.metodo_pago] ?? a.metodo_pago})`}
+            valor={pesos(a.monto_centavos)}
           />
-        ))
+        ))}
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginTop: espacio.xs,
+            paddingTop: espacio.sm,
+            borderTopWidth: grosor.fuerte,
+            borderTopColor: colores.bordeFuerte,
+          }}
+        >
+          <Text style={estilos.textoTarjeta}>Debe</Text>
+          <Cifra valor={pesos(saldo)} tamano="destacado" />
+        </View>
+      </Tarjeta>
+
+      <Text style={estilos.seccion}>Cobranza</Text>
+      <View style={{ flexDirection: 'row', gap: espacio.sm, marginBottom: espacio.md }}>
+        {(['liquidar', 'abonar'] as const).map((o) => (
+          <Chip
+            key={o}
+            etiqueta={ETIQUETA_OPCION[o]}
+            elegida={opcion === o}
+            onPress={() => {
+              setProblemas([]);
+              setOpcion(o);
+            }}
+            ancho
+          />
+        ))}
+      </View>
+
+      {opcion === 'liquidar' ? (
+        <View style={[estilos.campo, { backgroundColor: colores.superficieHundida, justifyContent: 'center' }]}>
+          <Cifra valor={pesos(saldo)} />
+        </View>
+      ) : (
+        <>
+          <Campo
+            etiqueta="Cuánto abona"
+            cifra
+            keyboardType="decimal-pad"
+            value={montoTexto}
+            onChangeText={setMontoTexto}
+            placeholder="0.00"
+          />
+          <Tarjeta estado="pendiente">
+            <Text style={estilos.textoTarjeta}>{textoSaldoPendiente(Math.max(0, saldo - abonoCentavos))}</Text>
+          </Tarjeta>
+        </>
       )}
 
-      {nota ? (
-        <>
-          <Text style={estilos.seccion}>Pago</Text>
-          <View style={estilos.filaAcciones}>
-            <View style={{ flex: 1 }}>
-              <Campo
-                etiqueta="Monto cobrado"
-                cifra
-                value={montoTexto}
-                onChangeText={setMontoTexto}
-                invalido={montoTexto.trim() !== '' && montoCentavos === null}
-                placeholder="0.00"
-                // `cifra` pone `number-pad`, que en Android no tiene punto: el
-                // monto lleva centavos. `Campo` aplica las props despues.
-                keyboardType="decimal-pad"
-              />
-            </View>
-            <Boton
-              etiqueta="Liquidar"
-              tono="neutra"
-              glifo="="
-              ancho="ajustado"
-              onPress={liquidar}
-            />
-          </View>
+      <Text style={estilos.seccion}>Método de pago</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: espacio.sm, marginBottom: espacio.md }}>
+        {METODOS.map((m) => (
+          <Chip key={m.valor} etiqueta={m.etiqueta} elegida={metodo === m.valor} onPress={() => setMetodo(m.valor)} />
+        ))}
+      </View>
 
-          <Text style={estilos.seccion}>Método de pago</Text>
-          <View style={estilos.rejilla}>
-            {METODOS.map((m) => (
-              <Opcion
-                key={m.valor}
-                etiqueta={m.etiqueta}
-                seleccionada={metodo === m.valor}
-                onPress={() => setMetodo(m.valor)}
-              />
-            ))}
-          </View>
-
-          <View style={{ marginTop: espacio.lg }}>
-            <Campo
-              etiqueta="Fecha de pago"
-              value={fechaPago}
-              onChangeText={setFechaPago}
-              maxLength={10}
-              placeholder="AAAA-MM-DD"
-              ayuda={ayudaRangoFecha(nota.fecha, hoy)}
-            />
-          </View>
-        </>
+      {numOtras > 0 ? (
+        <Boton
+          etiqueta={textoOtrasNotas(numOtras)}
+          tono="neutra"
+          icono="nota"
+          onPress={() => {
+            setProblemas([]);
+            setVerOtras(true);
+          }}
+          estilo={{ marginTop: espacio.sm }}
+        />
       ) : null}
-
+    </>,
+    // Los errores de validar y de grabar, pegados a "Grabar" (como en la venta).
+    <View
+      style={{
+        gap: espacio.sm,
+        paddingHorizontal: espacio.md,
+        paddingTop: espacio.sm,
+        paddingBottom: espacio.sm + insets.bottom,
+        backgroundColor: colores.superficie,
+        borderTopWidth: grosor.fuerte,
+        borderTopColor: colores.bordeFuerte,
+      }}
+    >
       {problemas.map((p) => (
         <Text key={p} style={estilos.error}>
           {p}
         </Text>
       ))}
+      <Boton etiqueta="Grabar e imprimir" icono="impresora" onPress={grabar} />
+    </View>,
+  );
+}
 
-      {/* Unica accion primaria de la captura. */}
-      <Boton
-        etiqueta="Revisar"
-        glifo="→"
-        onPress={revisar}
-        deshabilitado={notas.length === 0}
-        estilo={{ marginTop: espacio.lg, marginBottom: espacio.lg }}
-      />
+/** Un renglon "etiqueta ... valor" de la nota al frente. */
+function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
+  const { estilos } = useTema();
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: espacio.sm, marginTop: espacio.xs }}>
+      <Text style={[estilos.textoSuave, { flexShrink: 1 }]}>{etiqueta}</Text>
+      <Cifra valor={valor} />
+    </View>
+  );
+}
 
-      <Tarjeta estado={estadoCobros} etiqueta="Cobros de hoy">
-        {cobrosDeHoy.length === 0 ? (
-          <Text style={estilos.textoSuave}>Todavía no le has cobrado hoy.</Text>
-        ) : (
-          cobrosDeHoy.map((c) => (
-            <View key={c.id} style={{ gap: espacio.xs, marginBottom: espacio.sm }}>
-              <Text style={estilos.textoTarjeta}>
-                <Cifra valor={pesos(c.monto_centavos)} /> · {NOMBRE_METODO[c.metodo_pago]} · pagado el{' '}
-                {c.fecha_pago}
-              </Text>
-              <Pastilla texto={ETIQUETA_SYNC[c.sync_estado]} estado={ESTADO_SYNC[c.sync_estado]} />
-              {c.sync_estado === 'error' && c.sync_error ? (
-                <Text style={estilos.error}>{c.sync_error}</Text>
-              ) : null}
-            </View>
-          ))
-        )}
-      </Tarjeta>
-    </Pantalla>
+/** Una nota de "Otras notas pendientes": folio, fecha, total, lo que debe y su condicion. */
+function NotaElegible({
+  nota,
+  onPress,
+  condicion = null,
+}: {
+  nota: NotaPendiente;
+  onPress: () => void;
+  /** "Debe liquidar" / "Debe abonar" de una nota asignada (`etiquetaCondicionPendiente`). */
+  condicion?: string | null;
+}) {
+  const { estilos } = useTema();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`Nota ${nota.folio}, debe ${pesos(nota.saldo_centavos)}`}
+      onPress={onPress}
+      style={({ pressed }) => [
+        estilos.tarjeta,
+        { gap: espacio.xs, borderWidth: grosor.fuerte, borderColor: colores.borde },
+        pressed && { transform: [{ translateY: grosor.fuerte }], opacity: 0.9 },
+      ]}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: espacio.sm }}>
+        <View style={{ flex: 1, gap: espacio.xs }}>
+          <Text style={estilos.textoTarjeta}>
+            Nota <Cifra valor={nota.folio} /> · {formatearFechaCorta(nota.fecha)}
+          </Text>
+          <Text style={estilos.textoSuave}>
+            Total <Cifra valor={pesos(nota.monto_total_centavos)} tono="suave" /> · debe{' '}
+            <Cifra valor={pesos(nota.saldo_centavos)} tono="aviso" />
+          </Text>
+          {condicion ? <Pastilla texto={condicion} estado="pendiente" /> : null}
+        </View>
+        <Icono nombre="adelante" tamano={20} color={colores.tintaSuave} />
+      </View>
+    </Pressable>
   );
 }

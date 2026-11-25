@@ -3,6 +3,7 @@ import {
   borradorDe,
   leerBorrador,
   totalBorrador,
+  textoEstadoCarga,
   totalPiezas,
   type CargaRejilla,
 } from "./cargas";
@@ -14,9 +15,11 @@ const CARGA: CargaRejilla = {
   motivoRechazo: null,
   version: 1,
   respondidaEn: null,
+  renglones: 2,
+  renglonesAceptados: null,
   lineas: [
-    { presentacionId: "p1", piezas: 24 },
-    { presentacionId: "p2", piezas: 12 },
+    { presentacionId: "p1", piezas: 24, aceptada: null },
+    { presentacionId: "p2", piezas: 12, aceptada: null },
   ],
 };
 
@@ -61,5 +64,16 @@ describe("borrador de una carga (T-27)", () => {
 describe("lectura de la rejilla", () => {
   it("totalPiezas suma las líneas", () => {
     expect(totalPiezas(CARGA.lineas)).toBe(36);
+  });
+});
+
+describe("textoEstadoCarga (pieza 3)", () => {
+  it.each([
+    ["pendiente", null, 3, "Pendiente"],
+    ["aceptada", 3, 3, "Aceptada"],
+    ["aceptada", 2, 3, "Aceptada 2 de 3"],
+    ["rechazada", 0, 3, "Rechazada"],
+  ] as const)("%s %s/%s", (estado, aceptados, renglones, texto) => {
+    expect(textoEstadoCarga({ estado, renglonesAceptados: aceptados, renglones })).toBe(texto);
   });
 });

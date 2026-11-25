@@ -1,4 +1,4 @@
-import { depsDePrueba, FIRMA_DE_PRUEBA, MOMENTO, snapshotDePrueba } from '@/datos/pruebas-apoyo';
+import { ATENDIO_DE_PRUEBA, depsDePrueba, MOMENTO, simularFirmaVieja, snapshotDePrueba } from '@/datos/pruebas-apoyo';
 import { crearRepositorioCatalogos } from '@/datos/repositorios/catalogos';
 import { crearRepositorioFolios } from '@/datos/repositorios/folios';
 import { crearRepositorioVentas } from '@/datos/repositorios/ventas';
@@ -42,7 +42,8 @@ describe('fuente de ventas (T-16)', () => {
         { presentacionId: 'pre-2', cantidad: 0, cantidadPromocion: 3 },
       ],
       regalos: REGALOS,
-      firma: { uri: 'file:///documentos/firmas/firma-v.jpg', nombre: 'Doña Lupe' },
+      atendio: 'Doña Lupe',
+      abonoCentavos: 30000,
     });
 
     expect(fuente.pendientes()).toEqual([
@@ -69,8 +70,9 @@ describe('fuente de ventas (T-16)', () => {
             { promocion_id: 'promo-general', presentacion_id: 'pre-1', cantidad: 2, texto: 'Por cada 10 Jamaica, 1 Jamaica gratis' },
             { promocion_id: 'promo-prospecto', presentacion_id: 'pre-2', cantidad: 3, texto: 'Bienvenida' },
           ],
-          // T-73: toda venta nueva trae firma; solo viaja el nombre.
-          firma: { nombre: 'Doña Lupe' },
+          // Rediseno pieza 2: quien atendio y el abono al vender; ya no hay firma.
+          atendio: 'Doña Lupe',
+          abono_centavos: 30000,
         },
       },
     ]);
@@ -86,7 +88,7 @@ describe('fuente de ventas (T-16)', () => {
       factura: 'N/A',
       comentarios: null,
       lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
-      firma: FIRMA_DE_PRUEBA,
+      atendio: ATENDIO_DE_PRUEBA,
     });
     const op = fuente.pendientes()[0];
     expect(op?.datos).not.toHaveProperty('regalos');
@@ -102,7 +104,7 @@ describe('fuente de ventas (T-16)', () => {
       factura: 'N/A',
       comentarios: null,
       lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
-      firma: FIRMA_DE_PRUEBA,
+      atendio: ATENDIO_DE_PRUEBA,
     });
 
     fuente.marcarSincronizada(v.id);
@@ -119,7 +121,7 @@ describe('fuente de ventas (T-16)', () => {
       factura: 'N/A',
       comentarios: null,
       lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
-      firma: FIRMA_DE_PRUEBA,
+      atendio: ATENDIO_DE_PRUEBA,
     });
 
     fuente.marcarError(v.id, 'precio-no-asignado: el cliente no tiene precio');
@@ -127,34 +129,46 @@ describe('fuente de ventas (T-16)', () => {
     expect(ventas.porId(v.id)?.sync_error).toBe('precio-no-asignado: el cliente no tiene precio');
   });
 
-  it('una firma sin nombre viaja con nombre null', () => {
+  it('una venta sin abono no manda abono_centavos, y nunca manda firma', () => {
     const { ventas, fuente } = montar();
     ventas.registrar({
       vendedorId: 'ven-1',
       clienteId: 'cli-1',
-      numNota: '',
       contadoCredito: 'contado',
-      factura: 'N/A',
-      comentarios: null,
       lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
-      firma: FIRMA_DE_PRUEBA,
+      atendio: ATENDIO_DE_PRUEBA,
     });
-    expect(fuente.pendientes()[0]?.datos.firma).toEqual({ nombre: null });
+    const datos = fuente.pendientes()[0]?.datos;
+    expect(datos).toMatchObject({ atendio: ATENDIO_DE_PRUEBA, num_nota: null, factura: 'N/A', comentarios: null });
+    expect(datos).not.toHaveProperty('abono_centavos');
+    expect(datos).not.toHaveProperty('firma');
   });
 
-  it('una venta anterior a la 016 (sin firma_local) no manda la clave: el servidor no espera imagen', () => {
+  it('una venta vieja con firma_local sigue mandando firma (con nombre o null)', () => {
     const { deps, ventas, fuente } = montar();
     const v = ventas.registrar({
       vendedorId: 'ven-1',
       clienteId: 'cli-1',
-      numNota: '',
       contadoCredito: 'contado',
-      factura: 'N/A',
-      comentarios: null,
       lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
-      firma: FIRMA_DE_PRUEBA,
+      atendio: ATENDIO_DE_PRUEBA,
     });
-    deps.bd.runSync('update venta set firma_local = null where id = $id', { $id: v.id });
-    expect(fuente.pendientes()[0]?.datos).not.toHaveProperty('firma');
+    simularFirmaVieja(deps, v.id, { nombre: 'Doña Lupe' });
+    expect(fuente.pendientes()[0]?.datos.firma).toEqual({ nombre: 'Doña Lupe' });
+    simularFirmaVieja(deps, v.id, { nombre: null });
+    expect(fuente.pendientes()[0]?.datos.firma).toEqual({ nombre: null });
+  });
+
+  it('una venta vieja de antes de la 020 (atendio null) no manda la clave atendio', () => {
+    const { deps, ventas, fuente } = montar();
+    const v = ventas.registrar({
+      vendedorId: 'ven-1',
+      clienteId: 'cli-1',
+      contadoCredito: 'contado',
+      lineas: [{ presentacionId: 'pre-1', cantidad: 1, cantidadPromocion: 0 }],
+      atendio: ATENDIO_DE_PRUEBA,
+    });
+    deps.bd.runSync('update venta set atendio_nombre = null where id = $id', { $id: v.id });
+    expect(fuente.pendientes()[0]?.datos).not.toHaveProperty('atendio');
   });
 });

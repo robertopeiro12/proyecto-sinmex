@@ -49,6 +49,7 @@ describe('La carga en la app (e2e)', () => {
   let productoId: string;
   let litro: string;
   let medio: string;
+  let cuarto: string;
   let hoy: string;
 
   const entrar = async (login: string): Promise<string> =>
@@ -80,15 +81,17 @@ describe('La carga en la app (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .send(cuerpo);
 
-  const nuevaCarga = async (vendedor = vendedorId): Promise<CargaRejilla> =>
+  const nuevaCarga = async (
+    vendedor = vendedorId,
+    lineas: { presentacionId: string; piezas: number }[] = [
+      { presentacionId: litro, piezas: 24 },
+    ],
+  ): Promise<CargaRejilla> =>
     (
       await request(app.getHttpServer())
         .post('/cargas')
         .set('Cookie', cookieGeneral)
-        .send({
-          vendedorId: vendedor,
-          lineas: [{ presentacionId: litro, piezas: 24 }],
-        })
+        .send({ vendedorId: vendedor, lineas })
         .expect(201)
     ).body as CargaRejilla;
 
@@ -180,6 +183,7 @@ describe('La carga en la app (e2e)', () => {
       ).id;
     litro = await presentacion('1 L');
     medio = await presentacion('500 ml');
+    cuarto = await presentacion('250 ml');
 
     bearer = await entrar(LOGIN);
     bearerAjeno = await entrar(LOGIN_AJENO);
@@ -232,7 +236,7 @@ describe('La carga en la app (e2e)', () => {
       version: 1,
       respondida_en: null,
       activo: 1,
-      lineas: [{ presentacion_id: litro, piezas: 24 }],
+      lineas: [{ presentacion_id: litro, piezas: 24, aceptada: null }],
     });
     expect(cuerpo.cargas.some((c) => c.id === ajena.id)).toBe(false);
     expect(cuerpo.catalogos.vendedores).toEqual([
@@ -384,6 +388,188 @@ describe('La carga en la app (e2e)', () => {
     expect(incremental.cargas.find((c) => c.id === carga.id)).toMatchObject({
       estado: 'aceptada',
       version: 1,
+    });
+  });
+
+  describe('Pieza 3: la respuesta por renglón (`aceptadas`)', () => {
+    const tres = () =>
+      nuevaCarga(vendedorId, [
+        { presentacionId: litro, piezas: 24 },
+        { presentacionId: medio, piezas: 12 },
+        { presentacionId: cuarto, piezas: 6 },
+      ]);
+    const porPresentacion = (c: CargaPull) =>
+      Object.fromEntries(c.lineas.map((l) => [l.presentacion_id, l.aceptada]));
+
+    it('aceptar 2 de 3: 200 aceptada, y la respuesta y el pull traen `aceptada` por renglón', async () => {
+      const carga = await tres();
+      const antes = (await pull(bearer)).servidor_en;
+      const res = (
+        await responder(bearer, carga.id, {
+          version: 1,
+          aceptadas: [litro, cuarto],
+        }).expect(200)
+      ).body as CargaPull;
+      expect(res).toMatchObject({ estado: 'aceptada', motivo_rechazo: null });
+      expect(res.respondida_en).not.toBeNull();
+      expect(porPresentacion(res)).toEqual({
+        [litro]: true,
+        [medio]: false,
+        [cuarto]: true,
+      });
+      const incremental = (await pull(bearer, antes)).cargas.find(
+        (c) => c.id === carga.id,
+      )!;
+      expect(incremental.estado).toBe('aceptada');
+      expect(porPresentacion(incremental)).toEqual(porPresentacion(res));
+    });
+
+    it('la misma lista otra vez (en otro orden) es 200 sin reescribir; otra lista es 409', async () => {
+      const carga = await tres();
+      const primera = (
+        await responder(bearer, carga.id, {
+          version: 1,
+          aceptadas: [litro, medio],
+        }).expect(200)
+      ).body as CargaPull;
+      const segunda = (
+        await responder(bearer, carga.id, {
+          version: 1,
+          aceptadas: [medio, litro.toUpperCase()],
+        }).expect(200)
+      ).body as CargaPull;
+      expect(segunda.respondida_en).toBe(primera.respondida_en);
+
+      const otra = await responder(bearer, carga.id, {
+        version: 1,
+        aceptadas: [litro],
+      }).expect(409);
+      expect(
+        porPresentacion((otra.body as { carga: CargaPull }).carga),
+      ).toEqual({ [litro]: true, [medio]: true, [cuarto]: false });
+    });
+
+    it('la lista vacía rechaza la carga sin motivo, con todos los renglones en false', async () => {
+      const carga = await tres();
+      const res = (
+        await responder(bearer, carga.id, { version: 1, aceptadas: [] }).expect(
+          200,
+        )
+      ).body as CargaPull;
+      expect(res).toMatchObject({ estado: 'rechazada', motivo_rechazo: null });
+      expect(res.lineas.every((l) => l.aceptada === false)).toBe(true);
+      // Una rechazada se puede editar en el portal: vuelve a pendiente con renglones en null.
+      const editada = (
+        await request(app.getHttpServer())
+          .patch(`/cargas/${carga.id}`)
+          .set('Cookie', cookieGeneral)
+          .send({ version: 1, lineas: [{ presentacionId: medio, piezas: 3 }] })
+          .expect(200)
+      ).body as CargaRejilla;
+      expect(editada.estado).toBe('pendiente');
+      const enPull = (await pull(bearer)).cargas.find(
+        (c) => c.id === carga.id,
+      )!;
+      expect(enPull.lineas).toEqual([
+        { presentacion_id: medio, piezas: 3, aceptada: null },
+      ]);
+    });
+
+    it('Review Focus 3: una presentación ajena o repetida, o la lista con motivo o acción, es 400 y no toca la carga', async () => {
+      const carga = await tres();
+      // `productoId` es un uuid que no es presentación de esta carga.
+      for (const cuerpo of [
+        { version: 1, aceptadas: [litro, productoId] },
+        { version: 1, aceptadas: [litro, litro] },
+        { version: 1, aceptadas: [litro, 'no-es-uuid'] },
+        { version: 1, aceptadas: 'todas' },
+        { version: 1, aceptadas: [litro], motivo: 'algo' },
+        { version: 1, aceptadas: [litro], accion: 'aceptar' },
+        { version: 1 },
+      ]) {
+        await responder(bearer, carga.id, cuerpo).expect(400);
+      }
+      const fila = await db
+        .selectFrom('carga')
+        .select('estado')
+        .where('id', '=', carga.id)
+        .executeTakeFirstOrThrow();
+      expect(fila.estado).toBe('pendiente');
+    });
+
+    it('una lista con la versión vieja es 409 con la carga actual, aunque traiga un renglón que ya no está', async () => {
+      const carga = await tres();
+      await request(app.getHttpServer())
+        .patch(`/cargas/${carga.id}`)
+        .set('Cookie', cookieGeneral)
+        .send({ version: 1, lineas: [{ presentacionId: medio, piezas: 12 }] })
+        .expect(200);
+      const vieja = await responder(bearer, carga.id, {
+        version: 1,
+        aceptadas: [litro, cuarto],
+      }).expect(409);
+      expect((vieja.body as { carga: CargaPull }).carga).toMatchObject({
+        version: 2,
+        estado: 'pendiente',
+        lineas: [{ presentacion_id: medio, piezas: 12, aceptada: null }],
+      });
+    });
+
+    it('Review Focus 2: el cuerpo viejo sigue pasando (aceptar = todos en true, rechazar = todos en false)', async () => {
+      const a = await tres();
+      const aceptada = (
+        await responder(bearer, a.id, { version: 1, accion: 'aceptar' }).expect(
+          200,
+        )
+      ).body as CargaPull;
+      expect(aceptada.estado).toBe('aceptada');
+      expect(aceptada.lineas.every((l) => l.aceptada === true)).toBe(true);
+      // Repetirla con la lista completa es la misma respuesta.
+      await responder(bearer, a.id, {
+        version: 1,
+        aceptadas: [litro, medio, cuarto],
+      }).expect(200);
+
+      const r = await tres();
+      const rechazada = (
+        await responder(bearer, r.id, {
+          version: 1,
+          accion: 'rechazar',
+          motivo: 'Faltan cajas',
+        }).expect(200)
+      ).body as CargaPull;
+      expect(rechazada).toMatchObject({
+        estado: 'rechazada',
+        motivo_rechazo: 'Faltan cajas',
+      });
+      expect(rechazada.lineas.every((l) => l.aceptada === false)).toBe(true);
+    });
+
+    it('Review Focus 1: una aceptada de antes (renglones en null) repite con aceptar o con la lista completa', async () => {
+      const carga = await tres();
+      await db
+        .updateTable('carga')
+        .set({ estado: 'aceptada', respondida_en: sql<Date>`now()` })
+        .where('id', '=', carga.id)
+        .execute();
+      await responder(bearer, carga.id, {
+        version: 1,
+        accion: 'aceptar',
+      }).expect(200);
+      await responder(bearer, carga.id, {
+        version: 1,
+        aceptadas: [cuarto, medio, litro],
+      }).expect(200);
+      await responder(bearer, carga.id, {
+        version: 1,
+        aceptadas: [litro],
+      }).expect(409);
+      const lineas = await db
+        .selectFrom('carga_detalle')
+        .select('aceptada')
+        .where('carga_id', '=', carga.id)
+        .execute();
+      expect(lineas.every((l) => l.aceptada === null)).toBe(true);
     });
   });
 

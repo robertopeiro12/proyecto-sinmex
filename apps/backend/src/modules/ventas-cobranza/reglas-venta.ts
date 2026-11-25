@@ -12,12 +12,12 @@ import type { RechazoVenta } from './venta-rechazada';
 export type ContadoCredito = 'contado' | 'credito';
 
 /**
- * Los unicos status con los que una venta puede NACER. `abonado` y
- * `cuenta_perdida` existen en la columna pero nunca son iniciales: el primero
- * lo pone un abono (T-20) y el segundo solo se asigna al modificar
- * ([[Status de venta]]).
+ * Los unicos status con los que una venta puede NACER. `cuenta_perdida` existe
+ * en la columna pero nunca es inicial: solo se asigna al modificar
+ * ([[Status de venta]]). `abonado` lo pone un abono (T-20) o, desde la pieza 2
+ * del rediseno, el abono al vender de una venta a credito.
  */
-export type StatusInicial = 'pagada' | 'pendiente' | 'promocion';
+export type StatusInicial = 'pagada' | 'pendiente' | 'abonado' | 'promocion';
 
 /**
  * Status con el que nace la venta (D4).
@@ -25,13 +25,19 @@ export type StatusInicial = 'pagada' | 'pendiente' | 'promocion';
  * El monto va primero: una venta que solo regala piezas vale $0 y es
  * `promocion` aunque se haya marcado de contado o de credito — no hay nada que
  * cobrar ni nada que deba entrar a cuentas por cobrar.
+ *
+ * `abonoCentavos` (pieza 2): lo que el cliente pago al recibir una venta a
+ * credito. Mayor que 0 la deja `abonado`. Que sea menor que el monto lo
+ * garantizan `normalizarDatosVenta` (tablet) y la edicion del portal.
  */
 export function statusInicial(
   contadoCredito: ContadoCredito,
   montoTotalCentavos: number,
+  abonoCentavos: number | null = null,
 ): StatusInicial {
   if (montoTotalCentavos === 0) return 'promocion';
-  return contadoCredito === 'contado' ? 'pagada' : 'pendiente';
+  if (contadoCredito === 'contado') return 'pagada';
+  return abonoCentavos !== null && abonoCentavos > 0 ? 'abonado' : 'pendiente';
 }
 
 /**

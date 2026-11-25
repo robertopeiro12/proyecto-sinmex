@@ -63,10 +63,10 @@ export function validarGasto(e: EntradaGasto): ValidacionGasto {
   const montoCentavos = montoACentavos(e.monto);
   const comentario = e.comentario.trim() === '' ? null : e.comentario.trim();
 
-  if (e.campo === null) faltantes.push('Elige el campo del gasto.');
-  if (e.monto.trim() === '') faltantes.push('Escribe el monto en pesos.');
+  if (e.campo === null) faltantes.push('Elige el motivo del gasto.');
+  if (e.monto.trim() === '') faltantes.push('Escribe la cantidad en pesos.');
   else if (montoCentavos === null) {
-    faltantes.push('El monto tiene que ser mayor que $0, con dos decimales a lo más.');
+    faltantes.push('La cantidad tiene que ser mayor que $0, con dos decimales a lo más.');
   }
   if (comentario !== null && comentario.length > LARGO_MAX_COMENTARIO_GASTO) {
     faltantes.push(`Las observaciones no pueden pasar de ${LARGO_MAX_COMENTARIO_GASTO} caracteres.`);
@@ -84,21 +84,13 @@ export function validarGasto(e: EntradaGasto): ValidacionGasto {
 }
 
 /**
- * Lo que falta solo se lista cuando el vendedor ya empezo a capturar (campo,
- * monto u observaciones): al abrir el formulario vacio no se le regaña.
+ * Lo que falta solo se lista cuando el vendedor ya empezo a capturar (motivo,
+ * cantidad u observaciones): al abrir el formulario vacio no se le regaña. Los
+ * textos dicen "motivo" y "cantidad", como las etiquetas de la pantalla.
  */
 export function faltantesVisiblesGasto(e: EntradaGasto, v: ValidacionGasto): string[] {
   const empezo = e.campo !== null || e.monto !== '' || e.comentario !== '';
   return empezo ? v.faltantes : [];
-}
-
-/**
- * Si "Gastos" deja abrir el formulario: hace falta al menos un campo con "Se usa
- * en la app" y el dia abierto (con el dia cerrado la entrada del menu tambien
- * queda deshabilitada, `estadoMenuJornada`).
- */
-export function puedeRegistrarGasto(e: { camposDisponibles: number; diaCerrado: boolean }): boolean {
-  return e.camposDisponibles > 0 && !e.diaCerrado;
 }
 
 /** La pastilla de UN gasto en "Gastos de hoy". */
@@ -117,16 +109,15 @@ export function pastillaGasto(
 }
 
 /**
- * Si "Guardar" queda habilitado: gasto valido, con catalogo, dia abierto, sin un
- * guardado ya en curso y sin la foto del ticket tomandose/comprimiendose (un
- * toque en ese momento guardaria el gasto sin foto).
+ * Si "Guardar" queda habilitado: gasto valido, con catalogo, dia abierto y sin un
+ * guardado ya en curso. (La foto del ticket ya no se toma en la app: rediseño,
+ * pieza 1.)
  */
 export function puedeGuardarGasto(e: {
   gastoValido: boolean;
   hayCampos: boolean;
   diaAbierto: boolean;
   guardado: boolean;
-  tomandoFoto: boolean;
 }): boolean {
-  return e.gastoValido && e.hayCampos && e.diaAbierto && !e.guardado && !e.tomandoFoto;
+  return e.gastoValido && e.hayCampos && e.diaAbierto && !e.guardado;
 }

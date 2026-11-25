@@ -71,13 +71,14 @@ const VENTA: VentaDetalle = {
   puedeMarcarPerdida: true,
   // T-73: la venta de prueba es del portal: no espera firma.
   firma: { esperada: false, nombre: null, subidaEn: null },
+  atendio: null,
   editada: false,
 };
 
 function renderizar(venta: VentaDetalle = VENTA) {
   const props = { onVolver: vi.fn(), onEditar: vi.fn(), onCambiada: vi.fn(), onEliminada: vi.fn() };
-  render(<DetalleVenta venta={venta} {...props} />);
-  return { usuario: userEvent.setup(), ...props };
+  const { unmount } = render(<DetalleVenta venta={venta} {...props} />);
+  return { usuario: userEvent.setup(), desmontar: unmount, ...props };
 }
 
 describe("DetalleVenta", () => {
@@ -108,6 +109,26 @@ describe("DetalleVenta", () => {
   it("una venta sin nota de papel dice Sin nota", () => {
     renderizar({ ...VENTA, numNota: null });
     expect(screen.getByText("Sin nota")).toBeInTheDocument();
+  });
+
+  it("el pago al vender de una venta a crédito es Abono al vender; en contado, Cobro de contado", () => {
+    const alVender = {
+      id: "a9",
+      fechaPago: "2024-03-04",
+      metodoPago: "efectivo" as const,
+      montoCentavos: 5000,
+      origen: "venta_contado" as const,
+      cobroId: null,
+      peticionPendiente: false,
+    };
+    const primero = renderizar({ ...VENTA, cobros: [alVender] });
+    expect(screen.getByText("Abono al vender")).toBeInTheDocument();
+    expect(screen.queryByText("Cobro de contado")).not.toBeInTheDocument();
+    primero.desmontar();
+
+    renderizar({ ...VENTA, contadoCredito: "contado", status: "pagada", saldoCentavos: 0, cobros: [alVender] });
+    expect(screen.getByText("Cobro de contado")).toBeInTheDocument();
+    expect(screen.queryByText("Abono al vender")).not.toBeInTheDocument();
   });
 
   it("muestra cabecera, líneas y cobros; sin vendedor es Oficina", () => {
@@ -319,6 +340,19 @@ describe("DetalleVenta", () => {
         "Petición enviada: borrar el pago de $100.00 de Abarrotes Lupita.",
       );
     });
+  });
+});
+
+describe("DetalleVenta · quién atendió (pieza 2)", () => {
+  it("muestra Atendió y el nombre cuando viene", () => {
+    renderizar({ ...VENTA, atendio: "María de Jesús Ramos" });
+    expect(screen.getByText("Atendió")).toBeInTheDocument();
+    expect(screen.getByText("María de Jesús Ramos")).toBeInTheDocument();
+  });
+
+  it("no muestra Atendió cuando es null", () => {
+    renderizar({ ...VENTA, atendio: null });
+    expect(screen.queryByText("Atendió")).not.toBeInTheDocument();
   });
 });
 

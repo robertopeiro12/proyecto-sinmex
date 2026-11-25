@@ -160,6 +160,7 @@ const DETALLE = {
   motivoNoEditable: null,
   puedeMarcarPerdida: true,
   firma: { esperada: false, nombre: null, subidaEn: null },
+  atendio: null,
   editada: false,
 } as VentaDetalle;
 

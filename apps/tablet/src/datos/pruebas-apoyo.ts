@@ -9,18 +9,34 @@ import { ejecutarMigraciones, migraciones } from './migraciones';
 import { relojFijo } from './reloj';
 import type { DepsRepositorio } from './repositorios/deps';
 import type { SnapshotCatalogos } from './repositorios/catalogos';
+import type { CorteParaEnviar, SistemaCorte } from './repositorios/cortes';
 
 /** Momento fijo por defecto de las pruebas (hora de Tijuana, UTC-7). */
 export const MOMENTO = '2026-08-07T15:00:00.000Z';
 
 /**
- * La firma de una venta de prueba (T-73): `ventas.registrar()` la exige (D1).
- * La ruta nunca se abre en las pruebas: solo se guarda y viaja en la cola.
+ * Quien atendio en una venta de prueba (rediseno pieza 2): `ventas.registrar()`
+ * lo exige; la firma dibujada ya no se pide.
  */
-export const FIRMA_DE_PRUEBA: { uri: string; nombre: string | null } = {
-  uri: 'file:///documentos/firmas/firma-prueba.jpg',
-  nombre: null,
-};
+export const ATENDIO_DE_PRUEBA = 'Doña Lupe';
+
+/**
+ * Convierte una venta ya grabada en una **venta vieja con firma** (T-73, antes
+ * del rediseno pieza 2): le pone `firma_local` y `firma_nombre` por SQL. Sirve
+ * para probar que la cola de firmas y el push siguen atendiendo a las ventas
+ * que aun tienen una imagen por subir.
+ */
+export function simularFirmaVieja(
+  deps: DepsRepositorio,
+  ventaId: string,
+  firma: { uri?: string; nombre?: string | null } = {},
+): void {
+  deps.bd.runSync('update venta set firma_local = $uri, firma_nombre = $nombre where id = $id', {
+    $uri: firma.uri ?? 'file:///documentos/firmas/firma-prueba.jpg',
+    $nombre: firma.nombre ?? null,
+    $id: ventaId,
+  });
+}
 
 /** Base en memoria, migrada al dia, con reloj y generador de ids deterministas. */
 export function depsDePrueba(momento: string = MOMENTO): DepsRepositorio {
@@ -33,6 +49,45 @@ export function depsDePrueba(momento: string = MOMENTO): DepsRepositorio {
     reloj: relojFijo(momento),
     generarId: () => `id-${++contador}`,
   };
+}
+
+/**
+ * Una venta grabada **directo** en SQLite, sin `ventas.registrar()` (que exige
+ * quien atendio, precios y existencia): para las pruebas que solo leen la tabla
+ * `venta` (la ruta y las notas que trae el vendedor). Por omision, de `ven-1`
+ * a `cli-1`, de hoy y de contado.
+ */
+export function insertarVentaDePrueba(
+  deps: DepsRepositorio,
+  venta: {
+    id: string;
+    folio: string;
+    montoCentavos: number;
+    contadoCredito?: 'contado' | 'credito';
+    clienteId?: string;
+    vendedorId?: string;
+    fecha?: string;
+    /** Rediseno pieza 2: lo que pago al recibir una venta a credito. */
+    abonoCentavos?: number | null;
+  },
+): void {
+  deps.bd.runSync(
+    `insert into venta (id, fecha, cliente_id, vendedor_id, sucursal_id, folio, num_nota,
+                        contado_credito, monto_total_centavos, grabada_en, abono_centavos)
+     values ($id, $fecha, $cliente_id, $vendedor_id, 'suc-tj', $folio, null,
+             $contado_credito, $monto, $grabada_en, $abono_centavos)`,
+    {
+      $id: venta.id,
+      $fecha: venta.fecha ?? deps.reloj.hoy(),
+      $cliente_id: venta.clienteId ?? 'cli-1',
+      $vendedor_id: venta.vendedorId ?? 'ven-1',
+      $folio: venta.folio,
+      $contado_credito: venta.contadoCredito ?? 'contado',
+      $monto: venta.montoCentavos,
+      $grabada_en: deps.reloj.ahora(),
+      $abono_centavos: venta.abonoCentavos ?? null,
+    },
+  );
 }
 
 /** Snapshot minimo pero coherente: 1 sucursal, 1 vendedor, 1 vehiculo, 2 clientes. */
@@ -76,6 +131,14 @@ export function snapshotDePrueba(): SnapshotCatalogos {
       { id: 'mot-encargado', nombre: 'No estaba el encargado', exige_foto: 1, exige_atendio: 1, activo: 1 },
       // Dado de baja en el portal: baja con la bandera y ya no se ofrece.
       { id: 'mot-baja', nombre: 'Vacaciones', exige_foto: 0, exige_atendio: 0, activo: 0 },
+    ],
+    // Rediseño pieza 4: uno por bandera, uno solo de almacen y uno dado de baja.
+    motivosMerma: [
+      { id: 'mm-caducado', nombre: 'Caducado', aplica_cliente: 1, aplica_vehiculo: 0, activo: 1 },
+      { id: 'mm-golpe', nombre: 'Golpe en el camino', aplica_cliente: 0, aplica_vehiculo: 1, activo: 1 },
+      { id: 'mm-reventado', nombre: 'Reventado', aplica_cliente: 1, aplica_vehiculo: 1, activo: 1 },
+      { id: 'mm-almacen', nombre: 'Mal sellado', aplica_cliente: 0, aplica_vehiculo: 0, activo: 1 },
+      { id: 'mm-baja', nombre: 'Derramado', aplica_cliente: 1, aplica_vehiculo: 1, activo: 0 },
     ],
     camposEgreso: [
       { id: 'ce-gasolina', nombre: 'Gasolina', tipo: 'operacion', se_usa_en_app: 1, activo: 1 },
@@ -246,3 +309,43 @@ export function respuestaPullDePrueba(
     ...extra,
   };
 }
+
+/** Lo que decia el sistema al enviar un corte de prueba (rediseño pieza 6). */
+export const SISTEMA_DE_PRUEBA: SistemaCorte = {
+  efectivo: {
+    contadoCentavos: 50000,
+    abonosCentavos: 10000,
+    cobrosEfectivoCentavos: 20000,
+    abonosYCobrosCentavos: 30000,
+    gastosCentavos: 5000,
+    debeTraerCentavos: 75000,
+    otrosMetodosCentavos: 0,
+  },
+  notas: [
+    {
+      clave: 'nota:TJ260807AP01',
+      folio: 'TJ260807AP01',
+      cliente: 'Abarrotes Lupita',
+      estado: 'pendiente',
+      detalle: 'pendiente',
+      montoTexto: '$300.00',
+      saldoCentavos: 30000,
+    },
+  ],
+  inventario: {
+    renglones: [{ presentacionId: 'pre-1', etiqueta: 'Horchata 1 L', sistema: 12 }],
+    mermaSistema: 2,
+  },
+};
+
+/** Un corte completo, con los tres apartados cerrados. */
+export const CORTE_DE_PRUEBA: CorteParaEnviar = {
+  captura: {
+    efectivoTraidoCentavos: 75000,
+    notasTraidas: ['nota:TJ260807AP01'],
+    inventarioContado: { 'pre-1': 12 },
+    mermaContada: 2,
+    cerrados: ['efectivo', 'notas', 'inventario'],
+  },
+  sistema: SISTEMA_DE_PRUEBA,
+};

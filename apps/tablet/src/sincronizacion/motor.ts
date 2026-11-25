@@ -191,6 +191,16 @@ export interface ResultadoSincronizacion {
   pullPosterior?: 'fallo';
 }
 
+/**
+ * Rediseño pieza 4: una tablet con cursor guardado pero sin ningun motivo de
+ * merma (APK instalada antes que el backend: el pull incremental nunca trajo
+ * la coleccion y los motivos sembrados no cambian de `actualizado_en`) tiene
+ * que olvidar el cursor para que el pull sea completo y los traiga.
+ */
+export function debeOlvidarCursor({ hayCursor, motivosMerma }: { hayCursor: boolean; motivosMerma: number }): boolean {
+  return hayCursor && motivosMerma === 0;
+}
+
 export type MotorSincronizacion = ReturnType<typeof crearMotorSincronizacion>;
 
 export function crearMotorSincronizacion({
@@ -231,6 +241,9 @@ export function crearMotorSincronizacion({
 
       // --- 2. Pull
       try {
+        if (debeOlvidarCursor({ hayCursor: sync.leerCursor() !== null, motivosMerma: catalogos.contarMotivosMerma() })) {
+          sync.olvidarCursor();
+        }
         resultado.pull = await bajar(token);
       } catch (error) {
         return { ...resultado, ok: false, ...traducir(error) };
@@ -506,6 +519,16 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
       exige_foto: mo.exige_foto ? 1 : 0,
       exige_atendio: mo.exige_atendio ? 1 : 0,
     })),
+    // Rediseño pieza 4: un servidor anterior no manda la coleccion (`undefined`
+    // no escribe nada). Las banderas llegan booleanas y SQLite guarda 0/1. Trae
+    // tambien los motivos que solo aplican al almacen: filtra `listarMotivosMerma`.
+    motivosMerma: c.motivos_merma?.map((mo) => ({
+      id: mo.id,
+      nombre: mo.nombre,
+      aplica_cliente: mo.aplica_cliente ? 1 : 0,
+      aplica_vehiculo: mo.aplica_vehiculo ? 1 : 0,
+      activo: mo.activo,
+    })),
     // T-30/T-31: un servidor anterior no manda la coleccion (`undefined` no
     // escribe nada). La casilla llega booleana y SQLite guarda 0/1, como `exige_foto`.
     camposEgreso: c.campos_egreso?.map((ce) => ({
@@ -513,9 +536,12 @@ export function aSnapshot(respuesta: RespuestaPull): SnapshotCatalogos {
       se_usa_en_app: ce.se_usa_en_app ? 1 : 0,
     })),
     precios: c.precios,
-    notas: respuesta.notas_pendientes.map(({ abonos, ...nota }) => ({
+    // Rediseño pieza 7: el detalle se guarda como texto; un servidor anterior
+    // no lo manda y la nota queda con `null` (reimpresion sin renglones).
+    notas: respuesta.notas_pendientes.map(({ abonos, detalle, ...nota }) => ({
       ...nota,
       abonos_json: JSON.stringify(abonos ?? []),
+      detalle_json: detalle ? JSON.stringify(detalle) : null,
     })),
     // T-37: un servidor anterior a este ticket no manda la coleccion. Se pasa
     // `undefined` y `guardarSnapshot` no escribe nada de la ruta: la tablet

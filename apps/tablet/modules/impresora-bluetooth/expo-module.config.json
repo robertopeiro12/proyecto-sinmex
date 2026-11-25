@@ -1,0 +1,6 @@
+{
+  "platforms": ["android"],
+  "android": {
+    "modules": ["mx.jawa.impresorabluetooth.ImpresoraBluetoothModule"]
+  }
+}

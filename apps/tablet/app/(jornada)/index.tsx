@@ -1,31 +1,30 @@
-import { router, useFocusEffect, type Href } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ErrorRuta } from '@/datos';
-import { MOTIVO_CARGA_PENDIENTE, totalPiezas } from '@/estado/inventario';
+import { MOTIVO_CARGA_PENDIENTE, palabraPiezas, totalPiezas } from '@/estado/inventario';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import {
-  agruparRuta,
+  agruparRutaEnCurso,
   atendidosFueraDeRuta,
   sinRutaAsignada,
-  entradasMenu,
   textoAvisoSinRuta,
 } from '@/estado/ruta-del-dia';
 import type { MotivoAbandono } from '@/sincronizacion/motor';
 import { contarPendientesDeSubir } from '@/sincronizacion/pendientes';
 import { Boton } from '@/ui/boton';
-import { FilaAtendidoFueraDeRuta, FilaFueraDeRuta, FilaVisitadoSinVenta, ListaRuta } from '@/ui/lista-ruta';
+import { FilaAtendidoFueraDeRuta, FilaDadoDeBaja, FilaFueraDeRuta, ListaRuta } from '@/ui/lista-ruta';
 import { BotonIcono } from '@/ui/boton-icono';
 import { Cifra } from '@/ui/cifra';
-import { MenuLateral } from '@/ui/menu-lateral';
+import { MarcoMenu } from '@/ui/marco-menu';
 import { formatearMomento } from '@/ui/momento';
-import { Pastilla, Tarjeta } from '@/ui/pantalla';
+import { Tarjeta } from '@/ui/pantalla';
+import { TarjetaEmpezarRuta } from '@/ui/tarjeta-empezar-ruta';
 import { useTema } from '@/ui/tema';
-import { colores, espacio, fuente, grosor, tipo } from '@/ui/tokens';
+import { espacio } from '@/ui/tokens';
 
 /**
  * Lo que se le dice al vendedor cuando la sincronizacion no sale.
@@ -44,19 +43,17 @@ const MENSAJE: Record<MotivoAbandono, string> = {
 
 /**
  * La jornada abre en la ruta del dia (T-37, D16): la que asigno la oficina mas
- * lo que agrego el vendedor, en el orden en que el la recorre.
+ * lo que agrego el vendedor, en el orden del portal, partida en "Por visitar" y
+ * "Visitados" (rediseño, spec §4 y §6, maqueta 6).
  *
  * Todo lo que esta pantalla decide vive en funciones puras con prueba
  * (`src/estado/ruta-del-dia.ts`, `menu-jornada.ts`); aqui solo se pinta.
  */
 export default function RutaDelDia() {
   const { jornada, datos, vendedor, versionCatalogos } = useJawa();
-  const { salir, sincronizar, ultimaSincronizacion } = useSesion();
-  const { estilos, t } = useTema();
-  const insets = useSafeAreaInsets();
+  const { sincronizar, ultimaSincronizacion } = useSesion();
+  const { estilos } = useTema();
   const [sincronizando, setSincronizando] = useState(false);
-  const [menuAbierto, setMenuAbierto] = useState(false);
-  const [arrastrando, setArrastrando] = useState(false);
 
   // Se relee al volver a esta pantalla (`useFocusEffect`): vender o cobrar en
   // la ficha no mueve `datos`, y esta pantalla sigue montada debajo.
@@ -68,16 +65,25 @@ export default function RutaDelDia() {
   );
 
   // `versionCatalogos` sube cuando el pull escribe y cuando la ruta cambia
-  // (agregar, reordenar, quitar publican el cambio).
+  // (agregar y quitar publican el cambio). Con el vendedor, `notas_que_trae`
+  // cuenta tambien sus ventas a credito de hoy.
+  const vendedorId = vendedor?.id ?? null;
   const filas = useMemo(() => {
     void vueltas;
     void versionCatalogos;
     void ultimaSincronizacion;
-    return datos.rutas.delDia();
-  }, [datos, vueltas, versionCatalogos, ultimaSincronizacion]);
-  // Memoizado: un arreglo nuevo en cada render rehace el `PanResponder` de cada
-  // fila (y reinicia su `dy`) en cuanto el arrastre cambia el estado de aqui.
-  const { enRuta, visitadosSinVenta, fueraDeRuta } = useMemo(() => agruparRuta(filas), [filas]);
+    return vendedorId ? datos.rutas.delDia(vendedorId) : [];
+  }, [datos, vendedorId, vueltas, versionCatalogos, ultimaSincronizacion]);
+  const { porVisitar, visitados, fueraDeRuta, dadosDeBaja } = useMemo(() => agruparRutaEnCurso(filas), [filas]);
+  // El numero de cada cliente es su lugar fijo en la ruta viva (maqueta 6): no
+  // cambia cuando pasa a Visitados.
+  const numeroDe = useMemo(() => {
+    const numeros = new Map<string, number>();
+    for (const f of filas) {
+      if (f.activo === 1 && !numeros.has(f.cliente_id)) numeros.set(f.cliente_id, numeros.size + 1);
+    }
+    return (clienteId: string) => numeros.get(clienteId) ?? 0;
+  }, [filas]);
 
   // T-75 (D7): a quien se le vendio hoy sin estar en la ruta (prospectos de bienvenida incluidos).
   const atendidos = useMemo(() => {
@@ -101,9 +107,21 @@ export default function RutaDelDia() {
     return contarPendientesDeSubir(datos);
   }, [datos, vueltas, versionCatalogos, ultimaSincronizacion]);
 
+  // Rediseño, pieza 1: sin jornada de hoy hay que empezar ruta; con el control
+  // de inventario prendido, los clientes siguen cerrados hasta aceptar una carga.
+  // Mientras haya candado las filas se ven atenuadas y no se abren.
+  const candado = useMemo(() => {
+    void vueltas;
+    void versionCatalogos;
+    void ultimaSincronizacion;
+    return vendedor ? datos.cargas.candadoDeHoy(vendedor.id, jornada) : null;
+  }, [datos, vendedor, jornada, vueltas, versionCatalogos, ultimaSincronizacion]);
+  const sinEmpezar = candado?.tipo === 'empezar';
+
   // T-27 (D9): sin notificaciones push, la pantalla principal avisa de la carga
   // por aceptar mientras exista una pendiente de hoy, con o sin control (el aviso
-  // no bloquea nada por si mismo).
+  // no bloquea nada por si mismo). Con candado lo sustituye el aviso de la
+  // tarjeta de arriba: aqui solo queda la recarga pendiente a media ruta.
   const cargaPorAceptar = useMemo(() => {
     void vueltas;
     void versionCatalogos;
@@ -114,7 +132,7 @@ export default function RutaDelDia() {
   // T-38 (D6 capa 2): con el dia cerrado, la lista queda en solo lectura.
   const menu = estadoMenuJornada(jornada);
   const soloLectura = !menu.operacionesHabilitadas;
-  const sinRuta = sinRutaAsignada({ enRuta, visitadosSinVenta, fueraDeRuta });
+  const sinRuta = sinRutaAsignada({ porVisitar, visitados, fueraDeRuta, dadosDeBaja });
 
   /**
    * "Refrescar" es el "Sincronizar ahora" de siempre (D6): pull, push, fotos y
@@ -140,16 +158,16 @@ export default function RutaDelDia() {
     }
   }
 
-  const abrirCliente = useCallback((clienteId: string) => {
-    router.push({ pathname: '/(jornada)/operacion/[clienteId]', params: { clienteId } });
-  }, []);
-
-  const reordenar = useCallback(
-    (clienteIds: string[]) => {
-      if (jornada) datos.rutas.reordenar(jornada.fecha, clienteIds);
+  const bloqueada = candado !== null;
+  const abrirCliente = useCallback(
+    (clienteId: string) => {
+      if (bloqueada) return;
+      router.push({ pathname: '/(jornada)/operacion/[clienteId]', params: { clienteId } });
     },
-    [datos, jornada],
+    [bloqueada],
   );
+  // Atenua todo lo que lista clientes mientras haya candado.
+  const atenuado = bloqueada ? { opacity: 0.45 } : null;
 
   const quitar = useCallback(
     (id: string) => {
@@ -162,116 +180,33 @@ export default function RutaDelDia() {
     [datos],
   );
 
-  /**
-   * Cerrar sesion borra el material que permite entrar sin red (ver
-   * `gestor.salir()`). En ruta eso deja al vendedor fuera hasta volver al WiFi
-   * del negocio, asi que se confirma antes. Vive al pie del menu (T-37).
-   */
-  function confirmarSalida() {
-    Alert.alert(
-      'Cerrar sesión',
-      'Se borrará tu sesión de esta tablet. Para volver a entrar necesitarás conectarte al WiFi del negocio. Lo capturado hoy NO se borra.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Cerrar sesión', style: 'destructive', onPress: () => void salir() },
-      ],
-    );
-  }
-
-  const abrirMenu = useCallback(() => setMenuAbierto(true), []);
-  const cerrarMenu = useCallback(() => setMenuAbierto(false), []);
+  const derecha = (
+    <>
+      <BotonIcono
+        icono="agregar-cliente"
+        etiqueta="Agregar cliente a la ruta"
+        deshabilitado={soloLectura || sinEmpezar}
+        onPress={() => router.push('/(jornada)/agregar-a-ruta')}
+      />
+      <BotonIcono
+        icono="sincronizar"
+        etiqueta="Refrescar"
+        ocupado={sincronizando}
+        numero={pendientes}
+        onPress={() => void refrescar()}
+      />
+    </>
+  );
 
   return (
-    <MenuLateral
-      abierto={menuAbierto}
-      onCerrar={cerrarMenu}
-      entradas={entradasMenu(soloLectura)}
-      onElegir={(entrada) => {
-        setMenuAbierto(false);
-        router.push(entrada.destino as Href);
-      }}
-      encabezado={
-        <View style={{ gap: espacio.xs }}>
-          <Text style={estilos.textoTarjeta}>{vendedor?.nombre ?? 'Vendedor'}</Text>
-          <Text style={estilos.textoSuave}>Jornada del {jornada?.fecha}</Text>
-          {/* Lo que falta por subir tambien vive aqui, con su palabra: en la
-              cabecera solo queda la burbuja del boton de refrescar. */}
-          <View style={{ marginTop: espacio.sm }}>
-            <Pastilla
-              numero={pendientes}
-              texto="por subir"
-              estado={pendientes > 0 ? 'pendiente' : 'listo'}
-            />
-          </View>
-        </View>
-      }
-      pie={
-        <Boton
-          etiqueta="Cerrar sesión"
-          tono="peligro"
-          glifo="×"
-          onPress={() => {
-            setMenuAbierto(false);
-            confirmarSalida();
-          }}
-        />
-      }
-    >
-      <View style={{ flex: 1, backgroundColor: colores.papel }}>
-        {/* Cabecera propia (la del Stack se oculta para esta pantalla, ver el
-            layout): tiene que deslizarse junto con la ruta al abrir el menu. */}
-        <View
-          style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: espacio.sm,
-            paddingTop: insets.top + espacio.sm,
-            paddingBottom: espacio.sm,
-            paddingHorizontal: espacio.md,
-            backgroundColor: colores.superficie,
-            borderBottomWidth: grosor.hairline,
-            borderBottomColor: colores.borde,
-          }}
-        >
-          <BotonIcono glifo="☰" etiqueta="Abrir el menú" onPress={abrirMenu} />
-          {/* Mismo ancho que el segundo boton de la derecha: el titulo queda centrado. */}
-          <View style={{ width: 48 }} />
-          <Text
-            accessibilityRole="header"
-            numberOfLines={1}
-            style={{
-              flex: 1,
-              textAlign: 'center',
-              fontFamily: fuente.tituloMedio,
-              fontSize: t(tipo.subtitulo),
-              color: colores.tinta,
-            }}
-          >
-            Ruta del día
-          </Text>
-          <BotonIcono
-            glifo="+"
-            etiqueta="Registrar prospecto"
-            deshabilitado={soloLectura}
-            onPress={() => router.push('/(jornada)/prospectos')}
-          />
-          <BotonIcono
-            glifo="↻"
-            etiqueta="Refrescar"
-            ocupado={sincronizando}
-            numero={pendientes}
-            onPress={() => void refrescar()}
-          />
-        </View>
-
+    <MarcoMenu clave="ruta" titulo="Ruta del día" derecha={derecha}>
         <ScrollView
           style={estilos.pantalla}
           contentContainerStyle={estilos.contenido}
-          scrollEnabled={!arrastrando}
           keyboardShouldPersistTaps="handled"
         >
           <Text style={estilos.subtitulo}>
-            Jornada del {jornada?.fecha} · Catálogos bajados:{' '}
+            {jornada ? `Jornada del ${jornada.fecha} · ` : ''}Catálogos bajados:{' '}
             {formatearMomento(datos.catalogos.frescuraCatalogos())}
           </Text>
 
@@ -279,16 +214,19 @@ export default function RutaDelDia() {
             <Text style={estilos.error}>{MENSAJE[ultimaSincronizacion.motivo ?? 'sin-red']}</Text>
           ) : null}
 
-          {cargaPorAceptar ? (
+          {candado ? <TarjetaEmpezarRuta candado={candado} /> : null}
+
+          {!candado && cargaPorAceptar ? (
             <Tarjeta estado="accion" etiqueta="Carga por aceptar">
               <Text style={estilos.textoTarjeta}>{MOTIVO_CARGA_PENDIENTE}</Text>
               <Text style={estilos.textoSuave}>
                 Carga n.º {cargaPorAceptar.numero} ·{' '}
-                <Cifra valor={totalPiezas(cargaPorAceptar.lineas)} tono="suave" /> piezas
+                <Cifra valor={totalPiezas(cargaPorAceptar.lineas)} tono="suave" />{' '}
+                {palabraPiezas(totalPiezas(cargaPorAceptar.lineas))}
               </Text>
               <Boton
                 etiqueta="Ver la carga"
-                glifo="→"
+                icono="adelante"
                 ancho="ajustado"
                 onPress={() =>
                   router.push({
@@ -314,7 +252,7 @@ export default function RutaDelDia() {
               <View style={estilos.filaAcciones}>
                 <Boton
                   etiqueta={sincronizando ? 'Sincronizando…' : 'Sincronizar'}
-                  glifo="↻"
+                  icono="sincronizar"
                   tono="neutra"
                   ancho="ajustado"
                   ocupado={sincronizando}
@@ -322,47 +260,53 @@ export default function RutaDelDia() {
                 />
                 <Boton
                   etiqueta="Agregar a mi ruta"
-                  glifo="+"
+                  icono="mas"
                   ancho="ajustado"
-                  deshabilitado={soloLectura}
+                  deshabilitado={soloLectura || sinEmpezar}
                   onPress={() => router.push('/(jornada)/agregar-a-ruta')}
                 />
               </View>
             </Tarjeta>
           ) : (
             <>
-              <ListaRuta
-                filas={enRuta}
-                soloLectura={soloLectura}
-                onTocar={abrirCliente}
-                onReordenar={reordenar}
-                onQuitar={quitar}
-                onArrastrando={setArrastrando}
-              />
+              {porVisitar.length > 0 ? (
+                <View style={[{ gap: espacio.sm }, atenuado]}>
+                  <EncabezadoSeccion titulo="Por visitar" cuenta={porVisitar.length} />
+                  <ListaRuta
+                    filas={porVisitar}
+                    visitados={false}
+                    numeroDe={numeroDe}
+                    onTocar={abrirCliente}
+                    onQuitar={quitar}
+                  />
+                </View>
+              ) : null}
+              {visitados.length > 0 ? (
+                <View style={[{ gap: espacio.sm, marginTop: espacio.lg }, atenuado]}>
+                  <EncabezadoSeccion titulo="Visitados" cuenta={visitados.length} />
+                  <ListaRuta
+                    filas={visitados}
+                    visitados
+                    numeroDe={numeroDe}
+                    onTocar={abrirCliente}
+                    onQuitar={quitar}
+                  />
+                </View>
+              ) : null}
               {/* La accion principal de la pantalla, a lo ancho y al final de
                   la ruta: es donde el vendedor la busca cuando ya recorrio la lista. */}
               <Boton
                 etiqueta="Agregar a mi ruta"
-                glifo="+"
-                deshabilitado={soloLectura}
+                icono="mas"
+                deshabilitado={soloLectura || sinEmpezar}
                 onPress={() => router.push('/(jornada)/agregar-a-ruta')}
                 estilo={{ marginTop: espacio.sm }}
               />
             </>
           )}
 
-          {/* T-39 (D8): despues de la lista y antes de "Fuera de ruta". */}
-          {visitadosSinVenta.length > 0 ? (
-            <View style={{ gap: espacio.sm, marginTop: espacio.lg }}>
-              <Text style={estilos.seccion}>Visitados sin venta</Text>
-              {visitadosSinVenta.map((fila) => (
-                <FilaVisitadoSinVenta key={fila.id} fila={fila} onTocar={abrirCliente} />
-              ))}
-            </View>
-          ) : null}
-
           {fueraDeRuta.length > 0 ? (
-            <View style={{ gap: espacio.sm, marginTop: espacio.lg }}>
+            <View style={[{ gap: espacio.sm, marginTop: espacio.lg }, atenuado]}>
               <Text style={estilos.seccion}>Fuera de ruta</Text>
               {fueraDeRuta.map((fila) => (
                 <FilaFueraDeRuta key={fila.id} fila={fila} onTocar={abrirCliente} />
@@ -370,8 +314,17 @@ export default function RutaDelDia() {
             </View>
           ) : null}
 
-          {atendidos.length > 0 ? (
+          {dadosDeBaja.length > 0 ? (
             <View style={{ gap: espacio.sm, marginTop: espacio.lg }}>
+              <Text style={estilos.seccion}>Dados de baja</Text>
+              {dadosDeBaja.map((fila) => (
+                <FilaDadoDeBaja key={fila.id} fila={fila} />
+              ))}
+            </View>
+          ) : null}
+
+          {atendidos.length > 0 ? (
+            <View style={[{ gap: espacio.sm, marginTop: espacio.lg }, atenuado]}>
               <Text style={estilos.seccion}>Atendidos fuera de ruta</Text>
               {atendidos.map((a) => (
                 <FilaAtendidoFueraDeRuta key={a.cliente_id} fila={a} onTocar={abrirCliente} />
@@ -379,7 +332,17 @@ export default function RutaDelDia() {
             </View>
           ) : null}
         </ScrollView>
-      </View>
-    </MenuLateral>
+    </MarcoMenu>
+  );
+}
+
+/** "Por visitar 4": el titulo de la seccion y, a la derecha, cuantos clientes trae. */
+function EncabezadoSeccion({ titulo, cuenta }: { titulo: string; cuenta: number }) {
+  const { estilos } = useTema();
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+      <Text style={estilos.seccion}>{titulo}</Text>
+      <Cifra valor={cuenta} tono="suave" />
+    </View>
   );
 }

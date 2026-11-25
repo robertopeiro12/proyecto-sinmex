@@ -16,10 +16,12 @@ import type {
   SucursalPull,
   TipoNegocioPull,
   MotivoVisitaPull,
+  MotivoMermaPull,
   CampoEgresoPull,
   VehiculoPull,
   VendedorPull,
 } from './contrato';
+import { creadaEnDelDetalle } from './creada-en';
 import { aCentavos, aNumero } from './dinero';
 import type { OperacionNormalizada } from './operaciones';
 
@@ -223,6 +225,33 @@ export class SincronizacionRepository {
       nombre: f.nombre,
       exige_foto: f.exige_foto,
       exige_atendio: f.exige_atendio,
+      activo: bandera(true, f.deleted_at),
+    }));
+  }
+
+  /**
+   * Motivos de merma (rediseño pieza 4): catalogo global del Registro de
+   * Operacion, como `motivosVisita`. Corta por `actualizado_en` (el trigger
+   * `set_actualizado_en` la mueve en cualquier update, la baja incluida). Sin
+   * `desde` bajan todos, los dados de baja con `activo: 0`.
+   */
+  async motivosMerma(desde: Date | null): Promise<MotivoMermaPull[]> {
+    let q = this.db
+      .selectFrom('motivo_merma')
+      .select([
+        'id',
+        'nombre',
+        'aplica_cliente',
+        'aplica_vehiculo',
+        'deleted_at',
+      ]);
+    if (desde) q = q.where('actualizado_en', '>', desde);
+
+    return (await q.orderBy('nombre').execute()).map((f) => ({
+      id: f.id,
+      nombre: f.nombre,
+      aplica_cliente: f.aplica_cliente,
+      aplica_vehiculo: f.aplica_vehiculo,
       activo: bandera(true, f.deleted_at),
     }));
   }
@@ -433,15 +462,85 @@ export class SincronizacionRepository {
       abonado: string;
       abonos: { fecha_pago: string; monto: string; metodo_pago: string }[];
       borrada: Date | null;
+      lineas: {
+        presentacion_id: string;
+        etiqueta: string;
+        cantidad: number;
+        cantidad_promocion: number;
+        precio: string;
+      }[];
+      promociones: {
+        presentacion_id: string;
+        etiqueta: string;
+        cantidad: number;
+        texto: string;
+      }[];
+      vendedor_nombre: string | null;
+      atendio: string | null;
+      sucursal_nombre: string | null;
+      ocurrido_en: Date | null;
     }>`
       select vn.id, vn.folio, vn.num_nota,
              to_char(vn.fecha, 'YYYY-MM-DD') as fecha,
              vn.cliente_id, vn.status, vn.monto_total,
              coalesce(a.abonado, 0)::text as abonado,
              coalesce(a.abonos, '[]'::json) as abonos,
-             vn.deleted_at as borrada
+             vn.deleted_at as borrada,
+             -- Rediseño pieza 7: el detalle para reimprimir, en la misma
+             -- consulta (sin N+1). Los joins de etiqueta y nombres NO filtran
+             -- bajas: lo vendido se imprime aunque el catalogo cambie.
+             coalesce(l.lineas, '[]'::json) as lineas,
+             coalesce(pm.promociones, '[]'::json) as promociones,
+             ven.nombre as vendedor_nombre,
+             vn.atendio_nombre as atendio,
+             suc.nombre as sucursal_nombre,
+             -- La hora de la venta en la tablet, no la de llegada al servidor
+             -- (como la oficina, estadisticas/detalle.repository.ts). Sin
+             -- operacion de sync (nota de oficina) no hay hora real: el ticket
+             -- lleva solo vn.fecha, la fecha de la nota (recorrido final, D2).
+             op.ocurrido_en
         from venta_nota vn
         join cliente c on c.id = vn.cliente_id
+        left join vendedor ven on ven.id = vn.vendedor_id
+        left join sucursal suc on suc.id = vn.sucursal_id
+        left join lateral (
+          select so.ocurrido_en from sync_operacion so
+           where so.entidad_tabla = 'venta_nota' and so.entidad_id = vn.id
+             and so.vendedor_id = vn.vendedor_id
+           order by so.ocurrido_en limit 1
+        ) op on true
+        left join lateral (
+          select json_agg(
+                   json_build_object(
+                     'presentacion_id', d.presentacion_id,
+                     'etiqueta', p.nombre || ' ' || pr.volumen,
+                     'cantidad', d.cantidad,
+                     'cantidad_promocion', d.cantidad_promocion,
+                     -- Texto: un numeric como numero JSON pasa por coma flotante.
+                     'precio', d.precio::text
+                   ) order by d.created_at, p.nombre, pr.volumen, d.id
+                 ) as lineas
+            from venta_nota_detalle d
+            join presentacion pr on pr.id = d.presentacion_id
+            join producto p on p.id = pr.producto_id
+           where d.venta_nota_id = vn.id
+             and d.deleted_at is null
+        ) l on true
+        left join lateral (
+          -- Sin deleted_at: al editar la nota estas filas se borran (D15 de T-74).
+          select json_agg(
+                   json_build_object(
+                     'presentacion_id', vp.presentacion_id,
+                     'etiqueta', p.nombre || ' ' || pr.volumen,
+                     'cantidad', vp.cantidad,
+                     'texto', vp.promocion_texto
+                   ) order by vp.created_at, p.nombre, pr.volumen, vp.id
+                 ) as promociones
+            from venta_nota_promocion vp
+            join presentacion pr on pr.id = vp.presentacion_id
+            join producto p on p.id = pr.producto_id
+           where vp.venta_nota_id = vn.id
+        ) pm on true
         left join lateral (
           select sum(ca.monto) as abonado,
                  json_agg(
@@ -500,6 +599,20 @@ export class SincronizacionRepository {
           metodo_pago: a.metodo_pago as MetodoPagoAbono,
         })),
         activo: abierta && f.borrada === null ? 1 : 0,
+        detalle: {
+          lineas: f.lineas.map((ln) => ({
+            presentacion_id: ln.presentacion_id,
+            etiqueta: ln.etiqueta,
+            cantidad: ln.cantidad,
+            cantidad_promocion: ln.cantidad_promocion,
+            precio_centavos: aCentavos(ln.precio),
+          })),
+          promociones: f.promociones,
+          vendedor_nombre: f.vendedor_nombre,
+          atendio: f.atendio,
+          sucursal_nombre: f.sucursal_nombre ?? '',
+          creada_en: creadaEnDelDetalle(f.ocurrido_en, f.fecha),
+        },
       };
     });
   }

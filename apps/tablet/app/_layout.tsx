@@ -36,7 +36,6 @@ export default function LayoutRaiz() {
         <Stack screenOptions={cabecera}>
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
-          <Stack.Screen name="abrir-dia" options={{ title: 'Abrir el día' }} />
           <Stack.Screen name="(jornada)" options={{ headerShown: false }} />
         </Stack>
       </ProveedorJawa>

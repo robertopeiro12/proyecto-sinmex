@@ -13,6 +13,8 @@ import type { ContadoCredito } from './tipos';
 export const MAX_LINEAS_VENTA = 50;
 export const LARGO_MAX_NUM_NOTA = 30;
 export const LARGO_MAX_COMENTARIOS = 500;
+/** Quien atendio al vendedor en el negocio (rediseno pieza 2); el mismo tope que el servidor. */
+export const LARGO_MAX_ATENDIO = 80;
 
 /**
  * Limites de datos duplicados del servidor (backend/src/modules/ventas-cobranza/datos-venta.ts).
@@ -119,7 +121,7 @@ export function problemasDeCaptura(captura: CapturaVenta): string[] {
       problemas.push(`${l.etiqueta}: las cantidades son piezas enteras.`);
     } else if (l.cantidad > 0 && (l.precioCentavos === null || l.precioCentavos === 0)) {
       problemas.push(
-        `${l.etiqueta} no tiene precio para este cliente: solo puede ir como regalo de promoción.`,
+        `${l.etiqueta} no tiene precio para este cliente: solo puede ir como pieza de promoción.`,
       );
     }
   }
@@ -152,4 +154,18 @@ export function problemasDeCaptura(captura: CapturaVenta): string[] {
   }
 
   return problemas;
+}
+
+/**
+ * Quien atendio (rediseno pieza 2): obligatorio, se recorta y lleva de 1 a
+ * `LARGO_MAX_ATENDIO` caracteres. Devuelve el mensaje para el vendedor, o
+ * `null` si esta bien. La pantalla y `ventas.registrar()` usan la misma regla.
+ */
+export function validarAtendio(texto: string): string | null {
+  const limpio = texto.trim();
+  if (limpio === '') return 'Escribe el nombre de quien atiende.';
+  if (limpio.length > LARGO_MAX_ATENDIO) {
+    return `El nombre de quien atiende lleva hasta ${LARGO_MAX_ATENDIO} caracteres.`;
+  }
+  return null;
 }

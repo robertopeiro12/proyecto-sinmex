@@ -3,6 +3,7 @@ import { sql, type Transaction } from 'kysely';
 import type { DB } from '../../database/schema';
 import { aCentavos, aPesos } from '../sincronizacion/dinero';
 import type { FacturaVenta } from './datos-venta';
+import type { MetodoAbono } from './cobranzas.repository';
 import type { LineaGuardada, PlanDetalle } from './edicion-venta';
 import type { ContadoCredito, StatusInicial } from './reglas-venta';
 import type { MetodoPagoContado, OrigenVenta } from './ventas.service';
@@ -168,6 +169,31 @@ export class VentasEdicionRepository {
       : undefined;
   }
 
+  /**
+   * Pieza 2: el abono al vender de una venta a credito, si sigue vivo. Es la
+   * fila `venta_contado` con `tipo = 'abono'`; la del contado es `cobranza`.
+   * `monto` en centavos. Si hubiera mas de una (no deberia), se suman.
+   */
+  async abonoAlVender(
+    id: string,
+    trx: Transaction<DB>,
+  ): Promise<{ montoCentavos: number; metodoPago: MetodoAbono } | undefined> {
+    const filas = await trx
+      .selectFrom('cobranza_abono')
+      .select(['monto', 'metodo_pago'])
+      .where('venta_nota_id', '=', id)
+      .where('origen', '=', 'venta_contado')
+      .where('tipo', '=', 'abono')
+      .where('deleted_at', 'is', null)
+      .orderBy('created_at')
+      .execute();
+    if (filas.length === 0) return undefined;
+    return {
+      montoCentavos: filas.reduce((t, f) => t + aCentavos(f.monto), 0),
+      metodoPago: filas[0].metodo_pago as MetodoAbono,
+    };
+  }
+
   /** El % del cliente HOY (texto `numeric`), aunque el cliente este dado de baja. */
   async pctComisionDelCliente(
     clienteId: string,
@@ -248,7 +274,12 @@ export class VentasEdicionRepository {
       .execute();
   }
 
-  /** El cobro automatico de contado vivo, si lo hay (§4.2 paso 8). */
+  /**
+   * El cobro automatico de contado vivo, si lo hay (§4.2 paso 8), y el abono
+   * al vender de una venta a credito (pieza 2): los dos son `venta_contado`.
+   * Eliminar la venta los da de baja a los dos; la edicion vuelve a escribir
+   * el que corresponda.
+   */
   async borrarCobroContado(id: string, trx: Transaction<DB>): Promise<void> {
     await trx
       .updateTable('cobranza_abono')
