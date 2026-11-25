@@ -50,16 +50,17 @@ export type FiltroMovimientos =
  * logica: editar una carga reemplaza sus lineas. La misma suma que usaba
  * Retorno como referencia.
  */
-function cargasAceptadasDelDia(fecha: string, db: Kysely<DB>) {
+function cargasAceptadasDelRango(desde: string, hasta: string, db: Kysely<DB>) {
   return db
     .selectFrom('carga as c')
     .innerJoin('carga_detalle as cd', 'cd.carga_id', 'c.id')
     .select([
       'c.vendedor_id as vendedor_id',
       'cd.presentacion_id as presentacion_id',
+      'c.fecha as fecha',
       'cd.piezas as piezas',
     ])
-    .where(sql<boolean>`c.fecha = ${fecha}::date`)
+    .where(sql<boolean>`c.fecha between ${desde}::date and ${hasta}::date`)
     .where('c.estado', '=', 'aceptada')
     .where('c.deleted_at', 'is', null);
 }
@@ -89,40 +90,69 @@ export async function movimientosDelDia(
   fecha: string,
   filtro: FiltroMovimientos,
 ): Promise<MovimientoVendedor[]> {
+  const filas = await movimientosDelRango(db, fecha, fecha, filtro);
+  // Sin `fecha` ni `sucursalId`: la forma de siempre del corte.
+  return filas.map((f) => {
+    const m: Partial<MovimientoVendedorDia> = { ...f };
+    delete m.fecha;
+    delete m.sucursalId;
+    return m as MovimientoVendedor;
+  });
+}
+
+/** Un `MovimientoVendedor` de un dia del rango, con la sucursal del vendedor. */
+export interface MovimientoVendedorDia extends MovimientoVendedor {
+  /** `AAAA-MM-DD`. */
+  fecha: string;
+  sucursalId: string;
+}
+
+/**
+ * `movimientosDelDia` para un rango de fechas (`desde` y `hasta` incluidos), en
+ * una sola consulta agrupada por dia: la misma cuenta, una fila por vendedor,
+ * presentacion y dia. La usa el Inventario de PT para la merma de los
+ * vendedores (contada o teorica) sin un query por dia.
+ */
+export async function movimientosDelRango(
+  db: Kysely<DB>,
+  desde: string,
+  hasta: string,
+  filtro: FiltroMovimientos,
+): Promise<MovimientoVendedorDia[]> {
   const condicion =
     'vendedorId' in filtro
       ? sql`v.id = ${filtro.vendedorId}`
       : filtro.sucursalCodigo === null
         ? sql`true`
         : sql`s.codigo = ${filtro.sucursalCodigo}`;
-  const r = await sql<MovimientoVendedor>`
+  const r = await sql<MovimientoVendedorDia>`
     with mov as (
-      select cg.vendedor_id, cg.presentacion_id,
+      select cg.vendedor_id, cg.presentacion_id, cg.fecha,
              cg.piezas as cargadas, 0 as vendidas, 0 as regaladas, 0 as buenas, 0 as merma,
              0 as merma_entregada, 0 as merma_recibida, 0 as merma_almacen, 0 as consumo,
              0 as cambios_entregados, 0 as cambios_recibidos
-        from (${cargasAceptadasDelDia(fecha, db)}) cg
+        from (${cargasAceptadasDelRango(desde, hasta, db)}) cg
       union all
-      select vn.vendedor_id, d.presentacion_id,
+      select vn.vendedor_id, d.presentacion_id, vn.fecha,
              0, d.cantidad, d.cantidad_promocion, 0, 0,
              0, 0, 0, 0,
              0, 0
         from venta_nota vn
         join venta_nota_detalle d on d.venta_nota_id = vn.id
-       where vn.fecha = ${fecha}::date
+       where vn.fecha between ${desde}::date and ${hasta}::date
          and vn.vendedor_id is not null
          and vn.deleted_at is null
          and d.deleted_at is null
       union all
-      select rt.vendedor_id, rt.presentacion_id,
+      select rt.vendedor_id, rt.presentacion_id, rt.fecha,
              0, 0, 0, rt.piezas, rt.piezas_merma,
              0, 0, 0, 0,
              0, 0
         from retorno rt
-       where rt.fecha = ${fecha}::date
+       where rt.fecha between ${desde}::date and ${hasta}::date
          and rt.deleted_at is null
       union all
-      select mi.vendedor_id, l.presentacion_id,
+      select mi.vendedor_id, l.presentacion_id, mi.fecha,
              0, 0, 0, 0, 0,
              case when mi.tipo = 'merma_cliente' and l.sentido = 'entregado' then l.piezas else 0 end,
              case when mi.tipo = 'merma_cliente' and l.sentido = 'recibido' then l.piezas else 0 end,
@@ -131,13 +161,13 @@ export async function movimientosDelDia(
              0, 0
         from movimiento_inventario mi
         join movimiento_inventario_linea l on l.movimiento_id = mi.id
-       where mi.fecha = ${fecha}::date
+       where mi.fecha between ${desde}::date and ${hasta}::date
          and mi.deleted_at is null
       union all
       -- Procesos de la oficina con vendedor (Operacion -> Procesos, D4). Sin
       -- vendedor son de Oficina y no tocan ninguna camioneta; el descuento es
       -- la consecuencia del faltante y no mueve la cuenta.
-      select po.vendedor_id, l.presentacion_id,
+      select po.vendedor_id, l.presentacion_id, po.fecha,
              0, 0,
              case when po.tipo = 'promocion' then l.piezas else 0 end,
              0, 0,
@@ -149,12 +179,14 @@ export async function movimientosDelDia(
              case when po.tipo = 'cambio' and l.sentido = 'recibido' then l.piezas else 0 end
         from proceso_oficina po
         join proceso_oficina_linea l on l.proceso_id = po.id
-       where po.fecha = ${fecha}::date
+       where po.fecha between ${desde}::date and ${hasta}::date
          and po.deleted_at is null
          and po.vendedor_id is not null
          and po.tipo <> 'descuento'
     )
     select m.vendedor_id as "vendedorId",
+           to_char(m.fecha, 'YYYY-MM-DD') as fecha,
+           v.sucursal_id as "sucursalId",
            m.presentacion_id as "presentacionId",
            p.nombre || ' ' || pr.volumen as nombre,
            p.nombre as producto,
@@ -177,8 +209,8 @@ export async function movimientosDelDia(
       join producto p on p.id = pr.producto_id
      where v.deleted_at is null
        and ${condicion}
-     group by m.vendedor_id, m.presentacion_id, p.nombre, pr.volumen
-     order by p.nombre, pr.volumen, m.presentacion_id
+     group by m.vendedor_id, m.fecha, v.sucursal_id, m.presentacion_id, p.nombre, pr.volumen
+     order by m.fecha, p.nombre, pr.volumen, m.presentacion_id
   `.execute(db);
   return r.rows;
 }
