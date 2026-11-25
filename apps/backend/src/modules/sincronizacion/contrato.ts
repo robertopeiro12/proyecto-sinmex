@@ -75,7 +75,8 @@ export const MAX_BYTES_POR_LOTE = 1_000_000;
  * Hecho: T-27 pieza 2 — `movimiento`, la merma del cliente, la merma del
  *        trayecto o el consumo propio (ver {@link DatosMovimiento}); se proyecta
  *        a `movimiento_inventario` con `id = clave`. Tipo nuevo = cambio aditivo:
- *        no sube la version.
+ *        no sube la version. El rediseño (pieza 4) le suma el `cambio` con un
+ *        cliente y el `motivo_merma_id` de las mermas, tambien aditivos.
  * Hecho: T-39 — `visita`, una visita sin venta con su motivo (ver
  *        {@link DatosVisita}); se proyecta a la tabla `visita` con `id = clave`.
  *        **No** reutiliza `ruta`, que sigue reservado y se guarda sin proyectar.
@@ -288,6 +289,13 @@ export const CODIGOS_RECHAZO = [
    * no esto. Motivo neutro.
    */
   'movimiento-id-ocupado',
+  /**
+   * El `motivo_merma_id` de un movimiento no existe en el catalogo. Rediseño
+   * pieza 4. Un motivo **dado de baja si se acepta** (el vendedor lo eligio sin
+   * red) y no se miran las banderas `aplica_*`. Solo cae con un id que nunca
+   * existio (bug de la tablet).
+   */
+  'motivo-merma-inexistente',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -613,6 +621,14 @@ export type DatosGasto = {
  *   reposicion, de cualquier sabor y tamano).
  * - `merma_trayecto` y `consumo`: el sobre **no** lleva `cliente_id`; solo lineas
  *   `entregado`, al menos una.
+ * - `cambio` (rediseño pieza 4): el sobre **lleva** `cliente_id`; al menos una
+ *   linea `recibido` (regresa al inventario del vendedor) y al menos una
+ *   `entregado`. No se cobra diferencia.
+ *
+ * `motivo_merma_id` (rediseño pieza 4, aditivo): uuid del catalogo de motivos de
+ * merma, **solo** en `merma_cliente` y `merma_trayecto` (en `cambio`/`consumo` es
+ * `datos-invalidos`). Opcional para el servidor (tablets viejas); uno que nunca
+ * existio es `motivo-merma-inexistente`, uno dado de baja se acepta.
  *
  * Sin folio. La `clave` **es el id** de la fila `movimiento_inventario`: debe ser
  * uuid. El dia es `fecha_operacion`. El servidor **no** revisa el limite de
@@ -621,9 +637,11 @@ export type DatosGasto = {
  * Es `type` y no `interface` por la misma razon que {@link DatosVenta}.
  */
 export type DatosMovimiento = {
-  tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo';
+  tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo' | 'cambio';
   /** Hasta 300 caracteres; se recorta y uno vacio es `null`. */
   comentario?: string | null;
+  /** uuid de `motivo_merma`; solo en mermas. Ausente o `null` = sin motivo. */
+  motivo_merma_id?: string | null;
   /** Instante ISO-8601 con zona en que el vendedor lo guardo. */
   registrado_en: string;
   /** De 1 a 200; una presentacion una sola vez por sentido; piezas enteras 1..99 999. */

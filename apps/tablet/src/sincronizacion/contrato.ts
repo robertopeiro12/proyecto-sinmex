@@ -147,6 +147,11 @@ export const CODIGOS_RECHAZO = [
   'movimiento-id-ocupado',
   /** Notas asignadas: el id del comentario de nota no cobrada ya lo ocupa otro registro. Motivo neutro. */
   'nota-no-cobrada-id-ocupado',
+  /**
+   * Rediseño pieza 4: el motivo de merma no existe en el servidor (un id que
+   * nunca existio; uno dado de baja se acepta). El movimiento queda en `error`.
+   */
+  'motivo-merma-inexistente',
 ] as const;
 
 export type CodigoRechazo = (typeof CODIGOS_RECHAZO)[number];
@@ -839,12 +844,16 @@ export type DatosGasto = {
 /**
  * `datos` de un movimiento de inventario (T-27 pieza 2). Ver la copia normativa
  * en el backend: `merma_cliente` lleva `cliente_id` en el sobre y al menos una
- * linea `recibido`; `merma_trayecto` y `consumo`, sin cliente y solo `entregado`.
+ * linea `recibido`; `merma_trayecto` y `consumo`, sin cliente y solo `entregado`;
+ * `cambio` (pieza 4), con cliente, al menos una `recibido` y una `entregado`.
+ * `motivo_merma_id` solo en mermas.
  */
 export type DatosMovimiento = {
-  tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo';
+  tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo' | 'cambio';
   /** Hasta 300 caracteres. */
   comentario?: string | null;
+  /** uuid de `motivo_merma`; solo en `merma_cliente` y `merma_trayecto`. */
+  motivo_merma_id?: string | null;
   registrado_en: string;
   lineas: {
     presentacion_id: string;

@@ -112,6 +112,7 @@ describe('prepararProyeccion', () => {
         movimiento: {
           tipo: 'merma_trayecto',
           comentario: null,
+          motivoMermaId: null,
           registradoEn: '2026-10-23T18:40:00.000Z',
           lineas: [{ presentacionId: PRE_A, sentido: 'entregado', piezas: 2 }],
         },

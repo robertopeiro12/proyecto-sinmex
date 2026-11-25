@@ -41,6 +41,7 @@ interface FilaMovimiento {
   vendedor_id: string;
   cliente_id: string | null;
   tipo: string;
+  motivo_merma_id: string | null;
   comentario: string | null;
   fecha_texto: string;
   registrado_en: Date;
@@ -59,6 +60,8 @@ describe('Movimientos de inventario en el push (e2e)', () => {
   let productoId: string;
   let litro: string;
   let medio: string;
+  let motivoVivo: string;
+  let motivoDeBaja: string;
 
   const push = async (operaciones: unknown[]) => {
     const res = await request(app.getHttpServer())
@@ -122,6 +125,19 @@ describe('Movimientos de inventario en el push (e2e)', () => {
     },
   });
 
+  /** Rediseño pieza 4: recibe 3 litros del cliente, le entrega 2 medios. */
+  const cambio = (
+    datos: Record<string, unknown> = {},
+    sobre: Record<string, unknown> = {},
+  ) =>
+    mermaCliente(
+      {
+        tipo: 'cambio',
+        ...datos,
+      },
+      sobre,
+    );
+
   const altaProspecto = () => ({
     clave: randomUUID(),
     tipo: 'prospecto',
@@ -148,6 +164,7 @@ describe('Movimientos de inventario en el push (e2e)', () => {
         'vendedor_id',
         'cliente_id',
         'tipo',
+        'motivo_merma_id',
         'comentario',
         'registrado_en',
       ])
@@ -281,6 +298,22 @@ describe('Movimientos de inventario en el push (e2e)', () => {
     litro = await presentacion('1 L');
     medio = await presentacion('500 ml');
 
+    const motivo = async (nombre: string, deBaja: boolean) =>
+      (
+        await db
+          .insertInto('motivo_merma')
+          .values({
+            nombre,
+            aplica_cliente: true,
+            aplica_vehiculo: true,
+            deleted_at: deBaja ? new Date() : null,
+          })
+          .returning('id')
+          .executeTakeFirstOrThrow()
+      ).id;
+    motivoVivo = await motivo(`${PREFIJO} Reventado`, false);
+    motivoDeBaja = await motivo(`${PREFIJO} Viejo`, true);
+
     bearer = (
       (
         await request(app.getHttpServer())
@@ -304,6 +337,10 @@ describe('Movimientos de inventario en el push (e2e)', () => {
     await db
       .deleteFrom('movimiento_inventario')
       .where('vendedor_id', '=', vendedorId)
+      .execute();
+    await db
+      .deleteFrom('motivo_merma')
+      .where('id', 'in', [motivoVivo, motivoDeBaja])
       .execute();
     await db
       .deleteFrom('sync_operacion')
@@ -489,6 +526,111 @@ describe('Movimientos de inventario en el push (e2e)', () => {
     expect((await push([op])).resultados[0].estado).toBe('aplicada');
     expect(await filaMovimiento(op.clave)).toMatchObject({
       cliente_id: alta.clave,
+    });
+  });
+
+  describe('cambio y motivo de merma (rediseño pieza 4)', () => {
+    it('un cambio entra con su cliente y sus lineas recibido y entregado', async () => {
+      const op = cambio();
+      expect((await push([op])).resultados[0].estado).toBe('aplicada');
+      expect(await filaMovimiento(op.clave)).toMatchObject({
+        tipo: 'cambio',
+        cliente_id: clienteId,
+        motivo_merma_id: null,
+        fecha_texto: FECHA,
+      });
+      expect(await lineas(op.clave)).toEqual([
+        { presentacion_id: litro, sentido: 'recibido', piezas: 3 },
+        { presentacion_id: medio, sentido: 'entregado', piezas: 2 },
+      ]);
+    });
+
+    it.each([
+      [
+        'un cambio sin entregado',
+        () =>
+          cambio({
+            lineas: [
+              { presentacion_id: litro, sentido: 'recibido', piezas: 3 },
+            ],
+          }),
+        /^lineas: .*entregado/,
+      ],
+      [
+        'un cambio sin cliente_id',
+        () => cambio({}, { cliente_id: undefined }),
+        /^cliente_id: /,
+      ],
+      [
+        'un cambio con motivo de merma',
+        () => cambio({ motivo_merma_id: motivoVivo }),
+        /^motivo_merma_id: /,
+      ],
+      [
+        'un consumo con motivo de merma',
+        () => {
+          const op = sinCliente('consumo');
+          return { ...op, datos: { ...op.datos, motivo_merma_id: motivoVivo } };
+        },
+        /^motivo_merma_id: /,
+      ],
+    ])('%s es datos-invalidos y no deja fila', async (_caso, armar, motivo) => {
+      const op = armar();
+      const r = (await push([op])).resultados[0];
+      expect(r).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'datos-invalidos',
+      });
+      expect(r.motivo).toMatch(motivo);
+      expect(await filaMovimiento(op.clave)).toBeUndefined();
+    });
+
+    it('una merma del cliente y una del trayecto entran con su motivo', async () => {
+      const delCliente = mermaCliente({ motivo_merma_id: motivoVivo });
+      const trayecto = sinCliente('merma_trayecto');
+      const conMotivo = {
+        ...trayecto,
+        datos: { ...trayecto.datos, motivo_merma_id: motivoVivo },
+      };
+      const r = await push([delCliente, conMotivo]);
+      expect(r.resultados.map((x) => x.estado)).toEqual([
+        'aplicada',
+        'aplicada',
+      ]);
+      expect(await filaMovimiento(delCliente.clave)).toMatchObject({
+        motivo_merma_id: motivoVivo,
+      });
+      expect(await filaMovimiento(conMotivo.clave)).toMatchObject({
+        motivo_merma_id: motivoVivo,
+      });
+    });
+
+    it('Review Focus 1: una merma sin motivo (tablet vieja) entra con null', async () => {
+      const op = mermaCliente();
+      expect((await push([op])).resultados[0].estado).toBe('aplicada');
+      expect(await filaMovimiento(op.clave)).toMatchObject({
+        motivo_merma_id: null,
+      });
+    });
+
+    it('Review Focus 5: un motivo dado de baja entra igual', async () => {
+      const op = mermaCliente({ motivo_merma_id: motivoDeBaja });
+      expect((await push([op])).resultados[0].estado).toBe('aplicada');
+      expect(await filaMovimiento(op.clave)).toMatchObject({
+        motivo_merma_id: motivoDeBaja,
+      });
+    });
+
+    it('un motivo que nunca existio es motivo-merma-inexistente y no deja ni buzon ni movimiento', async () => {
+      const op = mermaCliente({ motivo_merma_id: randomUUID() });
+      const r = (await push([op])).resultados[0];
+      expect(r).toMatchObject({
+        estado: 'rechazada',
+        codigo: 'motivo-merma-inexistente',
+      });
+      expect(r.motivo).toMatch(/^motivo_merma_id: /);
+      expect(await filaMovimiento(op.clave)).toBeUndefined();
+      expect(await buzon(op.clave)).toBeUndefined();
     });
   });
 

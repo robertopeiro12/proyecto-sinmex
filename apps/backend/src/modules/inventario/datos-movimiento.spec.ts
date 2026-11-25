@@ -38,6 +38,7 @@ describe('normalizarDatosMovimiento (T-27 pieza 2)', () => {
       movimiento: {
         tipo: 'merma_cliente',
         comentario: 'Venían reventadas',
+        motivoMermaId: null,
         registradoEn: '2026-10-23T18:40:00.000Z',
         lineas: [{ presentacionId: LITRO, sentido: 'recibido', piezas: 3 }],
       },
@@ -85,7 +86,7 @@ describe('normalizarDatosMovimiento (T-27 pieza 2)', () => {
   });
 
   it.each([
-    [{ tipo: 'cambio' }, /^tipo: /],
+    [{ tipo: 'devolucion' }, /^tipo: /],
     [{ tipo: undefined }, /^tipo: /],
     [{ registrado_en: '2026-10-23' }, /^registrado_en: /],
     [{ comentario: 5 }, /^comentario: /],
@@ -166,5 +167,90 @@ describe('normalizarDatosMovimiento (T-27 pieza 2)', () => {
         }),
       ),
     ).toMatchObject({ ok: true });
+  });
+
+  describe('cambio (rediseño pieza 4)', () => {
+    it('un cambio con lo recibido y lo entregado sale normalizado', () => {
+      expect(normalizarDatosMovimiento(datos({ tipo: 'cambio' }))).toEqual({
+        ok: true,
+        movimiento: {
+          tipo: 'cambio',
+          comentario: null,
+          motivoMermaId: null,
+          registradoEn: '2026-10-23T18:40:00.000Z',
+          lineas: [
+            { presentacionId: LITRO, sentido: 'recibido', piezas: 3 },
+            { presentacionId: MEDIO, sentido: 'entregado', piezas: 2 },
+          ],
+        },
+      });
+    });
+
+    it.each([
+      [
+        'sin entregado',
+        [{ presentacion_id: LITRO, sentido: 'recibido', piezas: 3 }],
+        /^lineas: .*entregado/,
+      ],
+      [
+        'sin recibido',
+        [{ presentacion_id: MEDIO, sentido: 'entregado', piezas: 2 }],
+        /^lineas: .*recibido/,
+      ],
+    ])('un cambio %s es invalido', (_caso, lineas, motivo) => {
+      const r = normalizarDatosMovimiento(datos({ tipo: 'cambio', lineas }));
+      expect(r).toMatchObject({ ok: false });
+      if (!r.ok) expect(r.motivo).toMatch(motivo);
+    });
+  });
+
+  describe('motivo_merma_id (rediseño pieza 4)', () => {
+    const MOTIVO = '7b5e3c4d-9f0a-4b12-c3d4-e5f607182930';
+
+    it.each(['merma_cliente', 'merma_trayecto'])(
+      'una %s lleva su motivo, en minusculas',
+      (tipo) => {
+        const lineas =
+          tipo === 'merma_trayecto'
+            ? [{ presentacion_id: LITRO, sentido: 'entregado', piezas: 1 }]
+            : undefined;
+        expect(
+          normalizarDatosMovimiento(
+            datos({
+              tipo,
+              motivo_merma_id: MOTIVO.toUpperCase(),
+              ...(lineas ? { lineas } : {}),
+            }),
+          ),
+        ).toMatchObject({ ok: true, movimiento: { motivoMermaId: MOTIVO } });
+      },
+    );
+
+    it('Review Focus 1: una merma sin motivo (tablet vieja) entra con null', () => {
+      expect(normalizarDatosMovimiento(datos())).toMatchObject({
+        ok: true,
+        movimiento: { motivoMermaId: null },
+      });
+      expect(
+        normalizarDatosMovimiento(datos({ motivo_merma_id: null })),
+      ).toMatchObject({ ok: true, movimiento: { motivoMermaId: null } });
+    });
+
+    it.each([
+      [{ motivo_merma_id: 'abc' }],
+      [{ motivo_merma_id: 5 }],
+      [{ tipo: 'cambio', motivo_merma_id: MOTIVO }],
+      [
+        {
+          tipo: 'consumo',
+          motivo_merma_id: MOTIVO,
+          lineas: [{ presentacion_id: LITRO, sentido: 'entregado', piezas: 1 }],
+        },
+      ],
+    ])('%j es invalido y nombra motivo_merma_id', (extra) => {
+      const r = normalizarDatosMovimiento(datos(extra));
+      expect(r).toMatchObject({ ok: false });
+      if (!r.ok) expect(r.motivo).toMatch(/^motivo_merma_id: /);
+    });
   });
 });

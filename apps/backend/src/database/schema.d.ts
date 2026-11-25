@@ -233,6 +233,7 @@ export interface MovimientoInventario {
   deleted_at: Timestamp | null;
   fecha: Timestamp;
   id: string;
+  motivo_merma_id: string | null;
   registrado_en: Timestamp;
   sucursal_id: string;
   tipo: string;

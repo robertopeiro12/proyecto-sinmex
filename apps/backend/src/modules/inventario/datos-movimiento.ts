@@ -3,7 +3,8 @@ import { RE_UUID } from '../rutas/datos-visita';
 
 /**
  * Validacion y normalizacion de `datos` de un movimiento de inventario (T-27
- * pieza 2): la merma del cliente, la merma del trayecto y el consumo propio.
+ * pieza 2): la merma del cliente, la merma del trayecto y el consumo propio. El
+ * rediseño (pieza 4) suma el cambio fisico con un cliente y el motivo de merma.
  *
  * Pura, sin base: decide la FORMA. Que las presentaciones existan y que el id
  * este libre lo decide `MovimientosService` dentro de la transaccion; el
@@ -20,10 +21,12 @@ export const TIPOS_MOVIMIENTO = [
   'merma_cliente',
   'merma_trayecto',
   'consumo',
+  /** Rediseño pieza 4: lo recibido regresa al inventario, lo entregado sale. */
+  'cambio',
 ] as const;
 export type TipoMovimiento = (typeof TIPOS_MOVIMIENTO)[number];
 
-/** `recibido` = entra a la camioneta (merma del cliente); `entregado` = sale. */
+/** `recibido` = entra a la camioneta (merma del cliente, cambio); `entregado` = sale. */
 export const SENTIDOS_MOVIMIENTO = ['recibido', 'entregado'] as const;
 export type SentidoMovimiento = (typeof SENTIDOS_MOVIMIENTO)[number];
 
@@ -43,6 +46,11 @@ export interface LineaMovimientoNormalizada {
 export interface MovimientoNormalizado {
   tipo: TipoMovimiento;
   comentario: string | null;
+  /**
+   * uuid en minusculas del `motivo_merma`, solo en mermas. `null` = sin motivo
+   * (una tablet vieja; la app nueva lo exige). Que exista lo decide el servicio.
+   */
+  motivoMermaId: string | null;
   /** ISO-8601 en UTC (`toISOString`). */
   registradoEn: string;
   lineas: LineaMovimientoNormalizada[];
@@ -75,7 +83,8 @@ export function normalizarDatosMovimiento(
   if (!esTipo(tipo)) {
     return {
       ok: false,
-      motivo: 'tipo: tiene que ser merma_cliente, merma_trayecto o consumo.',
+      motivo:
+        'tipo: tiene que ser merma_cliente, merma_trayecto, consumo o cambio.',
     };
   }
 
@@ -102,6 +111,27 @@ export function normalizarDatosMovimiento(
       };
     }
     comentario = limpio === '' ? null : limpio;
+  }
+
+  // Decision 1 del plan: opcional (tablets viejas), solo en mermas.
+  let motivoMermaId: string | null = null;
+  const motivoCrudo = datos.motivo_merma_id;
+  if (motivoCrudo !== undefined && motivoCrudo !== null) {
+    if (typeof motivoCrudo !== 'string' || !RE_UUID.test(motivoCrudo)) {
+      return {
+        ok: false,
+        motivo:
+          'motivo_merma_id: tiene que ser el uuid de un motivo de merma o null.',
+      };
+    }
+    if (tipo !== 'merma_cliente' && tipo !== 'merma_trayecto') {
+      return {
+        ok: false,
+        motivo:
+          'motivo_merma_id: solo la merma del cliente y la del trayecto llevan motivo; el cambio y el consumo no.',
+      };
+    }
+    motivoMermaId = motivoCrudo.toLowerCase();
   }
 
   const crudas: unknown = datos.lineas;
@@ -164,7 +194,11 @@ export function normalizarDatosMovimiento(
     }
     vistas.add(llave);
 
-    if (tipo !== 'merma_cliente' && sentido === 'recibido') {
+    if (
+      tipo !== 'merma_cliente' &&
+      tipo !== 'cambio' &&
+      sentido === 'recibido'
+    ) {
       return {
         ok: false,
         motivo: `${campo}.sentido: la merma del trayecto y el consumo solo llevan líneas entregado (piezas que salen de la camioneta).`,
@@ -185,11 +219,30 @@ export function normalizarDatosMovimiento(
     };
   }
 
+  // Decision 2 del plan: un cambio es un intercambio, recibe y entrega.
+  if (tipo === 'cambio') {
+    if (!lineas.some((l) => l.sentido === 'recibido')) {
+      return {
+        ok: false,
+        motivo:
+          'lineas: un cambio lleva al menos una línea recibido (lo que entregó el cliente).',
+      };
+    }
+    if (!lineas.some((l) => l.sentido === 'entregado')) {
+      return {
+        ok: false,
+        motivo:
+          'lineas: un cambio lleva al menos una línea entregado (lo que le entregó el vendedor).',
+      };
+    }
+  }
+
   return {
     ok: true,
     movimiento: {
       tipo,
       comentario,
+      motivoMermaId,
       registradoEn: new Date(registradoEn).toISOString(),
       lineas,
     },

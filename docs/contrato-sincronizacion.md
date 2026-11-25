@@ -960,9 +960,10 @@ El vendedor, sin red, deja un comentario de por qué no cobró una nota que la o
   "tipo": "movimiento",
   "fecha_operacion": "2026-10-23",      // el día al que cuenta (el corte de inventario)
   "ocurrido_en": "2026-10-23T18:40:00.000Z",
-  "cliente_id": "uuid",                 // SOLO en merma_cliente; pasa por el alcance del lote. Sin "folio"
+  "cliente_id": "uuid",                 // SOLO en merma_cliente y cambio; pasa por el alcance del lote. Sin "folio"
   "datos": {
-    "tipo": "merma_cliente",            // merma_cliente | merma_trayecto | consumo
+    "tipo": "merma_cliente",            // merma_cliente | merma_trayecto | consumo | cambio
+    "motivo_merma_id": "uuid",          // opcional; SOLO en merma_cliente y merma_trayecto (rediseño pieza 4)
     "comentario": null,                 // opcional, <= 300
     "registrado_en": "2026-10-23T11:40:00-07:00",
     "lineas": [
@@ -974,12 +975,18 @@ El vendedor, sin red, deja un comentario de por qué no cobró una nota que la o
 ```
 
 - La forma se valida **antes** de la transacción (`prepararMovimiento` + `normalizarDatosMovimiento`): clave no uuid,
-  folio en el sobre, `cliente_id` presente en `merma_trayecto`/`consumo` o ausente en `merma_cliente`, o `datos` mal
+  folio en el sobre, `cliente_id` presente en `merma_trayecto`/`consumo` o ausente en `merma_cliente`/`cambio`, o `datos` mal
   formado es `datos-invalidos` con un motivo que nombra el campo. Una `merma_cliente` lleva al menos una línea
-  `recibido`; `merma_trayecto` y `consumo`, solo líneas `entregado` (al menos una). Piezas enteras 1–99 999; una
+  `recibido`; `merma_trayecto` y `consumo`, solo líneas `entregado` (al menos una); un **`cambio`** (rediseño pieza 4:
+  lo `recibido` regresa al inventario del vendedor, lo `entregado` sale; no se cobra diferencia) lleva al menos una
+  línea `recibido` **y** al menos una `entregado`. Piezas enteras 1–99 999; una
   presentación una sola vez por sentido; de 1 a 200 líneas; el comentario se recorta y uno vacío es `null`.
+- **`motivo_merma_id`** (rediseño pieza 4, aditivo): uuid del catálogo `motivo_merma`, **opcional para el servidor**
+  (una tablet vieja manda la merma sin él y entra con `null`; la app nueva lo exige). Solo en `merma_cliente` y
+  `merma_trayecto`: en `cambio` o `consumo`, o si no es uuid, es `datos-invalidos` (`motivo_merma_id: …`).
 - Dentro de la transacción (`MovimientosService.registrarMovimiento`, `modules/inventario/`): una presentación que
-  nunca existió es `datos-invalidos` (una dada de baja **sí** se acepta); un id que ya ocupa otro movimiento es
+  nunca existió es `datos-invalidos` (una dada de baja **sí** se acepta); un motivo de merma que nunca existió es
+  `motivo-merma-inexistente` (uno dado de baja **sí** se acepta y el servidor no mira `aplica_cliente`/`aplica_vehiculo`); un id que ya ocupa otro movimiento es
   `movimiento-id-ocupado`, con motivo neutro. La misma clave reenviada es `duplicada`.
 - **El servidor no revisa el límite de consumo ni la existencia**: las piezas ya salieron; lo exige la tablet.
 - Se guarda en `movimiento_inventario` con `id = clave`, `fecha = fecha_operacion` y la sucursal del token, y sus
@@ -1100,6 +1107,7 @@ texto en español** si reintenta o si avisa al vendedor.
 | `campo-egreso-inexistente` | El `campo_egreso_id` de un gasto no existe. Uno dado de baja **sí** se acepta y "se usa en la app" no se revisa. Se reintenta (T-30/T-31) |
 | `gasto-id-ocupado` | El id (la clave) del gasto ya lo ocupa otro registro. Motivo neutro; avisar a la oficina (T-30/T-31) |
 | `movimiento-id-ocupado` | El id (la clave) del movimiento de inventario ya lo ocupa otro registro. Motivo neutro; avisar a la oficina (T-27 pieza 2) |
+| `motivo-merma-inexistente` | El `motivo_merma_id` de un movimiento no existe. Uno dado de baja **sí** se acepta y las banderas `aplica_*` no se revisan. Se reintenta (rediseño pieza 4) |
 
 `clave-repetida-en-el-lote` no se resuelve como `duplicada`: un duplicado dentro
 de un mismo envío no es un reintento, es un bug del cliente, y llamarlo
@@ -1175,10 +1183,10 @@ propia transacción**:
      copia su nombre y su tipo e inserta en `gasto` con `id = clave` y `on conflict (id) do nothing`; si no
      insertó, `gasto-id-ocupado`. La entidad es la fila de `gasto`.
    - `MovimientosService.registrarMovimiento` (T-27 pieza 2) → comprueba que existan las presentaciones (**aunque
-     estén dadas de baja**), inserta en `movimiento_inventario` con `id = clave` y `on conflict (id) do nothing` (si no
+     estén dadas de baja**) y, si viene, el motivo de merma (**aunque esté dado de baja**; si no, `motivo-merma-inexistente`), inserta en `movimiento_inventario` con `id = clave` y `on conflict (id) do nothing` (si no
      insertó, `movimiento-id-ocupado`) y luego sus líneas. La entidad es la fila de `movimiento_inventario`.
 3. `commit` → `aplicada`. Si el dominio rechaza (`presentacion-inactiva`,
-   `precio-no-asignado`, `nota-no-encontrada`, `vehiculo-inexistente`, `jornada-duplicada`, `cliente-inexistente`, `ruta-duplicada`, `motivo-visita-inexistente`, `visita-id-ocupado`, `campo-egreso-inexistente`, `gasto-id-ocupado`, `movimiento-id-ocupado`, `nota-no-cobrada-id-ocupado`),
+   `precio-no-asignado`, `nota-no-encontrada`, `vehiculo-inexistente`, `jornada-duplicada`, `cliente-inexistente`, `ruta-duplicada`, `motivo-visita-inexistente`, `visita-id-ocupado`, `campo-egreso-inexistente`, `gasto-id-ocupado`, `movimiento-id-ocupado`, `motivo-merma-inexistente`, `nota-no-cobrada-id-ocupado`),
    `rollback`: no queda **ni** la fila de negocio **ni** la del buzón.
 
 Los tipos reservados sin módulo (`merma`, `ruta`) se guardan en el buzón y

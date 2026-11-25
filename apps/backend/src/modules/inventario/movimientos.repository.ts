@@ -16,6 +16,7 @@ export interface NuevoMovimiento {
   /** `AAAA-MM-DD`: la `fecha_operacion` del sobre, tal cual. */
   fecha: string;
   comentario: string | null;
+  motivoMermaId: string | null;
   registradoEn: string;
 }
 
@@ -45,6 +46,23 @@ export class MovimientosRepository {
   }
 
   /**
+   * ¿Existe el motivo de merma? **Sin mirar `deleted_at` ni `aplica_*`** a
+   * proposito: uno dado de baja despues de que el vendedor lo eligio sin red se
+   * acepta (como `motivo_visita`, T-39).
+   */
+  async motivoMermaExiste(
+    motivoId: string,
+    trx: Transaction<DB>,
+  ): Promise<boolean> {
+    const fila = await trx
+      .selectFrom('motivo_merma')
+      .select('id')
+      .where('id', '=', motivoId)
+      .executeTakeFirst();
+    return fila !== undefined;
+  }
+
+  /**
    * Inserta el movimiento, o devuelve `null` si su id ya estaba ocupado.
    *
    * `on conflict (id) do nothing` y no atrapar el `23505`: un unique_violation
@@ -65,6 +83,7 @@ export class MovimientosRepository {
         // El 'AAAA-MM-DD' del sobre tal cual, sin pasar por Date/UTC.
         fecha: nuevo.fecha,
         comentario: nuevo.comentario,
+        motivo_merma_id: nuevo.motivoMermaId,
         registrado_en: nuevo.registradoEn,
       })
       .onConflict((oc) => oc.column('id').doNothing())
