@@ -20,7 +20,7 @@ import { motivoBloqueoVenta } from '@/datos/notas-asignadas-reglas';
 import { LARGO_MAX_ATENDIO } from '@/datos/ventas-reglas';
 import { montoACentavos } from '@/estado/gasto';
 import { faltantesDeCaptura, textoTeQuedan } from '@/estado/inventario';
-import { crearGuardiaRegistro } from '@/estado/movimiento';
+import { crearGuardiaRegistro, textoPiezasBarra } from '@/estado/movimiento';
 import { notaParaCobrar } from '@/estado/notas-asignadas';
 import { useJawa } from '@/estado/proveedor-jawa';
 import {
@@ -856,11 +856,12 @@ export default function PantallaVenta() {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: espacio.md }}>
             <View style={{ flex: 1 }}>
               <Text style={[estilos.etiqueta, { marginBottom: 0 }]}>
-                {resumen.piezas} PIEZAS + {resumen.piezasPromocion} PROMO
+                {textoPiezasBarra(resumen.piezas)} + {resumen.piezasPromocion} PROMO
               </Text>
               <Cifra valor={pesos(totalCentavos)} tamano="destacado" />
             </View>
-            <View style={{ flex: 1.1 }}>
+            {/* A su medida y sin encogerse: con `flex` el texto se partia en dos renglones (N1). */}
+            <View style={{ flexShrink: 0 }}>
               <Boton
                 etiqueta="Ir a cobranza"
                 icono="adelante"

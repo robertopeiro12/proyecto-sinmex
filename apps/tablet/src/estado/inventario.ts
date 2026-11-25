@@ -161,6 +161,11 @@ export function totalPiezas(lineas: readonly { piezas: number }[]): number {
   return lineas.reduce((total, l) => total + l.piezas, 0);
 }
 
+/** "pieza" con 1, "piezas" con cualquier otro numero (recorrido final, N2). */
+export function palabraPiezas(n: number): string {
+  return n === 1 ? 'pieza' : 'piezas';
+}
+
 /**
  * La etiqueta de una presentacion para una columna angosta (recorrido final,
  * D3): pega el volumen a su unidad con un espacio duro ("1\u00A0L",

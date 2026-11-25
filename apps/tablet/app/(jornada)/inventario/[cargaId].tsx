@@ -8,6 +8,7 @@ import {
   crearRespondedorCarga,
   cuerpoRespuesta,
   MENSAJE_CARGA_ELIMINADA,
+  palabraPiezas,
   pastillaCarga,
   piezasDeCarga,
   puedeResponder,
@@ -178,7 +179,7 @@ export default function DetalleCarga() {
                 key={l.presentacion_id}
                 onPress={() => cambiarSeleccion(alternarRenglon(palomeados, l.presentacion_id))}
                 borde={palomeado ? colores.exito : colores.borde}
-                etiqueta={`${l.etiqueta}, ${l.piezas} piezas`}
+                etiqueta={`${l.etiqueta}, ${l.piezas} ${palabraPiezas(l.piezas)}`}
                 estadoA11y={palomeado}
               >
                 <Palomita encendida={palomeado} />
@@ -220,7 +221,7 @@ export default function DetalleCarga() {
             );
           })}
           <Text style={[estilos.textoSuave, { marginTop: espacio.xs }]}>
-            Total <Cifra valor={piezasDeCarga(carga)} tono="suave" /> piezas
+            Total <Cifra valor={piezasDeCarga(carga)} tono="suave" /> {palabraPiezas(piezasDeCarga(carga))}
           </Text>
         </Tarjeta>
       )}

@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Alert, ScrollView, Text, View } from 'react-native';
 
 import { ErrorRuta } from '@/datos';
-import { MOTIVO_CARGA_PENDIENTE, totalPiezas } from '@/estado/inventario';
+import { MOTIVO_CARGA_PENDIENTE, palabraPiezas, totalPiezas } from '@/estado/inventario';
 import { estadoMenuJornada } from '@/estado/menu-jornada';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
@@ -221,7 +221,8 @@ export default function RutaDelDia() {
               <Text style={estilos.textoTarjeta}>{MOTIVO_CARGA_PENDIENTE}</Text>
               <Text style={estilos.textoSuave}>
                 Carga n.º {cargaPorAceptar.numero} ·{' '}
-                <Cifra valor={totalPiezas(cargaPorAceptar.lineas)} tono="suave" /> piezas
+                <Cifra valor={totalPiezas(cargaPorAceptar.lineas)} tono="suave" />{' '}
+                {palabraPiezas(totalPiezas(cargaPorAceptar.lineas))}
               </Text>
               <Boton
                 etiqueta="Ver la carga"

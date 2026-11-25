@@ -8,6 +8,7 @@ import {
   pastillaCarga,
   cambiosNetos,
   etiquetaSinCortarVolumen,
+  palabraPiezas,
   salio,
   textoCambios,
   piezasDeCarga,
@@ -70,7 +71,7 @@ export default function Inventario() {
           <Tarjeta key={c.id} estado="pendiente" etiqueta={tituloAvisoCarga(c)}>
             <Text style={estilos.textoTarjeta}>
               Carga n.º {c.numero} · {c.lineas.length === 1 ? '1 producto' : `${c.lineas.length} productos`} ·{' '}
-              <Cifra valor={totalPiezas(c.lineas)} /> piezas
+              <Cifra valor={totalPiezas(c.lineas)} /> {palabraPiezas(totalPiezas(c.lineas))}
             </Text>
             <Boton
               etiqueta={c.numero > 1 ? 'Revisar recarga' : 'Revisar carga'}
@@ -96,9 +97,16 @@ export default function Inventario() {
           <Tarjeta etiqueta="Por producto">
             <View style={[filaResumen, { marginBottom: espacio.sm }]}>
               <Text style={[estilos.etiqueta, columnaProducto]}>Producto</Text>
-              <Text style={[estilos.etiqueta, columnaTitulo]}>Cargado</Text>
-              <Text style={[estilos.etiqueta, columnaTitulo]}>Salió</Text>
-              <Text style={[estilos.etiqueta, columnaTitulo]}>Cambios</Text>
+              {/* Una sola palabra: en un renglón y, si no cabe, más chica; nunca partida (D3). */}
+              <Text style={[estilos.etiqueta, columnaTitulo]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                Cargado
+              </Text>
+              <Text style={[estilos.etiqueta, columnaTitulo]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                Salió
+              </Text>
+              <Text style={[estilos.etiqueta, columnaTitulo]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                Cambios
+              </Text>
               <Text style={[estilos.etiqueta, columnaTitulo]}>Te quedan</Text>
             </View>
             {vista.filas.map((f) => (
@@ -153,7 +161,7 @@ export default function Inventario() {
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: espacio.sm }}>
                     <Pastilla texto={p.texto} estado={p.estado} />
                     <Text style={estilos.textoSuave}>
-                      <Cifra valor={piezasDeCarga(c)} tono="suave" /> piezas
+                      <Cifra valor={piezasDeCarga(c)} tono="suave" /> {palabraPiezas(piezasDeCarga(c))}
                     </Text>
                   </View>
                   {c.estado === 'rechazada' && c.motivo_rechazo ? (
@@ -178,10 +186,10 @@ export default function Inventario() {
 }
 
 // Recorrido final, D3: a 1080 px los encabezados se partian a media palabra
-// ("CARGA/DO", "CAMBI/OS"). Menos hueco, el producto un poco mas angosto y menos
-// interletrado en los encabezados de numeros: caben, y "Te quedan" se parte por
-// palabras.
+// ("CARGA/DO", "CAMBI/OS"). Menos hueco, el producto mas angosto, sin
+// interletrado en los encabezados de numeros y los de una palabra en un solo
+// renglon (se achican si no caben); "Te quedan" se parte por palabras.
 const filaResumen = { flexDirection: 'row', alignItems: 'center', gap: espacio.xs } as const;
-const columnaProducto = { flex: 1.5 } as const;
-const columnaTitulo = { flex: 1, textAlign: 'right', letterSpacing: 0.3 } as const;
+const columnaProducto = { flex: 1.3 } as const;
+const columnaTitulo = { flex: 1, textAlign: 'right', letterSpacing: 0 } as const;
 const columnaCifra = { flex: 1, alignItems: 'flex-end' } as const;

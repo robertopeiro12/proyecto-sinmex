@@ -26,6 +26,7 @@ import {
   tituloAvisoCarga,
   todosSeleccionados,
   etiquetaSinCortarVolumen,
+  palabraPiezas,
   piezasDeCarga,
   totalPiezas,
   type PasosRespuestaCarga,
@@ -101,6 +102,12 @@ describe('textos del inventario', () => {
     expect(pastillaCarga({ estado: 'rechazada', lineas: [l(0)] })).toEqual({ texto: 'Rechazada', estado: 'error' });
     expect(pastillaCarga({ estado: 'aceptada', lineas: [l(0)] })).toEqual({ texto: 'Rechazada', estado: 'error' });
     expect(totalPiezas([{ piezas: 24 }, { piezas: 12 }])).toBe(36);
+  });
+
+  it('palabraPiezas: singular solo con 1 (N2)', () => {
+    expect(palabraPiezas(1)).toBe('pieza');
+    expect(palabraPiezas(0)).toBe('piezas');
+    expect(palabraPiezas(90)).toBe('piezas');
   });
 
   it('etiquetaSinCortarVolumen: el volumen queda pegado a su unidad (D3)', () => {
