@@ -882,7 +882,7 @@ usuario con sesion pasa.
   calle, por cliente (como el Procesos del viejo). Cliente arriba (campo con el nombre y ✕; debajo **una línea de texto gris**
   sin pastillas: `[Prospecto ·] Contado | Crédito N días · Debe $X en N notas · Última compra mar 24 nov · N promociones`, lo
   que no hay se omite y las promociones se listan en un globito; `cliente-procesos.tsx`) y pestañas **Merma · Cambios · Consumos · Promoción · Descuentos**, cada una con la
-  captura arriba y la lista del día abajo. Ventas y Notas llegan en el PR B. Spec:
+  captura arriba y la lista del día abajo. Ventas y Notas van antes, desde el PR B (bloque siguiente). Spec:
   `docs/superpowers/specs/2026-11-25-procesos-design.md` (boceto vigente, "menos amontonado": `img/2026-11-25-procesos-boceto-2.png`).
   - **Tablas.** `proceso_oficina` (`tipo` `merma|cambio|consumo|promocion|descuento`, `sucursal_id`, `fecha`, `cliente_id`,
     `vendedor_id` **null = Oficina**, `merma_de` `cliente|almacen` solo en merma, `comentario` 1..300 recortado o `null`,
@@ -899,7 +899,7 @@ usuario con sesion pasa.
     `GET /procesos/descuentos/precarga?vendedor&fecha` y `GET /procesos/cliente/:id` (resumen de la tarjeta; otra sucursal,
     baja o inexistente = 404). **Permisos por tipo exigidos en el servicio** (`PermisosRepository.permisosDe`, como el Registro
     de Operación): `proceso.merma|cambio|consumo|promocion|descuento` (grupo Operacion Comercial); sin el del tipo = 403. El
-    resumen pide cualquiera de los cinco. Alcance como el Registro: atado a otra sucursal = 403 al listar, proceso de otra = 404,
+    resumen **solo pide sesión** desde el PR B (con el alcance de siempre). Alcance como el Registro: atado a otra sucursal = 403 al listar, proceso de otra = 404,
     `todas` = 400 "Elige una sucursal.".
   - **Camioneta (D4).** Con vendedor, cuenta en su corte del día: `movimientosDelDia` (`produccion/cortes.repository.ts`) une
     `proceso_oficina` vivo: merma de cliente → `mermaRecibida`/`mermaEntregada`, de almacén → `mermaAlmacen`, cambio →
@@ -935,6 +935,36 @@ usuario con sesion pasa.
     `Pestanas` ganó el modo controlado (`valor`; sin `valor` no cambia nada).
   - **Nube**: `20261126120000_procesos.sql` se sube a `sinmex dev` después del merge, con el protocolo de push (pre-flight:
     nada que contar; tablas nuevas y cinco permisos). **Backend y portal juntos.** La tablet no cambia.
+- **Procesos (PR B): Ventas y Notas.** Procesos absorbe *Registrar venta*, *Ventas*, *Facturas* y *Cobranza*, que **salieron
+  del menú** (las reglas de T-17/T-19/T-21/T-34 no cambian: mismos endpoints). Sin migración. Spec:
+  `docs/superpowers/specs/2026-11-25-procesos-ventas-notas-design.md` (boceto `img/2026-11-25-procesos-boceto-notas.png` con la
+  corrección R3).
+  - **Pestañas.** `Ventas` (permiso `venta.registrar`) y `Notas` (**solo sesión**, D5) van antes de Merma; se ven solo las
+    permitidas y abre en la primera. **Ventas** reutiliza `PantallaRegistrarVenta` con `clienteFijo` (el cliente de arriba, montada
+    con `key` del cliente); al grabar, aviso con el folio y "Ver en Notas" (Notas abre buscando ese folio).
+  - **Notas** (`procesos/pestana-notas.tsx`): buscador "Folio o # de nota" (un folio ADR-0001 busca el folio exacto; lo demás,
+    `numNota` en cualquier fecha) y Con saldo · Por facturar · Todas (Todas con `FiltroFechas`, este mes). Sin cliente: Con saldo y
+    Por facturar piden uno; Todas y el buscador cubren la sucursal con columna Cliente y sin casillas. Tabla sencilla (Saldo en
+    ámbar, Status y Factura en texto) con Ver › (detalle y edición dentro de la pestaña, "← Volver a Notas"). Casillas → barra
+    "N notas · saldo $X" con **Anotar factura** (`venta.asignar_factura`, todas en `pendiente`) y **Cobrar N notas…**
+    (`cobranza.registrar`); "Buscar factura" abre `BuscarFacturas` en una `Ventana`. Más de 200 = aviso de acotar.
+  - **Cobro** (`cobranza/recuadro-cobro.tsx`, hooks `usePago`/`useSaldoFavor`): el **mismo cuerpo, vista previa y 409** que la vieja
+    Cobranza. "Así queda" sale **sola** 300 ms después de la última tecla (una respuesta vieja se ignora); Grabar pago solo con
+    vista previa vigente; **Cancelar y Grabar pago juntos abajo a la derecha, después de "Así queda"** (R3); la barra esconde su
+    botón Cobrar con el recuadro abierto, y Ver, filtros, buscador y Anotar factura quedan deshabilitados.
+  - **Cambiar de cliente** limpia casillas, recuadro y detalle (Notas se monta con `key` del cliente); pregunta solo si hay un
+    cobro o una venta a medio capturar. La línea del cliente suma "A favor $X" y se recarga tras venta, cobro, factura o edición.
+  - **`GET /ventas`** ganó `folio` (exacto, sin espacios y en mayúsculas; ignora fechas) y `filtro` = `con_saldo|por_facturar|todas`
+    (omisión `todas` = lo de siempre; otro = 400). `con_saldo`/`por_facturar` **exigen `clienteId`** (400 "Elige un cliente.") e
+    ignoran fechas; `con_saldo` usa la misma consulta de notas con saldo de la ruta (`NotasRutaRepository.notasConSaldo`). Cada
+    fila trae `vendedorId` y `factura: { estado, numero }`. **`GET /procesos/cliente/:id`** solo pide sesión y trae
+    `saldoFavorCentavos`.
+  - **URL y redirecciones** (de servidor, conservan `?sucursal`): `/operacion/registrar-venta` → `/operacion/procesos?pestana=ventas`;
+    `/operacion/ventas` y `/operacion/facturas` → `?pestana=notas`; `/operacion/cobranza?cliente&nota` →
+    `?pestana=notas&cliente=…&nota=…`. Procesos lee `pestana`, `cliente` y `nota`: una pestaña desconocida o sin permiso cae a la
+    primera permitida, un cliente que no está en la lista de la sucursal se ignora y la nota solo se palomea si es de ese cliente.
+  - **Cuentas por Cobrar** se queda en el menú; su **Cobrar** (`enlaceCobrar`) lleva a Notas con ese cliente y esa nota palomeada.
+  - **Nube**: nada que subir (sin migración). Backend y portal juntos (el portal pide los filtros nuevos de `GET /ventas`).
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
   - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).
@@ -1052,7 +1082,7 @@ usuario con sesion pasa.
     `Ventana` y no toca lo que el de arriba tenga escrito. Consulta al entrar y al picar **Mostrar**.
   - Todas las pantallas propias del portal **dentro del marco** ya usan las piezas comunes (el login y los
     placeholders "Pronto" conservan su aspecto; Gastos es de Mario) (Etapa 4: Registrar venta, Promociones, Ruta
-    diaria). Registrar venta y Editar venta comparten los campos; Ruta diaria confirma con `useConfirmar` al descartar
+    diaria). Registrar venta (hoy la pestaña Ventas de Procesos) y Editar venta comparten los campos; Ruta diaria confirma con `useConfirmar` al descartar
     cambios. El modo `pantalla` de `PantallaCatalogo` pinta `EncabezadoPantalla` con `tituloFormulario` (el `h1`).
   - **Gastos es de Mario:** no se toca sin él. Ya no queda ningún `window.confirm` en el portal.
 
