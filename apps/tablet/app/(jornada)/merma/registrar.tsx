@@ -80,7 +80,9 @@ export default function RegistrarMovimiento() {
   }, [datos, vendedor, versionCatalogos]);
 
   const [captura, setCaptura] = useState<CapturaMovimiento>({});
-  const [motivoId, setMotivoId] = useState<string | null>(null);
+  const [motivoElegido, setMotivoId] = useState<string | null>(null);
+  // Si tras sincronizar el motivo elegido ya no se ofrece, cuenta como sin elegir.
+  const motivoId = motivos.some((m) => m.id === motivoElegido) ? motivoElegido : null;
   const [comentario, setComentario] = useState('');
   /** El renglon con el teclado abierto; `null` = cerrado. */
   const [activo, setActivo] = useState<string | null>(null);

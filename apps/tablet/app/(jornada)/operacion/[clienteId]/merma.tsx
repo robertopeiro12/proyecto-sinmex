@@ -111,7 +111,12 @@ export default function MermaYCambiosDelCliente() {
 
   const [pestana, setPestana] = useState<PestanaMovimiento>('merma');
   const [capturas, setCapturas] = useState<Record<PestanaMovimiento, CapturaMovimiento>>(SIN_CAPTURA);
-  const [motivoId, setMotivoId] = useState<string | null>(null);
+  const [motivoElegido, setMotivoId] = useState<string | null>(null);
+  /** La confirmacion de lo recien grabado, en la pestaña que lo grabo. */
+  const [registrado, setRegistrado] = useState<string | null>(null);
+  // Si tras sincronizar el motivo elegido ya no se ofrece, cuenta como sin elegir
+  // (el selector dice "Elige el motivo" y no se graba uno dado de baja).
+  const motivoId = motivos.some((m) => m.id === motivoElegido) ? motivoElegido : null;
   /** El lado cuyo "Agregar producto" esta abierto; `null` = la vista de la pestaña. */
   const [selector, setSelector] = useState<SentidoMovimiento | null>(null);
   /** El renglon con el teclado abierto. */
@@ -207,6 +212,7 @@ export default function MermaYCambiosDelCliente() {
 
   function abrirTeclado(sentido: SentidoMovimiento, presentacionId: string) {
     setError(null);
+    setRegistrado(null);
     setActivo({ sentido, presentacionId });
     mostrar(sentido, presentacionId);
   }
@@ -232,6 +238,7 @@ export default function MermaYCambiosDelCliente() {
   }
 
   function cambiarPestana(nueva: PestanaMovimiento) {
+    setRegistrado(null);
     setActivo(null);
     setSelector(null);
     setError(null);
@@ -258,18 +265,21 @@ export default function MermaYCambiosDelCliente() {
         }),
       );
       if (m === null) return;
-      avisar(pestana === 'merma' ? 'Merma registrada' : 'Cambio registrado');
+      const texto = pestana === 'merma' ? 'Merma registrada' : 'Cambio registrado';
+      avisar(texto);
       const quedaOtra =
         piezasDelSentido(capturas[otra], 'recibido') + piezasDelSentido(capturas[otra], 'entregado') > 0;
       if (!quedaOtra) {
         router.back();
         return;
       }
-      // Lo de la otra pestaña sigue capturado: se queda para grabarlo.
+      // Lo de la otra pestaña sigue capturado. Se queda en ESTA pestaña, ya
+      // vacia y con su confirmacion: un segundo toque en "Grabar" no puede
+      // grabar la otra (el vendedor cambia de pestaña a proposito).
       setCapturas((todas) => ({ ...todas, [pestana]: {} }));
       if (pestana === 'merma') setMotivoId(null);
       setGuardias((g) => ({ ...g, [pestana]: crearGuardiaRegistro() }));
-      setPestana(otra);
+      setRegistrado(`${texto}. Te queda por grabar lo capturado en ${otra === 'merma' ? 'Merma' : 'Cambios'}.`);
     } catch (e) {
       setError(
         e instanceof ErrorMovimiento || e instanceof ErrorJornada
@@ -409,6 +419,7 @@ export default function MermaYCambiosDelCliente() {
           {faltantes.length > 0 ? <Text style={estilos.textoSuave}>{faltantes.join(' ')}</Text> : null}
           {menu.avisoDiaCerrado ? <Text style={estilos.error}>{menu.avisoDiaCerrado}</Text> : null}
           {error ? <Text style={estilos.error}>{error}</Text> : null}
+          {registrado ? <Text style={[estilos.textoTarjeta, { color: colores.exito }]}>{registrado}</Text> : null}
           <Boton etiqueta="Grabar" icono="palomita" deshabilitado={!validacion.listo} onPress={grabar} />
         </BarraAbajo>
       )}
