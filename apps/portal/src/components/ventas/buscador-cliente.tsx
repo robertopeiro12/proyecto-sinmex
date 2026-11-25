@@ -184,6 +184,7 @@ export function BuscadorCliente({
                     }}
                     role="option"
                     aria-selected={i === activo}
+                    title={etiqueta(c)}
                     // Que el cuadro no pierda el foco (su blur cerraría la lista antes del clic).
                     onMouseDown={(e) => e.preventDefault()}
                     onMouseEnter={() => setActivo(i)}
