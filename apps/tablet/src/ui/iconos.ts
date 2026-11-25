@@ -30,7 +30,8 @@ export type NombreIcono =
   | 'sugerido'
   | 'salir'
   | 'foto'
-  | 'registros';
+  | 'registros'
+  | 'borrar';
 
 export const TRAZOS: Record<NombreIcono, readonly string[]> = {
   menu: ['M3 6h18M3 12h18M3 18h18'],
@@ -61,6 +62,7 @@ export const TRAZOS: Record<NombreIcono, readonly string[]> = {
   salir: ['M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4', 'M16 8l4 4-4 4M20 12H9'],
   foto: ['M4 8h3l2-3h6l2 3h3v12H4z', 'M12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z'],
   registros: ['M8 6h13M8 12h13M8 18h13', 'M3.5 6h.01M3.5 12h.01M3.5 18h.01'],
+  borrar: ['M21 5H9l-6 7 6 7h12z', 'M12 9l6 6M18 9l-6 6'],
 };
 
 export const NOMBRES_ICONO = Object.keys(TRAZOS) as readonly NombreIcono[];

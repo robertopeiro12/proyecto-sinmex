@@ -1,6 +1,7 @@
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Text, View } from 'react-native';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
+import { BackHandler, Pressable, ScrollView, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   aplicarRegalos,
@@ -8,77 +9,83 @@ import {
   ErrorFolio,
   ErrorJornada,
   ErrorVenta,
-  LARGO_MAX_COMENTARIOS,
-  LARGO_MAX_NUM_NOTA,
   leerCantidad,
   problemasDeCaptura,
   problemasDeRegalos,
   resumirCaptura,
-  type ContadoCredito,
-  type FacturaVenta,
   type LineaCaptura,
   type Venta,
-  validarAtendio,
 } from '@/datos';
 import { motivoBloqueoVenta } from '@/datos/notas-asignadas-reglas';
 import { LARGO_MAX_ATENDIO } from '@/datos/ventas-reglas';
-import {
-  crearGrabadorVenta,
-  ErrorFirma,
-  FIRMA_VACIA,
-  hayFirma,
-  puedeGrabarVenta,
-  textoFirmada,
-  type EstadoFirma,
-} from '@/estado/firma';
+import { montoACentavos } from '@/estado/gasto';
 import { faltantesDeCaptura, textoTeQuedan } from '@/estado/inventario';
+import { crearGuardiaRegistro } from '@/estado/movimiento';
 import { notaParaCobrar } from '@/estado/notas-asignadas';
 import { useJawa } from '@/estado/proveedor-jawa';
-import { guardarFirmaJpg } from '@/fotos/firma-expo';
+import {
+  alternarTodas,
+  checklistPromociones,
+  opcionesCobranza,
+  pasoAnterior,
+  presentacionPorOmision,
+  primerPaso,
+  renglonesVenta,
+  teclear,
+  textoSaldoPendiente,
+  validarCobranzaVenta,
+  type OpcionCobranza,
+  type PasoVenta,
+  type TeclaNumerica,
+} from '@/estado/venta-pasos';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
 import { Cifra, pesos } from '@/ui/cifra';
-import { Opcion } from '@/ui/opcion';
+import { Icono } from '@/ui/icono';
 import { Pantalla, Tarjeta } from '@/ui/pantalla';
-import { RecuadroFirma, type ControlFirma } from '@/ui/recuadro-firma';
+import { TecladoCantidad } from '@/ui/teclado-cantidad';
 import { useTema } from '@/ui/tema';
-import { espacio } from '@/ui/tokens';
+import { colores, espacio, fuente, grosor, radio, tipo } from '@/ui/tokens';
+
+const TITULO_PASO: Record<PasoVenta, string> = {
+  promociones: 'Promociones',
+  lista: 'Vender',
+  cobranza: 'Cobranza',
+  grabada: 'Venta grabada',
+};
+
+const ETIQUETA_COBRANZA: Record<OpcionCobranza, string> = {
+  liquidar: 'Liquidar',
+  abonar: 'Abonar',
+  credito: 'Crédito',
+};
 
 /**
- * Los tres pasos de la venta (D17).
+ * Venta a un cliente (rediseno pieza 2, maquetas 8 a 12): Promociones (solo si
+ * el cliente tiene) → lista con teclado propio → Cobranza → grabada. Sin firma:
+ * el cliente firma a mano la nota impresa, y aqui se escribe quien atendio.
  *
- * Una venta grabada **no se edita ni se anula** en la tablet (D3), asi que la
- * revision es obligatoria antes de grabar, y el folio se ensena en grande al
- * final para escribirlo en la nota fisica.
- */
-type Paso = 'captura' | 'revision' | 'grabada';
-
-/** Lo que el vendedor teclea en una fila, tal cual (texto). */
-interface CapturaTexto {
-  cantidad: string;
-}
-
-/**
- * Venta a un cliente (T-16): captura, revision y folio.
+ * Un solo componente con estado, para que ir y volver entre pasos no pierda lo
+ * palomeado, lo elegido ni lo capturado. Toda decision vive en
+ * `src/estado/venta-pasos.ts` y en las reglas de promociones y de venta; la
+ * pantalla solo pinta. Los precios se **muestran** pero no se envian:
+ * `datos.ventas.registrar()` los pone desde el catalogo local (D15) y vuelve a
+ * revisar bloqueo, existencias y regalos dentro de su transaccion.
  *
- * El vendedor solo captura cantidades; las piezas de promocion las calcula la
- * app con las promociones del cliente (T-74, D6). Los precios se
- * **muestran** pero no se envian: `datos.ventas.registrar()` los pone desde el
- * catalogo local (D15), asi que un error de esta pantalla no puede grabar un
- * precio distinto al del catalogo.
- * T-73: la revision pide la firma del cliente (obligatoria) y "Corregir" la borra (D4).
+ * Atras (flecha de la cabecera y del sistema): con el teclado abierto lo cierra;
+ * si no, regresa al paso anterior (`pasoAnterior`) y, en el primero o ya
+ * grabada, sale de la venta.
  */
 export default function PantallaVenta() {
   const { clienteId } = useLocalSearchParams<{ clienteId: string }>();
   const { datos, vendedor, versionCatalogos } = useJawa();
-  const { estilos } = useTema();
+  const { estilos, t } = useTema();
+  const insets = useSafeAreaInsets();
 
-  // El dia de trabajo del reloj de la tablet: el mismo con el que se emite el folio.
   const hoy = datos.deps.reloj.hoy();
 
-  // `versionCatalogos` en las tres lecturas: sin ella, la pantalla no ve lo que
-  // escribe el pull (defecto del primer arranque, 2026-08-23). Se lee con
-  // `void` para que `exhaustive-deps` no la marque como sobrante.
+  // `versionCatalogos` en las lecturas: sin ella, la pantalla no ve lo que
+  // escribe el pull. Se lee con `void` para que `exhaustive-deps` no la marque.
   const cliente = useMemo(() => {
     void versionCatalogos;
     return datos.catalogos.obtenerCliente(clienteId);
@@ -88,11 +95,6 @@ export default function PantallaVenta() {
     void versionCatalogos;
     return datos.catalogos.presentacionesParaVenta(clienteId, hoy);
   }, [datos, clienteId, hoy, versionCatalogos]);
-
-  const notas = useMemo(() => {
-    void versionCatalogos;
-    return datos.catalogos.notasPendientesDe(clienteId);
-  }, [datos, clienteId, versionCatalogos]);
 
   const catalogoPromos = useMemo(() => {
     void versionCatalogos;
@@ -104,9 +106,8 @@ export default function PantallaVenta() {
     return datos.promociones.aplicablesPara(clienteId);
   }, [datos, clienteId, versionCatalogos]);
 
-  // T-27 (D3, D4): bloqueo y existencias al abrir (y cuando el pull o una
-  // respuesta escriben). Solo para pintar: `ventas.registrar` vuelve a calcular
-  // al grabar, con la base de ese momento (Review Focus 1).
+  // T-27 (D3, D4): bloqueo y existencias. Solo para pintar: `ventas.registrar`
+  // vuelve a calcular al grabar, con la base de ese momento.
   const inventario = useMemo(() => {
     void versionCatalogos;
     return vendedor ? datos.cargas.paraVenta(vendedor.id) : null;
@@ -114,13 +115,7 @@ export default function PantallaVenta() {
 
   // Spec 2026-11-13: la nota asignada sin cumplir su condicion no deja vender.
   // Se relee al volver de "Ir a cobrar" (cobrar no publica cambio de catalogo).
-  // Solo enfoca/desenfoca: no re-renderiza a medio trazo de la firma.
   const [vueltas, setVueltas] = useState(0);
-  useFocusEffect(
-    useCallback(() => {
-      setVueltas((n) => n + 1);
-    }, []),
-  );
   const asignadas = useMemo(() => {
     void vueltas;
     void versionCatalogos;
@@ -128,83 +123,166 @@ export default function PantallaVenta() {
   }, [datos, clienteId, vueltas, versionCatalogos]);
   const motivoNota = motivoBloqueoVenta(asignadas);
 
-  const [paso, setPaso] = useState<Paso>('captura');
-  const [capturas, setCapturas] = useState<Record<string, CapturaTexto>>({});
-  const [contadoCredito, setContadoCredito] = useState<ContadoCredito | null>(null);
-  const [factura, setFactura] = useState<FacturaVenta>('N/A');
-  const [numNota, setNumNota] = useState('');
-  const [comentarios, setComentarios] = useState('');
-  const [problemas, setProblemas] = useState<string[]>([]);
-  /**
-   * T-27 (D4): los faltantes que ve la revision. Se calculan al tocar "Revisar"
-   * y se CONGELAN: nada de la revision cambia mientras el cliente firma
-   * (leccion de T-73: re-renderizar a medio gesto corta el trazo).
-   */
-  const [faltantesRevision, setFaltantesRevision] = useState<string[]>([]);
-  const [grabada, setGrabada] = useState<Venta | null>(null);
-  const [grabando, setGrabando] = useState(false);
-  /** Promociones cuyo regalo el cliente no quiso (D6). */
+  const hayPromociones = promociones.length > 0;
+  const [paso, setPaso] = useState<PasoVenta>(() => primerPaso(hayPromociones));
+  /** Promociones sin palomita (D6): el vendedor solo puede quitarlas. */
   const [descartados, setDescartados] = useState<Set<string>>(new Set());
-  /** promocion_id -> presentacion elegida para un regalo de producto completo (D16). */
+  /** promocion_id -> presentacion que eligio el vendedor (D16); sin eleccion va la de omision. */
   const [elecciones, setElecciones] = useState<Map<string, string>>(new Map());
-  /** T-73: la firma del cliente (trazos y nombre), capturada en la revision (D3). */
-  const [firma, setFirma] = useState<EstadoFirma>(FIRMA_VACIA);
-  const recuadro = useRef<ControlFirma>(null);
-  /**
-   * T-73: el id de la venta se genera ANTES de grabar, porque nombra el archivo
-   * de la firma. Se conserva mientras la pantalla siga abierta: un reintento
-   * sobrescribe el mismo `firma-<id>.jpg` en vez de dejar huerfanos.
-   */
-  const [ventaId] = useState(() => datos.deps.generarId());
-  /** Guardia de doble toque: exportar, convertir y grabar es asincrono (Review Focus 3). */
-  const [grabador] = useState(() => crearGrabadorVenta<Venta>());
+  /** presentacion_id -> lo tecleado, tal cual sale de `teclear` (solo digitos). */
+  const [cantidades, setCantidades] = useState<Record<string, string>>({});
+  /** El renglon con el teclado abierto; `null` = teclado cerrado. */
+  const [activo, setActivo] = useState<string | null>(null);
+  const [opcion, setOpcion] = useState<OpcionCobranza | null>(null);
+  const [abonoTexto, setAbonoTexto] = useState('');
+  const [atendio, setAtendio] = useState('');
+  const [problemas, setProblemas] = useState<string[]>([]);
+  const [grabada, setGrabada] = useState<Venta | null>(null);
+  /** Guardia de doble toque: un segundo toque en "Grabar" no emite otro folio. */
+  const [guardia] = useState(() => crearGuardiaRegistro());
 
-  // Todas las presentaciones van como base, aunque no se compren: un regalo a
-  // una presentacion que el vendedor no capturo necesita su linea.
-  const lineasBase = useMemo<LineaCaptura[]>(
+  const lista = useRef<ScrollView>(null);
+  const posiciones = useRef(new Map<string, number>());
+
+  // La presentacion de omision (la primera del catalogo) viene elegida: asi
+  // ningun regalo queda sin presentacion y "Continuar a vender" no se apaga.
+  const eleccionesEfectivas = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const p of promociones) {
+      if (p.regalo_tipo !== 'producto' || !p.regalo_producto_id) continue;
+      const elegida = elecciones.get(p.id) ?? presentacionPorOmision(p.regalo_producto_id, catalogoPromos);
+      if (elegida) m.set(p.id, elegida);
+    }
+    return m;
+  }, [promociones, elecciones, catalogoPromos]);
+
+  const renglones = useMemo(
     () =>
-      presentaciones.map((p) => {
-        const captura = capturas[p.presentacion_id];
-        return {
+      renglonesVenta({
+        presentaciones: presentaciones.map((p) => ({
           presentacionId: p.presentacion_id,
-          etiqueta: `${p.producto_nombre} ${p.volumen}`,
-          // Una cantidad ilegible viaja como NaN para que `problemasDeCaptura`
-          // la senale en su fila, en vez de volverse 0 en silencio.
-          cantidad: leerCantidad(captura?.cantidad ?? '') ?? Number.NaN,
-          cantidadPromocion: 0,
+          etiqueta: `${p.producto_nombre} · ${p.volumen}`,
           precioCentavos: p.precio_centavos,
-        };
+        })),
+        existencias: inventario?.existencias ?? new Map(),
+        controlInventario: inventario?.controlInventario ?? false,
       }),
-    [presentaciones, capturas],
+    [presentaciones, inventario],
   );
 
-  // D6: los regalos los calcula la app sobre lo capturado; el vendedor solo
-  // puede quitarlos (`descartados`) o elegir presentacion (`elecciones`, D16).
+  // Todas las presentaciones van como base, aunque no esten en la lista: una
+  // pieza de promocion a una presentacion sin renglon necesita su linea.
+  const lineasBase = useMemo<LineaCaptura[]>(
+    () =>
+      presentaciones.map((p) => ({
+        presentacionId: p.presentacion_id,
+        etiqueta: `${p.producto_nombre} ${p.volumen}`,
+        cantidad: leerCantidad(cantidades[p.presentacion_id] ?? '') ?? 0,
+        cantidadPromocion: 0,
+        precioCentavos: p.precio_centavos,
+      })),
+    [presentaciones, cantidades],
+  );
+
   const regalosPosibles = useMemo(
-    () => calcularRegalos(lineasBase, promociones, catalogoPromos, elecciones),
-    [lineasBase, promociones, catalogoPromos, elecciones],
+    () => calcularRegalos(lineasBase, promociones, catalogoPromos, eleccionesEfectivas),
+    [lineasBase, promociones, catalogoPromos, eleccionesEfectivas],
   );
   const { lineas, regalos } = useMemo(
     () => aplicarRegalos(lineasBase, regalosPosibles, descartados),
     [lineasBase, regalosPosibles, descartados],
   );
   const resumen = useMemo(() => resumirCaptura(lineas), [lineas]);
-  /** Piezas gratis por presentacion, para el texto bajo cada fila. */
-  const gratisPor = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const r of regalos) {
-      if (r.presentacionId) m.set(r.presentacionId, (m.get(r.presentacionId) ?? 0) + r.cantidad);
+  /** Piezas de promocion por presentacion. */
+  const promoPor = useMemo(
+    () => new Map(lineas.map((l) => [l.presentacionId, l.cantidadPromocion] as const)),
+    [lineas],
+  );
+  // El tope del teclado no basta: una pieza de promocion que se gana DESPUES de
+  // teclear puede pasar de la existencia. Se revisa en vivo con la regla de siempre.
+  const faltantes = useMemo(
+    () =>
+      faltantesDeCaptura({
+        controlInventario: inventario?.controlInventario ?? false,
+        existencias: inventario?.existencias ?? new Map(),
+        lineas: lineas.map((l) => ({ presentacionId: l.presentacionId, etiqueta: l.etiqueta, cantidad: l.cantidad })),
+        regalos,
+      }),
+    [inventario, lineas, regalos],
+  );
+
+  const totalCentavos = resumen.totalCentavos;
+  const opciones = opcionesCobranza(totalCentavos);
+  // Si al volver a la lista cambio el total, lo elegido puede ya no valer (total 0 = solo Liquidar).
+  const opcionVigente: OpcionCobranza | null =
+    opcion !== null && opciones.includes(opcion) ? opcion : opciones.length === 1 ? (opciones[0] ?? null) : null;
+
+  /** Atras: `true` = se atendio aqui; `false` = salir de la venta. */
+  const atras = useCallback((): boolean => {
+    if (activo !== null) {
+      setActivo(null);
+      return true;
     }
-    return m;
-  }, [regalos]);
+    const anterior = pasoAnterior(paso, hayPromociones);
+    if (anterior === null) return false;
+    setProblemas([]);
+    setPaso(anterior);
+    return true;
+  }, [activo, paso, hayPromociones]);
+
+  // Se relee la nota asignada cada que la venta vuelve a enfocarse.
+  useFocusEffect(
+    useCallback(() => {
+      setVueltas((n) => n + 1);
+    }, []),
+  );
+
+  // Solo con la pantalla enfocada: encima pueden abrirse Inventario o Cobrar,
+  // y su "atras" no es de esta venta.
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', atras);
+      return () => sub.remove();
+    }, [atras]),
+  );
+
+  const cabecera = (
+    <Stack.Screen
+      options={{
+        headerTitle: () => (
+          <View>
+            <Text style={{ fontFamily: fuente.tituloMedio, fontSize: t(tipo.subtitulo), color: colores.tinta }}>
+              {TITULO_PASO[paso]}
+            </Text>
+            {cliente ? (
+              <Text style={{ fontFamily: fuente.cuerpo, fontSize: t(tipo.menor), color: colores.tintaSuave }}>
+                {cliente.nombre}
+              </Text>
+            ) : null}
+          </View>
+        ),
+        headerLeft: () => (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Atrás"
+            hitSlop={espacio.sm}
+            onPress={() => {
+              if (!atras()) router.back();
+            }}
+            style={{ paddingRight: espacio.md, paddingVertical: espacio.xs }}
+          >
+            <Icono nombre="atras" tamano={t(tipo.subtitulo)} color={colores.tinta} />
+          </Pressable>
+        ),
+      }}
+    />
+  );
 
   // Antes de este punto solo hay hooks: se llaman siempre, en el mismo orden.
   if (!cliente || !vendedor) {
     return (
-      <Pantalla
-        titulo="Cliente no encontrado"
-        subtitulo="No está en el catálogo local de esta tablet."
-      >
+      <Pantalla titulo="Cliente no encontrado" subtitulo="No está en el catálogo local de esta tablet.">
+        {cabecera}
         <Text style={estilos.textoSuave}>
           Puede que lo hayan dado de alta después de tu última sincronización.
         </Text>
@@ -215,574 +293,645 @@ export default function PantallaVenta() {
   const vendedorId = vendedor.id;
   const nombreCliente = cliente.nombre;
 
-  function capturar(presentacionId: string, valor: string) {
-    setCapturas((previas) => ({ ...previas, [presentacionId]: { cantidad: valor } }));
-  }
-
-  function alternarDescarte(promocionId: string) {
-    setDescartados((previos) => {
-      const s = new Set(previos);
-      if (s.has(promocionId)) s.delete(promocionId);
-      else s.add(promocionId);
-      return s;
-    });
-  }
-
-  function revisar() {
-    const encontrados = [
-      ...problemasDeCaptura({ numNota, contadoCredito, comentarios, lineas }),
-      ...problemasDeRegalos(regalos),
-    ];
-    setProblemas(encontrados);
-    if (encontrados.length > 0) return;
-    setFaltantesRevision(
-      faltantesDeCaptura({
-        controlInventario: inventario?.controlInventario ?? false,
-        existencias: inventario?.existencias ?? new Map(),
-        lineas: lineas.map((l) => ({
-          presentacionId: l.presentacionId,
-          etiqueta: l.etiqueta,
-          cantidad: l.cantidad,
-        })),
-        regalos,
-      }),
+  /** Marco de un paso: lo que se desliza arriba y una barra fija abajo. */
+  function marco(cuerpo: ReactNode, abajo: ReactNode, conLista = false) {
+    return (
+      <View style={{ flex: 1, backgroundColor: colores.papel }}>
+        {cabecera}
+        <ScrollView
+          ref={conLista ? lista : undefined}
+          style={{ flex: 1 }}
+          contentContainerStyle={[estilos.contenido, { paddingBottom: espacio.lg }]}
+          keyboardShouldPersistTaps="handled"
+        >
+          {cuerpo}
+        </ScrollView>
+        {abajo}
+      </View>
     );
-    setPaso('revision');
   }
 
-  function volverACaptura() {
-    // D4: el cliente firmo un total; si cambian las cantidades, firma otra vez.
-    // Los trazos los vacia el propio recuadro con su `borrar` (la misma funcion
-    // que "Borrar firma", ruling F7); si no estuviera montado, FIRMA_VACIA basta:
-    // al volver a la revision se monta de nuevo con esos trazos vacios.
-    recuadro.current?.borrar();
-    setFirma(FIRMA_VACIA);
-    setProblemas([]);
-    setFaltantesRevision([]);
-    setPaso('captura');
-  }
+  const barra = (children: ReactNode) => (
+    <View
+      style={{
+        gap: espacio.sm,
+        paddingHorizontal: espacio.md,
+        paddingTop: espacio.sm,
+        paddingBottom: espacio.sm + insets.bottom,
+        backgroundColor: colores.superficie,
+        borderTopWidth: grosor.fuerte,
+        borderTopColor: colores.bordeFuerte,
+      }}
+    >
+      {children}
+    </View>
+  );
 
-  async function grabar() {
-    // `revisar` no deja llegar aqui sin elegir; la comprobacion es para el tipo.
-    if (contadoCredito === null) return;
-    const pago = contadoCredito;
-    // Rediseno pieza 2 (interino hasta Task 5): el campo de nombre ya es quien
-    // atendio, obligatorio. Se valida antes de exportar la firma: un nombre
-    // vacio no escribe JPG ni llama a `registrar`.
-    const problemaAtendio = validarAtendio(firma.nombre);
-    if (problemaAtendio !== null) {
-      setProblemas([problemaAtendio]);
-      return;
-    }
-    const atendio = firma.nombre.trim();
-    setGrabando(true);
-    const resultado = await grabador.grabar({
-      exportarPng: () => {
-        const control = recuadro.current;
-        return control
-          ? control.exportarPng()
-          : Promise.reject(new ErrorFirma('El recuadro de firma no está en pantalla.'));
-      },
-      guardarJpg: (png) => guardarFirmaJpg(ventaId, png),
-      registrar: () =>
-        datos.ventas.registrar({
-          id: ventaId,
-          vendedorId,
-          clienteId,
-          numNota,
-          contadoCredito: pago,
-          factura,
-          comentarios: comentarios.trim() === '' ? null : comentarios,
-          // Sin precios: los pone el repositorio (D15).
-          lineas: resumen.lineas.map((l) => ({
-            presentacionId: l.presentacionId,
-            cantidad: l.cantidad,
-            cantidadPromocion: l.cantidadPromocion,
-          })),
-          // Solo los regalos con presentacion: `revisar` ya exigio elegirla, y el
-          // repositorio vuelve a comprobar que cuadran con `cantidadPromocion`.
-          regalos: regalos
-            .filter((r) => r.presentacionId !== null)
-            .map((r) => ({
-              promocionId: r.promocionId,
-              presentacionId: r.presentacionId as string,
-              cantidad: r.cantidad,
-              texto: r.texto,
-            })),
-          // Rediseno pieza 2: la venta ya no guarda la firma; Task 5 quita el recuadro.
-          atendio,
-        }),
-    });
-    // Segundo toque mientras el primero corre: el primero se encarga de todo.
-    if (resultado === null) return;
-    setGrabando(false);
-    if (resultado.estado === 'grabada') {
-      setProblemas([]);
-      setGrabada(resultado.venta);
-      setPaso('grabada');
-      return;
-    }
-    if (resultado.estado === 'sin-firma') {
-      // No se llamo a `registrar`: ni venta ni folio. La firma sigue en el recuadro.
-      setProblemas([resultado.mensaje]);
-      return;
-    }
-    const e = resultado.error;
-    setProblemas([
-      e instanceof ErrorVenta || e instanceof ErrorFolio || e instanceof ErrorJornada
-        ? e.message
-        : 'No se pudo grabar la venta. No se consumió ningún folio; intenta de nuevo.',
-    ]);
-  }
+  const avisos = problemas.map((p) => (
+    <Text key={p} style={estilos.error}>
+      {p}
+    </Text>
+  ));
 
   /* ---------------------------------------------------------------- */
-  /* 3. Grabada: el folio en grande                                    */
+  /* 4. Grabada: el folio en grande                                    */
   /* ---------------------------------------------------------------- */
 
   if (paso === 'grabada' && grabada) {
+    const abono = grabada.abono_centavos;
     return (
-      <Pantalla
-        titulo="Venta grabada"
-        subtitulo={`${nombreCliente} · escribe este folio en la nota física.`}
-      >
+      <Pantalla subtitulo={`${nombreCliente} · escribe este folio en la nota física.`}>
+        {cabecera}
         <Tarjeta estado="listo" etiqueta="Folio">
           <Cifra valor={grabada.folio} tamano="grande" />
           <Text style={estilos.textoSuave}>
             Total <Cifra valor={pesos(grabada.monto_total_centavos)} tono="suave" /> ·{' '}
-            {grabada.num_nota ? (
-              <>
-                nota <Cifra valor={grabada.num_nota} tono="suave" /> ·{' '}
-              </>
-            ) : null}
-            {grabada.contado_credito === 'contado' ? 'de contado' : 'a crédito'}
+            {grabada.contado_credito === 'contado' ? 'liquidada' : abono !== null ? 'abonada' : 'a crédito'}
           </Text>
-          <Text style={estilos.textoTarjeta}>{textoFirmada(grabada.firma_nombre)}</Text>
+          {abono !== null ? (
+            <Text style={estilos.textoSuave}>
+              Abonó <Cifra valor={pesos(abono)} tono="suave" /> ·{' '}
+              {textoSaldoPendiente(grabada.monto_total_centavos - abono)}
+            </Text>
+          ) : null}
+          {grabada.atendio_nombre ? (
+            <Text style={estilos.textoTarjeta}>Atendió {grabada.atendio_nombre}</Text>
+          ) : null}
           <Text style={estilos.textoSuave}>
-            Quedó guardada en la tablet y sube sola al sincronizar. Una venta grabada no se edita:
-            si hay un error, se corrige desde el portal.
+            Quedó guardada en la tablet y sube sola al sincronizar. Una venta grabada no se edita: si hay
+            un error, se corrige desde el portal.
           </Text>
         </Tarjeta>
-
-        {/*
-          D6 (T-20): consignacion. Si el cliente tiene notas pendientes, se
-          ofrece cobrarlas en un paso aparte. Es neutra (contorno, $) para que
-          la primaria siga siendo volver (relleno, ←). `replace` y no `push`:
-          al terminar el cobro, "Volver al cliente" regresa a la ficha y no a
-          esta venta ya grabada.
-        */}
-        {notas.length > 0 ? (
-          <View style={[estilos.filaAcciones, { marginTop: espacio.lg, marginBottom: espacio.xl }]}>
-            <Boton
-              etiqueta={`Cobrar notas pendientes (${notas.length})`}
-              tono="neutra"
-              icono="cobrar"
-              onPress={() =>
-                router.replace({
-                  pathname: '/(jornada)/operacion/[clienteId]/cobranza',
-                  params: { clienteId },
-                })
-              }
-            />
-            <Boton etiqueta="Volver al cliente" icono="atras" onPress={() => router.back()} />
-          </View>
-        ) : (
-          <Boton
-            etiqueta="Volver al cliente"
-            icono="atras"
-            onPress={() => router.back()}
-            estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
-          />
-        )}
+        <Boton
+          etiqueta="Volver a la ruta"
+          icono="atras"
+          onPress={() => router.dismissTo('/(jornada)')}
+          estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
+        />
       </Pantalla>
     );
   }
 
   /* ---------------------------------------------------------------- */
-  /* 2. Revision: lo ultimo que se ve antes de grabar                  */
+  /* 1. Promociones (maqueta 8)                                        */
   /* ---------------------------------------------------------------- */
 
-  if (paso === 'revision') {
-    return (
-      <Pantalla
-        titulo="Revisa la venta"
-        subtitulo={`${nombreCliente} · una vez grabada no se puede editar.`}
-      >
-        <Tarjeta etiqueta="Productos">
-          {resumen.lineas.map((l) => (
+  if (paso === 'promociones') {
+    const check = checklistPromociones(promociones, descartados);
+    return marco(
+      <>
+        <Text style={[estilos.textoSuave, { marginBottom: espacio.sm }]}>
+          Vienen todas palomeadas. Quita la palomita a la que el cliente no quiera.
+        </Text>
+        <Renglon
+          onPress={() => setDescartados(alternarTodas(promociones, descartados))}
+          borde={colores.bordeFuerte}
+          etiqueta="Seleccionar todas"
+          estadoA11y={check.todas}
+        >
+          <Palomita encendida={check.todas} />
+          <View style={{ flex: 1 }}>
+            <Text style={estilos.textoTarjeta}>Seleccionar todas</Text>
+            <Text style={estilos.textoSuave}>
+              {check.palomeadas} de {check.total} palomeadas
+            </Text>
+          </View>
+        </Renglon>
+        {promociones.map((p) => {
+          const palomeada = !descartados.has(p.id);
+          const productoId = p.regalo_tipo === 'producto' ? p.regalo_producto_id : null;
+          const opcionesPres = productoId
+            ? [...catalogoPromos.presentaciones].filter(([, pres]) => pres.productoId === productoId)
+            : [];
+          const nombreProducto = productoId ? catalogoPromos.productos.get(productoId) : undefined;
+          const frase = `${p.texto}${p.audiencia === 'prospecto' ? ' (primera venta)' : ''}`;
+          return (
             <View
-              key={l.presentacionId}
+              key={p.id}
               style={{
-                flexDirection: 'row',
-                justifyContent: 'space-between',
-                gap: espacio.sm,
-                marginBottom: espacio.xs,
+                marginBottom: espacio.sm,
+                borderRadius: radio.medio,
+                borderWidth: grosor.fuerte,
+                borderStyle: palomeada ? 'solid' : 'dashed',
+                borderColor: palomeada ? colores.exito : colores.borde,
+                backgroundColor: palomeada ? colores.superficie : colores.superficieHundida,
               }}
             >
-              <Text style={[estilos.textoTarjeta, { flexShrink: 1 }]}>{l.etiqueta}</Text>
-              <Text style={estilos.textoSuave}>
-                <Cifra valor={l.cantidad} /> × <Cifra valor={pesos(l.precioCentavos ?? 0)} tono="suave" />
-                {l.cantidadPromocion > 0 ? (
-                  <>
-                    {' + '}
-                    <Cifra valor={l.cantidadPromocion} tono="suave" /> de promoción
-                  </>
-                ) : null}
-                {' = '}
-                <Cifra valor={pesos(l.importeCentavos)} />
-              </Text>
-            </View>
-          ))}
-        </Tarjeta>
-
-        {regalos.length > 0 ? (
-          <Tarjeta estado="listo" etiqueta="Regalos">
-            {regalos.map((r) => (
-              <Text key={r.promocionId} style={estilos.textoTarjeta}>
-                <Cifra valor={r.cantidad} /> ×{' '}
-                {r.presentacionId ? catalogoPromos.presentaciones.get(r.presentacionId)?.etiqueta : ''} ·{' '}
-                {r.texto}
-              </Text>
-            ))}
-          </Tarjeta>
-        ) : null}
-
-        <Tarjeta estado="accion" etiqueta="Total">
-          <Cifra valor={pesos(resumen.totalCentavos)} tamano="grande" />
-          <Text style={estilos.textoSuave}>
-            {contadoCredito === 'contado' ? 'De contado' : 'A crédito'} ·{' '}
-            {numNota.trim() !== '' ? (
-              <>
-                nota <Cifra valor={numNota.trim()} tono="suave" /> ·{' '}
-              </>
-            ) : null}
-            factura {factura}
-          </Text>
-          {comentarios.trim() !== '' ? (
-            <Text style={estilos.textoSuave}>{comentarios.trim()}</Text>
-          ) : null}
-        </Tarjeta>
-
-        {/*
-          T-73 (D1, D3): la firma se captura aqui, antes de grabar, y se guarda en
-          la misma transaccion. Sin firma, "Grabar venta" no se habilita.
-        */}
-        {faltantesRevision.length > 0 ? (
-          <Tarjeta estado="error" etiqueta="No te alcanza el producto">
-            {faltantesRevision.map((f) => (
-              <Text key={f} style={estilos.textoTarjeta}>
-                {f}
-              </Text>
-            ))}
-            <Text style={estilos.textoSuave}>Corrige las cantidades o acepta una recarga en Inventario.</Text>
-          </Tarjeta>
-        ) : null}
-
-        <Tarjeta estado={hayFirma(firma.trazos) ? 'listo' : 'pendiente'} etiqueta="Firma del cliente">
-          <Text style={estilos.textoSuave}>Pide al cliente que firme con el dedo.</Text>
-          <RecuadroFirma
-            ref={recuadro}
-            trazos={firma.trazos}
-            alCambiar={(trazos) => setFirma((previa) => ({ ...previa, trazos }))}
-            deshabilitado={grabando}
-          />
-          <Campo
-            etiqueta="Nombre de quien atiende"
-            value={firma.nombre}
-            onChangeText={(nombre) => setFirma((previa) => ({ ...previa, nombre }))}
-            maxLength={LARGO_MAX_ATENDIO}
-            editable={!grabando}
-          />
-        </Tarjeta>
-
-        {problemas.map((p) => (
-          <Text key={p} style={estilos.error}>
-            {p}
-          </Text>
-        ))}
-
-        {/*
-          Opuestas en tres ejes (sistema de diseno): Grabar es relleno naranja con
-          ✓; Corregir es contorno neutro con ←. Grabar es la unica primaria.
-        */}
-        <View style={estilos.filaAcciones}>
-          <Boton
-            etiqueta="Corregir"
-            tono="neutra"
-            icono="atras"
-            onPress={volverACaptura}
-            deshabilitado={grabando}
-          />
-          <Boton
-            etiqueta="Grabar venta"
-            icono="palomita"
-            onPress={() => void grabar()}
-            ocupado={grabando}
-            deshabilitado={
-              !puedeGrabarVenta({ contadoCredito, trazos: firma.trazos, grabando }) ||
-              faltantesRevision.length > 0
-            }
-          />
-        </View>
-      </Pantalla>
-    );
-  }
-
-  // T-27 (D3): con el control prendido y una carga por aceptar, en lugar de la
-  // captura va el motivo y el camino a Inventario. SOLO en la captura: si la
-  // carga llega con la revision abierta (y la firma a medias), la pantalla no
-  // cambia; `ventas.registrar` la rechaza al grabar.
-  if (inventario?.bloqueo) {
-    return (
-      <Pantalla titulo={`Venta · ${nombreCliente}`} subtitulo="Antes de vender acepta tu carga.">
-        <Tarjeta estado="pendiente" etiqueta="Carga por aceptar">
-          <Text style={estilos.textoTarjeta}>{inventario.bloqueo}.</Text>
-          <Text style={estilos.textoSuave}>
-            Revisa las piezas con el almacenista y acéptala en Inventario; después podrás vender.
-          </Text>
-        </Tarjeta>
-        <Boton
-          etiqueta="Ir a Inventario"
-          icono="adelante"
-          onPress={() => router.push('/(jornada)/inventario')}
-          estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
-        />
-      </Pantalla>
-    );
-  }
-
-  // Spec 2026-11-13 (regla 10): igual que la carga, solo en la captura;
-  // `ventas.registrar` vuelve a exigirlo al grabar.
-  if (motivoNota) {
-    const notaACobrar = notaParaCobrar(asignadas);
-    return (
-      <Pantalla titulo={`Venta · ${nombreCliente}`} subtitulo="Antes de vender cobra su nota asignada.">
-        <Tarjeta estado="pendiente" etiqueta="Nota por cobrar">
-          <Text style={estilos.textoTarjeta}>{motivoNota}</Text>
-          <Text style={estilos.textoSuave}>Ve a cobrarla; después podrás vender.</Text>
-        </Tarjeta>
-        <Boton
-          etiqueta="Ir a cobrar"
-          icono="adelante"
-          onPress={() =>
-            router.push({
-              pathname: '/(jornada)/operacion/[clienteId]/cobranza',
-              params: notaACobrar ? { clienteId, notaId: notaACobrar } : { clienteId },
-            })
-          }
-          estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
-        />
-      </Pantalla>
-    );
-  }
-
-  /* ---------------------------------------------------------------- */
-  /* 1. Captura                                                        */
-  /* ---------------------------------------------------------------- */
-
-  return (
-    <Pantalla
-      formulario
-      titulo={`Venta · ${nombreCliente}`}
-      subtitulo="Captura solo cantidades: el precio sale del catálogo del cliente."
-    >
-      {/* T-74 (D11): la misma tarjeta de la ficha, para saber que esperar al capturar. */}
-      {promociones.length > 0 ? (
-        <Tarjeta estado="listo" etiqueta="Promociones">
-          {promociones.map((p) => (
-            <Text key={p.id} style={estilos.textoTarjeta}>
-              {p.texto}
-              {p.audiencia === 'prospecto' ? ' (primera venta)' : ''}
-            </Text>
-          ))}
-        </Tarjeta>
-      ) : null}
-
-      {notas.length > 0 ? (
-        <Tarjeta estado="pendiente" etiqueta="Notas pendientes (solo lectura)">
-          {notas.map((n) => (
-            <Text key={n.id} style={estilos.textoSuave}>
-              <Cifra valor={n.folio} tono="suave" /> ·{' '}
-              {n.num_nota ? (
-                <>
-                  nota <Cifra valor={n.num_nota} tono="suave" /> ·{' '}
-                </>
-              ) : null}
-              {n.fecha} · saldo <Cifra valor={pesos(n.saldo_centavos)} tono="aviso" />
-            </Text>
-          ))}
-          <Text style={estilos.textoSuave}>
-            Se cobran desde «Cobranza / abono», también al terminar esta venta.
-          </Text>
-        </Tarjeta>
-      ) : null}
-
-      <Text style={estilos.seccion}>Productos</Text>
-      {presentaciones.length === 0 ? (
-        <Tarjeta estado="pendiente" etiqueta="Catálogo vacío">
-          <Text style={estilos.textoTarjeta}>Sin productos en el catálogo local</Text>
-          <Text style={estilos.textoSuave}>
-            Los productos bajan del portal con la sincronización.
-          </Text>
-        </Tarjeta>
-      ) : (
-        presentaciones.map((p) => {
-          const captura = capturas[p.presentacion_id];
-          const cantidad = leerCantidad(captura?.cantidad ?? '');
-          const sinPrecio = p.precio_centavos === null || p.precio_centavos === 0;
-          // T-27 (D4): lo que queda de esta presentacion si se graba lo capturado
-          // (vendido + regalado en esta venta). Solo con el control prendido.
-          const quedan = inventario?.controlInventario
-            ? textoTeQuedan(
-                inventario.existencias.get(p.presentacion_id)?.existencia ?? 0,
-                (cantidad ?? 0) + (gratisPor.get(p.presentacion_id) ?? 0),
-              )
-            : null;
-          return (
-            <Tarjeta key={p.presentacion_id} etiqueta={`${p.producto_nombre} · ${p.volumen}`}>
-              <Text style={estilos.textoSuave}>
-                {sinPrecio ? (
-                  'Sin precio para este cliente: solo puede ir como regalo.'
-                ) : (
-                  <>
-                    Precio <Cifra valor={pesos(p.precio_centavos ?? 0)} tono="suave" />
-                  </>
-                )}
-              </Text>
-              {gratisPor.has(p.presentacion_id) ? (
-                <Text style={estilos.textoTarjeta}>
-                  +<Cifra valor={gratisPor.get(p.presentacion_id) ?? 0} /> gratis por promoción
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: palomeada }}
+                accessibilityLabel={frase}
+                onPress={() =>
+                  setDescartados((previos) => {
+                    const s = new Set(previos);
+                    if (s.has(p.id)) s.delete(p.id);
+                    else s.add(p.id);
+                    return s;
+                  })
+                }
+                style={{ flexDirection: 'row', gap: espacio.sm, alignItems: 'flex-start', padding: espacio.sm }}
+              >
+                <Palomita encendida={palomeada} />
+                <Text style={[estilos.textoTarjeta, { flex: 1 }, !palomeada && { color: colores.tintaSuave }]}>
+                  {frase}
                 </Text>
-              ) : null}
-              {quedan ? (
-                <Text style={quedan.falta ? estilos.error : estilos.textoSuave}>{quedan.texto}</Text>
-              ) : null}
-              {/* Sin precio no se vende (el servidor rechaza piezas a $0): el campo
-                  queda bloqueado y la fila solo recibe regalos. */}
-              <Campo
-                etiqueta="Cantidad"
-                cifra
-                value={captura?.cantidad ?? ''}
-                onChangeText={(v) => capturar(p.presentacion_id, v)}
-                editable={!sinPrecio}
-                invalido={cantidad === null || (sinPrecio && (cantidad ?? 0) > 0)}
-                placeholder="0"
-              />
-            </Tarjeta>
-          );
-        })
-      )}
-
-      {regalosPosibles.length > 0 ? (
-        <Tarjeta estado="listo" etiqueta="Regalos por promoción">
-          {regalosPosibles.map((r) => {
-            const descartado = descartados.has(r.promocionId);
-            const opciones = [...catalogoPromos.presentaciones].filter(
-              ([, pres]) => pres.productoId === r.productoId,
-            );
-            // D16: solo el regalo de producto completo con varias presentaciones se
-            // elige; la lista se queda visible para corregir un toque equivocado.
-            const elegible =
-              promociones.find((p) => p.id === r.promocionId)?.regalo_tipo === 'producto' &&
-              opciones.length > 1;
-            return (
-              <View key={r.promocionId} style={{ marginBottom: espacio.sm, gap: espacio.xs }}>
-                <Text
-                  style={[estilos.textoTarjeta, descartado && { textDecorationLine: 'line-through' }]}
-                >
-                  <Cifra valor={r.cantidad} /> gratis · {r.texto}
-                </Text>
-                {!descartado && elegible ? (
-                  <View style={estilos.rejilla}>
-                    {opciones.map(([id, pres]) => (
-                      <Opcion
+              </Pressable>
+              {palomeada && opcionesPres.length > 1 ? (
+                <View style={{ paddingLeft: espacio.xl + espacio.xs, paddingRight: espacio.sm, paddingBottom: espacio.sm }}>
+                  <Text style={estilos.etiqueta}>Presentación que se entrega</Text>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: espacio.sm }}>
+                    {opcionesPres.map(([id, pres]) => (
+                      <Chip
                         key={id}
-                        etiqueta={pres.etiqueta}
-                        seleccionada={id === r.presentacionId}
-                        onPress={() => setElecciones((previas) => new Map(previas).set(r.promocionId, id))}
+                        etiqueta={
+                          nombreProducto && pres.etiqueta.startsWith(`${nombreProducto} `)
+                            ? pres.etiqueta.slice(nombreProducto.length + 1)
+                            : pres.etiqueta
+                        }
+                        elegida={eleccionesEfectivas.get(p.id) === id}
+                        onPress={() => setElecciones((previas) => new Map(previas).set(p.id, id))}
                       />
                     ))}
                   </View>
-                ) : null}
-                {!descartado && !elegible && r.presentacionId !== null ? (
-                  <Text style={estilos.textoSuave}>
-                    {catalogoPromos.presentaciones.get(r.presentacionId)?.etiqueta}
-                  </Text>
-                ) : null}
-                <Boton
-                  etiqueta={descartado ? 'Volver a dar' : 'El cliente no lo quiso'}
-                  tono="neutra"
-                  ancho="ajustado"
-                  onPress={() => alternarDescarte(r.promocionId)}
-                />
-              </View>
-            );
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
+      </>,
+      barra(
+        <Boton etiqueta="Continuar a vender" icono="adelante" onPress={() => setPaso('lista')} />,
+      ),
+    );
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 3. Cobranza (maquetas 11 y 12)                                    */
+  /* ---------------------------------------------------------------- */
+
+  if (paso === 'cobranza') {
+    const abonoCentavos = montoACentavos(abonoTexto) ?? 0;
+    const etiquetaDe = (l: LineaCaptura) =>
+      l.etiqueta !== '' ? l.etiqueta : (catalogoPromos.presentaciones.get(l.presentacionId)?.etiqueta ?? '');
+
+    function grabar() {
+      if (opcionVigente === null) {
+        setProblemas(['Elige cómo paga el cliente: Liquidar, Abonar o Crédito.']);
+        return;
+      }
+      const cobro = validarCobranzaVenta({ opcion: opcionVigente, abonoTexto, totalCentavos, atendio });
+      if (cobro.problemas.length > 0) {
+        setProblemas(cobro.problemas);
+        return;
+      }
+      try {
+        const venta = guardia.intentar(() =>
+          datos.ventas.registrar({
+            vendedorId,
+            clienteId,
+            contadoCredito: cobro.contadoCredito,
+            abonoCentavos: cobro.abonoCentavos,
+            atendio: atendio.trim(),
+            // Sin precios: los pone el repositorio (D15).
+            lineas: resumen.lineas.map((l) => ({
+              presentacionId: l.presentacionId,
+              cantidad: l.cantidad,
+              cantidadPromocion: l.cantidadPromocion,
+            })),
+            // Solo con presentacion: la lista ya exigio elegirla (`problemasDeRegalos`).
+            regalos: regalos.flatMap((r) =>
+              r.presentacionId === null
+                ? []
+                : [{ promocionId: r.promocionId, presentacionId: r.presentacionId, cantidad: r.cantidad, texto: r.texto }],
+            ),
+          }),
+        );
+        // Segundo toque mientras el primero corre: el primero se encarga de todo.
+        if (venta === null) return;
+        setProblemas([]);
+        setGrabada(venta);
+        setPaso('grabada');
+      } catch (e) {
+        setProblemas([
+          e instanceof ErrorVenta || e instanceof ErrorFolio || e instanceof ErrorJornada
+            ? e.message
+            : 'No se pudo grabar la venta. No se consumió ningún folio; intenta de nuevo.',
+        ]);
+      }
+    }
+
+    return marco(
+      <>
+        <Tarjeta etiqueta={`Nota · ${nombreCliente}`}>
+          {resumen.lineas.flatMap((l) => {
+            const etiqueta = etiquetaDe(l);
+            const filas: ReactNode[] = [];
+            if (l.cantidad > 0) {
+              filas.push(
+                <LineaNota key={`${l.presentacionId}-v`} texto={`${l.cantidad} × ${etiqueta}`} importe={l.importeCentavos} />,
+              );
+            }
+            if (l.cantidadPromocion > 0) {
+              filas.push(
+                <LineaNota
+                  key={`${l.presentacionId}-p`}
+                  texto={`${l.cantidadPromocion} × ${etiqueta} (promoción)`}
+                  importe={0}
+                />,
+              );
+            }
+            return filas;
           })}
+          <View
+            style={{
+              flexDirection: 'row',
+              justifyContent: 'space-between',
+              marginTop: espacio.sm,
+              paddingTop: espacio.sm,
+              borderTopWidth: grosor.fuerte,
+              borderTopColor: colores.bordeFuerte,
+            }}
+          >
+            <Text style={estilos.textoTarjeta}>Total</Text>
+            <Cifra valor={pesos(totalCentavos)} tamano="destacado" />
+          </View>
+        </Tarjeta>
+
+        <Text style={estilos.seccion}>Cobranza</Text>
+        <View style={{ flexDirection: 'row', gap: espacio.sm, marginBottom: espacio.md }}>
+          {opciones.map((o) => (
+            <Chip
+              key={o}
+              etiqueta={ETIQUETA_COBRANZA[o]}
+              elegida={opcionVigente === o}
+              onPress={() => {
+                setProblemas([]);
+                setOpcion(o);
+              }}
+              ancho
+            />
+          ))}
+        </View>
+
+        {opcionVigente === 'liquidar' ? (
+          <View style={[estilos.campo, { backgroundColor: colores.superficieHundida, justifyContent: 'center' }]}>
+            <Cifra valor={pesos(totalCentavos)} />
+          </View>
+        ) : null}
+        {opcionVigente === 'abonar' ? (
+          <>
+            <Campo
+              etiqueta="Cuánto abona"
+              cifra
+              keyboardType="decimal-pad"
+              value={abonoTexto}
+              onChangeText={setAbonoTexto}
+              placeholder="0.00"
+            />
+            <Tarjeta estado="pendiente">
+              <Text style={estilos.textoTarjeta}>
+                {textoSaldoPendiente(Math.max(0, totalCentavos - abonoCentavos))}
+              </Text>
+            </Tarjeta>
+          </>
+        ) : null}
+        {opcionVigente === 'credito' ? (
+          <Tarjeta estado="pendiente">
+            <Text style={estilos.textoTarjeta}>{textoSaldoPendiente(totalCentavos)}</Text>
+          </Tarjeta>
+        ) : null}
+
+        <View style={{ marginTop: espacio.md }}>
+          <Campo
+            etiqueta="Nombre de quien atiende"
+            value={atendio}
+            onChangeText={setAtendio}
+            maxLength={LARGO_MAX_ATENDIO}
+            autoCapitalize="words"
+          />
+        </View>
+        {avisos}
+      </>,
+      barra(<Boton etiqueta="Grabar" icono="palomita" onPress={grabar} deshabilitado={grabada !== null} />),
+    );
+  }
+
+  /* ---------------------------------------------------------------- */
+  /* 2. Lista con teclado (maquetas 9 y 10)                            */
+  /* ---------------------------------------------------------------- */
+
+  const bloqueoCarga = inventario?.bloqueo ?? null;
+  const bloqueado = bloqueoCarga !== null || motivoNota !== null;
+  const notaACobrar = motivoNota ? notaParaCobrar(asignadas) : null;
+  const sinPiezas = resumen.piezas + resumen.piezasPromocion === 0;
+
+  /** Lo que el teclado deja capturar: lo que queda menos lo que ya va de promocion ahi. */
+  function tope(presentacionId: string): number | null {
+    const quedan = renglones.find((r) => r.presentacionId === presentacionId)?.quedan ?? null;
+    return quedan === null ? null : Math.max(0, quedan - (promoPor.get(presentacionId) ?? 0));
+  }
+
+  function mostrar(presentacionId: string) {
+    const y = posiciones.current.get(presentacionId);
+    if (y !== undefined) lista.current?.scrollTo({ y: Math.max(0, y - espacio.xxl), animated: true });
+  }
+
+  function abrirTeclado(presentacionId: string) {
+    setProblemas([]);
+    setActivo(presentacionId);
+    mostrar(presentacionId);
+  }
+
+  function tecla(valor: TeclaNumerica | 'borrar') {
+    if (activo === null) return;
+    const id = activo;
+    const maximo = tope(id);
+    setCantidades((previas) => {
+      const nuevo = teclear(previas[id] ?? '', valor, maximo);
+      return { ...previas, [id]: nuevo === '0' ? '' : nuevo };
+    });
+  }
+
+  const indiceActivo = activo === null ? -1 : renglones.findIndex((r) => r.presentacionId === activo);
+  const siguienteRenglon = indiceActivo >= 0 ? renglones[indiceActivo + 1] : undefined;
+
+  function siguiente() {
+    if (siguienteRenglon) {
+      setActivo(siguienteRenglon.presentacionId);
+      mostrar(siguienteRenglon.presentacionId);
+    } else {
+      setActivo(null);
+    }
+  }
+
+  function irACobranza() {
+    const encontrados = [
+      // El pago se elige en Cobranza: aqui solo se revisan las cantidades.
+      ...problemasDeCaptura({ numNota: '', contadoCredito: 'contado', comentarios: '', lineas }),
+      ...problemasDeRegalos(regalos),
+    ];
+    setProblemas(encontrados);
+    if (encontrados.length > 0) return;
+    setActivo(null);
+    setPaso('cobranza');
+  }
+
+  return marco(
+    <>
+      {/* T-27 (D3): con una carga por aceptar no se vende; `ventas.registrar` lo vuelve a exigir. */}
+      {bloqueoCarga ? (
+        <Tarjeta estado="pendiente" etiqueta="Carga por aceptar">
+          <Text style={estilos.textoTarjeta}>{bloqueoCarga}.</Text>
+          <Text style={estilos.textoSuave}>
+            Revisa las piezas con el almacenista y acéptala en Inventario; después podrás vender.
+          </Text>
+          <Boton
+            etiqueta="Ir a Inventario"
+            tono="neutra"
+            icono="adelante"
+            onPress={() => router.push('/(jornada)/inventario')}
+            estilo={{ marginTop: espacio.sm }}
+          />
+        </Tarjeta>
+      ) : null}
+      {/* Spec 2026-11-13 (regla 10): la nota asignada con condicion se cobra antes. */}
+      {motivoNota ? (
+        <Tarjeta estado="pendiente" etiqueta="Nota por cobrar">
+          <Text style={estilos.textoTarjeta}>{motivoNota}</Text>
+          <Text style={estilos.textoSuave}>Ve a cobrarla; después podrás vender.</Text>
+          <Boton
+            etiqueta="Ir a cobrar"
+            tono="neutra"
+            icono="adelante"
+            onPress={() =>
+              router.push({
+                pathname: '/(jornada)/operacion/[clienteId]/cobranza',
+                params: notaACobrar ? { clienteId, notaId: notaACobrar } : { clienteId },
+              })
+            }
+            estilo={{ marginTop: espacio.sm }}
+          />
         </Tarjeta>
       ) : null}
 
-      <Text style={estilos.seccion}>Pago</Text>
-      <View style={estilos.rejilla}>
-        <Opcion
-          etiqueta="Contado"
-          seleccionada={contadoCredito === 'contado'}
-          onPress={() => setContadoCredito('contado')}
-        />
-        <Opcion
-          etiqueta="Crédito"
-          seleccionada={contadoCredito === 'credito'}
-          onPress={() => setContadoCredito('credito')}
-        />
-      </View>
+      {renglones.length === 0 ? (
+        <Tarjeta estado="pendiente" etiqueta="Sin productos para vender">
+          <Text style={estilos.textoTarjeta}>
+            {inventario?.controlInventario
+              ? 'No traes producto con existencia para venderle a este cliente.'
+              : 'Sin productos con precio en el catálogo local.'}
+          </Text>
+          <Text style={estilos.textoSuave}>Los productos y precios bajan del portal con la sincronización.</Text>
+        </Tarjeta>
+      ) : null}
 
-      <Text style={estilos.seccion}>Factura</Text>
-      <View style={estilos.rejilla}>
-        <Opcion etiqueta="N/A" seleccionada={factura === 'N/A'} onPress={() => setFactura('N/A')} />
-        <Opcion
-          etiqueta="Pendiente"
-          seleccionada={factura === 'pendiente'}
-          onPress={() => setFactura('pendiente')}
-        />
-      </View>
-
-      <View style={{ marginTop: espacio.lg }}>
-        <Campo
-          etiqueta="Número de nota (opcional)"
-          value={numNota}
-          onChangeText={setNumNota}
-          maxLength={LARGO_MAX_NUM_NOTA}
-          placeholder="Solo si usaste el block de papel"
-        />
-        <Campo
-          etiqueta="Comentarios (opcional)"
-          value={comentarios}
-          onChangeText={setComentarios}
-          maxLength={LARGO_MAX_COMENTARIOS}
-          multiline
-        />
-      </View>
-
-      <Tarjeta estado="accion" etiqueta="Total">
-        <Cifra valor={pesos(resumen.totalCentavos)} tamano="grande" />
-        <Text style={estilos.textoSuave}>
-          <Cifra valor={resumen.piezas} tono="suave" /> pieza(s) ·{' '}
-          <Cifra valor={resumen.piezasPromocion} tono="suave" /> de promoción
-        </Text>
-      </Tarjeta>
-
-      {problemas.map((p) => (
-        <Text key={p} style={estilos.error}>
-          {p}
-        </Text>
-      ))}
-
-      {/* Unica accion primaria de la captura. */}
-      <Boton
-        etiqueta="Revisar"
-        icono="adelante"
-        onPress={revisar}
-        deshabilitado={presentaciones.length === 0}
-        estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
+      {renglones.map((r) => {
+        const cantidad = leerCantidad(cantidades[r.presentacionId] ?? '') ?? 0;
+        const promo = promoPor.get(r.presentacionId) ?? 0;
+        const quedan = r.quedan === null ? null : textoTeQuedan(r.quedan, cantidad + promo);
+        const esActivo = activo === r.presentacionId;
+        const conAlgo = cantidad > 0;
+        return (
+          <View
+            key={r.presentacionId}
+            onLayout={(e) => posiciones.current.set(r.presentacionId, e.nativeEvent.layout.y)}
+          >
+            <Renglon
+              onPress={() => abrirTeclado(r.presentacionId)}
+              etiqueta={`${r.etiqueta}, cantidad ${cantidad}`}
+              borde={esActivo || conAlgo ? colores.primario : colores.borde}
+              fondo={conAlgo || esActivo ? colores.primarioTenue : colores.superficie}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={estilos.textoTarjeta}>{r.etiqueta}</Text>
+                <Text style={estilos.textoSuave}>
+                  <Cifra valor={pesos(r.precioCentavos)} tono="suave" tamano="menor" />
+                  {quedan ? (
+                    <Text style={quedan.falta ? { color: colores.peligro } : undefined}>
+                      {' · '}
+                      {quedan.texto.charAt(0).toLowerCase() + quedan.texto.slice(1)}
+                    </Text>
+                  ) : null}
+                </Text>
+                {promo > 0 ? (
+                  <Text style={[estilos.textoSuave, { color: colores.exito }]}>+{promo} de promoción</Text>
+                ) : null}
+              </View>
+              <View
+                style={{
+                  minWidth: 64,
+                  minHeight: 44,
+                  paddingHorizontal: espacio.sm,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: radio.chico,
+                  borderWidth: grosor.fuerte,
+                  borderColor: esActivo ? colores.primario : colores.borde,
+                  backgroundColor: colores.superficie,
+                }}
+              >
+                {conAlgo ? <Cifra valor={cantidad} tamano="destacado" /> : null}
+              </View>
+            </Renglon>
+          </View>
+        );
+      })}
+    </>,
+    activo !== null ? (
+      <TecladoCantidad
+        onTecla={tecla}
+        onSiguiente={siguiente}
+        etiquetaSiguiente={siguienteRenglon ? 'Siguiente' : 'Listo'}
       />
-    </Pantalla>
+    ) : (
+      barra(
+        <>
+          {faltantes.map((f) => (
+            <Text key={f} style={estilos.error}>
+              {f}
+            </Text>
+          ))}
+          {avisos}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: espacio.md }}>
+            <View style={{ flex: 1 }}>
+              <Text style={[estilos.etiqueta, { marginBottom: 0 }]}>
+                {resumen.piezas} PIEZAS + {resumen.piezasPromocion} PROMO
+              </Text>
+              <Cifra valor={pesos(totalCentavos)} tamano="destacado" />
+            </View>
+            <View style={{ flex: 1.1 }}>
+              <Boton
+                etiqueta="Ir a cobranza"
+                icono="adelante"
+                onPress={irACobranza}
+                deshabilitado={sinPiezas || bloqueado || faltantes.length > 0}
+              />
+            </View>
+          </View>
+        </>,
+      )
+    ),
+    true,
+  );
+}
+
+/** Un renglon tocable de la lista o del checklist. */
+function Renglon({
+  children,
+  onPress,
+  etiqueta,
+  borde,
+  fondo = colores.superficie,
+  estadoA11y,
+}: {
+  children: ReactNode;
+  onPress: () => void;
+  etiqueta: string;
+  borde: string;
+  fondo?: string;
+  estadoA11y?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole={estadoA11y === undefined ? 'button' : 'checkbox'}
+      accessibilityState={estadoA11y === undefined ? undefined : { checked: estadoA11y }}
+      accessibilityLabel={etiqueta}
+      onPress={onPress}
+      style={({ pressed }) => [
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: espacio.sm,
+          padding: espacio.sm,
+          marginBottom: espacio.sm,
+          borderRadius: radio.medio,
+          borderWidth: grosor.fuerte,
+          borderColor: borde,
+          backgroundColor: fondo,
+        },
+        pressed && { opacity: 0.9 },
+      ]}
+    >
+      {children}
+    </Pressable>
+  );
+}
+
+/** La casilla del checklist: palomita SVG cuando esta encendida. */
+function Palomita({ encendida }: { encendida: boolean }) {
+  return (
+    <View
+      style={{
+        width: 26,
+        height: 26,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: radio.chico,
+        borderWidth: grosor.fuerte,
+        borderColor: encendida ? colores.exito : colores.bordeFuerte,
+        backgroundColor: encendida ? colores.exito : colores.superficie,
+      }}
+    >
+      {encendida ? <Icono nombre="palomita" tamano={18} color={colores.tintaInversa} /> : null}
+    </View>
+  );
+}
+
+/** Una opcion corta en tira (presentacion de la promocion, forma de cobro). */
+function Chip({
+  etiqueta,
+  elegida,
+  onPress,
+  ancho = false,
+}: {
+  etiqueta: string;
+  elegida: boolean;
+  onPress: () => void;
+  /** Reparte el ancho de la fila entre las opciones. */
+  ancho?: boolean;
+}) {
+  const { dispositivo, t } = useTema();
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected: elegida }}
+      accessibilityLabel={etiqueta}
+      onPress={onPress}
+      style={({ pressed }) => [
+        {
+          minHeight: Math.min(dispositivo.tactil, 48),
+          paddingHorizontal: espacio.md,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: radio.chico,
+          borderWidth: grosor.fuerte,
+          borderColor: elegida ? colores.primario : colores.borde,
+          backgroundColor: elegida ? colores.primarioTenue : colores.superficie,
+        },
+        ancho && { flex: 1 },
+        pressed && { transform: [{ translateY: grosor.fuerte }], opacity: 0.9 },
+      ]}
+    >
+      <Text
+        style={{
+          fontFamily: fuente.cuerpoFuerte,
+          fontSize: t(tipo.cuerpo),
+          color: elegida ? colores.primario : colores.tinta,
+        }}
+      >
+        {etiqueta}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** Un renglon de la nota: "12 × Jamaica 500 ml" y su importe. */
+function LineaNota({ texto, importe }: { texto: string; importe: number }) {
+  const { estilos } = useTema();
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: espacio.sm, marginBottom: espacio.xs }}>
+      <Text style={[estilos.textoTarjeta, { flexShrink: 1 }]}>{texto}</Text>
+      <Cifra valor={pesos(importe)} />
+    </View>
   );
 }
