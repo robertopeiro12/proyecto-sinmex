@@ -187,7 +187,7 @@ function Reimprimir({
         // Se avisa como cualquier impresion que no salio.
       }
       const r = await imprimirTickets(tickets);
-      setNoImpresa(r.ok ? null : avisoNoImpreso(r.detalle));
+      setNoImpresa(r.ok ? null : avisoNoImpreso(r.detalle, { yaEnReimpresion: true }));
     } finally {
       setImprimiendo(false);
     }

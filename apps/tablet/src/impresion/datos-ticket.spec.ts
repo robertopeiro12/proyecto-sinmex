@@ -352,6 +352,13 @@ describe('imprimirJuntos', () => {
 });
 
 describe('avisoNoImpreso', () => {
+  it('ya en Ventas / Cobranza dice solo el motivo, sin la pista de reimprimir', () => {
+    expect(avisoNoImpreso('No se pudo conectar con PT-210.', { yaEnReimpresion: true })).toBe(
+      'No se pudo imprimir: No se pudo conectar con PT-210.',
+    );
+    expect(avisoNoImpreso(undefined, { yaEnReimpresion: true })).toBe('No se pudo imprimir.');
+  });
+
   it('sin motivo es el aviso de siempre', () => {
     expect(avisoNoImpreso()).toBe(AVISO_NO_IMPRESO);
     expect(avisoNoImpreso('  ')).toBe(AVISO_NO_IMPRESO);

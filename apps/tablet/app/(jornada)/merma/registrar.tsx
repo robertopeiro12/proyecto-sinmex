@@ -126,6 +126,7 @@ export default function RegistrarMovimiento() {
   const validacion = validarCapturaMovimiento(entrada);
   const faltantes = faltantesVisiblesMovimiento(entrada, validacion);
   const restante = consumoRestante(consumo);
+  const textoRestante = textoConsumoRestante(restante, !menu.operacionesHabilitadas);
   const piezas = piezasDelSentido(captura, 'entregado');
 
   const indiceActivo = activo === null ? -1 : renglones.findIndex((r) => r.presentacionId === activo);
@@ -197,9 +198,9 @@ export default function RegistrarMovimiento() {
         contentContainerStyle={[estilos.contenido, { paddingBottom: espacio.lg }]}
         keyboardShouldPersistTaps="handled"
       >
-        {tipo === 'consumo' ? (
+        {tipo === 'consumo' && textoRestante !== null ? (
           <Tarjeta estado={restante > 0 ? 'listo' : 'pendiente'} etiqueta="Consumo de hoy">
-            <Text style={estilos.textoTarjeta}>{textoConsumoRestante(restante)}</Text>
+            <Text style={estilos.textoTarjeta}>{textoRestante}</Text>
           </Tarjeta>
         ) : null}
 

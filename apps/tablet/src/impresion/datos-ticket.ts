@@ -25,8 +25,10 @@ export const AVISO_NO_IMPRESO = 'No se pudo imprimir. Puedes reimprimir desde Ve
  * (`textoErrorImpresora` o `SIN_IMPRESORA`), nunca el mensaje crudo de Android.
  * Sin motivo, `AVISO_NO_IMPRESO`.
  */
-export function avisoNoImpreso(detalle?: string): string {
+export function avisoNoImpreso(detalle?: string, opciones: { yaEnReimpresion?: boolean } = {}): string {
   const motivo = detalle?.trim();
+  // Desde Ventas / Cobranza no se manda "reimprime desde Ventas / Cobranza": ya se esta ahi.
+  if (opciones.yaEnReimpresion) return motivo ? `No se pudo imprimir: ${motivo}` : 'No se pudo imprimir.';
   if (!motivo) return AVISO_NO_IMPRESO;
   return `No se pudo imprimir: ${motivo} Puedes reimprimir desde Ventas / Cobranza.`;
 }

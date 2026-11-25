@@ -169,5 +169,6 @@ describe('consumo propio (D4)', () => {
     expect(textoConsumoRestante(2)).toBe('Te quedan 2 de consumo hoy');
     expect(textoConsumoRestante(1)).toBe('Te queda 1 de consumo hoy');
     expect(textoConsumoRestante(0)).toBe('Te quedan 0 de consumo hoy');
+    expect(textoConsumoRestante(1, true)).toBeNull();
   });
 });

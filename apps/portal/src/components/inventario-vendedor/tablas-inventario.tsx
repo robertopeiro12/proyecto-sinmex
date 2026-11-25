@@ -333,7 +333,7 @@ function TablaRecargas({ datos }: { datos: InventarioVendedor }) {
               key={`${r.cargaId}-${r.presentacionId}`}
               className={cn(
                 "align-middle",
-                r.estado === "aceptada" && r.aceptada === false && "bg-destructive-soft/40",
+                r.estado === "aceptada" && r.aceptada === false && "bg-destructive-soft",
               )}
             >
               {conVendedor && <Td className="truncate">{r.vendedor}</Td>}

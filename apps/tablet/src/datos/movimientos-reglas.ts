@@ -107,8 +107,9 @@ export function consumoRestante({ limite, consumoDeHoy }: { limite: number; cons
   return Math.max(0, limite - consumoDeHoy);
 }
 
-/** "Te quedan N de consumo hoy" (spec); con 1, "Te queda 1" (recorrido final, D7). */
-export function textoConsumoRestante(restante: number): string {
+/** "Te quedan N de consumo hoy" (spec); con 1, "Te queda 1" (recorrido final, D7); con el día cerrado no hay texto (`null`). */
+export function textoConsumoRestante(restante: number, diaCerrado = false): string | null {
+  if (diaCerrado) return null; // dia cerrado (solo lectura): no se ofrece consumo
   return `Te ${restante === 1 ? 'queda' : 'quedan'} ${restante} de consumo hoy`;
 }
 

@@ -215,9 +215,9 @@ describe("TablasInventario", () => {
     await userEvent.click(screen.getByRole("tab", { name: "Recargas" }));
     const tabla = screen.getByRole("table", { name: "Recargas" });
     const no = within(tabla).getByText("No aceptado");
-    expect(no.closest("tr")).toHaveClass("bg-destructive-soft/40");
+    expect(no.closest("tr")).toHaveClass("bg-destructive-soft");
     const si = within(tabla).getByText("Aceptada 1 de 2");
-    expect(si.closest("tr")).not.toHaveClass("bg-destructive-soft/40");
+    expect(si.closest("tr")).not.toHaveClass("bg-destructive-soft");
   });
 
   it("Recargas: hora, estado y motivo; Vendedor solo con Todos", async () => {
