@@ -1011,7 +1011,9 @@ export interface NotaPendientePull extends FilaSincronizable {
  * - `precio_centavos` es el precio **unitario** guardado en la linea.
  * - `vendedor_nombre` es `null` en una venta de mostrador; `atendio` es `null`
  *   si la venta no lo trae.
- * - `creada_en` = `venta_nota.created_at`, ISO-8601 en UTC.
+ * - `creada_en` = la hora de la venta en la tablet: el `ocurrido_en` mas
+ *   antiguo de `sync_operacion` para la nota y su vendedor, o
+ *   `venta_nota.created_at` si no hay (igual que la oficina). ISO-8601 en UTC.
  */
 export interface DetalleNotaPull {
   lineas: {

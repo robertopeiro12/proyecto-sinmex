@@ -1184,6 +1184,39 @@ describe('Sincronizacion pull/push (e2e)', () => {
             promocion_texto: 'Por cada 12, 1 gratis',
           })
           .execute();
+        // La venta se hizo sin red a las 16:10 y llego al servidor a las 18:30
+        // (created_at). La fecha del ticket es la de la venta, como en la
+        // oficina: el ocurrido_en mas antiguo de sync_operacion.
+        const vendida = new Date('2026-08-05T16:10:00.000Z');
+        await db
+          .insertInto('sync_operacion')
+          .values([
+            {
+              tipo: 'venta',
+              entidad_tabla: 'venta_nota',
+              entidad_id: nota.id,
+              vendedor_id: vendedorId,
+              sucursal_id: sucursalId,
+              contrato: 1,
+              clave_idempotencia: `e2e-p7-hora-1-${SUFIJO}`,
+              datos: '{}',
+              fecha_operacion: '2026-08-05',
+              ocurrido_en: new Date('2026-08-05T17:00:00.000Z'),
+            },
+            {
+              tipo: 'venta',
+              entidad_tabla: 'venta_nota',
+              entidad_id: nota.id,
+              vendedor_id: vendedorId,
+              sucursal_id: sucursalId,
+              contrato: 1,
+              clave_idempotencia: `e2e-p7-hora-0-${SUFIJO}`,
+              datos: '{}',
+              fecha_operacion: '2026-08-05',
+              ocurrido_en: vendida,
+            },
+          ])
+          .execute();
 
         const cuerpo = (await pull().expect(200)).body as RespuestaPull;
         const bajada = cuerpo.notas_pendientes.find((n) => n.id === nota.id);
@@ -1221,8 +1254,9 @@ describe('Sincronizacion pull/push (e2e)', () => {
           vendedor_nombre: 'Vendedor sync',
           atendio: 'Dona Lupe',
           sucursal_nombre: sucursal.nombre,
-          creada_en: creada.toISOString(),
+          creada_en: vendida.toISOString(),
         });
+        expect(vendida.getTime()).toBeLessThan(creada.getTime());
 
         // Una nota sin lineas ni promociones trae listas vacias, no null.
         const vieja = cuerpo.notas_pendientes.find((n) => n.id === notaId);
@@ -1230,6 +1264,10 @@ describe('Sincronizacion pull/push (e2e)', () => {
         expect(vieja?.detalle?.promociones).toEqual([]);
         expect(vieja?.detalle?.atendio).toBeNull();
       } finally {
+        await db
+          .deleteFrom('sync_operacion')
+          .where('entidad_id', '=', nota.id)
+          .execute();
         await db
           .deleteFrom('venta_nota_promocion')
           .where('venta_nota_id', '=', nota.id)

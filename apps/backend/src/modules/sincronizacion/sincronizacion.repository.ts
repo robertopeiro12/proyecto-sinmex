@@ -493,11 +493,19 @@ export class SincronizacionRepository {
              ven.nombre as vendedor_nombre,
              vn.atendio_nombre as atendio,
              suc.nombre as sucursal_nombre,
-             vn.created_at as creada_en
+             -- La hora de la venta en la tablet, no la de llegada al servidor:
+             -- igual que la oficina (estadisticas/detalle.repository.ts).
+             coalesce(op.ocurrido_en, vn.created_at) as creada_en
         from venta_nota vn
         join cliente c on c.id = vn.cliente_id
         left join vendedor ven on ven.id = vn.vendedor_id
         left join sucursal suc on suc.id = vn.sucursal_id
+        left join lateral (
+          select so.ocurrido_en from sync_operacion so
+           where so.entidad_tabla = 'venta_nota' and so.entidad_id = vn.id
+             and so.vendedor_id = vn.vendedor_id
+           order by so.ocurrido_en limit 1
+        ) op on true
         left join lateral (
           select json_agg(
                    json_build_object(
