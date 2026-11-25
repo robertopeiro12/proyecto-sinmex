@@ -39,3 +39,19 @@ export function textoErrorImpresora(code: string | null, nombre: string): string
       return `No se pudo imprimir en ${nombre}.`;
   }
 }
+
+/**
+ * `llamar()`; si el modulo responde `sin-permiso`, `pedirPermiso()` (que lanza
+ * `sin-permiso` si lo niegan) y `llamar()` una vez mas. El nativo revisa el
+ * adaptador antes que el permiso, asi que un equipo sin Bluetooth nunca ve la
+ * ventana de permiso. Ver `puente-bluetooth.ts`.
+ */
+export async function conPermiso<T>(llamar: () => Promise<T>, pedirPermiso: () => Promise<void>): Promise<T> {
+  try {
+    return await llamar();
+  } catch (e) {
+    if (codigoDeError(e) !== 'sin-permiso') throw e;
+    await pedirPermiso();
+    return llamar();
+  }
+}

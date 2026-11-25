@@ -17,7 +17,7 @@ import * as modulo from '../../modules/impresora-bluetooth';
 import type { ImpresoraEmparejada } from '../../modules/impresora-bluetooth';
 
 import type { PuenteImpresora } from './controlador';
-import { codigoDeError } from './errores-impresora';
+import { conPermiso } from './errores-impresora';
 
 function sinPermiso(): Error & { code: 'sin-permiso' } {
   return Object.assign(new Error('Falta el permiso de Bluetooth'), { code: 'sin-permiso' as const });
@@ -29,23 +29,12 @@ async function pedirPermiso(): Promise<void> {
   if (r !== PermissionsAndroid.RESULTS.GRANTED) throw sinPermiso();
 }
 
-/** `llamar()`, y si falta el permiso, pedirlo y `llamar()` otra vez. */
-async function conPermiso<T>(llamar: () => Promise<T>): Promise<T> {
-  try {
-    return await llamar();
-  } catch (e) {
-    if (codigoDeError(e) !== 'sin-permiso') throw e;
-    await pedirPermiso();
-    return llamar();
-  }
-}
-
 export const puenteBluetooth: PuenteImpresora & {
   /** `false` si el APK no trae el modulo (o no es Android). */
   disponible(): boolean;
   emparejadas(): Promise<ImpresoraEmparejada[]>;
 } = {
   disponible: () => modulo.disponible(),
-  emparejadas: () => conPermiso(() => modulo.emparejadas()),
-  imprimir: (direccion, bytesBase64) => conPermiso(() => modulo.imprimir(direccion, bytesBase64)),
+  emparejadas: () => conPermiso(() => modulo.emparejadas(), pedirPermiso),
+  imprimir: (direccion, bytesBase64) => conPermiso(() => modulo.imprimir(direccion, bytesBase64), pedirPermiso),
 };
