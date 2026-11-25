@@ -360,8 +360,10 @@ Spec: `docs/superpowers/specs/2026-10-22-t-27-carga-y-recarga-design.md`.
 - **Inventario** (`app/(jornada)/inventario/index.tsx`, entrada del menú): cargas de hoy con estado y total, y por
   presentación Cargado − Vendido − Regalado = Existencia (en rojo si es 0). Con el control apagado se ve igual, con la
   nota.
-- **Detalle** (`inventario/[cargaId].tsx`): Aceptar (confirmar ✓) o Rechazar (peligro ×, con motivo ≤ 300). Llama a
-  `POST /sync/cargas/:id/respuesta` con la versión que se pinta (`crearRespondedorCarga` en un `useRef`: un solo envío
+- **Detalle** (`inventario/[cargaId].tsx`, rediseño pieza 3, spec `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md` §7):
+  la carga es un checklist por renglón; se marcan los que llegaron y se acepta (todos o una parte; ninguno = rechazada,
+  sin motivo). La parcial es definitiva y se etiqueta "Aceptada N de M". Migración 021: `carga_detalle.aceptada`. Llama a
+  `POST /sync/cargas/:id/respuesta` con `{ version, aceptadas }` y la versión que se pinta (`crearRespondedorCarga` en un `useRef`: un solo envío
   aunque se toque dos veces). Sin red: "Conéctate al WiFi para aceptar la carga."; 409: aplica la carga nueva,
   sincroniza y pide revisarla; 404: sincroniza (se eliminó en el portal).
 - **Ruta del día**: aviso "Tienes una carga por aceptar" con botón a la carga mientras haya una pendiente de hoy (con o

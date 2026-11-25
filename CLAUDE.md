@@ -233,7 +233,7 @@ usuario con sesion pasa.
   (`ck_venta_nota_origen_actores`). Toda venta de la tablet sigue llevando vendedor.
 - **Con `sucursal.control_inventario` prendida, el portal no le vende a un vendedor más de lo que trae cargado** (cliente,
   2026-11-12; la misma casilla y la misma regla que la app de T-27). Aplica a `POST /ventas` y a `PATCH /ventas/:id` solo
-  si la venta tiene vendedor (Oficina nunca se revisa): existencia = las piezas teóricas por regresar del corte (cargadas aceptadas − vendidas − regaladas − merma entregada − merma de
+  si la venta tiene vendedor (Oficina nunca se revisa): existencia = las piezas teóricas por regresar del corte (cargados aceptados − vendidas − regaladas − merma entregada − merma de
   almacén − consumo) de ese vendedor en la **fecha de la venta**, la misma cuenta del corte (`movimientosDelDia` de
   `produccion/cortes.repository.ts` + `existenciasPorPresentacion` de `reglas-corte.ts`; la merma **recibida** no suma a lo vendible). Si no alcanza → **409** "No le alcanza el producto a …: Horchata 1 L, faltan 3; …" antes del folio (no
   lo quema). Al editar se suman de vuelta las líneas de la propia venta si sigue con el mismo vendedor, y una presentación
@@ -676,7 +676,7 @@ usuario con sesion pasa.
     avisar**; la venta "Abonar" entraría `pendiente` por el total, la tablet la daría por sincronizada y el abono que
     el vendedor recibió no existiría en el servidor.
 - **Carga y recarga del vendedor (T-27 pieza 1 / T-26).** Producción registra en el portal la carga de la mañana y cada
-  recarga; la carga baja a la tablet, el vendedor la **acepta o la rechaza** con red y, con el control de inventario de
+  recarga; la carga baja a la tablet, el vendedor la **acepta o la rechaza, renglón por renglón** (rediseño pieza 3, spec `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md` §7), con red y, con el control de inventario de
   su sucursal prendido, no vende con una carga pendiente ni deja una presentación en negativo. Spec:
   `docs/superpowers/specs/2026-10-22-t-27-carga-y-recarga-design.md`. La pieza 2 (merma y consumo) está abajo; la 3 (corte de
   inventario) es otro PR.
@@ -688,8 +688,17 @@ usuario con sesion pasa.
     regresa a pendiente y sube la versión; una **aceptada no se toca** (D5). El número se calcula con la fila del
     vendedor bloqueada (`for no key update`); otra sucursal = 404.
   - **App**: `POST /sync/cargas/:id/respuesta` (`@SoloApp`, `sincronizacion/cargas-app.controller.ts` →
-    `CargasService.responder`): `{ version, accion, motivo? }`; la misma respuesta otra vez es 200 sin reescribir; otra
-    versión o ya respondida = 409 con la carga; de otro vendedor, inexistente o eliminada = 404. No renueva la sesión.
+    `CargasService.responder`): cuerpo nuevo `{ version, aceptadas: [presentacion_id…] }` (todas o una parte = `aceptada`;
+    lista vacía = `rechazada`, sin motivo); el cuerpo viejo `{ version, accion, motivo? }` se sigue aceptando (tablets sin
+    actualizar). La misma respuesta otra vez es 200 sin reescribir; otra versión o ya respondida = 409 con la carga; de otro
+    vendedor, inexistente o eliminada = 404; un cuerpo mal formado = 400, que se evalúa **después** del 404 y del 409. La
+    **aceptación parcial es definitiva**: lo no aceptado llega, si hace falta, en una recarga nueva. No renueva la sesión.
+  - **Por renglón** (migración `20261127120000_carga_renglon_aceptado.sql`): `carga_detalle.aceptada boolean` nullable
+    (`null` = pendiente o respondida antes de la pieza 3); `carga.estado` conserva sus tres valores (`aceptada` si al menos
+    un renglón, `rechazada` si ninguno). Los lectores (corte, inventario del vendedor, venta del portal, rejilla) cuentan
+    `coalesce(aceptada, true)` en una carga `aceptada`: una aceptada vieja es "todo", una rechazada vieja "nada". El
+    portal etiqueta "Aceptada N de M" cuando fue parcial. `ck_carga_motivo` se relajó (el motivo ya no es obligatorio al
+    rechazar; solo una rechazada puede llevarlo).
   - **Contrato** (aditivo, `CONTRATO_ACTUAL` sigue en 1): colección `cargas` en el pull (las del vendedor desde
     `current_date - 1`, baja con `activo: 0`) y `VendedorPull.control_inventario`. Cambiar la casilla toca
     `vendedor.updated_at` de esa sucursal (`SucursalesRepository.actualizar`).
@@ -721,10 +730,12 @@ usuario con sesion pasa.
     curso (`src/sincronizacion/una-a-la-vez.ts`) para no renovar dos veces el refresh token a la vez, y
     `ventas.registrar()` publica un cambio de catálogo tras grabar para que Inventario relea. **`ventas.registrar()` recalcula bloqueo y
     faltantes dentro de su transacción, antes del folio** (vale la existencia del momento de grabar). Pantallas:
-    Inventario (menú), detalle con Aceptar/Rechazar, aviso "Tienes una carga por aceptar" en la ruta, y la venta con
+    Inventario (menú), detalle con la carga como checklist (migración local **021**, `carga_detalle.aceptada`), aviso "Tienes una carga por aceptar" en la ruta, y la venta con
     bloqueo, "Te quedan N" y faltantes congelados en la revisión.
   - **Nube**: `20261022120000_carga_vendedor.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
-    (pre-flight: tablas nuevas y una columna con default; nada que contar). Backend antes que la app. **No prender la
+    (pre-flight: tablas nuevas y una columna con default; nada que contar). La pieza 3 suma
+    `20261127120000_carga_renglon_aceptado.sql` (columna nullable y `ck_carga_motivo` relajado: pre-flight, nada que contar).
+    **Backend antes que la app** (la tablet nueva manda `aceptadas`). **No prender la
     casilla de una sucursal hasta que sus tablets tengan la versión nueva** y producción esté capturando cargas.
 - **Merma y consumo en la tablet (T-27 pieza 2).** La tablet registra lo que sale o entra a la camioneta sin ser venta:
   **merma del cliente** (en la ficha, también de un prospecto, "Merma": "Recibí dañado" —al menos una pieza— y "Le
@@ -854,7 +865,7 @@ usuario con sesion pasa.
       **Merma teórica (C4)** = merma recibida del cliente + merma de almacén. Los movimientos salen de `movimiento_inventario`
       vivo (`merma_cliente` entregado/recibido, `merma_trayecto` = de almacén, `consumo`) por `fecha` y vendedor. **Cambios
       físicos = 0 siempre** (no existen hasta T-33; los campos ya están para que solo se llene la consulta).
-    - Cargadas = solo cargas **aceptadas**; vendidas/regaladas = `cantidad`/`cantidad_promocion` de líneas **vivas** de
+    - Cargadas = solo **renglones aceptados** (`coalesce(carga_detalle.aceptada, true)` en una carga `aceptada`; rediseño pieza 3); vendidas/regaladas = `cantidad`/`cantidad_promocion` de líneas **vivas** de
       ventas **vivas** del vendedor con esa `fecha`, de cualquier status. Un vendedor con solo merma o consumo ese día también
       sale en la lista.
     - **D1: un tamaño no compensa a otro.** Dentro de un tamaño sí (lo que sobra de un sabor tapa lo que falta de otro); el
@@ -895,7 +906,7 @@ usuario con sesion pasa.
     y "Faltan: N pz merma", cliente 2026-11-24); con "Todos" es la suma de `totales.faltante`/`faltanteMerma` del corte de **cada** vendedor con corte
     hecho (lo mismo que `faltantesDeCortes`; lo que sobra a uno no compensa lo que falta a otro, Roberto 2026-11-24).
     `vendedor` que no es uuid ni `todos` = 400 "Elige un vendedor válido.". Recargas muestra también las pendientes y
-    rechazadas, con su estado, pero Inventario solo cuenta las aceptadas. Sin filas: "No hubo recargas ese día." (Recargas) y
+    rechazadas, con su estado, pero Inventario solo cuenta los renglones aceptados. Sin filas: "No hubo recargas ese día." (Recargas) y
     "Sin carga aceptada ni venta ese día." (Inventario y Merma).
   - **Dashboard y Flujo diario**: la columna Inventario trae la **pastilla del corte** (`FilaVendedorDia.corte`: Sin corte /
     Corte hecho / "Faltan: N pz p/Almacen · N pz merma", cliente 2026-11-24) y `ResumenDia.faltantesCorte`; picarla abre el detalle en la pestaña **Inventario**
