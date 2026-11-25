@@ -8,7 +8,7 @@ import { Entrada, Lista } from "@/components/ui/campo";
 import { SelectorSegmentado } from "@/components/ui/selector-segmentado";
 import { mensajeDe } from "@/lib/api";
 import { diaAnterior } from "@/lib/fechas";
-import { formatearDiaLargo } from "@/lib/formato";
+import { diaEscrito } from "@/lib/formato";
 import {
   crearProceso,
   cuadre,
@@ -55,14 +55,6 @@ function renglonDe(linea: { presentacionId: string; nombre: string; piezas: numb
     volumen: o?.volumen ?? "",
     piezas: String(linea.piezas),
   };
-}
-
-/** "Hoy, miércoles 25 de noviembre" / "Ayer, martes 24 de noviembre" / "lunes 23 de noviembre". */
-export function diaEscrito(fecha: string, hoy: string): string {
-  const largo = formatearDiaLargo(fecha);
-  if (fecha === hoy) return `Hoy, ${largo}`;
-  if (fecha === diaAnterior(hoy)) return `Ayer, ${largo}`;
-  return largo;
 }
 
 /**

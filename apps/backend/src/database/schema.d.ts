@@ -196,6 +196,21 @@ export interface Gasto {
   vendedor_id: string | null;
 }
 
+export interface InventarioPtAjuste {
+  actualizado_por_usuario_id: string | null;
+  capturo_usuario_id: string;
+  comentario: string | null;
+  created_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+  fecha: Timestamp;
+  id: Generated<string>;
+  inventario_inicial: number;
+  merma_acumulada_inicial: number;
+  presentacion_id: string;
+  sucursal_id: string;
+  updated_at: Generated<Timestamp>;
+}
+
 export interface Jornada {
   abierta_en: Timestamp;
   cerrada_en: Timestamp;
@@ -770,6 +785,7 @@ export interface DB {
   factura: Factura;
   folio_oficina_contador: FolioOficinaContador;
   gasto: Gasto;
+  inventario_pt_ajuste: InventarioPtAjuste;
   jornada: Jornada;
   lista_precio: ListaPrecio;
   motivo_merma: MotivoMerma;
