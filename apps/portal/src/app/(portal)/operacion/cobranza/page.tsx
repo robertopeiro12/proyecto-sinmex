@@ -1,19 +1,16 @@
-import { PantallaCobranza } from "@/components/cobranza/pantalla-cobranza";
+import { redirect } from "next/navigation";
 
-// Server component delgado (mismo patron que /operacion/facturas). `cliente` y
-// `nota` llegan del boton Cobrar de Cuentas por Cobrar (T-22).
+// Procesos › Notas reemplazó a Cobranza. `cliente` y `nota` (del botón Cobrar de Cuentas por
+// Cobrar, T-22) pasan tal cual; se conserva la sucursal.
 export default async function Page({
   searchParams,
 }: {
   searchParams: Promise<{ sucursal?: string; cliente?: string; nota?: string }>;
 }) {
   const { sucursal, cliente, nota } = await searchParams;
-  return (
-    <PantallaCobranza
-      key={`${sucursal ?? ""}|${cliente ?? ""}|${nota ?? ""}`}
-      sucursal={sucursal ?? null}
-      clienteInicial={cliente ?? null}
-      notaInicial={nota ?? null}
-    />
-  );
+  const params = new URLSearchParams({ pestana: "notas" });
+  if (cliente) params.set("cliente", cliente);
+  if (nota) params.set("nota", nota);
+  if (sucursal) params.set("sucursal", sucursal);
+  redirect(`/operacion/procesos?${params.toString()}`);
 }

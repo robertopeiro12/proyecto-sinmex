@@ -62,8 +62,8 @@ describe("textoVence", () => {
 
 describe("enlaceCobrar", () => {
   it("lleva cliente y nota, y la sucursal si hay", () => {
-    expect(enlaceCobrar("c1", "n1", null)).toBe("/operacion/cobranza?cliente=c1&nota=n1");
-    expect(enlaceCobrar("c1", "n1", "TJ")).toBe("/operacion/cobranza?cliente=c1&nota=n1&sucursal=TJ");
+    expect(enlaceCobrar("c1", "n1", null)).toBe("/operacion/procesos?pestana=notas&cliente=c1&nota=n1");
+    expect(enlaceCobrar("c1", "n1", "TJ")).toBe("/operacion/procesos?pestana=notas&cliente=c1&nota=n1&sucursal=TJ");
   });
 });
 

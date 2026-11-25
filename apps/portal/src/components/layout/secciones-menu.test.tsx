@@ -10,12 +10,12 @@ describe("SeccionesMenu", () => {
   });
 
   it("abre sola la sección de la pantalla actual y marca su opción", () => {
-    render(<SeccionesMenu pathname="/operacion/ventas" sucursal={null} />);
+    render(<SeccionesMenu pathname="/operacion/procesos" sucursal={null} />);
     expect(screen.getByRole("navigation", { name: "Menú principal" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Operación" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByRole("button", { name: "Finanzas" })).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByRole("link", { name: "Ventas" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "Facturas" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Procesos" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Peticiones" })).not.toHaveAttribute("aria-current");
     expect(screen.queryByRole("link", { name: "Tesorería" })).not.toBeInTheDocument();
   });
 
@@ -26,21 +26,21 @@ describe("SeccionesMenu", () => {
   });
 
   it("los enlaces conservan la sucursal elegida", () => {
-    render(<SeccionesMenu pathname="/operacion/ventas" sucursal="TJ" />);
-    expect(screen.getByRole("link", { name: "Cobranza" })).toHaveAttribute("href", "/operacion/cobranza?sucursal=TJ");
+    render(<SeccionesMenu pathname="/operacion/procesos" sucursal="TJ" />);
+    expect(screen.getByRole("link", { name: "Procesos" })).toHaveAttribute("href", "/operacion/procesos?sucursal=TJ");
   });
 
   it("lo que todavía no existe dice Pronto; lo que existe no", () => {
-    render(<SeccionesMenu pathname="/operacion/ventas" sucursal={null} />);
+    render(<SeccionesMenu pathname="/operacion/procesos" sucursal={null} />);
     const notificaciones = screen.getByRole("link", { name: "Notificaciones Pronto" });
     expect(within(notificaciones).getByText("Pronto")).toBeInTheDocument();
-    expect(within(screen.getByRole("link", { name: "Ventas" })).queryByText("Pronto")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("link", { name: "Peticiones" })).queryByText("Pronto")).not.toBeInTheDocument();
     expect(within(screen.getByRole("link", { name: "Procesos" })).queryByText("Pronto")).not.toBeInTheDocument();
   });
 
   it("Tesorería y Flujo de Efectivo no salen en el menú; Gastos sí", async () => {
     const usuario = userEvent.setup();
-    render(<SeccionesMenu pathname="/operacion/ventas" sucursal={null} />);
+    render(<SeccionesMenu pathname="/operacion/procesos" sucursal={null} />);
     await usuario.click(screen.getByRole("button", { name: "Finanzas" }));
     expect(screen.getByRole("link", { name: "Gastos" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Tesorería" })).not.toBeInTheDocument();
@@ -49,19 +49,19 @@ describe("SeccionesMenu", () => {
 
   it("recuerda lo que el usuario abre y cierra", async () => {
     const usuario = userEvent.setup();
-    const { unmount } = render(<SeccionesMenu pathname="/operacion/ventas" sucursal={null} />);
+    const { unmount } = render(<SeccionesMenu pathname="/operacion/procesos" sucursal={null} />);
     await usuario.click(screen.getByRole("button", { name: "Finanzas" }));
     expect(screen.getByRole("button", { name: "Finanzas" })).toHaveAttribute("aria-expanded", "true");
     expect(JSON.parse(localStorage.getItem(CLAVE_SECCIONES) ?? "{}")).toMatchObject({ Finanzas: true });
     unmount();
 
-    render(<SeccionesMenu pathname="/operacion/ventas" sucursal={null} />);
+    render(<SeccionesMenu pathname="/operacion/procesos" sucursal={null} />);
     await waitFor(() => expect(screen.getByRole("button", { name: "Finanzas" })).toHaveAttribute("aria-expanded", "true"));
   });
 
   it("la sección actual se abre aunque se haya guardado cerrada", async () => {
     localStorage.setItem(CLAVE_SECCIONES, JSON.stringify({ "Operación": false, "Catálogo": true }));
-    render(<SeccionesMenu pathname="/operacion/ventas" sucursal={null} />);
+    render(<SeccionesMenu pathname="/operacion/procesos" sucursal={null} />);
     await waitFor(() => expect(screen.getByRole("button", { name: "Catálogo" })).toHaveAttribute("aria-expanded", "true"));
     expect(screen.getByRole("button", { name: "Operación" })).toHaveAttribute("aria-expanded", "true");
   });
@@ -81,7 +81,7 @@ describe("SeccionesMenu", () => {
       throw new Error("SecurityError");
     });
     const usuario = userEvent.setup();
-    render(<SeccionesMenu pathname="/operacion/ventas" sucursal={null} />);
+    render(<SeccionesMenu pathname="/operacion/procesos" sucursal={null} />);
     expect(screen.getByRole("button", { name: "Operación" })).toHaveAttribute("aria-expanded", "true");
     await usuario.click(screen.getByRole("button", { name: "Catálogo" }));
     expect(screen.getByRole("button", { name: "Catálogo" })).toHaveAttribute("aria-expanded", "true");

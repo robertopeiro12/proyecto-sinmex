@@ -224,6 +224,15 @@ describe("PantallaProcesos", () => {
     expect(screen.queryByRole("region", { name: "Notas marcadas" })).toBeNull();
   });
 
+  it("Review Focus 2: con clienteInicial y notaInicial abre en Notas con ese cliente y esa nota palomeada", async () => {
+    mockAuth(TODOS);
+    render(<PantallaProcesos sucursal={null} pestanaInicial="notas" clienteInicial="c1" notaInicial="v2" />);
+    expect(await screen.findByRole("checkbox", { name: "Marcar TJ261120RI05" })).toBeChecked();
+    expect(screen.getByRole("tab", { name: "Notas" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("button", { name: "Quitar cliente" })).toBeInTheDocument();
+    expect(ventasLib.buscarVentas).toHaveBeenCalledWith({ sucursal: "TJ", clienteId: "c1", filtro: "con_saldo" });
+  });
+
   it("Review Focus 3: cambiar de cliente con el detalle abierto lo cierra sin preguntar", async () => {
     mockAuth(TODOS);
     const u = userEvent.setup();

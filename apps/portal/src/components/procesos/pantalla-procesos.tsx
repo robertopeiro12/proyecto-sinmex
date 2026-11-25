@@ -39,10 +39,16 @@ const PESTANAS_VENTAS: { valor: string; etiqueta: string; permiso: string | null
 export function PantallaProcesos({
   sucursal,
   pestanaInicial = null,
+  clienteInicial = null,
+  notaInicial = null,
 }: {
   sucursal: string | null;
   /** La pestaña con que abre (`ventas`, `notas`, `merma`, …); sin ella, la primera. */
   pestanaInicial?: string | null;
+  /** El cliente que abre elegido (id), del botón Cobrar de Cuentas por Cobrar. */
+  clienteInicial?: string | null;
+  /** La nota que abre palomeada en Notas (id de la venta). */
+  notaInicial?: string | null;
 }) {
   const { usuario, puede, cargando } = useAuth();
   const [actual, setActual] = useState<string | null>(pestanaInicial);
@@ -55,6 +61,8 @@ export function PantallaProcesos({
   const [clientes, setClientes] = useState<ClienteResumen[]>([]);
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
+  // La nota palomeada de entrada solo vale para el cliente con que se abrió.
+  const [notaDeEntrada, setNotaDeEntrada] = useState<string | null>(notaInicial);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
   const sucio = useRef(false);
   const avisarSucio = useCallback((s: boolean) => {
@@ -74,7 +82,13 @@ export function PantallaProcesos({
     if (!codigo) return;
     let vigente = true;
     const fallo = (texto: string) => () => vigente && setErrorCarga(texto);
-    listarClientes(codigo, "todos").then((c) => vigente && setClientes(c), fallo("No se pudieron cargar los clientes."));
+    listarClientes(codigo, "todos").then((c) => {
+        if (!vigente) return;
+        setClientes(c);
+        const inicial = clienteInicial ? c.find((x) => x.id === clienteInicial) : undefined;
+        if (inicial) setCliente((actual) => actual ?? inicial);
+      },
+      fallo("No se pudieron cargar los clientes."));
     // Vendedores y productos solo los usan las capturas de PR A.
     if (!hayTipos)
       return () => {
@@ -88,6 +102,8 @@ export function PantallaProcesos({
     return () => {
       vigente = false;
     };
+    // clienteInicial solo se usa al montar (la página vuelve a montar con otra `key`).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [codigo, hayTipos]);
 
   const opciones: OpcionPresentacion[] = useMemo(() => presentacionesParaAgregar(productos, []), [productos]);
@@ -109,12 +125,14 @@ export function PantallaProcesos({
     if (!(await soltarCaptura())) return;
     // La búsqueda que dejó "Ver en Notas" era del cliente anterior.
     setBusquedaNotas(null);
+    setNotaDeEntrada(null);
     setCliente(nuevo);
   }
 
   async function cambiarPestana(valor: string) {
     if (!(await soltarCaptura())) return;
     setBusquedaNotas(null);
+    setNotaDeEntrada(null);
     setActual(valor);
   }
 
@@ -149,6 +167,7 @@ export function PantallaProcesos({
           sucursal={codigo}
           cliente={cliente}
           busquedaInicial={busquedaNotas}
+          notaInicial={cliente?.id === clienteInicial ? notaDeEntrada : null}
           onSucio={avisarSucio}
           onCambio={recargarCliente}
         />

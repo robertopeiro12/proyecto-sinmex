@@ -29,10 +29,6 @@ export const navSections: NavSection[] = [
       { label: "Ruta Diaria", href: "/operacion/ruta-diaria" },
       { label: "Ruta Semanal", href: "/operacion/ruta-semanal" },
       // Nuevas.
-      { label: "Registrar venta", href: "/operacion/registrar-venta" },
-      { label: "Ventas", href: "/operacion/ventas" },
-      { label: "Facturas", href: "/operacion/facturas" },
-      { label: "Cobranza", href: "/operacion/cobranza" },
       { label: "Cuentas por Cobrar", href: "/operacion/cuentas-por-cobrar" },
       { label: "Promociones", href: "/operacion/promociones" },
     ],
