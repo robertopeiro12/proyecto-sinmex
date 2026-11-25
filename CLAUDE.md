@@ -464,13 +464,21 @@ usuario con sesion pasa.
     **parte en renglones, nunca se corta**. `datos-ticket.ts` arma `DatosTicket` desde lo guardado; `html.ts` lo vuelve HTML.
   - **Cuándo imprime**: "Grabar e imprimir" en Vender y en Cobrar; el cobro **reimprime cada nota de su reparto** (con
     "Reimpresión" / "Cobró" en el ticket); "Reimprimir" en el detalle de Ventas / Cobranza (`registros/[tipo]/[id].tsx`).
+    Varias notas salen en **un solo trabajo de impresión** (`imprimirTickets` → `ticketsAHtml`, salto de página entre
+    notas): en Android `printAsync` vuelve al abrir el diálogo y dos trabajos seguidos no están garantizados.
   - **Imprimir nunca deshace lo grabado**: si falla o se cancela solo avisa; la nota ya está guardada y se reimprime después.
   - **Pull**: `NotaPendientePull.detalle` (aditivo, ver `docs/contrato-sincronizacion.md`) trae líneas, promociones y
     nombres para reimprimir una nota que no se vendió en esa tablet; la migración local **024** (`nota_pendiente.detalle_json`)
     **reinicia el cursor del pull** para bajar el detalle de todas las notas. **Backend antes que la APK**: un servidor
-    viejo no manda `detalle` y la reimpresión de una nota no local sale **sin renglones**.
-  - **Preguntas abiertas para Mario**: modelo de la impresora térmica real (no se ha probado con papel) y si la nota
-    liquidada lleva espacio para firma.
+    viejo no manda `detalle` y la reimpresión de una nota no local sale **sin renglones**. **Backend antes que la APK: el
+    cursor se reinicia una sola vez; si la APK llega primero, las notas no traen detalle hasta que cambien.**
+    `detalle.creada_en` es la hora de la venta en la tablet (`ocurrido_en` de `sync_operacion`, como la oficina).
+  - **Antes de instalar el APK con la migración 024, sincronizar la tablet**; el pull completo no baja notas
+    cerradas/borradas entre el último pull y la actualización (mismo patrón que 019/022).
+  - **Preguntas abiertas para Mario**: modelo de la impresora térmica real (no se ha probado con papel); si la nota
+    liquidada lleva espacio para firma; y si una nota que un cobro liquida lista el abono nuevo al reimprimirse (spec §12
+    dice que sí; la maqueta 25 no muestra abonos). Hoy se sigue la maqueta y el plan: la LIQUIDADA imprime
+    "Pagó $total" sin la lista de abonos (`ticket.ts`).
 
 - **Promociones (T-74).** Regla de regalo por compra, configurada en el portal (*Operación → Promociones*, permiso
   `promocion.gestionar`; backend en `cartera-clientes/promociones.*`, `/promociones`) y **aplicada solo por la
