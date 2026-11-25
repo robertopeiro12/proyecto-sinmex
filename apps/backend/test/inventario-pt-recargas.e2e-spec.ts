@@ -56,6 +56,7 @@ describe('Inventario de PT con Recargas (e2e)', () => {
   let enviada: string;
   let vieja: string;
   let muerta: string;
+  let conAjuste: string;
   let vendedorA: string;
   let vendedorBaja: string;
   let vendedorL: string;
@@ -466,6 +467,7 @@ describe('Inventario de PT con Recargas (e2e)', () => {
     const otro = await crearProducto(`${PRODUCTO}-b`);
     vieja = await crearPresentacion(otro, '5 L', true);
     muerta = await crearPresentacion(otro, '4 L', true);
+    conAjuste = await crearPresentacion(otro, '3 L', true);
     cliente = await crearCliente(kId);
     vendedorA = await crearVendedor(nombreA, kId);
     vendedorBaja = await crearVendedor(nombreBaja, kId, true);
@@ -495,6 +497,8 @@ describe('Inventario de PT con Recargas (e2e)', () => {
     // --- AYER (solo para el Inicial de hoy, via PT con Ventas) ---
     // Litro YE: ajuste 500, venta 10, entrada 30 → Final de ayer 520.
     await ajuste(kId, litro, ayer, 500);
+    // Dada de baja, con ajuste vivo ayer y sin movimiento hoy: sigue saliendo.
+    await ajuste(kId, conAjuste, ayer, 40);
     await crearVenta(ayer, litro, 10);
     await crearOperacion({
       tipo: 'entrada',
@@ -858,6 +862,17 @@ describe('Inventario de PT con Recargas (e2e)', () => {
         inicial: null,
         actual: null,
       });
+      expect(renglon(r, muerta)).toBeUndefined();
+    });
+
+    it('M1: dada de baja con ajuste vivo y sin movimiento hoy sigue saliendo', async () => {
+      const r = await leer({ sucursal: K });
+      expect(renglon(r, conAjuste)).toMatchObject({
+        recargas: 0,
+        inicial: 40,
+        actual: 40,
+      });
+      // Sin ajuste ni movimiento, no.
       expect(renglon(r, muerta)).toBeUndefined();
     });
 

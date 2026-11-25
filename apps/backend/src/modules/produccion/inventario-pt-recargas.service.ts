@@ -70,11 +70,22 @@ export class InventarioPtRecargasService {
           f,
         ),
       );
-    // Las vivas, mas las dadas de baja con movimiento hoy.
+    // Las vivas, mas las dadas de baja con movimiento hoy o con un ajuste vivo
+    // <= hoy en el ambito (la misma regla de visibilidad de PT con Ventas:
+    // tiene inventario que encadenar). Una sola consulta agrupada.
     const conMovimiento = [...porPresentacion]
       .filter(([, m]) => hayMovimientoRecargas(m))
       .map(([id]) => id);
-    const presentaciones = await this.ptRepo.presentaciones(conMovimiento);
+    const ajustes = await this.ptRepo.ajustes(
+      ambito.sucursalIds,
+      hoy,
+      hoy,
+      null,
+    );
+    const presentaciones = await this.ptRepo.presentaciones([
+      ...conMovimiento,
+      ...ajustes.map((a) => a.presentacionId),
+    ]);
     const iniciales = await this.pt.inicialesDelDia(
       ambito,
       presentaciones,
