@@ -36,7 +36,7 @@ un día; este dice cuánto **hay ahorita**.
   Recargas · Envíos · Entradas/Compras · Merma · Consumo · Descuentos · **Actual**. Todas las presentaciones vivas (aunque
   estén en 0). Cabe a 1366 px.
 - **D2. De dónde sale cada número** (por sucursal y presentación, **hoy**; todo **vivo**):
-  - **Recargas**: `carga_detalle.piezas` de cargas vivas de hoy de vendedores de la sucursal, con la carga `pendiente`, o
+  - **Recargas**: `carga_detalle.piezas` de cargas vivas de hoy de la sucursal (`carga.sucursal_id`), con la carga `pendiente`, o
     `aceptada` y el renglón aceptado (`coalesce(aceptada, true)`, la misma regla que el Corte). Rechazada = no cuenta.
   - **Envíos**: Registro `envio` de esta sucursal (salen).
   - **Entradas/Compras**: Registro `entrada` + **envíos recibidos** (los `envio` con destino esta sucursal).
@@ -59,8 +59,8 @@ un día; este dice cuánto **hay ahorita**.
 - **Por qué el Final de ayer sirve de Inicial** (aunque PT con Ventas no resta recargas): lo que el vendedor no vendió
   regresa en el corte, así que `Inicial − Ventas` de ayer ya es lo que físicamente quedó en el almacén (lo que faltó lo
   cuadra el descuento de Procesos). Hoy se restan las recargas que salieron.
-- **Mis decisiones (Claude):** una recarga cuenta en la sucursal **actual** del vendedor, también si está dado de baja (como
-  la merma en PT con Ventas); se muestran las presentaciones vivas y además las desactivadas o dadas de baja **con
+- **Mis decisiones (Claude):** una recarga cuenta en la sucursal **de la carga** (`carga.sucursal_id`), también si el vendedor
+  ya está dado de baja; se muestran las presentaciones vivas y además las desactivadas o dadas de baja **con
   movimiento hoy** (como el Corte).
 - **D5. Detalle al picar.** Un número de **Recargas** ≠ 0 abre una ventana "A quién": vendedor, n.º de carga, estado
   (Pendiente / Aceptada) y piezas, con total. Un número de **Descuentos** ≠ 0 abre "A quién" con trabajador y piezas
