@@ -92,8 +92,11 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
    * 0 (el cobro retira la `nota_pendiente` con `activo = 0`); sin el, solo las
    * de nota viva, como siempre.
    */
-  function deHoy(clienteId: string | null, { conLiquidadasHoy = false } = {}): NotaAsignadaDeHoy[] {
-    const hoy = reloj.hoy();
+  function deHoy(
+    clienteId: string | null,
+    { conLiquidadasHoy = false, fecha = reloj.hoy() }: { conLiquidadasHoy?: boolean; fecha?: FechaISO } = {},
+  ): NotaAsignadaDeHoy[] {
+    const hoy = fecha;
     const filtroCliente = clienteId === null ? '' : 'and np.cliente_id = $cliente_id';
     const params: ParametrosSQL = clienteId === null ? { $hoy: hoy } : { $hoy: hoy, $cliente_id: clienteId };
 
@@ -201,8 +204,8 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
      * "liquidada $0.00". Lo que el vendedor **trae** sigue siendo
      * `queTraeDelVendedor`.
      */
-    asignadasDeHoy(): NotaAsignadaDeHoy[] {
-      return deHoy(null, { conLiquidadasHoy: true });
+    asignadasDeHoy(fecha: FechaISO = reloj.hoy()): NotaAsignadaDeHoy[] {
+      return deHoy(null, { conLiquidadasHoy: true, fecha });
     },
 
     /**
@@ -222,12 +225,12 @@ export function crearRepositorioNotasAsignadas({ bd, reloj, generarId }: DepsRep
      *
      * `ventaId` es la venta de esta tablet con ese folio, si la hay.
      */
-    queTraeDelVendedor(vendedorId: string): NotaQueTrae[] {
-      const hoy = reloj.hoy();
+    queTraeDelVendedor(vendedorId: string, fecha: FechaISO = reloj.hoy()): NotaQueTrae[] {
+      const hoy = fecha;
       const lista: NotaQueTrae[] = [];
 
       const asignadas = new Set<string>();
-      for (const n of deHoy(null)) {
+      for (const n of deHoy(null, { fecha })) {
         asignadas.add(n.ventaNotaId);
         if (n.saldoCentavos > 0 && !n.liquidadaHoy) {
           const venta = bd.getFirstSync<{ id: string }>('select id from venta where folio = $folio', {

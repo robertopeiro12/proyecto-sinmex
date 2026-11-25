@@ -393,7 +393,17 @@ export function crearRepositorioCortes(deps: DepsRepositorio) {
       });
     },
 
-    /** El corte de hoy del vendedor (borrador o enviado), o `null`. */
+    /**
+     * El corte de esa jornada (borrador o enviado), o `null`. La pantalla lee
+     * por jornada, no por reloj: abierta pasada la medianoche sigue mostrando
+     * el corte del dia que se cerro (revision final de la pieza 6, m-1).
+     */
+    deJornada(jornadaId: string): Corte | null {
+      const fila = filaDeJornada(bd, jornadaId);
+      return fila ? aCorte(fila) : null;
+    },
+
+    /** El corte de hoy (`reloj.hoy()`) del vendedor (borrador o enviado), o `null`. */
     deHoy(vendedorId: string): Corte | null {
       const fila = bd.getFirstSync<FilaCorte>(
         'select * from corte where vendedor_id = $vendedor_id and fecha = $fecha',

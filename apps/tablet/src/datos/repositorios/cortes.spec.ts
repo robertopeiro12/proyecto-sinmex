@@ -85,6 +85,22 @@ describe('repositorio de cortes', () => {
       expect(hoy.deHoy('ven-1')).toBeNull();
     });
 
+    it('pieza 6 m-1: deJornada lo encuentra aunque el reloj ya este en otro dia', () => {
+      const ayer = conCortes('2026-08-06T15:00:00.000Z');
+      ayer.cortes.guardarBorrador(ayer.jornada.id, { mermaContada: 2 });
+      const hoy = crearRepositorioCortes({
+        ...ayer.deps,
+        reloj: { ahora: () => MOMENTO, hoy: () => '2026-08-07' },
+      });
+      expect(hoy.deHoy('ven-1')).toBeNull();
+      expect(hoy.deJornada(ayer.jornada.id)).toMatchObject({
+        jornadaId: ayer.jornada.id,
+        fecha: '2026-08-06',
+        captura: { mermaContada: 2 },
+      });
+      expect(hoy.deJornada('otra')).toBeNull();
+    });
+
     it('deHoy regresa el borrador de hoy, sin sistema y sin enviar', () => {
       const { cortes, jornada } = conCortes();
       cortes.guardarBorrador(jornada.id, { cerrados: ['notas'] });

@@ -185,6 +185,16 @@ describe('el inventario del dia', () => {
     expect(cargas.filasInventario('ven-1')).toEqual([]);
   });
 
+  it('pieza 6 m-1: filasInventario lee el dia que se le pide (el de la jornada)', () => {
+    const { deps, cargas } = montar();
+    aplicarSnapshotCargas(deps.bd, [fila({ id: 'c-ayer', fecha: '2026-08-06', estado: 'aceptada' })], MOMENTO);
+    expect(cargas.filasInventario('ven-1')).toEqual([]);
+    expect(cargas.filasInventario('ven-1', '2026-08-06').map((f) => [f.presentacionId, f.cargado])).toEqual([
+      ['pre-1', 24],
+      ['pre-2', 12],
+    ]);
+  });
+
   it('filasInventario: cargado − vendido − regalado por presentacion, con su nombre', () => {
     const { deps, cargas, ventas } = montar();
     aplicarSnapshotCargas(deps.bd, [fila({ estado: 'aceptada' })], MOMENTO);

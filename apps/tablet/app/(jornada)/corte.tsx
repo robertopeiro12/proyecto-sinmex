@@ -90,15 +90,20 @@ export default function Corte() {
 
   const diaCerrado = jornada?.estado === 'cerrada';
 
-  /** Lo que dice el sistema hoy. Se llama otra vez al enviar, para mandar lo mas nuevo. */
+  /**
+   * Lo que dice el sistema del dia de la jornada (`jornada.fecha`, no el reloj:
+   * abierta pasada la medianoche no lee el dia nuevo, vacio; pieza 6 m-1). Se
+   * llama otra vez al enviar, para mandar lo mas nuevo.
+   */
   const leerSistema = useCallback(() => {
-    if (!vendedor) return null;
-    const { porVisitar, visitados } = agruparRutaEnCurso(datos.rutas.delDia(vendedor.id));
-    const ventas = datos.ventas.delDiaDelVendedor(vendedor.id);
-    const cobros = datos.cobranzas.delDiaDelVendedor(vendedor.id);
-    const gastos = datos.gastos.delDia(vendedor.id);
-    const asignadas = datos.notasAsignadas.asignadasDeHoy();
-    const queTrae = datos.notasAsignadas.queTraeDelVendedor(vendedor.id);
+    if (!vendedor || !jornada) return null;
+    const fecha = jornada.fecha;
+    const { porVisitar, visitados } = agruparRutaEnCurso(datos.rutas.delDia(vendedor.id, fecha));
+    const ventas = datos.ventas.delDiaDelVendedor(vendedor.id, fecha);
+    const cobros = datos.cobranzas.delDiaDelVendedor(vendedor.id, fecha);
+    const gastos = datos.gastos.delDia(vendedor.id, fecha);
+    const asignadas = datos.notasAsignadas.asignadasDeHoy(fecha);
+    const queTrae = datos.notasAsignadas.queTraeDelVendedor(vendedor.id, fecha);
     const nombres = new Map<string, string>();
     for (const id of [...asignadas.map((a) => a.clienteId), ...queTrae.map((n) => n.clienteId)]) {
       if (!nombres.has(id)) nombres.set(id, datos.catalogos.obtenerCliente(id)?.nombre ?? '');
@@ -106,10 +111,12 @@ export default function Corte() {
     const sistema: SistemaCorte = {
       efectivo: efectivoEsperado({ ventas, cobros, gastos }),
       notas: notasDelCorte({ asignadas, queTrae, cobros, nombres }),
-      inventario: inventarioDelCorte(filasPorRegresar(datos.cargas.filasInventario(vendedor.id))),
+      inventario: inventarioDelCorte(filasPorRegresar(datos.cargas.filasInventario(vendedor.id, fecha))),
     };
     return {
       porVisitar: porVisitar.length,
+      // El candado si es del reloj: "¿se pueden abrir clientes ahora?". Pasada
+      // la medianoche da `empezar` (no nulo) y Corte no queda con candado.
       candado: datos.cargas.candadoDeHoy(vendedor.id, jornada),
       resumen: resumenDelDia({ ventas, cobros, gastos, porVisitar, visitados }),
       sistema,
@@ -579,7 +586,7 @@ function CapturaDelCorte({
 
 /** El dia ya cerrado: lo enviado, en solo lectura, y lo que falta por subir. */
 function CorteEnviado({ resumen }: { resumen: ResumenDelDia }) {
-  const { datos, jornada, vendedor, versionCatalogos } = useJawa();
+  const { datos, jornada, versionCatalogos } = useJawa();
   const { ultimaSincronizacion } = useSesion();
   const { estilos } = useTema();
 
@@ -587,11 +594,11 @@ function CorteEnviado({ resumen }: { resumen: ResumenDelDia }) {
     void versionCatalogos;
     void ultimaSincronizacion;
     return {
-      corte: vendedor ? datos.cortes.deHoy(vendedor.id) : null,
+      corte: jornada ? datos.cortes.deJornada(jornada.id) : null,
       // Suma todas las fuentes del push: el dia no esta "listo" con algo sin subir.
       pendientes: contarPendientesDeSubir(datos),
     };
-  }, [datos, vendedor, versionCatalogos, ultimaSincronizacion]);
+  }, [datos, jornada, versionCatalogos, ultimaSincronizacion]);
 
   const sistema = corte?.sistema ?? null;
   const captura = corte?.captura ?? null;

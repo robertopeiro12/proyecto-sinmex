@@ -317,8 +317,8 @@ export function crearRepositorioCargas(
     },
 
     /** La tabla de Inventario, por nombre de producto y volumen. */
-    filasInventario(vendedorId: string): FilaInventario[] {
-      const hoy = reloj.hoy();
+    filasInventario(vendedorId: string, fecha: FechaISO = reloj.hoy()): FilaInventario[] {
+      const hoy = fecha;
       const inventario = leerInventarioDelDia(bd, vendedorId, hoy);
       const nombres = etiquetasDelCatalogo(bd);
       return [...existencias(inventario.cargas, inventario.ventas, hoy, inventario.movimientos)]
