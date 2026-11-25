@@ -175,6 +175,11 @@ de vendedores es **T-62**).
   jornada de hoy `cerrada` el menú apaga Merma y Gastos (`entradasMenu({ diaCerrado })`), la hoja del cliente no deja
   vender ni cobrar, y `ventas`/`cobranzas`/`prospectos.registrar` lanzan `ErrorJornada` (`exigirJornadaAbierta` en
   `src/datos/repositorios/jornadas.ts`). El candado de datos es el que vale: las pantallas se pueden saltar.
+- **El Corte** (`corte.tsx`, rediseño pieza 6, spec §13): resumen del día y tres apartados (Efectivo, Notas,
+  Inventario) que se cierran por separado; con los tres cerrados el botón Corte pide el km final y
+  `jornadas.cerrarConCorte` guarda el corte (migración local 023) y cierra la jornada en una transacción. No se entra
+  con clientes por visitar (salvo candado de inventario). Un apartado cerrado se reabre si el sistema cambia después.
+  El corte sube como operación `corte` y es informativo (`src/estado/corte.ts`).
 - **El contador de "registros por subir" cuenta solo lo que viaja.** La jornada abierta no se sube (el buzón
   del servidor es de solo escritura hasta T-43), así que `jornadas.pendientesDeSincronizar()` solo devuelve
   cerradas.

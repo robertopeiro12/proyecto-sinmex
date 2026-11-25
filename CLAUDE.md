@@ -316,7 +316,29 @@ usuario con sesion pasa.
     (`exigirJornadaAbierta`); no hay reabrir. Desde el rediseño (pieza 1, `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md`) ya no hay pantalla
     `abrir-dia`: sin jornada de hoy la Ruta pinta la tarjeta "Empezar ruta" (vehículo + km inicial) y el menú apaga todo
     menos Ruta y Cerrar sesión ("Empieza tu ruta"); la guardia de `(jornada)/_layout.tsx` regresa a la Ruta cualquier
-    otra pantalla. El cierre se hace desde la entrada **Corte** del menú (hoy `cerrar-dia.tsx`; la pieza 6 lo rehace).
+    otra pantalla. El día se cierra desde la pantalla **Corte** (`app/(jornada)/corte.tsx`; `cerrar-dia.tsx` ya no existe, rediseño
+    pieza 6, spec §13): `jornadas.cerrarConCorte` guarda el corte y cierra la jornada en **una** transacción atómica.
+    **Candado del Corte**: no se entra con clientes por visitar, salvo que el candado de inventario (sin carga aceptada)
+    impida abrir clientes, caso en que el Corte sigue disponible para no dejar el día sin cerrar (`corteDisponible`);
+    con el día cerrado queda disponible como resumen de solo lectura.
+- **Corte del vendedor (rediseño pieza 6, spec §13 `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md`).**
+  Al cerrar el día la tablet sube la operación **`corte`** (`DatosCorte`, forma en `docs/contrato-sincronizacion.md`).
+  - **Servidor**: `rutas/cortes-vendedor.service.ts` (`registrarCorte`) guarda en la tabla nueva `corte_vendedor`
+    (migración `20261129120000`; uno vivo por vendedor y día). Rechazos: `datos-invalidos` (forma, validada antes de la
+    transacción) y `corte-duplicado` (otra clave el mismo día; misma clave es `duplicada`).
+  - **Nube / pre-flight**: tabla nueva y vacía, nada que contar. **Backend antes que la app**: un servidor viejo
+    responde `tipo-desconocido` y la tablet reintenta en la siguiente sincronización.
+  - **Es informativo**: no cambia saldos, existencias ni el corte de mercancía de la oficina (`corte_mercancia`).
+  - **Tablet** (`src/estado/corte.ts`, funciones puras): tres apartados que se cierran por separado (Efectivo, Notas,
+    Inventario) y el botón Corte solo se enciende con los tres cerrados.
+    - **Efectivo esperado** = ventas de contado + abonos al vender (solo ventas a crédito) + cobros en **efectivo** −
+      gastos. Cobros por transferencia o cheque se muestran aparte; puede salir negativo.
+    - **Notas**: las asignadas de hoy (liquidadas salen con saldo $0.00) más las nuevas que trae el vendedor.
+    - **Inventario**: un renglón por presentación con las buenas por regresar (`filasPorRegresar`) y **un** total de
+      merma, que viaja dentro de `inventario` (`inventario.merma`).
+    - **Huellas** (`huellaApartado`): al cerrar un apartado se guarda lo que decía el sistema; si después cambia (venta,
+      cobro, gasto, merma) el apartado se **reabre** para que lo revise.
+  - **Tablet, local**: migración 023 (`cortes`, repositorio `datos.cortes`); fuente de push `fuente-cortes.ts`.
 - **Ruta semanal y Ruta diaria (T-37 + 2026-11-10).** La oficina tiene rutas fijas por día (*Operación → Ruta Semanal*), le
   asigna una a cada vendedor cada mañana (*Ruta Diaria*), la ajusta, le pone vehículo y le asigna notas por cobrar; el
   vendedor la complementa desde la tablet con la operación **`ruta-alta`** (no `ruta`, que sigue guardada sin proyectar; la
@@ -538,7 +560,7 @@ usuario con sesion pasa.
     forma (ubicación obligatoria) y `rutas/visitas.service.ts` proyecta. Rechazos nuevos:
     `motivo-visita-inexistente` (uno **dado de baja sí entra**) y `visita-id-ocupado` (motivo neutro). **El servidor
     no revisa "exige foto/nombre"**: lo exige la tablet (`src/estado/visita.ts`, `validarVisita`).
-  - **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → gastos → rutas` (`fuentesDelPush`, con
+  - **Orden del push**: `jornadas → prospectos → ventas → cobranzas → visitas → gastos → movimientos → cortes → rutas` (`fuentesDelPush`, con
     prueba). El alcance se comprueba **una vez por lote**: una visita a un prospecto cuya alta viaja en el mismo
     lote cae `cliente-fuera-de-alcance`; la tablet sube alta y visita en lotes consecutivos de una sincronización.
   - **GPS**: una coordenada inválida (fuera de rango o no finita) es "sin GPS" (se pide la dirección y se guarda con
@@ -760,7 +782,7 @@ usuario con sesion pasa.
     revisa el límite de consumo ni la existencia** (lo exige la tablet).
   - **Contrato** (aditivo, `CONTRATO_ACTUAL` sigue en 1): tipo `movimiento` (el tipo `merma` queda reservado, sin
     proyección), `VendedorPull.consumo_diario_max`. Cambiar el límite en el portal toca `vendedor.updated_at` de la
-    sucursal (como `control_inventario`). Orden del push: `… → gastos → movimientos → rutas`.
+    sucursal (como `control_inventario`). Orden del push: `… → gastos → movimientos → cortes → rutas`.
   - **Portal**: *Catálogo › Sucursales*: "Consumo propio máximo por día" (0–99) en la edición
     (`components/sucursales/consumo-diario.ts`).
   - **Tablet** (migración local 018): `movimiento`, `movimiento_linea`, `vendedor.consumo_diario_max` (el login sin red
