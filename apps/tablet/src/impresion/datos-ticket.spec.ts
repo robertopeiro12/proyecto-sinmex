@@ -7,7 +7,7 @@ import type { DetalleNotaPull } from '@/sincronizacion/contrato';
 
 import { estadoTicket, type DatosTicket } from './ticket';
 import {
-  imprimirEnOrden,
+  imprimirJuntos,
   ticketDeNota,
   ticketDeVenta,
   ticketDeVentaParaReimprimir,
@@ -260,31 +260,42 @@ describe('ticketDeVentaParaReimprimir', () => {
   });
 });
 
-describe('imprimirEnOrden', () => {
+describe('imprimirJuntos', () => {
   const t = (folio: string) => ({ folio }) as unknown as DatosTicket;
 
-  it('imprime en orden y dice si salieron todos', async () => {
-    const vistos: string[] = [];
-    const ok = await imprimirEnOrden(async (d) => {
-      vistos.push(d.folio);
+  it('manda todos en una sola llamada, en orden, y dice si salieron', async () => {
+    const llamadas: string[][] = [];
+    const ok = await imprimirJuntos(async (ds) => {
+      llamadas.push(ds.map((d) => d.folio));
       return { ok: true };
-    }, [t('A'), t('B')]);
+    }, [t('A'), t('B'), t('C')]);
     expect(ok).toBe(true);
-    expect(vistos).toEqual(['A', 'B']);
+    expect(llamadas).toEqual([['A', 'B', 'C']]);
   });
 
-  it('un null, un fallo o un error: sigue con los demás y responde false', async () => {
-    const vistos: string[] = [];
-    const ok = await imprimirEnOrden(async (d) => {
-      vistos.push(d.folio);
-      if (d.folio === 'B') throw new Error('x');
-      return { ok: d.folio !== 'C' };
-    }, [t('A'), null, t('B'), t('C'), t('D')]);
+  it('un null: imprime los demás y responde false', async () => {
+    const llamadas: string[][] = [];
+    const ok = await imprimirJuntos(async (ds) => {
+      llamadas.push(ds.map((d) => d.folio));
+      return { ok: true };
+    }, [t('A'), null, t('B')]);
     expect(ok).toBe(false);
-    expect(vistos).toEqual(['A', 'B', 'C', 'D']);
+    expect(llamadas).toEqual([['A', 'B']]);
   });
 
-  it('nada que imprimir es no impreso', async () => {
-    expect(await imprimirEnOrden(async () => ({ ok: true }), [])).toBe(false);
+  it('un fallo o un error: false, sin lanzar', async () => {
+    expect(await imprimirJuntos(async () => ({ ok: false }), [t('A')])).toBe(false);
+    expect(
+      await imprimirJuntos(async () => {
+        throw new Error('x');
+      }, [t('A')]),
+    ).toBe(false);
+  });
+
+  it('nada que imprimir (o solo nulls) es no impreso y no abre el diálogo', async () => {
+    const imprimir = jest.fn(async () => ({ ok: true }));
+    expect(await imprimirJuntos(imprimir, [])).toBe(false);
+    expect(await imprimirJuntos(imprimir, [null])).toBe(false);
+    expect(imprimir).not.toHaveBeenCalled();
   });
 });

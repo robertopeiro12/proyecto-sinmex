@@ -29,10 +29,23 @@ export function escaparHtml(s: string): string {
 }
 
 export function renglonesAHtml(renglones: string[], papel: Papel): string {
+  return ticketsAHtml([renglones], papel);
+}
+
+/**
+ * Varios tickets en **un solo** trabajo de impresion, con un salto de pagina
+ * entre uno y otro (no despues del ultimo). Un cobro que toca varias notas las
+ * imprime asi: en Android `printAsync` vuelve en cuanto abre el dialogo, y un
+ * segundo `printAsync` con el primero aun en pantalla no esta garantizado.
+ */
+export function ticketsAHtml(tickets: string[][], papel: Papel): string {
   const anchoMm = IMPRIMIBLE_MM[papel];
   // mm de letra para que COLUMNAS caracteres llenen el area imprimible.
   const letraMm = (anchoMm / (COLUMNAS[papel] * ANCHO_CARACTER)).toFixed(2);
-  const cuerpo = renglones.map(escaparHtml).join('\n');
+  const cuerpos = tickets.map((renglones, i) => {
+    const clase = i < tickets.length - 1 ? 'ticket corte' : 'ticket';
+    return `<div class="${clase}"><pre>${renglones.map(escaparHtml).join('\n')}</pre></div>`;
+  });
   return [
     '<!doctype html>',
     '<html><head><meta charset="utf-8">',
@@ -41,9 +54,10 @@ export function renglonesAHtml(renglones: string[], papel: Papel): string {
     `@page { size: ${papel}mm auto; margin: 0; }`,
     'html, body { margin: 0; padding: 0; background: #fff; color: #000; }',
     `.ticket { width: ${anchoMm}mm; margin: 0 auto; padding: 4mm 0; }`,
+    '.corte { page-break-after: always; break-after: page; }',
     `pre { margin: 0; font-family: "Courier New", Courier, monospace; font-size: ${letraMm}mm;`,
     '  line-height: 1.25; font-weight: normal; white-space: pre; overflow: hidden; }',
     '</style></head>',
-    `<body><div class="ticket"><pre>${cuerpo}</pre></div></body></html>`,
+    `<body>${cuerpos.join('')}</body></html>`,
   ].join('\n');
 }

@@ -1,4 +1,4 @@
-import { COLUMNAS, renglonesAHtml } from './html';
+import { COLUMNAS, renglonesAHtml, ticketsAHtml } from './html';
 
 describe('renglonesAHtml', () => {
   test('escapa < y & (y no escapa dos veces)', () => {
@@ -35,5 +35,36 @@ describe('renglonesAHtml', () => {
 
   test('columnas por papel', () => {
     expect(COLUMNAS).toEqual({ 58: 32, 80: 48 });
+  });
+});
+
+describe('ticketsAHtml', () => {
+  const cortes = (html: string) => html.split('class="ticket corte"').length - 1;
+
+  test('N tickets en un solo HTML con N-1 saltos de página', () => {
+    for (const n of [1, 2, 3]) {
+      const tickets = Array.from({ length: n }, (_, i) => [`Nota ${i + 1}`]);
+      const html = ticketsAHtml(tickets, 58);
+      expect(html.match(/<html>/g)).toHaveLength(1);
+      expect(html.match(/<pre>/g)).toHaveLength(n);
+      expect(cortes(html)).toBe(n - 1);
+    }
+    expect(ticketsAHtml([['a'], ['b']], 80)).toContain('page-break-after: always; break-after: page;');
+  });
+
+  test('el último ticket no lleva salto y el orden se respeta', () => {
+    const html = ticketsAHtml([['A'], ['B']], 58);
+    expect(html).toContain('<div class="ticket corte"><pre>A</pre></div><div class="ticket"><pre>B</pre></div>');
+  });
+
+  test('escapa cada ticket', () => {
+    const html = ticketsAHtml([['Uno <a> & b'], ['Dos "c" > d']], 58);
+    expect(html).toContain('Uno &lt;a&gt; &amp; b');
+    expect(html).toContain('Dos &quot;c&quot; &gt; d');
+    expect(html).not.toContain('<a>');
+  });
+
+  test('un solo ticket es lo mismo que renglonesAHtml', () => {
+    expect(ticketsAHtml([['x', 'y']], 80)).toBe(renglonesAHtml(['x', 'y'], 80));
   });
 });

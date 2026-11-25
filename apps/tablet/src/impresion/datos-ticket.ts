@@ -209,25 +209,23 @@ export function ticketsDelCobro(
 }
 
 /**
- * Imprime uno tras otro (Android abre un dialogo a la vez) y dice si **todos**
- * salieron. Un ticket `null` (lo pedido ya no esta) o una impresion que truena
- * cuentan como no impresos; nunca lanza, para que la pantalla solo avise.
+ * Imprime varios tickets en **un solo** trabajo (con salto de pagina entre
+ * ellos) y dice si **todos** salieron. En Android `printAsync` vuelve en cuanto
+ * abre su dialogo, asi que varios trabajos seguidos no estan garantizados.
+ * Un ticket `null` (lo pedido ya no esta) no se imprime y cuenta como no
+ * impreso; nada que imprimir es no impreso. Nunca lanza, para que la pantalla
+ * solo avise.
  */
-export async function imprimirEnOrden(
-  imprimir: (d: DatosTicket) => Promise<{ ok: boolean }>,
+export async function imprimirJuntos(
+  imprimir: (ds: DatosTicket[]) => Promise<{ ok: boolean }>,
   tickets: (DatosTicket | null)[],
 ): Promise<boolean> {
-  let todos = tickets.length > 0;
-  for (const t of tickets) {
-    if (t === null) {
-      todos = false;
-      continue;
-    }
-    try {
-      if (!(await imprimir(t)).ok) todos = false;
-    } catch {
-      todos = false;
-    }
+  const validos = tickets.filter((t): t is DatosTicket => t !== null);
+  if (validos.length === 0) return false;
+  try {
+    const { ok } = await imprimir(validos);
+    return ok && validos.length === tickets.length;
+  } catch {
+    return false;
   }
-  return todos;
 }

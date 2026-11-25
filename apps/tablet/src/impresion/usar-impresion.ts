@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import { crearControladorExpoPrint, type ResultadoImpresion } from './controlador';
-import { imprimirEnOrden } from './datos-ticket';
+import { imprimirJuntos } from './datos-ticket';
 import { COLUMNAS, type Papel } from './html';
 import { guardarPapel, leerPapel } from './preferencia-expo';
 import { armarTicket, type DatosTicket } from './ticket';
@@ -46,10 +46,18 @@ export function useImpresion() {
     }
   }, []);
 
-  /** Varias notas, una tras otra; `true` solo si salieron todas (ver `imprimirEnOrden`). */
+  /**
+   * Varias notas (las de un cobro) en **un solo** trabajo de impresion, con
+   * salto de pagina entre ellas; `true` solo si salieron todas (ver
+   * `imprimirJuntos`).
+   */
   const imprimirTickets = useCallback(
-    (tickets: (DatosTicket | null)[]) => imprimirEnOrden(imprimirTicket, tickets),
-    [imprimirTicket],
+    (tickets: (DatosTicket | null)[]) =>
+      imprimirJuntos(async (ds) => {
+        const p = await leerPapel();
+        return crearControladorExpoPrint(p).imprimirVarios(ds.map((d) => armarTicket(d, COLUMNAS[p])));
+      }, tickets),
+    [],
   );
 
   /** `null` mientras se lee la preferencia. */

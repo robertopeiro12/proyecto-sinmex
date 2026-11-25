@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Text, View } from 'react-native';
 
+import { relojSistema } from '@/datos/reloj';
 import { useJawa } from '@/estado/proveedor-jawa';
 import type { ResultadoImpresion } from '@/impresion/controlador';
 import type { Papel } from '@/impresion/html';
@@ -67,7 +68,7 @@ export default function Impresora() {
     setImprimiendo(true);
     setResultado(null);
     try {
-      setResultado(await imprimirTicket(ticketDePrueba(new Date().toISOString(), vendedor?.nombre)));
+      setResultado(await imprimirTicket(ticketDePrueba(relojSistema, vendedor?.nombre)));
     } finally {
       setImprimiendo(false);
     }
