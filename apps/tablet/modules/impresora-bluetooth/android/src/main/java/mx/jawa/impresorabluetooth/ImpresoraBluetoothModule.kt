@@ -135,6 +135,9 @@ class ImpresoraBluetoothModule : Module() {
       } finally {
         vigilante.cancel()
       }
+      // El limite pudo vencer justo cuando `connect()` volvia bien: el socket ya
+      // quedo cerrado y escribir daria un `fallo-envio` engañoso.
+      if (agotado.get()) throw error("no-conecta", "La impresora no respondió en 10 s")
 
       try {
         socket.outputStream.apply {
