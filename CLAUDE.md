@@ -458,16 +458,27 @@ usuario con sesion pasa.
   La tablet imprime **directo por Bluetooth** a la térmica portátil de 58 mm ESC/POS que eligió Mario (clase PT-210 /
   MTP-II); `expo-print` se conserva para el emulador y otras impresoras. Ambos son módulos **nativos**: hace falta
   `expo prebuild` y una **APK nueva**. Código en `apps/tablet/src/impresion/`.
-  - **Bluetooth**: `escpos.ts` codifica el ticket (CP850, 4 LF de avance, **sin corte**). Módulo Expo local
-    `apps/tablet/modules/impresora-bluetooth` (Kotlin, SPP, conexión con límite de 10 s, **solo dispositivos ya
-    emparejados**). `BLUETOOTH_CONNECT` se pide **solo después de que el nativo responde `sin-permiso`**. El
+  - **Bluetooth**: `escpos.ts` codifica el ticket (`ESC @`, CP850 con `ESC t 2`, `FS .` para apagar el modo
+    chino/Kanji de los clones, 4 LF de avance, **sin corte**). Módulo Expo local
+    `apps/tablet/modules/impresora-bluetooth` (Kotlin, SPP, conexión con límite de 10 s, escribe en pedazos de 512 B
+    con 20 ms entre ellos, **solo dispositivos ya emparejados**). `BLUETOOTH_CONNECT` se pide **solo después de que el nativo responde `sin-permiso`**. El
     emparejado se hace en Android Ajustes > Bluetooth (PIN 0000 / 1234). "Seleccionar impresora" lista las emparejadas
     más la opción "Diálogo de Android" (`expo-print`). **Cada tablet elige una vez**; no hay respaldo silencioso a otra
     impresora. Errores (`errores-impresora.ts`): sin Bluetooth, "Prende el Bluetooth.", "Da permiso de Bluetooth a la
     app.", "No se pudo conectar con X. ¿Está prendida?", "Se cortó la conexión con X al mandar la nota…". Los tickets
-    de un cobro salen en **un solo envío**.
-  - **Compilar**: `JAVA_HOME` = JBR de Android Studio y `ANDROID_HOME` definidos. **Falta la prueba con la impresora
-    física** (Mario).
+    de un cobro salen en **un solo envío**. Tras una venta, un cobro o "Reimprimir", el aviso dice el motivo
+    (`avisoNoImpreso`: "No se pudo imprimir: <motivo> Puedes reimprimir…") con un botón a "Seleccionar impresora"; el
+    mensaje crudo del diálogo de Android no se muestra ahí. **Sin impresora guardada**: con el módulo en el APK falla
+    con "Elige la impresora en Seleccionar impresora."; sin el módulo (APK viejo) usa el diálogo (`controladorAUsar`).
+  - **Compilar**: `JAVA_HOME` = JBR de Android Studio y `ANDROID_HOME` definidos.
+  - **Prueba con la impresora física (Mario)** — pendiente:
+    1. Emparejarla en Android Ajustes > Bluetooth (PIN 0000 o 1234).
+    2. Elegirla en "Seleccionar impresora".
+    3. "Imprimir prueba": acentos, ñ y "·" deben salir bien. Si salen caracteres raros, imprimir el autotest de la
+       impresora (FEED al prenderla), revisar su tabla de páginas de códigos y ajustar el índice de `ESC t` en `escpos.ts`.
+    4. Una venta (la nota sale sola al grabar).
+    5. Un cobro que toque varias notas: que la última no salga cortada.
+    6. Si da "No se pudo conectar", anotar el modelo exacto (lo primero a probar: conexión RFCOMM insegura o por canal 1).
   - **Papel**: preferencia 58 o 80 mm en "Seleccionar impresora" (`impresora.tsx`), guardada en SecureStore
     (`preferencia.ts`, clave `jawa.impresion.papel`); sin dato o dato ilegible, 58.
   - **Ticket**: `armarTicket(datos, 32 | 48)` es **puro** (32 columnas en 58 mm, 48 en 80 mm). El nombre del producto se
