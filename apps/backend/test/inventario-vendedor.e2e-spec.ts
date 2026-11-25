@@ -250,7 +250,7 @@ describe('Inventario por vendedor (e2e)', () => {
     vendedorId: string;
     sucursalId: string;
     fecha: string;
-    tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo';
+    tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo' | 'cambio';
     clienteId?: string;
     borrado?: boolean;
     lineas: {
@@ -267,7 +267,7 @@ describe('Inventario por vendedor (e2e)', () => {
         sucursal_id: opciones.sucursalId,
         vendedor_id: opciones.vendedorId,
         cliente_id:
-          opciones.tipo === 'merma_cliente'
+          opciones.tipo === 'merma_cliente' || opciones.tipo === 'cambio'
             ? (opciones.clienteId ?? clienteTj)
             : null,
         tipo: opciones.tipo,
@@ -534,6 +534,58 @@ describe('Inventario por vendedor (e2e)', () => {
         mermaFaltante: 1,
       });
       expect(con.totales.faltante).toBe(1);
+    });
+
+    it('muestra los cambios: lo recibido sube la teorica, lo entregado la baja y la merma teorica no cambia', async () => {
+      const dia = diaDeLaCorrida(6);
+      const v = await crearVendedor('Inv cambio', tjId);
+      await crearCarga({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'aceptada',
+        lineas: [
+          { presentacionId: litro, piezas: 10 },
+          { presentacionId: medio, piezas: 6 },
+        ],
+      });
+      await crearMovimiento({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        tipo: 'cambio',
+        lineas: [
+          { presentacionId: medio, sentido: 'recibido', piezas: 3 },
+          { presentacionId: litro, sentido: 'entregado', piezas: 2 },
+        ],
+      });
+
+      const r = (
+        await consultar(cookieGeneral, {
+          fecha: dia,
+          sucursal: 'TJ',
+          vendedor: v,
+        }).expect(200)
+      ).body as InventarioVendedor;
+      expect(linea(r, medio)).toMatchObject({
+        cambiosRecibidos: 3,
+        cambiosEntregados: 0,
+        mermaRecibida: 0,
+        deberiaRegresar: 9,
+        mermaTeorica: 0,
+      });
+      expect(linea(r, litro)).toMatchObject({
+        cambiosRecibidos: 0,
+        cambiosEntregados: 2,
+        mermaEntregada: 0,
+        deberiaRegresar: 8,
+        mermaTeorica: 0,
+      });
+      expect(r.totales).toMatchObject({
+        cambiosRecibidos: 3,
+        cambiosEntregados: 2,
+        deberiaRegresar: 17,
+      });
     });
 
     it('un vendedor sin movimiento ese dia da lineas vacias, sin error', async () => {

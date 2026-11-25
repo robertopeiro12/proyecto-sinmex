@@ -232,6 +232,13 @@ export interface MotivoVisitaPull extends FilaSincronizable {
   exige_atendio: boolean;
 }
 
+/** Copia del backend (rediseño pieza 4). */
+export interface MotivoMermaPull extends FilaSincronizable {
+  nombre: string;
+  aplica_cliente: boolean;
+  aplica_vehiculo: boolean;
+}
+
 /** Copia del backend (T-30). */
 export interface CampoEgresoPull extends FilaSincronizable {
   nombre: string;
@@ -542,6 +549,12 @@ export interface RespuestaPull {
      * visita dice que no hay catalogo y no deja guardar.
      */
     motivos_visita?: MotivoVisitaPull[];
+    /**
+     * Rediseño pieza 4. **Opcional en la copia de la tablet, obligatoria en el
+     * servidor**, por la misma razon que `tipos_negocio`: sin la coleccion la
+     * tablet no tiene motivos de merma que ofrecer.
+     */
+    motivos_merma?: MotivoMermaPull[];
     /**
      * T-30. **Opcional en la copia de la tablet, obligatoria en el servidor**,
      * por la misma razon que `tipos_negocio`: sin la coleccion la pantalla de

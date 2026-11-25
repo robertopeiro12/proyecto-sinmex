@@ -138,6 +138,7 @@ export class SincronizacionService {
       clientes,
       tiposNegocio,
       motivosVisita,
+      motivosMerma,
       camposEgreso,
       notasPendientes,
       rutas,
@@ -156,6 +157,8 @@ export class SincronizacionService {
       this.repo.tiposNegocio(desde),
       // T-39: el catalogo de la pantalla de visita. No lleva sucursal.
       this.repo.motivosVisita(desde),
+      // Rediseño pieza 4: el catalogo de la merma. No lleva sucursal.
+      this.repo.motivosMerma(desde),
       // T-30: el catalogo de la pantalla de gastos. No lleva sucursal.
       this.repo.camposEgreso(desde),
       this.repo.notasPendientes(vendedor.sucursal_id, desde),
@@ -207,6 +210,7 @@ export class SincronizacionService {
         clientes,
         tipos_negocio: tiposNegocio,
         motivos_visita: motivosVisita,
+        motivos_merma: motivosMerma,
         campos_egreso: camposEgreso,
         precios,
       },

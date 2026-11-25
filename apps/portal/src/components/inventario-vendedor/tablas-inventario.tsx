@@ -118,14 +118,14 @@ function TablaInventario({ datos }: { datos: InventarioVendedor }) {
               Cambio físico entregado
               <Ayuda
                 tema="Cambio físico entregado"
-                texto="Los cambios físicos se registrarán desde la app; por ahora valen 0."
+                texto="Piezas que el vendedor le dio al cliente en un cambio físico desde la app. Restan de las piezas teóricas por regresar."
               />
             </Th>
             <Th alinear="derecha" className={`${TOP2} whitespace-normal`}>
               Cambio físico recibido
               <Ayuda
                 tema="Cambio físico recibido"
-                texto="Los cambios físicos se registrarán desde la app; por ahora valen 0."
+                texto="Piezas que el vendedor recibió del cliente en un cambio físico desde la app. Suman a las piezas teóricas por regresar; no son merma."
               />
             </Th>
             <Th alinear="derecha" className={`${TOP2} whitespace-normal`}>

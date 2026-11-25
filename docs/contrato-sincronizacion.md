@@ -198,6 +198,8 @@ nadie relacionaría con nada.
     "tipos_negocio":  [{ "id": "…", "nombre": "Abarrotes", "activo": 1 }],
     "motivos_visita": [{ "id": "…", "nombre": "Cerrado", "exige_foto": true,
                          "exige_atendio": false, "activo": 1 }],
+    "motivos_merma":  [{ "id": "…", "nombre": "Caducado por fecha", "aplica_cliente": true,
+                         "aplica_vehiculo": true, "activo": 1 }],
     "campos_egreso":  [{ "id": "…", "nombre": "Gasolina", "tipo": "operacion",
                          "se_usa_en_app": true, "activo": 1 }],
     "precios":        [{ "id": "<clienteId>:<presentacionId>", "cliente_id": "…",
@@ -293,6 +295,18 @@ Colección **nueva** y aditiva (§3). Baja completa (no por sucursal: es un cat�
 `motivo_visita`; un trigger la mueve en cualquier cambio, la baja lógica incluida). La baja viaja como
 `activo: 0`: la tablet deja de ofrecer el motivo, y una visita ya guardada con él sube igual (el push lo acepta,
 §6). `exige_foto` y `exige_atendio` son booleanos JSON; **los exige la tablet**, el servidor no los revisa.
+
+### `motivos_merma`: el catálogo de la merma (rediseño pieza 4)
+
+Colección **nueva** y aditiva (§3): el catálogo `motivo_merma` del Registro de Operación. Baja completa (no por
+sucursal: es un catálogo de la empresa, como `motivos_visita`) e incremental por **`actualizado_en`** (un trigger
+la mueve en cualquier cambio, la baja lógica incluida). La baja viaja como `activo: 0`. Bajan todos los motivos,
+también los que solo aplican al almacén; `aplica_cliente` y `aplica_vehiculo` son booleanos JSON.
+
+La tablet ofrece en la merma del cliente los motivos con `activo: 1` **y** `aplica_cliente: true`, y en la del
+trayecto los que tienen `activo: 1` **y** `aplica_vehiculo: true`, y manda el elegido como `motivo_merma_id`
+(§6, `movimiento`). Si la oficina da de baja el motivo o le quita la bandera mientras la tablet está sin red, la
+merma ya capturada sube igual: el servidor **no** revisa ni la baja ni las banderas.
 
 ### `campos_egreso`: el catálogo de los gastos de la ruta (T-30)
 
@@ -989,6 +1003,8 @@ El vendedor, sin red, deja un comentario de por qué no cobró una nota que la o
   `motivo-merma-inexistente` (uno dado de baja **sí** se acepta y el servidor no mira `aplica_cliente`/`aplica_vehiculo`); un id que ya ocupa otro movimiento es
   `movimiento-id-ocupado`, con motivo neutro. La misma clave reenviada es `duplicada`.
 - **El servidor no revisa el límite de consumo ni la existencia**: las piezas ya salieron; lo exige la tablet.
+- En el corte de mercancía, Inventario por vendedor y la existencia de la venta del portal, un `cambio` **suma** lo
+  `recibido` y **resta** lo `entregado` de las piezas teóricas por regresar; no es merma (no entra a la merma teórica).
 - Se guarda en `movimiento_inventario` con `id = clave`, `fecha = fecha_operacion` y la sucursal del token, y sus
   líneas en `movimiento_inventario_linea`. El buzón apunta a esa fila (`entidad_tabla = 'movimiento_inventario'`).
 - **Orden del push**: `jornadas → prospectos → ventas → cobranzas → notas-no-cobradas → visitas → gastos → movimientos → rutas`. Una

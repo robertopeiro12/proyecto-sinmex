@@ -1286,6 +1286,81 @@ describe('Sincronizacion pull/push (e2e)', () => {
       });
     });
 
+    describe('motivos de merma (rediseño pieza 4)', () => {
+      it('bajan los vivos con sus banderas y los dados de baja como activo 0; incremental por actualizado_en', async () => {
+        const nombre = (n: string) => `ZZ-sync-${SUFIJO} ${n}`;
+        const ids: string[] = [];
+        const alta = async (
+          n: string,
+          banderas: {
+            aplica_almacen?: boolean;
+            aplica_cliente?: boolean;
+            aplica_vehiculo?: boolean;
+          },
+          borrado = false,
+        ) => {
+          const { id } = await db
+            .insertInto('motivo_merma')
+            .values({
+              nombre: nombre(n),
+              ...banderas,
+              deleted_at: borrado ? new Date() : null,
+            })
+            .returning('id')
+            .executeTakeFirstOrThrow();
+          ids.push(id);
+          return id;
+        };
+        try {
+          const delCliente = await alta('Roto', { aplica_cliente: true });
+          const delVehiculo = await alta('Derramado', {
+            aplica_vehiculo: true,
+          });
+          const deBaja = await alta('Viejo', { aplica_cliente: true }, true);
+
+          const completo = (await pull().expect(200)).body as RespuestaPull;
+          const porId = new Map(
+            completo.catalogos.motivos_merma.map((m) => [m.id, m]),
+          );
+          expect(porId.get(delCliente)).toEqual({
+            id: delCliente,
+            nombre: nombre('Roto'),
+            aplica_cliente: true,
+            aplica_vehiculo: false,
+            activo: 1,
+          });
+          expect(porId.get(delVehiculo)).toMatchObject({
+            aplica_cliente: false,
+            aplica_vehiculo: true,
+            activo: 1,
+          });
+          expect(porId.get(deBaja)).toMatchObject({ activo: 0 });
+
+          // Incremental: solo baja lo que se movio, y la baja como activo 0.
+          const corte = completo.servidor_en;
+          const vacio = (await pull({ desde: corte }).expect(200))
+            .body as RespuestaPull;
+          expect(
+            vacio.catalogos.motivos_merma.some((m) => ids.includes(m.id)),
+          ).toBe(false);
+
+          // El trigger `set_actualizado_en` mueve la columna por la que corta.
+          await db
+            .updateTable('motivo_merma')
+            .set({ deleted_at: new Date() })
+            .where('id', '=', delCliente)
+            .execute();
+          const despues = (await pull({ desde: corte }).expect(200))
+            .body as RespuestaPull;
+          expect(
+            despues.catalogos.motivos_merma.filter((m) => ids.includes(m.id)),
+          ).toEqual([expect.objectContaining({ id: delCliente, activo: 0 })]);
+        } finally {
+          await db.deleteFrom('motivo_merma').where('id', 'in', ids).execute();
+        }
+      });
+    });
+
     describe('alcance', () => {
       it('pedir su propia sucursal por su codigo es correcto', async () => {
         const res = await pull({ sucursal: sucursalCodigo }).expect(200);

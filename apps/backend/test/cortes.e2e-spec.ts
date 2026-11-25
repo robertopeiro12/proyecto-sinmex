@@ -41,7 +41,7 @@ const LOGIN_TIJUANA = `e2e-cor-tj-${SUFIJO}`;
 const LOGIN_SIN_PERMISO = `e2e-cor-sin-${SUFIJO}`;
 const PRODUCTO = `ZZ-cor-${SUFIJO}`;
 
-const DIAS_DE_LA_CORRIDA = 15;
+const DIAS_DE_LA_CORRIDA = 16;
 const DIA_BASE = Date.now() % 2900;
 function diaDeLaCorrida(desplazamiento: number): string {
   return new Date(
@@ -282,7 +282,7 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
     vendedorId: string;
     sucursalId: string;
     fecha: string;
-    tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo';
+    tipo: 'merma_cliente' | 'merma_trayecto' | 'consumo' | 'cambio';
     clienteId?: string;
     borrado?: boolean;
     lineas: {
@@ -299,7 +299,7 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
         sucursal_id: opciones.sucursalId,
         vendedor_id: opciones.vendedorId,
         cliente_id:
-          opciones.tipo === 'merma_cliente'
+          opciones.tipo === 'merma_cliente' || opciones.tipo === 'cambio'
             ? (opciones.clienteId ?? clienteTj)
             : null,
         tipo: opciones.tipo,
@@ -1123,6 +1123,55 @@ describe('Corte de mercancia desde el portal (e2e)', () => {
         piezasFaltantes: 1,
         mermaFaltante: 1,
         estado: 'con_faltante',
+      });
+    });
+
+    it('un cambio suma lo recibido y resta lo entregado de la teorica, sin tocar la merma teorica', async () => {
+      const dia = diaDeLaCorrida(15);
+      const v = await crearVendedor('Cor cambio', tjId);
+      await crearCarga({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        estado: 'aceptada',
+        lineas: [
+          { presentacionId: medio, piezas: 10 },
+          { presentacionId: litro, piezas: 10 },
+        ],
+      });
+      await crearMovimiento({
+        vendedorId: v,
+        sucursalId: tjId,
+        fecha: dia,
+        tipo: 'cambio',
+        lineas: [
+          { presentacionId: medio, sentido: 'recibido', piezas: 3 },
+          { presentacionId: litro, sentido: 'entregado', piezas: 2 },
+        ],
+      });
+
+      const corte = (
+        await leer(cookieGeneral, { fecha: dia, vendedor: v }).expect(200)
+      ).body as CorteVendedor;
+      expect(linea(corte, medio)).toMatchObject({
+        mermaEntregada: 0,
+        mermaRecibida: 0,
+        cambiosRecibidos: 3,
+        cambiosEntregados: 0,
+        deberiaRegresar: 13,
+        mermaTeorica: 0,
+      });
+      expect(linea(corte, litro)).toMatchObject({
+        mermaEntregada: 0,
+        mermaRecibida: 0,
+        cambiosRecibidos: 0,
+        cambiosEntregados: 2,
+        deberiaRegresar: 8,
+        mermaTeorica: 0,
+      });
+      expect(corte.totales).toMatchObject({
+        deberiaRegresar: 21,
+        mermaTeorica: 0,
       });
     });
 

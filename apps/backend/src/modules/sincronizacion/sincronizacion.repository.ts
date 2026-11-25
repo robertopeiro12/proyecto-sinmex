@@ -16,6 +16,7 @@ import type {
   SucursalPull,
   TipoNegocioPull,
   MotivoVisitaPull,
+  MotivoMermaPull,
   CampoEgresoPull,
   VehiculoPull,
   VendedorPull,
@@ -223,6 +224,33 @@ export class SincronizacionRepository {
       nombre: f.nombre,
       exige_foto: f.exige_foto,
       exige_atendio: f.exige_atendio,
+      activo: bandera(true, f.deleted_at),
+    }));
+  }
+
+  /**
+   * Motivos de merma (rediseño pieza 4): catalogo global del Registro de
+   * Operacion, como `motivosVisita`. Corta por `actualizado_en` (el trigger
+   * `set_actualizado_en` la mueve en cualquier update, la baja incluida). Sin
+   * `desde` bajan todos, los dados de baja con `activo: 0`.
+   */
+  async motivosMerma(desde: Date | null): Promise<MotivoMermaPull[]> {
+    let q = this.db
+      .selectFrom('motivo_merma')
+      .select([
+        'id',
+        'nombre',
+        'aplica_cliente',
+        'aplica_vehiculo',
+        'deleted_at',
+      ]);
+    if (desde) q = q.where('actualizado_en', '>', desde);
+
+    return (await q.orderBy('nombre').execute()).map((f) => ({
+      id: f.id,
+      nombre: f.nombre,
+      aplica_cliente: f.aplica_cliente,
+      aplica_vehiculo: f.aplica_vehiculo,
       activo: bandera(true, f.deleted_at),
     }));
   }

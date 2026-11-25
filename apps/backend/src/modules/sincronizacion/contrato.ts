@@ -791,6 +791,26 @@ export interface MotivoVisitaPull extends FilaSincronizable {
 }
 
 /**
+ * Un motivo de merma (rediseño pieza 4): el catalogo `motivo_merma` del Registro
+ * de Operacion, para que el vendedor diga por que es merma. Global (no cuelga de
+ * sucursal), como `motivos_visita`. Coleccion nueva = aditiva. Incremental por
+ * `actualizado_en`; la baja logica viaja como `activo: 0`.
+ *
+ * Bajan todos (tambien los que solo aplican al almacen); la tablet ofrece en la
+ * merma del cliente los vivos con `aplica_cliente` y en la del trayecto los vivos
+ * con `aplica_vehiculo`. Una merma ya guardada con un motivo que despues se dio
+ * de baja o perdio la bandera sube igual: el servidor no revisa ni la baja ni las
+ * banderas (`motivo_merma_id` en {@link DatosMovimiento}).
+ */
+export interface MotivoMermaPull extends FilaSincronizable {
+  nombre: string;
+  /** Se ofrece en la merma del cliente. */
+  aplica_cliente: boolean;
+  /** Se ofrece en la merma del trayecto (vehiculo). */
+  aplica_vehiculo: boolean;
+}
+
+/**
  * Un campo de egreso (T-30, D6): el catalogo de la pantalla "Gastos" de la
  * tablet. Global (no cuelga de sucursal), como `motivos_visita`. Coleccion
  * nueva = aditiva. Incremental por `actualizado_en`; la baja logica viaja como
@@ -1159,6 +1179,8 @@ export interface RespuestaPull {
     tipos_negocio: TipoNegocioPull[];
     /** T-39. Aditiva: una tablet vieja la ignora. */
     motivos_visita: MotivoVisitaPull[];
+    /** Rediseño pieza 4. Aditiva: una tablet vieja la ignora. */
+    motivos_merma: MotivoMermaPull[];
     /** T-30. Aditiva: una tablet vieja la ignora. */
     campos_egreso: CampoEgresoPull[];
     /**
