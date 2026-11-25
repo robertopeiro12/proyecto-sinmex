@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorApi } from "@/lib/api";
@@ -8,6 +8,8 @@ import * as procesosLib from "@/lib/procesos";
 import type { Proceso, ResumenCliente } from "@/lib/procesos";
 import * as productosLib from "@/lib/productos";
 import * as vendedoresLib from "@/lib/vendedores";
+import { diaAnterior } from "@/lib/fechas";
+import { formatearDiaLargo } from "@/lib/formato";
 import { hoyEnTijuana } from "@/lib/ventas";
 import { PantallaProcesos } from "./pantalla-procesos";
 
@@ -453,7 +455,7 @@ describe("PantallaProcesos", () => {
     expect(screen.getByRole("radio", { name: "De almacén" })).toBeChecked();
   });
 
-  it("Descuentos: picar Otro día sin cambiar la fecha no vuelve a precargar ni borra lo corregido", async () => {
+  it("Descuentos: picar Hoy cuando ya es hoy no vuelve a precargar ni borra lo corregido", async () => {
     mockAuth(["proceso.descuento"]);
     const u = userEvent.setup();
     vi.mocked(procesosLib.precargaDescuentos).mockResolvedValue({
@@ -465,11 +467,40 @@ describe("PantallaProcesos", () => {
     const campo = await screen.findByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" });
     await u.clear(campo);
     await u.type(campo, "2");
-    await u.click(screen.getByRole("radio", { name: "Otro día" }));
+    await u.click(screen.getByRole("button", { name: "Hoy" }));
     expect(screen.getByLabelText("Día")).toHaveValue(HOY);
     expect(procesosLib.precargaDescuentos).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("textbox", { name: "Piezas de Horchata 1 L en Productos" })).toHaveValue("2");
     expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("el día como en las demás pantallas: campo Día con Hoy · Ayer y el día escrito; filtra la lista y es el de la captura", async () => {
+    mockAuth(["proceso.consumo"]);
+    const u = userEvent.setup();
+    const AYER = diaAnterior(HOY);
+    vi.mocked(procesosLib.crearProceso).mockResolvedValue(proceso({ tipo: "consumo" }));
+    render(<PantallaProcesos sucursal={null} />);
+    const dia = await screen.findByLabelText("Día");
+    expect(dia).toHaveAttribute("type", "date");
+    expect(dia).toHaveAttribute("max", HOY);
+    expect(screen.queryByRole("radio", { name: "Otro día" })).toBeNull();
+    expect(screen.getByText(`Hoy, ${formatearDiaLargo(HOY)}`)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Consumos de hoy" })).toBeInTheDocument();
+
+    await u.click(screen.getByRole("button", { name: "Ayer" }));
+    expect(dia).toHaveValue(AYER);
+    expect(screen.getByText(`Ayer, ${formatearDiaLargo(AYER)}`)).toBeInTheDocument();
+    await waitFor(() => expect(procesosLib.listarProcesos).toHaveBeenLastCalledWith({ tipo: "consumo", fecha: AYER, sucursal: "TJ" }));
+    expect(screen.getByRole("heading", { name: `Consumos del ${formatearDiaLargo(AYER)}` })).toBeInTheDocument();
+
+    const antier = diaAnterior(AYER);
+    fireEvent.change(dia, { target: { value: antier } });
+    expect(await screen.findByText(formatearDiaLargo(antier))).toBeInTheDocument();
+    await agregar(u, "Productos", "jam", "Jamaica 500 ml", "2");
+    await u.click(screen.getByRole("button", { name: "Guardar consumo" }));
+    expect(procesosLib.crearProceso).toHaveBeenCalledWith(expect.objectContaining({ fecha: antier }));
+    // Guardar conserva el día elegido.
+    await waitFor(() => expect(screen.getByLabelText("Día")).toHaveValue(antier));
   });
 
   it("Descuentos: cambiar de vendedor con algo corregido pregunta antes de reemplazarlo", async () => {

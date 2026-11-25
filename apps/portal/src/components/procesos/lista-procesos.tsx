@@ -151,8 +151,8 @@ export function ListaProcesos({
               {conCliente && <col className="w-44" />}
               <col />
               {dosColumnas && <col />}
+              <col className="w-40" />
               <col className="w-32" />
-              <col className="w-36" />
             </colgroup>
             <thead>
               <tr>

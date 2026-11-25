@@ -7,6 +7,7 @@ import { useConfirmar } from "@/components/ui/confirmar";
 import { Entrada, Lista } from "@/components/ui/campo";
 import { SelectorSegmentado } from "@/components/ui/selector-segmentado";
 import { mensajeDe } from "@/lib/api";
+import { diaAnterior } from "@/lib/fechas";
 import { formatearDiaLargo } from "@/lib/formato";
 import {
   crearProceso,
@@ -56,7 +57,13 @@ function renglonDe(linea: { presentacionId: string; nombre: string; piezas: numb
   };
 }
 
-export type ModoFecha = "hoy" | "otro";
+/** "Hoy, miércoles 25 de noviembre" / "Ayer, martes 24 de noviembre" / "lunes 23 de noviembre". */
+export function diaEscrito(fecha: string, hoy: string): string {
+  const largo = formatearDiaLargo(fecha);
+  if (fecha === hoy) return `Hoy, ${largo}`;
+  if (fecha === diaAnterior(hoy)) return `Ayer, ${largo}`;
+  return largo;
+}
 
 /**
  * La captura de una pestaña de Procesos (D1, boceto 2): una fila compacta de opciones, las
@@ -71,7 +78,6 @@ export function CapturaProceso({
   hoy,
   cliente,
   fecha,
-  modoFecha,
   onFecha,
   mermaDe,
   onMermaDe,
@@ -91,8 +97,7 @@ export function CapturaProceso({
   /** El cliente elegido arriba (o el del registro que se corrige). */
   cliente: { id: string; nombre: string } | null;
   fecha: string;
-  modoFecha: ModoFecha;
-  onFecha: (fecha: string, modo: ModoFecha) => void;
+  onFecha: (fecha: string) => void;
   mermaDe: MermaDe;
   onMermaDe: (m: MermaDe) => void;
   quien: string;
@@ -194,16 +199,16 @@ export function CapturaProceso({
     void precargar(q, fecha);
   }
 
-  async function cambiarFecha(dia: string, modo: ModoFecha) {
+  async function cambiarFecha(dia: string) {
     if (dia === "" || dia > hoy) return;
-    // "Otro día" sin cambiar la fecha solo muestra el campo: no vuelve a precargar.
+    // El mismo día (p. ej. "Hoy" cuando ya es hoy) no vuelve a precargar.
     // Sin vendedor no hay corte que precargar: la caja se queda como está.
     if (dia === fecha || quien === "") {
-      onFecha(dia, modo);
+      onFecha(dia);
       return;
     }
     if (!(await soltarCajaDescuento())) return;
-    onFecha(dia, modo);
+    onFecha(dia);
     void precargar(quien, dia);
   }
 
@@ -274,6 +279,7 @@ export function CapturaProceso({
       : activos;
 
   const quienId = `quien-${tipo}`;
+  const diaId = `dia-${tipo}`;
 
   return (
     <div className="flex flex-col gap-4">
@@ -290,27 +296,21 @@ export function CapturaProceso({
             ]}
           />
         )}
+        {/* El día como en las demás pantallas (Registro de Operación): campo + atajos Hoy · Ayer. */}
         <div className="flex items-center gap-2">
-          <SelectorSegmentado<ModoFecha>
-            etiqueta="Fecha"
-            valor={modoFecha}
-            onCambio={(m) => void cambiarFecha(m === "hoy" ? hoy : fecha, m)}
-            opciones={[
-              { valor: "hoy", texto: `Hoy · ${formatearDiaLargo(hoy)}` },
-              { valor: "otro", texto: "Otro día" },
-            ]}
-          />
-          {modoFecha === "otro" && (
-            <Entrada
-              type="date"
-              aria-label="Día"
-              required
-              max={hoy}
-              value={fecha}
-              onChange={(e) => void cambiarFecha(e.target.value, "otro")}
-              className="w-40"
-            />
-          )}
+          <label htmlFor={diaId} className="text-sm text-muted-foreground">
+            Día
+          </label>
+          <Entrada id={diaId} type="date" required max={hoy} value={fecha} onChange={(e) => void cambiarFecha(e.target.value)} className="w-40" />
+          <div role="group" aria-label="Atajos de día" className="flex items-center gap-0.5">
+            <Button type="button" variant="ghost" size="sm" onClick={() => void cambiarFecha(hoy)}>
+              Hoy
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => void cambiarFecha(diaAnterior(hoy))}>
+              Ayer
+            </Button>
+          </div>
+          <span className="text-sm text-muted-foreground">{diaEscrito(fecha, hoy)}</span>
         </div>
         <div className="flex items-center gap-2">
           <label htmlFor={quienId} className="text-sm text-muted-foreground">

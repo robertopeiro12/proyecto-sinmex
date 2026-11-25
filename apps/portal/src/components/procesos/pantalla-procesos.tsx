@@ -14,7 +14,7 @@ import { listarProductos, type Producto } from "@/lib/productos";
 import { listarVendedores, type Vendedor } from "@/lib/vendedores";
 import { hoyEnTijuana } from "@/lib/ventas";
 import type { OpcionPresentacion } from "./caja-productos";
-import { CapturaProceso, QUIEN_OFICINA, type ModoFecha } from "./captura-proceso";
+import { CapturaProceso, QUIEN_OFICINA } from "./captura-proceso";
 import { ListaProcesos } from "./lista-procesos";
 import { ClienteProcesos } from "./cliente-procesos";
 
@@ -152,7 +152,6 @@ function PestanaProceso({
 }) {
   const hoy = hoyEnTijuana();
   const [fecha, setFecha] = useState(hoy);
-  const [modoFecha, setModoFecha] = useState<ModoFecha>("hoy");
   const [mermaDe, setMermaDe] = useState<MermaDe>("cliente");
   const [quien, setQuien] = useState(tipo === "descuento" ? "" : QUIEN_OFICINA);
   const [editando, setEditando] = useState<Proceso | null>(null);
@@ -180,7 +179,6 @@ function PestanaProceso({
     if (!(await soltarCaptura())) return;
     setEditando(p);
     setFecha(p.fecha);
-    setModoFecha(p.fecha === hoy ? "hoy" : "otro");
     if (p.mermaDe) setMermaDe(p.mermaDe);
     setQuien(p.vendedor?.id ?? (tipo === "descuento" ? "" : QUIEN_OFICINA));
   }
@@ -199,11 +197,7 @@ function PestanaProceso({
         hoy={hoy}
         cliente={editando ? editando.cliente : cliente}
         fecha={fecha}
-        modoFecha={modoFecha}
-        onFecha={(f, m) => {
-          setFecha(f);
-          setModoFecha(m);
-        }}
+        onFecha={setFecha}
         mermaDe={mermaDe}
         onMermaDe={setMermaDe}
         quien={quien}

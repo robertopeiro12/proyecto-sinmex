@@ -916,8 +916,10 @@ usuario con sesion pasa.
     en texto ("Horchata 500 ml × 5, …") y Editar · Eliminar como texto.
     Cambiar de cliente o de pestaña con algo escrito pregunta (`useConfirmar`); la pestaña se monta con `key` = tipo + cliente.
     Merma de cliente, Cambios y Promoción sin cliente: solo "Elige un cliente arriba." (sin lista). Pasar Merma a Almacén
-    descarta "Le entregué" (preguntando si había algo). Descuentos precarga al cambiar vendedor o día; "Otro día" sin cambiar la
-    fecha no vuelve a precargar; si la caja se corrigió a mano pregunta antes de reemplazarla; "Elige un vendedor…" la vacía.
+    descarta "Le entregué" (preguntando si había algo). El día va **como en las demás pantallas** (Registro de Operación): campo
+    "Día" (`type="date"`, `max` = hoy) con atajos Hoy · Ayer y el día escrito en gris ("Hoy, miércoles 25 de noviembre",
+    `diaEscrito`); filtra la lista y es el de la captura. Descuentos precarga al cambiar vendedor o día; elegir el mismo día
+    (p. ej. "Hoy" cuando ya es hoy) no vuelve a precargar; si la caja se corrigió a mano pregunta antes de reemplazarla; "Elige un vendedor…" la vacía.
   - **Descuentos: nunca a la persona equivocada (revisión final).** Al cambiar de vendedor o día la caja se **vacía antes** de
     pedir la precarga y **se queda vacía si falla**; mientras va en camino, Guardar y la caja están deshabilitados, y una
     respuesta que llega tarde (de una elección anterior) se ignora (`precargar` en `captura-proceso.tsx`). Si la lista del día
