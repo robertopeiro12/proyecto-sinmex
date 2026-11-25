@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { Pressable, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -226,5 +227,27 @@ export function BarraAbajo({ children }: { children: ReactNode }) {
     >
       {children}
     </View>
+  );
+}
+
+/**
+ * La flecha de la cabecera: primero cierra lo abierto (teclado o selector) con
+ * `atras`, igual que el boton fisico; si no habia nada, sale de la pantalla.
+ * Mismo patron que la venta (`venta.tsx`).
+ */
+export function FlechaAtras({ atras }: { atras: () => boolean }) {
+  const { t } = useTema();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Atrás"
+      hitSlop={espacio.sm}
+      onPress={() => {
+        if (!atras()) router.back();
+      }}
+      style={{ paddingRight: espacio.md, paddingVertical: espacio.xs }}
+    >
+      <Icono nombre="atras" tamano={t(tipo.subtitulo)} color={colores.tinta} />
+    </Pressable>
   );
 }

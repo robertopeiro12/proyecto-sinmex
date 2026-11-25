@@ -1,5 +1,5 @@
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, BackHandler, Keyboard, Platform, ScrollView, Text, ToastAndroid, View } from 'react-native';
 
 import { ErrorJornada, ErrorMovimiento } from '@/datos';
@@ -24,7 +24,7 @@ import {
 import { useJawa } from '@/estado/proveedor-jawa';
 import { teclear, type TeclaNumerica } from '@/estado/venta-pasos';
 import { Boton } from '@/ui/boton';
-import { BarraAbajo, RenglonCantidad, SelectorMotivo } from '@/ui/captura-movimiento';
+import { BarraAbajo, FlechaAtras, RenglonCantidad, SelectorMotivo } from '@/ui/captura-movimiento';
 import { Campo } from '@/ui/campo';
 import { Pantalla, Tarjeta } from '@/ui/pantalla';
 import { TecladoCantidad } from '@/ui/teclado-cantidad';
@@ -87,6 +87,8 @@ export default function RegistrarMovimiento() {
   const [error, setError] = useState<string | null>(null);
   const [grabado, setGrabado] = useState(false);
   const [guardia] = useState(() => crearGuardiaRegistro());
+  const lista = useRef<ScrollView>(null);
+  const posiciones = useRef(new Map<string, number>());
 
   const atras = useCallback((): boolean => {
     if (activo === null) return false;
@@ -127,10 +129,17 @@ export default function RegistrarMovimiento() {
   const indiceActivo = activo === null ? -1 : renglones.findIndex((r) => r.presentacionId === activo);
   const siguienteRenglon = indiceActivo >= 0 ? renglones[indiceActivo + 1] : undefined;
 
+  /** Desliza la lista para que el renglon del teclado quede a la vista (como la venta). */
+  function mostrar(presentacionId: string) {
+    const y = posiciones.current.get(presentacionId);
+    if (y !== undefined) lista.current?.scrollTo({ y: Math.max(0, y - espacio.xxl), animated: true });
+  }
+
   function abrirTeclado(presentacionId: string) {
     Keyboard.dismiss();
     setError(null);
     setActivo(presentacionId);
+    mostrar(presentacionId);
   }
 
   function tecla(valor: TeclaNumerica | 'borrar') {
@@ -142,6 +151,7 @@ export default function RegistrarMovimiento() {
 
   function siguiente() {
     setActivo(siguienteRenglon ? siguienteRenglon.presentacionId : null);
+    if (siguienteRenglon) mostrar(siguienteRenglon.presentacionId);
   }
 
   function registrar() {
@@ -173,8 +183,14 @@ export default function RegistrarMovimiento() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colores.papel }}>
-      <Stack.Screen options={{ title: esMerma ? 'Merma del vehículo' : TITULO_MOVIMIENTO[tipo] }} />
+      <Stack.Screen
+        options={{
+          title: esMerma ? 'Merma del vehículo' : TITULO_MOVIMIENTO[tipo],
+          headerLeft: () => <FlechaAtras atras={atras} />,
+        }}
+      />
       <ScrollView
+        ref={lista}
         style={{ flex: 1 }}
         contentContainerStyle={[estilos.contenido, { paddingBottom: espacio.lg }]}
         keyboardShouldPersistTaps="handled"
@@ -197,14 +213,18 @@ export default function RegistrarMovimiento() {
           </Tarjeta>
         ) : (
           renglones.map((r) => (
-            <RenglonCantidad
+            <View
               key={r.presentacionId}
-              etiqueta={r.etiqueta}
-              piezas={piezasCapturadas(captura, r.presentacionId, 'entregado')}
-              quedan={r.quedan}
-              activo={activo === r.presentacionId}
-              onPress={() => abrirTeclado(r.presentacionId)}
-            />
+              onLayout={(e) => posiciones.current.set(r.presentacionId, e.nativeEvent.layout.y)}
+            >
+              <RenglonCantidad
+                etiqueta={r.etiqueta}
+                piezas={piezasCapturadas(captura, r.presentacionId, 'entregado')}
+                quedan={r.quedan}
+                activo={activo === r.presentacionId}
+                onPress={() => abrirTeclado(r.presentacionId)}
+              />
+            </View>
           ))
         )}
 

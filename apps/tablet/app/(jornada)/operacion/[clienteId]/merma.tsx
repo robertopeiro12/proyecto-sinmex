@@ -1,5 +1,5 @@
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, BackHandler, Platform, ScrollView, Text, ToastAndroid, View } from 'react-native';
 
 import { ErrorJornada, ErrorMovimiento } from '@/datos';
@@ -27,6 +27,7 @@ import {
   AgregarProducto,
   BarraAbajo,
   EncabezadoSeccion,
+  FlechaAtras,
   RenglonCantidad,
   SelectorMotivo,
 } from '@/ui/captura-movimiento';
@@ -122,9 +123,32 @@ export default function MermaYCambiosDelCliente() {
     cambios: crearGuardiaRegistro(),
   }));
 
+  const lista = useRef<ScrollView>(null);
+  const posiciones = useRef(new Map<string, number>());
+
   const captura = capturas[pestana];
-  const candidatos = (sentido: SentidoMovimiento): RenglonMovimiento[] =>
-    sentido === 'recibido' ? todoElCatalogo : loQueTrae;
+  /**
+   * Las filas de un lado. "Le entregué" es lo que trae, mas lo ya capturado
+   * que dejo de traer (p. ej. lo agoto el movimiento de la otra pestaña): asi
+   * sigue a la vista, con su "Faltan N", para corregirlo.
+   */
+  const candidatos = (sentido: SentidoMovimiento): RenglonMovimiento[] => {
+    if (sentido === 'recibido') return todoElCatalogo;
+    const ids = new Set(loQueTrae.map((r) => r.presentacionId));
+    const extra = todoElCatalogo
+      .filter((r) => !ids.has(r.presentacionId) && captura[r.presentacionId]?.entregado !== undefined)
+      .map((r) => ({
+        ...r,
+        quedan: inventario?.controlInventario ? (inventario.existencias.get(r.presentacionId)?.existencia ?? 0) : null,
+      }));
+    return extra.length === 0 ? loQueTrae : [...loQueTrae, ...extra];
+  };
+
+  /** Desliza la lista para que el renglon del teclado quede a la vista (como la venta). */
+  function mostrar(sentido: SentidoMovimiento, presentacionId: string) {
+    const y = posiciones.current.get(`${sentido}-${presentacionId}`);
+    if (y !== undefined) lista.current?.scrollTo({ y: Math.max(0, y - espacio.xxl), animated: true });
+  }
 
   const atras = useCallback((): boolean => {
     if (activo !== null) {
@@ -144,6 +168,8 @@ export default function MermaYCambiosDelCliente() {
       return () => sub.remove();
     }, [atras]),
   );
+
+  const cabecera = <Stack.Screen options={{ headerLeft: () => <FlechaAtras atras={atras} /> }} />;
 
   if (!cliente) {
     return (
@@ -182,6 +208,7 @@ export default function MermaYCambiosDelCliente() {
   function abrirTeclado(sentido: SentidoMovimiento, presentacionId: string) {
     setError(null);
     setActivo({ sentido, presentacionId });
+    mostrar(sentido, presentacionId);
   }
 
   function tecla(valor: TeclaNumerica | 'borrar') {
@@ -198,6 +225,7 @@ export default function MermaYCambiosDelCliente() {
   function siguiente() {
     if (activo !== null && siguienteRenglon) {
       setActivo({ sentido: activo.sentido, presentacionId: siguienteRenglon.presentacionId });
+      mostrar(activo.sentido, siguienteRenglon.presentacionId);
     } else {
       setActivo(null);
     }
@@ -261,14 +289,18 @@ export default function MermaYCambiosDelCliente() {
     ) : null;
 
   const renglon = (sentido: SentidoMovimiento, r: RenglonMovimiento) => (
-    <RenglonCantidad
+    <View
       key={`${sentido}-${r.presentacionId}`}
-      etiqueta={r.etiqueta}
-      piezas={piezasCapturadas(captura, r.presentacionId, sentido)}
-      quedan={sentido === 'entregado' ? r.quedan : null}
-      activo={activo?.sentido === sentido && activo.presentacionId === r.presentacionId}
-      onPress={() => abrirTeclado(sentido, r.presentacionId)}
-    />
+      onLayout={(e) => posiciones.current.set(`${sentido}-${r.presentacionId}`, e.nativeEvent.layout.y)}
+    >
+      <RenglonCantidad
+        etiqueta={r.etiqueta}
+        piezas={piezasCapturadas(captura, r.presentacionId, sentido)}
+        quedan={sentido === 'entregado' ? r.quedan : null}
+        activo={activo?.sentido === sentido && activo.presentacionId === r.presentacionId}
+        onPress={() => abrirTeclado(sentido, r.presentacionId)}
+      />
+    </View>
   );
 
   /* ---------------------------------------------------------------- */
@@ -278,7 +310,9 @@ export default function MermaYCambiosDelCliente() {
     const filas = candidatos(selector);
     return (
       <View style={{ flex: 1, backgroundColor: colores.papel }}>
+        {cabecera}
         <ScrollView
+          ref={lista}
           style={{ flex: 1 }}
           contentContainerStyle={[estilos.contenido, { paddingBottom: espacio.lg }]}
           keyboardShouldPersistTaps="handled"
@@ -300,7 +334,14 @@ export default function MermaYCambiosDelCliente() {
         </ScrollView>
         {teclado ?? (
           <BarraAbajo>
-            <Boton etiqueta="Listo" icono="palomita" onPress={() => setSelector(null)} />
+            <Boton
+              etiqueta="Listo"
+              icono="palomita"
+              onPress={() => {
+                posiciones.current.clear();
+                setSelector(null);
+              }}
+            />
           </BarraAbajo>
         )}
       </View>
@@ -321,6 +362,7 @@ export default function MermaYCambiosDelCliente() {
         onPress={() => {
           setActivo(null);
           setError(null);
+          posiciones.current.clear();
           setSelector(sentido);
         }}
       />
@@ -329,7 +371,9 @@ export default function MermaYCambiosDelCliente() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colores.papel }}>
+      {cabecera}
       <ScrollView
+        ref={lista}
         style={{ flex: 1 }}
         contentContainerStyle={[estilos.contenido, { paddingBottom: espacio.lg }]}
         keyboardShouldPersistTaps="handled"

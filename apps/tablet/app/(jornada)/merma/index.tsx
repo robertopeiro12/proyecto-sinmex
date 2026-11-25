@@ -109,8 +109,8 @@ export default function MermaYCambios() {
               backgroundColor: colores.superficie,
             }}
           >
-            <Text style={estilos.textoTarjeta}>Hoy · {textoMovimientos(filas.length)}</Text>
-            <Cifra valor={textoPzas(totalPiezasDelDia(filas))} tamano="destacado" />
+            <Text style={estilos.textoTarjeta}>Hoy · {textoMovimientos(vista.movimientos.length)}</Text>
+            <Cifra valor={textoPzas(totalPiezasDelDia(vista.movimientos))} tamano="destacado" />
           </View>
 
           {filas.length === 0 ? (
