@@ -511,8 +511,8 @@ export default function PantallaVenta() {
         // Sin ticket: se avisa abajo, como cualquier impresion que no salio.
       }
       const r = await imprimirTickets([ticket]);
-    setMotivoNoImpresa(r.ok ? undefined : r.detalle);
-    setImpresion(r.ok ? 'enviada' : 'no-impresa');
+      setMotivoNoImpresa(r.ok ? undefined : r.detalle);
+      setImpresion(r.ok ? 'enviada' : 'no-impresa');
     }
 
     function grabar() {

@@ -463,8 +463,8 @@ usuario con sesion pasa.
     `apps/tablet/modules/impresora-bluetooth` (Kotlin, SPP, conexión con límite de 10 s, escribe en pedazos de 512 B
     con 20 ms entre ellos, **solo dispositivos ya emparejados**). `BLUETOOTH_CONNECT` se pide **solo después de que el nativo responde `sin-permiso`**. El
     emparejado se hace en Android Ajustes > Bluetooth (PIN 0000 / 1234). "Seleccionar impresora" lista las emparejadas
-    más la opción "Diálogo de Android" (`expo-print`). **Cada tablet elige una vez**; no hay respaldo silencioso a otra
-    impresora. Errores (`errores-impresora.ts`): sin Bluetooth, "Prende el Bluetooth.", "Da permiso de Bluetooth a la
+    más la opción "Diálogo de Android" (`expo-print`). **Cada tablet elige una vez**; con una impresora elegida no hay respaldo
+    silencioso a otra. Errores (`errores-impresora.ts`): sin Bluetooth, "Prende el Bluetooth.", "Da permiso de Bluetooth a la
     app.", "No se pudo conectar con X. ¿Está prendida?", "Se cortó la conexión con X al mandar la nota…". Los tickets
     de un cobro salen en **un solo envío**. Tras una venta, un cobro o "Reimprimir", el aviso dice el motivo
     (`avisoNoImpreso`: "No se pudo imprimir: <motivo> Puedes reimprimir…") con un botón a "Seleccionar impresora"; el
