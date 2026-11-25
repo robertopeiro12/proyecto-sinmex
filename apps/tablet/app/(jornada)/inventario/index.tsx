@@ -22,7 +22,7 @@ import { Cifra } from '@/ui/cifra';
 import { MarcoMenu } from '@/ui/marco-menu';
 import { Pantalla, Pastilla, Tarjeta } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
-import { espacio } from '@/ui/tokens';
+import { espacio, tipo } from '@/ui/tokens';
 
 /**
  * Inventario (T-27, entrada del menu; rediseño pieza 3, maqueta 5): arriba, el
@@ -36,7 +36,11 @@ import { espacio } from '@/ui/tokens';
 export default function Inventario() {
   const { datos, vendedor, versionCatalogos } = useJawa();
   const { ultimaSincronizacion } = useSesion();
-  const { estilos } = useTema();
+  const { estilos, t } = useTema();
+  // N3: el producto nunca mas angosto que ~3.6 veces su tamaño de letra ("Tamarindo",
+  // "Horchata" caben enteras y se parten solo entre palabras); las cifras se
+  // reparten el resto.
+  const columnaProducto = { flex: 1, minWidth: t(tipo.destacado) * 3.6 };
 
   // `versionCatalogos` sube cuando el pull o una respuesta escriben cargas, y
   // cuando una venta publica su cambio; al volver de vender ya esta al dia.
@@ -190,6 +194,5 @@ export default function Inventario() {
 // interletrado en los encabezados de numeros y los de una palabra en un solo
 // renglon (se achican si no caben); "Te quedan" se parte por palabras.
 const filaResumen = { flexDirection: 'row', alignItems: 'center', gap: espacio.xs } as const;
-const columnaProducto = { flex: 1.3 } as const;
 const columnaTitulo = { flex: 1, textAlign: 'right', letterSpacing: 0 } as const;
 const columnaCifra = { flex: 1, alignItems: 'flex-end' } as const;
