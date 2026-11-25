@@ -253,10 +253,53 @@ describe('ticketsDelCobro', () => {
 });
 
 describe('ticketDeVentaParaReimprimir', () => {
+  /** La nota que baja en el pull para una venta de esta tablet. */
+  function notaDelPull(bd: ReturnType<typeof montar>['bd'], folio: string, saldo: number, abonos: unknown[], activo = 1) {
+    bd.runSync(
+      `insert into nota_pendiente (id, cliente_id, folio, num_nota, fecha, status, monto_total_centavos,
+                                   saldo_centavos, abonos_json, activo, sincronizado_en)
+       values ('nota-local', 'cli-1', $folio, null, '2026-08-07', 'abonado', 33600, $saldo, $abonos, $activo, $ahora)`,
+      { $folio: folio, $saldo: saldo, $abonos: JSON.stringify(abonos), $activo: activo, $ahora: MOMENTO },
+    );
+  }
+
   it('sin nota del pull: la venta local', () => {
     const { bd, ventas } = montar();
     const v = ventas.registrar(venta({ contadoCredito: 'credito' }));
     expect(ticketDeVentaParaReimprimir(bd, v.id)).toEqual(ticketDeVenta(bd, v.id));
+  });
+
+  it('abono al vender y un cobro que la liquida: LIQUIDADA con los dos abonos (nota inactiva)', () => {
+    const { bd, ventas } = montar();
+    const v = ventas.registrar(venta({ contadoCredito: 'credito', abonoCentavos: 10000 }));
+    notaDelPull(
+      bd,
+      v.folio,
+      0,
+      [
+        { fecha_pago: '2026-08-07', monto_centavos: 10000, metodo_pago: 'efectivo' },
+        { fecha_pago: '2026-08-09', monto_centavos: 23600, metodo_pago: 'efectivo' },
+      ],
+      0,
+    );
+    const d = ticketDeVentaParaReimprimir(bd, v.id)!;
+    expect(d.abonos).toEqual([
+      { fecha: '2026-08-07', montoCentavos: 10000 },
+      { fecha: '2026-08-09', montoCentavos: 23600 },
+    ]);
+    expect(d.saldoCentavos).toBe(0);
+    expect(estadoTicket(d)).toBe('LIQUIDADA');
+  });
+
+  it('de contado (la oficina la editó y bajó): sin abonos listados aunque el servidor guarde el venta_contado', () => {
+    const { bd, ventas } = montar();
+    const v = ventas.registrar(venta());
+    notaDelPull(bd, v.folio, 0, [{ fecha_pago: '2026-08-07', monto_centavos: 33600, metodo_pago: 'efectivo' }], 0);
+    const d = ticketDeVentaParaReimprimir(bd, v.id)!;
+    expect(d.abonos).toEqual([]);
+    expect(estadoTicket(d)).toBe('LIQUIDADA');
+    // La venta recién grabada de contado tampoco lista abonos.
+    expect(ticketDeVenta(bd, v.id)!.abonos).toEqual([]);
   });
 });
 

@@ -168,16 +168,44 @@ describe('armarTicket a 32 columnas (maquetas 25-27)', () => {
     ]);
   });
 
-  it('LIQUIDADA al reimprimir por el último cobro: Reimpresión y Cobró, sin firma', () => {
+  it('LIQUIDADA con abonos (abono al vender y cobro): lista cada abono, saldo $0.00 y sin firma', () => {
     const d = nota({
-      abonos: [{ fecha: '2026-11-18', montoCentavos: 80400 }],
+      abonos: [
+        { fecha: '2026-11-18', montoCentavos: 30000 },
+        { fecha: '2026-11-25', montoCentavos: 50400 },
+      ],
+    });
+    expect(armarTicket(d, 32)).toEqual([
+      ...ENCABEZADO_32,
+      ...TABLA_32,
+      '--------------------------------',
+      'Abonos',
+      '18 nov 2026              $300.00',
+      '25 nov 2026              $504.00',
+      'SALDO PENDIENTE            $0.00',
+      '',
+      '       *** LIQUIDADA ***',
+      '',
+      '     Gracias por su compra',
+    ]);
+  });
+
+  it('LIQUIDADA al reimprimir por el último cobro: los abonos, Reimpresión y Cobró, sin firma', () => {
+    const d = nota({
+      abonos: [
+        { fecha: '2026-11-18', montoCentavos: 30000 },
+        { fecha: '2026-11-25', montoCentavos: 50400 },
+      ],
       reimpresion: { momento: REIMPRESA, cobro: 'Juan Pérez' },
     });
     expect(armarTicket(d, 32)).toEqual([
       ...ENCABEZADO_32,
       ...TABLA_32,
-      'Pagó                     $804.00',
-      'Saldo pendiente            $0.00',
+      '--------------------------------',
+      'Abonos',
+      '18 nov 2026              $300.00',
+      '25 nov 2026              $504.00',
+      'SALDO PENDIENTE            $0.00',
       '',
       '       *** LIQUIDADA ***',
       '',
@@ -234,7 +262,8 @@ describe('armarTicket: nada se sale del papel', () => {
   });
 
   it.each([32, 48] as const)('a %i columnas ningún renglón pasa del ancho ni deja espacios al final', (columnas) => {
-    for (const d of [nota(), largos]) {
+    const liquidadaConAbonos = { ...largos, saldoCentavos: 0 };
+    for (const d of [nota(), largos, liquidadaConAbonos]) {
       for (const l of armarTicket(d, columnas)) {
         expect(l.length).toBeLessThanOrEqual(columnas);
         expect(l).toBe(l.trimEnd());
@@ -271,6 +300,43 @@ describe('armarTicket: nada se sale del papel', () => {
       '     Regalo de bienvenida',
       '--------------------------------',
     ]);
+  });
+
+  it('a 48 columnas: la LIQUIDADA de contado dice Pagó; la liquidada con abonos los lista; ninguna lleva firma', () => {
+    const contado = armarTicket(nota(), 48);
+    expect(contado.slice(-6)).toEqual([
+      'Pagó'+' '.repeat(37)+'$804.00',
+      'Saldo pendiente'+' '.repeat(28)+'$0.00',
+      '',
+      ' '.repeat(15)+'*** LIQUIDADA ***',
+      '',
+      ' '.repeat(13)+'Gracias por su compra',
+    ]);
+    const conAbonos = armarTicket(
+      nota({
+        abonos: [
+          { fecha: '2026-11-18', montoCentavos: 30000 },
+          { fecha: '2026-11-25', montoCentavos: 50400 },
+        ],
+      }),
+      48,
+    );
+    expect(conAbonos.slice(-10)).toEqual([
+      'TOTAL'+' '.repeat(36)+'$804.00',
+      '-'.repeat(48),
+      'Abonos',
+      '18 nov 2026'+' '.repeat(30)+'$300.00',
+      '25 nov 2026'+' '.repeat(30)+'$504.00',
+      'SALDO PENDIENTE'+' '.repeat(28)+'$0.00',
+      '',
+      ' '.repeat(15)+'*** LIQUIDADA ***',
+      '',
+      ' '.repeat(13)+'Gracias por su compra',
+    ]);
+    for (const t of [contado, conAbonos]) {
+      expect(t.some((l) => l.includes('Firma de quien recibe'))).toBe(false);
+      expect(t.every((l) => l.length <= 48 && l === l.trimEnd())).toBe(true);
+    }
   });
 
   it('a 48 columnas los nombres de la maqueta caben completos', () => {

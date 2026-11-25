@@ -247,6 +247,10 @@ que probar con la impresora térmica real antes de comprometer el formato.
   raya** para que el cliente firme a mano ("Firma de quien recibe").
 - Venta a Crédito: igual que con abono, sin abonos listados y con todo el total como saldo. *(Decisión de diseño: la
   leyenda es "CRÉDITO".)*
+- **Liquidada** (Mario, 2026-11-25): **nunca lleva espacio para firma**. Si se pagó completa al vender (contado, sin
+  abonos), dice "Pagó $total" y saldo $0.00, sin lista de abonos (maqueta 25). Si se liquidó **con abonos** (abono al
+  vender y cobros, o la reimpresión del cobro que la liquida), lista **todos los abonos con su fecha**, como la
+  ABONADO, con saldo $0.00 y LIQUIDADA.
 - **Cada cobro o abono a una nota la reimprime completa** con el abono nuevo, la fecha de reimpresión y quién cobró.
   Viene de lo que respondió el cliente el 2026-11-10 (R-3.6 y R-3.7 en la bóveda).
 - **Seleccionar impresora** (menú): elegir y recordar la impresora del vendedor. Si no hay impresora o falla, lo

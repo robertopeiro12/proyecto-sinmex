@@ -476,10 +476,13 @@ usuario con sesion pasa.
     una nota de la oficina (sin operación) es solo la fecha `YYYY-MM-DD` y el ticket imprime solo el día.
   - **Antes de instalar el APK con la migración 024, sincronizar la tablet**; el pull completo no baja notas
     cerradas/borradas entre el último pull y la actualización (mismo patrón que 019/022).
-  - **Preguntas abiertas para Mario**: modelo de la impresora térmica real (no se ha probado con papel); si la nota
-    liquidada lleva espacio para firma; y si una nota que un cobro liquida lista el abono nuevo al reimprimirse (spec §12
-    dice que sí; la maqueta 25 no muestra abonos). Hoy se sigue la maqueta y el plan: la LIQUIDADA imprime
-    "Pagó $total" sin la lista de abonos (`ticket.ts`).
+  - **LIQUIDADA** (Mario, 2026-11-25; spec §12): **nunca** lleva espacio para firma. Pagada completa al vender (contado,
+    sin abonos) imprime "Pagó $total" y saldo $0.00 (maqueta 25). Liquidada **con abonos** (abono al vender y cobros, o
+    la reimpresión del cobro que la liquida) lista **cada abono con su fecha**, como la ABONADO, con SALDO PENDIENTE
+    $0.00 (`armarTicket` decide por `abonos.length`). `ticketDeNota` lee los abonos de la nota aunque esté inactiva y
+    los deja vacíos si la venta de esta tablet con ese folio es de contado (el servidor guarda un abono `venta_contado`
+    por el total; una de contado solo baja si la oficina la editó o la borró).
+  - **Pregunta abierta para Mario**: modelo de la impresora térmica real (no se ha probado con papel).
 
 - **Promociones (T-74).** Regla de regalo por compra, configurada en el portal (*Operación → Promociones*, permiso
   `promocion.gestionar`; backend en `cartera-clientes/promociones.*`, `/promociones`) y **aplicada solo por la

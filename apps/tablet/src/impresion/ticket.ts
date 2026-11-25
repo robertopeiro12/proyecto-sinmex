@@ -21,7 +21,13 @@ import { pesos } from '@/ui/pesos';
  *   espacio al nombre.
  * - La frase de la promoción y el aviso "Detalle no disponible…" se cortan por
  *   palabras.
- * - La LIQUIDADA no lleva espacio de firma (plan, decisión 3).
+ * - La LIQUIDADA nunca lleva espacio de firma (Mario, 2026-11-25).
+ * - Abonos (Mario, 2026-11-25): la LIQUIDADA **sin** abonos (pagada completa al
+ *   vender, de contado) imprime "Pagó $total" como la maqueta 25; la que se
+ *   liquidó **con** abonos (abono al vender y cobros, o la reimpresión del cobro
+ *   que la liquida) lista cada abono con su fecha, como la ABONADO, con saldo
+ *   $0.00. Quien arma los datos (`datos-ticket.ts`) deja `abonos` vacío en la de
+ *   contado.
  */
 export interface DatosTicket {
   sucursal: string;
@@ -148,7 +154,7 @@ export function armarTicket(d: DatosTicket, columnas: 32 | 48): string[] {
   }
   r.push(parValor('TOTAL', pesos(d.totalCentavos), columnas));
 
-  if (estado === 'LIQUIDADA') {
+  if (estado === 'LIQUIDADA' && d.abonos.length === 0) {
     r.push(
       parValor('Pagó', pesos(d.totalCentavos), columnas),
       parValor('Saldo pendiente', pesos(0), columnas),
@@ -159,7 +165,7 @@ export function armarTicket(d: DatosTicket, columnas: 32 | 48): string[] {
       r.push('Abonos');
       for (const a of d.abonos) r.push(parValor(formatearFechaCorta(a.fecha), pesos(a.montoCentavos), columnas));
     }
-    r.push(parValor('SALDO PENDIENTE', pesos(d.saldoCentavos), columnas));
+    r.push(parValor('SALDO PENDIENTE', pesos(Math.max(0, d.saldoCentavos)), columnas));
   }
 
   r.push('', centrado(`*** ${estado} ***`, columnas), '');

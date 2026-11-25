@@ -129,6 +129,13 @@ function leerDetalle(json: string | null): DetalleNotaPull | null {
  * renglones, de `detalle_json` y, si no bajo, de la venta de esta tablet con el
  * mismo **folio**. Sin ninguno de los dos: `detalleDisponible: false`.
  *
+ * Abonos (Mario, 2026-11-25): una nota liquidada **con** abonos (abono al
+ * vender y cobros) los lista todos, aunque ya este inactiva. La de **contado**
+ * no lista nada: el servidor le guarda un abono `venta_contado` por el total,
+ * pero se pago completa al vender y el ticket dice "Pagó $total". Se sabe que es
+ * de contado por la venta de esta tablet con el mismo folio (una de contado solo
+ * baja si la oficina la edito o la borro).
+ *
  * `reimpresion`: el momento y quien cobro, al reimprimirla por un cobro.
  */
 export function ticketDeNota(
@@ -144,7 +151,9 @@ export function ticketDeNota(
   );
 
   const detalle = leerDetalle(n.detalle_json);
-  const local = detalle ? null : bd.getFirstSync<Venta>('select * from venta where folio = $folio', { $folio: n.folio });
+  const ventaLocal = bd.getFirstSync<Venta>('select * from venta where folio = $folio', { $folio: n.folio });
+  const local = detalle ? null : ventaLocal;
+  const deContado = n.saldo_centavos <= 0 && ventaLocal?.contado_credito === 'contado';
 
   const encabezado = detalle
     ? {
@@ -172,7 +181,9 @@ export function ticketDeNota(
     cliente: cliente?.nombre ?? 'Cliente',
     ...encabezado,
     totalCentavos: n.monto_total_centavos,
-    abonos: leerAbonos(n.abonos_json).map((a) => ({ fecha: a.fecha_pago, montoCentavos: a.monto_centavos })),
+    abonos: deContado
+      ? []
+      : leerAbonos(n.abonos_json).map((a) => ({ fecha: a.fecha_pago, montoCentavos: a.monto_centavos })),
     saldoCentavos: n.saldo_centavos,
     reimpresion,
     detalleDisponible: detalle !== null || local !== null,
