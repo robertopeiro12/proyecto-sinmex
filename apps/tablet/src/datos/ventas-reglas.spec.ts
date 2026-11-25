@@ -92,7 +92,7 @@ describe('problemasDeCaptura', () => {
 
   it('vender una presentacion sin precio para el cliente no se puede (D15)', () => {
     expect(problemasDeCaptura(captura({ lineas: [linea({ precioCentavos: null })] }))).toEqual([
-      'Jamaica 1 L no tiene precio para este cliente: solo puede ir como regalo de promoción.',
+      'Jamaica 1 L no tiene precio para este cliente: solo puede ir como pieza de promoción.',
     ]);
   });
 

@@ -133,7 +133,7 @@ export default function PantallaVenta() {
   const [cantidades, setCantidades] = useState<Record<string, string>>({});
   /** El renglon con el teclado abierto; `null` = teclado cerrado. */
   const [activo, setActivo] = useState<string | null>(null);
-  const [opcion, setOpcion] = useState<OpcionCobranza | null>(null);
+  const [opcion, setOpcion] = useState<OpcionCobranza | null>('liquidar');
   const [abonoTexto, setAbonoTexto] = useState('');
   const [atendio, setAtendio] = useState('');
   const [problemas, setProblemas] = useState<string[]>([]);
@@ -610,9 +610,14 @@ export default function PantallaVenta() {
             autoCapitalize="words"
           />
         </View>
-        {avisos}
       </>,
-      barra(<Boton etiqueta="Grabar" icono="palomita" onPress={grabar} deshabilitado={grabada !== null} />),
+      // Los errores de validar y de grabar, pegados a "Grabar": al final del scroll no se veian.
+      barra(
+        <>
+          {avisos}
+          <Boton etiqueta="Grabar" icono="palomita" onPress={grabar} deshabilitado={grabada !== null} />
+        </>,
+      ),
     );
   }
 

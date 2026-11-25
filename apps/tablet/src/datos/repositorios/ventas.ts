@@ -193,7 +193,7 @@ export function crearRepositorioVentas(
       const regalos = datos.regalos ?? [];
       const regaladas = new Map<string, number>();
       if (regalos.length > MAX_REGALOS_VENTA) {
-        throw new ErrorVenta('La venta trae demasiados regalos de promoción. Vuelve a capturar la venta.');
+        throw new ErrorVenta('La venta trae demasiadas promociones. Vuelve a capturar la venta.');
       }
       for (const r of regalos) {
         const texto = r.texto.trim();
@@ -205,20 +205,20 @@ export function crearRepositorioVentas(
           texto === '' ||
           texto.length > LARGO_MAX_TEXTO_PROMOCION
         ) {
-          throw new ErrorVenta('Un regalo de promoción viene incompleto. Vuelve a capturar la venta.');
+          throw new ErrorVenta('Una promoción viene incompleta. Vuelve a capturar la venta.');
         }
         regaladas.set(r.presentacionId, (regaladas.get(r.presentacionId) ?? 0) + r.cantidad);
       }
       for (const l of resumen.lineas) {
         if ((regaladas.get(l.presentacionId) ?? 0) !== l.cantidadPromocion) {
-          throw new ErrorVenta('Las piezas de promoción no cuadran con los regalos. Vuelve a capturar la venta.');
+          throw new ErrorVenta('Las piezas de promoción no cuadran con las promociones. Vuelve a capturar la venta.');
         }
       }
       // El servidor tambien rechaza un regalo de una presentacion que no es linea de la venta.
       const conLinea = new Set(resumen.lineas.map((l) => l.presentacionId));
       for (const presentacionId of regaladas.keys()) {
         if (!conLinea.has(presentacionId)) {
-          throw new ErrorVenta('Un regalo de promoción no corresponde a ninguna línea de la venta. Vuelve a capturar la venta.');
+          throw new ErrorVenta('Unas piezas de promoción no corresponden a ninguna línea de la venta. Vuelve a capturar la venta.');
         }
       }
 

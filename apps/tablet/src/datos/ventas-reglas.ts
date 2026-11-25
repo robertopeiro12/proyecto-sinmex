@@ -121,7 +121,7 @@ export function problemasDeCaptura(captura: CapturaVenta): string[] {
       problemas.push(`${l.etiqueta}: las cantidades son piezas enteras.`);
     } else if (l.cantidad > 0 && (l.precioCentavos === null || l.precioCentavos === 0)) {
       problemas.push(
-        `${l.etiqueta} no tiene precio para este cliente: solo puede ir como regalo de promoción.`,
+        `${l.etiqueta} no tiene precio para este cliente: solo puede ir como pieza de promoción.`,
       );
     }
   }

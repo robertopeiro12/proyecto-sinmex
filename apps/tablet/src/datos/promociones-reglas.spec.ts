@@ -503,8 +503,8 @@ describe('problemasDeRegalos (D16)', () => {
         { promocionId: 'p3', texto: 'Al comprar 5 Horchata, 1 Horchata gratis (una vez)', productoId: 'pro-2', presentacionId: null, cantidad: 1 },
       ]),
     ).toEqual([
-      'Elige la presentación del regalo de «Por cada pieza, 1 Jamaica gratis».',
-      'Elige la presentación del regalo de «Al comprar 5 Horchata, 1 Horchata gratis (una vez)».',
+      'Elige qué presentación se entrega de la promoción «Por cada pieza, 1 Jamaica gratis».',
+      'Elige qué presentación se entrega de la promoción «Al comprar 5 Horchata, 1 Horchata gratis (una vez)».',
     ]);
   });
 });
