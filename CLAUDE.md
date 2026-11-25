@@ -410,6 +410,11 @@ usuario con sesion pasa.
     (`rutas.delDia(vendedorId).notas_que_trae` = `queTraePorCliente`: asignadas con saldo no liquidadas hoy más las
     ventas a crédito de hoy del vendedor) y la hoja del cliente apaga Vender con "Cobra primero" mientras una asignada
     traiga la condición sin cumplir (`accionesCliente`, `src/estado/hoja-cliente.ts`).
+    **Pieza 5 (Ventas / Cobranza, §11 de `docs/superpowers/specs/2026-11-18-rediseno-app-vendedor-design.md`).**
+    `queTraeDelVendedor` es la regla única (la lista de notas que trae el vendedor) y `queTraePorCliente` es su conteo.
+    La pantalla `registros/index.tsx` lista ventas y cobros de hoy (`cobranzas.delDiaDelVendedor`); el detalle es
+    `registros/[tipo]/[id].tsx` (un `sync_error` se muestra con `motivoDeRechazo`). `catalogos.folioDeNota` ignora `activo`
+    (una nota dada de baja sigue mostrando su folio).
 
 - **Promociones (T-74).** Regla de regalo por compra, configurada en el portal (*Operación → Promociones*, permiso
   `promocion.gestionar`; backend en `cartera-clientes/promociones.*`, `/promociones`) y **aplicada solo por la

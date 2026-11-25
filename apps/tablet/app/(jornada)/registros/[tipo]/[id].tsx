@@ -13,6 +13,7 @@ import {
   renglonesDeVenta,
   type DatoDetalle,
 } from '@/estado/detalle-registro';
+import { motivoDeRechazo } from '@/estado/ruta-del-dia';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
 import { Boton } from '@/ui/boton';
@@ -99,14 +100,14 @@ function DetalleVentaVista({ detalle, cliente }: { detalle: DetalleVenta; client
           <Text style={estilos.textoTarjeta}>Total</Text>
           <Cifra valor={pesos(v.monto_total_centavos)} tamano="destacado" />
         </View>
-        <Dato dato={pago!} />
-        <Dato dato={credito!} color={colores.primario} />
+        {pago ? <Dato dato={pago} /> : null}
+        {credito ? <Dato dato={credito} color={colores.primario} /> : null}
       </Tarjeta>
       <Tarjeta>
         {datosDeLaVenta(v, vendedor?.nombre ?? 'Vendedor').map((d) => (
           <Dato key={d.etiqueta} dato={d} color={d.etiqueta === 'Sincronizada' ? colorSincronizada(d) : undefined} />
         ))}
-        {v.sync_estado === 'error' && v.sync_error ? <Text style={estilos.error}>{v.sync_error}</Text> : null}
+        {v.sync_estado === 'error' && v.sync_error ? <Text style={estilos.error}>{motivoDeRechazo(v.sync_error)}</Text> : null}
       </Tarjeta>
     </Pantalla>
   );
@@ -126,7 +127,7 @@ function DetalleCobroVista({ cobro: c, cliente }: { cobro: Cobranza; cliente: st
             <Dato key={d.etiqueta} dato={d} color={d.etiqueta === 'Sincronizada' ? colorSincronizada(d) : undefined} />
           ))}
         </View>
-        {c.sync_estado === 'error' && c.sync_error ? <Text style={estilos.error}>{c.sync_error}</Text> : null}
+        {c.sync_estado === 'error' && c.sync_error ? <Text style={estilos.error}>{motivoDeRechazo(c.sync_error)}</Text> : null}
       </Tarjeta>
       <Tarjeta etiqueta={notas.length === 1 ? 'Nota' : 'Notas'}>
         {notas.map((n, i) => (
