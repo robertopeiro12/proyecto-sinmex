@@ -406,7 +406,7 @@ usuario con sesion pasa.
     venta. Push `nota-no-cobrada` después de cobranzas; la ruta marca "Nota asignada" (1) / "Notas asignadas · N" (más), muestra el recado ("Mensaje de la
     oficina") y el comentario cuenta como visita. `ALTO_FILA` de la ruta subió a 112.
 
-- **Promociones (T-74).** Regla de regalo por compra, configurada en el portal (*Operación → Promociones*, permiso
+- **Promociones (T-74).** Regla de regalo por compra, configurada en el portal (*Catálogo → Promociones*, `/catalogo/promociones`; antes en Operación, la dirección vieja redirige; permiso
   `promocion.gestionar`; backend en `cartera-clientes/promociones.*`, `/promociones`) y **aplicada solo por la
   tablet**. Reemplaza al enum `cliente.promocion` y a `cliente_promocion_producto`. Spec:
   `docs/superpowers/specs/2026-10-14-t-74-promociones-por-regla-design.md`.

@@ -30,7 +30,6 @@ export const navSections: NavSection[] = [
       { label: "Ruta Semanal", href: "/operacion/ruta-semanal" },
       // Nuevas.
       { label: "Cuentas por Cobrar", href: "/operacion/cuentas-por-cobrar" },
-      { label: "Promociones", href: "/operacion/promociones" },
     ],
   },
   {
@@ -47,6 +46,7 @@ export const navSections: NavSection[] = [
       { label: "Campos de egreso", href: "/catalogo/campos-de-egreso" },
       { label: "Productos", href: "/catalogo/productos" },
       { label: "Listas de Precios", href: "/catalogo/precios" },
+      { label: "Promociones", href: "/catalogo/promociones" },
       { label: "Usuarios", href: "/catalogo/usuarios" },
       { label: "Perfiles y Permisos", href: "/catalogo/perfiles-y-permisos" },
     ],
