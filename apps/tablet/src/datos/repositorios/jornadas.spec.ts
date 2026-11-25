@@ -1,5 +1,6 @@
-import { depsDePrueba, snapshotDePrueba, MOMENTO } from '../pruebas-apoyo';
+import { CORTE_DE_PRUEBA, depsDePrueba, snapshotDePrueba, MOMENTO } from '../pruebas-apoyo';
 import { crearRepositorioCatalogos } from './catalogos';
+import { crearRepositorioCortes, ErrorCorte } from './cortes';
 import { crearRepositorioJornadas, ErrorJornada } from './jornadas';
 
 function conJornadas(momento: string = MOMENTO) {
@@ -83,6 +84,83 @@ describe('repositorio de jornadas', () => {
       expect(() =>
         jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-fantasma', kmInicial: 10 }),
       ).toThrow();
+    });
+  });
+
+  describe('cerrar el dia con el corte (rediseño pieza 6)', () => {
+    function abierta() {
+      const { deps, jornadas } = conJornadas();
+      const jornada = jornadas.abrir({ vendedorId: 'ven-1', vehiculoId: 'veh-1', kmInicial: 100 });
+      return { deps, jornadas, jornada, cortes: crearRepositorioCortes(deps) };
+    }
+
+    it('con km valido guarda el corte enviado y cierra la jornada', () => {
+      const { jornadas, jornada, cortes } = abierta();
+      const { jornada: cerrada, corte } = jornadas.cerrarConCorte(jornada.id, 150, CORTE_DE_PRUEBA);
+
+      expect(cerrada).toMatchObject({ estado: 'cerrada', km_final: 150, cerrada_en: MOMENTO });
+      expect(jornadas.porId(jornada.id)?.estado).toBe('cerrada');
+      expect(corte).toMatchObject({ jornadaId: jornada.id, enviadoEn: MOMENTO, captura: CORTE_DE_PRUEBA.captura });
+      expect(cortes.deHoy('ven-1')).toEqual(corte);
+    });
+
+    it('reutiliza el borrador (mismo id) y lo vuelve enviado', () => {
+      const { jornadas, jornada, cortes } = abierta();
+      const borrador = cortes.guardarBorrador(jornada.id, { efectivoTraidoCentavos: 1 });
+      const { corte } = jornadas.cerrarConCorte(jornada.id, 150, CORTE_DE_PRUEBA);
+      expect(corte.id).toBe(borrador.id);
+      expect(corte.captura.efectivoTraidoCentavos).toBe(75000);
+    });
+
+    it('con km invalido no guarda el corte ni cierra el dia, y el borrador sigue intacto', () => {
+      const { deps, jornadas, jornada, cortes } = abierta();
+      cortes.guardarBorrador(jornada.id, { mermaContada: 3, cerrados: ['efectivo'] });
+      const antes = cortes.borrador(jornada.id);
+
+      expect(() => jornadas.cerrarConCorte(jornada.id, 99, CORTE_DE_PRUEBA)).toThrow(ErrorJornada);
+      expect(() => jornadas.cerrarConCorte(jornada.id, Number.NaN, CORTE_DE_PRUEBA)).toThrow(ErrorJornada);
+
+      expect(jornadas.porId(jornada.id)).toMatchObject({ estado: 'abierta', km_final: null });
+      expect(cortes.borrador(jornada.id)).toEqual(antes);
+      expect(deps.bd.getFirstSync('select enviado_en from corte')).toEqual({ enviado_en: null });
+    });
+
+    it('sin un corte nuevo no hay jornada: sin corte previo, no queda fila', () => {
+      const { deps, jornadas, jornada } = abierta();
+      expect(() => jornadas.cerrarConCorte(jornada.id, 99, CORTE_DE_PRUEBA)).toThrow(ErrorJornada);
+      expect(deps.bd.getFirstSync('select count(*) as n from corte')).toEqual({ n: 0 });
+    });
+
+    it('si guardar el corte falla despues de cerrar, se deshace tambien el cierre', () => {
+      const { deps, jornadas, jornada, cortes } = abierta();
+      cortes.guardarBorrador(jornada.id, { mermaContada: 3 });
+      deps.bd.execSync(`
+        create trigger corte_falla before update on corte
+        begin select raise(abort, 'falla simulada'); end;
+      `);
+
+      expect(() => jornadas.cerrarConCorte(jornada.id, 150, CORTE_DE_PRUEBA)).toThrow(/falla simulada/);
+      expect(jornadas.porId(jornada.id)).toMatchObject({ estado: 'abierta', km_final: null, cerrada_en: null });
+      expect(cortes.borrador(jornada.id)?.mermaContada).toBe(3);
+    });
+
+    it('exige los tres apartados cerrados y no cierra si falta uno', () => {
+      const { jornadas, jornada, cortes } = abierta();
+      expect(() =>
+        jornadas.cerrarConCorte(jornada.id, 150, {
+          ...CORTE_DE_PRUEBA,
+          captura: { ...CORTE_DE_PRUEBA.captura, cerrados: ['efectivo', 'notas'] },
+        }),
+      ).toThrow(ErrorCorte);
+      expect(jornadas.porId(jornada.id)?.estado).toBe('abierta');
+      expect(cortes.deHoy('ven-1')).toBeNull();
+    });
+
+    it('una jornada ya cerrada no se vuelve a cerrar con corte', () => {
+      const { jornadas, jornada, cortes } = abierta();
+      jornadas.cerrar(jornada.id, 150);
+      expect(() => jornadas.cerrarConCorte(jornada.id, 160, CORTE_DE_PRUEBA)).toThrow(/ya esta cerrada/);
+      expect(cortes.deHoy('ven-1')).toBeNull();
     });
   });
 

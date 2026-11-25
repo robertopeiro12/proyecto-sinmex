@@ -9,6 +9,7 @@ import { ejecutarMigraciones, migraciones } from './migraciones';
 import { relojFijo } from './reloj';
 import type { DepsRepositorio } from './repositorios/deps';
 import type { SnapshotCatalogos } from './repositorios/catalogos';
+import type { CorteParaEnviar, SistemaCorte } from './repositorios/cortes';
 
 /** Momento fijo por defecto de las pruebas (hora de Tijuana, UTC-7). */
 export const MOMENTO = '2026-08-07T15:00:00.000Z';
@@ -308,3 +309,43 @@ export function respuestaPullDePrueba(
     ...extra,
   };
 }
+
+/** Lo que decia el sistema al enviar un corte de prueba (rediseño pieza 6). */
+export const SISTEMA_DE_PRUEBA: SistemaCorte = {
+  efectivo: {
+    contadoCentavos: 50000,
+    abonosCentavos: 10000,
+    cobrosEfectivoCentavos: 20000,
+    abonosYCobrosCentavos: 30000,
+    gastosCentavos: 5000,
+    debeTraerCentavos: 75000,
+    otrosMetodosCentavos: 0,
+  },
+  notas: [
+    {
+      clave: 'nota:TJ260807AP01',
+      folio: 'TJ260807AP01',
+      cliente: 'Abarrotes Lupita',
+      estado: 'pendiente',
+      detalle: 'pendiente',
+      montoTexto: '$300.00',
+      saldoCentavos: 30000,
+    },
+  ],
+  inventario: {
+    renglones: [{ presentacionId: 'pre-1', etiqueta: 'Horchata 1 L', sistema: 12 }],
+    mermaSistema: 2,
+  },
+};
+
+/** Un corte completo, con los tres apartados cerrados. */
+export const CORTE_DE_PRUEBA: CorteParaEnviar = {
+  captura: {
+    efectivoTraidoCentavos: 75000,
+    notasTraidas: ['nota:TJ260807AP01'],
+    inventarioContado: { 'pre-1': 12 },
+    mermaContada: 2,
+    cerrados: ['efectivo', 'notas', 'inventario'],
+  },
+  sistema: SISTEMA_DE_PRUEBA,
+};

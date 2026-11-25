@@ -1,4 +1,5 @@
-import type { DepsRepositorio } from './deps';
+import { guardarCorteEnviado, type Corte, type CorteParaEnviar } from './cortes';
+import { enTransaccion, type DepsRepositorio } from './deps';
 import type { Jornada } from '../tipos';
 
 /** Error de regla de negocio de la jornada (no un fallo tecnico de SQLite). */
@@ -57,7 +58,47 @@ export type RepositorioJornadas = ReturnType<typeof crearRepositorioJornadas>;
  * Las demas entidades operativas (venta, cobranza, gasto, merma...) llegan con
  * sus propios tickets siguiendo este mismo patron.
  */
-export function crearRepositorioJornadas({ bd, reloj, generarId }: DepsRepositorio) {
+export function crearRepositorioJornadas(deps: DepsRepositorio) {
+  const { bd, reloj, generarId } = deps;
+
+  /**
+   * La **unica** escritura de `km_final`. Sin transaccion propia: la ponen
+   * `cerrar` y `cerrarConCorte` (`enTransaccion` no se anida).
+   */
+  function cerrarSinTransaccion(jornadaId: string, kmFinal: number): Jornada {
+    const jornada = repo.porId(jornadaId);
+    if (!jornada) throw new ErrorJornada(`No existe la jornada ${jornadaId}.`);
+    if (jornada.estado === 'cerrada') {
+      throw new ErrorJornada('La jornada ya esta cerrada.');
+    }
+    if (!Number.isFinite(kmFinal) || kmFinal < jornada.km_inicial) {
+      throw new ErrorJornada(
+        `El kilometraje final (${kmFinal}) no puede ser menor al inicial (${jornada.km_inicial}).`,
+      );
+    }
+
+    const ahora = reloj.ahora();
+    bd.runSync(
+      `update jornada set
+         km_final = $km_final,
+         cerrada_en = $cerrada_en,
+         estado = 'cerrada',
+         sync_estado = 'pendiente',
+         actualizado_local_en = $actualizado_local_en
+       where id = $id`,
+      {
+        $km_final: kmFinal,
+        $cerrada_en: ahora,
+        $actualizado_local_en: ahora,
+        $id: jornadaId,
+      },
+    );
+
+    const cerrada = repo.porId(jornadaId);
+    if (!cerrada) throw new ErrorJornada('No se pudo leer la jornada recien cerrada.');
+    return cerrada;
+  }
+
   const repo = {
     /**
      * Abre el dia: vehiculo + kilometraje inicial.
@@ -124,56 +165,36 @@ export function crearRepositorioJornadas({ bd, reloj, generarId }: DepsRepositor
      * captura, y dejarlo pasar produciria kilometraje negativo en el reporte
      * del portal.
      *
-     * > [!important] T-38: esta funcion ES el candado del km final
+     * > [!important] T-38: el candado del km final
      * > "Km final obligatorio antes de enviar el corte" ([[App Tablet]], §5) se
-     * > cumple porque `km_final` **solo** se puede escribir por aqui, y aqui no
-     * > hay forma de cerrar sin darlo: un `kmFinal` ausente o ilegible es `NaN`,
-     * > que `Number.isFinite` rechaza. No hay una segunda ruta de escritura.
+     * > cumple porque `km_final` **solo** se escribe en `cerrarSinTransaccion`,
+     * > que usan esta funcion y `cerrarConCorte`, y ahi no hay forma de cerrar
+     * > sin darlo: un `kmFinal` ausente o ilegible es `NaN`, que
+     * > `Number.isFinite` rechaza. No hay otra ruta de escritura.
      * >
-     * > TODO: T-33 — el corte del dia (ventas por presentacion, cobranza,
-     * >       gastos, tesoreria, comision, efectividad e impresion) se calcula
-     * >       en su propio ticket; aqui solo se cierra la jornada. Lo que T-33
-     * >       tiene que **conectar** es una sola condicion: la accion de enviar
-     * >       el corte exige `jornada.estado === 'cerrada'`. No hace falta que
-     * >       revalide el kilometraje —si esta cerrada, paso por aqui— pero si
-     * >       que no ofrezca el envio sobre una jornada abierta, porque hoy
-     * >       nada mas lo impide: el guardia de `(jornada)/_layout.tsx` exige
-     * >       jornada, no jornada cerrada. Mientras T-33 no exista, el unico
-     * >       camino al corte es la tarjeta de `cerrar-dia.tsx`, que se pinta
-     * >       solo en la rama de `estado === 'cerrada'`.
+     * > Rediseño pieza 6: el corte del vendedor se envia con `cerrarConCorte`
+     * > (cierre + corte en una transaccion). Este `cerrar` sin corte queda para
+     * > `cerrar-dia.tsx` mientras la pantalla nueva del Corte no lo reemplace.
      */
     cerrar(jornadaId: string, kmFinal: number): Jornada {
-      const jornada = repo.porId(jornadaId);
-      if (!jornada) throw new ErrorJornada(`No existe la jornada ${jornadaId}.`);
-      if (jornada.estado === 'cerrada') {
-        throw new ErrorJornada('La jornada ya esta cerrada.');
-      }
-      if (!Number.isFinite(kmFinal) || kmFinal < jornada.km_inicial) {
-        throw new ErrorJornada(
-          `El kilometraje final (${kmFinal}) no puede ser menor al inicial (${jornada.km_inicial}).`,
-        );
-      }
+      return enTransaccion(bd, () => cerrarSinTransaccion(jornadaId, kmFinal));
+    },
 
-      const ahora = reloj.ahora();
-      bd.runSync(
-        `update jornada set
-           km_final = $km_final,
-           cerrada_en = $cerrada_en,
-           estado = 'cerrada',
-           sync_estado = 'pendiente',
-           actualizado_local_en = $actualizado_local_en
-         where id = $id`,
-        {
-          $km_final: kmFinal,
-          $cerrada_en: ahora,
-          $actualizado_local_en: ahora,
-          $id: jornadaId,
-        },
-      );
-
-      const cerrada = repo.porId(jornadaId);
-      if (!cerrada) throw new ErrorJornada('No se pudo leer la jornada recien cerrada.');
-      return cerrada;
+    /**
+     * Rediseño pieza 6: cierra el dia **y** guarda el corte enviado en una sola
+     * transaccion. Si el km no pasa, o el corte no esta completo, o guardar
+     * falla, no queda ni la jornada cerrada ni el corte enviado (el borrador,
+     * si habia, sigue como estaba).
+     */
+    cerrarConCorte(
+      jornadaId: string,
+      kmFinal: number,
+      corte: CorteParaEnviar,
+    ): { jornada: Jornada; corte: Corte } {
+      return enTransaccion(bd, () => {
+        const jornada = cerrarSinTransaccion(jornadaId, kmFinal);
+        return { jornada, corte: guardarCorteEnviado(deps, jornada, corte) };
+      });
     },
 
     /**
