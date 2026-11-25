@@ -4,6 +4,7 @@
  */
 
 const ESC = 0x1b;
+const FS = 0x1c;
 const LF = 0x0a;
 /** La PT-210 no corta: se avanza papel para poder arrancar la nota. */
 const LF_DE_AVANCE = 4;
@@ -43,9 +44,11 @@ export function aCp850(texto: string): number[] {
   return salida;
 }
 
-/** Varios tickets en un solo trabajo: init + CP850, cada renglón con LF y 4 LF tras cada ticket. */
+/** Varios tickets en un solo trabajo: init + CP850 + sin Kanji, cada renglón con LF y 4 LF tras cada ticket. */
 export function ticketsAEscPos(tickets: string[][]): Uint8Array {
-  const bytes: number[] = [ESC, 0x40, ESC, 0x74, 0x02];
+  // ESC @ (init), ESC t 2 (CP850) y FS . (apaga el modo chino/Kanji: en clones
+  // PT-210/MTP-II viene prendido y un byte >= 0x80 se come el siguiente).
+  const bytes: number[] = [ESC, 0x40, ESC, 0x74, 0x02, FS, 0x2e];
   for (const ticket of tickets) {
     for (const renglon of ticket) bytes.push(...aCp850(renglon), LF);
     for (let i = 0; i < LF_DE_AVANCE; i++) bytes.push(LF);

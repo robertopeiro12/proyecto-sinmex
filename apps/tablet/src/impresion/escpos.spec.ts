@@ -30,13 +30,13 @@ describe('aCp850', () => {
 describe('ticketsAEscPos', () => {
   const bytes = (t: string[][]) => Array.from(ticketsAEscPos(t));
 
-  it('inicializa e indica CP850', () => {
-    expect(bytes([['A']]).slice(0, 5)).toEqual([0x1b, 0x40, 0x1b, 0x74, 0x02]);
+  it('inicializa, indica CP850 y apaga el modo chino/Kanji (FS .)', () => {
+    expect(bytes([['A']]).slice(0, 7)).toEqual([0x1b, 0x40, 0x1b, 0x74, 0x02, 0x1c, 0x2e]);
   });
 
   it('cada renglón termina en LF y entre tickets y al final hay 4 LF', () => {
     expect(bytes([['A'], ['B']])).toEqual([
-      0x1b, 0x40, 0x1b, 0x74, 0x02,
+      0x1b, 0x40, 0x1b, 0x74, 0x02, 0x1c, 0x2e,
       0x41, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
       0x42, 0x0a, 0x0a, 0x0a, 0x0a, 0x0a,
     ]);
@@ -53,7 +53,7 @@ describe('ticketsAEscPos', () => {
     };
     const lineas = armarTicket(d, 32);
     const out = bytes([lineas]);
-    const cuerpo = out.slice(5);
+    const cuerpo = out.slice(7);
     const renglones: number[][] = [];
     let actual: number[] = [];
     for (const b of cuerpo) {
