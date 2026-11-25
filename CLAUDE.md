@@ -1184,6 +1184,35 @@ usuario con sesion pasa.
   - **Nube:** `20261130120000_inventario_pt_ajuste.sql` (tabla nueva, índices, trigger y 2 permisos) se sube a `sinmex dev`
     después del merge, con el protocolo de push. Pre-flight: **nada que contar**. **Backend y portal juntos** (el portal nuevo
     llama a `/inventario-pt`).
+- **Inventario de PT con Recargas (2026-11-25).** *Producción → Inventario de PT con Recargas*
+  (`/produccion/inventario-pt-recargas`, en el menú antes de PT con Ventas): lo que hay **ahora** en el almacén, solo de
+  **hoy** de Tijuana (sin campo de fecha; botón Actualizar y hora de la consulta). Spec:
+  `docs/superpowers/specs/2026-11-25-inventario-pt-recargas-design.md`. Solo lectura; no se guarda nada.
+  - **Fórmula:** `Actual = Inicial − Recargas − Envíos + Entradas − Merma − Consumo − Descuentos`. Cuenta pura en
+    `produccion/reglas-inventario-pt-recargas.ts`; consulta en `inventario-pt-recargas.repository.ts`, servicio y controlador
+    hermanos. No lleva ventas ni retornos (eso es PT con Ventas).
+  - **Fuente de cada columna** (por sucursal y presentación, hoy, todo **vivo**): **Recargas** = `carga_detalle.piezas` de cargas
+    vivas de hoy (`carga.sucursal_id`, aunque el vendedor esté dado de baja), **por renglón**: carga `pendiente` cuenta; `aceptada`
+    cuenta solo si el renglón está aceptado (`coalesce(aceptada, true)`); un renglón o carga **rechazados** no (R1 de Roberto,
+    **pendiente de confirmar con el tío**). **Envíos** = Registro `envio` que sale; **Entradas** = Registro `entrada` + **envíos
+    recibidos** (destino esta sucursal). **Merma, Consumo y Descuentos = solo Registro de Operación**: lo de vendedores, la app y
+    Procesos **no** entra aquí (sí en PT con Ventas).
+  - **Inicial compartido con PT con Ventas** (misma cuenta, `inicialesDelDia`, no se duplica): el ajuste de **hoy** si lo hay, si
+    no el **Final de ayer** de PT con Ventas. Sin ninguno → `null` (Inicial y Actual vacíos, "Sin inventario inicial"), nunca 0.
+    **"Todas"** sigue `sumarSucursales` de PT con Ventas (sin ajuste pero con movimiento deja el total vacío; sin nada aporta 0).
+    "Ajustado" solo por presentación. Sucursal inexistente = **404** (como PT con Ventas, cuyo ámbito se reutiliza).
+  - **Ajustar** = la misma pantalla de ajustes de PT con Ventas **fija en hoy** (`ajustes-inventario-pt.tsx`; mismos
+    `GET|PUT|DELETE /inventario-pt/ajustes`, permiso `inventario_pt.ajustar`, sin pedir `inventario_pt.ver`); precarga el Inicial,
+    no el Actual. Un solo conteo físico: ajustar hoy aquí cambia también el Inicial de hoy en PT con Ventas. Con "Todas",
+    deshabilitado.
+  - **Permiso** `inventario_pt_recargas.ver` (grupo Produccion/Almacen, con ⓘ en `lib/explicacion-permisos.ts`), aparte del de PT
+    con Ventas; los perfiles siguen vacíos. Alcance como PT con Ventas (atado a otra = 403; `todas` solo General).
+  - **Endpoints:** `GET /inventario-pt/recargas?sucursal&vista=presentacion|producto` → `{ fecha, hoyEnTijuana, consultadoEn,
+    renglones }` y `GET /inventario-pt/recargas/detalle?(presentacion|producto)&sucursal&columna=recargas|descuentos` ("A quién":
+    vendedor, n.º de carga, estado y piezas; o trabajador de nómina). Tipos duplicados backend ↔ portal en
+    `apps/portal/src/lib/inventario-pt-recargas.ts`: si cambias uno, cambia el otro.
+  - **Nube:** `20261201120000_permiso_inventario_pt_recargas.sql` (un insert en `permiso`) se sube a `sinmex dev` después del
+    merge, con el protocolo de push. Pre-flight: **nada que contar**. **Backend y portal juntos.** Sin cambio en la tablet.
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
   - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).
