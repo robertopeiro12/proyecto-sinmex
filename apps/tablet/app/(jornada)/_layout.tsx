@@ -73,7 +73,9 @@ export default function LayoutJornada() {
       <Stack.Screen name="inventario/index" options={{ title: 'Inventario', headerShown: false }} />
       <Stack.Screen name="inventario/[cargaId]" options={{ title: 'Carga' }} />
       {/* Pantallas del menu: dibujan su cabecera con `MarcoMenu` (se desliza con el menu). */}
-      <Stack.Screen name="registros" options={{ title: 'Ventas / Cobranza', headerShown: false }} />
+      <Stack.Screen name="registros/index" options={{ title: 'Ventas / Cobranza', headerShown: false }} />
+      {/* Rediseño pieza 5 (maqueta 18): el detalle de un movimiento, con "atrás"; su título lo pone la pantalla. */}
+      <Stack.Screen name="registros/[tipo]/[id]" options={{ title: 'Movimiento' }} />
       <Stack.Screen name="impresora" options={{ title: 'Seleccionar impresora', headerShown: false }} />
       <Stack.Screen name="sugerido-de-carga" options={{ title: 'Sugerido de carga', headerShown: false }} />
       <Stack.Screen name="agregar-a-ruta" options={{ title: 'Agregar a mi ruta' }} />

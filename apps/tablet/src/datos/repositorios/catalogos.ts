@@ -501,6 +501,18 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
       );
     },
 
+    /**
+     * El folio de una `nota_pendiente`, **este o no activa** (rediseño pieza 5):
+     * un cobro que liquida la nota la retira (`activo = 0`) y el registro del
+     * dia tiene que seguir diciendo "Cobro nota <folio>". `null` si no esta.
+     */
+    folioDeNota(ventaNotaId: string): string | null {
+      return (
+        bd.getFirstSync<{ folio: string }>('select folio from nota_pendiente where id = $id', { $id: ventaNotaId })
+          ?.folio ?? null
+      );
+    },
+
     obtenerCliente(id: string): Cliente | null {
       return bd.getFirstSync<Cliente>('select * from cliente where id = $id', { $id: id });
     },

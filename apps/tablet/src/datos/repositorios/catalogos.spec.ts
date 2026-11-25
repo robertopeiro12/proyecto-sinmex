@@ -173,6 +173,17 @@ describe('repositorio de catalogos', () => {
       expect(catalogos.notasPendientesDe('cli-1').map((n) => n.id)).toEqual(['nota-2']);
     });
 
+    it('folioDeNota (pieza 5) lee el folio aunque la nota ya no este activa', () => {
+      const { catalogos } = conCatalogos();
+      expect(catalogos.folioDeNota('nota-1')).toBe('TJ260801AP01');
+
+      catalogos.guardarSnapshot({
+        notas: [{ ...snapshotDePrueba().notas![0]!, activo: 0 }],
+      });
+      expect(catalogos.folioDeNota('nota-1')).toBe('TJ260801AP01');
+      expect(catalogos.folioDeNota('no-existe')).toBeNull();
+    });
+
     it('un cliente sin notas devuelve lista vacia, no null', () => {
       const { catalogos } = conCatalogos();
       expect(catalogos.notasPendientesDe('cli-2')).toEqual([]);

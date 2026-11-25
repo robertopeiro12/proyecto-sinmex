@@ -99,6 +99,8 @@ describe('repositorio de cobranzas (T-20; sin folio desde T-21)', () => {
 
     expect(nota(deps, 'nota-1')).toMatchObject({ saldo_centavos: 0, activo: 0 });
     expect(catalogos.notasPendientesDe('cli-1').map((x) => x.id)).toEqual(['nota-2']);
+    // Pieza 5: el registro del dia sigue diciendo "Cobro nota <folio>".
+    expect(catalogos.folioDeNota('nota-1')).toBe('TJ260801AP01');
   });
 
   it('el excedente va a la otra nota y lo que sobra al saldo a favor del cliente', () => {
