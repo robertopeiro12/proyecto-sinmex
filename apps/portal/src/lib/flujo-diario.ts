@@ -165,6 +165,17 @@ export interface VisitaDetalle {
   comentario: string | null;
 }
 
+/** Un renglón de merma o cambio que registró la tablet (uno por línea del movimiento). */
+export interface MovimientoDetalle {
+  tipo: "merma_cliente" | "merma_trayecto" | "cambio";
+  cliente: string | null;
+  producto: string;
+  sentido: "recibido" | "entregado";
+  cantidad: number;
+  motivo: string | null;
+  comentario: string | null;
+}
+
 export interface DetalleVendedorDia {
   fecha: string;
   vendedorId: string;
@@ -199,6 +210,8 @@ export interface DetalleVendedorDia {
   notasNoEntregadas: NotaNoEntregada[];
   visitas: VisitaDetalle[];
   promociones: { cliente: string; producto: string; cantidad: number }[];
+  /** Mermas y cambios de la tablet, un renglón por línea; el servidor los manda ordenados. */
+  movimientos: MovimientoDetalle[];
   /** `null` sin jornada cerrada. */
   corte: Corte | null;
 }
@@ -248,6 +261,8 @@ export interface DetalleDia {
   gastos: { vendedor: string; descripcion: string; montoCentavos: number }[];
   visitas: (Omit<VisitaDetalle, "atendio"> & { vendedor: string })[];
   promociones: { producto: string; cantidad: number }[];
+  /** Solo la merma del vehículo y la recibida del cliente; `cliente` null = vehículo. */
+  mermas: { vendedor: string; cliente: string | null; producto: string; cantidad: number; motivo: string | null }[];
 }
 
 /* ---- Consultas ---- */

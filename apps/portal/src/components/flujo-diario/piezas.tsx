@@ -292,3 +292,8 @@ export function EtiquetaPartida({ texto, tono }: { texto: string; tono: "neutro"
     </Etiqueta>
   );
 }
+
+/** Motivo de una merma: sin motivo (tablet vieja) se dice, nunca queda vacío. */
+export function TextoMotivo({ motivo }: { motivo: string | null }) {
+  return motivo ? <>{motivo}</> : <span className="text-muted-foreground">Sin motivo</span>;
+}

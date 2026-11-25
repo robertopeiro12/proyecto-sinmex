@@ -76,7 +76,7 @@ const DETALLE: DetalleVendedorDia = {
   fecha: "2026-11-09", vendedorId: "rblas", vendedor: "RBlas",
   porProducto: [], notas: [],
   cobranza: { contado: [], anteriores: [], aFavor: [] },
-  gastos: [], notasCredito: [], asignadasCobradas: [], asignadasPorEntregar: [], notasNoEntregadas: [], visitas: [], promociones: [],
+  gastos: [], notasCredito: [], asignadasCobradas: [], asignadasPorEntregar: [], notasNoEntregadas: [], visitas: [], promociones: [], movimientos: [],
   corte: { contadoCentavos: 279650, anterioresCentavos: 0, aFavorCentavos: 0, gastoCentavos: 1000, tesoreriaCentavos: 278650 },
 };
 

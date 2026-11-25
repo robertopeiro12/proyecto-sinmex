@@ -89,6 +89,7 @@ const DETALLE: DetalleVendedorDia = {
     { cliente: "Abarrotes Mary", visitado: true, vendio: false, hora: "2026-11-09T17:15:00.000Z", motivo: "Tiene producto", atendio: "Mary", comentario: "Pasar el jueves" },
   ],
   promociones: [{ cliente: "Don Gallo", producto: "Horchata 500 ml", cantidad: 4 }],
+  movimientos: [],
   corte: null,
 };
 
@@ -571,6 +572,67 @@ describe("DetalleVendedor", () => {
     expect(within(promos).getAllByRole("row").at(-1)).toHaveTextContent("Total1,200");
   });
 
+  describe("Mermas, cambios y promociones de la tablet", () => {
+    const mov = (extra: Partial<fd.MovimientoDetalle>): fd.MovimientoDetalle => ({
+      tipo: "merma_cliente", cliente: "Don Gallo", producto: "Horchata 500 ml", sentido: "recibido", cantidad: 2, motivo: "Caducado", comentario: null, ...extra,
+    });
+    async function abrir(movimientos: fd.MovimientoDetalle[], promociones: DetalleVendedorDia["promociones"] = []) {
+      const u = userEvent.setup();
+      render(<DetalleVendedor detalle={{ ...DETALLE, promociones, movimientos }} sucursal="TJ" modo="flujo" />);
+      await u.click(screen.getByRole("tab", { name: "Mermas/Cambios/Promociones" }));
+      return screen.getByRole("tabpanel");
+    }
+
+    it("merma del vehículo primero, y la merma del cliente con motivo y 'Sin motivo'", async () => {
+      const panel = await abrir([
+        mov({ tipo: "merma_trayecto", cliente: null, producto: "Jamaica 1 L", cantidad: 3, motivo: "Se rompió", comentario: "Frenó fuerte" }),
+        mov({ comentario: "Lo regresó" }),
+        mov({ producto: "Tamarindo 1 L", cantidad: 1, motivo: null }),
+      ]);
+      const vehiculo = within(panel).getByRole("table", { name: "Merma del vehículo" });
+      expect(within(vehiculo).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Producto", "Cantidad", "Motivo", "Comentario"]);
+      expect(within(vehiculo).getAllByRole("row")[1]).toHaveTextContent("Jamaica 1 L3Se rompióFrenó fuerte");
+      const recibidas = within(panel).getByRole("table", { name: "Mermas recibidas de Don Gallo" });
+      const filas = within(recibidas).getAllByRole("row");
+      expect(filas[1]).toHaveTextContent("Horchata 500 ml2CaducadoLo regresó");
+      expect(filas[2]).toHaveTextContent("Tamarindo 1 L1Sin motivo");
+      expect(within(filas[2]).getByText("Sin motivo")).toHaveClass("text-muted-foreground");
+      expect(panel.textContent).not.toContain("null");
+    });
+
+    it("reposición entregada: solo Producto y Cantidad, sin motivo", async () => {
+      const panel = await abrir([mov({ sentido: "entregado", cantidad: 2, motivo: null })]);
+      const t = within(panel).getByRole("table", { name: "Reposición entregada a Don Gallo" });
+      expect(within(t).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Producto", "Cantidad"]);
+      expect(within(panel).queryByText("Sin motivo")).not.toBeInTheDocument();
+    });
+
+    it("cambios: lo que entregó y lo que recibió, uno junto al otro", async () => {
+      const panel = await abrir([
+        mov({ tipo: "cambio", sentido: "entregado", producto: "Horchata 500 ml", cantidad: 5, motivo: null }),
+        mov({ tipo: "cambio", sentido: "recibido", producto: "Jamaica 1 L", cantidad: 4, motivo: null }),
+      ]);
+      expect(within(within(panel).getByRole("table", { name: "Cambios (entregó) de Don Gallo" })).getAllByRole("row")[1]).toHaveTextContent("Horchata 500 ml5");
+      expect(within(within(panel).getByRole("table", { name: "Cambios recibidos de Don Gallo" })).getAllByRole("row")[1]).toHaveTextContent("Jamaica 1 L4");
+    });
+
+    it("un cliente con solo cambios tiene su bloque, y los clientes van en orden alfabético", async () => {
+      const panel = await abrir(
+        [mov({ tipo: "cambio", cliente: "Abarrotes Mary", sentido: "entregado", motivo: null })],
+        [{ cliente: "Don Gallo", producto: "Horchata 500 ml", cantidad: 4 }],
+      );
+      const titulos = within(panel).getAllByText(/^Cliente: /).map((h) => h.textContent);
+      expect(titulos).toEqual(["Cliente: Abarrotes Mary", "Cliente: Don Gallo"]);
+      expect(within(panel).getByRole("table", { name: "Cambios (entregó) de Abarrotes Mary" })).toBeInTheDocument();
+      expect(within(panel).queryByRole("table", { name: "Cambios recibidos de Abarrotes Mary" })).not.toBeInTheDocument();
+    });
+
+    it("sin mermas, cambios ni promociones", async () => {
+      const panel = await abrir([]);
+      expect(within(panel).getByText("Sin mermas, cambios ni promociones este día.")).toBeInTheDocument();
+    });
+  });
+
   it("sin datos: los textos de vacío", async () => {
     const u = userEvent.setup();
     const vacio: DetalleVendedorDia = { ...DETALLE, notasCredito: [], promociones: [] };
@@ -578,6 +640,6 @@ describe("DetalleVendedor", () => {
     await u.click(screen.getByRole("tab", { name: "Notas de ventas" }));
     expect(screen.getByText("No hay notas pendientes.")).toBeInTheDocument();
     await u.click(screen.getByRole("tab", { name: "Mermas/Cambios/Promociones" }));
-    expect(screen.getByText("Sin promociones este día.")).toBeInTheDocument();
+    expect(screen.getByText("Sin mermas, cambios ni promociones este día.")).toBeInTheDocument();
   });
 });
