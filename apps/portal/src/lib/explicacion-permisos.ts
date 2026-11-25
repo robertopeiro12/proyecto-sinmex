@@ -77,6 +77,8 @@ export const EXPLICACION_PERMISO: Record<string, string> = {
     "Puede registrar entradas y salidas de mercancía en el almacén de una sucursal.",
   "carga.gestionar": "Puede registrar qué mercancía sale cargada en cada vehículo.",
   "inventario.ver": "Puede consultar cuánto inventario hay disponible.",
+  "inventario_pt_recargas.ver":
+    "Abre Producción → Inventario de PT con Recargas: lo que hay hoy en el almacén (inicial, recargas a vendedores, envíos, entradas, merma, consumo, descuentos y actual), con a quién se le recargó o descontó.",
   "inventario_pt.ver":
     "Abre Producción → Inventario de PT con Ventas: el inventario real del almacén por día (inicial, ventas, merma, entradas, final), con los días anteriores de cada producto y a quién se le descontó.",
   "inventario_pt.ajustar":

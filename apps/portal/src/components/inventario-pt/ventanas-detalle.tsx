@@ -25,7 +25,7 @@ import {
 import { CeldasPt, ColumnasPt, EncabezadosPt, InicialConMarca, nombreDe, SEPARADOR } from "./tabla-inventario-pt";
 
 /** La presentación o el producto del renglón picado (en la vista por producto no hay presentación). */
-export function cualDe(r: RenglonPt): CualPt {
+export function cualDe(r: Pick<RenglonPt, "presentacionId" | "productoId">): CualPt {
   return r.presentacionId ? { presentacion: r.presentacionId } : { producto: r.productoId };
 }
 

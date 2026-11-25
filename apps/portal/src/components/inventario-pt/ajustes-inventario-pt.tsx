@@ -40,6 +40,8 @@ export function AjustesInventarioPt({
   hoy,
   onVolver,
   onGuardado,
+  fijaEnHoy = false,
+  volverA = TITULO,
 }: {
   /** Código de UNA sucursal (con "Todas" no se ajusta). */
   sucursal: string;
@@ -48,8 +50,12 @@ export function AjustesInventarioPt({
   onVolver: () => void;
   /** Guardó: el día que se ajustó. */
   onGuardado: (fecha: string) => void;
+  /** Sin campo de día: siempre `hoy` (Inventario de PT con Recargas, D4). */
+  fijaEnHoy?: boolean;
+  /** La pantalla a la que regresa "← Volver a …". */
+  volverA?: string;
 }) {
-  const [fecha, setFecha] = useState(fechaInicial > hoy ? hoy : fechaInicial);
+  const [fecha, setFecha] = useState(fijaEnHoy || fechaInicial > hoy ? hoy : fechaInicial);
   const [precarga, setPrecarga] = useState<RenglonAjustePt[] | null>(null);
   const [captura, setCaptura] = useState<CapturaAjuste>({});
   const [comentario, setComentario] = useState("");
@@ -206,7 +212,7 @@ export function AjustesInventarioPt({
     <Pantalla key="ajustes">
       <div>
         <Button type="button" variant="ghost" size="sm" onClick={() => void volver()}>
-          ← Volver a {TITULO}
+          ← Volver a {volverA}
         </Button>
       </div>
       <EncabezadoPantalla
@@ -215,31 +221,38 @@ export function AjustesInventarioPt({
       />
 
       <div className="flex flex-wrap items-start gap-4">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="pt-ajuste-dia" className="text-sm font-medium">
-            Día
-          </label>
-          <div className="flex items-center gap-2">
-            <Entrada
-              id="pt-ajuste-dia"
-              type="date"
-              required
-              max={hoy}
-              value={fecha}
-              onChange={(e) => void cambiarFecha(e.target.value)}
-              className="w-40"
-            />
-            <div role="group" aria-label="Atajos de día" className="flex items-center gap-0.5">
-              <Button type="button" variant="ghost" size="sm" onClick={() => void cambiarFecha(hoy)}>
-                Hoy
-              </Button>
-              <Button type="button" variant="ghost" size="sm" onClick={() => void cambiarFecha(diaAnterior(hoy))}>
-                Ayer
-              </Button>
-            </div>
-            <span className="text-sm text-muted-foreground">{diaEscrito(fecha, hoy)}</span>
+        {fijaEnHoy ? (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium">Día</span>
+            <span className="flex h-9 items-center text-sm text-muted-foreground">{diaEscrito(fecha, hoy)}</span>
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="pt-ajuste-dia" className="text-sm font-medium">
+              Día
+            </label>
+            <div className="flex items-center gap-2">
+              <Entrada
+                id="pt-ajuste-dia"
+                type="date"
+                required
+                max={hoy}
+                value={fecha}
+                onChange={(e) => void cambiarFecha(e.target.value)}
+                className="w-40"
+              />
+              <div role="group" aria-label="Atajos de día" className="flex items-center gap-0.5">
+                <Button type="button" variant="ghost" size="sm" onClick={() => void cambiarFecha(hoy)}>
+                  Hoy
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => void cambiarFecha(diaAnterior(hoy))}>
+                  Ayer
+                </Button>
+              </div>
+              <span className="text-sm text-muted-foreground">{diaEscrito(fecha, hoy)}</span>
+            </div>
+          </div>
+        )}
         <Campo id="pt-ajuste-comentario" etiqueta="Comentario" opcional className="min-w-64 flex-1">
           <AreaTexto maxLength={MAX_COMENTARIO_AJUSTE} value={comentario} onChange={(e) => setComentario(e.target.value)} />
         </Campo>

@@ -170,7 +170,7 @@ export function totalesHistorial(renglones: readonly MovimientosDia[]): Movimien
 }
 
 /** Suma que se vuelve `null` si un renglón no tiene el dato: un total a medias engañaría. */
-function sumaCompleta(renglones: readonly RenglonPt[], valor: (r: RenglonPt) => number | null): number | null {
+export function sumaCompleta<T>(renglones: readonly T[], valor: (r: T) => number | null): number | null {
   let total = 0;
   for (const r of renglones) {
     const v = valor(r);
@@ -207,6 +207,42 @@ export function gruposPt(renglones: readonly RenglonPt[]): GrupoPt[] {
         mermaAcumulada: sumaCompleta(rs, (r) => r.mermaAcumulada),
       },
     }));
+}
+
+/**
+ * El aviso "sin inventario inicial" (D3), compartido con Inventario de PT con Recargas: cuántos
+ * renglones no tienen Inicial, qué columnas quedan vacías y a dónde ir a capturar el ajuste.
+ * Con Todas el botón está deshabilitado y el vacío puede venir de otra sucursal.
+ */
+export function textoSinInicial({
+  cuantos,
+  vista,
+  todas,
+  puedeAjustar,
+  vacias,
+  movimientos,
+}: {
+  cuantos: number;
+  vista: VistaPt;
+  todas: boolean;
+  puedeAjustar: boolean;
+  /** "su Inicial, Final y Merma acumulada quedan vacíos". */
+  vacias: string;
+  /** "Los movimientos del día sí se ven." */
+  movimientos: string;
+}): string {
+  const que =
+    vista === "producto"
+      ? cuantos === 1
+        ? "producto sin inventario inicial"
+        : "productos sin inventario inicial"
+      : cuantos === 1
+        ? "presentación sin inventario inicial"
+        : "presentaciones sin inventario inicial";
+  const donde = todas
+    ? `cada sucursal capture su ajuste${puedeAjustar ? " (elígela en el menú lateral)" : ""}`
+    : `se capture un ajuste${puedeAjustar ? " con «Ajustar inventario»" : ""}`;
+  return `${cuantos} ${que}: ${vacias} hasta que ${donde}. ${movimientos}`;
 }
 
 /** Días de `desde` a `hasta`, contando los dos. */
