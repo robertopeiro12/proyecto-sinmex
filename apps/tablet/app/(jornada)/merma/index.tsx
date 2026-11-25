@@ -73,25 +73,33 @@ export default function MermaYCambios() {
       <View style={{ flex: 1, backgroundColor: colores.papel }}>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={[estilos.contenido, { paddingBottom: espacio.lg }]}>
           <View style={{ gap: espacio.sm, marginBottom: espacio.md }}>
-            <Boton
-              etiqueta="Merma del vehículo"
-              icono="camion"
-              deshabilitado={deshabilitado}
-              onPress={() => router.push({ pathname: '/(jornada)/merma/registrar', params: { tipo: 'merma_trayecto' } })}
-            />
-            {ofreceConsumo(vista.limite) ? (
-              <>
+            <View style={{ flexDirection: 'row', gap: espacio.sm }}>
+              <View style={{ flex: 2 }}>
                 <Boton
-                  etiqueta="Consumo"
-                  icono="vender"
-                  tono="neutra"
-                  deshabilitado={deshabilitado || restante === 0}
-                  onPress={() => router.push({ pathname: '/(jornada)/merma/registrar', params: { tipo: 'consumo' } })}
+                  etiqueta="Merma del vehículo"
+                  icono="camion"
+                  deshabilitado={deshabilitado}
+                  onPress={() =>
+                    router.push({ pathname: '/(jornada)/merma/registrar', params: { tipo: 'merma_trayecto' } })
+                  }
                 />
-                <Text style={estilos.textoSuave}>
-                  {restante > 0 ? textoConsumoRestante(restante) : MENSAJE_CONSUMO_AGOTADO}
-                </Text>
-              </>
+              </View>
+              {ofreceConsumo(vista.limite) ? (
+                <View style={{ flex: 1 }}>
+                  <Boton
+                    etiqueta="Consumo"
+                    icono="vaso"
+                    tono="neutra"
+                    deshabilitado={deshabilitado || restante === 0}
+                    onPress={() => router.push({ pathname: '/(jornada)/merma/registrar', params: { tipo: 'consumo' } })}
+                  />
+                </View>
+              ) : null}
+            </View>
+            {ofreceConsumo(vista.limite) ? (
+              <Text style={estilos.textoSuave}>
+                {restante > 0 ? textoConsumoRestante(restante) : MENSAJE_CONSUMO_AGOTADO}
+              </Text>
             ) : null}
             {menu.avisoDiaCerrado ? <Text style={estilos.error}>{menu.avisoDiaCerrado}</Text> : null}
           </View>

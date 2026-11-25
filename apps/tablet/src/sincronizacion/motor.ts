@@ -191,6 +191,16 @@ export interface ResultadoSincronizacion {
   pullPosterior?: 'fallo';
 }
 
+/**
+ * Rediseño pieza 4: una tablet con cursor guardado pero sin ningun motivo de
+ * merma (APK instalada antes que el backend: el pull incremental nunca trajo
+ * la coleccion y los motivos sembrados no cambian de `actualizado_en`) tiene
+ * que olvidar el cursor para que el pull sea completo y los traiga.
+ */
+export function debeOlvidarCursor({ hayCursor, motivosMerma }: { hayCursor: boolean; motivosMerma: number }): boolean {
+  return hayCursor && motivosMerma === 0;
+}
+
 export type MotorSincronizacion = ReturnType<typeof crearMotorSincronizacion>;
 
 export function crearMotorSincronizacion({
@@ -231,6 +241,9 @@ export function crearMotorSincronizacion({
 
       // --- 2. Pull
       try {
+        if (debeOlvidarCursor({ hayCursor: sync.leerCursor() !== null, motivosMerma: catalogos.contarMotivosMerma() })) {
+          sync.olvidarCursor();
+        }
         resultado.pull = await bajar(token);
       } catch (error) {
         return { ...resultado, ok: false, ...traducir(error) };

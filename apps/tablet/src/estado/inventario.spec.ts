@@ -16,7 +16,9 @@ import {
   MENSAJE_SIN_RED_CARGA,
   pastillaCarga,
   puedeResponder,
+  cambiosNetos,
   salio,
+  textoCambios,
   seleccionarTodos,
   textoAceptar,
   textoEstadoCarga,
@@ -182,6 +184,24 @@ describe('el resumen de Inventario (maqueta 5)', () => {
     expect(salio({ cargado: 0, existencia: -4 })).toBe(4);
     // Un cambio que recibe mas de lo que entrega sube la existencia arriba de lo cargado.
     expect(salio({ cargado: 10, existencia: 13 })).toBe(0);
+  });
+
+  it('Cargado − Salió + Cambios = Existencia cuando hay cambios', () => {
+    // Cargo 10, vendio 4, recibio 5 de cambio y entrego 1: existencia 10.
+    const fila = { cargado: 10, existencia: 10, cambiosRecibidos: 5, cambiosEntregados: 1 };
+    expect(cambiosNetos(fila)).toBe(4);
+    expect(salio(fila)).toBe(4);
+    expect(fila.cargado - salio(fila) + cambiosNetos(fila)).toBe(fila.existencia);
+    // Entrega mas de lo que recibe: la existencia baja sin que sea venta.
+    const otra = { cargado: 10, existencia: 5, cambiosRecibidos: 0, cambiosEntregados: 3 };
+    expect(salio(otra)).toBe(2);
+    expect(otra.cargado - salio(otra) + cambiosNetos(otra)).toBe(otra.existencia);
+  });
+
+  it('textoCambios: signo explicito', () => {
+    expect(textoCambios(4)).toBe('+4');
+    expect(textoCambios(-2)).toBe('−2');
+    expect(textoCambios(0)).toBe('0');
   });
 
   it('tituloAvisoCarga: la primera es "Carga por aceptar", las demas "Recarga esperando"', () => {

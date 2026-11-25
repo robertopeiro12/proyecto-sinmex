@@ -159,7 +159,7 @@ export function pastillaMovimiento(
 
 /**
  * "Me entregó dañado: Jamaica 1 L ×3 · Le entregué: Jamaica 500 ml ×2" (merma del
- * cliente), "Fresa 500 ml por Mango 500 ml" (cambio: lo que regreso el cliente
+ * cliente), "Fresa por Mango" (cambio: lo que regreso el cliente
  * "por" lo que se llevo, sin repetir), o las piezas que salieron.
  */
 export function resumenMovimiento(m: { tipo: TipoMovimiento; lineas: readonly LineaMovimientoConEtiqueta[] }): string {
@@ -169,8 +169,25 @@ export function resumenMovimiento(m: { tipo: TipoMovimiento; lineas: readonly Li
       .map((l) => `${l.etiqueta} ×${l.piezas}`)
       .join(', ');
   if (m.tipo === 'cambio') {
+    // Maqueta 15: "Fresa por Mango", sin volumen. El volumen solo vuelve cuando
+    // dos presentaciones distintas de un mismo producto andan en el cambio.
+    const sinVolumen = (etiqueta: string) => etiqueta.replace(/\s+\d+(?:[.,]\d+)?\s*[A-Za-zµ]+$/, '');
+    const etiquetas = [...new Set(m.lineas.map((l) => l.etiqueta))];
+    const repetidos = new Set<string>();
+    const vistos = new Set<string>();
+    for (const e of etiquetas) {
+      const n = sinVolumen(e);
+      if (vistos.has(n)) repetidos.add(n);
+      vistos.add(n);
+    }
     const nombres = (sentido: SentidoMovimiento) =>
-      [...new Set(m.lineas.filter((l) => l.sentido === sentido).map((l) => l.etiqueta))].join(', ');
+      [
+        ...new Set(
+          m.lineas
+            .filter((l) => l.sentido === sentido)
+            .map((l) => (repetidos.has(sinVolumen(l.etiqueta)) ? l.etiqueta : sinVolumen(l.etiqueta))),
+        ),
+      ].join(', ');
     return `${nombres('recibido')} por ${nombres('entregado')}`;
   }
   if (m.tipo !== 'merma_cliente') return lista('entregado');

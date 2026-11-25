@@ -786,6 +786,10 @@ usuario con sesion pasa.
       movimientos de hoy con filtros Todo / Merma / Cambios) → `merma/registrar.tsx`.
     - **Nube**: `20261128120000_movimiento_cambio_motivo.sql` se sube a `sinmex dev` después del merge, con el protocolo de push
       (pre-flight: nada que contar; los checks solo se ensanchan y la columna es nula). **Backend antes que la app.**
+      Si la APK se instaló antes que el backend, el pull incremental no trae los motivos sembrados (no cambian de
+      `actualizado_en`) y la merma queda sin motivos que elegir; el motor lo cura solo: si al empezar a sincronizar la tabla
+      local `motivo_merma` está vacía, olvida el cursor y el pull sale completo (`debeOlvidarCursor`, `motor.ts`). Remedio
+      manual equivalente: borrar el cursor (`olvidarCursor`) o reinstalar. Con un backend sin motivos cada sync sale completo.
   - **Nube**: `20261025120000_movimiento_inventario.sql` se sube a `sinmex dev` después del merge, con el protocolo de
     push (pre-flight: tablas nuevas y una columna con default; nada que contar). Backend antes que la app.
 - **Registro de Operación (parte 1).** *Producción → Registro de Operación* (`/produccion/registro-operacion`, pestañas

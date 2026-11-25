@@ -6,7 +6,9 @@ import {
   filasPorRegresar,
   NOTA_CONTROL_APAGADO,
   pastillaCarga,
+  cambiosNetos,
   salio,
+  textoCambios,
   tituloAvisoCarga,
   totalPiezas,
 } from '@/estado/inventario';
@@ -22,7 +24,7 @@ import { espacio } from '@/ui/tokens';
 /**
  * Inventario (T-27, entrada del menu; rediseño pieza 3, maqueta 5): arriba, el
  * aviso de cada carga o recarga por aceptar ("Revisar recarga" abre el mismo
- * checklist); el resumen por producto: Cargado · Salió · Te quedan (solo los
+ * checklist); el resumen por producto: Cargado · Salió · Cambios · Te quedan (solo los
  * renglones aceptados; Salió = vendido, regalado, mermas y consumo); lo que hay
  * que regresar a la planta, y las cargas de hoy ya respondidas con su estado
  * ("Aceptada 3 de 5"). Con el control apagado se muestra igual, con la nota.
@@ -94,6 +96,7 @@ export default function Inventario() {
               <Text style={[estilos.etiqueta, { flex: 2 }]}>Producto</Text>
               <Text style={[estilos.etiqueta, columnaTitulo]}>Cargado</Text>
               <Text style={[estilos.etiqueta, columnaTitulo]}>Salió</Text>
+              <Text style={[estilos.etiqueta, columnaTitulo]}>Cambios</Text>
               <Text style={[estilos.etiqueta, columnaTitulo]}>Te quedan</Text>
             </View>
             {vista.filas.map((f) => (
@@ -104,6 +107,9 @@ export default function Inventario() {
                 </View>
                 <View style={columnaCifra}>
                   <Cifra valor={salio(f)} tono="suave" />
+                </View>
+                <View style={columnaCifra}>
+                  <Cifra valor={textoCambios(cambiosNetos(f))} tono="suave" />
                 </View>
                 <View style={columnaCifra}>
                   <Cifra valor={f.existencia} tono={f.existencia <= 0 ? 'peligro' : 'tinta'} />

@@ -218,7 +218,7 @@ describe('resumenMovimiento del cambio', () => {
   it('"Fresa por Mango": lo que regreso el cliente por lo que se llevo, sin repetir', () => {
     expect(
       resumenMovimiento({ tipo: 'cambio', lineas: [linea('Fresa 500 ml', 'recibido', 6), linea('Mango 500 ml', 'entregado', 6)] }),
-    ).toBe('Fresa 500 ml por Mango 500 ml');
+    ).toBe('Fresa por Mango');
     expect(
       resumenMovimiento({
         tipo: 'cambio',
@@ -228,7 +228,16 @@ describe('resumenMovimiento del cambio', () => {
           linea('Mango 500 ml', 'entregado', 3),
         ],
       }),
-    ).toBe('Fresa 500 ml, Jamaica 1 L por Mango 500 ml');
+    ).toBe('Fresa, Jamaica por Mango');
+  });
+
+  it('con dos presentaciones del mismo producto conserva el volumen para distinguirlas', () => {
+    expect(
+      resumenMovimiento({
+        tipo: 'cambio',
+        lineas: [linea('Fresa 500 ml', 'recibido', 2), linea('Fresa 1 L', 'entregado', 2), linea('Mango 1 L', 'entregado', 1)],
+      }),
+    ).toBe('Fresa 500 ml por Fresa 1 L, Mango');
   });
 });
 
@@ -273,7 +282,7 @@ describe('registro de Merma / Cambios (maqueta 15)', () => {
 
   it('detalle: el motivo de la merma; el resumen en el cambio, el consumo y la merma sin motivo', () => {
     expect(detalleMovimiento(vehiculo)).toBe('Envase roto');
-    expect(detalleMovimiento(cambio)).toBe('Fresa 500 ml por Mango 500 ml');
+    expect(detalleMovimiento(cambio)).toBe('Fresa por Mango');
     expect(detalleMovimiento(consumo)).toBe('Jamaica 1 L ×1');
     expect(detalleMovimiento({ ...merma, motivo_nombre: null })).toBe(
       'Me entregó dañado: Jamaica 1 L ×3, Horchata 500 ml ×2 · Le entregué: Jamaica 1 L ×3',

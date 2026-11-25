@@ -27,7 +27,7 @@ import type {
 import { fuenteFotosProspectos, type FuenteFotos } from './fuente-fotos';
 import { fuenteJornadas } from './fuente-jornadas';
 import { fuenteProspectos } from './fuente-prospectos';
-import { aSnapshot, crearMotorSincronizacion, type FuenteOperaciones } from './motor';
+import { aSnapshot, crearMotorSincronizacion, debeOlvidarCursor, type FuenteOperaciones } from './motor';
 
 /** Respuesta de push que acepta todo lo que le manden. */
 function pushOk(operaciones: OperacionSaliente[]): RespuestaPush {
@@ -363,14 +363,26 @@ describe('motor de sincronizacion', () => {
     });
 
     it('la primera vez pide sin cursor; la segunda, con el que devolvio el servidor', async () => {
-      const { motor, escenario, sync } = montar({});
+      const { motor, escenario, sync, catalogos } = montar({});
 
       await motor.sincronizar();
       expect(escenario.pulls[0]!.desde).toBeNull();
       expect(sync.leerCursor()).toBe('2026-08-07T14:59:55.000Z');
 
+      // Con motivos de merma ya bajados el pull sigue siendo incremental.
+      catalogos.guardarSnapshot({
+        motivosMerma: [{ id: 'mm1', nombre: 'Caducado', aplica_cliente: 1, aplica_vehiculo: 1, activo: 1 }],
+      } as Parameters<typeof catalogos.guardarSnapshot>[0]);
       await motor.sincronizar();
       expect(escenario.pulls[1]!.desde).toBe('2026-08-07T14:59:55.000Z');
+    });
+
+    it('sin motivos de merma locales (APK antes que el backend) el pull sale completo', async () => {
+      const { motor, escenario } = montar({});
+
+      await motor.sincronizar();
+      await motor.sincronizar();
+      expect(escenario.pulls[1]!.desde).toBeNull();
     });
 
     it('el cursor NO se guarda si aplicar el snapshot falla', async () => {
@@ -1317,5 +1329,13 @@ describe('aSnapshot (notas asignadas)', () => {
     const vacio = aSnapshot(respuestaPullDePrueba());
     expect(vacio.rutasDia).toBeUndefined();
     expect(vacio.notasAsignadas).toBeUndefined();
+  });
+});
+
+describe('debeOlvidarCursor (rediseño pieza 4)', () => {
+  it('con cursor y sin motivos de merma el pull tiene que ser completo', () => {
+    expect(debeOlvidarCursor({ hayCursor: true, motivosMerma: 0 })).toBe(true);
+    expect(debeOlvidarCursor({ hayCursor: true, motivosMerma: 3 })).toBe(false);
+    expect(debeOlvidarCursor({ hayCursor: false, motivosMerma: 0 })).toBe(false);
   });
 });

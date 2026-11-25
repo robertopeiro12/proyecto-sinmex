@@ -401,6 +401,11 @@ export function crearRepositorioCatalogos({ bd, reloj }: DepsRepositorio) {
       );
     },
 
+    /** Cuantos motivos de merma hay guardados (activos o no); 0 = el catalogo nunca bajo. */
+    contarMotivosMerma(): number {
+      return bd.getFirstSync<{ n: number }>('select count(*) as n from motivo_merma')?.n ?? 0;
+    },
+
     /** Un motivo de merma por id, activo o no (`movimientos.registrar` decide si sirve). */
     obtenerMotivoMerma(id: string): MotivoMerma | null {
       return bd.getFirstSync<MotivoMerma>('select * from motivo_merma where id = $id', { $id: id });

@@ -127,13 +127,34 @@ export function tituloAvisoCarga(carga: { numero: number }): string {
   return carga.numero > 1 ? 'Recarga esperando' : 'Carga por aceptar';
 }
 
+/** Lo que de un cambio recibe y entrega el vendedor, por presentacion. */
+interface FilaConCambios {
+  cargado: number;
+  existencia: number;
+  cambiosRecibidos?: number;
+  cambiosEntregados?: number;
+}
+
+/** Cambios netos del resumen: lo que recibio de los clientes menos lo que entrego. */
+export function cambiosNetos(fila: Pick<FilaConCambios, 'cambiosRecibidos' | 'cambiosEntregados'>): number {
+  return (fila.cambiosRecibidos ?? 0) - (fila.cambiosEntregados ?? 0);
+}
+
+/** "+3", "−2" o "0" (con el signo menos tipografico): la columna Cambios. */
+export function textoCambios(neto: number): string {
+  if (neto > 0) return `+${neto}`;
+  if (neto < 0) return `−${-neto}`;
+  return '0';
+}
+
 /**
- * "Salió" del resumen: vendido + regalado + mermas + consumo, o sea cargado −
- * existencia. Nunca negativo: un cambio que recibe mas de lo que entrega de una
- * presentacion deja la existencia arriba de lo cargado (rediseño pieza 4).
+ * "Salió" del resumen: vendido + regalado + mermas + consumo, sin los cambios:
+ * cargado − existencia + cambios netos. Asi Cargado − Salió + Cambios =
+ * Existencia aunque un cambio reciba mas de lo que entrega (rediseño pieza 4).
+ * Nunca negativo.
  */
-export function salio(fila: { cargado: number; existencia: number }): number {
-  return Math.max(0, fila.cargado - fila.existencia);
+export function salio(fila: FilaConCambios): number {
+  return Math.max(0, fila.cargado - fila.existencia + cambiosNetos(fila));
 }
 
 export function totalPiezas(lineas: readonly { piezas: number }[]): number {
