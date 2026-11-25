@@ -9,13 +9,16 @@ import type { Migracion } from './motor';
  * vendio en esta tablet**. `null` = el servidor no lo mando (uno anterior a la
  * pieza 7): la reimpresion sale sin renglones.
  *
- * No reinicia el cursor del pull: cada nota trae su detalle la siguiente vez
- * que cambie (un abono, una edicion) o en el siguiente pull completo.
+ * **Reinicia el cursor del pull** (como la 019 y la 022): asi la siguiente
+ * sincronizacion es completa y toda nota pendiente ya guardada baja con su
+ * detalle, sin esperar a que cambie.
  */
 export const notaDetalle: Migracion = {
   version: 24,
   nombre: 'nota-detalle',
   sql: `
     alter table nota_pendiente add column detalle_json text;
+
+    delete from sync_cursor where entidad = 'pull';
   `,
 };

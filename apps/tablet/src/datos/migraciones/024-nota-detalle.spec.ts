@@ -1,6 +1,7 @@
+import { abrirBaseDatosNode } from '../driver-node';
 import { depsDePrueba, snapshotDePrueba } from '../pruebas-apoyo';
 import { crearRepositorioCatalogos } from '../repositorios/catalogos';
-import { migraciones, versionEsquema } from './index';
+import { ejecutarMigraciones, migraciones, versionEsquema } from './index';
 
 /**
  * La 024 (rediseño pieza 7) agrega `nota_pendiente.detalle_json`: el detalle
@@ -23,6 +24,18 @@ describe('migracion 024: detalle de la nota pendiente (rediseño pieza 7)', () =
           where name = 'detalle_json'`,
       ),
     ).toEqual({ type: 'TEXT', notnull: 0, dflt_value: null });
+  });
+
+  it('borra el cursor del pull y deja los demas: el siguiente pull trae el detalle de todas', () => {
+    const bd = abrirBaseDatosNode();
+    ejecutarMigraciones(bd, migraciones.slice(0, 23));
+    bd.runSync(
+      `insert into sync_cursor (entidad, cursor, actualizado_en)
+       values ('pull', 'c1', '2026-11-25T10:00:00.000Z'), ('otra', 'c2', '2026-11-25T10:00:00.000Z')`,
+    );
+    ejecutarMigraciones(bd, migraciones);
+    expect(versionEsquema(bd)).toBe(migraciones.length);
+    expect(bd.getAllSync('select entidad from sync_cursor')).toEqual([{ entidad: 'otra' }]);
   });
 
   it('una nota guardada sin detalle queda en null', () => {
