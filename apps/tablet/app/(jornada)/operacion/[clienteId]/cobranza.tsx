@@ -23,11 +23,13 @@ import { useJawa } from '@/estado/proveedor-jawa';
 import { textoSaldoPendiente } from '@/estado/venta-pasos';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
+import { Chip } from '@/ui/chip';
 import { Cifra, pesos } from '@/ui/cifra';
 import { Icono } from '@/ui/icono';
+import { formatearFechaCorta } from '@/ui/momento';
 import { Pantalla, Pastilla, Tarjeta } from '@/ui/pantalla';
 import { useTema } from '@/ui/tema';
-import { colores, espacio, fuente, grosor, radio, tipo } from '@/ui/tokens';
+import { colores, espacio, fuente, grosor, tipo } from '@/ui/tokens';
 
 const METODOS: { valor: MetodoPago; etiqueta: string }[] = [
   { valor: 'efectivo', etiqueta: 'Efectivo' },
@@ -52,7 +54,12 @@ const ETIQUETA_OPCION: Record<OpcionCobro, string> = {
  */
 export default function PantallaCobranza() {
   // `notaId`: la nota que la ficha o la venta piden cobrar (`notaParaCobrar`).
-  const { clienteId, notaId: notaIdInicial } = useLocalSearchParams<{ clienteId: string; notaId?: string }>();
+  // `desde: 'venta'`: se llego desde "Ir a cobrar" de la venta; al grabar se regresa a ella.
+  const {
+    clienteId,
+    notaId: notaIdInicial,
+    desde,
+  } = useLocalSearchParams<{ clienteId: string; notaId?: string; desde?: string }>();
   const { datos, vendedor, versionCatalogos } = useJawa();
   const { estilos, t } = useTema();
   const insets = useSafeAreaInsets();
@@ -181,7 +188,7 @@ export default function PantallaCobranza() {
         <Tarjeta estado="listo" etiqueta="Cobro grabado">
           <Cifra valor={pesos(cobro.monto_centavos)} tamano="grande" />
           <Text style={estilos.textoSuave}>
-            En {NOMBRE_METODO[cobro.metodo_pago]} · pagado el {cobro.fecha_pago}
+            En {NOMBRE_METODO[cobro.metodo_pago]} · pagado el {formatearFechaCorta(cobro.fecha_pago)}
           </Text>
           {lineas.map((l) => (
             <Text key={l.notaId} style={estilos.textoTarjeta}>
@@ -205,10 +212,11 @@ export default function PantallaCobranza() {
             nota, el servidor pasa el dinero a las otras notas o al saldo a favor.
           </Text>
         </Tarjeta>
+        {/* `back` y no `dismissTo` la ruta: debajo esta la venta (que relee la nota al enfocarse) o la ficha. */}
         <Boton
-          etiqueta="Volver a la ruta"
+          etiqueta={desde === 'venta' ? 'Seguir con la venta' : 'Volver al cliente'}
           icono="atras"
-          onPress={() => router.dismissTo('/(jornada)')}
+          onPress={() => router.back()}
           estilo={{ marginTop: espacio.lg, marginBottom: espacio.xl }}
         />
       </Pantalla>
@@ -359,12 +367,12 @@ export default function PantallaCobranza() {
           </Text>
           {asignadaAlFrente?.etiqueta ? <Pastilla texto={asignadaAlFrente.etiqueta} estado="pendiente" /> : null}
         </View>
-        <Dato etiqueta="Fecha" valor={notaFrente.fecha} />
+        <Dato etiqueta="Fecha" valor={formatearFechaCorta(notaFrente.fecha)} />
         <Dato etiqueta="Total" valor={pesos(notaFrente.monto_total_centavos)} />
         {abonos.map((a, i) => (
           <Dato
             key={`${a.fecha_pago}-${i}`}
-            etiqueta={`Abonado (${a.fecha_pago}, ${NOMBRE_METODO[a.metodo_pago] ?? a.metodo_pago})`}
+            etiqueta={`Abonado (${formatearFechaCorta(a.fecha_pago)}, ${NOMBRE_METODO[a.metodo_pago] ?? a.metodo_pago})`}
             valor={pesos(a.monto_centavos)}
           />
         ))}
@@ -499,7 +507,7 @@ function NotaElegible({
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: espacio.sm }}>
         <View style={{ flex: 1, gap: espacio.xs }}>
           <Text style={estilos.textoTarjeta}>
-            Nota <Cifra valor={nota.folio} /> · {nota.fecha}
+            Nota <Cifra valor={nota.folio} /> · {formatearFechaCorta(nota.fecha)}
           </Text>
           <Text style={estilos.textoSuave}>
             Total <Cifra valor={pesos(nota.monto_total_centavos)} tono="suave" /> · debe{' '}
@@ -509,54 +517,6 @@ function NotaElegible({
         </View>
         <Icono nombre="adelante" tamano={20} color={colores.tintaSuave} />
       </View>
-    </Pressable>
-  );
-}
-
-/** Una opcion corta en tira (Liquidar / Abonar, metodo de pago); la misma de la venta. */
-function Chip({
-  etiqueta,
-  elegida,
-  onPress,
-  ancho = false,
-}: {
-  etiqueta: string;
-  elegida: boolean;
-  onPress: () => void;
-  /** Reparte el ancho de la fila entre las opciones. */
-  ancho?: boolean;
-}) {
-  const { dispositivo, t } = useTema();
-  return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ selected: elegida }}
-      accessibilityLabel={etiqueta}
-      onPress={onPress}
-      style={({ pressed }) => [
-        {
-          minHeight: Math.min(dispositivo.tactil, 48),
-          paddingHorizontal: espacio.md,
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: radio.chico,
-          borderWidth: grosor.fuerte,
-          borderColor: elegida ? colores.primario : colores.borde,
-          backgroundColor: elegida ? colores.primarioTenue : colores.superficie,
-        },
-        ancho && { flex: 1 },
-        pressed && { transform: [{ translateY: grosor.fuerte }], opacity: 0.9 },
-      ]}
-    >
-      <Text
-        style={{
-          fontFamily: fuente.cuerpoFuerte,
-          fontSize: t(tipo.cuerpo),
-          color: elegida ? colores.primario : colores.tinta,
-        }}
-      >
-        {etiqueta}
-      </Text>
     </Pressable>
   );
 }

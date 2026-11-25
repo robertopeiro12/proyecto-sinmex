@@ -1,4 +1,4 @@
-import { formatearHora, formatearMomento } from './momento';
+import { formatearFechaCorta, formatearHora, formatearMomento } from './momento';
 
 /**
  * Las fechas se construyen con componentes LOCALES (`new Date(2026, 9, 10, 11, 2)`)
@@ -40,5 +40,19 @@ describe('formatearHora (T-39)', () => {
   it('sin hora o con basura dice --:--', () => {
     expect(formatearHora(null)).toBe('--:--');
     expect(formatearHora('no es fecha')).toBe('--:--');
+  });
+});
+
+describe('formatearFechaCorta', () => {
+  it.each([
+    ['2026-11-03', '3 nov 2026'],
+    ['2026-01-31', '31 ene 2026'],
+    ['2025-12-10', '10 dic 2025'],
+  ])('%s -> %s', (fecha, esperado) => {
+    expect(formatearFechaCorta(fecha)).toBe(esperado);
+  });
+
+  it.each(['', 'ayer', '2026-13-01', '2026-11-00', '2026-11-03T10:00:00Z'])('deja tal cual lo que no es AAAA-MM-DD: %p', (fecha) => {
+    expect(formatearFechaCorta(fecha)).toBe(fecha);
   });
 });

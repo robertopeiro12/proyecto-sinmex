@@ -40,6 +40,7 @@ import {
 } from '@/estado/venta-pasos';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
+import { Chip } from '@/ui/chip';
 import { Cifra, pesos } from '@/ui/cifra';
 import { Icono } from '@/ui/icono';
 import { Pantalla, Tarjeta } from '@/ui/pantalla';
@@ -711,7 +712,10 @@ export default function PantallaVenta() {
             onPress={() =>
               router.push({
                 pathname: '/(jornada)/operacion/[clienteId]/cobranza',
-                params: notaACobrar ? { clienteId, notaId: notaACobrar } : { clienteId },
+                // `desde: 'venta'`: al grabar, Cobrar regresa aqui ("Seguir con la venta").
+                params: notaACobrar
+                  ? { clienteId, notaId: notaACobrar, desde: 'venta' }
+                  : { clienteId, desde: 'venta' },
               })
             }
             estilo={{ marginTop: espacio.sm }}
@@ -882,53 +886,6 @@ function Palomita({ encendida }: { encendida: boolean }) {
   );
 }
 
-/** Una opcion corta en tira (presentacion de la promocion, forma de cobro). */
-function Chip({
-  etiqueta,
-  elegida,
-  onPress,
-  ancho = false,
-}: {
-  etiqueta: string;
-  elegida: boolean;
-  onPress: () => void;
-  /** Reparte el ancho de la fila entre las opciones. */
-  ancho?: boolean;
-}) {
-  const { dispositivo, t } = useTema();
-  return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ selected: elegida }}
-      accessibilityLabel={etiqueta}
-      onPress={onPress}
-      style={({ pressed }) => [
-        {
-          minHeight: Math.min(dispositivo.tactil, 48),
-          paddingHorizontal: espacio.md,
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderRadius: radio.chico,
-          borderWidth: grosor.fuerte,
-          borderColor: elegida ? colores.primario : colores.borde,
-          backgroundColor: elegida ? colores.primarioTenue : colores.superficie,
-        },
-        ancho && { flex: 1 },
-        pressed && { transform: [{ translateY: grosor.fuerte }], opacity: 0.9 },
-      ]}
-    >
-      <Text
-        style={{
-          fontFamily: fuente.cuerpoFuerte,
-          fontSize: t(tipo.cuerpo),
-          color: elegida ? colores.primario : colores.tinta,
-        }}
-      >
-        {etiqueta}
-      </Text>
-    </Pressable>
-  );
-}
 
 /** Un renglon de la nota: "12 × Jamaica 500 ml" y su importe. */
 function LineaNota({ texto, importe }: { texto: string; importe: number }) {

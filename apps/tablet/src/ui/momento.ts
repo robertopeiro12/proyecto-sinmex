@@ -32,3 +32,20 @@ export function formatearHora(iso: string | null): string {
   const dos = (n: number) => `${n}`.padStart(2, '0');
   return `${dos(d.getHours())}:${dos(d.getMinutes())}`;
 }
+
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+
+/**
+ * Una fecha de calendario `AAAA-MM-DD` (la de una nota o un abono) como la lee el
+ * vendedor: `3 nov 2026`. Se lee del texto, sin `Date`: una fecha sin hora no
+ * tiene zona y `new Date('2026-11-03')` es medianoche UTC (el 2 en Tijuana).
+ * Lo que no tenga esa forma sale tal cual.
+ */
+export function formatearFechaCorta(fecha: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha);
+  if (!m) return fecha;
+  const mes = MESES_CORTOS[Number(m[2]) - 1];
+  const dia = Number(m[3]);
+  if (mes === undefined || dia < 1 || dia > 31) return fecha;
+  return `${dia} ${mes} ${m[1]}`;
+}
