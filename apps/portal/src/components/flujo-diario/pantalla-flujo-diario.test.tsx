@@ -352,8 +352,13 @@ describe("PantallaFlujoDiario", () => {
     await screen.findByRole("table", { name: "Por vendedor" });
     await u.click(screen.getByRole("tab", { name: "Resultados por día" }));
     const tabla = screen.getByRole("table", { name: "Por día" });
-    const texto = within(tabla).getByText("Faltan: 7 pz p/Almacen · 2 pz merma");
-    expect(texto.closest("button")).toBeNull();
+    // Misma pastilla que Por vendedor: en dos renglones para que quepa, pero no es botón.
+    const parte = within(tabla).getByText("Faltan: 7 pz p/Almacen");
+    expect(parte).toHaveClass("block");
+    const etiqueta = parte.closest("[data-tono]")!;
+    expect(etiqueta).toHaveAttribute("data-tono", "error");
+    expect(etiqueta).toHaveTextContent("Faltan: 7 pz p/Almacen · 2 pz merma");
+    expect(parte.closest("button")).toBeNull();
     expect(within(tabla).queryByText("Pronto")).not.toBeInTheDocument();
   });
 

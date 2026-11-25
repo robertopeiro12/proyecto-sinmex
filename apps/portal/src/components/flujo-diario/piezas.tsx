@@ -257,7 +257,6 @@ export function BotonRenglon({ children, onClick }: { children: ReactNode; onCli
  */
 export function PastillaCorte({ corte, etiqueta, onClick }: { corte: EstadoCorteFila; etiqueta: string; onClick: () => void }) {
   const { texto, tono } = etiquetaEstadoCorte(corte);
-  const partes = texto.split(" · ");
   return (
     <button
       type="button"
@@ -269,18 +268,27 @@ export function PastillaCorte({ corte, etiqueta, onClick }: { corte: EstadoCorte
       }}
       className="rounded-full outline-none focus-visible:ring-2 focus-visible:ring-sucursal"
     >
-      {partes.length > 1 ? (
-        <Etiqueta tono={tono} className="flex-col rounded-[10px] py-1 leading-tight whitespace-normal">
-          {partes.map((p, i) => (
-            <span key={i} className="block">
-              {i > 0 && <span className="sr-only">{" · "}</span>}
-              {p}
-            </span>
-          ))}
-        </Etiqueta>
-      ) : (
-        <Etiqueta tono={tono}>{texto}</Etiqueta>
-      )}
+      <EtiquetaPartida texto={texto} tono={tono} />
     </button>
+  );
+}
+
+/**
+ * Una etiqueta cuyo texto puede traer " · " ("Faltan: 1 pz p/Almacen · 1 pz merma"): con dos partes se pinta en dos
+ * renglones para que quepa en su columna (el " · " queda para el lector de pantalla; `relative` lo encierra: sin él, ese texto invisible se escapaba de la caja de la tabla y la página se desplazaba de lado). La usan la pastilla del corte
+ * (Por vendedor y Dashboard) y la columna Inventario de "Por día".
+ */
+export function EtiquetaPartida({ texto, tono }: { texto: string; tono: "neutro" | "exito" | "error" }) {
+  const partes = texto.split(" · ");
+  if (partes.length < 2) return <Etiqueta tono={tono}>{texto}</Etiqueta>;
+  return (
+    <Etiqueta tono={tono} className="relative flex-col rounded-[10px] py-1 leading-tight whitespace-normal">
+      {partes.map((p, i) => (
+        <span key={i} className="block">
+          {i > 0 && <span className="sr-only">{" · "}</span>}
+          {p}
+        </span>
+      ))}
+    </Etiqueta>
   );
 }
