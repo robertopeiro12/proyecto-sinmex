@@ -1,15 +1,20 @@
 import type { NotaAsignadaDeHoy } from '@/datos/notas-asignadas-reglas';
 import type { NotaQueTrae } from '@/datos/repositorios/notas-asignadas';
+import type { SistemaCorte } from '@/datos/repositorios/cortes';
+
 import {
+  apartadosDesactualizados,
   capturaParaEnviar,
   corteDisponible,
   efectivoEsperado,
+  huellaApartado,
   inventarioCapturado,
   inventarioDelCorte,
   leerPiezas,
   notasDelCorte,
   puedeEnviarCorte,
   resumenDelDia,
+  textoApartadoCambio,
   textoFaltanPorVisitar,
   textoMontoCaptura,
   textoNotasQueTraes,
@@ -252,16 +257,13 @@ const INVENTARIO = {
 };
 
 describe('inventarioCapturado (cerrar Inventario)', () => {
-  it('lo que no se tocó se guarda con lo del sistema (prellenado), no como 0', () => {
-    expect(inventarioCapturado(INVENTARIO, {}, undefined)).toEqual({
-      inventarioContado: { p1: 8, p2: 6 },
-      mermaContada: 5,
-    });
+  it('sin tocar nada no congela nada: lo no tocado sigue al sistema', () => {
+    expect(inventarioCapturado(INVENTARIO, {}, undefined)).toEqual({ inventarioContado: {}, mermaContada: null });
   });
 
-  it('lo corregido gana; un renglón que ya no está en el sistema se descarta', () => {
+  it('guarda solo lo corregido; un renglón que ya no está en el sistema se descarta', () => {
     expect(inventarioCapturado(INVENTARIO, { p1: '7', viejo: '3' }, '4')).toEqual({
-      inventarioContado: { p1: 7, p2: 6 },
+      inventarioContado: { p1: 7 },
       mermaContada: 4,
     });
   });
@@ -270,6 +272,73 @@ describe('inventarioCapturado (cerrar Inventario)', () => {
     expect(inventarioCapturado(INVENTARIO, { p1: '' }, undefined)).toBeNull();
     expect(inventarioCapturado(INVENTARIO, { p2: '1.5' }, undefined)).toBeNull();
     expect(inventarioCapturado(INVENTARIO, {}, '-1')).toBeNull();
+  });
+});
+
+const SISTEMA: SistemaCorte = {
+  efectivo: efectivoEsperado({ ventas: VENTAS, cobros: COBROS, gastos: GASTOS }),
+  notas: [
+    { clave: 'nota:F1', folio: 'F1', cliente: 'A', estado: 'pendiente', detalle: 'pendiente', montoTexto: '$500.00', saldoCentavos: 50000 },
+  ],
+  inventario: INVENTARIO,
+};
+const huellas = (sistema: SistemaCorte) => ({
+  efectivo: huellaApartado('efectivo', sistema),
+  notas: huellaApartado('notas', sistema),
+  inventario: huellaApartado('inventario', sistema),
+});
+
+describe('apartados cerrados que cambiaron (huellas)', () => {
+  const cerrados = ['efectivo' as const, 'notas' as const, 'inventario' as const];
+
+  it('con el sistema igual, ninguno', () => {
+    expect(apartadosDesactualizados({ cerrados, huellas: huellas(SISTEMA) }, SISTEMA)).toEqual([]);
+  });
+
+  it('una venta de contado cambia lo que debe traer: se reabre Efectivo', () => {
+    const despues = {
+      ...SISTEMA,
+      efectivo: efectivoEsperado({
+        ventas: [...VENTAS, { contado_credito: 'contado' as const, monto_total_centavos: 1000, abono_centavos: null }],
+        cobros: COBROS,
+        gastos: GASTOS,
+      }),
+    };
+    expect(apartadosDesactualizados({ cerrados, huellas: huellas(SISTEMA) }, despues)).toEqual(['efectivo']);
+  });
+
+  it('una nota nueva o un saldo distinto reabre Notas', () => {
+    const nueva = { ...SISTEMA.notas[0]!, clave: 'nota:F2', folio: 'F2' };
+    expect(
+      apartadosDesactualizados({ cerrados, huellas: huellas(SISTEMA) }, { ...SISTEMA, notas: [...SISTEMA.notas, nueva] }),
+    ).toEqual(['notas']);
+    const abonada = [{ ...SISTEMA.notas[0]!, saldoCentavos: 10000 }];
+    expect(apartadosDesactualizados({ cerrados, huellas: huellas(SISTEMA) }, { ...SISTEMA, notas: abonada })).toEqual([
+      'notas',
+    ]);
+  });
+
+  it('un renglón que baja, sale o aparece, o la merma, reabre Inventario', () => {
+    const conInventario = (inventario: SistemaCorte['inventario']) =>
+      apartadosDesactualizados({ cerrados, huellas: huellas(SISTEMA) }, { ...SISTEMA, inventario });
+    const [p1, p2] = INVENTARIO.renglones;
+    expect(conInventario({ ...INVENTARIO, renglones: [{ ...p1!, sistema: 6 }, p2!] })).toEqual(['inventario']);
+    expect(conInventario({ ...INVENTARIO, renglones: [p2!] })).toEqual(['inventario']);
+    expect(conInventario({ ...INVENTARIO, mermaSistema: 6 })).toEqual(['inventario']);
+    // El orden de los renglones no cuenta.
+    expect(conInventario({ ...INVENTARIO, renglones: [p2!, p1!] })).toEqual([]);
+  });
+
+  it('solo los cerrados; uno cerrado sin huella se reabre', () => {
+    expect(apartadosDesactualizados({ cerrados: [], huellas: {} }, SISTEMA)).toEqual([]);
+    expect(apartadosDesactualizados({ cerrados: ['notas'], huellas: {} }, SISTEMA)).toEqual(['notas']);
+    expect(apartadosDesactualizados({ cerrados: ['notas'] }, SISTEMA)).toEqual(['notas']);
+  });
+
+  it('textoApartadoCambio', () => {
+    expect(textoApartadoCambio('inventario')).toBe(
+      'Cambió Inventario desde que lo cerraste. Revísalo y ciérralo otra vez.',
+    );
   });
 });
 
@@ -282,7 +351,7 @@ describe('capturaParaEnviar', () => {
     cerrados: ['efectivo' as const, 'notas' as const, 'inventario' as const],
   };
 
-  it('un renglón que apareció después de cerrar Inventario sale con lo del sistema', () => {
+  it('lo no corregido sale con lo del sistema al enviar; lo corregido y lo de fuera del sistema se conservan', () => {
     expect(capturaParaEnviar(captura, INVENTARIO)).toEqual({
       ...captura,
       inventarioContado: { p1: 7, p2: 6, extra: 2 },

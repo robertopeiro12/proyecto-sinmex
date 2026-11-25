@@ -7,15 +7,18 @@ import { leerMontoCentavos } from '@/datos/cobranzas-reglas';
 import type { CapturaCorte, SistemaCorte } from '@/datos/repositorios/cortes';
 import {
   APARTADOS,
+  apartadosDesactualizados,
   capturaParaEnviar,
   corteDisponible,
   efectivoEsperado,
+  huellaApartado,
   inventarioCapturado,
   inventarioDelCorte,
   leerPiezas,
   notasDelCorte,
   puedeEnviarCorte,
   resumenDelDia,
+  textoApartadoCambio,
   textoFaltanPorVisitar,
   textoMontoCaptura,
   textoNotasQueTraes,
@@ -45,6 +48,7 @@ const CAPTURA_VACIA: CapturaCorte = {
   inventarioContado: {},
   mermaContada: null,
   cerrados: [],
+  huellas: {},
 };
 
 const TITULO_APARTADO: Record<Apartado, string> = {
@@ -67,6 +71,13 @@ const aTextos = (contado: Record<string, number>): Record<string, string> =>
  * (`textoConfirmarCierre`) y cierra el dia con el corte en una sola transaccion
  * (`jornadas.cerrarConCorte`). Lo que el sistema espera se calcula **al
  * enviar**, con las reglas puras de `src/estado/corte.ts`.
+ *
+ * El dia sigue abierto mientras se hace el corte (se puede vender, cobrar,
+ * gastar o registrar merma). Al cerrar un apartado se guarda la huella de lo
+ * que decia el sistema (`huellaApartado`); si cambia, el apartado se reabre
+ * solo con un aviso y Corte se apaga (`apartadosDesactualizados`), al pintar y
+ * otra vez al enviar. Los renglones de inventario que el vendedor no corrigio
+ * no se congelan: siguen al sistema.
  *
  * El menu apaga Corte con clientes por visitar (`corteDisponible`); si se llega
  * por un enlace directo, la pantalla repite la regla y solo avisa. Con el dia
@@ -186,9 +197,17 @@ function CapturaDelCorte({
   const [error, setError] = useState<string | null>(null);
   const [pidiendoKm, setPidiendoKm] = useState(false);
   const [km, setKm] = useState('');
+  // Apartados que se reabrieron solos porque el sistema cambio despues de cerrarlos.
+  const [cambiados, setCambiados] = useState<Apartado[]>([]);
   const enviando = useRef(false);
 
-  const cerrados = new Set(captura.cerrados);
+  // Un apartado cerrado cuyo sistema cambio (una venta, un cobro, un gasto o
+  // una merma despues de cerrarlo) se pinta abierto, con su aviso, hasta que se
+  // vuelva a cerrar (eso guarda la huella nueva). Al enviar se revisa otra vez
+  // contra lo mas nuevo y ahi se reabre tambien en el borrador.
+  const desactualizados = apartadosDesactualizados(captura, sistema);
+  const avisos = APARTADOS.filter((a) => desactualizados.includes(a) || cambiados.includes(a));
+  const cerrados = new Set(captura.cerrados.filter((a) => !desactualizados.includes(a)));
   const cerrado = cerrados.has(pestana);
 
   /** Guarda el borrador; si falla (dia cerrado en otra pantalla, por ejemplo) lo dice. */
@@ -204,7 +223,21 @@ function CapturaDelCorte({
 
   const cerrar = (apartado: Apartado, parcial: Partial<CapturaCorte> = {}) => {
     setError(null);
-    guardar({ ...parcial, cerrados: [...captura.cerrados.filter((a) => a !== apartado), apartado] });
+    setCambiados((previos) => previos.filter((a) => a !== apartado));
+    guardar({
+      ...parcial,
+      cerrados: [...captura.cerrados.filter((a) => a !== apartado), apartado],
+      huellas: { ...captura.huellas, [apartado]: huellaApartado(apartado, sistema) },
+    });
+  };
+
+  /** Reabre los apartados cerrados cuyo sistema cambio; `true` si reabrio alguno. */
+  const reabrirDesactualizados = (actual: SistemaCorte): boolean => {
+    const viejos = apartadosDesactualizados(captura, actual);
+    if (viejos.length === 0) return false;
+    setCambiados((previos) => [...previos.filter((a) => !viejos.includes(a)), ...viejos]);
+    guardar({ cerrados: captura.cerrados.filter((a) => !viejos.includes(a)) });
+    return true;
   };
   const reabrir = (apartado: Apartado) => {
     setError(null);
@@ -256,9 +289,7 @@ function CapturaDelCorte({
   const inventarioListo = inventarioCapturado(sistema.inventario, piezas, mermaTexto);
   const cerrarInventario = () => {
     if (!inventarioListo) return;
-    // Lo que no se toco se guarda con lo del sistema: sin esto subiria como 0.
-    setPiezas(aTextos(inventarioListo.inventarioContado));
-    setMermaTexto(String(inventarioListo.mermaContada));
+    // Solo lo corregido; lo demas sigue al sistema y sale con el al enviar (`capturaParaEnviar`).
     cerrar('inventario', inventarioListo);
   };
 
@@ -275,9 +306,15 @@ function CapturaDelCorte({
       enviando.current = false;
       return;
     }
+    // Si algo cambio desde que se cerro un apartado, se reabre y no se envia.
+    if (reabrirDesactualizados(actual)) {
+      enviando.current = false;
+      setPidiendoKm(false);
+      return;
+    }
     // La escritura y lo que sigue van separados: si refrescar o sincronizar
-    // fallan, el dia YA esta cerrado y el corte guardado (ver la nota de T-38
-    // que vivia en `cerrar-dia.tsx`).
+    // fallan, el dia YA esta cerrado y el corte guardado (T-38: un fallo al
+    // refrescar no puede decir "no se cerro" con el dia ya cerrado).
     try {
       datos.jornadas.cerrarConCorte(jornadaId, kmNumero, {
         captura: capturaParaEnviar(captura, actual.inventario),
@@ -364,6 +401,12 @@ function CapturaDelCorte({
           keyboardShouldPersistTaps="handled"
         >
           <TarjetaResumen resumen={resumen} />
+
+          {avisos.map((a) => (
+            <Tarjeta key={a} estado="pendiente">
+              <Text style={estilos.textoTarjeta}>{textoApartadoCambio(a)}</Text>
+            </Tarjeta>
+          ))}
 
           {pestana === 'efectivo' ? (
             <>

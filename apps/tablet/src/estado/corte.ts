@@ -1,5 +1,5 @@
 import { leerReparto } from '@/datos/cobranzas-reglas';
-import type { CapturaCorte } from '@/datos/repositorios/cortes';
+import type { CapturaCorte, SistemaCorte } from '@/datos/repositorios/cortes';
 import type { CandadoClientes } from '@/datos/inventario-reglas';
 import type { NotaAsignadaDeHoy } from '@/datos/notas-asignadas-reglas';
 import type { NotaQueTrae } from '@/datos/repositorios/notas-asignadas';
@@ -281,33 +281,86 @@ export function textoMontoCaptura(centavos: number | null): string {
 }
 
 /**
- * Lo que queda al **cerrar** el apartado Inventario (maqueta 24): un conteo por
- * cada renglon del sistema y la merma. Un campo que el vendedor no toco
- * (`piezas` sin llave, `merma` `undefined`) vale lo que dice el sistema: viene
- * prellenado, y sin guardarlo subiria como 0. Un campo tocado que no es un
- * entero >= 0 (vacio incluido) no deja cerrar: `null`.
+ * Lo que se guarda al **cerrar** el apartado Inventario (maqueta 24): solo lo
+ * que el vendedor escribio (`piezas` con llave, `merma` definida), de los
+ * renglones que el sistema trae hoy. Lo que no toco no se congela: sigue
+ * mostrando, y al enviar lleva, lo que diga el sistema en ese momento
+ * (`capturaParaEnviar`). Un campo tocado que no es un entero >= 0 (vacio
+ * incluido) no deja cerrar: `null`.
  */
 export function inventarioCapturado(
   inventario: InventarioDelCorte,
   piezas: Readonly<Record<string, string>>,
   merma: string | undefined,
-): Pick<CapturaCorte, 'inventarioContado'> & { mermaContada: number } | null {
+): (Pick<CapturaCorte, 'inventarioContado' | 'mermaContada'>) | null {
   const inventarioContado: Record<string, number> = {};
   for (const r of inventario.renglones) {
     const texto = piezas[r.presentacionId];
-    const contado = texto === undefined ? r.sistema : leerPiezas(texto);
+    if (texto === undefined) continue;
+    const contado = leerPiezas(texto);
     if (contado === null) return null;
     inventarioContado[r.presentacionId] = contado;
   }
-  const mermaContada = merma === undefined ? inventario.mermaSistema : leerPiezas(merma);
-  if (mermaContada === null) return null;
-  return { inventarioContado, mermaContada };
+  if (merma === undefined) return { inventarioContado, mermaContada: null };
+  const mermaContada = leerPiezas(merma);
+  return mermaContada === null ? null : { inventarioContado, mermaContada };
 }
 
 /**
- * La captura que se envia con el corte. El dia sigue abierto despues de cerrar
- * Inventario: si una venta o una merma posterior agrego un renglon al sistema,
- * ese renglon sale con lo del sistema (no con 0); igual la merma sin contar.
+ * La huella de lo que dice el sistema en un apartado. Se guarda al cerrarlo;
+ * si despues cambia (una venta, un cobro, un gasto o una merma con el apartado
+ * cerrado), el apartado se reabre para que el vendedor lo revise: lo que
+ * capturo se comparo contra otros numeros.
+ *
+ * - Efectivo: lo que debe traer.
+ * - Notas: cada nota con su saldo.
+ * - Inventario: cada renglon con su sistema, y la merma.
+ */
+export function huellaApartado(apartado: Apartado, sistema: SistemaCorte): string {
+  switch (apartado) {
+    case 'efectivo':
+      return String(sistema.efectivo.debeTraerCentavos);
+    case 'notas':
+      return sistema.notas
+        .map((n) => `${n.clave}=${n.saldoCentavos}`)
+        .sort()
+        .join('|');
+    case 'inventario':
+      return [
+        ...sistema.inventario.renglones.map((r) => `${r.presentacionId}=${r.sistema}`).sort(),
+        `merma=${sistema.inventario.mermaSistema}`,
+      ].join('|');
+  }
+}
+
+/**
+ * Los apartados cerrados cuya huella ya no es la del sistema de hoy (o que no
+ * la tienen): hay que reabrirlos. En el orden de las pestañas.
+ */
+export function apartadosDesactualizados(
+  captura: Pick<CapturaCorte, 'cerrados' | 'huellas'>,
+  sistema: SistemaCorte,
+): Apartado[] {
+  return APARTADOS.filter(
+    (a) => captura.cerrados.includes(a) && captura.huellas?.[a] !== huellaApartado(a, sistema),
+  );
+}
+
+const NOMBRE_APARTADO: Record<Apartado, string> = {
+  efectivo: 'Efectivo',
+  notas: 'Notas',
+  inventario: 'Inventario',
+};
+
+/** El aviso de un apartado que se reabrio solo. */
+export function textoApartadoCambio(apartado: Apartado): string {
+  return `Cambió ${NOMBRE_APARTADO[apartado]} desde que lo cerraste. Revísalo y ciérralo otra vez.`;
+}
+
+/**
+ * La captura que se envia con el corte: cada renglon del sistema que el
+ * vendedor no corrigio lleva lo que dice el sistema al enviar (sin esto
+ * subiria como 0, `fuente-cortes`); igual la merma sin tocar.
  */
 export function capturaParaEnviar(captura: CapturaCorte, inventario: InventarioDelCorte): CapturaCorte {
   const inventarioContado = { ...captura.inventarioContado };

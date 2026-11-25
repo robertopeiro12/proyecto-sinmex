@@ -39,6 +39,12 @@ export interface CapturaCorte {
   mermaContada: number | null;
   /** Apartados que el vendedor ya cerro. */
   cerrados: ApartadoCorte[];
+  /**
+   * La huella de lo que decia el sistema en cada apartado al cerrarlo
+   * (`huellaApartado`, `src/estado/corte.ts`): si cambia despues, el apartado
+   * se reabre. Solo en el borrador; no sube.
+   */
+  huellas?: Partial<Record<ApartadoCorte, string>>;
 }
 
 /** = `EfectivoEsperado` de `src/estado/corte.ts`. */
@@ -127,7 +133,8 @@ interface FilaCorte {
 //   inventario_json { contado: {[presentacionId]: number}, mermaContada: number|null,
 //                     sistema?: InventarioSistemaCorte }
 //   cerrados_json   ApartadoCorte[]
-// `sistema` solo existe en un corte enviado.
+// `sistema` solo existe en un corte enviado. Cada apartado puede llevar
+// ademas `huella: string` (la de `CapturaCorte.huellas`).
 // --------------------------------------------------------------------------
 
 function leerJson(texto: string): unknown {
@@ -161,6 +168,16 @@ function aCorte(fila: FilaCorte): Corte {
     }
   }
 
+  const huellas: Partial<Record<ApartadoCorte, string>> = {};
+  const partes: [ApartadoCorte, unknown][] = [
+    ['efectivo', efectivo],
+    ['notas', notas],
+    ['inventario', inventario],
+  ];
+  for (const [apartado, json] of partes) {
+    if (esObjeto(json) && typeof json.huella === 'string') huellas[apartado] = json.huella;
+  }
+
   const captura: CapturaCorte = {
     efectivoTraidoCentavos: esObjeto(efectivo) ? cantidadONulo(efectivo.traidoCentavos) : null,
     notasTraidas:
@@ -172,6 +189,7 @@ function aCorte(fila: FilaCorte): Corte {
     cerrados: Array.isArray(cerrados)
       ? cerrados.filter((a): a is ApartadoCorte => APARTADOS_CORTE.includes(a as ApartadoCorte))
       : [],
+    huellas,
   };
 
   const sistema: SistemaCorte | null =
@@ -222,12 +240,19 @@ function validarCaptura(captura: CapturaCorte): CapturaCorte {
   if (!captura.cerrados.every((a) => APARTADOS_CORTE.includes(a))) {
     throw new ErrorCorte('Apartado del corte no válido.');
   }
+  const huellas = captura.huellas ?? {};
+  for (const [apartado, huella] of Object.entries(huellas)) {
+    if (!APARTADOS_CORTE.includes(apartado as ApartadoCorte) || typeof huella !== 'string') {
+      throw new ErrorCorte('Huella del corte no válida.');
+    }
+  }
   return {
     efectivoTraidoCentavos: captura.efectivoTraidoCentavos,
     notasTraidas: sinRepetidos(captura.notasTraidas),
     inventarioContado: { ...captura.inventarioContado },
     mermaContada: captura.mermaContada,
     cerrados: sinRepetidos(captura.cerrados),
+    huellas: { ...huellas },
   };
 }
 
@@ -237,6 +262,7 @@ const CAPTURA_VACIA: CapturaCorte = {
   inventarioContado: {},
   mermaContada: null,
   cerrados: [],
+  huellas: {},
 };
 
 function filaDeJornada(bd: DepsRepositorio['bd'], jornadaId: string): FilaCorte | null {
@@ -255,18 +281,25 @@ function escribir(
   captura: CapturaCorte,
   envio: { sistema: SistemaCorte; enviadoEn: MomentoISO } | null,
 ): void {
+  const huella = (a: ApartadoCorte) => {
+    const h = captura.huellas?.[a];
+    return h === undefined ? {} : { huella: h };
+  };
   const valores = {
     $efectivo_json: JSON.stringify({
       traidoCentavos: captura.efectivoTraidoCentavos,
+      ...huella('efectivo'),
       ...(envio ? { sistema: envio.sistema.efectivo } : {}),
     }),
     $notas_json: JSON.stringify({
       traidas: captura.notasTraidas,
+      ...huella('notas'),
       ...(envio ? { sistema: envio.sistema.notas } : {}),
     }),
     $inventario_json: JSON.stringify({
       contado: captura.inventarioContado,
       mermaContada: captura.mermaContada,
+      ...huella('inventario'),
       ...(envio ? { sistema: envio.sistema.inventario } : {}),
     }),
     $cerrados_json: JSON.stringify(captura.cerrados),

@@ -33,7 +33,11 @@ describe('repositorio de cortes', () => {
 
     it('se conserva entre lecturas y entre instancias del repositorio', () => {
       const { deps, cortes, jornada } = conCortes();
-      cortes.guardarBorrador(jornada.id, { efectivoTraidoCentavos: 12345, cerrados: ['efectivo'] });
+      cortes.guardarBorrador(jornada.id, {
+        efectivoTraidoCentavos: 12345,
+        cerrados: ['efectivo'],
+        huellas: { efectivo: '75000' },
+      });
 
       const otra = crearRepositorioCortes(deps);
       expect(otra.borrador(jornada.id)).toEqual({
@@ -44,6 +48,7 @@ describe('repositorio de cortes', () => {
         inventarioContado: {},
         mermaContada: null,
         cerrados: ['efectivo'],
+        huellas: { efectivo: '75000' },
       });
       expect(otra.borrador(jornada.id)).toEqual(cortes.borrador(jornada.id));
     });
@@ -62,6 +67,7 @@ describe('repositorio de cortes', () => {
         inventarioContado: { 'pre-1': 3 },
         mermaContada: 1,
         cerrados: [],
+        huellas: {},
       });
     });
 
