@@ -40,7 +40,7 @@ import {
   type PasoVenta,
   type TeclaNumerica,
 } from '@/estado/venta-pasos';
-import { AVISO_NO_IMPRESO, ticketDeVenta } from '@/impresion/datos-ticket';
+import { avisoNoImpreso, ticketDeVenta } from '@/impresion/datos-ticket';
 import { useImpresion } from '@/impresion/usar-impresion';
 import { Boton } from '@/ui/boton';
 import { Campo } from '@/ui/campo';
@@ -146,6 +146,8 @@ export default function PantallaVenta() {
   const [grabada, setGrabada] = useState<Venta | null>(null);
   /** Rediseño pieza 7: la nota se imprime despues de grabar; un fallo solo avisa. */
   const [impresion, setImpresion] = useState<'imprimiendo' | 'enviada' | 'no-impresa' | null>(null);
+  /** El motivo de la nota sin imprimir, para el vendedor (pieza 7b). */
+  const [motivoNoImpresa, setMotivoNoImpresa] = useState<string | undefined>(undefined);
   const { imprimirTickets } = useImpresion();
   /** Guardia de doble toque: un segundo toque en "Grabar" no emite otro folio. */
   const [guardia] = useState(() => crearGuardiaRegistro());
@@ -376,7 +378,14 @@ export default function PantallaVenta() {
         {impresion === 'imprimiendo' ? <Text style={estilos.textoSuave}>Imprimiendo la nota…</Text> : null}
         {impresion === 'no-impresa' ? (
           <Tarjeta estado="pendiente" etiqueta="Nota sin imprimir">
-            <Text style={estilos.textoTarjeta}>{AVISO_NO_IMPRESO}</Text>
+            <Text style={estilos.textoTarjeta}>{avisoNoImpreso(motivoNoImpresa)}</Text>
+            <Boton
+              etiqueta="Seleccionar impresora"
+              icono="impresora"
+              tono="neutra"
+              onPress={() => router.push('/(jornada)/impresora')}
+              estilo={{ marginTop: espacio.md }}
+            />
           </Tarjeta>
         ) : null}
         <Boton
@@ -501,7 +510,9 @@ export default function PantallaVenta() {
       } catch {
         // Sin ticket: se avisa abajo, como cualquier impresion que no salio.
       }
-      setImpresion((await imprimirTickets([ticket])) ? 'enviada' : 'no-impresa');
+      const r = await imprimirTickets([ticket]);
+    setMotivoNoImpresa(r.ok ? undefined : r.detalle);
+    setImpresion(r.ok ? 'enviada' : 'no-impresa');
     }
 
     function grabar() {

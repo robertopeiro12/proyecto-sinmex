@@ -18,7 +18,7 @@ import {
 import { motivoDeRechazo } from '@/estado/ruta-del-dia';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { useSesion } from '@/estado/proveedor-sesion';
-import { AVISO_NO_IMPRESO, ticketDeVentaParaReimprimir, ticketsDelCobro } from '@/impresion/datos-ticket';
+import { avisoNoImpreso, ticketDeVentaParaReimprimir, ticketsDelCobro } from '@/impresion/datos-ticket';
 import type { DatosTicket } from '@/impresion/ticket';
 import { useImpresion } from '@/impresion/usar-impresion';
 import { Boton } from '@/ui/boton';
@@ -173,11 +173,12 @@ function Reimprimir({
   const { estilos } = useTema();
   const { imprimirTickets } = useImpresion();
   const [imprimiendo, setImprimiendo] = useState(false);
-  const [noImpresa, setNoImpresa] = useState(false);
+  /** `null`: no hay aviso; si no, el aviso con el motivo (pieza 7b). */
+  const [noImpresa, setNoImpresa] = useState<string | null>(null);
 
   const reimprimir = async () => {
     setImprimiendo(true);
-    setNoImpresa(false);
+    setNoImpresa(null);
     try {
       let tickets: (DatosTicket | null)[] = [null];
       try {
@@ -185,7 +186,8 @@ function Reimprimir({
       } catch {
         // Se avisa como cualquier impresion que no salio.
       }
-      setNoImpresa(!(await imprimirTickets(tickets)));
+      const r = await imprimirTickets(tickets);
+      setNoImpresa(r.ok ? null : avisoNoImpreso(r.detalle));
     } finally {
       setImprimiendo(false);
     }
@@ -193,7 +195,17 @@ function Reimprimir({
 
   return (
     <View style={{ marginTop: espacio.lg, marginBottom: espacio.xl, gap: espacio.sm }}>
-      {noImpresa ? <Text style={estilos.error}>{AVISO_NO_IMPRESO}</Text> : null}
+      {noImpresa !== null ? (
+        <>
+          <Text style={estilos.error}>{noImpresa}</Text>
+          <Boton
+            etiqueta="Seleccionar impresora"
+            icono="impresora"
+            tono="neutra"
+            onPress={() => router.push('/(jornada)/impresora')}
+          />
+        </>
+      ) : null}
       <Boton etiqueta="Reimprimir" icono="impresora" onPress={() => void reimprimir()} ocupado={imprimiendo} />
     </View>
   );

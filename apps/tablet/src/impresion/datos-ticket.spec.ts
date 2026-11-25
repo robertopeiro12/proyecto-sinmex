@@ -7,6 +7,8 @@ import type { DetalleNotaPull } from '@/sincronizacion/contrato';
 
 import { estadoTicket, type DatosTicket } from './ticket';
 import {
+  AVISO_NO_IMPRESO,
+  avisoNoImpreso,
   imprimirJuntos,
   ticketDeNota,
   ticketDeVenta,
@@ -308,37 +310,59 @@ describe('imprimirJuntos', () => {
 
   it('manda todos en una sola llamada, en orden, y dice si salieron', async () => {
     const llamadas: string[][] = [];
-    const ok = await imprimirJuntos(async (ds) => {
+    const r = await imprimirJuntos(async (ds) => {
       llamadas.push(ds.map((d) => d.folio));
       return { ok: true };
     }, [t('A'), t('B'), t('C')]);
-    expect(ok).toBe(true);
+    expect(r).toEqual({ ok: true });
     expect(llamadas).toEqual([['A', 'B', 'C']]);
   });
 
-  it('un null: imprime los demás y responde false', async () => {
+  it('un null: imprime los demás y responde no impreso, sin motivo', async () => {
     const llamadas: string[][] = [];
-    const ok = await imprimirJuntos(async (ds) => {
+    const r = await imprimirJuntos(async (ds) => {
       llamadas.push(ds.map((d) => d.folio));
       return { ok: true };
     }, [t('A'), null, t('B')]);
-    expect(ok).toBe(false);
+    expect(r).toEqual({ ok: false });
     expect(llamadas).toEqual([['A', 'B']]);
   });
 
-  it('un fallo o un error: false, sin lanzar', async () => {
-    expect(await imprimirJuntos(async () => ({ ok: false }), [t('A')])).toBe(false);
+  it('un fallo o un error: no impreso, sin lanzar', async () => {
+    expect(await imprimirJuntos(async () => ({ ok: false }), [t('A')])).toEqual({ ok: false });
     expect(
       await imprimirJuntos(async () => {
         throw new Error('x');
       }, [t('A')]),
-    ).toBe(false);
+    ).toEqual({ ok: false });
+  });
+
+  it('un fallo con motivo lo conserva para el aviso', async () => {
+    expect(
+      await imprimirJuntos(async () => ({ ok: false, detalle: 'Prende el Bluetooth.' }), [t('A'), t('B')]),
+    ).toEqual({ ok: false, detalle: 'Prende el Bluetooth.' });
   });
 
   it('nada que imprimir (o solo nulls) es no impreso y no abre el diálogo', async () => {
     const imprimir = jest.fn(async () => ({ ok: true }));
-    expect(await imprimirJuntos(imprimir, [])).toBe(false);
-    expect(await imprimirJuntos(imprimir, [null])).toBe(false);
+    expect(await imprimirJuntos(imprimir, [])).toEqual({ ok: false });
+    expect(await imprimirJuntos(imprimir, [null])).toEqual({ ok: false });
     expect(imprimir).not.toHaveBeenCalled();
+  });
+});
+
+describe('avisoNoImpreso', () => {
+  it('sin motivo es el aviso de siempre', () => {
+    expect(avisoNoImpreso()).toBe(AVISO_NO_IMPRESO);
+    expect(avisoNoImpreso('  ')).toBe(AVISO_NO_IMPRESO);
+  });
+
+  it('con motivo lo dice antes de cómo reimprimir', () => {
+    expect(avisoNoImpreso('Elige la impresora en Seleccionar impresora.')).toBe(
+      'No se pudo imprimir: Elige la impresora en Seleccionar impresora. Puedes reimprimir desde Ventas / Cobranza.',
+    );
+    expect(avisoNoImpreso('No se pudo conectar con PT-210. ¿Está prendida?')).toBe(
+      'No se pudo imprimir: No se pudo conectar con PT-210. ¿Está prendida? Puedes reimprimir desde Ventas / Cobranza.',
+    );
   });
 });

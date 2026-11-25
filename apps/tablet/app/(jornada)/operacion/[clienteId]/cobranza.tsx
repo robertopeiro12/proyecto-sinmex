@@ -21,7 +21,7 @@ import { crearGuardiaRegistro } from '@/estado/movimiento';
 import { agruparNotasParaCobrar } from '@/estado/notas-asignadas';
 import { useJawa } from '@/estado/proveedor-jawa';
 import { textoSaldoPendiente } from '@/estado/venta-pasos';
-import { AVISO_NO_IMPRESO, ticketsDelCobro } from '@/impresion/datos-ticket';
+import { avisoNoImpreso, ticketsDelCobro } from '@/impresion/datos-ticket';
 import type { DatosTicket } from '@/impresion/ticket';
 import { useImpresion } from '@/impresion/usar-impresion';
 import { Boton } from '@/ui/boton';
@@ -69,6 +69,8 @@ export default function PantallaCobranza() {
   const { imprimirTickets } = useImpresion();
   /** Rediseño pieza 7: tras grabar se reimprime cada nota que tocó el cobro; un fallo solo avisa. */
   const [impresion, setImpresion] = useState<'imprimiendo' | 'enviada' | 'no-impresa' | null>(null);
+  /** El motivo de la nota sin imprimir, para el vendedor (pieza 7b). */
+  const [motivoNoImpresa, setMotivoNoImpresa] = useState<string | undefined>(undefined);
 
   // El dia de trabajo del reloj de la tablet: el de `fecha_operacion`.
   const hoy = datos.deps.reloj.hoy();
@@ -221,7 +223,14 @@ export default function PantallaCobranza() {
         {impresion === 'imprimiendo' ? <Text style={estilos.textoSuave}>Imprimiendo la nota…</Text> : null}
         {impresion === 'no-impresa' ? (
           <Tarjeta estado="pendiente" etiqueta="Nota sin imprimir">
-            <Text style={estilos.textoTarjeta}>{AVISO_NO_IMPRESO}</Text>
+            <Text style={estilos.textoTarjeta}>{avisoNoImpreso(motivoNoImpresa)}</Text>
+            <Boton
+              etiqueta="Seleccionar impresora"
+              icono="impresora"
+              tono="neutra"
+              onPress={() => router.push('/(jornada)/impresora')}
+              estilo={{ marginTop: espacio.md }}
+            />
           </Tarjeta>
         ) : null}
         {/* `back` y no `dismissTo` la ruta: debajo esta la venta (que relee la nota al enfocarse) o la ficha. */}
@@ -319,7 +328,9 @@ export default function PantallaCobranza() {
     } catch {
       // Se avisa como cualquier impresion que no salio.
     }
-    setImpresion((await imprimirTickets(tickets)) ? 'enviada' : 'no-impresa');
+    const r = await imprimirTickets(tickets);
+    setMotivoNoImpresa(r.ok ? undefined : r.detalle);
+    setImpresion(r.ok ? 'enviada' : 'no-impresa');
   }
 
   function grabar() {

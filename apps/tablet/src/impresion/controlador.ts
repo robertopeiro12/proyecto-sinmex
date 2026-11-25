@@ -9,7 +9,8 @@
  *   (`renglonesAHtml`) y abre el dialogo de impresion de Android, que usa la
  *   impresora configurada en el sistema (otra impresora o PDF).
  *
- * `elegirControlador` toma la impresora guardada en "Seleccionar impresora".
+ * `elegirControlador` toma la impresora guardada en "Seleccionar impresora"
+ * (sin guardada: ver `controladorAUsar`).
  *
  * > [!warning] En Android, `ok` quiere decir "se abrio el dialogo"
  * > `Print.printAsync` se resuelve en cuanto Android muestra su dialogo, no
@@ -93,12 +94,28 @@ const SIN_ELEGIR: ControladorImpresion = {
   imprimirVarios: async () => ({ ok: false, motivo: 'fallo', detalle: SIN_IMPRESORA }),
 };
 
+/**
+ * Que controlador toca (pieza 7b). Sin impresora guardada:
+ * - con el modulo Bluetooth en el APK, `sin-elegir` (falla con `SIN_IMPRESORA`);
+ * - sin el modulo (APK viejo o iOS), el `dialogo` de Android, como en la pieza 7:
+ *   no hay Bluetooth que elegir y asi la nota sigue saliendo.
+ */
+export type ControladorAUsar = 'bluetooth' | 'dialogo' | 'sin-elegir';
+
+export function controladorAUsar(impresora: ImpresoraElegida | null, moduloDisponible: boolean): ControladorAUsar {
+  if (impresora === null) return moduloDisponible ? 'sin-elegir' : 'dialogo';
+  return impresora.tipo;
+}
+
+/** `moduloDisponible`: si el APK trae el modulo `ImpresoraBluetooth` (`puenteBluetooth.disponible()`). */
 export function elegirControlador(
   impresora: ImpresoraElegida | null,
   papel: Papel,
   puente: PuenteImpresora,
+  moduloDisponible: boolean,
 ): ControladorImpresion {
-  if (impresora === null) return SIN_ELEGIR;
-  if (impresora.tipo === 'dialogo') return crearControladorExpoPrint(papel);
-  return crearControladorBluetooth(impresora.direccion, impresora.nombre, puente);
+  if (impresora?.tipo === 'bluetooth') {
+    return crearControladorBluetooth(impresora.direccion, impresora.nombre, puente);
+  }
+  return controladorAUsar(impresora, moduloDisponible) === 'dialogo' ? crearControladorExpoPrint(papel) : SIN_ELEGIR;
 }

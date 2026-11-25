@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 
-import { elegirControlador, type ControladorImpresion, type ResultadoImpresion } from './controlador';
+import {
+  controladorAUsar,
+  elegirControlador,
+  type ControladorImpresion,
+  type ResultadoImpresion,
+} from './controlador';
 import { imprimirJuntos } from './datos-ticket';
 import { COLUMNAS, type Papel } from './html';
 import type { ImpresoraElegida } from './preferencia';
@@ -9,9 +14,18 @@ import { puenteBluetooth } from './puente-bluetooth';
 import { armarTicket, type DatosTicket } from './ticket';
 
 /** El controlador de la impresora y el papel guardados **ahora** (ver `useImpresion`). */
-async function controladorGuardado(): Promise<{ controlador: ControladorImpresion; papel: Papel }> {
+async function controladorGuardado(): Promise<{
+  controlador: ControladorImpresion;
+  papel: Papel;
+  esDialogo: boolean;
+}> {
   const [papel, impresora] = await Promise.all([leerPapel(), leerImpresora()]);
-  return { controlador: elegirControlador(impresora, papel, puenteBluetooth), papel };
+  const modulo = puenteBluetooth.disponible();
+  return {
+    controlador: elegirControlador(impresora, papel, puenteBluetooth, modulo),
+    papel,
+    esDialogo: controladorAUsar(impresora, modulo) === 'dialogo',
+  };
 }
 
 /**
@@ -21,7 +35,8 @@ async function controladorGuardado(): Promise<{ controlador: ControladorImpresio
  * hook: otra pantalla (la venta) no ve el cambio hecho en "Seleccionar
  * impresora", y una impresion antes de la primera lectura usaria otra cosa en
  * silencio. Sin impresora elegida sale `fallo` con "Elige la impresora en
- * Seleccionar impresora." (`elegirControlador`).
+ * Seleccionar impresora."; si el APK no trae el modulo Bluetooth, se usa el
+ * dialogo de Android (`controladorAUsar`).
  */
 export function useImpresion() {
   const [papel, setPapel] = useState<Papel | null>(null);
@@ -68,14 +83,17 @@ export function useImpresion() {
 
   /**
    * Varias notas (las de un cobro) en **un solo** trabajo de impresion (un
-   * solo envio por Bluetooth, o un dialogo con salto de pagina entre ellas); `true` solo si salieron todas (ver
-   * `imprimirJuntos`).
+   * solo envio por Bluetooth, o un dialogo con salto de pagina entre ellas);
+   * `ok` solo si salieron todas (ver `imprimirJuntos`). El `detalle` de un
+   * fallo es el texto para el vendedor (Bluetooth o sin elegir); el del dialogo
+   * es el mensaje crudo de Android y no se pasa al aviso.
    */
   const imprimirTickets = useCallback(
     (tickets: (DatosTicket | null)[]) =>
       imprimirJuntos(async (ds) => {
-        const { controlador, papel: p } = await controladorGuardado();
-        return controlador.imprimirVarios(ds.map((d) => armarTicket(d, COLUMNAS[p])));
+        const { controlador, papel: p, esDialogo } = await controladorGuardado();
+        const r = await controlador.imprimirVarios(ds.map((d) => armarTicket(d, COLUMNAS[p])));
+        return r.ok || !esDialogo ? r : { ok: false };
       }, tickets),
     [],
   );

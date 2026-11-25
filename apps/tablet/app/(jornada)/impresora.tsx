@@ -139,7 +139,9 @@ export default function Impresora() {
   const imprimirPrueba = async () => {
     setImprimiendo(true);
     setResultado(null);
-    const con = impresora ?? null;
+    // Sin elegir y sin el modulo Bluetooth se imprime con el dialogo (`controladorAUsar`).
+    const con: ImpresoraElegida | null =
+      impresora ?? (puenteBluetooth.disponible() ? null : { tipo: 'dialogo' });
     try {
       setResultado({ r: await imprimirTicket(ticketDePrueba(relojSistema, vendedor?.nombre)), con });
     } finally {
@@ -163,6 +165,14 @@ export default function Impresora() {
             <Icono nombre="bluetooth" tamano={24} color={colores.tinta} />
             <Text style={estilos.textoTarjeta}>Impresora</Text>
           </View>
+
+          {impresora === null ? (
+            <Text style={[estilos.textoSuave, { marginBottom: espacio.md }]}>
+              {puenteBluetooth.disponible()
+                ? 'Aún no eliges impresora. Las notas no se imprimen hasta que elijas una.'
+                : 'Aún no eliges impresora. Mientras, las notas salen por el diálogo de Android.'}
+            </Text>
+          ) : null}
 
           {lista.estado === 'sin-bluetooth' ? (
             <Text style={[estilos.textoSuave, { marginBottom: espacio.md }]}>{SIN_BLUETOOTH}</Text>

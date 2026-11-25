@@ -20,6 +20,17 @@ export const VENDEDOR_DESCONOCIDO = '—';
 /** El aviso de cualquier impresion que no salio (fallo, cancelada o sin datos). */
 export const AVISO_NO_IMPRESO = 'No se pudo imprimir. Puedes reimprimir desde Ventas / Cobranza.';
 
+/**
+ * El aviso con el motivo (pieza 7b): `detalle` es un texto para el vendedor
+ * (`textoErrorImpresora` o `SIN_IMPRESORA`), nunca el mensaje crudo de Android.
+ * Sin motivo, `AVISO_NO_IMPRESO`.
+ */
+export function avisoNoImpreso(detalle?: string): string {
+  const motivo = detalle?.trim();
+  if (!motivo) return AVISO_NO_IMPRESO;
+  return `No se pudo imprimir: ${motivo} Puedes reimprimir desde Ventas / Cobranza.`;
+}
+
 interface Renglon {
   etiqueta: string;
   cantidad: number;
@@ -219,24 +230,30 @@ export function ticketsDelCobro(
   return [...new Set(ids)].map((id) => ticketDeNota(bd, id, { momento, cobro: quienCobro }));
 }
 
+/** Lo que devuelve `imprimirJuntos`: `detalle` es el motivo para el vendedor, si se sabe. */
+export type ResultadoJuntos = { ok: true } | { ok: false; detalle?: string };
+
 /**
  * Imprime varios tickets en **un solo** trabajo (con salto de pagina entre
  * ellos) y dice si **todos** salieron. En Android `printAsync` vuelve en cuanto
  * abre su dialogo, asi que varios trabajos seguidos no estan garantizados.
  * Un ticket `null` (lo pedido ya no esta) no se imprime y cuenta como no
  * impreso; nada que imprimir es no impreso. Nunca lanza, para que la pantalla
- * solo avise.
+ * solo avise. Si `imprimir` falla con `detalle` (pieza 7b: "Prende el
+ * Bluetooth.", "Elige la impresora..."), se devuelve para mostrarlo en el aviso
+ * (`avisoNoImpreso`).
  */
 export async function imprimirJuntos(
-  imprimir: (ds: DatosTicket[]) => Promise<{ ok: boolean }>,
+  imprimir: (ds: DatosTicket[]) => Promise<{ ok: boolean; detalle?: string }>,
   tickets: (DatosTicket | null)[],
-): Promise<boolean> {
+): Promise<ResultadoJuntos> {
   const validos = tickets.filter((t): t is DatosTicket => t !== null);
-  if (validos.length === 0) return false;
+  if (validos.length === 0) return { ok: false };
   try {
-    const { ok } = await imprimir(validos);
-    return ok && validos.length === tickets.length;
+    const r = await imprimir(validos);
+    if (!r.ok) return r.detalle ? { ok: false, detalle: r.detalle } : { ok: false };
+    return validos.length === tickets.length ? { ok: true } : { ok: false };
   } catch {
-    return false;
+    return { ok: false };
   }
 }

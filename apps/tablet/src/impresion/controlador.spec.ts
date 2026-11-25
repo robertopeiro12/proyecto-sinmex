@@ -1,5 +1,5 @@
 import { aBase64 } from './base64';
-import { crearControladorBluetooth, elegirControlador, type PuenteImpresora } from './controlador';
+import { controladorAUsar, crearControladorBluetooth, elegirControlador, type PuenteImpresora } from './controlador';
 import { ticketsAEscPos } from './escpos';
 
 function puente(falla?: string): PuenteImpresora & { envios: [string, string][] } {
@@ -43,10 +43,28 @@ describe('crearControladorBluetooth', () => {
   });
 });
 
+describe('controladorAUsar', () => {
+  test('sin impresora y con el módulo Bluetooth: hay que elegir', () => {
+    expect(controladorAUsar(null, true)).toBe('sin-elegir');
+  });
+
+  test('sin impresora y sin el módulo (APK viejo): el diálogo de Android', () => {
+    expect(controladorAUsar(null, false)).toBe('dialogo');
+  });
+
+  test('lo elegido manda, haya o no módulo', () => {
+    const bt = { tipo: 'bluetooth', nombre: 'PT-210', direccion: DIR } as const;
+    expect(controladorAUsar(bt, true)).toBe('bluetooth');
+    expect(controladorAUsar(bt, false)).toBe('bluetooth');
+    expect(controladorAUsar({ tipo: 'dialogo' }, true)).toBe('dialogo');
+    expect(controladorAUsar({ tipo: 'dialogo' }, false)).toBe('dialogo');
+  });
+});
+
 describe('elegirControlador', () => {
-  test('sin impresora elegida no imprime y lo dice', async () => {
+  test('sin impresora elegida (con módulo) no imprime y lo dice', async () => {
     const p = puente();
-    expect(await elegirControlador(null, 58, p).imprimir(['UNO'])).toEqual({
+    expect(await elegirControlador(null, 58, p, true).imprimir(['UNO'])).toEqual({
       ok: false,
       motivo: 'fallo',
       detalle: 'Elige la impresora en Seleccionar impresora.',
@@ -56,14 +74,14 @@ describe('elegirControlador', () => {
 
   test('la impresora Bluetooth elegida recibe los bytes', async () => {
     const p = puente();
-    await elegirControlador({ tipo: 'bluetooth', nombre: 'PT-210', direccion: DIR }, 80, p).imprimirVarios([['UNO']]);
+    await elegirControlador({ tipo: 'bluetooth', nombre: 'PT-210', direccion: DIR }, 80, p, true).imprimirVarios([['UNO']]);
     expect(p.envios).toHaveLength(1);
     expect(p.envios[0]?.[0]).toBe(DIR);
   });
 
   test('el diálogo no usa el Bluetooth', () => {
     const p = puente();
-    const c = elegirControlador({ tipo: 'dialogo' }, 58, p);
+    const c = elegirControlador({ tipo: 'dialogo' }, 58, p, true);
     expect(typeof c.imprimir).toBe('function');
     expect(p.envios).toEqual([]);
   });
