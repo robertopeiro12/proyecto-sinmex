@@ -41,7 +41,6 @@ const renglon = (producto: string, volumen: string, m: Partial<RenglonPtRecargas
   volumen,
   inicial: 0,
   actual: 0,
-  ajustado: false,
   recargas: 0,
   envios: 0,
   entradas: 0,
@@ -53,7 +52,7 @@ const DIA: InventarioPtRecargas = {
   hoyEnTijuana: HOY,
   consultadoEn: "10:32",
   renglones: [
-    renglon("Horchata", "500 ml", { inicial: 1940, recargas: 600, envios: 100, entradas: 300, actual: 1540, ajustado: true }),
+    renglon("Horchata", "500 ml", { inicial: 1940, recargas: 600, envios: 100, entradas: 300, actual: 1540 }),
     renglon("Jamaica", "500 ml", { inicial: 1017, recargas: 400, entradas: 50, actual: 667 }),
     renglon("Agua", "1 L", { inicial: null, recargas: 20, actual: null }),
   ],
@@ -63,7 +62,7 @@ const PRODUCTO: InventarioPtRecargas = {
   ...DIA,
   renglones: [
     renglon("Agua", "", { presentacionId: null, inicial: null, recargas: 20, actual: null }),
-    renglon("Horchata", "", { presentacionId: null, inicial: 3000, recargas: 900, actual: 2100, ajustado: true }),
+    renglon("Horchata", "", { presentacionId: null, inicial: 3000, recargas: 900, actual: 2100 }),
   ],
 };
 
@@ -99,11 +98,11 @@ describe("PantallaInventarioPtRecargas: hoy", () => {
     expect(screen.getByText(`${diaEscrito(HOY, HOY)} · a las 10:32`)).toBeInTheDocument();
   });
 
-  it("el Inicial ajustado lleva la marca", async () => {
+  it("sin marca «Ajustado» (aquí no se ajusta)", async () => {
     render(<PantallaInventarioPtRecargas sucursal={null} />);
     const t = await tabla();
-    expect(within(fila(t, "Horchata")).getByText("Ajustado")).toBeInTheDocument();
-    expect(within(fila(t, "Jamaica")).queryByText("Ajustado")).toBeNull();
+    expect(within(t).queryByText("Ajustado")).toBeNull();
+    expect(celdas(fila(t, "Horchata"))[1]).toBe("1940");
   });
 
   it("sin inventario inicial: Inicial y Actual vacíos (no 0), total vacío y un aviso", async () => {
@@ -119,7 +118,7 @@ describe("PantallaInventarioPtRecargas: hoy", () => {
     expect(aviso).toHaveTextContent(/se capture un ajuste en Inventario de PT con Ventas/);
   });
 
-  it("Por producto: un renglón por producto, sin grupos ni marca Ajustado", async () => {
+  it("Por producto: un renglón por producto, sin grupos", async () => {
     render(<PantallaInventarioPtRecargas sucursal={null} />);
     await tabla();
     await userEvent.click(screen.getByRole("radio", { name: "Por producto" }));

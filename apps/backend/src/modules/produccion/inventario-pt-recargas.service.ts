@@ -105,7 +105,6 @@ export class InventarioPtRecargasService {
         ...soloMovimientos(m),
         inicial,
         actual: actualDelDia(inicial, m),
-        ajustado: ini?.ajustado ?? false,
       };
     });
     return {

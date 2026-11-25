@@ -17,7 +17,6 @@ const renglon = (producto: string, volumen: string, m: Partial<RenglonPtRecargas
   volumen,
   inicial: 0,
   actual: 0,
-  ajustado: false,
   recargas: 0,
   envios: 0,
   entradas: 0,

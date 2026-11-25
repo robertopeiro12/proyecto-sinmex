@@ -772,7 +772,6 @@ describe('Inventario de PT con Recargas (e2e)', () => {
         envios: 6,
         entradas: 100,
         actual: ACTUAL_LITRO_K,
-        ajustado: false,
       });
     });
 
@@ -815,12 +814,10 @@ describe('Inventario de PT con Recargas (e2e)', () => {
       );
     });
 
-    it('RF 3: con ajuste hoy, el Inicial es el del ajuste y lleva "Ajustado"', async () => {
-      expect(renglon(await leer({ sucursal: K }), medio)).toMatchObject({
-        inicial: 300,
-        actual: 300,
-        ajustado: true,
-      });
+    it('RF 3: con ajuste hoy (capturado en PT con Ventas), el Inicial es el del ajuste, sin marca', async () => {
+      const r = renglon(await leer({ sucursal: K }), medio);
+      expect(r).toMatchObject({ inicial: 300, actual: 300 });
+      expect(r).not.toHaveProperty('ajustado');
     });
 
     it('la carga de otra sucursal cuenta en la suya; YF sin inicial = vacío', async () => {
@@ -829,7 +826,6 @@ describe('Inventario de PT con Recargas (e2e)', () => {
         entradas: 6,
         inicial: null,
         actual: null,
-        ajustado: false,
       });
     });
 
@@ -894,7 +890,7 @@ describe('Inventario de PT con Recargas (e2e)', () => {
       });
     });
 
-    it('por producto: suma sus presentaciones, sin "Ajustado"', async () => {
+    it('por producto: suma sus presentaciones', async () => {
       const r = await leer({ sucursal: K, vista: 'producto' });
       const p = r.renglones.find((x) => x.productoId === producto);
       expect(p).toMatchObject({
@@ -904,7 +900,6 @@ describe('Inventario de PT con Recargas (e2e)', () => {
         recargas: RECARGAS_LITRO_K + 1,
         envios: 12,
         actual: ACTUAL_LITRO_K + 300 + 93,
-        ajustado: false,
       });
     });
   });

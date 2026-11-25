@@ -41,8 +41,6 @@ export interface RenglonPtRecargas extends MovimientosRecargas {
   volumen: string;
   inicial: number | null;
   actual: number | null;
-  /** Hoy hay un ajuste: el Inicial es el del ajuste. Solo por presentacion. */
-  ajustado: boolean;
 }
 
 export function sumarMovimientosRecargas(
@@ -75,8 +73,7 @@ const sumaONull = (valores: (number | null)[]): number | null =>
 
 /**
  * "Por producto": un renglon por producto sumando sus presentaciones, por
- * nombre. Inicial y Actual `null` si alguna presentacion no tiene inicial; sin
- * marca "Ajustado" (solo va por presentacion).
+ * nombre. Inicial y Actual `null` si alguna presentacion no tiene inicial.
  */
 export function porProductoRecargas(
   renglones: readonly RenglonPtRecargas[],
@@ -98,7 +95,6 @@ export function porProductoRecargas(
       }),
       inicial: sumaONull(g.map((r) => r.inicial)),
       actual: sumaONull(g.map((r) => r.actual)),
-      ajustado: false,
     }))
     .sort(
       (a, b) =>

@@ -13,7 +13,7 @@ Contestó las 3 casillas del Word ("Así quedó el Inventario de PT con Recargas
 - **Recargas: solo cuando el vendedor acepta** (renglón aceptado de una carga `aceptada`). La pendiente **ya no resta**
   (cambia R1). El "a quién" ya no lleva Estado.
 - **Sin botón "Ajustar inventario"**: el ajuste se hace sobre el inventario real (PT con Ventas). El aviso "Sin inventario
-  inicial" manda a capturarlo allá.
+  inicial" manda a capturarlo allá. Tampoco lleva la marca "Ajustado" en el Inicial (Roberto: aquí no se ajusta).
 - Envíos restan (confirma el "error de dedo").
 
 ## Para qué

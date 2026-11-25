@@ -24,7 +24,6 @@ const renglon = (parcial: Partial<RenglonPtRecargas>): RenglonPtRecargas => ({
   ...SIN_MOVIMIENTOS_RECARGAS,
   inicial: 0,
   actual: 0,
-  ajustado: false,
   ...parcial,
 });
 
@@ -78,7 +77,6 @@ describe('porProductoRecargas', () => {
         recargas: 2,
         inicial: 10,
         actual: 8,
-        ajustado: true,
       }),
       renglon({
         presentacionId: B,
@@ -108,7 +106,6 @@ describe('porProductoRecargas', () => {
         envios: 3,
         inicial: 15,
         actual: 10,
-        ajustado: false,
       }),
       expect.objectContaining({
         productoId: 'j',
@@ -116,7 +113,6 @@ describe('porProductoRecargas', () => {
         entradas: 1,
         inicial: 4,
         actual: 3,
-        ajustado: false,
       }),
     ]);
   });

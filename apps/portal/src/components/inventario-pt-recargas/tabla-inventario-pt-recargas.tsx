@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, type ReactNode } from "react";
-import { InicialConMarca, Opcional, SEPARADOR } from "@/components/inventario-pt/tabla-inventario-pt";
+import { Opcional, SEPARADOR } from "@/components/inventario-pt/tabla-inventario-pt";
 import { CajaTabla, Fila, FilaGrupo, FilaTotal, FilaVacia, Tabla, Td, Th } from "@/components/ui/tabla";
 import type { VistaPt } from "@/lib/inventario-pt";
 import { gruposPtRecargas, type RenglonPtRecargas, type TotalesPtRecargas } from "@/lib/inventario-pt-recargas";
@@ -60,7 +60,7 @@ export function TablaInventarioPtRecargas({
     return (
       <Fila key={r.presentacionId ?? r.productoId} className="align-middle">
         <Td className="truncate" title={r.producto}>{r.producto}</Td>
-        <Celdas r={r} inicial={<InicialConMarca r={r} />} onPicar={() => onDetalle(r)} />
+        <Celdas r={r} onPicar={() => onDetalle(r)} />
       </Fila>
     );
   }

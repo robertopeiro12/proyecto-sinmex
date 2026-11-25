@@ -1200,7 +1200,7 @@ usuario con sesion pasa.
   - **Inicial compartido con PT con Ventas** (misma cuenta, `inicialesDelDia`, no se duplica): el ajuste de **hoy** si lo hay, si
     no el **Final de ayer** de PT con Ventas. Sin ninguno → `null` (Inicial y Actual vacíos, "Sin inventario inicial"), nunca 0.
     **"Todas"** sigue `sumarSucursales` de PT con Ventas (sin ajuste pero con movimiento deja el total vacío; sin nada aporta 0).
-    "Ajustado" solo por presentación. Sucursal inexistente = **404** (como PT con Ventas, cuyo ámbito se reutiliza).
+    Sin marca "Ajustado" (aquí no se ajusta; Roberto, 2026-11-25). Sucursal inexistente = **404** (como PT con Ventas, cuyo ámbito se reutiliza).
   - **Sin "Ajustar inventario"** (tío): el ajuste se hace sobre el inventario real, en PT con Ventas; el aviso "Sin inventario
     inicial" manda allá. Un ajuste de hoy capturado en PT con Ventas sí cambia el Inicial de esta pantalla.
   - **Permiso** `inventario_pt_recargas.ver` (grupo Produccion/Almacen, con ⓘ en `lib/explicacion-permisos.ts`), aparte del de PT

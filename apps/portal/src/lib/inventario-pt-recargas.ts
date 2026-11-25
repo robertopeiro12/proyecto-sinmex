@@ -29,8 +29,6 @@ export interface RenglonPtRecargas extends MovimientosRecargas {
   /** `null` = "Sin inventario inicial": celda vacía, nunca 0. */
   inicial: number | null;
   actual: number | null;
-  /** Hoy hay un ajuste: el Inicial es el del ajuste. */
-  ajustado: boolean;
 }
 
 /** `GET /inventario-pt/recargas`. */
