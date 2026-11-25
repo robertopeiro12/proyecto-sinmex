@@ -33,6 +33,13 @@ private const val LIMITE_CONEXION_MS = 10_000L
  */
 private fun esperaAntesDeCerrarMs(bytes: Int) = minOf(200L + bytes / 10, 2_000L)
 
+/**
+ * Un cobro con varias notas son 5-10 KB y la térmica tiene un búfer chico: se
+ * manda en pedazos con una pausa corta entre ellos para no desbordarla.
+ */
+private const val PEDAZO_BYTES = 512
+private const val PAUSA_ENTRE_PEDAZOS_MS = 20L
+
 private fun error(code: String, mensaje: String, causa: Throwable? = null) =
   CodedException(code, mensaje, causa)
 
@@ -141,7 +148,13 @@ class ImpresoraBluetoothModule : Module() {
 
       try {
         socket.outputStream.apply {
-          write(bytes)
+          var desde = 0
+          while (desde < bytes.size) {
+            val cuantos = minOf(PEDAZO_BYTES, bytes.size - desde)
+            write(bytes, desde, cuantos)
+            desde += cuantos
+            if (desde < bytes.size) Thread.sleep(PAUSA_ENTRE_PEDAZOS_MS)
+          }
           flush()
         }
         Thread.sleep(esperaAntesDeCerrarMs(bytes.size))
