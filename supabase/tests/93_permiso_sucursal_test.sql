@@ -16,11 +16,13 @@ select is(
 -- (Dashboard) y 36 nota_papel.revisar (casilla Entregada de las notas),
 -- 37-41 operacion.entrada/envio/merma/consumo/descuento y 42 motivo_merma.gestionar
 -- (Registro de Operación), 43 operacion.retiro_merma (Retiro de merma),
--- 44-48 proceso.merma/cambio/consumo/promocion/descuento (Procesos).
+-- 44-48 proceso.merma/cambio/consumo/promocion/descuento (Procesos),
+-- 49-50 inventario_pt.ver/ajustar (Inventario de PT), 51 inventario_pt_recargas.ver
+-- (Inventario de PT con Recargas).
 select is(
   (select count(*)::int from permiso where deleted_at is null),
-  48,
-  'el catalogo de permisos tiene 48 claves'
+  51,
+  'el catalogo de permisos tiene 51 claves'
 );
 
 select * from finish();

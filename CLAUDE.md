@@ -1142,6 +1142,80 @@ usuario con sesion pasa.
   - **Cuentas por Cobrar** se queda en el menú; su **Cobrar** (`enlaceCobrar`) lleva a Notas con ese cliente y esa nota palomeada,
     con la sucursal **del cliente** cuando la vista está en "Todas" (si no, Procesos pediría elegir sucursal).
   - **Nube**: nada que subir (sin migración). Backend y portal juntos (el portal pide los filtros nuevos de `GET /ventas`).
+- **Inventario de PT con Ventas (2026-11-25).** *Producción → Inventario de PT con Ventas*
+  (`/produccion/inventario-pt-ventas`): el inventario real del almacén por día y presentación, **calculado** (no se guarda) a
+  partir de un conteo físico de arranque. Spec: `docs/superpowers/specs/2026-11-25-inventario-pt-ventas-design.md`.
+  - **Fórmula (D2):** `Final = Inicial − Ventas − Merma − Consumo − Promo − Descuentos + Cambios + Entradas − Envíos`;
+    `Merma acumulada = la del día anterior + Merma − Retiro de merma`. El **Inicial** de un día es el Final del anterior, o el del
+    ajuste de ese día si lo hay. Todo en `produccion/reglas-inventario-pt.ts` (puro: `serie`, `finalDelDia`, `sumarSucursales`,
+    `porProducto`); la consulta en `inventario-pt.repository.ts` y el servicio en `inventario-pt.service.ts`.
+  - **Fuente de cada columna** (todo **vivo**, por la sucursal de la venta/operación): Ventas y Promo = líneas vivas de ventas
+    vivas (Promo suma además Procesos `promocion`); **Merma** = Registro `merma` + la de cada vendedor (la **contada** del corte
+    si ya está hecho, si no la teórica de `reglas-corte.ts`) + Procesos `merma` **solo con Oficina** (con vendedor ya cuenta en su
+    corte: no se suma dos veces); Consumo = Registro + Procesos + app (`movimiento_inventario`); Descuentos = Registro + Procesos;
+    Cambios = Procesos `cambio` neto (recibido suma); Entradas = Registro `entrada` + los **envíos recibidos** (destino);
+    Envíos = `envio` que sale; Retiro = `retiro_merma` **autorizado** (pendiente y rechazado no cuentan). Un envío TJ→MX resta
+    en TJ y suma en MX: con "Todas" el total no cambia.
+  - **Ajustes** (`inventario_pt_ajuste`): conteo de arranque por (sucursal, presentación, fecha), uno vivo por esa llave
+    (`uq_inventario_pt_ajuste`, parcial); `PUT` en lote, todo o nada, corrige en vez de duplicar, sin fechas futuras, **solo los
+    renglones que cambian**. Un ajuste a media serie fija el Inicial de ese día y los siguientes encadenan desde ahí; el día
+    anterior no cambia. Se **da de baja** (baja lógica, `DELETE`): ese día vuelve a encadenar desde el ajuste anterior.
+  - **Sin ajuste previo → `null`**, nunca 0: Inicial, Final y Merma acumulada salen vacíos ("Sin inventario inicial") y los
+    movimientos del día sí se ven. **"Todas"** = suma de las sucursales vivas, decidida **por día y por (sucursal, presentación)**
+    (`sumarSucursales`), igual en la tabla y en el historial: con un ajuste vivo ≤ ese día encadena desde él; sin ajuste ≤ ese día
+    pero con **algún movimiento de esa presentación en cualquier día ≤ ese día** deja el total en `null`; sin ajuste ni movimiento
+    hasta ese día aporta 0. Si ninguna tiene ajuste ≤ ese día, `null`. El primer movimiento sale de **una** consulta
+    (`primerosMovimientos`, `min(fecha)` por sucursal y presentación, sin límite hacia atrás), **no** de la ventana cargada: así
+    el ajuste de otra presentación no cambia el resultado. **"Ajustado" exige Inicial**: un total `null` no lleva la marca
+    (`sumarRenglones` y `InicialConMarca`). En la pantalla, un total de tamaño con algún renglón `null` queda vacío (no se suma a
+    medias); con "Todas" el aviso manda a capturar el ajuste eligiendo cada sucursal en el menú lateral.
+  - **Vendedor dado de baja:** su merma sigue contando en la historia (`movimientosDelRango` con `incluirDadosDeBaja`, solo
+    desde aquí; corte, Inventario por vendedor y candado de venta siguen con vendedores vivos). La merma de un vendedor se asigna
+    a su sucursal **actual**.
+  - **Permisos** (grupo Produccion/Almacen, con ⓘ en `lib/explicacion-permisos.ts`): `inventario_pt.ver` (tabla, historial, "a
+    quién") e `inventario_pt.ajustar` (captura y baja de ajustes). Los perfiles siguen vacíos: los configura el cliente. Alcance
+    como el Corte (atado a otra sucursal = 403; `todas` solo en lectura; ajustar con `todas` o sin sucursal = 400 "Elige una
+    sucursal.").
+  - **Endpoints** (`produccion/inventario-pt.controller.ts`): `GET /inventario-pt?fecha&sucursal&vista=presentacion|producto`;
+    `GET /inventario-pt/historial?(presentacion|producto)&desde&hasta&sucursal` (máx. 62 días); `GET /inventario-pt/descuentos?
+    (presentacion|producto)&fecha&sucursal` ("a quién": nómina = Registro, corte = Procesos); `GET|PUT|DELETE
+    /inventario-pt/ajustes` (`DELETE ?fecha&sucursal&presentacionId`, 404 si no hay uno vivo). Fecha futura = 400 con
+    `hoyEnTijuana`. Tipos duplicados backend ↔ portal en `apps/portal/src/lib/inventario-pt.ts`: si cambias uno, cambia el otro.
+  - **Pantalla:** abre en **ayer**; Día + Hoy · Ayer; *Por presentación* (agrupada por tamaño con `claveTamano`/`compararTamano`)
+    o *Por producto*. Picar el producto abre el historial (ventana, 7 días por omisión) y picar Descuentos ≠ 0 abre "A quién".
+    "Ajustar inventario" es una pantalla completa precargada con lo que calcula el sistema (TAB baja por columna; "Quitar" con
+    `useConfirmar`); con "Todas" está deshabilitado. La marca "Ajustado" solo va por presentación. Revisada a 1366 px sin scroll
+    horizontal. **Aún no alimenta almacenes** (T-63) ni cambios físicos (T-33, hoy 0).
+  - **Nube:** `20261130120000_inventario_pt_ajuste.sql` (tabla nueva, índices, trigger y 2 permisos) se sube a `sinmex dev`
+    después del merge, con el protocolo de push. Pre-flight: **nada que contar**. **Backend y portal juntos** (el portal nuevo
+    llama a `/inventario-pt`).
+- **Inventario de PT con Recargas (2026-11-25).** *Producción → Inventario de PT con Recargas*
+  (`/produccion/inventario-pt-recargas`, en el menú antes de PT con Ventas): una **fotografía a grandes rasgos** de lo que hay
+  **ahora** en el almacén, solo de **hoy** de Tijuana (sin campo de fecha; botón Actualizar y hora de la consulta). **No es el
+  inventario real** (ese es PT con Ventas, tío 2026-11-25). Spec: `docs/superpowers/specs/2026-11-25-inventario-pt-recargas-design.md`
+  (su sección "Cambios del tío" manda). Solo lectura; no se guarda nada.
+  - **Fórmula (tío, 2026-11-25):** `Actual = Inicial − Recargas − Envíos + Entradas`. **Sin Merma, Consumo ni Descuentos** (los
+    quitó el tío: no los vuelvas a poner). Cuenta pura en `produccion/reglas-inventario-pt-recargas.ts`; consulta en
+    `inventario-pt-recargas.repository.ts`, servicio y controlador hermanos. No lleva ventas ni retornos (eso es PT con Ventas).
+  - **Fuente de cada columna** (por sucursal y presentación, hoy, todo **vivo**): **Recargas** = `carga_detalle.piezas` de cargas
+    vivas de hoy (`carga.sucursal_id`, aunque el vendedor esté dado de baja) **solo cuando el vendedor ya aceptó**: carga
+    `aceptada` y renglón aceptado (`coalesce(aceptada, true)`); una carga **pendiente** o un renglón/carga **rechazados** no restan
+    (tío). **Envíos** = Registro `envio` que sale; **Entradas** = Registro `entrada` (producción/compras) + **envíos recibidos**
+    (destino esta sucursal).
+  - **Inicial compartido con PT con Ventas** (misma cuenta, `inicialesDelDia`, no se duplica): el ajuste de **hoy** si lo hay, si
+    no el **Final de ayer** de PT con Ventas. Sin ninguno → `null` (Inicial y Actual vacíos, "Sin inventario inicial"), nunca 0.
+    **"Todas"** sigue `sumarSucursales` de PT con Ventas (sin ajuste pero con movimiento deja el total vacío; sin nada aporta 0).
+    Sin marca "Ajustado" (aquí no se ajusta; Roberto, 2026-11-25). Sucursal inexistente = **404** (como PT con Ventas, cuyo ámbito se reutiliza).
+  - **Sin "Ajustar inventario"** (tío): el ajuste se hace sobre el inventario real, en PT con Ventas; el aviso "Sin inventario
+    inicial" manda allá. Un ajuste de hoy capturado en PT con Ventas sí cambia el Inicial de esta pantalla.
+  - **Permiso** `inventario_pt_recargas.ver` (grupo Produccion/Almacen, con ⓘ en `lib/explicacion-permisos.ts`), aparte del de PT
+    con Ventas; los perfiles siguen vacíos. Alcance como PT con Ventas (atado a otra = 403; `todas` solo General).
+  - **Endpoints:** `GET /inventario-pt/recargas?sucursal&vista=presentacion|producto` → `{ fecha, hoyEnTijuana, consultadoEn,
+    renglones }` y `GET /inventario-pt/recargas/detalle?(presentacion|producto)&sucursal` ("A quién" de las recargas: vendedor,
+    n.º de carga y piezas aceptadas). Tipos duplicados backend ↔ portal en
+    `apps/portal/src/lib/inventario-pt-recargas.ts`: si cambias uno, cambia el otro.
+  - **Nube:** `20261201120000_permiso_inventario_pt_recargas.sql` (un insert en `permiso`) se sube a `sinmex dev` después del
+    merge, con el protocolo de push. Pre-flight: **nada que contar**. **Backend y portal juntos.** Sin cambio en la tablet.
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
   - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).
