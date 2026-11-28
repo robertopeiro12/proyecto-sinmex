@@ -136,6 +136,23 @@ describe("PantallaInformacionProduccion", () => {
     );
   });
 
+  it("Este mes y Esta semana no piden días futuros: Hasta se recorta a hoy", async () => {
+    render(<PantallaInformacionProduccion sucursal={null} />);
+    await tabla();
+    await userEvent.click(screen.getByRole("button", { name: "Este mes" }));
+    await userEvent.click(screen.getByRole("button", { name: "Mostrar" }));
+    await waitFor(() =>
+      expect(lib.leerInformacionProduccion).toHaveBeenLastCalledWith(INICIO, HOY, "TJ", "presentacion"),
+    );
+    expect(screen.getByLabelText("Hasta")).toHaveValue(HOY);
+    await userEvent.click(screen.getByRole("button", { name: "Esta semana" }));
+    await userEvent.click(screen.getByRole("button", { name: "Mostrar" }));
+    await waitFor(() => {
+      const [, hasta] = vi.mocked(lib.leerInformacionProduccion).mock.lastCall!;
+      expect(hasta <= HOY).toBe(true);
+    });
+  });
+
   it("el detalle por presentación, con el rango consultado y sin columna Sucursal", async () => {
     vi.mocked(lib.leerDetalleInformacion).mockResolvedValue({
       detalle: [

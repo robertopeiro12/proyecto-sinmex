@@ -53,6 +53,15 @@ function Informacion({ sucursal }: { sucursal: string }) {
   const [detalle, setDetalle] = useState<RenglonInformacion | null>(null);
   const ultima = useRef(0);
 
+  // "Esta semana" y "Este mes" terminan en un día futuro y el servidor lo rechaza: el fin se
+  // recorta a hoy, y el campo Hasta muestra lo que de verdad se consultó.
+  function alMostrar(r: RangoFechas) {
+    const hoy = hoyEnTijuana();
+    const recortado = { desde: r.desde, hasta: r.hasta > hoy ? hoy : r.hasta };
+    setRango(recortado);
+    setConsultado(recortado);
+  }
+
   useEffect(() => {
     const esta = ++ultima.current;
     setCargandoDatos(true);
@@ -83,7 +92,7 @@ function Informacion({ sucursal }: { sucursal: string }) {
         desde={rango.desde}
         hasta={rango.hasta}
         onCambio={setRango}
-        onMostrar={(r) => setConsultado({ ...r })}
+        onMostrar={alMostrar}
         deshabilitado={cargandoDatos}
       />
 
