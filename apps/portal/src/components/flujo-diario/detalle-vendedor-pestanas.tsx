@@ -598,21 +598,20 @@ export function PestanaMermas({
             {recibidas.length > 0 && (
               <TablaMovimientos titulo="Mermas recibidas" aria={`Mermas recibidas de ${cliente}`} movimientos={recibidas} conMotivo />
             )}
-            {(reposicion.length > 0 || cambioEntrego.length > 0 || cambioRecibio.length > 0) && (
-              <div className="grid grid-cols-1 items-start gap-3 md:grid-cols-2">
-                {reposicion.length > 0 && (
-                  <TablaMovimientos titulo="Reposición entregada" aria={`Reposición entregada a ${cliente}`} movimientos={reposicion} conMotivo={false} />
-                )}
-                {cambioEntrego.length > 0 && (
-                  <TablaMovimientos titulo="Cambios (entregó)" aria={`Cambios (entregó) de ${cliente}`} movimientos={cambioEntrego} conMotivo={false} />
-                )}
-                {cambioRecibio.length > 0 && (
-                  <TablaMovimientos titulo="Cambios recibidos" aria={`Cambios recibidos de ${cliente}`} movimientos={cambioRecibio} conMotivo={false} />
-                )}
+            {reposicion.length > 0 && (
+              <div className="grid grid-cols-2 items-start gap-3">
+                <TablaMovimientos titulo="Reposición entregada" aria={`Reposición entregada a ${cliente}`} movimientos={reposicion} conMotivo={false} />
+              </div>
+            )}
+            {/* Los dos lados del cambio juntos, como en Procesos (lo que regresó · lo que se le entregó). */}
+            {(cambioRecibio.length > 0 || cambioEntrego.length > 0) && (
+              <div className="grid grid-cols-2 items-start gap-3">
+                <TablaMovimientos titulo="Cambios recibidos" aria={`Cambios recibidos de ${cliente}`} movimientos={cambioRecibio} conMotivo={false} />
+                <TablaMovimientos titulo="Cambios entregados" aria={`Cambios entregados a ${cliente}`} movimientos={cambioEntrego} conMotivo={false} />
               </div>
             )}
             {promos.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2">
+              <div className="grid grid-cols-2 gap-3">
                 <div className="min-w-0">
                 <TituloBloque tenue>Promociones</TituloBloque>
                 <CajaTabla>

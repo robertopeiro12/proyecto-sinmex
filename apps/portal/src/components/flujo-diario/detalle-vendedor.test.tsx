@@ -607,12 +607,16 @@ describe("DetalleVendedor", () => {
       expect(within(panel).queryByText("Sin motivo")).not.toBeInTheDocument();
     });
 
-    it("cambios: lo que entregó y lo que recibió, uno junto al otro", async () => {
+    it("cambios: lo que recibió y lo que entregó, uno junto al otro (como en Procesos)", async () => {
       const panel = await abrir([
         mov({ tipo: "cambio", sentido: "entregado", producto: "Horchata 500 ml", cantidad: 5, motivo: null }),
         mov({ tipo: "cambio", sentido: "recibido", producto: "Jamaica 1 L", cantidad: 4, motivo: null }),
       ]);
-      expect(within(within(panel).getByRole("table", { name: "Cambios (entregó) de Don Gallo" })).getAllByRole("row")[1]).toHaveTextContent("Horchata 500 ml5");
+      expect(within(within(panel).getByRole("table", { name: "Cambios entregados a Don Gallo" })).getAllByRole("row")[1]).toHaveTextContent("Horchata 500 ml5");
+      const titulos = within(panel).getAllByText(/^Cambios (recibidos|entregados)$/).map((t) => t.textContent);
+      expect(titulos).toEqual(["Cambios recibidos", "Cambios entregados"]);
+      // Los dos lados en el mismo renglón; la reposición no se mete entre ellos.
+      expect(within(panel).getByText("Cambios recibidos").closest(".grid")).toBe(within(panel).getByText("Cambios entregados").closest(".grid"));
       expect(within(within(panel).getByRole("table", { name: "Cambios recibidos de Don Gallo" })).getAllByRole("row")[1]).toHaveTextContent("Jamaica 1 L4");
     });
 
@@ -623,8 +627,7 @@ describe("DetalleVendedor", () => {
       );
       const titulos = within(panel).getAllByText(/^Cliente: /).map((h) => h.textContent);
       expect(titulos).toEqual(["Cliente: Abarrotes Mary", "Cliente: Don Gallo"]);
-      expect(within(panel).getByRole("table", { name: "Cambios (entregó) de Abarrotes Mary" })).toBeInTheDocument();
-      expect(within(panel).queryByRole("table", { name: "Cambios recibidos de Abarrotes Mary" })).not.toBeInTheDocument();
+      expect(within(panel).getByRole("table", { name: "Cambios entregados a Abarrotes Mary" })).toBeInTheDocument();
     });
 
     it("sin mermas, cambios ni promociones", async () => {
