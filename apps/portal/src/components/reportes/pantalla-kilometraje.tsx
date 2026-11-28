@@ -3,16 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Aviso } from "@/components/ui/aviso";
-import { BotonExcel } from "@/components/ui/boton-excel";
 import { Campo, Lista } from "@/components/ui/campo";
 import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { FiltroFechas } from "@/components/ui/filtro-fechas";
 import { mensajeDe } from "@/lib/api";
-import { exportarExcel } from "@/lib/excel/exportar";
 import { primerDiaDelMes, type RangoFechas } from "@/lib/fechas";
 import {
-  definicionExcelKilometraje,
   etiquetaSucursal,
   etiquetaVehiculo,
   obtenerReporteKilometraje,
@@ -44,7 +41,6 @@ export function PantallaKilometraje({ sucursal }: { sucursal: string | null }) {
   const [vehiculos, setVehiculos] = useState<Vehiculo[]>([]);
   const [consultado, setConsultado] = useState<Consultado | null>(null);
   const [cargando, setCargando] = useState(false);
-  const [exportando, setExportando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Una consulta lenta que llega tarde no pisa a la mas nueva.
   const ultimaConsulta = useRef(0);
@@ -98,24 +94,6 @@ export function PantallaKilometraje({ sucursal }: { sucursal: string | null }) {
     }
   }
 
-  async function alExportar() {
-    if (!consultado) return;
-    setError(null);
-    setExportando(true);
-    try {
-      await exportarExcel(
-        definicionExcelKilometraje(consultado.reporte, {
-          sucursal: consultado.sucursal,
-          vehiculo: consultado.vehiculo,
-        }),
-      );
-    } catch {
-      setError("No se pudo generar el Excel.");
-    } finally {
-      setExportando(false);
-    }
-  }
-
   const hayResultados = consultado !== null && consultado.reporte.vehiculos.length > 0;
 
   return (
@@ -132,7 +110,6 @@ export function PantallaKilometraje({ sucursal }: { sucursal: string | null }) {
         onCambio={setRango}
         onMostrar={(r) => void alMostrar(r)}
         deshabilitado={cargando}
-        acciones={<BotonExcel exportando={exportando} disabled={!hayResultados} onClick={() => void alExportar()} />}
       >
         <Campo id="km-vehiculo" etiqueta="Vehículo">
           <Lista value={vehiculoId} onChange={(e) => setVehiculoId(e.target.value)}>

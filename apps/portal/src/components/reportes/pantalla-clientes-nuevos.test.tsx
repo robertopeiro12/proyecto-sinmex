@@ -3,7 +3,6 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorApi } from "@/lib/api";
-import * as excel from "@/lib/excel/exportar";
 import * as rcn from "@/lib/reporte-clientes-nuevos";
 import type { ReporteClientesNuevos } from "@/lib/reporte-clientes-nuevos";
 import { rangoMes, rangoSemana } from "@/lib/reporte-ventas";
@@ -16,10 +15,8 @@ vi.mock("@/lib/reporte-clientes-nuevos", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/reporte-clientes-nuevos")>();
   return { ...real, obtenerReporteClientesNuevos: vi.fn() };
 });
-vi.mock("@/lib/excel/exportar", () => ({ exportarExcel: vi.fn() }));
 
 const obtener = vi.mocked(rcn.obtenerReporteClientesNuevos);
-const exportarExcel = vi.mocked(excel.exportarExcel);
 
 const REPORTE: ReporteClientesNuevos = {
   desde: "2026-10-01",
@@ -45,7 +42,6 @@ describe("PantallaClientesNuevos", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     obtener.mockResolvedValue(REPORTE);
-    exportarExcel.mockResolvedValue(undefined);
   });
 
   it("sesión cargando → Cargando…", () => {
@@ -135,14 +131,14 @@ describe("PantallaClientesNuevos", () => {
     ]);
   });
 
-  it("sin resultados lo dice y Excel deshabilitado; error del servidor en alert", async () => {
+  it("sin resultados lo dice, sin botón de Excel; error del servidor en alert", async () => {
     mockAuth([PERMISO]);
     obtener.mockResolvedValueOnce({ ...REPORTE, clientes: [], total: 0 });
     const u = userEvent.setup();
     render(<PantallaClientesNuevos sucursal={null} />);
     await u.click(screen.getByRole("button", { name: "Mostrar" }));
     expect(await screen.findByText("No hay clientes nuevos en ese rango.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Exportar a Excel" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Exportar a Excel" })).toBeNull();
     obtener.mockRejectedValueOnce(new ErrorApi("Bad Request", 400, "El rango no puede pasar de un año."));
     await u.click(screen.getByRole("button", { name: "Mostrar" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("El rango no puede pasar de un año.");
@@ -182,13 +178,4 @@ describe("PantallaClientesNuevos", () => {
     expect(celda).toHaveAttribute("title", largo);
   });
 
-  it("exporta lo consultado con la sucursal del usuario atado", async () => {
-    mockAuth([PERMISO], "TJ");
-    const u = userEvent.setup();
-    render(<PantallaClientesNuevos sucursal={null} />);
-    await u.click(screen.getByRole("button", { name: "Mostrar" }));
-    await screen.findByRole("table", { name: "Clientes nuevos" });
-    await u.click(screen.getByRole("button", { name: "Exportar a Excel" }));
-    expect(exportarExcel).toHaveBeenCalledWith(rcn.definicionExcelClientesNuevos(REPORTE, { sucursal: "TJ" }));
-  });
 });

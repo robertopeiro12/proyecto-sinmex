@@ -1,18 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAuth } from "@/components/auth/auth-provider";
 import { Aviso } from "@/components/ui/aviso";
-import { BotonExcel } from "@/components/ui/boton-excel";
 import { FiltroFechas } from "@/components/ui/filtro-fechas";
 import { Monto } from "@/components/ui/monto";
 import { CajaTabla, FilaTotal, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
 import { mensajeDe } from "@/lib/api";
-import { exportarExcel } from "@/lib/excel/exportar";
 import type { RangoFechas } from "@/lib/fechas";
-import { etiquetaSucursal, formatearFecha } from "@/lib/reportes";
+import { formatearFecha } from "@/lib/reportes";
 import {
-  definicionExcelTesoreria,
   describirEvento,
   ETIQUETA_METODO,
   etiquetaSucursalCuenta,
@@ -28,12 +24,10 @@ function Pesos({ centavos }: { centavos: number | null }) {
 
 /** Mostrar Tesorería (spec §5.2): saldo al inicio y al final por cuenta, total y saldos fijados del rango. */
 export function PestanaVista({ sucursal, activa = true }: { sucursal: string | null; activa?: boolean }) {
-  const { usuario } = useAuth();
   const hoy = hoyEnTijuana();
   const [rango, setRango] = useState<RangoFechas>({ desde: hoy, hasta: hoy });
   const [vista, setVista] = useState<VistaTesoreria | null>(null);
   const [cargando, setCargando] = useState(false);
-  const [exportando, setExportando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ultima = useRef(0);
 
@@ -77,20 +71,6 @@ export function PestanaVista({ sucursal, activa = true }: { sucursal: string | n
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activa]);
 
-  async function alExportar() {
-    if (!vista) return;
-    setExportando(true);
-    try {
-      await exportarExcel(
-        definicionExcelTesoreria(vista, { sucursal: etiquetaSucursal(usuario?.sucursal?.codigo ?? null, sucursal) }),
-      );
-    } catch {
-      setError("No se pudo generar el Excel.");
-    } finally {
-      setExportando(false);
-    }
-  }
-
   const t = vista?.total;
 
   return (
@@ -101,7 +81,6 @@ export function PestanaVista({ sucursal, activa = true }: { sucursal: string | n
         hasta={rango.hasta}
         onCambio={setRango}
         onMostrar={(r) => void consultar(r.desde, r.hasta)}
-        acciones={<BotonExcel exportando={exportando} disabled={!vista || cargando} onClick={() => void alExportar()} />}
       />
 
       {error && <Aviso tono="error">{error}</Aviso>}
