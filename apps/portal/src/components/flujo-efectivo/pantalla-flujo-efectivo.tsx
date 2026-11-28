@@ -3,16 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Aviso } from "@/components/ui/aviso";
-import { BotonExcel } from "@/components/ui/boton-excel";
 import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { FiltroFechas } from "@/components/ui/filtro-fechas";
 import { Monto } from "@/components/ui/monto";
 import { CajaTabla, Tabla, Td, TdMonto, Th } from "@/components/ui/tabla";
 import { mensajeDe } from "@/lib/api";
-import { exportarExcel } from "@/lib/excel/exportar";
 import {
-  definicionExcelFlujo,
   formatearPorcentaje,
   obtenerFlujoEfectivo,
   type FlujoEfectivo,
@@ -71,7 +68,6 @@ export function PantallaFlujoEfectivo({ sucursal }: { sucursal: string | null })
   const [rango, setRango] = useState<RangoFechas>({ desde: hoy, hasta: hoy });
   const [consultado, setConsultado] = useState<Consultado | null>(null);
   const [cargando, setCargando] = useState(false);
-  const [exportando, setExportando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Solo la última consulta escribe: una lenta que llega tarde no pisa a la nueva.
   const ultima = useRef(0);
@@ -106,19 +102,6 @@ export function PantallaFlujoEfectivo({ sucursal }: { sucursal: string | null })
   if (cargandoSesion) return <EstadoPantalla titulo="Flujo de Efectivo" tipo="cargando" />;
   if (!permitido) return <EstadoPantalla titulo="Flujo de Efectivo" tipo="sin-permiso" />;
 
-  async function alExportar() {
-    if (!consultado) return;
-    setError(null);
-    setExportando(true);
-    try {
-      await exportarExcel(definicionExcelFlujo(consultado.flujo, { sucursal: consultado.sucursal }));
-    } catch {
-      setError("No se pudo generar el Excel.");
-    } finally {
-      setExportando(false);
-    }
-  }
-
   const flujo = consultado?.flujo ?? null;
   const actualizando = cargando && consultado !== null;
 
@@ -135,7 +118,6 @@ export function PantallaFlujoEfectivo({ sucursal }: { sucursal: string | null })
         hasta={rango.hasta}
         onCambio={setRango}
         onMostrar={(r) => void consultar(r.desde, r.hasta)}
-        acciones={<BotonExcel exportando={exportando} disabled={!flujo || cargando} onClick={() => void alExportar()} />}
       />
 
       {error && <Aviso tono="error">{error}</Aviso>}

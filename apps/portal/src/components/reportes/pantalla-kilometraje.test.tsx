@@ -3,7 +3,6 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorApi } from "@/lib/api";
-import * as excel from "@/lib/excel/exportar";
 import * as reportes from "@/lib/reportes";
 import type { ReporteKilometraje } from "@/lib/reportes";
 import { diaAnterior } from "@/lib/fechas";
@@ -20,11 +19,9 @@ vi.mock("@/lib/vehiculos", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/vehiculos")>();
   return { ...real, listarVehiculos: vi.fn() };
 });
-vi.mock("@/lib/excel/exportar", () => ({ exportarExcel: vi.fn() }));
 
 const obtener = vi.mocked(reportes.obtenerReporteKilometraje);
 const listarVehiculos = vi.mocked(vehiculosLib.listarVehiculos);
-const exportarExcel = vi.mocked(excel.exportarExcel);
 
 const REPORTE: ReporteKilometraje = {
   desde: "2026-10-01",
@@ -84,7 +81,6 @@ describe("PantallaKilometraje", () => {
     vi.clearAllMocks();
     listarVehiculos.mockResolvedValue(VEHICULOS);
     obtener.mockResolvedValue(REPORTE);
-    exportarExcel.mockResolvedValue(undefined);
   });
 
   it("mientras carga la sesión dice Cargando…, no \"No tienes permiso\"", () => {
@@ -111,7 +107,7 @@ describe("PantallaKilometraje", () => {
     expect(await screen.findByRole("option", { name: "Vieja (desactivado)" })).toBeInTheDocument();
     expect(listarVehiculos).toHaveBeenCalledWith("TJ");
     expect(obtener).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Exportar a Excel" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Exportar a Excel" })).toBeNull();
   });
 
   it("con fechas invertidas avisa y no consulta", async () => {
@@ -154,14 +150,14 @@ describe("PantallaKilometraje", () => {
     });
   });
 
-  it("sin jornadas lo dice y no deja exportar", async () => {
+  it("sin jornadas lo dice; sin botón de Excel", async () => {
     mockAuth(() => true);
     obtener.mockResolvedValue({ ...REPORTE, vehiculos: [], totalKilometrosDecimas: 0, totalSaltoDecimas: 0 });
     const usuario = userEvent.setup();
     render(<PantallaKilometraje sucursal={null} />);
     await usuario.click(screen.getByRole("button", { name: "Mostrar" }));
     expect(await screen.findByText("No hay jornadas cerradas en ese rango.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Exportar a Excel" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Exportar a Excel" })).toBeNull();
   });
 
   it("muestra el mensaje del servidor si la consulta falla", async () => {
@@ -171,29 +167,6 @@ describe("PantallaKilometraje", () => {
     render(<PantallaKilometraje sucursal={null} />);
     await usuario.click(screen.getByRole("button", { name: "Mostrar" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("El rango no puede pasar de un año.");
-  });
-
-  it("Review Focus 5: exporta lo consultado con los filtros aplicados, aunque luego se cambien", async () => {
-    mockAuth(() => true, "TJ");
-    const usuario = userEvent.setup();
-    render(<PantallaKilometraje sucursal={null} />);
-    await screen.findByRole("option", { name: "Nissan-01 (ABC-123)" });
-    await usuario.selectOptions(screen.getByLabelText("Vehículo"), "v1");
-    await usuario.click(screen.getByRole("button", { name: "Mostrar" }));
-    await screen.findByText("Total general");
-
-    // Cambia los filtros SIN volver a consultar.
-    await usuario.selectOptions(screen.getByLabelText("Vehículo"), "");
-    await usuario.click(screen.getByRole("button", { name: "Exportar a Excel" }));
-
-    expect(exportarExcel).toHaveBeenCalledTimes(1);
-    const def = exportarExcel.mock.calls[0]?.[0];
-    expect(def?.filtros).toEqual([
-      ["Rango", "01/10/2026 a 13/10/2026"],
-      ["Sucursal", "TJ"],
-      ["Vehículo", "Nissan-01 (ABC-123)"],
-    ]);
-    expect(def?.nombreArchivo).toBe("kilometraje_2026-10-01_a_2026-10-13");
   });
 
   it("el encabezado explica el reporte; los atajos cambian el rango sin consultar", async () => {

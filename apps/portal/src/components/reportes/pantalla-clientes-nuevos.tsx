@@ -3,14 +3,11 @@
 import { useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Aviso } from "@/components/ui/aviso";
-import { BotonExcel } from "@/components/ui/boton-excel";
 import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { FiltroFechas } from "@/components/ui/filtro-fechas";
 import { mensajeDe } from "@/lib/api";
-import { exportarExcel } from "@/lib/excel/exportar";
 import {
-  definicionExcelClientesNuevos,
   obtenerReporteClientesNuevos,
   textoTotalClientes,
   type ReporteClientesNuevos,
@@ -37,7 +34,6 @@ export function PantallaClientesNuevos({ sucursal }: { sucursal: string | null }
   });
   const [consultado, setConsultado] = useState<Consultado | null>(null);
   const [cargando, setCargando] = useState(false);
-  const [exportando, setExportando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Solo la última consulta escribe.
   const ultima = useRef(0);
@@ -63,19 +59,6 @@ export function PantallaClientesNuevos({ sucursal }: { sucursal: string | null }
     }
   }
 
-  async function alExportar() {
-    if (!consultado) return;
-    setError(null);
-    setExportando(true);
-    try {
-      await exportarExcel(definicionExcelClientesNuevos(consultado.reporte, { sucursal: consultado.sucursal }));
-    } catch {
-      setError("No se pudo generar el Excel.");
-    } finally {
-      setExportando(false);
-    }
-  }
-
   const reporte = consultado?.reporte ?? null;
   const hayClientes = reporte !== null && reporte.clientes.length > 0;
   const actualizando = cargando && consultado !== null;
@@ -94,9 +77,6 @@ export function PantallaClientesNuevos({ sucursal }: { sucursal: string | null }
         hasta={rango.hasta}
         onCambio={setRango}
         onMostrar={(r) => void alMostrar(r)}
-        acciones={
-          <BotonExcel exportando={exportando} disabled={!hayClientes || cargando} onClick={() => void alExportar()} />
-        }
       />
 
       {error && <Aviso tono="error">{error}</Aviso>}
