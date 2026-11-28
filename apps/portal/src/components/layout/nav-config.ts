@@ -61,6 +61,7 @@ export const navSections: NavSection[] = [
       { label: "Registro de Operación", href: "/produccion/registro-operacion" },
       { label: "Inventario de PT con Recargas", href: "/produccion/inventario-pt-recargas" },
       { label: "Inventario de PT con Ventas", href: "/produccion/inventario-pt-ventas" },
+      { label: "Información de Producción", href: "/produccion/informacion-produccion" },
       { label: "Almacenes", href: "/produccion/almacenes", pronto: true },
     ],
   },

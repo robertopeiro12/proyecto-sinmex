@@ -79,6 +79,8 @@ export const EXPLICACION_PERMISO: Record<string, string> = {
   "inventario.ver": "Puede consultar cuánto inventario hay disponible.",
   "inventario_pt_recargas.ver":
     "Abre Producción → Inventario de PT con Recargas: una fotografía de lo que hay hoy en el almacén (inicial, recargas aceptadas por los vendedores, envíos, entradas y actual), con a quién se le recargó.",
+  "informacion_produccion.ver":
+    "Abre Producción → Información de Producción: lo que se produjo y se compró en un rango de días (por presentación o por producto), con cada captura de Entradas/Compras.",
   "inventario_pt.ver":
     "Abre Producción → Inventario de PT con Ventas: el inventario real del almacén por día (inicial, ventas, merma, entradas, final), con los días anteriores de cada producto y a quién se le descontó.",
   "inventario_pt.ajustar":
