@@ -4,7 +4,7 @@ Fecha: 2026-11-28 · Rama: `feature/informacion-produccion` · Backend + portal 
 
 ## Para qué
 Un **reporte** de lo que se produjo o se compró: junta las capturas de *Registro de Operación → Entradas/Compras* de un
-rango de días. No se captura nada aquí; solo se consulta (y se baja a Excel).
+rango de días. No se captura nada aquí; solo se consulta.
 
 ## Fuentes (vault `90-Fuentes/`)
 - **Módulo de Producción e Inventarios 2026-11-16**, "Submódulo: Información de Producción": "mostrar todos los registros
@@ -26,7 +26,8 @@ respuesta todavía). **Si el tío elige otra opción, se cambia después** (son 
   de Inventario de PT con Ventas** (antes de Almacenes). `EncabezadoPantalla` "Información de Producción" + una línea:
   "Lo que se produjo y se compró en un rango de días, según las Entradas/Compras del Registro de Operación." Sucursal del
   menú lateral (**Todas** = suma de las sucursales). `FiltroFechas` (Desde/Hasta, atajos, **Mostrar**), por omisión **este
-  mes** (del día 1 a hoy), con `BotonExcel` en `acciones`. `SelectorSegmentado` **Por presentación | Por producto**.
+  mes** (del día 1 a hoy). `SelectorSegmentado` **Por presentación | Por producto**. **Sin Excel**: el tío no lo pidió aquí
+  (Roberto, 2026-11-28: el Excel va en la pantalla de Reportes).
   Consulta al entrar y al picar Mostrar; cambiar de vista vuelve a pedir con el rango consultado. Cabe a 1366 px.
 - **D2. Tabla.** Columnas **Producto · Producción · Compras · Total**.
   - *Por presentación*: agrupada por tamaño (`agruparPorTamano`), con renglón **Total <tamaño>** y, al final, **Total**
@@ -44,17 +45,14 @@ respuesta todavía). **Si el tío elige otra opción, se cambia después** (son 
   sus presentaciones, sumadas por operación): **Día · Origen · Capturó · Piezas · Comentario**, y con **Todas** además la
   columna **Sucursal**, de la más vieja a la más nueva (`fecha`, hora de captura, id), con renglón **Total**. Usa el rango
   ya consultado (no tiene filtros propios).
-- **D5. Excel** (`lib/excel`, `exportarExcel`): título "Información de Producción", filtros Rango, Sucursal y Vista; las
-  mismas columnas y renglones de la tabla en pantalla (grupos de tamaño como `grupo`, totales de tamaño como `subtotal`,
-  total general como `total`). Archivo `informacion-produccion_<desde>_a_<hasta>`. Deshabilitado sin renglones.
-- **D6. Permiso nuevo** `informacion_produccion.ver` (grupo `Produccion/Almacen`, con su ⓘ en
+- **D5. Permiso nuevo** `informacion_produccion.ver` (grupo `Produccion/Almacen`, con su ⓘ en
   `lib/explicacion-permisos.ts`); los perfiles siguen vacíos (los configura el cliente). Alcance de sucursal como PT con
   Ventas (`InventarioPtService.ambito`: atado a otra = 403; `todas` para General = todas las vivas; código inexistente =
   404). El portal muestra `EstadoPantalla` sin permiso si falta.
-- **D7. Fechas.** `desde`/`hasta` obligatorias, `AAAA-MM-DD` reales; `hasta` > hoy de Tijuana = 400 con `hoyEnTijuana`
+- **D6. Fechas.** `desde`/`hasta` obligatorias, `AAAA-MM-DD` reales; `hasta` > hoy de Tijuana = 400 con `hoyEnTijuana`
   (mismo error que PT con Ventas); `desde > hasta` = 400; rango de más de **366 días** = 400 "El rango no puede pasar de un
   año." (el de los demás reportes, `MAX_DIAS_RANGO`).
-- **D8. Endpoints** (`modules/produccion/`, archivos `informacion-produccion.*` y reglas puras
+- **D7. Endpoints** (`modules/produccion/`, archivos `informacion-produccion.*` y reglas puras
   `reglas-informacion-produccion.ts`):
   - `GET /informacion-produccion?desde&hasta&sucursal&vista=presentacion|producto` →
     `{ desde, hasta, hoyEnTijuana, renglones: { presentacionId: string | null; productoId; producto; volumen; produccion;
@@ -67,6 +65,7 @@ respuesta todavía). **Si el tío elige otra opción, se cambia después** (son 
 
 ## Fuera de alcance
 - Envíos recibidos (P3), costos o precios de compra, proveedores, almacenes (T-63).
+- Exportar a Excel (va en *Información → Reportes*, no aquí).
 - Capturar o corregir entradas (eso es el Registro de Operación).
 
 ## Nube
@@ -78,5 +77,4 @@ Unit de las reglas (suma por origen, por producto, total). e2e: producción y co
 recibido) **no** cuenta; operación borrada no cuenta; otro tipo (merma, consumo) no cuenta; fuera del rango no cuenta;
 Todas suma sucursales; presentación dada de baja con entrada sale; detalle por presentación y por producto (suma por
 operación, con Capturó y Comentario); validaciones de fecha y rango; permisos (403 sin `informacion_produccion.ver`) y
-alcance (atado a otra = 403). Portal: tabla agrupada con totales, Por producto, detalle, Excel (definición), sin
-permiso, vacío. Navegador a 1366 px.
+alcance (atado a otra = 403). Portal: tabla agrupada con totales, Por producto, detalle, sin permiso, vacío. Navegador a 1366 px.
