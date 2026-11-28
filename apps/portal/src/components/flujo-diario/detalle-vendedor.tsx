@@ -85,7 +85,7 @@ export function DetalleVendedor({
     {
       valor: "mermas",
       etiqueta: E.mermas,
-      contenido: <PestanaMermas promociones={detalle.promociones} />,
+      contenido: <PestanaMermas promociones={detalle.promociones} movimientos={detalle.movimientos} />,
     },
     ...(modo === "dashboard"
       ? [{ valor: "corte", etiqueta: E.corte, contenido: <PestanaCorte corte={detalle.corte} /> }]

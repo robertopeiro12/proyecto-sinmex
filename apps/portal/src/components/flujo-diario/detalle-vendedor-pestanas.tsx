@@ -14,6 +14,7 @@ import {
   guardarNotasEntregadas,
   type Corte,
   type DetalleVendedorDia,
+  type MovimientoDetalle,
   type NotaNoEntregada,
   type NotaRevision,
   type PagoDetalle,
@@ -34,6 +35,7 @@ import {
   TdImporte,
   TdLiquidada,
   RENGLON_QUE_ABRE,
+  TextoMotivo,
   TituloBloque,
 } from "./piezas";
 
@@ -490,45 +492,160 @@ export function PestanaVisitas({ visitas }: { visitas: VisitaDetalle[] }) {
   );
 }
 
-/** Hoy solo hay promociones (las mermas y cambios no existen en la base): un bloque por cliente, como el viejo. */
-export function PestanaMermas({ promociones }: { promociones: DetalleVendedorDia["promociones"] }) {
-  if (promociones.length === 0) return <SinDatos>Sin promociones este día.</SinDatos>;
-  const porCliente = new Map<string, { producto: string; cantidad: number }[]>();
-  for (const p of promociones) {
-    const lista = porCliente.get(p.cliente) ?? [];
-    lista.push(p);
-    porCliente.set(p.cliente, lista);
-  }
+/** Producto · Cantidad (· Motivo · Comentario si `conMotivo`) de una lista de renglones de la tablet. */
+function TablaMovimientos({
+  titulo,
+  aria,
+  movimientos,
+  conMotivo,
+}: {
+  titulo: string;
+  /** Nombre accesible: dice también el cliente. */
+  aria: string;
+  movimientos: MovimientoDetalle[];
+  conMotivo: boolean;
+}) {
   return (
-    <div className="flex mx-auto w-full max-w-xl flex-col gap-2">
-      {[...porCliente.entries()].map(([cliente, productos]) => (
-        <section key={cliente} className="flex flex-col gap-2">
-          <h3 className="rounded-lg bg-menu px-3 py-2 text-[13.5px] font-semibold">{`Cliente: ${cliente}`}</h3>
-          <TituloBloque tenue>Promociones</TituloBloque>
-          <CajaTabla>
-            <Tabla densidad="compacta" aria-label={`Promociones de ${cliente}`}>
-              <thead>
-                <tr>
-                  <Th>Producto</Th>
-                  <Th alinear="derecha">Cantidad</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {productos.map((p, i) => (
-                  <tr key={`${p.producto}-${i}`}>
-                    <Td>{p.producto}</Td>
-                    <Td alinear="derecha">{formatearPiezas(p.cantidad)}</Td>
-                  </tr>
-                ))}
-                <FilaTotal>
-                  <Td>Total</Td>
-                  <Td alinear="derecha">{formatearPiezas(productos.reduce((s, p) => s + p.cantidad, 0))}</Td>
-                </FilaTotal>
-              </tbody>
-            </Tabla>
-          </CajaTabla>
+    <div className="min-w-0">
+      <TituloBloque tenue>{titulo}</TituloBloque>
+      <CajaTabla>
+        <Tabla densidad="compacta" aria-label={aria} className="table-fixed">
+          {conMotivo ? (
+            <colgroup>
+              <col className="w-[28%]" />
+              <col className="w-[10%]" />
+              <col className="w-[24%]" />
+              <col />
+            </colgroup>
+          ) : (
+            <colgroup>
+              <col />
+              <col className="w-[5rem]" />
+            </colgroup>
+          )}
+          <thead>
+            <tr>
+              <Th>Producto</Th>
+              <Th alinear="derecha">Cantidad</Th>
+              {conMotivo && <Th>Motivo</Th>}
+              {conMotivo && <Th>Comentario</Th>}
+            </tr>
+          </thead>
+          <tbody>
+            {movimientos.map((m, i) => (
+              <tr key={`${m.producto}-${i}`}>
+                <Td className="truncate" title={m.producto}>
+                  {m.producto}
+                </Td>
+                <Td alinear="derecha" className="whitespace-nowrap">
+                  {formatearPiezas(m.cantidad)}
+                </Td>
+                {conMotivo && (
+                  <Td>
+                    <TextoMotivo motivo={m.motivo} />
+                  </Td>
+                )}
+                {conMotivo && <Td>{m.comentario ?? ""}</Td>}
+              </tr>
+            ))}
+          </tbody>
+        </Tabla>
+      </CajaTabla>
+    </div>
+  );
+}
+
+/**
+ * Mermas, cambios y promociones de la tablet: primero la merma del vehículo y después un bloque por
+ * cliente (alfabético, con los que solo tuvieron cambios). El servidor manda los renglones ordenados.
+ */
+export function PestanaMermas({
+  promociones,
+  movimientos,
+}: {
+  promociones: DetalleVendedorDia["promociones"];
+  movimientos: MovimientoDetalle[];
+}) {
+  const vehiculo = movimientos.filter((m) => m.tipo === "merma_trayecto");
+  const porCliente = new Map<string, { movs: MovimientoDetalle[]; promos: { producto: string; cantidad: number }[] }>();
+  const bloque = (cliente: string) => {
+    let b = porCliente.get(cliente);
+    if (!b) porCliente.set(cliente, (b = { movs: [], promos: [] }));
+    return b;
+  };
+  for (const m of movimientos) if (m.tipo !== "merma_trayecto" && m.cliente) bloque(m.cliente).movs.push(m);
+  for (const p of promociones) bloque(p.cliente).promos.push(p);
+  if (vehiculo.length === 0 && porCliente.size === 0) return <SinDatos>Sin mermas, cambios ni promociones este día.</SinDatos>;
+  const clientes = [...porCliente.keys()].sort((a, b) => a.localeCompare(b, "es"));
+  return (
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-3">
+      {vehiculo.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <TablaMovimientos titulo="Merma del vehículo" aria="Merma del vehículo" movimientos={vehiculo} conMotivo />
         </section>
-      ))}
+      )}
+      {clientes.map((cliente) => {
+        const { movs, promos } = porCliente.get(cliente)!;
+        const de = (tipo: MovimientoDetalle["tipo"], sentido: MovimientoDetalle["sentido"]) =>
+          movs.filter((m) => m.tipo === tipo && m.sentido === sentido);
+        const recibidas = de("merma_cliente", "recibido");
+        const reposicion = de("merma_cliente", "entregado");
+        const cambioEntrego = de("cambio", "entregado");
+        const cambioRecibio = de("cambio", "recibido");
+        return (
+          <section key={cliente} className="flex flex-col gap-2">
+            <h3 className="rounded-lg bg-menu px-3 py-2 text-[13.5px] font-semibold">{`Cliente: ${cliente}`}</h3>
+            {recibidas.length > 0 && (
+              <TablaMovimientos titulo="Mermas recibidas" aria={`Mermas recibidas de ${cliente}`} movimientos={recibidas} conMotivo />
+            )}
+            {reposicion.length > 0 && (
+              <div className="grid grid-cols-2 items-start gap-3">
+                <TablaMovimientos titulo="Reposición entregada" aria={`Reposición entregada a ${cliente}`} movimientos={reposicion} conMotivo={false} />
+              </div>
+            )}
+            {/* Los dos lados del cambio juntos, como en Procesos (lo que regresó · lo que se le entregó). */}
+            {(cambioRecibio.length > 0 || cambioEntrego.length > 0) && (
+              <div className="grid grid-cols-2 items-start gap-3">
+                <TablaMovimientos titulo="Cambios recibidos" aria={`Cambios recibidos de ${cliente}`} movimientos={cambioRecibio} conMotivo={false} />
+                <TablaMovimientos titulo="Cambios entregados" aria={`Cambios entregados a ${cliente}`} movimientos={cambioEntrego} conMotivo={false} />
+              </div>
+            )}
+            {promos.length > 0 && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="min-w-0">
+                <TituloBloque tenue>Promociones</TituloBloque>
+                <CajaTabla>
+                  <Tabla densidad="compacta" aria-label={`Promociones de ${cliente}`} className="table-fixed">
+                    <colgroup>
+                      <col />
+                      <col className="w-[5rem]" />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <Th>Producto</Th>
+                        <Th alinear="derecha">Cantidad</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {promos.map((p, i) => (
+                        <tr key={`${p.producto}-${i}`}>
+                          <Td>{p.producto}</Td>
+                          <Td alinear="derecha">{formatearPiezas(p.cantidad)}</Td>
+                        </tr>
+                      ))}
+                      <FilaTotal>
+                        <Td>Total</Td>
+                        <Td alinear="derecha">{formatearPiezas(promos.reduce((s, p) => s + p.cantidad, 0))}</Td>
+                      </FilaTotal>
+                    </tbody>
+                  </Tabla>
+                </CajaTabla>
+                </div>
+              </div>
+            )}
+          </section>
+        );
+      })}
     </div>
   );
 }

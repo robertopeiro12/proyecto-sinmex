@@ -16,6 +16,7 @@ import {
   sumar,
   TdImporte,
   TdLiquidada,
+  TextoMotivo,
   TituloBloque,
 } from "./piezas";
 
@@ -35,7 +36,7 @@ const E = ETIQUETA_PESTANA_DIA;
 
 /**
  * El detalle de un día de una sucursal en "Por día" (spec §5.3). La cobranza incluye la
- * de la oficina ("Oficina"); las mermas todavía no existen en la base (spec §6).
+ * de la oficina ("Oficina").
  */
 export function DetalleDia({
   detalle,
@@ -58,11 +59,7 @@ export function DetalleDia({
         { valor: "ventas", etiqueta: E.ventas, contenido: <PestanaVentas detalle={detalle} /> },
         { valor: "cobranza", etiqueta: E.cobranza, contenido: <PestanaCobranzaDia detalle={detalle} /> },
         { valor: "gastos", etiqueta: E.gastos, contenido: <PestanaGastosDia gastos={detalle.gastos} /> },
-        {
-          valor: "mermas",
-          etiqueta: E.mermas,
-          contenido: <SinDatos>Todavía no se registran mermas en el sistema.</SinDatos>,
-        },
+        { valor: "mermas", etiqueta: E.mermas, contenido: <PestanaMermasDia mermas={detalle.mermas} /> },
         { valor: "promociones", etiqueta: E.promociones, contenido: <PestanaPromocionesDia detalle={detalle} /> },
         { valor: "visitas", etiqueta: E.visitas, contenido: <PestanaVisitasDia visitas={detalle.visitas} /> },
       ]}
@@ -279,6 +276,49 @@ function PestanaGastosDia({ gastos }: { gastos: DatosDetalleDia["gastos"] }) {
               <Td colSpan={2}>Total</Td>
               <TdMonto centavos={sumar(gastos, (g) => g.montoCentavos)} />
             </FilaTotal>
+          </tbody>
+        </Tabla>
+      </CajaTabla>
+    </div>
+  );
+}
+
+/** Merma del vehículo y la que recibieron los clientes, con su motivo; `cliente` null es el vehículo. */
+function PestanaMermasDia({ mermas }: { mermas: DatosDetalleDia["mermas"] }) {
+  if (mermas.length === 0) return <SinDatos>Sin mermas este día.</SinDatos>;
+  return (
+    <div className="mx-auto w-full max-w-5xl">
+      <TituloBloque>Mermas</TituloBloque>
+      <CajaTabla>
+        <Tabla densidad="compacta" aria-label="Mermas" className="table-fixed">
+          <colgroup>
+            <col className="w-[16%]" />
+            <col className="w-[24%]" />
+            <col />
+            <col className="w-[8rem]" />
+            <col className="w-[22%]" />
+          </colgroup>
+          <thead>
+            <tr>
+              <Th>Vendedor</Th>
+              <Th>Cliente</Th>
+              <Th>Producto</Th>
+              <Th alinear="derecha">Cantidad</Th>
+              <Th>Motivo</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {mermas.map((m, i) => (
+              <tr key={`${m.vendedor}-${i}`}>
+                <Td>{m.vendedor}</Td>
+                <Td>{m.cliente ?? "Vehículo"}</Td>
+                <Td>{m.producto}</Td>
+                <Td alinear="derecha">{formatearPiezas(m.cantidad)}</Td>
+                <Td>
+                  <TextoMotivo motivo={m.motivo} />
+                </Td>
+              </tr>
+            ))}
           </tbody>
         </Tabla>
       </CajaTabla>

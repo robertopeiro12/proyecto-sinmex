@@ -3,6 +3,7 @@ import {
   cmpVolumen,
   armarDetalleVendedor,
   type AsignadaFila,
+  type MovimientoFila,
   type PagoFila,
   type VentaFila,
 } from './reglas-detalle';
@@ -16,6 +17,7 @@ const vacio = {
   gastos: [],
   visitasSinVenta: [],
   promociones: [],
+  movimientos: [],
 };
 const base = {
   fecha: '2026-11-07',
@@ -657,5 +659,155 @@ describe('nota no cobrada (decision 17)', () => {
     };
     const d = armarDetalleVendedor(base, { ...vacio, asignadas: [fila] });
     expect(d.asignadasPorEntregar).toEqual([fila]);
+  });
+});
+
+const mov = (extra: Partial<MovimientoFila>): MovimientoFila => ({
+  tipo: 'merma_cliente',
+  vendedor: 'Ana',
+  cliente: 'C1',
+  producto: 'Horchata 1 L',
+  sentido: 'recibido',
+  piezas: 3,
+  motivo: 'Caducado',
+  comentario: null,
+  registradoEn: '2026-11-07T17:00:00.000Z',
+  ...extra,
+});
+
+describe('movimientos de la tablet en el detalle', () => {
+  const filas = [
+    mov({ producto: 'Jamaica 1 L', registradoEn: '2026-11-07T18:00:00.000Z' }),
+    mov({
+      producto: 'Horchata 1 L',
+      sentido: 'entregado',
+      piezas: 2,
+      motivo: 'Caducado',
+    }),
+    mov({
+      producto: 'Agua 1 L',
+      registradoEn: '2026-11-07T17:00:00.000Z',
+      comentario: 'Se rompio',
+    }),
+    mov({
+      tipo: 'merma_trayecto',
+      cliente: null,
+      motivo: null,
+      producto: 'Horchata 1 L',
+      registradoEn: '2026-11-07T19:00:00.000Z',
+    }),
+    mov({
+      tipo: 'cambio',
+      motivo: null,
+      producto: 'Horchata 1 L',
+      registradoEn: '2026-11-07T20:00:00.000Z',
+    }),
+  ];
+
+  it('vendedor: un renglon por linea, cantidad = piezas, en orden de registro y luego producto', () => {
+    const d = armarDetalleVendedor(base, { ...vacio, movimientos: filas });
+    expect(
+      d.movimientos.map((m) => [
+        m.producto,
+        m.sentido,
+        m.cantidad,
+        m.motivo,
+        m.comentario,
+      ]),
+    ).toEqual([
+      ['Agua 1 L', 'recibido', 3, 'Caducado', 'Se rompio'],
+      ['Horchata 1 L', 'entregado', 2, 'Caducado', null],
+      ['Jamaica 1 L', 'recibido', 3, 'Caducado', null],
+      ['Horchata 1 L', 'recibido', 3, null, null],
+      ['Horchata 1 L', 'recibido', 3, null, null],
+    ]);
+    expect(d.movimientos[3]).toEqual({
+      tipo: 'merma_trayecto',
+      cliente: null,
+      producto: 'Horchata 1 L',
+      sentido: 'recibido',
+      cantidad: 3,
+      motivo: null,
+      comentario: null,
+    });
+    expect(d.movimientos[4].tipo).toBe('cambio');
+  });
+
+  it('dia: solo mermas (trayecto y lo recibido de cliente), sin reposiciones ni cambios', () => {
+    const d = armarDetalleDia(
+      { fecha: base.fecha, sucursalCodigo: 'TJ' },
+      { ...vacio, movimientos: filas },
+    );
+    expect(d.mermas).toEqual([
+      {
+        vendedor: 'Ana',
+        cliente: 'C1',
+        producto: 'Agua 1 L',
+        cantidad: 3,
+        motivo: 'Caducado',
+      },
+      {
+        vendedor: 'Ana',
+        cliente: 'C1',
+        producto: 'Jamaica 1 L',
+        cantidad: 3,
+        motivo: 'Caducado',
+      },
+      {
+        vendedor: 'Ana',
+        cliente: null,
+        producto: 'Horchata 1 L',
+        cantidad: 3,
+        motivo: null,
+      },
+    ]);
+  });
+
+  it('dia: ordena por vendedor', () => {
+    const d = armarDetalleDia(
+      { fecha: base.fecha, sucursalCodigo: 'TJ' },
+      {
+        ...vacio,
+        movimientos: [mov({ vendedor: 'Beto' }), mov({ vendedor: 'Ana' })],
+      },
+    );
+    expect(d.mermas.map((m) => m.vendedor)).toEqual(['Ana', 'Beto']);
+  });
+
+  it('sin movimientos, listas vacias', () => {
+    expect(armarDetalleVendedor(base, vacio).movimientos).toEqual([]);
+    expect(
+      armarDetalleDia({ fecha: base.fecha, sucursalCodigo: 'TJ' }, vacio)
+        .mermas,
+    ).toEqual([]);
+  });
+
+  it('misma hora y producto: recibido antes que entregado sin importar el orden de las filas', () => {
+    const entregado = mov({ sentido: 'entregado', piezas: 2 });
+    const recibido = mov({ sentido: 'recibido', piezas: 3 });
+    const d = armarDetalleVendedor(base, {
+      ...vacio,
+      movimientos: [entregado, recibido],
+    });
+    expect(d.movimientos.map((m) => m.sentido)).toEqual([
+      'recibido',
+      'entregado',
+    ]);
+    const dia = armarDetalleDia(
+      { fecha: base.fecha, sucursalCodigo: 'TJ' },
+      { ...vacio, movimientos: [entregado, recibido] },
+    );
+    expect(dia.mermas.map((m) => m.cantidad)).toEqual([3]);
+  });
+
+  it('misma hora, producto y sentido: desempata por tipo', () => {
+    const d = armarDetalleVendedor(base, {
+      ...vacio,
+      movimientos: [mov({ tipo: 'merma_trayecto' }), mov({ tipo: 'cambio' })],
+    });
+    expect(d.movimientos.map((m) => m.tipo)).toEqual([
+      'cambio',
+      'merma_trayecto',
+    ]);
   });
 });

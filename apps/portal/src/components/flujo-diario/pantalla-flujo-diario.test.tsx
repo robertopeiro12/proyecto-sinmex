@@ -98,7 +98,7 @@ const DETALLE: DetalleVendedorDia = {
   notas: [],
   cobranza: { contado: [], anteriores: [], aFavor: [] },
   gastos: [], notasCredito: [], asignadasCobradas: [], asignadasPorEntregar: [], notasNoEntregadas: [],
-  visitas: [], promociones: [], corte: null,
+  visitas: [], promociones: [], movimientos: [], corte: null,
 };
 
 function mockAuth(permisos: string[]) {
@@ -367,7 +367,7 @@ describe("PantallaFlujoDiario", () => {
     obtenerFlujo.mockResolvedValue(DOS_SUCURSALES);
     obtenerDetalleDia.mockResolvedValue({
       fecha: "2026-11-09", sucursalCodigo: "MX", porPresentacion: [], porProducto: [], porVendedor: [], porCliente: [],
-      cobranza: [], aFavor: [], gastos: [], visitas: [], promociones: [],
+      cobranza: [], aFavor: [], gastos: [], visitas: [], promociones: [], mermas: [],
     });
     const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PantallaFlujoDiario sucursal={null} />);
@@ -380,7 +380,33 @@ describe("PantallaFlujoDiario", () => {
     const ventana = await screen.findByRole("dialog", { name: "Ventas · Mexicali · 09/11/2026" });
     await u.click(await within(ventana).findByRole("tab", { name: "Mermas" }));
     expect(screen.getByRole("dialog", { name: "Mermas · Mexicali · 09/11/2026" })).toBe(ventana);
-    expect(within(ventana).getByText("Todavía no se registran mermas en el sistema.")).toBeInTheDocument();
+    expect(within(ventana).getByText("Sin mermas este día.")).toBeInTheDocument();
+  });
+
+  it("Por día: la pestaña Mermas lista vendedor, cliente (o Vehículo), producto, cantidad y motivo", async () => {
+    mockAuth([PERMISO]);
+    obtenerFlujo.mockResolvedValue(DOS_SUCURSALES);
+    obtenerDetalleDia.mockResolvedValue({
+      fecha: "2026-11-09", sucursalCodigo: "MX", porPresentacion: [], porProducto: [], porVendedor: [], porCliente: [],
+      cobranza: [], aFavor: [], gastos: [], visitas: [], promociones: [],
+      mermas: [
+        { vendedor: "RBlas", cliente: null, producto: "Jamaica 1 L", cantidad: 3, motivo: "Se rompió" },
+        { vendedor: "RBlas", cliente: "Don Gallo", producto: "Horchata 500 ml", cantidad: 2, motivo: null },
+      ],
+    });
+    const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    render(<PantallaFlujoDiario sucursal={null} />);
+    await screen.findByRole("table", { name: "Por vendedor" });
+    await u.click(screen.getByRole("tab", { name: "Resultados por día" }));
+    const botones = within(screen.getByRole("table", { name: "Por día" })).getAllByRole("button", { name: "09/11/2026" });
+    await u.click(botones[1]);
+    const ventana = await screen.findByRole("dialog", { name: "Ventas · Mexicali · 09/11/2026" });
+    await u.click(await within(ventana).findByRole("tab", { name: "Mermas" }));
+    const tabla = within(ventana).getByRole("table", { name: "Mermas" });
+    expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Vendedor", "Cliente", "Producto", "Cantidad", "Motivo"]);
+    const filas = within(tabla).getAllByRole("row");
+    expect(filas[1]).toHaveTextContent("RBlasVehículoJamaica 1 L3Se rompió");
+    expect(filas[2]).toHaveTextContent("RBlasDon GalloHorchata 500 ml2Sin motivo");
   });
 
   it("Por día es de toda la sucursal: sin selector de vendedor y su consulta ignora al vendedor elegido", async () => {
@@ -390,7 +416,7 @@ describe("PantallaFlujoDiario", () => {
     ]);
     obtenerDetalleDia.mockResolvedValue({
       fecha: "2026-11-09", sucursalCodigo: "TJ", porPresentacion: [], porProducto: [], porVendedor: [], porCliente: [],
-      cobranza: [], aFavor: [], gastos: [], visitas: [], promociones: [],
+      cobranza: [], aFavor: [], gastos: [], visitas: [], promociones: [], mermas: [],
     });
     const u = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
     render(<PantallaFlujoDiario sucursal="TJ" />);

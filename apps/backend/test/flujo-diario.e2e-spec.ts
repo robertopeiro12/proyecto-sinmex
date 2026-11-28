@@ -48,6 +48,7 @@ describe('Flujo diario (e2e)', () => {
   let presentacionId: string;
   let presentacionMediaId: string;
   let motivoId: string;
+  let motivoMermaId: string;
   let campoId: string;
   let vehiculoId: string;
   let vehiculoAsignadoId: string;
@@ -642,6 +643,109 @@ describe('Flujo diario (e2e)', () => {
         promocion_texto: 'Lleva 10 y regalo 2',
       })
       .execute();
+    // Eva, 05-14: movimientos de la tablet. Vivos: merma de cliente con motivo
+    // (recibido 3 + entregado 2), merma del vehiculo sin motivo y un cambio.
+    // Fuera: uno borrado y uno de otra fecha.
+    motivoMermaId = (
+      await db
+        .insertInto('motivo_merma')
+        .values({ nombre: `Caducado fd ${SUFIJO}`, aplica_cliente: true })
+        .returning('id')
+        .executeTakeFirstOrThrow()
+    ).id;
+    const sembrarMovimiento = async (o: {
+      tipo: 'merma_cliente' | 'merma_trayecto' | 'cambio' | 'consumo';
+      vendedor?: string;
+      fecha: string;
+      hora: string;
+      motivo?: boolean;
+      comentario?: string;
+      borrado?: boolean;
+      lineas: { sentido: 'recibido' | 'entregado'; piezas: number }[];
+    }) => {
+      const id = randomUUID();
+      await db
+        .insertInto('movimiento_inventario')
+        .values({
+          id,
+          sucursal_id: idFd,
+          vendedor_id: o.vendedor ?? eva,
+          cliente_id:
+            o.tipo === 'merma_trayecto' || o.tipo === 'consumo' ? null : c1,
+          tipo: o.tipo,
+          fecha: sql<Date>`${o.fecha}::date`,
+          comentario: o.comentario ?? null,
+          motivo_merma_id: o.motivo ? motivoMermaId : null,
+          registrado_en: sql<Date>`${o.fecha + 'T' + o.hora + 'Z'}::timestamptz`,
+          deleted_at: o.borrado ? sql<Date>`now()` : null,
+        })
+        .execute();
+      await db
+        .insertInto('movimiento_inventario_linea')
+        .values(
+          o.lineas.map((l) => ({
+            movimiento_id: id,
+            presentacion_id: presentacionId,
+            ...l,
+          })),
+        )
+        .execute();
+    };
+    await sembrarMovimiento({
+      tipo: 'merma_cliente',
+      fecha: '2018-05-14',
+      hora: '17:00:00',
+      motivo: true,
+      comentario: 'Llego roto',
+      lineas: [
+        { sentido: 'recibido', piezas: 3 },
+        { sentido: 'entregado', piezas: 2 },
+      ],
+    });
+    await sembrarMovimiento({
+      tipo: 'merma_trayecto',
+      fecha: '2018-05-14',
+      hora: '18:00:00',
+      lineas: [{ sentido: 'recibido', piezas: 1 }],
+    });
+    await sembrarMovimiento({
+      tipo: 'cambio',
+      fecha: '2018-05-14',
+      hora: '19:00:00',
+      lineas: [
+        { sentido: 'recibido', piezas: 4 },
+        { sentido: 'entregado', piezas: 4 },
+      ],
+    });
+    await sembrarMovimiento({
+      tipo: 'merma_cliente',
+      fecha: '2018-05-14',
+      hora: '20:00:00',
+      motivo: true,
+      borrado: true,
+      lineas: [{ sentido: 'recibido', piezas: 9 }],
+    });
+    // Fuera de la lista: consumo del mismo dia y merma de otro vendedor.
+    await sembrarMovimiento({
+      tipo: 'consumo',
+      fecha: '2018-05-14',
+      hora: '21:00:00',
+      lineas: [{ sentido: 'recibido', piezas: 6 }],
+    });
+    await sembrarMovimiento({
+      tipo: 'merma_trayecto',
+      vendedor: ana,
+      fecha: '2018-05-14',
+      hora: '22:00:00',
+      lineas: [{ sentido: 'recibido', piezas: 7 }],
+    });
+    await sembrarMovimiento({
+      tipo: 'merma_cliente',
+      fecha: '2018-05-13',
+      hora: '17:00:00',
+      motivo: true,
+      lineas: [{ sentido: 'recibido', piezas: 8 }],
+    });
     const ventaEvaBorrada = await sembrarVenta({
       clienteId: c1,
       fecha: '2018-05-14',
@@ -794,6 +898,25 @@ describe('Flujo diario (e2e)', () => {
     await porVendedor('visita');
     await porVendedor('jornada');
     await porVendedor('ruta');
+    await db
+      .deleteFrom('movimiento_inventario_linea')
+      .where(
+        'movimiento_id',
+        'in',
+        db
+          .selectFrom('movimiento_inventario')
+          .select('id')
+          .where('vendedor_id', 'in', vendedorIds),
+      )
+      .execute();
+    await db
+      .deleteFrom('movimiento_inventario')
+      .where('vendedor_id', 'in', vendedorIds)
+      .execute();
+    await db
+      .deleteFrom('motivo_merma')
+      .where('id', '=', motivoMermaId)
+      .execute();
     await db
       .deleteFrom('nota_no_cobrada')
       .where('vendedor_id', 'in', vendedorIds)
@@ -1196,6 +1319,56 @@ describe('Flujo diario (e2e)', () => {
           cantidad: 2,
         },
       ]);
+      // Mermas y cambios de la tablet: vivos y de ese dia, uno por linea.
+      const producto = `Horchata fd ${SUFIJO} 1 L`;
+      const cliente = `Cliente 1 ${SUFIJO}`;
+      expect(d.movimientos).toEqual([
+        {
+          tipo: 'merma_cliente',
+          cliente,
+          producto,
+          sentido: 'recibido',
+          cantidad: 3,
+          motivo: `Caducado fd ${SUFIJO}`,
+          comentario: 'Llego roto',
+        },
+        {
+          tipo: 'merma_cliente',
+          cliente,
+          producto,
+          sentido: 'entregado',
+          cantidad: 2,
+          motivo: `Caducado fd ${SUFIJO}`,
+          comentario: 'Llego roto',
+        },
+        {
+          tipo: 'merma_trayecto',
+          cliente: null,
+          producto,
+          sentido: 'recibido',
+          cantidad: 1,
+          motivo: null,
+          comentario: null,
+        },
+        {
+          tipo: 'cambio',
+          cliente,
+          producto,
+          sentido: 'recibido',
+          cantidad: 4,
+          motivo: null,
+          comentario: null,
+        },
+        {
+          tipo: 'cambio',
+          cliente,
+          producto,
+          sentido: 'entregado',
+          cantidad: 4,
+          motivo: null,
+          comentario: null,
+        },
+      ]);
       // La visita sin venta (9:15 de Tijuana = 16:15Z) sale antes que la venta.
       expect(d.visitas[0]).toEqual({
         cliente: `Cliente 2 ${SUFIJO}`,
@@ -1388,6 +1561,31 @@ describe('Flujo diario (e2e)', () => {
       expect(d.visitas).toHaveLength(2);
       expect(d.promociones).toEqual([
         { producto: `Horchata fd ${SUFIJO} 1 L`, cantidad: 2 },
+      ]);
+      // Solo las mermas: lo recibido de la de cliente y la del vehiculo.
+      // Ana (otro vendedor de la sucursal) va primero; el consumo de Eva no sale.
+      expect(d.mermas).toEqual([
+        {
+          vendedor: `Ana ${SUFIJO}`,
+          cliente: null,
+          producto: `Horchata fd ${SUFIJO} 1 L`,
+          cantidad: 7,
+          motivo: null,
+        },
+        {
+          vendedor: `Eva ${SUFIJO}`,
+          cliente: `Cliente 1 ${SUFIJO}`,
+          producto: `Horchata fd ${SUFIJO} 1 L`,
+          cantidad: 3,
+          motivo: `Caducado fd ${SUFIJO}`,
+        },
+        {
+          vendedor: `Eva ${SUFIJO}`,
+          cliente: null,
+          producto: `Horchata fd ${SUFIJO} 1 L`,
+          cantidad: 1,
+          motivo: null,
+        },
       ]);
       // Cuadra con el renglon "Por dia" (cobranza = vendedores + oficina).
       const dia = (await deFd()).porDia.find((x) => x.fecha === '2018-05-14');

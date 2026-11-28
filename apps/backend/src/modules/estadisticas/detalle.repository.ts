@@ -9,6 +9,7 @@ import type {
   GastoFila,
   LineaFila,
   MetodoPago,
+  MovimientoFila,
   NotaNoCobradaFila,
   NotaNoEntregada,
   PagoFila,
@@ -36,6 +37,8 @@ export interface FilasDetalle {
   /** Solo para un vendedor: sus "no cobre" de ese dia. */
   notasNoCobradas: NotaNoCobradaFila[];
   promociones: PromoFila[];
+  /** Mermas y cambios de la tablet de ese dia (una fila por linea). */
+  movimientos: MovimientoFila[];
 }
 
 // Instante UTC como texto ISO, para no depender de como el driver lee timestamptz.
@@ -98,6 +101,7 @@ export class DetalleRepository {
       gastos,
       visitas,
       promos,
+      movimientos,
       ruta,
       asignadas,
       notasNoCobradas,
@@ -110,6 +114,7 @@ export class DetalleRepository {
       this.gastos(cond, fecha),
       this.visitas(cond, fecha),
       this.promociones(cond, fecha),
+      this.movimientos(cond, fecha),
       'vendedorId' in a
         ? this.ruta(a.vendedorId, fecha)
         : Promise.resolve<RutaFila[]>([]),
@@ -128,6 +133,7 @@ export class DetalleRepository {
       gastos,
       visitasSinVenta: visitas,
       promociones: promos,
+      movimientos,
       ruta,
       asignadas,
       notasNoCobradas,
@@ -648,6 +654,47 @@ export class DetalleRepository {
       cliente: x.cliente,
       producto: x.producto,
       cantidad: Number(x.cantidad),
+    }));
+  }
+  /** Mermas y cambios vivos de la tablet de ese dia; no los procesos de la oficina ni el consumo. */
+  private async movimientos(cond: RawBuilder<unknown>, fecha: string) {
+    const r = await sql<{
+      tipo: string;
+      vendedor: string;
+      cliente: string | null;
+      producto: string;
+      sentido: string;
+      piezas: number;
+      motivo: string | null;
+      comentario: string | null;
+      registrado_en: string;
+    }>`
+      select mi.tipo, v.nombre as vendedor, cl.nombre as cliente,
+             pr.nombre || ' ' || p.volumen as producto, l.sentido, l.piezas,
+             mm.nombre as motivo, mi.comentario,
+             ${iso('mi.registrado_en')} as registrado_en
+        from movimiento_inventario mi
+        join movimiento_inventario_linea l on l.movimiento_id = mi.id
+        join vendedor v on v.id = mi.vendedor_id
+        join sucursal s on s.id = v.sucursal_id
+        left join cliente cl on cl.id = mi.cliente_id
+        join presentacion p on p.id = l.presentacion_id
+        join producto pr on pr.id = p.producto_id
+        left join motivo_merma mm on mm.id = mi.motivo_merma_id
+       where mi.deleted_at is null and mi.fecha = ${fecha}::date
+         and mi.tipo in ('merma_cliente', 'merma_trayecto', 'cambio')
+         and ${cond}
+    `.execute(this.db);
+    return r.rows.map<MovimientoFila>((x) => ({
+      tipo: x.tipo as MovimientoFila['tipo'],
+      vendedor: x.vendedor,
+      cliente: x.cliente,
+      producto: x.producto,
+      sentido: x.sentido as MovimientoFila['sentido'],
+      piezas: Number(x.piezas),
+      motivo: x.motivo,
+      comentario: x.comentario,
+      registradoEn: x.registrado_en,
     }));
   }
 }
