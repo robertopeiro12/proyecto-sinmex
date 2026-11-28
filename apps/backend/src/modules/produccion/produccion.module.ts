@@ -17,6 +17,9 @@ import { InventarioVendedorService } from './inventario-vendedor.service';
 import { InventarioPtController } from './inventario-pt.controller';
 import { InventarioPtRepository } from './inventario-pt.repository';
 import { InventarioPtService } from './inventario-pt.service';
+import { InformacionProduccionController } from './informacion-produccion.controller';
+import { InformacionProduccionRepository } from './informacion-produccion.repository';
+import { InformacionProduccionService } from './informacion-produccion.service';
 import { InventarioPtRecargasController } from './inventario-pt-recargas.controller';
 import { InventarioPtRecargasRepository } from './inventario-pt-recargas.repository';
 import { InventarioPtRecargasService } from './inventario-pt-recargas.service';
@@ -39,6 +42,10 @@ import { InventarioPtRecargasService } from './inventario-pt-recargas.service';
 // ventas, Registro de Operacion, Procesos y la tablet, mas los ajustes. La
 // merma de los vendedores sale de la cuenta del corte (`movimientosDelRango`).
 //
+// Informacion de Produccion: reporte de solo lectura de las entradas del
+// Registro de Operacion (`informacion-produccion.*`); el alcance lo da
+// `InventarioPtService`.
+//
 // Inventario de PT con Recargas: solo lectura de hoy (cargas y Registro de
 // Operacion); el Inicial lo da `InventarioPtService` (la misma cuenta).
 @Module({
@@ -51,6 +58,7 @@ import { InventarioPtRecargasService } from './inventario-pt-recargas.service';
     InventarioVendedorController,
     InventarioPtController,
     InventarioPtRecargasController,
+    InformacionProduccionController,
   ],
   providers: [
     CargasService,
@@ -66,6 +74,8 @@ import { InventarioPtRecargasService } from './inventario-pt-recargas.service';
     InventarioPtRepository,
     InventarioPtRecargasService,
     InventarioPtRecargasRepository,
+    InformacionProduccionService,
+    InformacionProduccionRepository,
   ],
   exports: [CargasService, CortesService],
 })

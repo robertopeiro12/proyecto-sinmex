@@ -31,13 +31,14 @@ describe("navSections", () => {
     expect(produccion.some((i) => i.href === "/produccion/retorno")).toBe(false);
   });
 
-  it("Producción: Corte · Inventario por vendedor · Registro de Operación · Inventario de PT con Recargas · Inventario de PT con Ventas · Almacenes, sin Peticiones ni Producción del día", () => {
+  it("Producción: Corte · Inventario por vendedor · Registro de Operación · Inventario de PT con Recargas · Inventario de PT con Ventas · Información de Producción · Almacenes, sin Peticiones ni Producción del día", () => {
     expect(navSections[2].items.map((i) => i.label)).toEqual([
       "Corte",
       "Inventario por vendedor",
       "Registro de Operación",
       "Inventario de PT con Recargas",
       "Inventario de PT con Ventas",
+      "Información de Producción",
       "Almacenes",
     ]);
     expect(navSections[2].items).toContainEqual({ label: "Inventario de PT con Recargas", href: "/produccion/inventario-pt-recargas" });

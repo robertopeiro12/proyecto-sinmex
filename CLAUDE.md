@@ -1216,6 +1216,30 @@ usuario con sesion pasa.
     `apps/portal/src/lib/inventario-pt-recargas.ts`: si cambias uno, cambia el otro.
   - **Nube:** `20261201120000_permiso_inventario_pt_recargas.sql` (un insert en `permiso`) se sube a `sinmex dev` después del
     merge, con el protocolo de push. Pre-flight: **nada que contar**. **Backend y portal juntos.** Sin cambio en la tablet.
+- **Información de Producción (2026-11-28).** *Producción → Información de Producción*
+  (`/produccion/informacion-produccion`, en el menú después de PT con Ventas): **reporte** de lo que se produjo y se
+  compró en un rango de días, según *Registro de Operación → Entradas/Compras*. Solo lectura. Spec:
+  `docs/superpowers/specs/2026-11-28-informacion-de-produccion-design.md`.
+  - **Fuente:** solo `operacion_almacen` `tipo = 'entrada'` **vivas** de la(s) sucursal(es) del ámbito (con **Todas** no
+    se filtra: cuenta también una sucursal dada de baja después, es historia), `fecha` entre
+    `desde` y `hasta` (incluidos). Columnas **Producción** (`origen = 'produccion'`) · **Compras** (`'compra'`) · Total.
+    Los **envíos no cuentan** (ni el que sale ni el recibido). Solo salen presentaciones con alguna entrada en el rango
+    (dadas de baja también).
+  - Construido con las **recomendadas** del Word "Preguntas Información de Producción" (2026-11-28; totales con detalle,
+    Producción/Compras separadas, sin envíos) **mientras el tío contesta**: si elige otra opción, se ajusta.
+  - **Sin Excel** (Roberto, 2026-11-28: el Excel va en *Información → Reportes*).
+  - Por presentación (agrupada por tamaño, total por tamaño y total general) o por producto. Picar el producto abre las
+    capturas: Día (+ hora de captura) · Sucursal (solo con Todas) · Origen · Capturó · Piezas · Comentario, una fila por
+    operación.
+  - **Fechas:** formato real; `hasta` futura = 400 con `hoyEnTijuana`; `desde > hasta` = 400; más de 366 días = 400.
+    Alcance como PT con Ventas (`InventarioPtService.ambito`/`objetivo`/`hoy` se reutilizan). Permiso
+    `informacion_produccion.ver` (grupo Produccion/Almacen, con ⓘ).
+  - **Endpoints** (`produccion/informacion-produccion.*`, reglas en `reglas-informacion-produccion.ts`):
+    `GET /informacion-produccion?desde&hasta&sucursal&vista=presentacion|producto` y
+    `GET /informacion-produccion/detalle?(presentacion|producto)&desde&hasta&sucursal`. Tipos duplicados backend ↔ portal
+    en `apps/portal/src/lib/informacion-produccion.ts`: si cambias uno, cambia el otro.
+  - **Nube:** `20261202120000_permiso_informacion_produccion.sql` (un insert en `permiso`) se sube a `sinmex dev` después
+    del merge, con el protocolo de push. Pre-flight: **nada que contar**. **Backend y portal juntos.**
 - **Reportes y Excel (T-50 / T-15).** `GET /reportes/kilometraje` (`modules/estadisticas/`, permiso `reportes.ver`)
   lee la `jornada` de T-38; no escribe nada.
   - Kilómetros en **décimas de km enteras** (`round(km * 10)::int` en SQL; las columnas son `numeric(10,1)`).
