@@ -75,7 +75,7 @@ function Informacion({ sucursal }: { sucursal: string }) {
   const deVista = datos && datos.renglones.every((r) => (vista === "producto") === (r.presentacionId === null));
 
   return (
-    <Pantalla key="rango">
+    <Pantalla>
       <EncabezadoPantalla titulo={TITULO} descripcion={DESCRIPCION} />
 
       <FiltroFechas
@@ -85,7 +85,9 @@ function Informacion({ sucursal }: { sucursal: string }) {
         onCambio={setRango}
         onMostrar={(r) => setConsultado({ ...r })}
         deshabilitado={cargandoDatos}
-      >
+      />
+
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
         <SelectorSegmentado
           etiqueta="Ver la información"
           resaltado
@@ -96,7 +98,7 @@ function Informacion({ sucursal }: { sucursal: string }) {
             { valor: "producto", texto: "Por producto" },
           ]}
         />
-      </FiltroFechas>
+      </div>
 
       {error && <Aviso tono="error">{error}</Aviso>}
       {cargandoDatos && !deVista && !error && <EstadoPantalla tipo="cargando" />}

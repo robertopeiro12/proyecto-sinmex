@@ -161,7 +161,7 @@ describe("PantallaInformacionProduccion", () => {
     expect(within(d).getByText("Compra")).toBeInTheDocument();
     expect(within(d).getByText("Turno 1")).toBeInTheDocument();
     expect(celdas(within(d.querySelector("tfoot") as HTMLElement).getByText("Total").closest("tr") as HTMLElement)[0]).toBe("Total");
-    expect(within(d).getByText("120")).toBeInTheDocument();
+    expect(celdas(d.querySelector("tfoot tr") as HTMLElement)).toContain("120");
   });
 
   it("el detalle por producto llama con el producto, y con Todas trae la columna Sucursal", async () => {
