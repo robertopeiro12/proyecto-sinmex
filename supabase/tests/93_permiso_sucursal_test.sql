@@ -18,11 +18,11 @@ select is(
 -- (Registro de Operación), 43 operacion.retiro_merma (Retiro de merma),
 -- 44-48 proceso.merma/cambio/consumo/promocion/descuento (Procesos),
 -- 49-50 inventario_pt.ver/ajustar (Inventario de PT), 51 inventario_pt_recargas.ver
--- (Inventario de PT con Recargas).
+-- (Inventario de PT con Recargas), 52 informacion_produccion.ver (Información de Producción).
 select is(
   (select count(*)::int from permiso where deleted_at is null),
-  51,
-  'el catalogo de permisos tiene 51 claves'
+  52,
+  'el catalogo de permisos tiene 52 claves'
 );
 
 select * from finish();
