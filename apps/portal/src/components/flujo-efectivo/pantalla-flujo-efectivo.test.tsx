@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
-import * as excel from "@/lib/excel/exportar";
 import * as fe from "@/lib/flujo-efectivo";
 import type { FlujoEfectivo } from "@/lib/flujo-efectivo";
 import { diaAnterior } from "@/lib/tesoreria";
@@ -14,10 +13,8 @@ vi.mock("@/lib/flujo-efectivo", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/flujo-efectivo")>();
   return { ...real, obtenerFlujoEfectivo: vi.fn() };
 });
-vi.mock("@/lib/excel/exportar", () => ({ exportarExcel: vi.fn() }));
 
 const obtener = vi.mocked(fe.obtenerFlujoEfectivo);
-const exportarExcel = vi.mocked(excel.exportarExcel);
 
 const FLUJO: FlujoEfectivo = {
   desde: "2026-10-13",
@@ -65,7 +62,6 @@ const CONCEPTOS = [
 describe("PantallaFlujoEfectivo", () => {
   beforeEach(() => {
     obtener.mockReset();
-    exportarExcel.mockReset();
     mockAuth(["flujo_efectivo.ver"]);
   });
 
@@ -157,15 +153,6 @@ describe("PantallaFlujoEfectivo", () => {
     await userEvent.click(screen.getByRole("button", { name: "Mostrar" }));
     const ayer = diaAnterior(hoyEnTijuana());
     await waitFor(() => expect(obtener).toHaveBeenLastCalledWith({ desde: ayer, hasta: ayer, sucursal: null }));
-  });
-
-  it("exporta a Excel lo consultado", async () => {
-    obtener.mockResolvedValue(FLUJO);
-    render(<PantallaFlujoEfectivo sucursal="TJ" />);
-    await screen.findByRole("table", { name: "Flujo de Efectivo" });
-    await userEvent.click(screen.getByRole("button", { name: "Exportar a Excel" }));
-    await waitFor(() => expect(exportarExcel).toHaveBeenCalledTimes(1));
-    expect(exportarExcel.mock.calls[0][0].titulo).toBe("Flujo de Efectivo");
   });
 
   it("muestra el error de la consulta", async () => {

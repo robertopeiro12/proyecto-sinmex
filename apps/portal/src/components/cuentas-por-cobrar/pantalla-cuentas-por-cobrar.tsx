@@ -3,18 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Aviso } from "@/components/ui/aviso";
-import { BotonExcel } from "@/components/ui/boton-excel";
 import { Casilla } from "@/components/ui/campo";
 import { EncabezadoPantalla, Pantalla } from "@/components/ui/encabezado-pantalla";
 import { EstadoPantalla } from "@/components/ui/estado-pantalla";
 import { mensajeDe } from "@/lib/api";
 import {
-  definicionExcelCuentasPorCobrar,
   obtenerCuentasPorCobrar,
   type CuentasPorCobrar,
 } from "@/lib/cuentas-por-cobrar";
-import { exportarExcel } from "@/lib/excel/exportar";
-import { etiquetaSucursal } from "@/lib/reportes";
 import { plural } from "@/lib/formato";
 import { formatearPesos } from "@/lib/ventas";
 import { TablaCuentasPorCobrar } from "./tabla-cuentas-por-cobrar";
@@ -24,13 +20,12 @@ import { TablaCuentasPorCobrar } from "./tabla-cuentas-por-cobrar";
  * `key={sucursal}`: cambiar el selector global de sucursal empieza limpio.
  */
 export function PantallaCuentasPorCobrar({ sucursal }: { sucursal: string | null }) {
-  const { puede, usuario, cargando: cargandoSesion } = useAuth();
+  const { puede, cargando: cargandoSesion } = useAuth();
   const permitido = puede("cuentas_cobrar.ver");
   const [soloVencidas, setSoloVencidas] = useState(false);
   const [datos, setDatos] = useState<CuentasPorCobrar | null>(null);
   const [consultadoConVencidas, setConsultadoConVencidas] = useState(false);
   const [cargando, setCargando] = useState(false);
-  const [exportando, setExportando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Solo la última petición escribe: una lenta que llega tarde no pisa a la nueva.
   const ultima = useRef(0);
@@ -60,24 +55,6 @@ export function PantallaCuentasPorCobrar({ sucursal }: { sucursal: string | null
   if (cargandoSesion) return <EstadoPantalla titulo="Cuentas por Cobrar" tipo="cargando" />;
   if (!permitido) return <EstadoPantalla titulo="Cuentas por Cobrar" tipo="sin-permiso" />;
 
-  async function alExportar() {
-    if (!datos) return;
-    setError(null);
-    setExportando(true);
-    try {
-      await exportarExcel(
-        definicionExcelCuentasPorCobrar(datos, {
-          sucursal: etiquetaSucursal(usuario?.sucursal?.codigo ?? null, sucursal),
-          soloVencidas: consultadoConVencidas,
-        }),
-      );
-    } catch {
-      setError("No se pudo generar el Excel.");
-    } finally {
-      setExportando(false);
-    }
-  }
-
   // Refetch (p. ej. al marcar Solo vencidas): lo viejo sigue a la vista, atenuado.
   const actualizando = cargando && datos !== null;
   const hayNotas = datos !== null && datos.clientes.length > 0;
@@ -87,7 +64,6 @@ export function PantallaCuentasPorCobrar({ sucursal }: { sucursal: string | null
       <EncabezadoPantalla
         titulo="Cuentas por Cobrar"
         descripcion="Cuánto debe cada cliente, con sus notas pendientes y vencidas."
-        acciones={<BotonExcel exportando={exportando} disabled={!hayNotas || cargando} onClick={() => void alExportar()} />}
       />
 
       <div className="flex flex-wrap items-center gap-4 rounded-[10px] border p-3.5">

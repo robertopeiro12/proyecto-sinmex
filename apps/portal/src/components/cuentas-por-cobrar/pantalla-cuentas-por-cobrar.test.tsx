@@ -5,7 +5,6 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorApi } from "@/lib/api";
 import * as cxc from "@/lib/cuentas-por-cobrar";
 import type { CuentasPorCobrar } from "@/lib/cuentas-por-cobrar";
-import * as excel from "@/lib/excel/exportar";
 import { PantallaCuentasPorCobrar } from "./pantalla-cuentas-por-cobrar";
 
 vi.mock("@/components/auth/auth-provider");
@@ -13,10 +12,8 @@ vi.mock("@/lib/cuentas-por-cobrar", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/cuentas-por-cobrar")>();
   return { ...real, obtenerCuentasPorCobrar: vi.fn() };
 });
-vi.mock("@/lib/excel/exportar", () => ({ exportarExcel: vi.fn() }));
 
 const obtener = vi.mocked(cxc.obtenerCuentasPorCobrar);
-const exportarExcel = vi.mocked(excel.exportarExcel);
 
 const DATOS: CuentasPorCobrar = {
   hoy: "2026-10-14",
@@ -57,7 +54,6 @@ describe("PantallaCuentasPorCobrar", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     obtener.mockResolvedValue(DATOS);
-    exportarExcel.mockResolvedValue(undefined);
   });
 
   it("mientras carga la sesión dice Cargando…, no \"No tienes permiso\"", () => {
@@ -206,12 +202,12 @@ describe("PantallaCuentasPorCobrar", () => {
     expect(await screen.findByRole("button", { name: "Cobach XXI · TJ" })).toBeInTheDocument();
   });
 
-  it("sin notas lo dice y deshabilita Excel", async () => {
+  it("sin notas lo dice; sin botón de Excel (va en Reportes)", async () => {
     mockAuth(["cuentas_cobrar.ver"]);
     obtener.mockResolvedValue({ hoy: "2026-10-14", totalCentavos: 0, vencidoCentavos: 0, notas: 0, clientes: [] });
     render(<PantallaCuentasPorCobrar sucursal={null} />);
     expect(await screen.findByText("No hay cuentas por cobrar.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Exportar a Excel" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Exportar a Excel" })).toBeNull();
   });
 
   it("muestra el error del servidor", async () => {
@@ -221,14 +217,4 @@ describe("PantallaCuentasPorCobrar", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("No tienes acceso a esa sucursal.");
   });
 
-  it("exporta lo que está en pantalla, con la sucursal del usuario atado", async () => {
-    mockAuth(["cuentas_cobrar.ver"], "TJ");
-    const u = userEvent.setup();
-    render(<PantallaCuentasPorCobrar sucursal={null} />);
-    await screen.findByText("$377.00");
-    await u.click(screen.getByRole("button", { name: "Exportar a Excel" }));
-    expect(exportarExcel).toHaveBeenCalledWith(
-      cxc.definicionExcelCuentasPorCobrar(DATOS, { sucursal: "TJ", soloVencidas: false }),
-    );
-  });
 });

@@ -2,14 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useAuth } from "@/components/auth/auth-provider";
-import * as excel from "@/lib/excel/exportar";
 import * as lib from "@/lib/tesoreria";
 import type { VistaTesoreria } from "@/lib/tesoreria";
 import { hoyEnTijuana } from "@/lib/ventas";
 import { PestanaVista } from "./pestana-vista";
 
 vi.mock("@/components/auth/auth-provider");
-vi.mock("@/lib/excel/exportar", () => ({ exportarExcel: vi.fn() }));
 vi.mock("@/lib/tesoreria", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/lib/tesoreria")>();
   return { ...real, obtenerTesoreria: vi.fn() };
@@ -136,13 +134,6 @@ describe("PestanaVista", () => {
     await userEvent.click(screen.getByRole("button", { name: "Mostrar" }));
     const ayer = lib.diaAnterior(HOY);
     expect(lib.obtenerTesoreria).toHaveBeenLastCalledWith({ desde: ayer, hasta: ayer, sucursal: null });
-  });
-
-  it("exporta lo consultado", async () => {
-    render(<PestanaVista sucursal={null} />);
-    await screen.findByText("ScotiaFiscal");
-    await userEvent.click(screen.getByRole("button", { name: "Exportar a Excel" }));
-    expect(excel.exportarExcel).toHaveBeenCalledWith(lib.definicionExcelTesoreria(VISTA, { sucursal: "Todas" }));
   });
 
   it("los gastos de ruta salen como salida con su concepto y sin comentario ni capturó", async () => {

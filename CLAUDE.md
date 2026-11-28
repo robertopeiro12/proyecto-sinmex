@@ -1247,8 +1247,11 @@ usuario con sesion pasa.
     id`), buscada aunque caiga antes de `desde` (`lag` sobre todo lo anterior a `hasta`; el `desde` se aplica
     después). Las jornadas borradas no cuentan.
   - Rango máximo de 366 días; vehículos desactivados o dados de baja sí aparecen.
-  - **Todo reporte del portal exporta con `apps/portal/src/lib/excel/`** (`exportarExcel(definición)`), que carga
-    `exceljs` solo al exportar. `uuid` de `exceljs` va forzado a `^11.1.1` con `overrides` en el `package.json`
+  - **El Excel solo se descarga desde *Información → Reportes*** (el cliente, 2026-11-28: todos los Excel que usa los
+    saca de Reportes, como en su sistema viejo). **No pongas botón de Excel en otras pantallas**: se quitaron de Cuentas
+    por Cobrar, Kilometraje, Clientes nuevos, Tesorería y Flujo de Efectivo. Las piezas se quedan para Reportes:
+    `BotonExcel` y `apps/portal/src/lib/excel/` (`exportarExcel(definición)`, carga `exceljs` solo al exportar) y las
+    `definicionExcel*` de cada `lib/`. `uuid` de `exceljs` va forzado a `^11.1.1` con `overrides` en el `package.json`
     raíz (aviso de seguridad heredado).
   - **Flujo diario y Dashboard (2026-11-09; reemplazan a la pantalla del Reporte de Ventas de T-49).** Spec:
     `docs/superpowers/specs/2026-11-09-dashboard-flujo-diario-design.md`. Backend en `modules/estadisticas/`
