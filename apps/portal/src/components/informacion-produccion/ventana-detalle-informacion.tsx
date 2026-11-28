@@ -10,6 +10,7 @@ import { mensajeDe } from "@/lib/api";
 import { formatearDiaCorto } from "@/lib/formato";
 import {
   leerDetalleInformacion,
+  textoRango,
   type DetalleInformacionProduccion,
   type RenglonInformacion,
 } from "@/lib/informacion-produccion";
@@ -45,7 +46,7 @@ export function VentanaDetalleInformacion({
 
   const total = datos?.detalle.reduce((t, d) => t + d.piezas, 0) ?? 0;
   const columnas = todas ? 6 : 5;
-  const rango = desde === hasta ? formatearDiaCorto(desde) : `${formatearDiaCorto(desde)} – ${formatearDiaCorto(hasta)}`;
+  const rango = textoRango(desde, hasta);
 
   return (
     <Ventana abierta alCerrar={alCerrar} ancho="ancho" titulo={`${nombreDe(renglon)} · ${rango}`}>

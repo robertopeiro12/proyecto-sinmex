@@ -4,6 +4,7 @@ import {
   gruposInformacion,
   leerDetalleInformacion,
   leerInformacionProduccion,
+  textoRango,
   totalInformacion,
   type RenglonInformacion,
 } from "./informacion-produccion";
@@ -57,5 +58,20 @@ describe("totales", () => {
 
   it("total general", () => {
     expect(totalInformacion([renglon("A", "", 3, 4), renglon("B", "", 1, 1)])).toEqual({ produccion: 4, compras: 5, total: 9 });
+  });
+});
+
+describe("textoRango (título del detalle, spec D4)", () => {
+  it("el mismo mes: del 3 al 7 nov", () => {
+    expect(textoRango("2026-11-03", "2026-11-07")).toBe("del 3 al 7 nov");
+  });
+  it("un solo día: 3 nov", () => {
+    expect(textoRango("2026-11-03", "2026-11-03")).toBe("3 nov");
+  });
+  it("meses distintos: del 28 oct al 3 nov", () => {
+    expect(textoRango("2026-10-28", "2026-11-03")).toBe("del 28 oct al 3 nov");
+  });
+  it("años distintos: lleva el año", () => {
+    expect(textoRango("2025-12-28", "2026-01-03")).toBe("del 28 dic 2025 al 3 ene 2026");
   });
 });

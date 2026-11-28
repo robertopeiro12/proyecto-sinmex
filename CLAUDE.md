@@ -1220,7 +1220,8 @@ usuario con sesion pasa.
   (`/produccion/informacion-produccion`, en el menú después de PT con Ventas): **reporte** de lo que se produjo y se
   compró en un rango de días, según *Registro de Operación → Entradas/Compras*. Solo lectura. Spec:
   `docs/superpowers/specs/2026-11-28-informacion-de-produccion-design.md`.
-  - **Fuente:** solo `operacion_almacen` `tipo = 'entrada'` **vivas** de la(s) sucursal(es) del ámbito, `fecha` entre
+  - **Fuente:** solo `operacion_almacen` `tipo = 'entrada'` **vivas** de la(s) sucursal(es) del ámbito (con **Todas** no
+    se filtra: cuenta también una sucursal dada de baja después, es historia), `fecha` entre
     `desde` y `hasta` (incluidos). Columnas **Producción** (`origen = 'produccion'`) · **Compras** (`'compra'`) · Total.
     Los **envíos no cuentan** (ni el que sale ni el recibido). Solo salen presentaciones con alguna entrada en el rango
     (dadas de baja también).

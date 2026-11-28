@@ -7,7 +7,7 @@ import {
   InformacionProduccionRepository,
   type FilaDetalleInformacion,
 } from './informacion-produccion.repository';
-import { InventarioPtService } from './inventario-pt.service';
+import { InventarioPtService, type Ambito } from './inventario-pt.service';
 import {
   esFechaReal,
   MENSAJE_FECHA_FUTURA,
@@ -58,7 +58,11 @@ export class InformacionProduccionService {
   ): Promise<InformacionProduccion> {
     const hoy = await this.exigirRango(q.desde, q.hasta);
     const ambito = await this.pt.ambito(usuarioId, q.sucursal);
-    const filas = await this.repo.totales(ambito.sucursalIds, q.desde, q.hasta);
+    const filas = await this.repo.totales(
+      sucursalesDe(ambito),
+      q.desde,
+      q.hasta,
+    );
     const renglones: RenglonInformacion[] = filas.map((f) => ({
       ...f,
       total: f.produccion + f.compras,
@@ -83,7 +87,7 @@ export class InformacionProduccionService {
     const ambito = await this.pt.ambito(usuarioId, q.sucursal);
     return {
       detalle: await this.repo.detalle(
-        ambito.sucursalIds,
+        sucursalesDe(ambito),
         objetivo.map((p) => p.presentacionId),
         q.desde,
         q.hasta,
@@ -109,4 +113,12 @@ export class InformacionProduccionService {
       throw new BadRequestException(MENSAJE_RANGO_LARGO_INFORMACION);
     return hoy;
   }
+}
+
+/**
+ * Con Todas (`codigo` null, solo un General) no se filtra por sucursal: las
+ * entradas de una sucursal dada de baja despues siguen contando (es historia).
+ */
+function sucursalesDe(ambito: Ambito): readonly string[] | null {
+  return ambito.codigo === null ? null : ambito.sucursalIds;
 }

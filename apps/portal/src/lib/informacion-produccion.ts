@@ -99,3 +99,19 @@ export function gruposInformacion(renglones: readonly RenglonInformacion[]): Gru
     totales: totalInformacion(rs),
   }));
 }
+
+const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+/**
+ * El rango del título del detalle (spec D4): "del 3 al 7 nov"; un solo día, "3 nov"; meses distintos,
+ * "del 28 oct al 3 nov"; años distintos, con el año en los dos.
+ */
+export function textoRango(desde: string, hasta: string): string {
+  const [ad, md, dd] = desde.split("-").map(Number);
+  const [ah, mh, dh] = hasta.split("-").map(Number);
+  const dia = (d: number, m: number, a?: number) => `${d} ${MESES_CORTOS[m - 1]}${a ? ` ${a}` : ""}`;
+  if (desde === hasta) return dia(dd, md);
+  if (ad !== ah) return `del ${dia(dd, md, ad)} al ${dia(dh, mh, ah)}`;
+  if (md !== mh) return `del ${dia(dd, md)} al ${dia(dh, mh)}`;
+  return `del ${dd} al ${dia(dh, mh)}`;
+}

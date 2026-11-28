@@ -30,9 +30,18 @@ const idsComoArreglo = (ids: readonly string[]) =>
   sql`array[${sql.join([...ids])}]::uuid[]`;
 
 /**
+ * Sucursales del ambito: `null` = Todas, sin filtrar, para que cuenten tambien
+ * las entradas de una sucursal dada de baja despues (es historia).
+ */
+const deSucursales = (sucursalIds: readonly string[] | null) =>
+  sucursalIds === null
+    ? sql`true`
+    : sql`o.sucursal_id = any(${idsComoArreglo(sucursalIds)})`;
+
+/**
  * SQL de Informacion de Produccion: solo las `entrada` vivas del Registro de
- * Operacion (nunca `envio` ni otro tipo), en las sucursales del ambito y el
- * rango (ambos dias incluidos). Una consulta agrupada, sin N+1.
+ * Operacion (nunca `envio` ni otro tipo), en las sucursales del ambito (con
+ * Todas, tambien las dadas de baja) y el rango (ambos dias incluidos). Una consulta agrupada, sin N+1.
  */
 @Injectable()
 export class InformacionProduccionRepository {
@@ -40,11 +49,11 @@ export class InformacionProduccionRepository {
 
   /** Produccion y compras por presentacion (viva o no: es historia). */
   async totales(
-    sucursalIds: readonly string[],
+    sucursalIds: readonly string[] | null,
     desde: string,
     hasta: string,
   ): Promise<FilaInformacion[]> {
-    if (sucursalIds.length === 0) return [];
+    if (sucursalIds?.length === 0) return [];
     const r = await sql<FilaInformacion>`
       select pr.id as "presentacionId", p.id as "productoId",
              p.nombre as producto, pr.volumen as volumen,
@@ -56,7 +65,7 @@ export class InformacionProduccionRepository {
         join producto p on p.id = pr.producto_id
        where o.deleted_at is null
          and o.tipo = 'entrada'
-         and o.sucursal_id = any(${idsComoArreglo(sucursalIds)})
+         and ${deSucursales(sucursalIds)}
          and o.fecha between ${desde}::date and ${hasta}::date
        group by pr.id, p.id, p.nombre, pr.volumen
     `.execute(this.db);
@@ -69,12 +78,12 @@ export class InformacionProduccionRepository {
    * mas nueva.
    */
   async detalle(
-    sucursalIds: readonly string[],
+    sucursalIds: readonly string[] | null,
     presentacionIds: readonly string[],
     desde: string,
     hasta: string,
   ): Promise<FilaDetalleInformacion[]> {
-    if (sucursalIds.length === 0 || presentacionIds.length === 0) return [];
+    if (sucursalIds?.length === 0 || presentacionIds.length === 0) return [];
     const r = await sql<FilaDetalleInformacion>`
       select to_char(o.fecha, 'YYYY-MM-DD') as fecha,
              to_char(o.created_at at time zone 'America/Tijuana', 'HH24:MI') as hora,
@@ -89,7 +98,7 @@ export class InformacionProduccionRepository {
         join usuario u on u.id = o.capturo_usuario_id
        where o.deleted_at is null
          and o.tipo = 'entrada'
-         and o.sucursal_id = any(${idsComoArreglo(sucursalIds)})
+         and ${deSucursales(sucursalIds)}
          and o.fecha between ${desde}::date and ${hasta}::date
          and l.presentacion_id = any(${idsComoArreglo(presentacionIds)})
        group by o.id, s.codigo, u.nombre

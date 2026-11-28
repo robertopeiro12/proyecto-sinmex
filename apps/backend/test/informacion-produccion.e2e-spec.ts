@@ -28,6 +28,8 @@ const SUFIJO = `${Date.now()}-${process.pid}`;
 const PASSWORD = 'contrasena-de-prueba';
 const K = 'YG';
 const L = 'YH';
+/** Sucursal que se da de baja despues de capturar: su historia sigue contando con Todas. */
+const B = 'YI';
 const PRODUCTO = `ZZ-inf-${SUFIJO}`;
 
 function restarDias(fecha: string, dias: number): string {
@@ -47,6 +49,7 @@ describe('Información de Producción (e2e)', () => {
   let generalId: string;
   let kId: string;
   let lId: string;
+  let bId: string;
   let producto: string;
   let otro: string;
   let litro: string;
@@ -317,6 +320,19 @@ describe('Información de Producción (e2e)', () => {
       fecha: restarDias(desde, -2),
       lineas: [{ presentacionId: litro, piezas: 11 }],
     });
+    // YI captura 5 litros y despues se da de baja: con Todas sigue contando (es historia).
+    bId = await crearSucursal(B);
+    await crearOperacion({
+      tipo: 'entrada',
+      fecha: restarDias(desde, -2),
+      sucursalId: bId,
+      lineas: [{ presentacionId: litro, piezas: 5 }],
+    });
+    await db
+      .updateTable('sucursal')
+      .set({ deleted_at: sql<Date>`now()` })
+      .where('id', '=', bId)
+      .execute();
     // Envio YG -> YH: no cuenta ni en YG (sale) ni en YH (llega), ni con Todas.
     await crearOperacion({
       tipo: 'envio',
@@ -427,16 +443,16 @@ describe('Información de Producción (e2e)', () => {
       });
     });
 
-    it('Todas suma las dos sucursales (sin el envio)', async () => {
+    it('Todas suma las sucursales, tambien la dada de baja (sin el envio)', async () => {
       expect(renglon(await leer({ sucursal: 'todas' }), litro)).toMatchObject({
-        produccion: 32,
+        produccion: 37,
         compras: 4,
-        total: 36,
+        total: 41,
       });
     });
 
     it('sin sucursal un General ve todas', async () => {
-      expect(renglon(await leer({}), litro)).toMatchObject({ total: 36 });
+      expect(renglon(await leer({}), litro)).toMatchObject({ total: 41 });
     });
 
     it('orden por tamano: 500 ml antes de 1 L antes de 5 L', async () => {
@@ -524,7 +540,7 @@ describe('Información de Producción (e2e)', () => {
     it('con Todas trae las dos sucursales', async () => {
       const r = await detalle({ presentacion: litro, sucursal: 'todas' });
       expect(new Set(r.detalle.map((f) => f.sucursal))).toEqual(
-        new Set([K, L]),
+        new Set([K, L, B]),
       );
     });
 
@@ -620,10 +636,15 @@ describe('Información de Producción (e2e)', () => {
       expect(d.detalle).toHaveLength(3);
     });
 
-    it('atado a otra sucursal = 403', async () => {
+    it('atado a otra sucursal = 403, tambien en el detalle', async () => {
       await http()
         .get('/informacion-produccion')
         .query({ desde, hasta, sucursal: L })
+        .set('Cookie', cookieKVer)
+        .expect(403);
+      await http()
+        .get('/informacion-produccion/detalle')
+        .query({ presentacion: litro, desde, hasta, sucursal: L })
         .set('Cookie', cookieKVer)
         .expect(403);
     });
